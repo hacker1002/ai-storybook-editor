@@ -37,6 +37,35 @@
   }
 }
 
+@layer utilities {
+  .animate-in {
+    animation-duration: 150ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-fill-mode: forwards;
+  }
+  .animate-out {
+    animation-duration: 150ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .fade-in-0 { animation-name: fadeIn; }
+  .fade-out-0 { animation-name: fadeOut; }
+  .zoom-in-95 { animation-name: zoomIn; }
+  .zoom-out-95 { animation-name: zoomOut; }
+  .slide-in-from-top-2 { animation-name: slideInFromTop; }
+  .slide-in-from-bottom-2 { animation-name: slideInFromBottom; }
+  .slide-in-from-left-2 { animation-name: slideInFromLeft; }
+  .slide-in-from-right-2 { animation-name: slideInFromRight; }
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes zoomIn { from { transform: scale(0.95); } to { transform: scale(1); } }
+@keyframes zoomOut { from { transform: scale(1); } to { transform: scale(0.95); } }
+@keyframes slideInFromTop { from { transform: translateY(-8px); } }
+@keyframes slideInFromBottom { from { transform: translateY(8px); } }
+@keyframes slideInFromLeft { from { transform: translateX(-8px); } }
+@keyframes slideInFromRight { from { transform: translateX(8px); } }
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

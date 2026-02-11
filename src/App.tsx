@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/app-layout'
 import { HomePage } from '@/features/home'
 import { LoginPage, RegisterPage } from '@/features/auth'
+import { EditorPage } from '@/features/editor'
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -20,6 +21,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/editor/:bookId" element={<EditorPage />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/explore" element={<PlaceholderPage title="Explore Community" />} />

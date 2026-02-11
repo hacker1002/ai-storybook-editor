@@ -1,0 +1,98 @@
+graph TB
+    subgraph Root["Root"]
+        App["App.tsx<br/>(Router)"]
+    end
+
+    subgraph Auth["Auth"]
+        LoginPage
+        RegisterPage
+    end
+
+    subgraph Layout["Layout"]
+        AppLayout["AppLayout"]
+        Sidebar
+    end
+
+    subgraph Home["Home"]
+        HomePage
+        StoryCard
+    end
+
+    subgraph Editor["Editor"]
+        EditorPage["EditorPage"]
+
+        subgraph Header["Header"]
+            EditorHeader
+            MenuPopover
+            LanguageSelector
+            SaveStatus["SaveStatusIndicator"]
+        end
+
+        subgraph Rail["Icon Rail"]
+            IconRail
+            IconRailItem
+        end
+
+        subgraph Spaces["Creative Spaces"]
+            DocCreativeSpace
+            MockCreativeSpace
+
+            subgraph Doc["Doc Components"]
+                DocSidebar
+                DocTabItem
+                ManuscriptEditor["ManuscriptDocEditor"]
+                PromptPanel
+                ToolbarButton
+            end
+        end
+    end
+
+    subgraph UI["Shared UI - shadcn"]
+        Button
+        Card
+        Input
+        Textarea
+        Tabs
+        Select
+        Popover
+        Avatar
+        Separator
+        Tooltip
+        Label
+        Progress
+    end
+
+    subgraph State["Zustand Stores"]
+        AuthStore["auth-store"]
+        EditorSettings["editor-settings-store"]
+        SnapshotStore["snapshot-store"]
+    end
+
+    %% Routes
+    App --> LoginPage
+    App --> RegisterPage
+    App --> AppLayout
+    App --> EditorPage
+
+    %% Layout
+    AppLayout --> Sidebar
+    Sidebar --> HomePage
+    HomePage --> StoryCard
+
+    %% Editor hierarchy
+    EditorPage --> EditorHeader
+    EditorPage --> IconRail
+    EditorPage --> DocCreativeSpace
+    EditorPage --> MockCreativeSpace
+    IconRail --> IconRailItem
+    DocCreativeSpace --> DocSidebar
+    DocCreativeSpace --> ManuscriptEditor
+    DocSidebar --> DocTabItem
+    DocTabItem --> PromptPanel
+    ManuscriptEditor --> ToolbarButton
+
+    %% State bindings
+    EditorPage -.-> EditorSettings
+    EditorPage -.-> SnapshotStore
+    DocCreativeSpace -.-> SnapshotStore
+    Sidebar -.-> AuthStore
