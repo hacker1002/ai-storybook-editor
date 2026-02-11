@@ -1,53 +1,111 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEditorSettingsActions } from '@/stores/editor-settings-store';
-import { useSnapshotActions, useIsDirty, useIsSaving } from '@/stores/snapshot-store';
+import {
+  useSnapshotActions,
+  useIsDirty,
+  useIsSaving,
+  useSnapshotFetchLoading,
+  useSnapshotFetchError,
+} from '@/stores/snapshot-store';
+import { useBookStore, useCurrentBook, useBooksLoading, useBooksError } from '@/stores/book-store';
 import { getDefaultCreativeSpace, AVAILABLE_LANGUAGES } from '@/constants/editor-constants';
+import { PIPELINE_STEP_MAP } from '@/constants/book-enums';
 import { EditorHeader } from '../components/editor-header';
 import { IconRail } from '../components/icon-rail';
 import { DocCreativeSpace } from '../components/doc-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
-import type { CreativeSpaceType, PipelineStep, Language, Book, SaveStatus } from '@/types/editor';
-
-// Mock book data - replace with API call
-const MOCK_BOOK: Book = {
-  id: '1',
-  title: 'The Hidden Valley',
-  type: 1,
-  original_language: 'en_US',
-};
+import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
 
 const MOCK_USER_POINTS = { current: 750, total: 1000 };
 
 export function EditorPage() {
   const { bookId } = useParams<{ bookId: string }>();
   const navigate = useNavigate();
-  const initialized = useRef(false);
 
-  // Stores
-  const { setCurrentStep, resetSettings } = useEditorSettingsActions();
-  const { initSnapshot } = useSnapshotActions();
+  // Book store
+  const { fetchBook } = useBookStore();
+  const book = useCurrentBook();
+  const bookLoading = useBooksLoading();
+  const bookError = useBooksError();
+
+  // Snapshot store
+  const { fetchSnapshot, resetSnapshot } = useSnapshotActions();
   const isDirty = useIsDirty();
   const isSaving = useIsSaving();
+  const snapshotLoading = useSnapshotFetchLoading();
+  const snapshotError = useSnapshotFetchError();
 
-  // Local state - initialize synchronously with mock data
-  const [book, setBook] = useState<Book>(MOCK_BOOK);
+  // Editor settings
+  const { setCurrentStep, resetSettings } = useEditorSettingsActions();
+
+  // Local UI state
   const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('doc');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notificationCount] = useState(3);
 
-  // Initialize stores on mount (external systems sync)
+  // Fetch book and snapshot on mount
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    if (!bookId) {
+      navigate('/');
+      return;
+    }
 
-    initSnapshot({ docs: undefined, meta: { bookId: bookId ?? null } });
+    const loadData = async () => {
+      const fetchedBook = await fetchBook(bookId);
+      if (fetchedBook) {
+        // Initialize editor settings based on book
+        const initialLang =
+          AVAILABLE_LANGUAGES.find((l) => l.code === fetchedBook.original_language) ??
+          AVAILABLE_LANGUAGES[0];
+        const initialStep = (PIPELINE_STEP_MAP[fetchedBook.step as keyof typeof PIPELINE_STEP_MAP] ??
+          'manuscript') as PipelineStep;
+        resetSettings(initialLang, initialStep);
+        setActiveCreativeSpace(getDefaultCreativeSpace(initialStep) as CreativeSpaceType);
 
-    const initialLang =
-      AVAILABLE_LANGUAGES.find((l) => l.code === MOCK_BOOK.original_language) ??
-      AVAILABLE_LANGUAGES[0];
-    resetSettings(initialLang, 'manuscript');
-  }, [bookId, initSnapshot, resetSettings]);
+        // Fetch snapshot for this book
+        await fetchSnapshot(bookId);
+      }
+    };
+
+    loadData();
+
+    // Cleanup on unmount
+    return () => {
+      resetSnapshot();
+    };
+  }, [bookId, fetchBook, fetchSnapshot, resetSnapshot, resetSettings, navigate]);
+
+  // Loading state
+  const isLoading = bookLoading || snapshotLoading;
+  const error = bookError || snapshotError;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+          <p className="mt-4 text-muted-foreground">Loading editor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !book) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive">{error || 'Book not found'}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="mt-4 text-primary hover:underline"
+          >
+            ← Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Derived save status
   const saveStatus: SaveStatus = isSaving ? 'saving' : isDirty ? 'unsaved' : 'saved';
@@ -63,10 +121,12 @@ export function EditorPage() {
   };
 
   const handleTitleEdit = (newTitle: string) => {
-    setBook((prev) => (prev ? { ...prev, title: newTitle } : prev));
+    // TODO: Update book title via Supabase
+    console.log('Title edit:', newTitle);
   };
 
   const handleSave = async () => {
+    // TODO: Save snapshot to Supabase
     console.log('Saving...');
   };
 

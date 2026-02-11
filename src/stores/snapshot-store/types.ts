@@ -20,7 +20,13 @@ export interface MetaSlice {
   setSaveError: (error: string | null) => void;
 }
 
-export type SnapshotStore = DocsSlice & MetaSlice & {
+export interface FetchSlice {
+  fetchLoading: boolean;
+  fetchError: string | null;
+  fetchSnapshot: (bookId: string) => Promise<void>;
+}
+
+export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

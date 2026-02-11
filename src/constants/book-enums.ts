@@ -115,7 +115,7 @@ export const CONTENT_GENRE_OPTIONS = enumToOptions(CONTENT_GENRE_MAP);
 export const WRITING_STYLE_OPTIONS = enumToOptions(WRITING_STYLE_MAP);
 
 // Helper: Get label from enum value
-export function getEnumLabel<T extends EnumMap>(map: T, value: number | null | undefined): string {
+export function getEnumLabel(map: EnumMap, value: number | null | undefined): string {
   if (value == null) return '';
-  return map[value as keyof T] ?? '';
+  return map[value] ?? '';
 }

@@ -1,33 +1,33 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { useAuthStore } from '@/stores/auth-store'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuthStore } from '@/stores/auth-store';
 
 export function LoginPage() {
-  const navigate = useNavigate()
-  const { login, isLoading } = useAuthStore()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const navigate = useNavigate();
+  const { login, isLoading } = useAuthStore();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
+    e.preventDefault();
+    setError('');
 
     if (!email || !password) {
-      setError('Please fill in all fields')
-      return
+      setError('Vui lòng điền đầy đủ thông tin');
+      return;
     }
 
-    try {
-      await login(email, password)
-      navigate('/')
-    } catch {
-      setError('Invalid credentials')
+    const result = await login(email, password);
+    if (result.error) {
+      setError(result.error);
+    } else {
+      navigate('/');
     }
-  }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
@@ -70,15 +70,9 @@ export function LoginPage() {
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-primary hover:underline">
-                Sign up
-              </Link>
-            </p>
           </form>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

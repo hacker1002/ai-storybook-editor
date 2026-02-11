@@ -1,62 +1,102 @@
 import { create } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
-import { devtools } from 'zustand/middleware';
-import type { BookSettings, BookReferences } from '@/types/editor';
+import { persist, devtools } from 'zustand/middleware';
+import { supabase } from '@/lib/supabase';
+import type { Book, BookListItem } from '@/types/editor';
 
 interface BookStore {
-  settings: BookSettings;
-  references: BookReferences;
-  updateSettings: (updates: Partial<BookSettings>) => void;
-  updateReferences: (updates: Partial<BookReferences>) => void;
-  resetBook: () => void;
+  books: BookListItem[];
+  currentBook: Book | null;
+  isLoading: boolean;
+  error: string | null;
+  lastFetchedAt: number | null;
+
+  fetchBooks: () => Promise<void>;
+  fetchBook: (bookId: string) => Promise<Book | null>;
+  setCurrentBook: (book: Book | null) => void;
+  clearBooks: () => void;
 }
 
-const DEFAULT_SETTINGS: BookSettings = {
-  targetAudience: '',
-  targetCoreValue: '',
-  formatGenre: '',
-  contentGenre: '',
-};
-
-const DEFAULT_REFERENCES: BookReferences = {
-  eraId: null,
-  locationId: null,
-};
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export const useBookStore = create<BookStore>()(
   devtools(
-    (set) => ({
-      settings: DEFAULT_SETTINGS,
-      references: DEFAULT_REFERENCES,
+    persist(
+      (set, get) => ({
+        books: [],
+        currentBook: null,
+        isLoading: false,
+        error: null,
+        lastFetchedAt: null,
 
-      updateSettings: (updates) =>
-        set((state) => ({
-          settings: { ...state.settings, ...updates },
-        })),
+        fetchBooks: async () => {
+          const { lastFetchedAt, books } = get();
 
-      updateReferences: (updates) =>
-        set((state) => ({
-          references: { ...state.references, ...updates },
-        })),
+          // Skip if cache fresh
+          if (lastFetchedAt && Date.now() - lastFetchedAt < CACHE_DURATION && books.length > 0) {
+            return;
+          }
 
-      resetBook: () =>
-        set({
-          settings: DEFAULT_SETTINGS,
-          references: DEFAULT_REFERENCES,
+          set({ isLoading: true, error: null });
+
+          const { data, error } = await supabase
+            .from('books')
+            .select('id, title, description, cover, step, type, updated_at')
+            .order('updated_at', { ascending: false });
+
+          if (error) {
+            set({ isLoading: false, error: 'Không thể tải danh sách sách' });
+            return;
+          }
+
+          set({
+            books: data || [],
+            isLoading: false,
+            lastFetchedAt: Date.now(),
+          });
+        },
+
+        fetchBook: async (bookId) => {
+          set({ isLoading: true, error: null });
+
+          const { data, error } = await supabase
+            .from('books')
+            .select('*')
+            .eq('id', bookId)
+            .single();
+
+          if (error) {
+            set({ isLoading: false, error: 'Không thể tải sách' });
+            return null;
+          }
+
+          set({ currentBook: data, isLoading: false });
+          return data;
+        },
+
+        setCurrentBook: (book) => set({ currentBook: book }),
+
+        clearBooks: () =>
+          set({
+            books: [],
+            currentBook: null,
+            lastFetchedAt: null,
+            error: null,
+          }),
+      }),
+      {
+        name: 'book-store',
+        partialize: (state) => ({
+          books: state.books,
+          lastFetchedAt: state.lastFetchedAt,
         }),
-    }),
+      }
+    ),
     { name: 'book-store' }
   )
 );
 
 // Selectors
-export const useBookSettings = () => useBookStore((s) => s.settings);
-export const useBookReferences = () => useBookStore((s) => s.references);
-export const useBookActions = () =>
-  useBookStore(
-    useShallow((s) => ({
-      updateSettings: s.updateSettings,
-      updateReferences: s.updateReferences,
-      resetBook: s.resetBook,
-    }))
-  );
+export const useBooks = () => useBookStore((s) => s.books);
+export const useCurrentBook = () => useBookStore((s) => s.currentBook);
+export const useBooksLoading = () => useBookStore((s) => s.isLoading);
+export const useBooksError = () => useBookStore((s) => s.error);

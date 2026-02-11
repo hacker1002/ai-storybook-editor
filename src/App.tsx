@@ -1,8 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AppLayout } from '@/components/layout/app-layout'
-import { HomePage } from '@/features/home'
-import { LoginPage, RegisterPage } from '@/features/auth'
-import { EditorPage } from '@/features/editor'
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AppLayout } from '@/components/layout/app-layout';
+import { HomePage } from '@/features/home';
+import { LoginPage } from '@/features/auth';
+import { EditorPage } from '@/features/editor';
+import { useAuthStore } from '@/stores/auth-store';
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -12,15 +14,35 @@ function PlaceholderPage({ title }: { title: string }) {
         <p className="mt-2 text-muted-foreground">Coming soon</p>
       </div>
     </div>
-  )
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <div className="text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+        <p className="mt-4 text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
+  const { initialize, isInitialized } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  if (!isInitialized) {
+    return <LoadingScreen />;
+  }
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
         <Route path="/editor/:bookId" element={<EditorPage />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
@@ -34,5 +56,5 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }

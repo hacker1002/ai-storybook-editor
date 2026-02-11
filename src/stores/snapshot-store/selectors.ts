@@ -14,6 +14,10 @@ export const useDocByIndex = (index: number) => useSnapshotStore((s) => s.docs[i
 export const useDocByType = (type: DocType) =>
   useSnapshotStore((s) => s.docs.find((d) => d.type === type));
 
+// Fetch state selectors
+export const useSnapshotFetchLoading = () => useSnapshotStore((s) => s.fetchLoading);
+export const useSnapshotFetchError = () => useSnapshotStore((s) => s.fetchError);
+
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>
   useSnapshotStore(
@@ -33,5 +37,6 @@ export const useSnapshotActions = () =>
       // Top-level
       initSnapshot: s.initSnapshot,
       resetSnapshot: s.resetSnapshot,
+      fetchSnapshot: s.fetchSnapshot,
     }))
   );

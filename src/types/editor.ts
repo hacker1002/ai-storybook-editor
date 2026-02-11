@@ -58,24 +58,39 @@ export interface SyncState {
   error: string | null;
 }
 
-// Minimal book type for EditorPage
+// Full Book type matching database schema
 export interface Book {
   id: string;
   title: string;
-  type: number; // 1=book, 0=asset
+  description: string | null;
+  owner_id: string;
+  step: number; // 1: manuscript, 2: illustration, 3: retouch
+  type: number; // 0: source book, 1: normal book
   original_language: string;
+  current_version: string | null;
+  current_content: Record<string, unknown> | null;
+  cover: { thumbnail_url?: string; normal_url?: string } | null;
+  book_type: number | null;
+  dimension: number | null;
+  target_audience: number | null;
+  target_core_value: number | null;
+  format_genre: number | null;
+  content_genre: number | null;
+  writing_style: number | null;
+  era_id: string | null;
+  location_id: string | null;
+  artstyle_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-// Book settings for Brief attributes
-export interface BookSettings {
-  targetAudience: string;
-  targetCoreValue: string;
-  formatGenre: string;
-  contentGenre: string;
-}
-
-// Book references (optional attributes)
-export interface BookReferences {
-  eraId: string | null;
-  locationId: string | null;
+// Simplified for list display
+export interface BookListItem {
+  id: string;
+  title: string;
+  description: string | null;
+  cover: { thumbnail_url?: string } | null;
+  step: number;
+  type: number;
+  updated_at: string;
 }
