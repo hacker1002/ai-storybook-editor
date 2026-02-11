@@ -73,42 +73,13 @@ export function getDefaultCreativeSpace(step: PipelineStep): string {
   return icons?.[0]?.id ?? 'doc';
 }
 
-// Brief attribute options
-export const TARGET_AUDIENCES = [
-  { value: '0-3', label: '0-3 years (Infants/Toddlers)' },
-  { value: '3-5', label: '3-5 years (Preschool)' },
-  { value: '5-8', label: '5-8 years (Early Readers)' },
-  { value: '8-12', label: '8-12 years (Middle Grade)' },
-  { value: '12+', label: '12+ years (Young Adult)' },
-];
-
-export const CORE_VALUES = [
-  { value: 'kindness', label: 'Kindness' },
-  { value: 'courage', label: 'Courage' },
-  { value: 'friendship', label: 'Friendship' },
-  { value: 'curiosity', label: 'Curiosity' },
-  { value: 'perseverance', label: 'Perseverance' },
-  { value: 'creativity', label: 'Creativity' },
-  { value: 'honesty', label: 'Honesty' },
-  { value: 'empathy', label: 'Empathy' },
-];
-
-export const FORMAT_GENRES = [
-  { value: 'picture-book', label: 'Picture Book' },
-  { value: 'board-book', label: 'Board Book' },
-  { value: 'early-reader', label: 'Early Reader' },
-  { value: 'chapter-book', label: 'Chapter Book' },
-  { value: 'graphic-novel', label: 'Graphic Novel' },
-  { value: 'interactive', label: 'Interactive Book' },
-];
-
-export const CONTENT_GENRES = [
-  { value: 'adventure', label: 'Adventure' },
-  { value: 'fantasy', label: 'Fantasy' },
-  { value: 'educational', label: 'Educational' },
-  { value: 'slice-of-life', label: 'Slice of Life' },
-  { value: 'mystery', label: 'Mystery' },
-  { value: 'humor', label: 'Humor' },
-  { value: 'sci-fi', label: 'Science Fiction' },
-  { value: 'historical', label: 'Historical' },
-];
+// Brief attribute options - re-export from book-enums for backwards compatibility
+export {
+  TARGET_AUDIENCE_OPTIONS as TARGET_AUDIENCES,
+  TARGET_CORE_VALUE_OPTIONS as CORE_VALUES,
+  FORMAT_GENRE_OPTIONS as FORMAT_GENRES,
+  CONTENT_GENRE_OPTIONS as CONTENT_GENRES,
+  BOOK_TYPE_OPTIONS,
+  DIMENSION_OPTIONS,
+  WRITING_STYLE_OPTIONS,
+} from './book-enums';
