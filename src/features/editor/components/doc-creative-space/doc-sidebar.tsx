@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocTabItem } from './doc-tab-item';
-import type { ManuscriptDoc, DocType } from '@/types/editor';
+import type { ManuscriptDoc, DocType, AttachedFile } from '@/types/editor';
 
 const FIXED_DOC_TYPES: DocType[] = ['brief', 'draft', 'script'];
 
@@ -13,7 +13,7 @@ interface DocSidebarProps {
   onAddDoc: () => void;
   onUpdateDocTitle: (index: number, title: string) => void;
   onDeleteDoc: (index: number) => void;
-  onGenerate: (index: number, prompt: string) => Promise<void>;
+  onGenerate: (index: number, prompt: string, attachments: AttachedFile[]) => Promise<void>;
   error?: string | null;
   onClearError?: () => void;
 }
@@ -31,6 +31,7 @@ export function DocSidebar({
 }: DocSidebarProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(activeDocIndex);
   const [promptInputs, setPromptInputs] = useState<Record<number, string>>({});
+  const [attachments, setAttachments] = useState<Record<number, AttachedFile[]>>({});
   const [generatingIndexes, setGeneratingIndexes] = useState<Set<number>>(new Set());
 
   const handleToggle = (index: number) => {
@@ -46,13 +47,20 @@ export function DocSidebar({
     setPromptInputs((prev) => ({ ...prev, [index]: value }));
   };
 
+  const handleAttachmentsChange = (index: number, files: AttachedFile[]) => {
+    setAttachments((prev) => ({ ...prev, [index]: files }));
+  };
+
   const handleGenerate = async (index: number) => {
     const prompt = promptInputs[index] || '';
+    const files = attachments[index] || [];
     if (!prompt.trim()) return;
 
     setGeneratingIndexes((prev) => new Set(prev).add(index));
     try {
-      await onGenerate(index, prompt);
+      await onGenerate(index, prompt, files);
+      // Clear attachments after successful generation
+      setAttachments((prev) => ({ ...prev, [index]: [] }));
     } finally {
       setGeneratingIndexes((prev) => {
         const next = new Set(prev);
@@ -111,11 +119,13 @@ export function DocSidebar({
               canEditTitle={canEditTitle}
               canDelete={canDelete}
               promptInput={promptInputs[index] || ''}
+              attachments={attachments[index] || []}
               isGenerating={generatingIndexes.has(index)}
               onToggle={() => handleToggle(index)}
               onUpdateTitle={(title) => onUpdateDocTitle(index, title)}
               onDelete={() => onDeleteDoc(index)}
               onPromptChange={(v) => handlePromptChange(index, v)}
+              onAttachmentsChange={(files) => handleAttachmentsChange(index, files)}
               onGenerate={() => handleGenerate(index)}
             />
           );

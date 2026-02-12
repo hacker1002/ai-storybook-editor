@@ -1,4 +1,12 @@
-import type { DocType } from '@/types/editor';
+import type { DocType, AttachedFile } from '@/types/editor';
+import { fileToBase64 } from './file-utils';
+
+// API attachment format (matches edge function types)
+export interface Attachment {
+  filename: string;
+  mimeType: string;
+  base64Data: string;
+}
 
 // Request/Response types matching edge functions
 export interface LLMContext {
@@ -19,18 +27,24 @@ export interface GenerateDocResult {
 
 interface GenerateBriefParams {
   prompt: string;
+  currentBrief?: string;
+  attachments?: Attachment[];
   llmContext: LLMContext;
 }
 
 interface GenerateDraftParams {
   brief: string;
   prompt: string;
+  currentDraft?: string;
+  attachments?: Attachment[];
   llmContext: LLMContext;
 }
 
 interface GenerateScriptParams {
   draft: string;
   prompt: string;
+  currentScript?: string;
+  attachments?: Attachment[];
   llmContext: LLMContext;
 }
 
@@ -78,6 +92,23 @@ export async function generateDoc(
     console.error(`[doc-api] ${functionName} fetch error:`, error);
     return { success: false, error: 'Network error. Please try again.' };
   }
+}
+
+/**
+ * Convert frontend AttachedFile[] to API Attachment[]
+ */
+export async function prepareAttachments(
+  files: AttachedFile[]
+): Promise<Attachment[]> {
+  if (!files.length) return [];
+
+  return Promise.all(
+    files.map(async (f) => ({
+      filename: f.name,
+      mimeType: f.type,
+      base64Data: await fileToBase64(f.file),
+    }))
+  );
 }
 
 // Helper to build LLMContext from Book fields

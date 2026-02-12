@@ -94,3 +94,31 @@ export interface BookListItem {
   type: number;
   updated_at: string;
 }
+
+// File attachment for PromptPanel
+export interface AttachedFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  file: File;
+}
+
+// File upload constraints
+export const FILE_CONSTRAINTS = {
+  maxFiles: 5,
+  maxSizeBytes: 10 * 1024 * 1024, // 10MB
+  acceptedMimeTypes: [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+  ],
+  acceptedExtensions: '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.txt',
+} as const;
+
+export const MAX_FILENAME_DISPLAY_LENGTH = 15;

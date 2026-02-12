@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useDocs, useSnapshotActions } from '@/stores/snapshot-store';
 import { useCurrentBook } from '@/stores/book-store';
-import { generateDoc, buildLLMContext } from '@/lib/doc-api';
+import { generateDoc, buildLLMContext, prepareAttachments } from '@/lib/doc-api';
 import { DocSidebar } from './doc-sidebar';
 import { ManuscriptDocEditor } from './manuscript-doc-editor';
-import type { DocType } from '@/types/editor';
+import type { DocType, AttachedFile } from '@/types/editor';
 
 export function DocCreativeSpace() {
   const docs = useDocs();
@@ -31,7 +31,7 @@ export function DocCreativeSpace() {
     updateDoc(activeDocIndex, { content });
   };
 
-  const handleGenerate = async (index: number, prompt: string) => {
+  const handleGenerate = async (index: number, prompt: string, attachments: AttachedFile[]) => {
     const doc = docs[index];
     if (!doc || doc.type === 'other') return;
 
@@ -48,25 +48,47 @@ export function DocCreativeSpace() {
       return;
     }
 
+    // Convert files to API format
+    const apiAttachments = attachments.length > 0
+      ? await prepareAttachments(attachments)
+      : undefined;
+
     const docType = doc.type as Exclude<DocType, 'other'>;
     let result;
 
     if (docType === 'brief') {
-      result = await generateDoc('brief', { prompt, llmContext });
+      result = await generateDoc('brief', {
+        prompt,
+        currentBrief: doc.content || undefined,
+        attachments: apiAttachments,
+        llmContext,
+      });
     } else if (docType === 'draft') {
       const briefDoc = docs.find((d) => d.type === 'brief');
       if (!briefDoc?.content?.trim()) {
         setGenerateError('Brief content required to generate draft');
         return;
       }
-      result = await generateDoc('draft', { brief: briefDoc.content, prompt, llmContext });
+      result = await generateDoc('draft', {
+        brief: briefDoc.content,
+        prompt,
+        currentDraft: doc.content || undefined,
+        attachments: apiAttachments,
+        llmContext,
+      });
     } else {
       const draftDoc = docs.find((d) => d.type === 'draft');
       if (!draftDoc?.content?.trim()) {
         setGenerateError('Draft content required to generate script');
         return;
       }
-      result = await generateDoc('script', { draft: draftDoc.content, prompt, llmContext });
+      result = await generateDoc('script', {
+        draft: draftDoc.content,
+        prompt,
+        currentScript: doc.content || undefined,
+        attachments: apiAttachments,
+        llmContext,
+      });
     }
 
     if (!result.success || !result.data) {

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PromptPanel } from './prompt-panel';
-import type { ManuscriptDoc } from '@/types/editor';
+import { PromptPanel } from '../shared/prompt-panel';
+import type { ManuscriptDoc, AttachedFile } from '@/types/editor';
 import { cn } from '@/lib/utils';
 
 interface DocTabItemProps {
@@ -14,11 +14,13 @@ interface DocTabItemProps {
   canEditTitle: boolean;
   canDelete: boolean;
   promptInput: string;
+  attachments: AttachedFile[];
   isGenerating: boolean;
   onToggle: () => void;
   onUpdateTitle: (title: string) => void;
   onDelete: () => void;
   onPromptChange: (value: string) => void;
+  onAttachmentsChange: (files: AttachedFile[]) => void;
   onGenerate: () => void;
 }
 
@@ -29,11 +31,13 @@ export function DocTabItem({
   canEditTitle,
   canDelete,
   promptInput,
+  attachments,
   isGenerating,
   onToggle,
   onUpdateTitle,
   onDelete,
   onPromptChange,
+  onAttachmentsChange,
   onGenerate,
 }: DocTabItemProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -133,10 +137,11 @@ export function DocTabItem({
       {isExpanded && (
         <div className="border-t bg-background">
           <PromptPanel
-            docType={doc.type}
             promptValue={promptInput}
+            attachments={attachments}
             isGenerating={isGenerating}
             onPromptChange={onPromptChange}
+            onAttachmentsChange={onAttachmentsChange}
             onGenerate={onGenerate}
           />
         </div>
