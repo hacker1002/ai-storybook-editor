@@ -56,6 +56,61 @@ export const useSnapshotStore = create<SnapshotStore>()(
           });
         },
 
+        saveSnapshot: async () => {
+          const [set, get] = args;
+          const { meta, docs, sync } = get();
+
+          if (!meta.bookId || sync.isSaving) return;
+
+          set((state) => {
+            state.sync.isSaving = true;
+            state.sync.error = null;
+          });
+
+          const now = new Date();
+          const version = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+
+          const snapshotData = {
+            book_id: meta.bookId,
+            docs,
+            version,
+            save_type: 1, // manual save
+          };
+
+          let result;
+          if (meta.id) {
+            result = await supabase
+              .from('snapshots')
+              .update({ docs, version })
+              .eq('id', meta.id)
+              .select()
+              .single();
+          } else {
+            result = await supabase
+              .from('snapshots')
+              .insert(snapshotData)
+              .select()
+              .single();
+          }
+
+          if (result.error) {
+            set((state) => {
+              state.sync.isSaving = false;
+              state.sync.error = 'Không thể lưu snapshot';
+            });
+            console.error('[snapshot-store] save error:', result.error);
+            return;
+          }
+
+          set((state) => {
+            state.meta.id = result.data.id;
+            state.meta.version = result.data.version;
+            state.sync.isSaving = false;
+            state.sync.isDirty = false;
+            state.sync.lastSavedAt = now;
+          });
+        },
+
         initSnapshot: (data) => {
           const [set] = args;
           set((state) => {

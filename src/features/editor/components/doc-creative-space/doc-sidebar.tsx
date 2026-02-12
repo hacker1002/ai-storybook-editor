@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocTabItem } from './doc-tab-item';
 import type { ManuscriptDoc, DocType } from '@/types/editor';
@@ -14,6 +14,8 @@ interface DocSidebarProps {
   onUpdateDocTitle: (index: number, title: string) => void;
   onDeleteDoc: (index: number) => void;
   onGenerate: (index: number, prompt: string) => Promise<void>;
+  error?: string | null;
+  onClearError?: () => void;
 }
 
 export function DocSidebar({
@@ -24,6 +26,8 @@ export function DocSidebar({
   onUpdateDocTitle,
   onDeleteDoc,
   onGenerate,
+  error,
+  onClearError,
 }: DocSidebarProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(activeDocIndex);
   const [promptInputs, setPromptInputs] = useState<Record<number, string>>({});
@@ -76,6 +80,18 @@ export function DocSidebar({
           <Plus className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mx-2 mt-2 flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <span className="flex-1">{error}</span>
+          {onClearError && (
+            <button onClick={onClearError} className="shrink-0 hover:opacity-70" aria-label="Dismiss">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Accordion Doc List */}
       <div className="flex-1 overflow-auto p-2">

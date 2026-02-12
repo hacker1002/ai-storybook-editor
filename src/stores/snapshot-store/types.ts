@@ -24,6 +24,7 @@ export interface FetchSlice {
   fetchLoading: boolean;
   fetchError: string | null;
   fetchSnapshot: (bookId: string) => Promise<void>;
+  saveSnapshot: () => Promise<void>;
 }
 
 export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & {

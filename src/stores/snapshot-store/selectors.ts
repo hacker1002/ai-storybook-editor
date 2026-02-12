@@ -38,5 +38,6 @@ export const useSnapshotActions = () =>
       initSnapshot: s.initSnapshot,
       resetSnapshot: s.resetSnapshot,
       fetchSnapshot: s.fetchSnapshot,
+      saveSnapshot: s.saveSnapshot,
     }))
   );
