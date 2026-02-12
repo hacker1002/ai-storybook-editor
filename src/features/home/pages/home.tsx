@@ -1,63 +1,47 @@
-import { useState } from 'react'
-import { Send } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Send, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StoryCard } from '../components/story-card'
+import { fetchBooks, fetchUserBooks } from '@/api'
+import { useAuthStore } from '@/stores/auth-store'
 import type { Story } from '@/types/story'
-
-const mockStories: Story[] = [
-  {
-    id: '1',
-    title: 'Thỏ và Rùa',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    userId: '1',
-  },
-  {
-    id: '2',
-    title: 'Cô bé quàng khăn đỏ',
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    userId: '1',
-  },
-  {
-    id: '3',
-    title: 'Ba chú heo con',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    userId: '1',
-  },
-  {
-    id: '4',
-    title: 'Chú mèo đi hia',
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-    userId: '1',
-  },
-  {
-    id: '5',
-    title: 'Công chúa ngủ trong rừng',
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    userId: '1',
-  },
-  {
-    id: '6',
-    title: 'Bạch Tuyết',
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-    userId: '1',
-  },
-]
 
 export function HomePage() {
   const [storyIdea, setStoryIdea] = useState('')
+  const [recentStories, setRecentStories] = useState<Story[]>([])
+  const [userStories, setUserStories] = useState<Story[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { user } = useAuthStore()
+
+  useEffect(() => {
+    async function loadBooks() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const recent = await fetchBooks(12)
+        setRecentStories(recent)
+
+        if (user?.id) {
+          const owned = await fetchUserBooks(user.id, 12)
+          setUserStories(owned)
+        }
+      } catch (err) {
+        console.error('[HomePage] Failed to load books:', err)
+        setError('Failed to load books')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadBooks()
+  }, [user?.id])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!storyIdea.trim()) return
-    // TODO: Handle story creation
     console.log('Creating story:', storyIdea)
     setStoryIdea('')
   }
@@ -118,19 +102,45 @@ export function HomePage() {
           </div>
 
           <TabsContent value="recent" className="mt-6">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {mockStories.map((story) => (
-                <StoryCard key={story.id} story={story} />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : error ? (
+              <div className="py-12 text-center text-muted-foreground">{error}</div>
+            ) : recentStories.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground">
+                No stories yet. Create your first story above!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {recentStories.map((story) => (
+                  <StoryCard key={story.id} story={story} />
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="yours" className="mt-6">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {mockStories.slice(0, 3).map((story) => (
-                <StoryCard key={story.id} story={story} />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : !user ? (
+              <div className="py-12 text-center text-muted-foreground">
+                Sign in to see your stories
+              </div>
+            ) : userStories.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground">
+                You haven't created any stories yet
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {userStories.map((story) => (
+                  <StoryCard key={story.id} story={story} />
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>

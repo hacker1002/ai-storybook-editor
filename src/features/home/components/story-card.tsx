@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { Clock } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import type { Story } from '@/types/story'
@@ -20,12 +21,23 @@ function formatRelativeTime(date: Date): string {
 }
 
 export function StoryCard({ story }: StoryCardProps) {
+  const navigate = useNavigate()
+
+  const handleClick = () => {
+    navigate(`/editor/${story.id}`)
+  }
+
+  const coverUrl = story.cover?.thumbnail_url ?? story.cover?.normal_url
+
   return (
-    <Card className="group cursor-pointer overflow-hidden transition-shadow hover:shadow-lg">
+    <Card
+      className="group cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
+      onClick={handleClick}
+    >
       <div className="aspect-[4/3] bg-muted">
-        {story.coverImage ? (
+        {coverUrl ? (
           <img
-            src={story.coverImage}
+            src={coverUrl}
             alt={story.title}
             className="h-full w-full object-cover"
           />
