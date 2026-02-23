@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Send, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -143,6 +144,15 @@ export function HomePage() {
             )}
           </TabsContent>
         </Tabs>
+      </div>
+
+      <div className="border-t pt-6">
+        <p className="mb-3 text-sm text-muted-foreground">Demo Pages</p>
+        <Link to="/demo/manuscript-spread-view">
+          <Button variant="outline" size="sm">
+            Manuscript Spread View
+          </Button>
+        </Link>
       </div>
     </div>
   )
