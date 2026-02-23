@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { HomePage } from '@/features/home';
 import { LoginPage } from '@/features/auth';
 import { EditorPage } from '@/features/editor';
+import { DemoManuscriptSpreadView } from '@/features/demo-manuscript-spread-view';
 import { useAuthStore } from '@/stores/auth-store';
 
 function PlaceholderPage({ title }: { title: string }) {
@@ -44,6 +45,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/editor/:bookId" element={<EditorPage />} />
+        <Route path="/demo/manuscript-spread-view" element={<DemoManuscriptSpreadView />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/explore" element={<PlaceholderPage title="Explore Community" />} />
