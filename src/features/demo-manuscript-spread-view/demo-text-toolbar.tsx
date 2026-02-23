@@ -22,15 +22,15 @@ import {
   AudioWaveform,
   Upload,
 } from "lucide-react";
-import type {
-  BaseSpread,
-  TextToolbarContext,
-  Typography,
-  Fill,
-  Outline,
-  Geometry,
+import {
+  useToolbarPosition,
+  type BaseSpread,
+  type TextToolbarContext,
+  type Typography,
+  type Fill,
+  type Outline,
+  type Geometry,
 } from "@/components/manuscript-spread-view";
-import { useToolbarPosition } from "./use-toolbar-position";
 
 interface DemoTextToolbarProps<TSpread extends BaseSpread> {
   context: TextToolbarContext<TSpread>;

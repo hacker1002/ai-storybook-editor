@@ -1,7 +1,7 @@
 // __mocks__/snapshot-factory.ts - Mock data factory for Snapshot objects
 
 import { createMockSpreads, type CreateSpreadOptions } from './spread-factory';
-import type { BaseSpread } from '../types';
+import type { BaseSpread } from '@/components/manuscript-spread-view';
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {

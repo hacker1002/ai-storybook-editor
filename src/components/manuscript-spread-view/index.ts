@@ -1,5 +1,8 @@
 // index.ts - Barrel exports for ManuscriptSpreadView component family
 
+// Hooks
+export { useToolbarPosition } from './hooks/use-toolbar-position';
+
 // Main component
 export { ManuscriptSpreadView } from './manuscript-spread-view';
 

@@ -21,7 +21,7 @@ import { DemoTextToolbar } from "./demo-text-toolbar";
 import {
   createMockSnapshot,
   type CreateSnapshotOptions,
-} from "@/components/manuscript-spread-view/__mocks__/snapshot-factory";
+} from "./__mocks__/snapshot-factory";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";

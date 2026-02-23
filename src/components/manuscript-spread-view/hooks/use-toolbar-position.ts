@@ -1,6 +1,6 @@
 import { useState, useLayoutEffect, useEffect, useRef, type RefObject } from "react";
-import type { Geometry } from "@/components/manuscript-spread-view";
-import { geometryToScreenRect } from "@/components/manuscript-spread-view/utils/coordinate-utils";
+import type { Geometry } from "../types";
+import { geometryToScreenRect } from "../utils/coordinate-utils";
 
 interface UseToolbarPositionOptions {
   geometry: Geometry | null;

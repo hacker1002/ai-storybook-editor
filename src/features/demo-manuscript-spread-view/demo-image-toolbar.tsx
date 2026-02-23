@@ -9,8 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Sparkles, Upload, Copy, Trash2 } from "lucide-react";
-import type { BaseSpread, ImageToolbarContext } from "@/components/manuscript-spread-view";
-import { useToolbarPosition } from "./use-toolbar-position";
+import { useToolbarPosition, type BaseSpread, type ImageToolbarContext } from "@/components/manuscript-spread-view";
 
 interface DemoImageToolbarProps<TSpread extends BaseSpread> {
   context: ImageToolbarContext<TSpread>;
