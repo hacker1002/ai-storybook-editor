@@ -155,6 +155,8 @@ export interface ImageItemContext<TSpread extends BaseSpread> extends BaseItemCo
   onSelect: () => void;
   onUpdate: (updates: Partial<SpreadImage>) => void;
   onDelete: () => void;
+  onArtNoteChange?: (artNote: string) => void;
+  onEditingChange?: (isEditing: boolean) => void;
 }
 
 export interface TextItemContext<TSpread extends BaseSpread> extends BaseItemContext<TSpread> {

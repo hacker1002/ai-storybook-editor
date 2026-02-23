@@ -237,6 +237,8 @@ export function DemoManuscriptSpreadView() {
         isSelected={context.isSelected}
         isEditable={context.isSpreadSelected}
         onSelect={context.onSelect}
+        onArtNoteChange={context.onArtNoteChange}
+        onEditingChange={context.onEditingChange}
       />
     ),
     []
@@ -286,7 +288,7 @@ export function DemoManuscriptSpreadView() {
         isEditable={context.isSpreadSelected}
         onSelect={context.onSelect}
         onTextChange={context.onTextChange}
-        onEditingChange={() => {}} // Handle in parent if needed
+        onEditingChange={context.onEditingChange ?? (() => {})}
       />
     );
   }, []);

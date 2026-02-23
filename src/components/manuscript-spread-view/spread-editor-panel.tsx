@@ -80,6 +80,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
 interface EditorState {
   selectedElement: SelectedElement | null;
   isTextboxEditing: boolean;
+  isImageEditing: boolean;
   isDragging: boolean;
   isResizing: boolean;
   activeHandle: ResizeHandle | null;
@@ -115,6 +116,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const [state, setState] = useState<EditorState>({
     selectedElement: null,
     isTextboxEditing: false,
+    isImageEditing: false,
     isDragging: false,
     isResizing: false,
     activeHandle: null,
@@ -243,9 +245,13 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     }));
   }, []);
 
-  // === Textbox Editing Handler ===
+  // === Editing Handlers ===
   const handleTextboxEditingChange = useCallback((isEditing: boolean) => {
     setState((prev) => ({ ...prev, isTextboxEditing: isEditing }));
+  }, []);
+
+  const handleImageEditingChange = useCallback((isEditing: boolean) => {
+    setState((prev) => ({ ...prev, isImageEditing: isEditing }));
   }, []);
 
   // === Keyboard Handlers ===
@@ -280,7 +286,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         break;
       case 'Delete':
       case 'Backspace':
-        if (canDeleteItem) {
+        // Don't delete element if user is editing text
+        if (canDeleteItem && !state.isTextboxEditing && !state.isImageEditing) {
           if (selectedElement.type === 'image') onDeleteImage?.(selectedElement.index);
           if (selectedElement.type === 'textbox') onDeleteTextbox?.(selectedElement.index);
           handleElementSelect(null);
@@ -291,7 +298,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
-  const showHandles = canResizeItem && !state.isDragging && !state.isTextboxEditing;
+  const showHandles = canResizeItem && !state.isDragging;
 
   return (
     <div
@@ -345,7 +352,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             state.selectedElement,
             handleElementSelect,
             onUpdateImage,
-            onDeleteImage
+            onDeleteImage,
+            handleImageEditingChange
           );
           return <div key={image.id || index}>{renderImageItem(context)}</div>;
         })}
@@ -380,7 +388,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           return <div key={obj.id || index}>{renderObjectItem(context)}</div>;
         })}
 
-        {/* Selection Frame */}
+        {/* Selection Frame - frame border allows drag, center passes through for editing */}
         {state.selectedElement && selectedGeometry && isEditable && state.selectedElement.type !== 'page' && (
           <SelectionFrame
             geometry={selectedGeometry}

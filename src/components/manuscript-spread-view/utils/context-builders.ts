@@ -34,7 +34,8 @@ export function buildImageContext<TSpread extends BaseSpread>(
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
   onUpdate: UpdateImageFn,
-  onDelete?: DeleteFn
+  onDelete?: DeleteFn,
+  onEditingChange?: (isEditing: boolean) => void
 ): ImageItemContext<TSpread> {
   return {
     item: image,
@@ -46,6 +47,8 @@ export function buildImageContext<TSpread extends BaseSpread>(
     onSelect: () => onSelect({ type: 'image', index }),
     onUpdate: (updates) => onUpdate(index, updates),
     onDelete: () => onDelete?.(index),
+    onArtNoteChange: (artNote) => onUpdate(index, { art_note: artNote }),
+    onEditingChange,
   };
 }
 

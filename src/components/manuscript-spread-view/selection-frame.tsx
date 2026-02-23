@@ -76,24 +76,50 @@ export function SelectionFrame({
     return 'se';
   };
 
+  // Border width for drag zone (pixels)
+  const DRAG_BORDER_WIDTH = 20;
+
   return (
     <>
-      {/* Target element for Moveable - must have pointer-events to capture drag */}
+      {/* Frame container - only the border area captures drag events */}
       <div
         ref={targetRef}
-        className="absolute cursor-move"
+        className="absolute"
         style={{
           left: `${geometry.x}%`,
           top: `${geometry.y}%`,
           width: `${geometry.w}%`,
           height: `${geometry.h}%`,
           zIndex: 10000,
-          // Visual: transparent but with visible border for selection
-          border: '2px solid #3b82f6',
-          backgroundColor: 'transparent',
-          boxSizing: 'border-box',
+          pointerEvents: 'none',
         }}
-      />
+      >
+        {/* Top edge */}
+        <div
+          className="absolute left-0 right-0 top-0 cursor-move"
+          style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+        />
+        {/* Bottom edge */}
+        <div
+          className="absolute left-0 right-0 bottom-0 cursor-move"
+          style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+        />
+        {/* Left edge */}
+        <div
+          className="absolute left-0 top-0 bottom-0 cursor-move"
+          style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+        />
+        {/* Right edge */}
+        <div
+          className="absolute right-0 top-0 bottom-0 cursor-move"
+          style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+        />
+        {/* Visual border */}
+        <div
+          className="absolute inset-0 border-2 border-blue-500 pointer-events-none"
+          style={{ boxSizing: 'border-box' }}
+        />
+      </div>
 
       {/* Moveable controller */}
       <Moveable

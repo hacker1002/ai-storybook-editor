@@ -31,38 +31,38 @@ export function EditableTextbox({
 }: EditableTextboxProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [editText, setEditText] = useState('');
   const editableRef = useRef<HTMLDivElement>(null);
 
-  // When editing, use editText; otherwise always use the prop text
-  // This avoids state sync issues - we only track local state during editing
-  const displayText = isEditing ? editText : text;
-
   const enterEditMode = useCallback(() => {
-    setEditText(text);
     setIsEditing(true);
     onEditingChange(true);
     requestAnimationFrame(() => {
-      editableRef.current?.focus();
-      // Place cursor at end
-      const selection = window.getSelection();
-      const range = document.createRange();
-      if (editableRef.current && editableRef.current.childNodes.length > 0) {
-        range.selectNodeContents(editableRef.current);
-        range.collapse(false);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
+      if (editableRef.current) {
+        editableRef.current.innerText = text;
+        editableRef.current.focus();
+        // Place cursor at end
+        const selection = window.getSelection();
+        const range = document.createRange();
+        if (editableRef.current.childNodes.length > 0) {
+          range.selectNodeContents(editableRef.current);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
       }
     });
   }, [text, onEditingChange]);
 
   const exitEditMode = useCallback((save: boolean) => {
-    if (save && editText !== text) {
-      onTextChange(editText);
+    if (save && editableRef.current) {
+      const newText = editableRef.current.innerText;
+      if (newText !== text) {
+        onTextChange(newText);
+      }
     }
     setIsEditing(false);
     onEditingChange(false);
-  }, [editText, text, onTextChange, onEditingChange]);
+  }, [text, onTextChange, onEditingChange]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -100,15 +100,10 @@ export function EditableTextbox({
     }
   }, [isEditing, exitEditMode]);
 
-  const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
-    setEditText(e.currentTarget.innerText);
-  }, []);
-
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
     const plainText = e.clipboardData.getData('text/plain');
 
-    // Use modern API instead of deprecated execCommand
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
 
@@ -116,15 +111,9 @@ export function EditableTextbox({
     range.deleteContents();
     range.insertNode(document.createTextNode(plainText));
 
-    // Move cursor to end of inserted text
     range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);
-
-    // Trigger input event to update state
-    if (editableRef.current) {
-      setEditText(editableRef.current.innerText);
-    }
   }, []);
 
   // Map typography to CSS
@@ -141,7 +130,7 @@ export function EditableTextbox({
     textTransform: typography?.textTransform || 'none',
   };
 
-  const isEmpty = !text && !isEditing;
+  const isEmpty = !text;
 
   return (
     <div
@@ -175,14 +164,11 @@ export function EditableTextbox({
           ref={editableRef}
           contentEditable
           suppressContentEditableWarning
-          onInput={handleInput}
           onBlur={handleBlur}
           onPaste={handlePaste}
           className="w-full h-full outline-none p-1"
           style={{ backgroundColor: COLORS.EDIT_MODE_BG }}
-        >
-          {displayText}
-        </div>
+        />
       ) : isEmpty ? (
         <div
           className="w-full h-full flex items-center justify-center italic p-1"
@@ -192,7 +178,7 @@ export function EditableTextbox({
         </div>
       ) : (
         <div className="w-full h-full p-1 whitespace-pre-wrap">
-          {displayText}
+          {text}
         </div>
       )}
     </div>
