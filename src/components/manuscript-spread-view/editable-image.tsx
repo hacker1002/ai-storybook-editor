@@ -12,7 +12,7 @@ interface EditableImageProps {
   index: number;
   isSelected: boolean;
   isEditable: boolean;
-  onSelect: () => void;
+  onSelect: (rect?: DOMRect) => void;
   onArtNoteChange?: (artNote: string) => void;
   onEditingChange?: (isEditing: boolean) => void;
 }
@@ -72,10 +72,11 @@ export function EditableImage({
     onEditingChange?.(false);
   }, [artNoteText, onArtNoteChange, onEditingChange]);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (isEditable && !isEditing) {
-      onSelect();
+      const rect = e.currentTarget.getBoundingClientRect();
+      onSelect(rect);
     }
   }, [isEditable, isEditing, onSelect]);
 

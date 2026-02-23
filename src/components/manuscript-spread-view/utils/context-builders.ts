@@ -22,7 +22,7 @@ type UpdateTextboxFn = (index: number, updates: Partial<SpreadTextbox>) => void;
 type UpdateObjectFn = (index: number, updates: Partial<SpreadObject>) => void;
 type UpdateAnimationFn = (index: number, updates: Partial<SpreadAnimation>) => void;
 type DeleteFn = (index: number) => void;
-type SelectFn = (element: SelectedElement) => void;
+type SelectFn = (element: SelectedElement, rect?: DOMRect) => void;
 
 /**
  * Build image item context for render props
@@ -44,7 +44,7 @@ export function buildImageContext<TSpread extends BaseSpread>(
     spread,
     isSelected: selectedElement?.type === 'image' && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: () => onSelect({ type: 'image', index }),
+    onSelect: (rect?: DOMRect) => onSelect({ type: 'image', index }, rect),
     onUpdate: (updates) => onUpdate(index, updates),
     onDelete: () => onDelete?.(index),
     onArtNoteChange: (artNote) => onUpdate(index, { art_note: artNote }),
@@ -75,7 +75,7 @@ export function buildTextContext<TSpread extends BaseSpread>(
     spread,
     isSelected: selectedElement?.type === 'textbox' && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: () => onSelect({ type: 'textbox', index }),
+    onSelect: (rect?: DOMRect) => onSelect({ type: 'textbox', index }, rect),
     onTextChange: (text) => onUpdate(index, { [languageKey]: { ...langContent, text } } as Partial<SpreadTextbox>),
     onUpdate: (updates) => onUpdate(index, updates),
     onDelete: () => onDelete?.(index),

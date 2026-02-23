@@ -1,6 +1,6 @@
 // utils/coordinate-utils.ts - Coordinate conversion utilities
 
-import type { Point } from '../types';
+import type { Point, Geometry } from '../types';
 import { CANVAS } from '../constants';
 
 /**
@@ -60,4 +60,22 @@ export function getScaledDimensions(zoomLevel: number): { width: number; height:
     width: CANVAS.BASE_WIDTH * (zoomLevel / 100),
     height: CANVAS.BASE_HEIGHT * (zoomLevel / 100),
   };
+}
+
+/**
+ * Convert item geometry (percentages) to screen coordinates (pixels)
+ * Uses canvas rect to calculate absolute screen position
+ *
+ * This avoids getBoundingClientRect() calls during drag/resize for better performance
+ */
+export function geometryToScreenRect(
+  geometry: Geometry,
+  canvasRect: DOMRect
+): DOMRect {
+  const x = canvasRect.left + (geometry.x / 100) * canvasRect.width;
+  const y = canvasRect.top + (geometry.y / 100) * canvasRect.height;
+  const width = (geometry.w / 100) * canvasRect.width;
+  const height = (geometry.h / 100) * canvasRect.height;
+
+  return new DOMRect(x, y, width, height);
 }

@@ -35,6 +35,8 @@ export type {
   Geometry,
   Point,
   Typography,
+  Fill,
+  Outline,
   SelectedElement,
 
   // Context types
@@ -57,6 +59,7 @@ export {
   mouseToCanvasPercent,
   clamp,
   getScaledDimensions,
+  geometryToScreenRect,
 } from './utils/coordinate-utils';
 
 export {

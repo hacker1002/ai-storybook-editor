@@ -111,6 +111,7 @@ export function ManuscriptSpreadView<TSpread extends BaseSpread>({
   renderTextItem,
   renderObjectItem,
   renderImageToolbar,
+  renderTextToolbar,
   renderPageToolbar,
   onSpreadSelect,
   onSpreadReorder,
@@ -316,6 +317,7 @@ export function ManuscriptSpreadView<TSpread extends BaseSpread>({
                 renderTextItem={renderTextItem}
                 renderObjectItem={renderObjectItem}
                 renderImageToolbar={renderImageToolbar}
+                renderTextToolbar={renderTextToolbar}
                 renderPageToolbar={renderPageToolbar}
                 onUpdateSpread={handleUpdateSpread}
                 onUpdateImage={handleUpdateImage}

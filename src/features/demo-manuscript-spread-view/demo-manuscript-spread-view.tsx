@@ -11,7 +11,13 @@ import {
   type SpreadTextbox,
   type ImageItemContext,
   type TextItemContext,
+  type ImageToolbarContext,
+  type TextToolbarContext,
+  type Fill,
+  type Outline,
 } from "@/components/manuscript-spread-view";
+import { DemoImageToolbar } from "./demo-image-toolbar";
+import { DemoTextToolbar } from "./demo-text-toolbar";
 import {
   createMockSnapshot,
   type CreateSnapshotOptions,
@@ -65,6 +71,8 @@ interface FeatureFlags {
   canDeleteItem: boolean;
   canResizeItem: boolean;
   canDragItem: boolean;
+  renderImageToolbar: boolean;
+  renderTextToolbar: boolean;
 }
 
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -76,14 +84,17 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   canDeleteItem: true,
   canResizeItem: true,
   canDragItem: true,
+  renderImageToolbar: true,
+  renderTextToolbar: true,
 };
 
 export function DemoManuscriptSpreadView() {
   // Mock options state
   const [mockOptions, setMockOptions] =
     useState<MockOptions>(DEFAULT_MOCK_OPTIONS);
-  const [featureFlags, setFeatureFlags] =
-    useState<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(
+    DEFAULT_FEATURE_FLAGS
+  );
 
   // Generate spreads from options
   const generateSpreads = useCallback((opts: MockOptions): BaseSpread[] => {
@@ -228,6 +239,122 @@ export function DemoManuscriptSpreadView() {
     []
   );
 
+  const handleCloneImage = useCallback(
+    (spreadId: string, imageIndex: number) => {
+      setSpreads((prev) =>
+        prev.map((s) => {
+          if (s.id !== spreadId) return s;
+          const item = s.images[imageIndex];
+          if (!item) return s;
+          const clonedItem = {
+            ...item,
+            id: `img-${Date.now()}`,
+            geometry: {
+              ...item.geometry,
+              x: Math.min(100, item.geometry.x + 10),
+              y: Math.min(100, item.geometry.y + 10),
+            },
+          };
+          return { ...s, images: [...s.images, clonedItem] };
+        })
+      );
+    },
+    []
+  );
+
+  const handleCloneTextbox = useCallback(
+    (spreadId: string, textboxIndex: number) => {
+      setSpreads((prev) =>
+        prev.map((s) => {
+          if (s.id !== spreadId) return s;
+          const item = s.textboxes[textboxIndex];
+          if (!item) return s;
+          const clonedItem = {
+            ...item,
+            id: `txt-${Date.now()}`,
+          };
+          const langKey = Object.keys(item).find(
+            (k) => k !== "id" && k !== "title"
+          );
+          if (langKey) {
+            const langData = item[langKey] as {
+              text: string;
+              geometry: { x: number; y: number; w: number; h: number };
+            };
+            clonedItem[langKey] = {
+              ...langData,
+              geometry: {
+                ...langData.geometry,
+                x: Math.min(100, langData.geometry.x + 10),
+                y: Math.min(100, langData.geometry.y + 10),
+              },
+            };
+          }
+          return { ...s, textboxes: [...s.textboxes, clonedItem] };
+        })
+      );
+    },
+    []
+  );
+
+  const handleUpdateTextboxBackground = useCallback(
+    (spreadId: string, textboxIndex: number, bg: Partial<Fill>) => {
+      setSpreads((prev) =>
+        prev.map((s) => {
+          if (s.id !== spreadId) return s;
+          const newTextboxes = [...s.textboxes];
+          const item = newTextboxes[textboxIndex];
+          const langKey = Object.keys(item).find(
+            (k) => k !== "id" && k !== "title"
+          );
+          if (langKey) {
+            const langData = item[langKey] as {
+              fill?: Fill;
+            };
+            newTextboxes[textboxIndex] = {
+              ...item,
+              [langKey]: {
+                ...langData,
+                fill: { ...langData.fill, ...bg },
+              },
+            };
+          }
+          return { ...s, textboxes: newTextboxes };
+        })
+      );
+    },
+    []
+  );
+
+  const handleUpdateTextboxOutline = useCallback(
+    (spreadId: string, textboxIndex: number, outline: Partial<Outline>) => {
+      setSpreads((prev) =>
+        prev.map((s) => {
+          if (s.id !== spreadId) return s;
+          const newTextboxes = [...s.textboxes];
+          const item = newTextboxes[textboxIndex];
+          const langKey = Object.keys(item).find(
+            (k) => k !== "id" && k !== "title"
+          );
+          if (langKey) {
+            const langData = item[langKey] as {
+              outline?: Outline;
+            };
+            newTextboxes[textboxIndex] = {
+              ...item,
+              [langKey]: {
+                ...langData,
+                outline: { ...langData.outline, ...outline },
+              },
+            };
+          }
+          return { ...s, textboxes: newTextboxes };
+        })
+      );
+    },
+    []
+  );
+
   // === Render Props ===
   const renderImageItem = useCallback(
     (context: ImageItemContext<BaseSpread>) => (
@@ -255,8 +382,8 @@ export function DemoManuscriptSpreadView() {
       geometry: {
         x: number;
         y: number;
-        width: number;
-        height: number;
+        w: number;
+        h: number;
       };
       typography: {
         size?: number;
@@ -292,6 +419,38 @@ export function DemoManuscriptSpreadView() {
       />
     );
   }, []);
+
+  const renderImageToolbar = useCallback(
+    (context: ImageToolbarContext<BaseSpread>) => {
+      return (
+        <DemoImageToolbar
+          context={{
+            ...context,
+            onClone: () => handleCloneImage(context.spreadId, context.itemIndex),
+          }}
+        />
+      );
+    },
+    [handleCloneImage]
+  );
+
+  const renderTextToolbar = useCallback(
+    (context: TextToolbarContext<BaseSpread>) => {
+      return (
+        <DemoTextToolbar
+          context={{
+            ...context,
+            onClone: () => handleCloneTextbox(context.spreadId, context.itemIndex),
+            onUpdateBackground: (bg) =>
+              handleUpdateTextboxBackground(context.spreadId, context.itemIndex, bg),
+            onUpdateOutline: (outline) =>
+              handleUpdateTextboxOutline(context.spreadId, context.itemIndex, outline),
+          }}
+        />
+      );
+    },
+    [handleCloneTextbox, handleUpdateTextboxBackground, handleUpdateTextboxOutline]
+  );
 
   return (
     <TooltipProvider>
@@ -461,6 +620,12 @@ export function DemoManuscriptSpreadView() {
               renderItems={["image", "text"]}
               renderImageItem={renderImageItem}
               renderTextItem={renderTextItem}
+              renderImageToolbar={
+                featureFlags.renderImageToolbar ? renderImageToolbar : undefined
+              }
+              renderTextToolbar={
+                featureFlags.renderTextToolbar ? renderTextToolbar : undefined
+              }
               onSpreadSelect={handleSpreadSelect}
               onSpreadReorder={handleSpreadReorder}
               onSpreadAdd={handleSpreadAdd}
@@ -470,7 +635,14 @@ export function DemoManuscriptSpreadView() {
               onUpdateTextbox={handleUpdateTextbox}
               onDeleteImage={handleDeleteImage}
               onDeleteTextbox={handleDeleteTextbox}
-              {...featureFlags}
+              isEditable={featureFlags.isEditable}
+              canAddSpread={featureFlags.canAddSpread}
+              canReorderSpread={featureFlags.canReorderSpread}
+              canDeleteSpread={featureFlags.canDeleteSpread}
+              canAddItem={featureFlags.canAddItem}
+              canDeleteItem={featureFlags.canDeleteItem}
+              canResizeItem={featureFlags.canResizeItem}
+              canDragItem={featureFlags.canDragItem}
               initialViewMode="edit"
             />
           </div>
@@ -480,7 +652,9 @@ export function DemoManuscriptSpreadView() {
             <div className="p-3 border-b bg-background">
               <h3 className="text-sm font-medium">Spread Data</h3>
               <p className="text-xs text-muted-foreground">
-                {selectedSpread ? `ID: ${selectedSpread.id}` : "Select a spread"}
+                {selectedSpread
+                  ? `ID: ${selectedSpread.id}`
+                  : "Select a spread"}
               </p>
             </div>
             <div className="flex-1 overflow-auto p-3">

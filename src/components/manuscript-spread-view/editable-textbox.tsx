@@ -13,7 +13,7 @@ interface EditableTextboxProps {
   index: number;
   isSelected: boolean;
   isEditable: boolean;
-  onSelect: () => void;
+  onSelect: (rect?: DOMRect) => void;
   onTextChange: (text: string) => void;
   onEditingChange: (isEditing: boolean) => void;
 }
@@ -64,10 +64,11 @@ export function EditableTextbox({
     onEditingChange(false);
   }, [text, onTextChange, onEditingChange]);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (isEditable && !isEditing) {
-      onSelect();
+      const rect = e.currentTarget.getBoundingClientRect();
+      onSelect(rect);
     }
   }, [isEditable, isEditing, onSelect]);
 

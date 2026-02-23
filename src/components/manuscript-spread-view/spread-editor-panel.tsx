@@ -79,6 +79,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
 // === Local State Interface ===
 interface EditorState {
   selectedElement: SelectedElement | null;
+  selectedGeometry: Geometry | null;  // For toolbar positioning
   isTextboxEditing: boolean;
   isImageEditing: boolean;
   isDragging: boolean;
@@ -115,6 +116,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // Local state
   const [state, setState] = useState<EditorState>({
     selectedElement: null,
+    selectedGeometry: null,
     isTextboxEditing: false,
     isImageEditing: false,
     isDragging: false,
@@ -128,15 +130,30 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Selection Handlers ===
   const handleElementSelect = useCallback((element: SelectedElement | null) => {
+    let geometry: Geometry | null = null;
+
+    if (element) {
+      if (element.type === 'image') {
+        geometry = spread.images[element.index]?.geometry ?? null;
+      } else if (element.type === 'textbox') {
+        const item = spread.textboxes[element.index];
+        const langKey = Object.keys(item || {}).find((k) => k !== 'id' && k !== 'title');
+        geometry = langKey ? (item[langKey] as { geometry: Geometry })?.geometry ?? null : null;
+      } else if (element.type === 'object') {
+        geometry = spread.objects?.[element.index]?.geometry ?? null;
+      }
+    }
+
     setState((prev) => ({
       ...prev,
       selectedElement: element,
+      selectedGeometry: geometry,
       isDragging: false,
       isResizing: false,
       activeHandle: null,
       originalGeometry: null,
     }));
-  }, []);
+  }, [spread]);
 
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
     if (e.target === canvasRef.current) {
@@ -207,6 +224,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
     const newGeometry = applyDragDelta(originalGeometry, delta.x, delta.y);
     updateElementGeometry(selectedElement, newGeometry);
+
+    // Update selectedGeometry for toolbar positioning
+    setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
   }, [state, updateElementGeometry]);
 
   const handleDragEnd = useCallback(() => {
@@ -234,6 +254,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
     const newGeometry = applyResizeDelta(originalGeometry, handle, delta.x, delta.y);
     updateElementGeometry(selectedElement, newGeometry);
+
+    // Update selectedGeometry for toolbar positioning
+    setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
   }, [state, updateElementGeometry]);
 
   const handleResizeEnd = useCallback(() => {
@@ -409,35 +432,30 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         {/* Toolbars (rendered by consumer) */}
         {state.selectedElement && isEditable && (() => {
           const { selectedElement } = state;
-          const toolbarStyle = { zIndex: Z_INDEX.TOOLBAR };
 
           if (selectedElement.type === 'image' && renderImageToolbar) {
             const image = spread.images[selectedElement.index];
             if (!image) return null;
             const context = buildImageContext(image, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateImage, onDeleteImage);
-            return (
-              <div className="absolute top-2 right-2" style={toolbarStyle}>
-                {renderImageToolbar({
-                  ...context,
-                  onGenerateImage: () => {},
-                  onReplaceImage: () => {},
-                })}
-              </div>
-            );
+            return renderImageToolbar({
+              ...context,
+              selectedGeometry: state.selectedGeometry,
+              canvasRef,
+              onGenerateImage: () => {},
+              onReplaceImage: () => {},
+            });
           }
 
           if (selectedElement.type === 'textbox' && renderTextToolbar) {
             const textbox = spread.textboxes[selectedElement.index];
             if (!textbox) return null;
             const context = buildTextContext(textbox, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateTextbox, onDeleteTextbox);
-            return (
-              <div className="absolute top-2 right-2" style={toolbarStyle}>
-                {renderTextToolbar({
-                  ...context,
-                  onFormatText: () => {},
-                })}
-              </div>
-            );
+            return renderTextToolbar({
+              ...context,
+              selectedGeometry: state.selectedGeometry,
+              canvasRef,
+              onFormatText: () => {},
+            });
           }
 
           return null;

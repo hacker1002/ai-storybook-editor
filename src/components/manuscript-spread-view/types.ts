@@ -183,6 +183,14 @@ export interface AnimationItemContext<TSpread extends BaseSpread> extends BaseIt
 }
 
 // === Toolbar Contexts ===
+import type { RefObject } from 'react';
+
+// Base toolbar context with positioning data
+export interface BaseToolbarContext {
+  selectedGeometry: Geometry | null;
+  canvasRef: RefObject<HTMLDivElement | null>;
+}
+
 export interface PageToolbarContext<TSpread extends BaseSpread> {
   page: PageData;
   pageIndex: number;
@@ -198,13 +206,17 @@ export interface PageToolbarContext<TSpread extends BaseSpread> {
   isLayoutLocked: boolean;
 }
 
-export interface ImageToolbarContext<TSpread extends BaseSpread> extends ImageItemContext<TSpread> {
+export interface ImageToolbarContext<TSpread extends BaseSpread> extends ImageItemContext<TSpread>, BaseToolbarContext {
   onGenerateImage: () => void;
   onReplaceImage: () => void;
+  onClone?: () => void;
 }
 
-export interface TextToolbarContext<TSpread extends BaseSpread> extends TextItemContext<TSpread> {
+export interface TextToolbarContext<TSpread extends BaseSpread> extends TextItemContext<TSpread>, BaseToolbarContext {
   onFormatText: (format: Partial<Typography>) => void;
+  onClone?: () => void;
+  onUpdateBackground?: (bg: Partial<Fill>) => void;
+  onUpdateOutline?: (outline: Partial<Outline>) => void;
 }
 
 export interface ObjectToolbarContext<TSpread extends BaseSpread> extends ObjectItemContext<TSpread> {
