@@ -54,7 +54,7 @@ export function SelectionFrame({
   // Update moveable when geometry changes from external source
   useEffect(() => {
     moveableRef.current?.updateRect();
-  }, [geometry]);
+  }, [geometry.x, geometry.y, geometry.w, geometry.h]);
 
   // Sync activeHandle prop with internal state
   useEffect(() => {
@@ -92,9 +92,9 @@ export function SelectionFrame({
   // Border width for drag zone (pixels)
   const DRAG_BORDER_WIDTH = 20;
 
-  // Compute className for active handle visual feedback
-  const moveableClassName = currentHandleRef.current
-    ? `moveable-selection active-${currentHandleRef.current}`
+  // Compute className for active handle visual feedback (use prop directly)
+  const moveableClassName = activeHandle
+    ? `moveable-selection active-${activeHandle}`
     : 'moveable-selection';
 
   return (

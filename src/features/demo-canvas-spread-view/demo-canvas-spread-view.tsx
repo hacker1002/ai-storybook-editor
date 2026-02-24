@@ -15,6 +15,8 @@ import {
   type TextToolbarContext,
   type Fill,
   type Outline,
+  type Typography,
+  type SpreadType,
 } from "@/components/canvas-spread-view";
 import { DemoImageToolbar } from "./demo-image-toolbar";
 import { DemoTextToolbar } from "./demo-text-toolbar";
@@ -22,6 +24,7 @@ import {
   createMockSnapshot,
   type CreateSnapshotOptions,
 } from "./__mocks__/snapshot-factory";
+import { createMockSpread } from "./__mocks__/spread-factory";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -143,6 +146,25 @@ export function DemoCanvasSpreadView() {
   );
 
   // === Spread-level handlers ===
+
+  // Helper: recalculate page numbers based on spread position
+  const renumberPages = useCallback((spreads: BaseSpread[]): BaseSpread[] => {
+    return spreads.map((spread, idx) => {
+      const leftPageNum = idx * 2;
+      const rightPageNum = leftPageNum + 1;
+      const isDPS = spread.pages.length === 1;
+
+      const newPages = isDPS
+        ? [{ ...spread.pages[0], number: `${leftPageNum}-${rightPageNum}` }]
+        : [
+            { ...spread.pages[0], number: leftPageNum },
+            { ...spread.pages[1], number: rightPageNum },
+          ];
+
+      return { ...spread, pages: newPages };
+    });
+  }, []);
+
   const handleSpreadSelect = useCallback((spreadId: string) => {
     setSelectedSpreadId(spreadId);
   }, []);
@@ -153,19 +175,29 @@ export function DemoCanvasSpreadView() {
         const newSpreads = [...prev];
         const [removed] = newSpreads.splice(fromIndex, 1);
         newSpreads.splice(toIndex, 0, removed);
-        return newSpreads;
+        return renumberPages(newSpreads);
       });
     },
-    []
+    [renumberPages]
   );
 
-  const handleSpreadAdd = useCallback(() => {
-    // In real app, would create new spread
-  }, []);
+  const handleSpreadAdd = useCallback((type: SpreadType) => {
+    const newSpread = createMockSpread({
+      spreadIndex: spreads.length,
+      isDPS: type === 'double',
+      imageCount: 0,
+      textboxCount: 0,
+    });
+    setSpreads((prev) => [...prev, newSpread]);
+    setSelectedSpreadId(newSpread.id);
+  }, [spreads.length]);
 
   const handleSpreadDelete = useCallback((spreadId: string) => {
-    setSpreads((prev) => prev.filter((s) => s.id !== spreadId));
-  }, []);
+    setSpreads((prev) => {
+      const filtered = prev.filter((s) => s.id !== spreadId);
+      return renumberPages(filtered);
+    });
+  }, [renumberPages]);
 
   // === Item-level handlers ===
   const handleUpdateSpread = useCallback(
@@ -269,19 +301,19 @@ export function DemoCanvasSpreadView() {
           if (s.id !== spreadId) return s;
           const item = s.textboxes[textboxIndex];
           if (!item) return s;
-          const clonedItem = {
+          const clonedItem: SpreadTextbox = {
             ...item,
             id: `txt-${Date.now()}`,
           };
           const langKey = Object.keys(item).find(
             (k) => k !== "id" && k !== "title"
-          );
-          if (langKey) {
+          ) as keyof SpreadTextbox | undefined;
+          if (langKey && langKey !== "id" && langKey !== "title") {
             const langData = item[langKey] as {
               text: string;
               geometry: { x: number; y: number; w: number; h: number };
             };
-            clonedItem[langKey] = {
+            (clonedItem[langKey] as typeof langData) = {
               ...langData,
               geometry: {
                 ...langData.geometry,
@@ -306,18 +338,23 @@ export function DemoCanvasSpreadView() {
           const item = newTextboxes[textboxIndex];
           const langKey = Object.keys(item).find(
             (k) => k !== "id" && k !== "title"
-          );
-          if (langKey) {
+          ) as keyof SpreadTextbox | undefined;
+          if (langKey && langKey !== "id" && langKey !== "title") {
             const langData = item[langKey] as {
+              text: string;
+              geometry: { x: number; y: number; w: number; h: number };
+              typography: Typography;
               fill?: Fill;
+              outline?: Outline;
             };
-            newTextboxes[textboxIndex] = {
+            const updatedTextbox: SpreadTextbox = {
               ...item,
               [langKey]: {
                 ...langData,
-                fill: { ...langData.fill, ...bg },
+                fill: { ...langData.fill, ...bg } as Fill,
               },
             };
+            newTextboxes[textboxIndex] = updatedTextbox;
           }
           return { ...s, textboxes: newTextboxes };
         })
@@ -335,18 +372,23 @@ export function DemoCanvasSpreadView() {
           const item = newTextboxes[textboxIndex];
           const langKey = Object.keys(item).find(
             (k) => k !== "id" && k !== "title"
-          );
-          if (langKey) {
+          ) as keyof SpreadTextbox | undefined;
+          if (langKey && langKey !== "id" && langKey !== "title") {
             const langData = item[langKey] as {
+              text: string;
+              geometry: { x: number; y: number; w: number; h: number };
+              typography: Typography;
+              fill?: Fill;
               outline?: Outline;
             };
-            newTextboxes[textboxIndex] = {
+            const updatedTextbox: SpreadTextbox = {
               ...item,
               [langKey]: {
                 ...langData,
-                outline: { ...langData.outline, ...outline },
+                outline: { ...langData.outline, ...outline } as Outline,
               },
             };
+            newTextboxes[textboxIndex] = updatedTextbox;
           }
           return { ...s, textboxes: newTextboxes };
         })
@@ -629,7 +671,7 @@ export function DemoCanvasSpreadView() {
               onSpreadSelect={handleSpreadSelect}
               onSpreadReorder={handleSpreadReorder}
               onSpreadAdd={handleSpreadAdd}
-              onSpreadDelete={handleSpreadDelete}
+              onDeleteSpread={handleSpreadDelete}
               onUpdateSpread={handleUpdateSpread}
               onUpdateImage={handleUpdateImage}
               onUpdateTextbox={handleUpdateTextbox}

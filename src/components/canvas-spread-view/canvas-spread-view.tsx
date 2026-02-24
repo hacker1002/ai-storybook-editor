@@ -6,6 +6,7 @@ import { SpreadViewHeader } from './spread-view-header';
 import { SpreadEditorPanel } from './spread-editor-panel';
 import { SpreadThumbnailList } from './spread-thumbnail-list';
 import { ZOOM, COLUMNS } from './constants';
+import type { SpreadType } from './new-spread-button';
 import type { ViewMode } from './types';
 
 const STORAGE_KEY = 'spread-view-prefs';
@@ -73,8 +74,8 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Spread-level callbacks
   onSpreadSelect?: (spreadId: string) => void;
   onSpreadReorder?: (fromIndex: number, toIndex: number) => void;
-  onSpreadAdd?: () => void;
-  onSpreadDelete?: (spreadId: string) => void;
+  onSpreadAdd?: (type: SpreadType) => void;
+  onDeleteSpread?: (spreadId: string) => void;
 
   // Item-level callbacks
   onUpdateSpread?: (spreadId: string, updates: Partial<TSpread>) => void;
@@ -116,7 +117,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   onSpreadSelect,
   onSpreadReorder,
   onSpreadAdd,
-  onSpreadDelete,
+  onDeleteSpread,
   onUpdateSpread,
   onUpdateImage,
   onUpdateTextbox,
@@ -169,7 +170,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     [spreads, selectedId]
   );
 
-  // === Global Keyboard Shortcuts ===
+  // === Global Keyboard Shortcuts (Navigation only) ===
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if user is typing in an input/textarea
@@ -179,10 +180,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
       }
 
       switch (e.key.toLowerCase()) {
-        case 'g':
-          // Toggle view mode
-          setViewMode((prev) => (prev === 'edit' ? 'grid' : 'edit'));
-          break;
         case 'arrowleft':
           // Navigate to previous spread
           if (selectedIndex > 0) {
@@ -214,34 +211,28 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             onSpreadSelect?.(lastSpread.id);
           }
           break;
-        case '+':
-        case '=':
-          // Zoom in / increase columns
-          if (viewMode === 'edit') {
-            setZoomLevel((prev) => Math.min(prev + ZOOM.STEP, ZOOM.MAX));
-          } else {
-            setColumnsPerRow((prev) => Math.min(prev + 1, COLUMNS.MAX));
-          }
-          break;
-        case '-':
-          // Zoom out / decrease columns
-          if (viewMode === 'edit') {
-            setZoomLevel((prev) => Math.max(prev - ZOOM.STEP, ZOOM.MIN));
-          } else {
-            setColumnsPerRow((prev) => Math.max(prev - 1, COLUMNS.MIN));
-          }
-          break;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [viewMode, selectedIndex, spreads, onSpreadSelect]);
+  }, [selectedIndex, spreads, onSpreadSelect]);
 
   // === Handlers ===
   const handleViewModeToggle = useCallback(() => {
-    setViewMode((prev) => (prev === 'edit' ? 'grid' : 'edit'));
-  }, []);
+    setViewMode((prev) => {
+      const newMode = prev === 'edit' ? 'grid' : 'edit';
+
+      // Auto-select first spread when switching to Edit without selection
+      if (newMode === 'edit' && !selectedId && spreads.length > 0) {
+        const firstSpreadId = spreads[0].id;
+        setSelectedId(firstSpreadId);
+        onSpreadSelect?.(firstSpreadId);
+      }
+
+      return newMode;
+    });
+  }, [selectedId, spreads, onSpreadSelect]);
 
   const handleZoomChange = useCallback((level: number) => {
     setZoomLevel(level);
@@ -254,11 +245,42 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   const handleSpreadClick = useCallback((spreadId: string) => {
     setSelectedId(spreadId);
     onSpreadSelect?.(spreadId);
-    // Switch to edit mode when clicking thumbnail in grid mode
-    if (viewMode === 'grid') {
-      setViewMode('edit');
+  }, [onSpreadSelect]);
+
+  const handleSpreadDoubleClick = useCallback((spreadId: string) => {
+    // Grid mode: select and switch to Edit
+    setSelectedId(spreadId);
+    onSpreadSelect?.(spreadId);
+    setViewMode('edit');
+  }, [onSpreadSelect]);
+
+  const handleDeleteSpread = useCallback((spreadId: string) => {
+    const currentIndex = spreads.findIndex(s => s.id === spreadId);
+    if (currentIndex === -1) return;
+
+    // Determine next selection (next spread, fallback to previous)
+    let nextId: string | null = null;
+    if (spreads.length > 1) {
+      if (currentIndex < spreads.length - 1) {
+        // Select NEXT spread (standard reading order flow)
+        nextId = spreads[currentIndex + 1].id;
+      } else {
+        // Was last spread, select PREVIOUS
+        nextId = spreads[currentIndex - 1].id;
+      }
     }
-  }, [viewMode, onSpreadSelect]);
+
+    // Call parent delete callback
+    onDeleteSpread?.(spreadId);
+
+    // Update selection to maintain user flow
+    if (nextId) {
+      setSelectedId(nextId);
+      onSpreadSelect?.(nextId);
+    } else {
+      setSelectedId(null);
+    }
+  }, [spreads, onDeleteSpread, onSpreadSelect]);
 
   // Wrap callbacks to include spreadId
   const handleUpdateSpread = useCallback((updates: Partial<TSpread>) => {
@@ -299,6 +321,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
         onViewModeToggle={handleViewModeToggle}
         onZoomChange={handleZoomChange}
         onColumnsChange={handleColumnsChange}
+        enableKeyboardShortcuts={true}
       />
 
       {/* Content */}
@@ -347,9 +370,10 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 canReorder={canReorderSpread}
                 canDelete={canDeleteSpread}
                 onSpreadClick={handleSpreadClick}
+                onSpreadDoubleClick={undefined}
                 onReorderSpread={onSpreadReorder}
                 onAddSpread={onSpreadAdd}
-                onDeleteSpread={onSpreadDelete}
+                onDeleteSpread={handleDeleteSpread}
               />
             </div>
           </>
@@ -367,9 +391,10 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             canReorder={canReorderSpread}
             canDelete={canDeleteSpread}
             onSpreadClick={handleSpreadClick}
+            onSpreadDoubleClick={handleSpreadDoubleClick}
             onReorderSpread={onSpreadReorder}
             onAddSpread={onSpreadAdd}
-            onDeleteSpread={onSpreadDelete}
+            onDeleteSpread={handleDeleteSpread}
           />
         )}
       </div>

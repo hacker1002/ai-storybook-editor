@@ -1,12 +1,14 @@
 // spread-view-header.tsx
 'use client';
 
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Grid2X2, Minus, Plus } from 'lucide-react';
 import { HEADER, ZOOM, COLUMNS } from './constants';
 import type { ViewMode } from './types';
+import { useSpreadViewKeyboard } from './hooks/use-spread-view-keyboard';
 
 // === Props Interface ===
 interface SpreadViewHeaderProps {
@@ -16,6 +18,7 @@ interface SpreadViewHeaderProps {
   onViewModeToggle: () => void;
   onZoomChange: (level: number) => void;
   onColumnsChange: (columns: number) => void;
+  enableKeyboardShortcuts?: boolean;
 }
 
 // === Main Component ===
@@ -26,7 +29,22 @@ export function SpreadViewHeader({
   onViewModeToggle,
   onZoomChange,
   onColumnsChange,
+  enableKeyboardShortcuts = true,
 }: SpreadViewHeaderProps) {
+  const [announcement, setAnnouncement] = useState('');
+
+  // Keyboard shortcuts hook
+  useSpreadViewKeyboard({
+    viewMode,
+    zoomLevel,
+    columnsPerRow,
+    onViewModeToggle,
+    onZoomChange,
+    onColumnsChange,
+    onAnnounce: setAnnouncement,
+    enabled: enableKeyboardShortcuts,
+  });
+
   return (
     <header
       className="flex items-center justify-between px-4 border-b bg-background"
@@ -46,6 +64,16 @@ export function SpreadViewHeader({
         onZoomChange={onZoomChange}
         onColumnsChange={onColumnsChange}
       />
+
+      {/* ARIA Live Region for Screen Readers */}
+      <span
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announcement}
+      </span>
     </header>
   );
 }
@@ -61,18 +89,27 @@ function ViewToggle({ viewMode, onToggle }: ViewToggleProps) {
     ? 'Show spread grid view'
     : 'Show full spread view';
 
+  const isEditMode = viewMode === 'edit';
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant="outline"
+          variant={isEditMode ? 'default' : 'ghost'}
           size="icon"
           onClick={onToggle}
           aria-pressed={viewMode === 'grid'}
           aria-label={`Switch to ${viewMode === 'edit' ? 'grid' : 'edit'} view`}
           style={{ width: HEADER.TOGGLE_SIZE, height: HEADER.TOGGLE_SIZE }}
+          className={
+            isEditMode
+              ? 'pointer-events-auto'
+              : 'hover:bg-muted/50'
+          }
         >
-          <Grid2X2 className="h-4 w-4" />
+          <Grid2X2
+            className={isEditMode ? 'h-4 w-4' : 'h-4 w-4 opacity-60'}
+          />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">

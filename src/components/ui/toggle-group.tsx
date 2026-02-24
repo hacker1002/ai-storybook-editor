@@ -1,5 +1,4 @@
 import * as React from "react";
-import { type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 
@@ -28,15 +27,15 @@ const ToggleGroup = React.forwardRef<HTMLDivElement, ToggleGroupProps>(
     return (
       <div ref={ref} className={cn("flex items-center gap-1", className)}>
         {React.Children.map(children, (child) => {
-          if (React.isValidElement(child)) {
+          if (React.isValidElement<ToggleGroupItemProps>(child)) {
+            const childProps = child.props as ToggleGroupItemProps;
             return React.cloneElement(child, {
-              ...child.props,
               onValueChange: handleToggle,
               isActive:
                 type === "single"
-                  ? child.props.value === value
-                  : Array.isArray(value) && value.includes(child.props.value),
-            } as any);
+                  ? childProps.value === value
+                  : Array.isArray(value) && value.includes(childProps.value),
+            } as Partial<ToggleGroupItemProps>);
           }
           return child;
         })}

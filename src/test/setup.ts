@@ -9,7 +9,19 @@ afterEach(() => {
 
 // Mock react-moveable for tests
 vi.mock('react-moveable', () => {
-  const Moveable = React.forwardRef(({
+  interface MoveableProps extends Record<string, unknown> {
+    target?: React.RefObject<HTMLElement>;
+    draggable?: boolean;
+    onDragStart?: () => void;
+    onDrag?: (e: { dist: number[]; distX: number; distY: number }) => void;
+    onDragEnd?: () => void;
+    className?: string;
+  }
+
+  const Moveable = React.forwardRef<{
+    updateRect: () => void;
+    getRect: () => { left: number; top: number; width: number; height: number };
+  }, MoveableProps>(({
     target,
     draggable,
     onDragStart,
@@ -40,19 +52,25 @@ vi.mock('react-moveable', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     padding,
     ...props
-  }: Record<string, unknown>, ref: React.ForwardedRef<unknown>) => {
+  }, ref) => {
+    // Extract callbacks with proper types
+    const dragStartCallback = onDragStart as (() => void) | undefined;
+    const dragCallback = onDrag as ((e: { dist: number[]; distX: number; distY: number }) => void) | undefined;
+    const dragEndCallback = onDragEnd as (() => void) | undefined;
+    const targetRef = target as React.RefObject<HTMLElement> | undefined;
+
     React.useImperativeHandle(ref, () => ({
       updateRect: vi.fn(),
       getRect: vi.fn(() => ({ left: 0, top: 0, width: 100, height: 100 })),
     }));
 
     React.useEffect(() => {
-      const targetElement = target?.current;
-      if (!targetElement) return;
+      if (!targetRef || !targetRef.current) return;
+      const targetElement = targetRef.current;
 
       const handleMouseDown = (e: MouseEvent) => {
         if (!draggable) return;
-        onDragStart?.();
+        if (dragStartCallback) dragStartCallback();
 
         const startX = e.clientX;
         const startY = e.clientY;
@@ -62,13 +80,13 @@ vi.mock('react-moveable', () => {
             moveEvent.clientX - startX,
             moveEvent.clientY - startY,
           ];
-          onDrag?.({ dist, distX: dist[0], distY: dist[1] });
+          if (dragCallback) dragCallback({ dist, distX: dist[0], distY: dist[1] });
         };
 
         const handleMouseUp = () => {
           document.removeEventListener('mousemove', handleMouseMove);
           document.removeEventListener('mouseup', handleMouseUp);
-          onDragEnd?.();
+          if (dragEndCallback) dragEndCallback();
         };
 
         document.addEventListener('mousemove', handleMouseMove);
@@ -80,7 +98,7 @@ vi.mock('react-moveable', () => {
       return () => {
         targetElement.removeEventListener('mousedown', handleMouseDown);
       };
-    }, [target, draggable, onDragStart, onDrag, onDragEnd]);
+    }, [targetRef, draggable, dragStartCallback, dragCallback, dragEndCallback]);
 
     // Filter out react-moveable-specific props before passing to div
     const divProps = {

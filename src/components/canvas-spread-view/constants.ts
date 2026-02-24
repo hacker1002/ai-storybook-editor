@@ -13,11 +13,11 @@ export const ZOOM = {
   MIN: 25,
   MAX: 200,
   DEFAULT: 100,
-  STEP: 25,
+  STEP: 5,
 } as const;
 
 export const COLUMNS = {
-  MIN: 1,
+  MIN: 2,
   MAX: 6,
   DEFAULT: 4,
 } as const;

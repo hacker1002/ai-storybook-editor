@@ -11,7 +11,7 @@ export { SpreadViewHeader } from './spread-view-header';
 export { SpreadEditorPanel } from './spread-editor-panel';
 export { SpreadThumbnailList } from './spread-thumbnail-list';
 export { SpreadThumbnail } from './spread-thumbnail';
-export { NewSpreadButton } from './new-spread-button';
+export { NewSpreadButton, type SpreadType } from './new-spread-button';
 
 // Utility components
 export { EditableImage } from './editable-image';

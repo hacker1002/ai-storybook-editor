@@ -1,10 +1,10 @@
 // spread-thumbnail.tsx
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import React, { useMemo, useRef, useState, useLayoutEffect, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { buildViewOnlyImageContext, buildViewOnlyTextContext } from './utils/context-builders';
-import { THUMBNAIL } from './constants';
+import { CANVAS, THUMBNAIL } from './constants';
 import type {
   BaseSpread,
   ItemType,
@@ -33,12 +33,16 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
 
   // Callbacks
   onClick: () => void;
+  onDoubleClick?: () => void;  // Grid mode: switch to Edit
+  onDelete?: () => void;        // Delete spread
+  canDelete?: boolean;          // Enable delete feature
+  isLastSpread?: boolean;       // Hide delete if true (can't delete last spread)
   onDragStart?: () => void;
   onDragOver?: () => void;
   onDragEnd?: () => void;
 }
 
-export function SpreadThumbnail<TSpread extends BaseSpread>({
+function SpreadThumbnailInner<TSpread extends BaseSpread>({
   spread,
   spreadIndex,
   isSelected,
@@ -50,9 +54,36 @@ export function SpreadThumbnail<TSpread extends BaseSpread>({
   isDragging = false,
   isDropTarget = false,
   onClick,
+  onDoubleClick,
+  onDelete,
+  canDelete = false,
+  isLastSpread = false,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
 }: SpreadThumbnailProps<TSpread>) {
-  // Scale factor
-  const scale = size === 'small' ? THUMBNAIL.SMALL_SCALE : THUMBNAIL.MEDIUM_SCALE;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Track container width for medium mode scaling
+  useLayoutEffect(() => {
+    if (size !== 'medium' || !containerRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [size]);
+
+  // Scale factor: small uses fixed, medium calculates from container width
+  const scale = size === 'small'
+    ? THUMBNAIL.SMALL_SCALE
+    : containerWidth > 0 ? containerWidth / CANVAS.BASE_WIDTH : 0;
 
   // Page label
   const label = useMemo(() => {
@@ -62,44 +93,94 @@ export function SpreadThumbnail<TSpread extends BaseSpread>({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
+  // Memoize image contexts
+  const imageContexts = useMemo(() => {
+    if (!renderItems.includes('image')) return [];
+    return spread.images.map((img, idx) => ({
+      image: img,
+      context: buildViewOnlyImageContext(img, idx, spread),
+    }));
+  }, [spread.images, spread.id, renderItems]);
+
+  // Memoize text contexts
+  const textContexts = useMemo(() => {
+    if (!renderItems.includes('text')) return [];
+    return spread.textboxes.map((textbox, idx) => ({
+      textbox,
+      context: buildViewOnlyTextContext(textbox, idx, spread),
+    }));
+  }, [spread.textboxes, spread.id, renderItems]);
+
+  // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
+  const cursor = isDragging ? 'grabbing' : (isDragEnabled ? 'grab' : 'pointer');
+
+  // Show delete button when hovering and not last spread
+  const showDeleteButton = canDelete && !isLastSpread;
+
   return (
     <div
       role="option"
       aria-selected={isSelected}
       aria-label={`Spread ${spreadIndex + 1}, ${label}`}
       tabIndex={0}
-      onClick={onClick}
       onKeyDown={(e) => e.key === 'Enter' && onClick()}
       className={cn(
-        'flex-shrink-0 cursor-pointer transition-all scroll-snap-align-start',
+        'flex-shrink-0 transition-all scroll-snap-align-start',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
         isDragging && 'opacity-50',
         isDropTarget && 'ring-2 ring-dashed ring-blue-400',
       )}
       draggable={isDragEnabled}
       aria-grabbed={isDragging}
+      onDragStart={(e) => {
+        if (!isDragEnabled) return;
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart?.();
+      }}
+      onDragOver={(e) => {
+        if (!isDragEnabled) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        onDragOver?.();
+      }}
+      onDragEnd={onDragEnd}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      }}
     >
-      {/* Thumbnail Container */}
+      {/* Thumbnail Container - responsive width with fixed aspect ratio */}
       <div
+        ref={containerRef}
         className={cn(
-          'relative overflow-hidden rounded-md bg-white shadow-sm',
+          'thumbnail-container relative overflow-hidden rounded-md bg-white shadow-sm',
           'hover:shadow-md transition-shadow',
+          size === 'medium' && 'w-full', // Medium: fill grid cell, Small: fixed
           isSelected && 'ring-2 ring-blue-500',
         )}
         style={{
-          width: size === 'small' ? THUMBNAIL.SMALL_SIZE.width : 'auto',
-          height: size === 'small' ? THUMBNAIL.SMALL_SIZE.height : 'auto',
+          // Maintain aspect ratio (4:3) regardless of container width
+          aspectRatio: `${CANVAS.ASPECT_RATIO}`,
+          // Small size: fixed dimensions, Medium: responsive
+          ...(size === 'small' && {
+            width: THUMBNAIL.SMALL_SIZE.width,
+            height: THUMBNAIL.SMALL_SIZE.height,
+          }),
           contain: 'layout style paint',
         }}
       >
-        {/* Scaled Content */}
+        {/* Scaled Content: render at 800×600, scale down to fit container */}
         <div
-          className="relative"
           style={{
-            width: 800,
-            height: 600,
-            transform: `scale(${scale})`,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: CANVAS.BASE_WIDTH,
+            height: CANVAS.BASE_HEIGHT,
+            transform: scale > 0 ? `scale(${scale})` : 'scale(0)',
             transformOrigin: 'top left',
+            pointerEvents: 'none',
+            // Hide until scale is calculated (prevents flash)
+            visibility: scale > 0 ? 'visible' : 'hidden',
           }}
         >
           {/* Page Background */}
@@ -110,26 +191,85 @@ export function SpreadThumbnail<TSpread extends BaseSpread>({
             <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-200" />
           )}
 
-          {/* Images (view-only) */}
-          {renderItems.includes('image') && spread.images.map((image, index) => {
-            const context = buildViewOnlyImageContext(image, index, spread);
-            return <div key={image.id || index}>{renderImageItem(context)}</div>;
-          })}
+          {/* Images (view-only, pointer-events: none) */}
+          {imageContexts.map(({ image, context }, index) => (
+            <div key={image.id || index} style={{ pointerEvents: 'none' }}>
+              {renderImageItem(context)}
+            </div>
+          ))}
 
-          {/* Textboxes (view-only) */}
-          {renderItems.includes('text') && spread.textboxes.map((textbox, index) => {
-            const context = buildViewOnlyTextContext(textbox, index, spread);
-            return <div key={textbox.id || index}>{renderTextItem(context)}</div>;
-          })}
+          {/* Textboxes (view-only, pointer-events: none) */}
+          {textContexts.map(({ textbox, context }, index) => (
+            <div key={textbox.id || index} style={{ pointerEvents: 'none' }}>
+              {renderTextItem(context)}
+            </div>
+          ))}
         </div>
+
+        {/* Click Overlay - captures all clicks/double-clicks */}
+        <div
+          className="absolute inset-0"
+          style={{
+            zIndex: 10,
+            cursor,
+            pointerEvents: 'auto',
+          }}
+          onClick={onClick}
+          onDoubleClick={onDoubleClick}
+        />
+
+        {/* Delete Button - shows on hover */}
+        {showDeleteButton && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete?.();
+            }}
+            className={cn(
+              'delete-button absolute top-1 right-1 z-20',
+              'w-6 h-6 rounded-full bg-red-500 text-white',
+              'flex items-center justify-center',
+              'opacity-0 transition-opacity duration-150',
+              'hover:bg-red-600',
+            )}
+            aria-label="Delete spread"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14zM10 11v6m4-6v6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Label */}
       <p className="mt-1 text-xs text-center text-muted-foreground truncate">
         {label}
       </p>
+
+      {/* CSS for delete button hover visibility */}
+      <style>{`
+        .thumbnail-container:hover .delete-button {
+          opacity: 1;
+        }
+      `}</style>
     </div>
   );
 }
+
+// Export memoized component
+export const SpreadThumbnail = React.memo(SpreadThumbnailInner) as typeof SpreadThumbnailInner;
 
 export default SpreadThumbnail;
