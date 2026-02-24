@@ -1,4 +1,4 @@
-// manuscript-spread-view.tsx - Root component composing all child components
+// canvas-spread-view.tsx - Root component composing all child components
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, type ReactNode } from 'react';
@@ -52,7 +52,7 @@ import type {
 } from './types';
 
 // === Props Interface ===
-interface ManuscriptSpreadViewProps<TSpread extends BaseSpread> {
+interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Data
   spreads: TSpread[];
 
@@ -104,7 +104,7 @@ interface ManuscriptSpreadViewProps<TSpread extends BaseSpread> {
 }
 
 // === Main Component ===
-export function ManuscriptSpreadView<TSpread extends BaseSpread>({
+export function CanvasSpreadView<TSpread extends BaseSpread>({
   spreads,
   renderItems,
   renderImageItem,
@@ -135,7 +135,7 @@ export function ManuscriptSpreadView<TSpread extends BaseSpread>({
   availableLayouts = [],
   initialSelectedId,
   initialViewMode = 'edit',
-}: ManuscriptSpreadViewProps<TSpread>) {
+}: CanvasSpreadViewProps<TSpread>) {
   // === Local View State (with localStorage persistence) ===
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const prefs = loadViewPreferences();
@@ -377,4 +377,4 @@ export function ManuscriptSpreadView<TSpread extends BaseSpread>({
   );
 }
 
-export default ManuscriptSpreadView;
+export default CanvasSpreadView;

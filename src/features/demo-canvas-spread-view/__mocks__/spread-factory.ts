@@ -7,7 +7,7 @@ import type {
   PageData,
   Geometry,
   Typography,
-} from '@/components/manuscript-spread-view';
+} from '@/components/canvas-spread-view';
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {

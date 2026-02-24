@@ -30,7 +30,7 @@ import {
   type Fill,
   type Outline,
   type Geometry,
-} from "@/components/manuscript-spread-view";
+} from "@/components/canvas-spread-view";
 
 interface DemoTextToolbarProps<TSpread extends BaseSpread> {
   context: TextToolbarContext<TSpread>;

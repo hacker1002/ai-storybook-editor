@@ -1,4 +1,4 @@
-// editable-image.tsx - Utility component for displaying images in ManuscriptSpreadView
+// editable-image.tsx - Utility component for displaying images in CanvasSpreadView
 'use client';
 
 import { useState, useCallback, useRef } from 'react';

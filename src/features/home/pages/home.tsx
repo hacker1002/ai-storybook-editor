@@ -148,9 +148,9 @@ export function HomePage() {
 
       <div className="border-t pt-6">
         <p className="mb-3 text-sm text-muted-foreground">Demo Pages</p>
-        <Link to="/demo/manuscript-spread-view">
+        <Link to="/demo/canvas-spread-view">
           <Button variant="outline" size="sm">
-            Manuscript Spread View
+            Canvas Spread View
           </Button>
         </Link>
       </div>

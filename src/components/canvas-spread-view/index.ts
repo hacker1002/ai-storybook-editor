@@ -1,10 +1,10 @@
-// index.ts - Barrel exports for ManuscriptSpreadView component family
+// index.ts - Barrel exports for CanvasSpreadView component family
 
 // Hooks
 export { useToolbarPosition } from './hooks/use-toolbar-position';
 
 // Main component
-export { ManuscriptSpreadView } from './manuscript-spread-view';
+export { CanvasSpreadView } from './canvas-spread-view';
 
 // Child components
 export { SpreadViewHeader } from './spread-view-header';

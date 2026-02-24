@@ -1,4 +1,4 @@
-// editable-textbox.tsx - Utility component for editable text in ManuscriptSpreadView
+// editable-textbox.tsx - Utility component for editable text in CanvasSpreadView
 'use client';
 
 import { useState, useRef, useCallback } from 'react';

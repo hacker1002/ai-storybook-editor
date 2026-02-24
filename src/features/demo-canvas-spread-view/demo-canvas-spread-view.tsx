@@ -1,9 +1,9 @@
-// features/demo-manuscript-spread-view/demo-manuscript-spread-view.tsx
+// features/demo-canvas-spread-view/demo-canvas-spread-view.tsx
 "use client";
 
 import { useState, useCallback } from "react";
 import {
-  ManuscriptSpreadView,
+  CanvasSpreadView,
   EditableImage,
   EditableTextbox,
   type BaseSpread,
@@ -15,7 +15,7 @@ import {
   type TextToolbarContext,
   type Fill,
   type Outline,
-} from "@/components/manuscript-spread-view";
+} from "@/components/canvas-spread-view";
 import { DemoImageToolbar } from "./demo-image-toolbar";
 import { DemoTextToolbar } from "./demo-text-toolbar";
 import {
@@ -88,7 +88,7 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   renderTextToolbar: true,
 };
 
-export function DemoManuscriptSpreadView() {
+export function DemoCanvasSpreadView() {
   // Mock options state
   const [mockOptions, setMockOptions] =
     useState<MockOptions>(DEFAULT_MOCK_OPTIONS);
@@ -458,7 +458,7 @@ export function DemoManuscriptSpreadView() {
         {/* Header */}
         <header className="p-4 border-b bg-background flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">ManuscriptSpreadView Demo</h1>
+            <h1 className="text-xl font-semibold">CanvasSpreadView Demo</h1>
             <p className="text-sm text-muted-foreground">
               {spreads.length} spreads • {mockOptions.imageCount} img •{" "}
               {mockOptions.textboxCount} text
@@ -615,7 +615,7 @@ export function DemoManuscriptSpreadView() {
         <main className="flex-1 overflow-hidden flex">
           {/* Spread View */}
           <div className="flex-1 overflow-hidden">
-            <ManuscriptSpreadView
+            <CanvasSpreadView
               spreads={spreads}
               renderItems={["image", "text"]}
               renderImageItem={renderImageItem}
@@ -675,4 +675,4 @@ export function DemoManuscriptSpreadView() {
   );
 }
 
-export default DemoManuscriptSpreadView;
+export default DemoCanvasSpreadView;
