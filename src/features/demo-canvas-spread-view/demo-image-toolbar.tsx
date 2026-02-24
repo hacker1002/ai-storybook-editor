@@ -1,26 +1,33 @@
-import { useRef, useCallback } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Sparkles, Upload, Copy, Trash2 } from "lucide-react";
-import { useToolbarPosition, type BaseSpread, type ImageToolbarContext } from "@/components/canvas-spread-view";
+import { Sparkles, Upload, Copy, Trash2, ChevronDown } from "lucide-react";
+import { useToolbarPosition, CANVAS, type BaseSpread, type ImageToolbarContext } from "@/components/canvas-spread-view";
+
+const COMMON_RATIOS = [
+  { label: '1:1', value: 1 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '3:2', value: 3 / 2 },
+  { label: '16:9', value: 16 / 9 },
+  { label: '3:4', value: 3 / 4 },
+  { label: '2:3', value: 2 / 3 },
+  { label: '9:16', value: 9 / 16 },
+] as const;
+
+function formatAspectRatio(w: number, h: number): string {
+  if (w <= 0 || h <= 0) return '—';
+
+  const ratio = (w / h) * CANVAS.ASPECT_RATIO;
+  const match = COMMON_RATIOS.find(r => Math.abs(r.value - ratio) < 0.05);
+
+  if (match) return match.label;
+  return ratio.toFixed(2);
+}
 
 interface DemoImageToolbarProps<TSpread extends BaseSpread> {
   context: ImageToolbarContext<TSpread>;
 }
 
-const ASPECT_RATIOS = {
-  '1:1': 1,
-  '4:3': 4 / 3,
-  '16:9': 16 / 9,
-  '3:2': 3 / 2,
-};
 
 export function DemoImageToolbar<TSpread extends BaseSpread>({
   context,
@@ -30,6 +37,7 @@ export function DemoImageToolbar<TSpread extends BaseSpread>({
   const { geometry } = item;
 
   const position = useToolbarPosition({ geometry: selectedGeometry, canvasRef, toolbarRef });
+  const aspectRatioLabel = useMemo(() => formatAspectRatio(geometry.w, geometry.h), [geometry.w, geometry.h]);
 
   const handleGeometryChange = useCallback(
     (field: 'x' | 'y' | 'w' | 'h', value: string) => {
@@ -47,28 +55,14 @@ export function DemoImageToolbar<TSpread extends BaseSpread>({
     [geometry, onUpdate]
   );
 
-  const handleAspectRatioChange = useCallback(
-    (ratio: string) => {
-      if (ratio === 'custom') return;
-      const aspectRatio = ASPECT_RATIOS[ratio as keyof typeof ASPECT_RATIOS];
-      const newHeight = geometry.w / aspectRatio;
-      onUpdate?.({
-        geometry: { ...geometry, h: Math.min(100, newHeight) }
-      });
-    },
-    [geometry, onUpdate]
-  );
-
   const toolbarStyle: React.CSSProperties = position ? {
     position: 'fixed',
     top: `${position.top}px`,
     left: `${position.left}px`,
-    zIndex: 10001,
   } : {
     position: 'fixed',
     opacity: 0,
     pointerEvents: 'none',
-    zIndex: 10001,
   };
 
   const toolbarContent = (
@@ -77,21 +71,13 @@ export function DemoImageToolbar<TSpread extends BaseSpread>({
       className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
       style={toolbarStyle}
     >
-      {/* Aspect Ratio Section */}
-      <div className="space-y-1.5">
+      {/* Aspect Ratio Section - Fixed, not editable */}
+      <div className="flex items-center gap-2">
         <Label className="text-xs text-muted-foreground">Aspect Ratio</Label>
-        <Select onValueChange={handleAspectRatioChange} defaultValue="custom">
-          <SelectTrigger className="h-7 text-sm">
-            <SelectValue placeholder="Select ratio" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1:1">1:1</SelectItem>
-            <SelectItem value="4:3">4:3</SelectItem>
-            <SelectItem value="16:9">16:9</SelectItem>
-            <SelectItem value="3:2">3:2</SelectItem>
-            <SelectItem value="custom">Custom</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center h-7 px-3 border border-border rounded-lg bg-muted/50 text-muted-foreground cursor-not-allowed">
+          <span className="text-sm">{aspectRatioLabel}</span>
+          <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+        </div>
       </div>
 
       {/* Geometry Section */}

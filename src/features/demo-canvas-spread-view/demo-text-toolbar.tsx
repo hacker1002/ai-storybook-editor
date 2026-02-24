@@ -181,12 +181,10 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
     position: 'fixed',
     top: `${position.top}px`,
     left: `${position.left}px`,
-    zIndex: 10001,
   } : {
     position: 'fixed',
     opacity: 0,
     pointerEvents: 'none',
-    zIndex: 10001,
   };
 
   const toolbarContent = (
