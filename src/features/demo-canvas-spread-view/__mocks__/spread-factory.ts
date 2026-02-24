@@ -19,8 +19,12 @@ function randomBetween(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// === Constants ===
+const IMAGE_ASPECT_RATIO = 4 / 3;   // Target image aspect ratio
+const CANVAS_ASPECT_RATIO = 4 / 3;  // Canvas spread aspect ratio (800x600)
+
 // === Helper: Random geometry ===
-function randomGeometry(page: 'left' | 'right' | 'full' = 'full'): Geometry {
+function randomGeometry(page: 'left' | 'right' | 'full' = 'full', forImage = false): Geometry {
   let xMin = 0, xMax = 70;
 
   if (page === 'left') {
@@ -31,11 +35,18 @@ function randomGeometry(page: 'left' | 'right' | 'full' = 'full'): Geometry {
     xMax = 90;
   }
 
+  const w = randomBetween(20, 40);
+  // Formula: actualAspect = (w%/h%) * canvasAspect
+  // To get IMAGE_ASPECT: h% = w% * canvasAspect / imageAspect
+  const h = forImage
+    ? w * CANVAS_ASPECT_RATIO / IMAGE_ASPECT_RATIO  // w * (4/3) / (4/3) = w
+    : randomBetween(20, 50);
+
   return {
     x: randomBetween(xMin, xMax),
     y: randomBetween(5, 40),
-    w: randomBetween(20, 40),
-    h: randomBetween(20, 50),
+    w,
+    h: Math.round(h * 10) / 10, // Round to 1 decimal for clean values
   };
 }
 
@@ -87,7 +98,7 @@ export function createMockImage(overrides: Partial<SpreadImage> = {}): SpreadIma
   return {
     id: generateUUID(),
     title: `Image ${randomBetween(1, 100)}`,
-    geometry: randomGeometry('left'),
+    geometry: randomGeometry('left', true), // forImage=true for 4:3 ratio
     art_note: ART_NOTES[randomBetween(0, ART_NOTES.length - 1)],
     visual_description: ART_NOTES[randomBetween(0, ART_NOTES.length - 1)],
     image_references: [],
@@ -164,7 +175,7 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
   // Create images
   const images: SpreadImage[] = Array.from({ length: imageCount }, (_, i) =>
     createMockImage({
-      geometry: randomGeometry(i % 2 === 0 ? 'left' : 'right'),
+      geometry: randomGeometry(i % 2 === 0 ? 'left' : 'right', true), // forImage=true for 4:3 ratio
       illustrations: withGeneratedImages
         ? [
             {
