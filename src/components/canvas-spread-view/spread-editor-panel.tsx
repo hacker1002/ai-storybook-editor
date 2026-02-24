@@ -252,12 +252,53 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     const { selectedElement, originalGeometry } = state;
     if (!selectedElement || !originalGeometry) return;
 
-    const newGeometry = applyResizeDelta(originalGeometry, handle, delta.x, delta.y);
+    let newGeometry = applyResizeDelta(originalGeometry, handle, delta.x, delta.y);
+
+    // Aspect ratio lock for Image items
+    if (selectedElement.type === 'image') {
+      const image = spread.images[selectedElement.index];
+      if (image) {
+        // Calculate aspect ratio from original geometry (matches actual image aspect ratio)
+        const originalAspect = originalGeometry.w / originalGeometry.h;
+
+        // Determine which dimension drives the resize
+        if (handle === 'e' || handle === 'w') {
+          // Horizontal edge - adjust height to maintain aspect
+          newGeometry.h = newGeometry.w / originalAspect;
+        } else if (handle === 'n' || handle === 's') {
+          // Vertical edge - adjust width to maintain aspect
+          newGeometry.w = newGeometry.h * originalAspect;
+        } else {
+          // Corner - use dominant delta
+          if (Math.abs(delta.x) > Math.abs(delta.y)) {
+            newGeometry.h = newGeometry.w / originalAspect;
+          } else {
+            newGeometry.w = newGeometry.h * originalAspect;
+          }
+        }
+
+        // Re-apply MIN_SIZE after aspect ratio adjustment
+        const minSize = CANVAS.MIN_ELEMENT_SIZE;
+        if (newGeometry.w < minSize) {
+          newGeometry.w = minSize;
+          newGeometry.h = minSize / originalAspect;
+        }
+        if (newGeometry.h < minSize) {
+          newGeometry.h = minSize;
+          newGeometry.w = minSize * originalAspect;
+        }
+
+        // Ensure bounds (0-100%)
+        newGeometry.w = Math.min(newGeometry.w, 100 - newGeometry.x);
+        newGeometry.h = Math.min(newGeometry.h, 100 - newGeometry.y);
+      }
+    }
+
     updateElementGeometry(selectedElement, newGeometry);
 
     // Update selectedGeometry for toolbar positioning
     setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
-  }, [state, updateElementGeometry]);
+  }, [state, updateElementGeometry, spread.images]);
 
   const handleResizeEnd = useCallback(() => {
     setState((prev) => ({
@@ -279,7 +320,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Keyboard Handlers ===
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    const { selectedElement } = state;
+    const { selectedElement, isDragging, isResizing, originalGeometry } = state;
     if (!selectedElement || !isEditable) return;
 
     const geometry = getSelectedGeometry();
@@ -305,7 +346,22 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         updateElementGeometry(selectedElement, applyNudge(geometry, 'right', step));
         break;
       case 'Escape':
-        handleElementSelect(null);
+        e.preventDefault();
+        // Cancel drag/resize and revert to original geometry
+        if ((isDragging || isResizing) && originalGeometry) {
+          updateElementGeometry(selectedElement, originalGeometry);
+          setState((prev) => ({
+            ...prev,
+            isDragging: false,
+            isResizing: false,
+            activeHandle: null,
+            originalGeometry: null,
+            selectedGeometry: originalGeometry,
+          }));
+        } else {
+          // Just deselect if not dragging/resizing
+          handleElementSelect(null);
+        }
         break;
       case 'Delete':
       case 'Backspace':
