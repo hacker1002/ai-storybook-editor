@@ -28,7 +28,9 @@ interface SelectionFrameProps {
 
 export function SelectionFrame({
   geometry,
+  zoomLevel,
   showHandles,
+  activeHandle,
   canDrag = true,
   canResize = true,
   onDragStart,
@@ -42,6 +44,7 @@ export function SelectionFrame({
   const moveableRef = useRef<Moveable>(null);
   const containerRef = useRef<HTMLElement | null>(null);
   const startGeometryRef = useRef<Geometry | null>(null);
+  const currentHandleRef = useRef<ResizeHandle | null>(null);
 
   // Get container dimensions for percentage calculations
   useEffect(() => {
@@ -53,13 +56,23 @@ export function SelectionFrame({
     moveableRef.current?.updateRect();
   }, [geometry]);
 
+  // Sync activeHandle prop with internal state
+  useEffect(() => {
+    currentHandleRef.current = activeHandle;
+  }, [activeHandle]);
+
   // Convert pixel delta to percentage delta
   const toPercentDelta = (dx: number, dy: number): Point => {
     if (!containerRef.current) return { x: 0, y: 0 };
     const rect = containerRef.current.getBoundingClientRect();
+
+    // Apply zoom adjustment - moveable library returns screen pixels
+    // Divide by zoomLevel because screen pixels are already scaled by zoom
+    const zoomFactor = zoomLevel / 100;
+
     return {
-      x: (dx / rect.width) * 100,
-      y: (dy / rect.height) * 100,
+      x: (dx / rect.width / zoomFactor) * 100,
+      y: (dy / rect.height / zoomFactor) * 100,
     };
   };
 
@@ -78,6 +91,11 @@ export function SelectionFrame({
 
   // Border width for drag zone (pixels)
   const DRAG_BORDER_WIDTH = 20;
+
+  // Compute className for active handle visual feedback
+  const moveableClassName = currentHandleRef.current
+    ? `moveable-selection active-${currentHandleRef.current}`
+    : 'moveable-selection';
 
   return (
     <>
@@ -134,7 +152,7 @@ export function SelectionFrame({
         origin={false}
         padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
         renderDirections={['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se']}
-        className="moveable-selection"
+        className={moveableClassName}
         // Drag events - use dist (cumulative) not delta (per-frame)
         onDragStart={() => {
           startGeometryRef.current = { ...geometry };
@@ -151,7 +169,9 @@ export function SelectionFrame({
         // Resize events - use dist (cumulative) not delta (per-frame)
         onResizeStart={({ direction }) => {
           startGeometryRef.current = { ...geometry };
-          onResizeStart(directionToHandle(direction));
+          const handle = directionToHandle(direction);
+          currentHandleRef.current = handle;
+          onResizeStart(handle);
         }}
         onResize={({ direction, dist }) => {
           const handle = directionToHandle(direction);
@@ -160,6 +180,7 @@ export function SelectionFrame({
         }}
         onResizeEnd={() => {
           startGeometryRef.current = null;
+          currentHandleRef.current = null;
           onResizeEnd();
         }}
       />

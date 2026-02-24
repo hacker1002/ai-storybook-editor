@@ -103,6 +103,21 @@
   background: hsl(var(--primary)) !important;
   border: 2px solid white !important;
   border-radius: 50% !important;
+  width: 8px !important;
+  height: 8px !important;
+  margin-top: -4px !important;
+  margin-left: -4px !important;
+}
+
+/* Active handle visual feedback - larger size (10px) */
+.moveable-selection.active-nw .moveable-control[data-direction="nw"],
+.moveable-selection.active-ne .moveable-control[data-direction="ne"],
+.moveable-selection.active-sw .moveable-control[data-direction="sw"],
+.moveable-selection.active-se .moveable-control[data-direction="se"],
+.moveable-selection.active-n .moveable-control[data-direction="n"],
+.moveable-selection.active-s .moveable-control[data-direction="s"],
+.moveable-selection.active-w .moveable-control[data-direction="w"],
+.moveable-selection.active-e .moveable-control[data-direction="e"] {
   width: 10px !important;
   height: 10px !important;
   margin-top: -5px !important;
