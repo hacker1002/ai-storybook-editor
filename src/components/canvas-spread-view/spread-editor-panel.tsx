@@ -28,6 +28,7 @@ import type {
   ImageToolbarContext,
   TextToolbarContext,
   PageToolbarContext,
+  ObjectToolbarContext,
   LayoutOption,
   Typography,
   Fill,
@@ -56,7 +57,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
-  renderObjectToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
+  renderObjectToolbar?: (context: ObjectToolbarContext<TSpread>) => ReactNode;
   renderAnimationToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
 
   // Callbacks
@@ -67,6 +68,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   onUpdatePage?: (pageIndex: number, updates: Partial<TSpread['pages'][number]>) => void;
   onDeleteImage?: (imageIndex: number) => void;
   onDeleteTextbox?: (textboxIndex: number) => void;
+  onDeleteObject?: (objectIndex: number) => void;
 
   // Item-level feature flags
   canAddItem?: boolean;
@@ -102,12 +104,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderImageToolbar,
   renderTextToolbar,
   renderPageToolbar,
+  renderObjectToolbar,
   onUpdateImage,
   onUpdateTextbox,
   onUpdateObject,
   onUpdatePage,
   onDeleteImage,
   onDeleteTextbox,
+  onDeleteObject,
   canDeleteItem = false,
   canResizeItem = true,
   canDragItem = true,
@@ -296,43 +300,54 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
     let newGeometry = applyResizeDelta(originalGeometry, handle, delta.x, delta.y);
 
-    // Aspect ratio lock for Image items
-    if (selectedElement.type === 'image') {
-      const image = spread.images[selectedElement.index];
-      if (image) {
-        // Calculate aspect ratio from original geometry (matches actual image aspect ratio)
-        const originalAspect = originalGeometry.w / originalGeometry.h;
+    // Helper: parse aspect ratio string to numeric value
+    const parseAspectRatio = (ratio: string | undefined): number | null => {
+      if (!ratio || ratio === 'free') return null;
+      const [w, h] = ratio.split(':').map(Number);
+      if (!w || !h) return null;
+      return w / h;
+    };
 
-        // Determine which dimension drives the resize
-        if (handle === 'e' || handle === 'w') {
-          // Horizontal edge - adjust height to maintain aspect
-          newGeometry.h = newGeometry.w / originalAspect;
-        } else if (handle === 'n' || handle === 's') {
-          // Vertical edge - adjust width to maintain aspect
-          newGeometry.w = newGeometry.h * originalAspect;
+    // Helper: apply aspect ratio lock to geometry
+    const applyAspectLock = (geo: Geometry, aspect: number) => {
+      if (handle === 'e' || handle === 'w') {
+        geo.h = geo.w / aspect;
+      } else if (handle === 'n' || handle === 's') {
+        geo.w = geo.h * aspect;
+      } else {
+        if (Math.abs(delta.x) > Math.abs(delta.y)) {
+          geo.h = geo.w / aspect;
         } else {
-          // Corner - use dominant delta
-          if (Math.abs(delta.x) > Math.abs(delta.y)) {
-            newGeometry.h = newGeometry.w / originalAspect;
-          } else {
-            newGeometry.w = newGeometry.h * originalAspect;
-          }
+          geo.w = geo.h * aspect;
         }
+      }
 
-        // Re-apply MIN_SIZE after aspect ratio adjustment
-        const minSize = CANVAS.MIN_ELEMENT_SIZE;
-        if (newGeometry.w < minSize) {
-          newGeometry.w = minSize;
-          newGeometry.h = minSize / originalAspect;
-        }
-        if (newGeometry.h < minSize) {
-          newGeometry.h = minSize;
-          newGeometry.w = minSize * originalAspect;
-        }
+      const minSize = CANVAS.MIN_ELEMENT_SIZE;
+      if (geo.w < minSize) {
+        geo.w = minSize;
+        geo.h = minSize / aspect;
+      }
+      if (geo.h < minSize) {
+        geo.h = minSize;
+        geo.w = minSize * aspect;
+      }
 
-        // Ensure bounds (0-100%)
-        newGeometry.w = Math.min(newGeometry.w, 100 - newGeometry.x);
-        newGeometry.h = Math.min(newGeometry.h, 100 - newGeometry.y);
+      geo.w = Math.min(geo.w, 100 - geo.x);
+      geo.h = Math.min(geo.h, 100 - geo.y);
+    };
+
+    // Aspect ratio lock for Image items (always locked to original ratio)
+    if (selectedElement.type === 'image') {
+      const originalAspect = originalGeometry.w / originalGeometry.h;
+      applyAspectLock(newGeometry, originalAspect);
+    }
+
+    // Aspect ratio lock for Object items (when aspect_ratio is set)
+    if (selectedElement.type === 'object') {
+      const obj = spread.objects?.[selectedElement.index];
+      const aspect = parseAspectRatio(obj?.aspect_ratio);
+      if (aspect) {
+        applyAspectLock(newGeometry, aspect);
       }
     }
 
@@ -340,7 +355,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
     // Update selectedGeometry for toolbar positioning
     setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
-  }, [state, updateElementGeometry, spread.images]);
+  }, [state, updateElementGeometry, spread.images, spread.objects]);
 
   const handleResizeEnd = useCallback(() => {
     setState((prev) => ({
@@ -572,6 +587,18 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                   [langKey]: { ...langContent, outline: { ...(langContent?.outline || { color: '#000000', width: 2, radius: 8, type: 'solid' }), ...outlineUpdates } },
                 } as Partial<SpreadTextbox>);
               },
+            });
+          }
+
+          if (selectedElement.type === 'object' && renderObjectToolbar && onUpdateObject) {
+            const obj = spread.objects?.[selectedElement.index];
+            if (!obj) return null;
+            const context = buildObjectContext(obj, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateObject, onDeleteObject);
+
+            return renderObjectToolbar({
+              ...context,
+              selectedGeometry: state.selectedGeometry,
+              canvasRef,
             });
           }
 

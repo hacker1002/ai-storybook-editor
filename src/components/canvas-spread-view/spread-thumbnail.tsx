@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   buildViewOnlyImageContext,
   buildViewOnlyTextContext,
+  buildViewOnlyObjectContext,
 } from "./utils/context-builders";
 import { CANVAS, THUMBNAIL } from "./constants";
 import type {
@@ -19,6 +20,7 @@ import type {
   ItemType,
   ImageItemContext,
   TextItemContext,
+  ObjectItemContext,
 } from "./types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
@@ -34,6 +36,7 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   renderItems: ItemType[];
   renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
+  renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
 
   // Drag state
   isDragEnabled?: boolean;
@@ -59,6 +62,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   renderItems,
   renderImageItem,
   renderTextItem,
+  renderObjectItem,
   isDragEnabled = false,
   isDragging = false,
   isDropTarget = false,
@@ -122,6 +126,15 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
       context: buildViewOnlyTextContext(textbox, idx, spread),
     }));
   }, [spread.textboxes, spread.id, renderItems, renderTextItem]);
+
+  // Memoize object contexts - skip if renderObjectItem not provided
+  const objectContexts = useMemo(() => {
+    if (!renderItems.includes("object") || !renderObjectItem || !spread.objects) return [];
+    return spread.objects.map((object, idx) => ({
+      object,
+      context: buildViewOnlyObjectContext(object, idx, spread),
+    }));
+  }, [spread.objects, spread.id, renderItems, renderObjectItem]);
 
   // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
   const cursor = isDragging ? "grabbing" : isDragEnabled ? "grab" : "pointer";
@@ -237,6 +250,13 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
           {renderTextItem && textContexts.map(({ textbox, context }, index) => (
             <div key={textbox.id || index} style={{ pointerEvents: "none" }}>
               {renderTextItem(context)}
+            </div>
+          ))}
+
+          {/* Objects (view-only, pointer-events: none) - skip if renderObjectItem not provided */}
+          {renderObjectItem && objectContexts.map(({ object, context }, index) => (
+            <div key={object.id || index} style={{ pointerEvents: "none" }}>
+              {renderObjectItem(context)}
             </div>
           ))}
         </div>

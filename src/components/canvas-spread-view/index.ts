@@ -16,6 +16,7 @@ export { NewSpreadButton, type SpreadType } from './new-spread-button';
 // Utility components
 export { EditableImage } from './editable-image';
 export { EditableTextbox } from './editable-textbox';
+export { EditableObject } from './editable-object';
 export { SelectionFrame } from './selection-frame';
 export { PageItem } from './page-item';
 
@@ -50,6 +51,7 @@ export type {
   PageToolbarContext,
   ImageToolbarContext,
   TextToolbarContext,
+  ObjectToolbarContext,
 
   // Config types
   LayoutOption,
@@ -76,8 +78,10 @@ export {
 export {
   buildImageContext,
   buildTextContext,
+  buildObjectContext,
   buildViewOnlyImageContext,
   buildViewOnlyTextContext,
+  buildViewOnlyObjectContext,
 } from './utils/context-builders';
 
 // Constants

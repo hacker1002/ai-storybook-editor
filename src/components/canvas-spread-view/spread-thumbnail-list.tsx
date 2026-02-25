@@ -21,6 +21,7 @@ import type {
   ThumbnailListLayout,
   ImageItemContext,
   TextItemContext,
+  ObjectItemContext,
 } from './types';
 import { COLUMNS } from './constants';
 
@@ -37,6 +38,7 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   renderItems: ItemType[];
   renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
+  renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
 
   // Feature flags
   canAdd: boolean;
@@ -60,6 +62,7 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
   renderItems,
   renderImageItem,
   renderTextItem,
+  renderObjectItem,
   canAdd,
   canReorder,
   canDelete,
@@ -236,6 +239,7 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
               renderItems={renderItems}
               renderImageItem={renderImageItem}
               renderTextItem={renderTextItem}
+              renderObjectItem={renderObjectItem}
               isDragEnabled={canReorder}
               isDragging={spread.id === draggedId}
               isDropTarget={spread.id === dropTargetId}

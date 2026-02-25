@@ -176,3 +176,24 @@ export function buildViewOnlyTextContext<TSpread extends BaseSpread>(
     onEditingChange: () => {},
   };
 }
+
+/**
+ * Build view-only object context for thumbnails
+ */
+export function buildViewOnlyObjectContext<TSpread extends BaseSpread>(
+  object: SpreadObject,
+  index: number,
+  spread: TSpread
+): ObjectItemContext<TSpread> {
+  return {
+    item: object,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: false,
+    isSpreadSelected: false,
+    onSelect: () => {},
+    onUpdate: () => {},
+    onDelete: () => {},
+  };
+}

@@ -4,6 +4,7 @@ import type {
   BaseSpread,
   SpreadImage,
   SpreadTextbox,
+  SpreadObject,
   PageData,
   Geometry,
   Typography,
@@ -108,6 +109,53 @@ export function createMockImage(overrides: Partial<SpreadImage> = {}): SpreadIma
   };
 }
 
+// === Create Single Object ===
+const OBJECT_TYPES: SpreadObject['type'][] = ['character', 'prop', 'background', 'foreground'];
+const OBJECT_NAMES = ['main_character', 'side_character', 'prop_1', 'background_1'];
+const OBJECT_STATES: Record<string, string[]> = {
+  main_character: ['default', 'happy', 'sad'],
+  side_character: ['default', 'talking'],
+  prop_1: ['default'],
+  background_1: ['day', 'night'],
+};
+
+export function createMockObject(overrides: Partial<SpreadObject> = {}): SpreadObject {
+  const typeIndex = randomBetween(0, OBJECT_TYPES.length - 1);
+  const type = OBJECT_TYPES[typeIndex];
+  const name = OBJECT_NAMES[typeIndex] || 'unnamed';
+  const states = OBJECT_STATES[name] || ['default'];
+  const state = states[randomBetween(0, states.length - 1)];
+
+  // Z-index defaults by type
+  const zIndexMap: Record<SpreadObject['type'], number> = {
+    background: 50,
+    character: 125,
+    prop: 175,
+    foreground: 250,
+    raw: 150,
+    other: 150,
+  };
+
+  return {
+    id: generateUUID(),
+    name,
+    state,
+    type,
+    media_url: `https://picsum.photos/seed/${generateUUID()}/200/300`,
+    media_type: 'image',
+    geometry: {
+      x: randomBetween(50, 70),
+      y: randomBetween(10, 40),
+      w: randomBetween(15, 30),
+      h: randomBetween(20, 40),
+    },
+    zIndex: zIndexMap[type],
+    player_visible: true,
+    editor_visible: true,
+    ...overrides,
+  };
+}
+
 // === Create Single Textbox ===
 export function createMockTextbox(
   language = 'en_US',
@@ -152,6 +200,7 @@ export interface CreateSpreadOptions {
   isDPS?: boolean;
   imageCount?: number;
   textboxCount?: number;
+  objectCount?: number;
   language?: string;
   withGeneratedImages?: boolean;
 }
@@ -162,6 +211,7 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     isDPS = true,
     imageCount = 1,
     textboxCount = 1,
+    objectCount = 0,
     language = 'en_US',
     withGeneratedImages = false,
   } = options;
@@ -195,12 +245,17 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     createMockTextbox(language)
   );
 
+  // Create objects
+  const objects: SpreadObject[] = Array.from({ length: objectCount }, () =>
+    createMockObject()
+  );
+
   return {
     id: generateUUID(),
     pages,
     images,
     textboxes,
-    objects: [],
+    objects,
     animations: [],
     manuscript: SAMPLE_TEXTS[language as keyof typeof SAMPLE_TEXTS]?.[spreadIndex % 6] || '',
   };
@@ -219,6 +274,7 @@ export function createMockSpreads(
 export default {
   createMockImage,
   createMockTextbox,
+  createMockObject,
   createMockPage,
   createMockSpread,
   createMockSpreads,

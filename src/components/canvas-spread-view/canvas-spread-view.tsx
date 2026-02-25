@@ -49,6 +49,7 @@ import type {
   ImageToolbarContext,
   TextToolbarContext,
   PageToolbarContext,
+  ObjectToolbarContext,
   LayoutOption,
 } from './types';
 
@@ -70,7 +71,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
-  renderObjectToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
+  renderObjectToolbar?: (context: ObjectToolbarContext<TSpread>) => ReactNode;
   renderAnimationToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
 
   // Spread-level callbacks
@@ -87,6 +88,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   onUpdatePage?: (spreadId: string, pageIndex: number, updates: Partial<TSpread['pages'][number]>) => void;
   onDeleteImage?: (spreadId: string, imageIndex: number) => void;
   onDeleteTextbox?: (spreadId: string, textboxIndex: number) => void;
+  onDeleteObject?: (spreadId: string, objectIndex: number) => void;
 
   // Feature flags
   isEditable?: boolean;
@@ -116,6 +118,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   renderImageToolbar,
   renderTextToolbar,
   renderPageToolbar,
+  renderObjectToolbar,
   onSpreadSelect,
   onSpreadReorder,
   onSpreadAdd,
@@ -127,6 +130,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   onUpdatePage,
   onDeleteImage,
   onDeleteTextbox,
+  onDeleteObject,
   isEditable = true,
   canAddSpread = false,
   canReorderSpread = false,
@@ -323,6 +327,10 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     if (selectedId) onDeleteTextbox?.(selectedId, textboxIndex);
   }, [selectedId, onDeleteTextbox]);
 
+  const handleDeleteObject = useCallback((objectIndex: number) => {
+    if (selectedId) onDeleteObject?.(selectedId, objectIndex);
+  }, [selectedId, onDeleteObject]);
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
@@ -354,6 +362,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderImageToolbar={renderImageToolbar}
                 renderTextToolbar={renderTextToolbar}
                 renderPageToolbar={renderPageToolbar}
+                renderObjectToolbar={renderObjectToolbar}
                 onUpdateSpread={handleUpdateSpread}
                 onUpdateImage={handleUpdateImage}
                 onUpdateTextbox={handleUpdateTextbox}
@@ -361,6 +370,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 onUpdatePage={handleUpdatePage}
                 onDeleteImage={handleDeleteImage}
                 onDeleteTextbox={handleDeleteTextbox}
+                onDeleteObject={handleDeleteObject}
                 canAddItem={canAddItem}
                 canDeleteItem={canDeleteItem}
                 canResizeItem={canResizeItem}
@@ -378,6 +388,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderItems={renderItems}
                 renderImageItem={renderImageItem}
                 renderTextItem={renderTextItem}
+                renderObjectItem={renderObjectItem}
                 canAdd={canAddSpread}
                 canReorder={canReorderSpread}
                 canDelete={canDeleteSpread}
@@ -399,6 +410,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             renderItems={renderItems}
             renderImageItem={renderImageItem}
             renderTextItem={renderTextItem}
+            renderObjectItem={renderObjectItem}
             canAdd={canAddSpread}
             canReorder={canReorderSpread}
             canDelete={canDeleteSpread}

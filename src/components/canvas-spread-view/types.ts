@@ -104,6 +104,7 @@ export interface SpreadObject {
   zIndex: number;
   player_visible: boolean;
   editor_visible: boolean;
+  aspect_ratio?: 'free' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '2:3' | '3:2';
 }
 
 export interface SpreadAnimation {
@@ -219,8 +220,11 @@ export interface TextToolbarContext<TSpread extends BaseSpread> extends TextItem
   onUpdateOutline?: (outline: Partial<Outline>) => void;
 }
 
-export interface ObjectToolbarContext<TSpread extends BaseSpread> extends ObjectItemContext<TSpread> {
-  onEditObject: () => void;
+export interface ObjectToolbarContext<TSpread extends BaseSpread> extends ObjectItemContext<TSpread>, BaseToolbarContext {
+  onRotate?: () => void;
+  onCut?: () => void;
+  onCrop?: () => void;
+  onGenerate?: () => void;
 }
 
 export interface AnimationToolbarContext<TSpread extends BaseSpread> extends AnimationItemContext<TSpread> {

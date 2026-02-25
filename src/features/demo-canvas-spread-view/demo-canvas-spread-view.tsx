@@ -6,22 +6,28 @@ import {
   CanvasSpreadView,
   EditableImage,
   EditableTextbox,
+  EditableObject,
   type BaseSpread,
   type SpreadImage,
   type SpreadTextbox,
+  type SpreadObject,
   type ImageItemContext,
   type TextItemContext,
+  type ObjectItemContext,
   type ImageToolbarContext,
   type TextToolbarContext,
   type PageToolbarContext,
+  type ObjectToolbarContext,
   type Fill,
   type Outline,
   type Typography,
   type SpreadType,
+  type ItemType,
 } from "@/components/canvas-spread-view";
 import { DemoImageToolbar } from "./demo-image-toolbar";
 import { DemoTextToolbar } from "./demo-text-toolbar";
 import { DemoPageToolbar } from "./demo-page-toolbar";
+import { DemoObjectToolbar } from "./demo-object-toolbar";
 import {
   createMockSnapshot,
   type CreateSnapshotOptions,
@@ -52,6 +58,7 @@ interface MockOptions {
   spreadCount: number;
   imageCount: number;
   textboxCount: number;
+  objectCount: number;
   withGeneratedImages: boolean;
   isDPS: boolean;
   language: "en_US" | "vi_VN";
@@ -61,6 +68,7 @@ const DEFAULT_MOCK_OPTIONS: MockOptions = {
   spreadCount: 8,
   imageCount: 1,
   textboxCount: 1,
+  objectCount: 1,
   withGeneratedImages: true,
   isDPS: true,
   language: "en_US",
@@ -79,6 +87,8 @@ interface FeatureFlags {
   renderImageToolbar: boolean;
   renderTextToolbar: boolean;
   renderPageToolbar: boolean;
+  renderObjectToolbar: boolean;
+  showObjects: boolean;
 }
 
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -93,6 +103,8 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   renderImageToolbar: true,
   renderTextToolbar: true,
   renderPageToolbar: true,
+  renderObjectToolbar: true,
+  showObjects: true,
 };
 
 export function DemoCanvasSpreadView() {
@@ -109,6 +121,7 @@ export function DemoCanvasSpreadView() {
       spreadCount: opts.spreadCount,
       imageCount: opts.imageCount,
       textboxCount: opts.textboxCount,
+      objectCount: opts.objectCount,
       withGeneratedImages: opts.withGeneratedImages,
       isDPS: opts.isDPS,
       language: opts.language,
@@ -283,6 +296,36 @@ export function DemoCanvasSpreadView() {
           const newPages = [...s.pages];
           newPages[pageIndex] = { ...newPages[pageIndex], ...updates };
           return { ...s, pages: newPages };
+        })
+      );
+    },
+    []
+  );
+
+  // Object handlers (no clone for objects per validation)
+  const handleUpdateObject = useCallback(
+    (spreadId: string, objectIndex: number, updates: Partial<SpreadObject>) => {
+      setSpreads((prev) =>
+        prev.map((s) => {
+          if (s.id !== spreadId) return s;
+          const newObjects = [...(s.objects || [])];
+          newObjects[objectIndex] = { ...newObjects[objectIndex], ...updates };
+          return { ...s, objects: newObjects };
+        })
+      );
+    },
+    []
+  );
+
+  const handleDeleteObject = useCallback(
+    (spreadId: string, objectIndex: number) => {
+      setSpreads((prev) =>
+        prev.map((s) => {
+          if (s.id !== spreadId) return s;
+          return {
+            ...s,
+            objects: (s.objects || []).filter((_, i) => i !== objectIndex),
+          };
         })
       );
     },
@@ -535,6 +578,42 @@ export function DemoCanvasSpreadView() {
     []
   );
 
+  // Object render props
+  const renderObjectItem = useCallback(
+    (context: ObjectItemContext<BaseSpread>) => (
+      <EditableObject
+        object={context.item}
+        index={context.itemIndex}
+        isSelected={context.isSelected}
+        isEditable={context.isSpreadSelected}
+        onSelect={context.onSelect}
+        onUpdate={(updates) => handleUpdateObject(context.spreadId, context.itemIndex, updates)}
+        onDelete={() => handleDeleteObject(context.spreadId, context.itemIndex)}
+      />
+    ),
+    [handleUpdateObject, handleDeleteObject]
+  );
+
+  const renderObjectToolbar = useCallback(
+    (context: ObjectToolbarContext<BaseSpread>) => {
+      return (
+        <DemoObjectToolbar
+          context={{
+            ...context,
+            onRotate: () => {
+              // Rotate 90°: swap width and height
+              const geo = context.item.geometry;
+              handleUpdateObject(context.spreadId, context.itemIndex, {
+                geometry: { ...geo, w: geo.h, h: geo.w },
+              });
+            },
+          }}
+        />
+      );
+    },
+    [handleUpdateObject]
+  );
+
   return (
     <TooltipProvider>
       <div className="h-screen flex flex-col">
@@ -544,7 +623,7 @@ export function DemoCanvasSpreadView() {
             <h1 className="text-xl font-semibold">CanvasSpreadView Demo</h1>
             <p className="text-sm text-muted-foreground">
               {spreads.length} spreads • {mockOptions.imageCount} img •{" "}
-              {mockOptions.textboxCount} text
+              {mockOptions.textboxCount} text • {mockOptions.objectCount} obj
             </p>
           </div>
           <Popover>
@@ -612,6 +691,20 @@ export function DemoCanvasSpreadView() {
                         value={[mockOptions.textboxCount]}
                         onValueChange={([v]) =>
                           updateMockOption("textboxCount", v)
+                        }
+                        min={0}
+                        max={5}
+                        step={1}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        Objects: {mockOptions.objectCount}
+                      </Label>
+                      <Slider
+                        value={[mockOptions.objectCount]}
+                        onValueChange={([v]) =>
+                          updateMockOption("objectCount", v)
                         }
                         min={0}
                         max={5}
@@ -700,9 +793,14 @@ export function DemoCanvasSpreadView() {
           <div className="flex-1 overflow-hidden">
             <CanvasSpreadView
               spreads={spreads}
-              renderItems={["image", "text"]}
+              renderItems={
+                featureFlags.showObjects
+                  ? (["image", "text", "object"] as ItemType[])
+                  : (["image", "text"] as ItemType[])
+              }
               renderImageItem={renderImageItem}
               renderTextItem={renderTextItem}
+              renderObjectItem={featureFlags.showObjects ? renderObjectItem : undefined}
               renderImageToolbar={
                 featureFlags.renderImageToolbar ? renderImageToolbar : undefined
               }
@@ -712,6 +810,11 @@ export function DemoCanvasSpreadView() {
               renderPageToolbar={
                 featureFlags.renderPageToolbar ? renderPageToolbar : undefined
               }
+              renderObjectToolbar={
+                featureFlags.renderObjectToolbar && featureFlags.showObjects
+                  ? renderObjectToolbar
+                  : undefined
+              }
               onSpreadSelect={handleSpreadSelect}
               onSpreadReorder={handleSpreadReorder}
               onSpreadAdd={handleSpreadAdd}
@@ -719,9 +822,11 @@ export function DemoCanvasSpreadView() {
               onUpdateSpread={handleUpdateSpread}
               onUpdateImage={handleUpdateImage}
               onUpdateTextbox={handleUpdateTextbox}
+              onUpdateObject={handleUpdateObject}
               onUpdatePage={handleUpdatePage}
               onDeleteImage={handleDeleteImage}
               onDeleteTextbox={handleDeleteTextbox}
+              onDeleteObject={handleDeleteObject}
               isEditable={featureFlags.isEditable}
               canAddSpread={featureFlags.canAddSpread}
               canReorderSpread={featureFlags.canReorderSpread}
