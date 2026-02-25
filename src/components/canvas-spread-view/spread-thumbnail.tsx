@@ -30,10 +30,10 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   isSelected: boolean;
   size: "small" | "medium";
 
-  // Render configuration
+  // Render configuration (optional - skip rendering if not provided)
   renderItems: ItemType[];
-  renderImageItem: (context: ImageItemContext<TSpread>) => ReactNode;
-  renderTextItem: (context: TextItemContext<TSpread>) => ReactNode;
+  renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
 
   // Drag state
   isDragEnabled?: boolean;
@@ -105,23 +105,23 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
-  // Memoize image contexts
+  // Memoize image contexts - skip if renderImageItem not provided
   const imageContexts = useMemo(() => {
-    if (!renderItems.includes("image")) return [];
+    if (!renderItems.includes("image") || !renderImageItem) return [];
     return spread.images.map((img, idx) => ({
       image: img,
       context: buildViewOnlyImageContext(img, idx, spread),
     }));
-  }, [spread.images, spread.id, renderItems]);
+  }, [spread.images, spread.id, renderItems, renderImageItem]);
 
-  // Memoize text contexts
+  // Memoize text contexts - skip if renderTextItem not provided
   const textContexts = useMemo(() => {
-    if (!renderItems.includes("text")) return [];
+    if (!renderItems.includes("text") || !renderTextItem) return [];
     return spread.textboxes.map((textbox, idx) => ({
       textbox,
       context: buildViewOnlyTextContext(textbox, idx, spread),
     }));
-  }, [spread.textboxes, spread.id, renderItems]);
+  }, [spread.textboxes, spread.id, renderItems, renderTextItem]);
 
   // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
   const cursor = isDragging ? "grabbing" : isDragEnabled ? "grab" : "pointer";
@@ -203,15 +203,15 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
             <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-200" />
           )}
 
-          {/* Images (view-only, pointer-events: none) */}
-          {imageContexts.map(({ image, context }, index) => (
+          {/* Images (view-only, pointer-events: none) - skip if renderImageItem not provided */}
+          {renderImageItem && imageContexts.map(({ image, context }, index) => (
             <div key={image.id || index} style={{ pointerEvents: "none" }}>
               {renderImageItem(context)}
             </div>
           ))}
 
-          {/* Textboxes (view-only, pointer-events: none) */}
-          {textContexts.map(({ textbox, context }, index) => (
+          {/* Textboxes (view-only, pointer-events: none) - skip if renderTextItem not provided */}
+          {renderTextItem && textContexts.map(({ textbox, context }, index) => (
             <div key={textbox.id || index} style={{ pointerEvents: "none" }}>
               {renderTextItem(context)}
             </div>

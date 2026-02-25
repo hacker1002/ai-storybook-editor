@@ -33,10 +33,10 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   layout: ThumbnailListLayout;
   columnsPerRow?: number;
 
-  // Render configuration
+  // Render configuration (optional - skip rendering if not provided)
   renderItems: ItemType[];
-  renderImageItem: (context: ImageItemContext<TSpread>) => ReactNode;
-  renderTextItem: (context: TextItemContext<TSpread>) => ReactNode;
+  renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
 
   // Feature flags
   canAdd: boolean;
@@ -46,8 +46,8 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   // Callbacks
   onSpreadClick: (spreadId: string) => void;
   onSpreadDoubleClick?: (spreadId: string) => void;
-  onReorderSpread?: (fromIndex: number, toIndex: number) => void;
-  onAddSpread?: (type: SpreadType) => void;
+  onSpreadReorder?: (fromIndex: number, toIndex: number) => void;
+  onSpreadAdd?: (type: SpreadType) => void;
   onDeleteSpread?: (spreadId: string) => void;
   checkSpreadHasContent?: (spread: TSpread) => boolean;
 }
@@ -65,8 +65,8 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
   canDelete,
   onSpreadClick,
   onSpreadDoubleClick,
-  onReorderSpread,
-  onAddSpread,
+  onSpreadReorder,
+  onSpreadAdd,
   onDeleteSpread,
   checkSpreadHasContent,
 }: SpreadThumbnailListProps<TSpread>) {
@@ -126,7 +126,7 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
     if (draggedId && dropTargetId && draggedId !== dropTargetId) {
       const fromIndex = spreads.findIndex((s) => s.id === draggedId);
       const toIndex = spreads.findIndex((s) => s.id === dropTargetId);
-      onReorderSpread?.(fromIndex, toIndex);
+      onSpreadReorder?.(fromIndex, toIndex);
     }
     setDraggedId(null);
     setDropTargetId(null);
@@ -202,7 +202,7 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
         role="listbox"
         aria-label="Spread thumbnails"
       >
-        {canAdd && <NewSpreadButton size="medium" onAdd={onAddSpread!} />}
+        {canAdd && onSpreadAdd && <NewSpreadButton size="medium" onAdd={onSpreadAdd} />}
       </div>
     );
   }
@@ -251,8 +251,8 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
           </div>
         ))}
 
-        {canAdd && (
-          <NewSpreadButton size={thumbnailSize} onAdd={onAddSpread!} />
+        {canAdd && onSpreadAdd && (
+          <NewSpreadButton size={thumbnailSize} onAdd={onSpreadAdd} />
         )}
       </div>
 

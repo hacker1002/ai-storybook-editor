@@ -60,9 +60,9 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Render configuration
   renderItems: ItemType[];
 
-  // Item render functions
-  renderImageItem: (context: ImageItemContext<TSpread>) => ReactNode;
-  renderTextItem: (context: TextItemContext<TSpread>) => ReactNode;
+  // Item render functions (optional - skip rendering if not provided)
+  renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
   renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
   renderAnimationItem?: (context: AnimationItemContext<TSpread>) => ReactNode;
 
@@ -70,6 +70,8 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
+  renderObjectToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
+  renderAnimationToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
 
   // Spread-level callbacks
   onSpreadSelect?: (spreadId: string) => void;
@@ -381,8 +383,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 canDelete={canDeleteSpread}
                 onSpreadClick={handleSpreadClick}
                 onSpreadDoubleClick={undefined}
-                onReorderSpread={onSpreadReorder}
-                onAddSpread={onSpreadAdd}
+                onSpreadReorder={onSpreadReorder}
+                onSpreadAdd={onSpreadAdd}
                 onDeleteSpread={handleDeleteSpread}
               />
             </div>
@@ -402,8 +404,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             canDelete={canDeleteSpread}
             onSpreadClick={handleSpreadClick}
             onSpreadDoubleClick={handleSpreadDoubleClick}
-            onReorderSpread={onSpreadReorder}
-            onAddSpread={onSpreadAdd}
+            onSpreadReorder={onSpreadReorder}
+            onSpreadAdd={onSpreadAdd}
             onDeleteSpread={handleDeleteSpread}
           />
         )}

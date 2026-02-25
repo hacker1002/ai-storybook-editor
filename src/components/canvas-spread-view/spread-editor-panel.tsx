@@ -38,7 +38,7 @@ import type {
 interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   // Data
   spread: TSpread;
-  spreadIndex: number;
+  spreadIndex: number;  // Currently unused, reserved for future features (e.g., spread navigation)
 
   // View config
   zoomLevel: number;
@@ -47,15 +47,17 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   // Render configuration
   renderItems: ItemType[];
 
-  // Item render functions
-  renderImageItem: (context: ImageItemContext<TSpread>) => ReactNode;
-  renderTextItem: (context: TextItemContext<TSpread>) => ReactNode;
+  // Item render functions (optional - skip rendering if not provided)
+  renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
   renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
+  renderObjectToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
+  renderAnimationToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
 
   // Callbacks
   onUpdateSpread: (updates: Partial<TSpread>) => void;
@@ -437,8 +439,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           />
         )}
 
-        {/* Images */}
-        {renderItems.includes('image') && spread.images.map((image, index) => {
+        {/* Images - skip if renderImageItem not provided */}
+        {renderItems.includes('image') && renderImageItem && spread.images.map((image, index) => {
           const context = buildImageContext(
             image,
             index,
@@ -452,8 +454,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           return <div key={image.id || index}>{renderImageItem(context)}</div>;
         })}
 
-        {/* Textboxes */}
-        {renderItems.includes('text') && spread.textboxes.map((textbox, index) => {
+        {/* Textboxes - skip if renderTextItem not provided */}
+        {renderItems.includes('text') && renderTextItem && spread.textboxes.map((textbox, index) => {
           const context = buildTextContext(
             textbox,
             index,
