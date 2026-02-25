@@ -208,6 +208,7 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
   const toolbarContent = (
     <div
       ref={toolbarRef}
+      data-toolbar="text"
       className="min-w-[320px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
       style={toolbarStyle}
     >

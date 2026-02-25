@@ -142,6 +142,31 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     }));
   }, [spread.id]);
 
+  // Click outside to deselect
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!state.selectedElement) return;
+      if (!canvasRef.current) return;
+
+      const target = e.target as Element;
+      // Check if click is inside canvas
+      if (canvasRef.current.contains(target)) return;
+      // Check if click is inside a toolbar or its children (portaled to body)
+      if (target.closest?.('[data-toolbar]')) return;
+      // Check if click is inside Radix UI portals (Select, Popover, Dialog, etc.)
+      if (target.closest?.('[data-radix-popper-content-wrapper], [data-radix-select-content], [data-radix-popover-content], [role="listbox"], [role="dialog"]')) return;
+
+      setState((prev) => ({
+        ...prev,
+        selectedElement: null,
+        selectedGeometry: null,
+      }));
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [state.selectedElement]);
+
   // Scaled dimensions
   const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(zoomLevel);
 
@@ -340,6 +365,26 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     const { selectedElement, isDragging, isResizing, originalGeometry } = state;
     if (!selectedElement || !isEditable) return;
 
+    // Handle ESC first - works for all selection types including page
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if ((isDragging || isResizing) && originalGeometry) {
+        updateElementGeometry(selectedElement, originalGeometry);
+        setState((prev) => ({
+          ...prev,
+          isDragging: false,
+          isResizing: false,
+          activeHandle: null,
+          originalGeometry: null,
+          selectedGeometry: originalGeometry,
+        }));
+      } else {
+        handleElementSelect(null);
+      }
+      return;
+    }
+
+    // For geometry operations, need valid geometry (not for page type)
     const geometry = getSelectedGeometry();
     if (!geometry) return;
 
@@ -361,24 +406,6 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case 'ArrowRight':
         e.preventDefault();
         updateElementGeometry(selectedElement, applyNudge(geometry, 'right', step));
-        break;
-      case 'Escape':
-        e.preventDefault();
-        // Cancel drag/resize and revert to original geometry
-        if ((isDragging || isResizing) && originalGeometry) {
-          updateElementGeometry(selectedElement, originalGeometry);
-          setState((prev) => ({
-            ...prev,
-            isDragging: false,
-            isResizing: false,
-            activeHandle: null,
-            originalGeometry: null,
-            selectedGeometry: originalGeometry,
-          }));
-        } else {
-          // Just deselect if not dragging/resizing
-          handleElementSelect(null);
-        }
         break;
       case 'Delete':
       case 'Backspace':

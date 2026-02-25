@@ -13,6 +13,7 @@ import {
   type TextItemContext,
   type ImageToolbarContext,
   type TextToolbarContext,
+  type PageToolbarContext,
   type Fill,
   type Outline,
   type Typography,
@@ -20,6 +21,7 @@ import {
 } from "@/components/canvas-spread-view";
 import { DemoImageToolbar } from "./demo-image-toolbar";
 import { DemoTextToolbar } from "./demo-text-toolbar";
+import { DemoPageToolbar } from "./demo-page-toolbar";
 import {
   createMockSnapshot,
   type CreateSnapshotOptions,
@@ -76,6 +78,7 @@ interface FeatureFlags {
   canDragItem: boolean;
   renderImageToolbar: boolean;
   renderTextToolbar: boolean;
+  renderPageToolbar: boolean;
 }
 
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -89,6 +92,7 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   canDragItem: true,
   renderImageToolbar: true,
   renderTextToolbar: true,
+  renderPageToolbar: true,
 };
 
 export function DemoCanvasSpreadView() {
@@ -265,6 +269,20 @@ export function DemoCanvasSpreadView() {
             ...s,
             textboxes: s.textboxes.filter((_, i) => i !== textboxIndex),
           };
+        })
+      );
+    },
+    []
+  );
+
+  const handleUpdatePage = useCallback(
+    (spreadId: string, pageIndex: number, updates: Partial<BaseSpread["pages"][number]>) => {
+      setSpreads((prev) =>
+        prev.map((s) => {
+          if (s.id !== spreadId) return s;
+          const newPages = [...s.pages];
+          newPages[pageIndex] = { ...newPages[pageIndex], ...updates };
+          return { ...s, pages: newPages };
         })
       );
     },
@@ -510,6 +528,13 @@ export function DemoCanvasSpreadView() {
     [handleCloneTextbox, handleUpdateTextboxBackground, handleUpdateTextboxOutline]
   );
 
+  const renderPageToolbar = useCallback(
+    (context: PageToolbarContext<BaseSpread>) => {
+      return <DemoPageToolbar context={context} />;
+    },
+    []
+  );
+
   return (
     <TooltipProvider>
       <div className="h-screen flex flex-col">
@@ -684,6 +709,9 @@ export function DemoCanvasSpreadView() {
               renderTextToolbar={
                 featureFlags.renderTextToolbar ? renderTextToolbar : undefined
               }
+              renderPageToolbar={
+                featureFlags.renderPageToolbar ? renderPageToolbar : undefined
+              }
               onSpreadSelect={handleSpreadSelect}
               onSpreadReorder={handleSpreadReorder}
               onSpreadAdd={handleSpreadAdd}
@@ -691,6 +719,7 @@ export function DemoCanvasSpreadView() {
               onUpdateSpread={handleUpdateSpread}
               onUpdateImage={handleUpdateImage}
               onUpdateTextbox={handleUpdateTextbox}
+              onUpdatePage={handleUpdatePage}
               onDeleteImage={handleDeleteImage}
               onDeleteTextbox={handleDeleteTextbox}
               isEditable={featureFlags.isEditable}

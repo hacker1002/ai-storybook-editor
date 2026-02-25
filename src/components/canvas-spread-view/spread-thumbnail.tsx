@@ -195,12 +195,35 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
             visibility: scale > 0 ? "visible" : "hidden",
           }}
         >
-          {/* Page Background */}
-          <div className="absolute inset-0 bg-gray-50" />
+          {/* Page Backgrounds */}
+          {spread.pages.map((page, pageIndex) => {
+            const isDPS = spread.pages.length === 1;
+            const positionStyle: React.CSSProperties = isDPS
+              ? { left: 0, top: 0, width: "100%", height: "100%" }
+              : pageIndex === 0
+              ? { left: 0, top: 0, width: "50%", height: "100%" }
+              : { left: "50%", top: 0, width: "50%", height: "100%" };
+
+            return (
+              <div
+                key={pageIndex}
+                className="absolute"
+                style={{
+                  ...positionStyle,
+                  backgroundColor: page.background.color,
+                  backgroundImage: page.background.texture
+                    ? `url(/textures/${page.background.texture}.png)`
+                    : "none",
+                  backgroundRepeat: "repeat",
+                  backgroundSize: "256px 256px",
+                }}
+              />
+            );
+          })}
 
           {/* Page Divider */}
           {spread.pages.length > 1 && (
-            <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-200" />
+            <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300" />
           )}
 
           {/* Images (view-only, pointer-events: none) - skip if renderImageItem not provided */}
