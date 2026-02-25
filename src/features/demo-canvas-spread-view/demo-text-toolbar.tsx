@@ -18,9 +18,7 @@ import {
   Trash2,
   Minus,
   Plus,
-  Play,
-  AudioWaveform,
-  Upload,
+  Copy,
 } from "lucide-react";
 import {
   useToolbarPosition,
@@ -54,6 +52,7 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
     onUpdate,
     onFormatText,
     onDelete,
+    onClone,
     onUpdateBackground,
     onUpdateOutline,
     selectedGeometry,
@@ -117,6 +116,25 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
     },
     [onFormatText]
   );
+
+  const handleWeightToggle = useCallback(() => {
+    const newWeight = typography.weight === 700 ? 400 : 700;
+    onFormatText?.({ weight: newWeight });
+  }, [typography.weight, onFormatText]);
+
+  const handleStyleToggle = useCallback(() => {
+    const newStyle = typography.style === 'italic' ? 'normal' : 'italic';
+    onFormatText?.({ style: newStyle });
+  }, [typography.style, onFormatText]);
+
+  const handleDecorationToggle = useCallback((decoration: 'underline' | 'line-through') => {
+    const newDecoration = typography.decoration === decoration ? 'none' : decoration;
+    onFormatText?.({ decoration: newDecoration });
+  }, [typography.decoration, onFormatText]);
+
+  const handleTextAlignChange = useCallback((align: 'left' | 'center' | 'right') => {
+    onFormatText?.({ textAlign: align });
+  }, [onFormatText]);
 
   const handleOpacityChange = useCallback(
     (delta: number) => {
@@ -237,31 +255,56 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
         </div>
 
         <div className="flex gap-1">
-          <button className="flex-1 py-2 rounded-lg font-bold transition-colors text-sm bg-secondary hover:bg-muted">
+          <button
+            onClick={handleWeightToggle}
+            className={`flex-1 py-2 rounded-lg font-bold transition-colors text-sm ${typography.weight === 700 ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+          >
             B
           </button>
-          <button className="flex-1 py-2 rounded-lg italic transition-colors text-sm bg-secondary hover:bg-muted">
+          <button
+            onClick={handleStyleToggle}
+            className={`flex-1 py-2 rounded-lg italic transition-colors text-sm ${typography.style === 'italic' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+          >
             I
           </button>
-          <button className="flex-1 py-2 rounded-lg underline transition-colors text-sm bg-secondary hover:bg-muted">
+          <button
+            onClick={() => handleDecorationToggle('underline')}
+            className={`flex-1 py-2 rounded-lg underline transition-colors text-sm ${typography.decoration === 'underline' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+          >
             U
           </button>
-          <button className="flex-1 py-2 rounded-lg transition-colors bg-secondary hover:bg-muted">
+          <button
+            onClick={() => handleDecorationToggle('line-through')}
+            className={`flex-1 py-2 rounded-lg transition-colors ${typography.decoration === 'line-through' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+          >
             <Strikethrough className="w-4 h-4 mx-auto" />
           </button>
         </div>
 
         <div className="flex gap-1">
-          <button className="flex-1 py-2 rounded-lg transition-colors bg-primary text-primary-foreground">
+          <button
+            onClick={() => handleTextAlignChange('left')}
+            className={`flex-1 py-2 rounded-lg transition-colors ${(!typography.textAlign || typography.textAlign === 'left') ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+          >
             <AlignLeft className="w-4 h-4 mx-auto" />
           </button>
-          <button className="flex-1 py-2 rounded-lg transition-colors bg-secondary hover:bg-muted">
+          <button
+            onClick={() => handleTextAlignChange('center')}
+            className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'center' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+          >
             <AlignCenter className="w-4 h-4 mx-auto" />
           </button>
-          <button className="flex-1 py-2 rounded-lg transition-colors bg-secondary hover:bg-muted">
+          <button
+            onClick={() => handleTextAlignChange('right')}
+            className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'right' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+          >
             <AlignRight className="w-4 h-4 mx-auto" />
           </button>
-          <button className="flex-1 py-2 rounded-lg transition-colors bg-secondary hover:bg-muted">
+          <button
+            onClick={() => onFormatText?.({ textAlign: undefined })}
+            className="flex-1 py-2 rounded-lg transition-colors bg-secondary hover:bg-muted"
+            title="Justify (reset)"
+          >
             <AlignJustify className="w-4 h-4 mx-auto" />
           </button>
         </div>
@@ -444,32 +487,14 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
         </div>
       </div>
 
-      {/* Narration Section */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase">Narration</Label>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 bg-muted/50 rounded-lg px-2 h-7">
-            <button className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors flex-shrink-0">
-              <Play className="w-2.5 h-2.5 ml-0.5" />
-            </button>
-            <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full" style={{ width: '0%' }} />
-            </div>
-            <span className="text-xs text-muted-foreground">0:00</span>
-          </div>
-        </div>
-      </div>
-
       {/* Footer */}
       <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
-        <div className="flex items-center gap-1">
-          <button className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors">
-            <AudioWaveform className="w-4 h-4" />
-          </button>
-          <button className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors">
-            <Upload className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          onClick={onClone}
+          className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
         <button
           onClick={onDelete}
           className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"

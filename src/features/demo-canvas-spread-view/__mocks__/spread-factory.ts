@@ -84,7 +84,7 @@ const defaultTypography: Typography = {
   size: 16,
   weight: 400,
   style: 'normal',
-  family: 'Inter',
+  family: 'Nunito',
   color: '#000000',
   lineHeight: 1.5,
   letterSpacing: 0,
@@ -123,6 +123,8 @@ export function createMockTextbox(
       text,
       geometry: randomGeometry('right'),
       typography: { ...defaultTypography },
+      fill: { color: '#ffffff', opacity: 0 },
+      outline: { color: '#000000', width: 0, radius: 0, type: 'solid' },
     },
     ...overrides,
   };

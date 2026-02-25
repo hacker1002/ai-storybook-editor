@@ -520,12 +520,29 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           if (selectedElement.type === 'textbox' && renderTextToolbar) {
             const textbox = spread.textboxes[selectedElement.index];
             if (!textbox) return null;
+            const langKey = Object.keys(textbox).find((k) => k !== 'id' && k !== 'title') || 'en_US';
+            const langContent = textbox[langKey] as { text: string; geometry: Geometry; typography: Typography; fill?: Fill; outline?: Outline };
             const context = buildTextContext(textbox, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateTextbox, onDeleteTextbox);
+
             return renderTextToolbar({
               ...context,
               selectedGeometry: state.selectedGeometry,
               canvasRef,
-              onFormatText: () => {},
+              onFormatText: (format: Partial<Typography>) => {
+                onUpdateTextbox(selectedElement.index, {
+                  [langKey]: { ...langContent, typography: { ...langContent?.typography, ...format } },
+                } as Partial<SpreadTextbox>);
+              },
+              onUpdateBackground: (bg: Partial<Fill>) => {
+                onUpdateTextbox(selectedElement.index, {
+                  [langKey]: { ...langContent, fill: { ...(langContent?.fill || { color: '#ffffff', opacity: 0 }), ...bg } },
+                } as Partial<SpreadTextbox>);
+              },
+              onUpdateOutline: (outlineUpdates: Partial<Outline>) => {
+                onUpdateTextbox(selectedElement.index, {
+                  [langKey]: { ...langContent, outline: { ...(langContent?.outline || { color: '#000000', width: 2, radius: 8, type: 'solid' }), ...outlineUpdates } },
+                } as Partial<SpreadTextbox>);
+              },
             });
           }
 

@@ -301,27 +301,31 @@ export function DemoCanvasSpreadView() {
           if (s.id !== spreadId) return s;
           const item = s.textboxes[textboxIndex];
           if (!item) return s;
-          const clonedItem: SpreadTextbox = {
-            ...item,
-            id: `txt-${Date.now()}`,
-          };
-          const langKey = Object.keys(item).find(
+
+          // Deep copy using structuredClone
+          const clonedItem: SpreadTextbox = structuredClone(item);
+
+          // Generate new UUID
+          clonedItem.id = crypto.randomUUID();
+
+          // Offset geometry +5% and clamp to max 100%
+          const langKey = Object.keys(clonedItem).find(
             (k) => k !== "id" && k !== "title"
           ) as keyof SpreadTextbox | undefined;
+
           if (langKey && langKey !== "id" && langKey !== "title") {
-            const langData = item[langKey] as {
+            const langData = clonedItem[langKey] as {
               text: string;
               geometry: { x: number; y: number; w: number; h: number };
             };
-            (clonedItem[langKey] as typeof langData) = {
-              ...langData,
-              geometry: {
-                ...langData.geometry,
-                x: Math.min(100, langData.geometry.x + 10),
-                y: Math.min(100, langData.geometry.y + 10),
-              },
-            };
+            // Calculate max position accounting for textbox dimensions
+            const maxX = Math.max(0, 100 - langData.geometry.w);
+            const maxY = Math.max(0, 100 - langData.geometry.h);
+
+            langData.geometry.x = Math.min(maxX, langData.geometry.x + 5);
+            langData.geometry.y = Math.min(maxY, langData.geometry.y + 5);
           }
+
           return { ...s, textboxes: [...s.textboxes, clonedItem] };
         })
       );
@@ -439,6 +443,16 @@ export function DemoCanvasSpreadView() {
         textAlign?: "left" | "center" | "right";
         textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
       };
+      fill?: {
+        color: string;
+        opacity: number;
+      };
+      outline?: {
+        color: string;
+        width: number;
+        radius: number;
+        type: "solid" | "dashed" | "dotted";
+      };
     }
 
     const langContent = langKey
@@ -452,6 +466,8 @@ export function DemoCanvasSpreadView() {
         text={langContent.text}
         geometry={langContent.geometry}
         typography={langContent.typography}
+        fill={langContent.fill}
+        outline={langContent.outline}
         index={context.itemIndex}
         isSelected={context.isSelected}
         isEditable={context.isSpreadSelected}
