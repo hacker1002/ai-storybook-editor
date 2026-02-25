@@ -1,7 +1,7 @@
 // spread-editor-panel.tsx - Main editor canvas for selected spread
 'use client';
 
-import { useState, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { SelectionFrame } from './selection-frame';
 import { PageItem } from './page-item';
 import {
@@ -124,6 +124,21 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     activeHandle: null,
     originalGeometry: null,
   });
+
+  // Reset selection when switching to different spread
+  useEffect(() => {
+    setState((prev) => ({
+      ...prev,
+      selectedElement: null,
+      selectedGeometry: null,
+      isTextboxEditing: false,
+      isImageEditing: false,
+      isDragging: false,
+      isResizing: false,
+      activeHandle: null,
+      originalGeometry: null,
+    }));
+  }, [spread.id]);
 
   // Scaled dimensions
   const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(zoomLevel);

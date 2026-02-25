@@ -1,16 +1,25 @@
 // spread-thumbnail.tsx
-'use client';
+"use client";
 
-import React, { useMemo, useRef, useState, useLayoutEffect, type ReactNode } from 'react';
-import { cn } from '@/lib/utils';
-import { buildViewOnlyImageContext, buildViewOnlyTextContext } from './utils/context-builders';
-import { CANVAS, THUMBNAIL } from './constants';
+import React, {
+  useMemo,
+  useRef,
+  useState,
+  useLayoutEffect,
+  type ReactNode,
+} from "react";
+import { cn } from "@/lib/utils";
+import {
+  buildViewOnlyImageContext,
+  buildViewOnlyTextContext,
+} from "./utils/context-builders";
+import { CANVAS, THUMBNAIL } from "./constants";
 import type {
   BaseSpread,
   ItemType,
   ImageItemContext,
   TextItemContext,
-} from './types';
+} from "./types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   // Data
@@ -19,7 +28,7 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
 
   // State
   isSelected: boolean;
-  size: 'small' | 'medium';
+  size: "small" | "medium";
 
   // Render configuration
   renderItems: ItemType[];
@@ -33,10 +42,10 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
 
   // Callbacks
   onClick: () => void;
-  onDoubleClick?: () => void;  // Grid mode: switch to Edit
-  onDelete?: () => void;        // Delete spread
-  canDelete?: boolean;          // Enable delete feature
-  isLastSpread?: boolean;       // Hide delete if true (can't delete last spread)
+  onDoubleClick?: () => void; // Grid mode: switch to Edit
+  onDelete?: () => void; // Delete spread
+  canDelete?: boolean; // Enable delete feature
+  isLastSpread?: boolean; // Hide delete if true (can't delete last spread)
   onDragStart?: () => void;
   onDragOver?: () => void;
   onDragEnd?: () => void;
@@ -67,7 +76,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
   // Track container width for medium mode scaling
   useLayoutEffect(() => {
-    if (size !== 'medium' || !containerRef.current) return;
+    if (size !== "medium" || !containerRef.current) return;
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -81,9 +90,12 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   }, [size]);
 
   // Scale factor: small uses fixed, medium calculates from container width
-  const scale = size === 'small'
-    ? THUMBNAIL.SMALL_SCALE
-    : containerWidth > 0 ? containerWidth / CANVAS.BASE_WIDTH : 0;
+  const scale =
+    size === "small"
+      ? THUMBNAIL.SMALL_SCALE
+      : containerWidth > 0
+      ? containerWidth / CANVAS.BASE_WIDTH
+      : 0;
 
   // Page label
   const label = useMemo(() => {
@@ -95,7 +107,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
   // Memoize image contexts
   const imageContexts = useMemo(() => {
-    if (!renderItems.includes('image')) return [];
+    if (!renderItems.includes("image")) return [];
     return spread.images.map((img, idx) => ({
       image: img,
       context: buildViewOnlyImageContext(img, idx, spread),
@@ -104,7 +116,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
   // Memoize text contexts
   const textContexts = useMemo(() => {
-    if (!renderItems.includes('text')) return [];
+    if (!renderItems.includes("text")) return [];
     return spread.textboxes.map((textbox, idx) => ({
       textbox,
       context: buildViewOnlyTextContext(textbox, idx, spread),
@@ -112,7 +124,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   }, [spread.textboxes, spread.id, renderItems]);
 
   // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
-  const cursor = isDragging ? 'grabbing' : (isDragEnabled ? 'grab' : 'pointer');
+  const cursor = isDragging ? "grabbing" : isDragEnabled ? "grab" : "pointer";
 
   // Show delete button when hovering and not last spread
   const showDeleteButton = canDelete && !isLastSpread;
@@ -123,24 +135,24 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
       aria-selected={isSelected}
       aria-label={`Spread ${spreadIndex + 1}, ${label}`}
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => e.key === "Enter" && onClick()}
       className={cn(
-        'flex-shrink-0 transition-all scroll-snap-align-start',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
-        isDragging && 'opacity-50',
-        isDropTarget && 'ring-2 ring-dashed ring-blue-400',
+        "flex-shrink-0 transition-all scroll-snap-align-start",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+        isDragging && "opacity-50",
+        isDropTarget && "ring-2 ring-dashed ring-blue-400"
       )}
       draggable={isDragEnabled}
       aria-grabbed={isDragging}
       onDragStart={(e) => {
         if (!isDragEnabled) return;
-        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.effectAllowed = "move";
         onDragStart?.();
       }}
       onDragOver={(e) => {
         if (!isDragEnabled) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        e.dataTransfer.dropEffect = "move";
         onDragOver?.();
       }}
       onDragEnd={onDragEnd}
@@ -152,35 +164,35 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
       <div
         ref={containerRef}
         className={cn(
-          'thumbnail-container relative overflow-hidden rounded-md bg-white shadow-sm',
-          'hover:shadow-md transition-shadow',
-          size === 'medium' && 'w-full', // Medium: fill grid cell, Small: fixed
-          isSelected && 'ring-2 ring-blue-500',
+          "thumbnail-container relative overflow-hidden rounded-md bg-white shadow-sm",
+          "hover:shadow-md transition-shadow",
+          size === "medium" && "w-full", // Medium: fill grid cell, Small: fixed
+          isSelected && "ring-2 ring-blue-500"
         )}
         style={{
           // Maintain aspect ratio (4:3) regardless of container width
           aspectRatio: `${CANVAS.ASPECT_RATIO}`,
           // Small size: fixed dimensions, Medium: responsive
-          ...(size === 'small' && {
+          ...(size === "small" && {
             width: THUMBNAIL.SMALL_SIZE.width,
             height: THUMBNAIL.SMALL_SIZE.height,
           }),
-          contain: 'layout style paint',
+          contain: "layout style paint",
         }}
       >
         {/* Scaled Content: render at 800×600, scale down to fit container */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             top: 0,
             left: 0,
             width: CANVAS.BASE_WIDTH,
             height: CANVAS.BASE_HEIGHT,
-            transform: scale > 0 ? `scale(${scale})` : 'scale(0)',
-            transformOrigin: 'top left',
-            pointerEvents: 'none',
+            transform: scale > 0 ? `scale(${scale})` : "scale(0)",
+            transformOrigin: "top left",
+            pointerEvents: "none",
             // Hide until scale is calculated (prevents flash)
-            visibility: scale > 0 ? 'visible' : 'hidden',
+            visibility: scale > 0 ? "visible" : "hidden",
           }}
         >
           {/* Page Background */}
@@ -193,14 +205,14 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
           {/* Images (view-only, pointer-events: none) */}
           {imageContexts.map(({ image, context }, index) => (
-            <div key={image.id || index} style={{ pointerEvents: 'none' }}>
+            <div key={image.id || index} style={{ pointerEvents: "none" }}>
               {renderImageItem(context)}
             </div>
           ))}
 
           {/* Textboxes (view-only, pointer-events: none) */}
           {textContexts.map(({ textbox, context }, index) => (
-            <div key={textbox.id || index} style={{ pointerEvents: 'none' }}>
+            <div key={textbox.id || index} style={{ pointerEvents: "none" }}>
               {renderTextItem(context)}
             </div>
           ))}
@@ -212,7 +224,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
           style={{
             zIndex: 10,
             cursor,
-            pointerEvents: 'auto',
+            pointerEvents: "auto",
           }}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
@@ -227,11 +239,11 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
               onDelete?.();
             }}
             className={cn(
-              'delete-button absolute top-1 right-1 z-20',
-              'w-6 h-6 rounded-full bg-red-500 text-white',
-              'flex items-center justify-center',
-              'opacity-0 transition-opacity duration-150',
-              'hover:bg-red-600',
+              "delete-button absolute top-1 right-1 z-20",
+              "w-6 h-6 rounded-full bg-red-500 text-white",
+              "flex items-center justify-center",
+              "opacity-0 transition-opacity duration-150",
+              "hover:bg-red-600"
             )}
             aria-label="Delete spread"
           >
@@ -270,6 +282,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 }
 
 // Export memoized component
-export const SpreadThumbnail = React.memo(SpreadThumbnailInner) as typeof SpreadThumbnailInner;
+export const SpreadThumbnail = React.memo(
+  SpreadThumbnailInner
+) as typeof SpreadThumbnailInner;
 
 export default SpreadThumbnail;

@@ -1,7 +1,7 @@
 // canvas-spread-view.tsx - Root component composing all child components
 'use client';
 
-import { useState, useCallback, useMemo, useEffect, type ReactNode } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { SpreadViewHeader } from './spread-view-header';
 import { SpreadEditorPanel } from './spread-editor-panel';
 import { SpreadThumbnailList } from './spread-thumbnail-list';
@@ -159,6 +159,17 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     saveViewPreferences({ viewMode, zoomLevel, columnsPerRow });
   }, [viewMode, zoomLevel, columnsPerRow]);
 
+  // Auto-select newly added spread (when spreads array grows)
+  const prevSpreadsLengthRef = useRef(spreads.length);
+  useEffect(() => {
+    if (spreads.length > prevSpreadsLengthRef.current && spreads.length > 0) {
+      const newSpread = spreads[spreads.length - 1];
+      setSelectedId(newSpread.id);
+      onSpreadSelect?.(newSpread.id);
+    }
+    prevSpreadsLengthRef.current = spreads.length;
+  }, [spreads.length, spreads, onSpreadSelect]);
+
   // === Derived State ===
   const selectedSpread = useMemo(
     () => spreads.find((s) => s.id === selectedId) ?? null,
@@ -255,32 +266,31 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   }, [onSpreadSelect]);
 
   const handleDeleteSpread = useCallback((spreadId: string) => {
-    const currentIndex = spreads.findIndex(s => s.id === spreadId);
-    if (currentIndex === -1) return;
+    const deletingIndex = spreads.findIndex(s => s.id === spreadId);
+    if (deletingIndex === -1) return;
 
-    // Determine next selection (next spread, fallback to previous)
-    let nextId: string | null = null;
-    if (spreads.length > 1) {
-      if (currentIndex < spreads.length - 1) {
-        // Select NEXT spread (standard reading order flow)
-        nextId = spreads[currentIndex + 1].id;
-      } else {
-        // Was last spread, select PREVIOUS
-        nextId = spreads[currentIndex - 1].id;
-      }
-    }
+    // Only update selection if deleting the currently selected spread
+    const isDeletingSelected = spreadId === selectedId;
 
     // Call parent delete callback
     onDeleteSpread?.(spreadId);
 
-    // Update selection to maintain user flow
-    if (nextId) {
-      setSelectedId(nextId);
-      onSpreadSelect?.(nextId);
-    } else {
+    // Update selection only if deleting current spread
+    if (isDeletingSelected && spreads.length > 1) {
+      let nextId: string | null = null;
+      if (deletingIndex < spreads.length - 1) {
+        nextId = spreads[deletingIndex + 1].id;
+      } else {
+        nextId = spreads[deletingIndex - 1].id;
+      }
+      if (nextId) {
+        setSelectedId(nextId);
+        onSpreadSelect?.(nextId);
+      }
+    } else if (isDeletingSelected) {
       setSelectedId(null);
     }
-  }, [spreads, onDeleteSpread, onSpreadSelect]);
+  }, [spreads, selectedId, onDeleteSpread, onSpreadSelect]);
 
   // Wrap callbacks to include spreadId
   const handleUpdateSpread = useCallback((updates: Partial<TSpread>) => {
