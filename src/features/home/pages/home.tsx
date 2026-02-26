@@ -148,11 +148,18 @@ export function HomePage() {
 
       <div className="border-t pt-6">
         <p className="mb-3 text-sm text-muted-foreground">Demo Pages</p>
-        <Link to="/demo/canvas-spread-view">
-          <Button variant="outline" size="sm">
-            Canvas Spread View
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/demo/canvas-spread-view">
+            <Button variant="outline" size="sm">
+              Canvas Spread View
+            </Button>
+          </Link>
+          <Link to="/demo/playable-spread-view">
+            <Button variant="outline" size="sm">
+              Playable Spread View
+            </Button>
+          </Link>
+        </div>
       </div>
     </div>
   )

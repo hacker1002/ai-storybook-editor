@@ -5,6 +5,7 @@ import { HomePage } from '@/features/home';
 import { LoginPage } from '@/features/auth';
 import { EditorPage } from '@/features/editor';
 import { DemoCanvasSpreadView } from '@/features/demo-canvas-spread-view';
+import { DemoPlayableSpreadView } from '@/features/demo-playable-spread-view';
 import { useAuthStore } from '@/stores/auth-store';
 
 function PlaceholderPage({ title }: { title: string }) {
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/editor/:bookId" element={<EditorPage />} />
         <Route path="/demo/canvas-spread-view" element={<DemoCanvasSpreadView />} />
+        <Route path="/demo/playable-spread-view" element={<DemoPlayableSpreadView />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/explore" element={<PlaceholderPage title="Explore Community" />} />
