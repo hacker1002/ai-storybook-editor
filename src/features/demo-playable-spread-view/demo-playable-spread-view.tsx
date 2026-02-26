@@ -6,6 +6,7 @@ import {
   PlayableSpreadView,
   type OperationMode,
   type PlayableSpread,
+  type Animation,
   type AddAnimationParams,
   type AssetSwapParams,
 } from "@/components/playable-spread-view";
@@ -100,6 +101,41 @@ export function DemoPlayableSpreadView() {
   // === PlayableSpreadView Handlers ===
   const handleAddAnimation = useCallback((params: AddAnimationParams) => {
     console.log("Add animation:", params);
+
+    if (!params.targetId || !params.targetType) {
+      console.warn("Missing target info for animation");
+      return;
+    }
+
+    // Map AnimationMediaType to Animation type ('sound' → 'audio')
+    const animationType: Animation["type"] =
+      params.type === "sound" ? "audio" : params.type;
+
+    setSpreads((prevSpreads) =>
+      prevSpreads.map((spread) => {
+        if (spread.id !== params.spreadId) return spread;
+
+        const existingAnimations = spread.animations ?? [];
+        const newAnimation: Animation = {
+          order: existingAnimations.length + 1,
+          type: animationType,
+          target: {
+            id: params.targetId!,
+            type: params.targetType!,
+          },
+          trigger_type: "on_click",
+          effect: {
+            type: 1, // Default effect type
+            duration: 1000,
+          },
+        };
+
+        return {
+          ...spread,
+          animations: [...existingAnimations, newAnimation],
+        };
+      })
+    );
   }, []);
 
   const handleAssetSwap = useCallback(
@@ -256,6 +292,7 @@ export function DemoPlayableSpreadView() {
           <PlayableSpreadView
             mode={operationMode}
             spreads={spreads}
+            language={mockOptions.language}
             onAddAnimation={handleAddAnimation}
             onAssetSwap={handleAssetSwap}
             onTextChange={handleTextChange}

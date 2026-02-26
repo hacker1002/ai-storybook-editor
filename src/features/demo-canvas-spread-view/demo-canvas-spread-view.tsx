@@ -531,6 +531,7 @@ export function DemoCanvasSpreadView() {
         outline={langContent.outline}
         index={context.itemIndex}
         isSelected={context.isSelected}
+        isSelectable={context.isSpreadSelected}
         isEditable={context.isSpreadSelected}
         onSelect={context.onSelect}
         onTextChange={context.onTextChange}

@@ -1,4 +1,4 @@
-// editable-object.tsx - Utility component for displaying objects in CanvasSpreadView
+// editable-object.tsx - Shared utility component for displaying objects
 'use client';
 
 import { useState, useCallback, useRef } from 'react';

@@ -73,13 +73,8 @@ export const HANDLE_CURSORS: Record<string, string> = {
   se: "nwse-resize",
 };
 
-export const COLORS = {
-  PLACEHOLDER_BG: "#f5f5f5",
-  PLACEHOLDER_BORDER: "#e0e0e0",
-  HOVER_OUTLINE: "#bdbdbd",
-  EDIT_MODE_BG: "rgba(33, 150, 243, 0.05)",
-  PLACEHOLDER_TEXT: "#9e9e9e",
-} as const;
+// Re-export COLORS from shared
+export { COLORS } from '../shared';
 
 export const AVAILABLE_TEXTURES = [
   "paper",

@@ -7,7 +7,21 @@ export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
 export type PlayMode = 'off' | 'semi-auto' | 'auto';
 export type ItemType = 'object' | 'textbox';
-export type AnimationMediaType = 'image' | 'video' | 'audio' | 'textbox';
+export type AnimationMediaType = 'image' | 'video' | 'sound' | 'textbox';
+
+// === Animation Editor State ===
+export interface AnimationEditorState {
+  selectedItemId: string | null;
+  selectedItemType: ItemType | null;
+  toolbarOpen: boolean;
+}
+
+export interface AddAnimationToolbarProps {
+  position: { top: number; left: number } | null;
+  targetType: ItemType;
+  onSelectOption: (type: AnimationMediaType) => void;
+  onClose: () => void;
+}
 
 // === PlayableSpread ===
 // Extend from BaseSpread, add animations array
@@ -49,8 +63,8 @@ export interface RemixAsset {
 // === Action Parameters ===
 export interface AddAnimationParams {
   type: AnimationMediaType;
-  targetId: string;
-  targetType: ItemType;
+  targetId: string | null;
+  targetType: ItemType | null;
   spreadId: string;
 }
 
@@ -65,6 +79,7 @@ export interface AssetSwapParams {
 export interface PlayableSpreadViewProps {
   mode: OperationMode;
   spreads: PlayableSpread[];
+  language?: string;
   assets?: RemixAsset[];
   onAddAnimation?: (params: AddAnimationParams) => void;
   onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
@@ -98,6 +113,8 @@ export interface PlayableThumbnailListProps {
 // === Canvas Props ===
 export interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
+  language: string;
+  zoomLevel?: number;
   onAddAnimation: (params: AddAnimationParams) => void;
 }
 

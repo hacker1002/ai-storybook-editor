@@ -8,14 +8,16 @@ import type {
 import { VOLUME, KEYBOARD_SHORTCUTS } from './constants';
 import { PlayableHeader } from './playable-header';
 import { PlayableThumbnailList } from './playable-thumbnail-list';
+import { AnimationEditorCanvas } from './animation-editor-canvas';
 
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   mode,
   spreads,
-  assets,
+  language = 'en',
+  assets: _assets,
   onAddAnimation,
-  onAssetSwap,
-  onTextChange,
+  onAssetSwap: _onAssetSwap,
+  onTextChange: _onTextChange,
   onSpreadSelect,
 }) => {
   // === Internal State ===
@@ -25,7 +27,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
-  const [volume, setVolume] = useState(VOLUME.DEFAULT);
+  const [volume, setVolume] = useState<number>(VOLUME.DEFAULT);
   const [isMuted, setIsMuted] = useState(false);
 
   // === Derived State ===
@@ -194,24 +196,33 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         />
       </div>
 
-      {/* Canvas Area - MOCK ONLY */}
+      {/* Canvas Area */}
       <div className="flex-1 overflow-hidden flex items-center justify-center bg-muted/10">
-        <div className="text-center space-y-2 p-8 rounded-lg bg-background border shadow-sm">
-          <div className="text-2xl font-semibold">Canvas: {activeCanvas}</div>
-          <div className="text-muted-foreground">Mode: {mode}</div>
-          <div className="text-muted-foreground">
-            Spread: {selectedSpreadId || 'None'}
+        {activeCanvas === 'animation-editor' && selectedSpread && onAddAnimation ? (
+          <AnimationEditorCanvas
+            spread={selectedSpread}
+            language={language}
+            onAddAnimation={onAddAnimation}
+          />
+        ) : (
+          /* Mock for remix-editor and player (future implementation) */
+          <div className="text-center space-y-2 p-8 rounded-lg bg-background border shadow-sm">
+            <div className="text-2xl font-semibold">Canvas: {activeCanvas}</div>
+            <div className="text-muted-foreground">Mode: {mode}</div>
+            <div className="text-muted-foreground">
+              Spread: {selectedSpreadId || 'None'}
+            </div>
+            <div className="text-sm">
+              {isPlaying ? '▶️ Playing' : '⏸️ Paused'}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Volume: {isMuted ? 'Muted' : `${volume}%`}
+            </div>
+            <div className="text-xs text-muted-foreground mt-4">
+              PlayMode: {playMode}
+            </div>
           </div>
-          <div className="text-sm">
-            {isPlaying ? '▶️ Playing' : '⏸️ Paused'}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Volume: {isMuted ? 'Muted' : `${volume}%`}
-          </div>
-          <div className="text-xs text-muted-foreground mt-4">
-            PlayMode: {playMode}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Thumbnail List */}

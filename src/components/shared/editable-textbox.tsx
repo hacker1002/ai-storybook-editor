@@ -1,4 +1,4 @@
-// editable-textbox.tsx - Utility component for editable text in CanvasSpreadView
+// editable-textbox.tsx - Shared utility component for editable text
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -14,7 +14,8 @@ interface EditableTextboxProps {
   outline?: Outline;
   index: number;
   isSelected: boolean;
-  isEditable: boolean;
+  isSelectable: boolean;  // NEW: Controls click selection behavior
+  isEditable: boolean;    // Controls double-click edit mode
   onSelect: (rect?: DOMRect) => void;
   onTextChange: (text: string) => void;
   onEditingChange: (isEditing: boolean) => void;
@@ -60,6 +61,7 @@ export function EditableTextbox({
   outline,
   index,
   isSelected,
+  isSelectable,
   isEditable,
   onSelect,
   onTextChange,
@@ -102,11 +104,11 @@ export function EditableTextbox({
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    if (isEditable && !isEditing) {
+    if (isSelectable && !isEditing) {
       const rect = e.currentTarget.getBoundingClientRect();
       onSelect(rect);
     }
-  }, [isEditable, isEditing, onSelect]);
+  }, [isSelectable, isEditing, onSelect]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -190,12 +192,12 @@ export function EditableTextbox({
 
   return (
     <div
-      {...(isEditable && {
+      {...(isSelectable && {
         role: 'textbox',
         'aria-label': `Textbox ${index + 1}`,
         'aria-multiline': 'true',
       })}
-      tabIndex={isEditable ? 0 : -1}
+      tabIndex={isSelectable ? 0 : -1}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
@@ -203,7 +205,7 @@ export function EditableTextbox({
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
         'absolute overflow-hidden',
-        isEditable && 'cursor-pointer',
+        isSelectable && 'cursor-pointer',
         !isSelected && isHovered && 'outline-dashed outline-1',
       )}
       style={{

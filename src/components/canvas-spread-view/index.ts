@@ -15,8 +15,7 @@ export { NewSpreadButton, type SpreadType } from './new-spread-button';
 
 // Utility components
 export { EditableImage } from './editable-image';
-export { EditableTextbox } from './editable-textbox';
-export { EditableObject } from './editable-object';
+export { EditableTextbox, EditableObject } from '../shared';
 export { SelectionFrame } from './selection-frame';
 export { PageItem } from './page-item';
 

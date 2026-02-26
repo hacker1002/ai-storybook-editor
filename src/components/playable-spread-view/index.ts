@@ -27,3 +27,6 @@ export { LAYOUT, THUMBNAIL_STYLES, PLAY_MODE_CYCLE, VOLUME, KEYBOARD_SHORTCUTS }
 export { PlayableSpreadView } from './playable-spread-view';
 export { PlayableHeader } from './playable-header';
 export { PlayableThumbnailList } from './playable-thumbnail-list';
+export { AnimationEditorCanvas } from './animation-editor-canvas';
+export { SelectionOverlay } from './selection-overlay';
+export { AddAnimationToolbar } from './add-animation-toolbar';
