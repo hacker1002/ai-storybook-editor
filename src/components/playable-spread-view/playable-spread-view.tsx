@@ -230,6 +230,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         <PlayableThumbnailList
           spreads={spreads}
           selectedId={selectedSpreadId}
+          language={language}
           onSpreadClick={handleSpreadClick}
         />
       </div>

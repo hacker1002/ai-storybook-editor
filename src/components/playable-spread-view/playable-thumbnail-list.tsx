@@ -3,7 +3,9 @@
 
 import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { EditableTextbox, EditableObject } from "../shared";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
+import type { Geometry, Typography, Fill, Outline } from "../shared/types";
 import { LAYOUT, THUMBNAIL_STYLES } from "./constants";
 
 // === Canvas Constants (from canvas-spread-view) ===
@@ -12,11 +14,23 @@ const CANVAS = {
   BASE_HEIGHT: 600,
 } as const;
 
+// Helper to find language key in textbox (same pattern as animation-editor-canvas)
+function getTextboxLanguageKey(textbox: Record<string, unknown>, preferredLang: string): string | null {
+  if (textbox[preferredLang] && typeof textbox[preferredLang] === 'object') {
+    return preferredLang;
+  }
+  const langKey = Object.keys(textbox).find(
+    (k) => k !== 'id' && k !== 'title' && typeof textbox[k] === 'object'
+  );
+  return langKey || null;
+}
+
 // === PlayableThumbnail Item Component ===
 interface PlayableThumbnailProps {
   spread: PlayableSpread;
   index: number;
   isSelected: boolean;
+  language: string;
   onClick: () => void;
 }
 
@@ -24,6 +38,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
   spread,
   index,
   isSelected,
+  language,
   onClick,
 }: PlayableThumbnailProps) {
   // Scale factor: thumbnail width / canvas base width
@@ -36,6 +51,24 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
     }
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
+
+  // Memoized textboxes with resolved language (same pattern as animation-editor-canvas)
+  const textboxesWithLang = useMemo(() => {
+    if (!spread.textboxes) return [];
+    return spread.textboxes.map((textbox) => {
+      const langKey = getTextboxLanguageKey(textbox, language);
+      if (!langKey) return null;
+      const data = textbox[langKey] as {
+        text: string;
+        geometry: Geometry;
+        typography: Typography;
+        fill?: Fill;
+        outline?: Outline;
+      };
+      if (!data?.geometry) return null;
+      return { textbox, langKey, data };
+    }).filter(Boolean);
+  }, [spread.textboxes, language]);
 
   return (
     <button
@@ -112,61 +145,38 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300" />
           )}
 
-          {/* Objects (simplified rendering) */}
-          {spread.objects?.map((object, idx) => {
-            const geometry = object.geometry;
+          {/* Objects (using EditableObject component) */}
+          {spread.objects?.map((object, idx) => (
+            <EditableObject
+              key={object.id || idx}
+              object={object}
+              index={idx}
+              isSelected={false}
+              isEditable={false}
+              onSelect={() => {}}
+            />
+          ))}
+
+          {/* Textboxes (using EditableTextbox component) */}
+          {textboxesWithLang.map((item, idx) => {
+            if (!item) return null;
+            const { textbox, data } = item;
             return (
-              <div
-                key={object.id || idx}
-                className="absolute bg-gray-300"
-                style={{
-                  left: `${geometry.x}%`,
-                  top: `${geometry.y}%`,
-                  width: `${geometry.w}%`,
-                  height: `${geometry.h}%`,
-                  pointerEvents: "none",
-                }}
-              />
-            );
-          })}
-
-          {/* Textboxes (simplified rendering) */}
-          {spread.textboxes?.map((textbox, idx) => {
-            // Extract data from language key (e.g., en_US, vi_VN)
-            const langKey = Object.keys(textbox).find(
-              (k) => k !== "id" && k !== "title" && typeof textbox[k as keyof typeof textbox] === "object"
-            );
-            if (!langKey) return null;
-
-            const langData = textbox[langKey as keyof typeof textbox] as {
-              text: string;
-              geometry: { x: number; y: number; w: number; h: number };
-              typography?: { size?: number; weight?: number; style?: string; family?: string; color?: string; textAlign?: string; lineHeight?: number };
-            };
-            if (!langData?.geometry) return null;
-
-            const { geometry, typography } = langData;
-            return (
-              <div
+              <EditableTextbox
                 key={textbox.id || idx}
-                className="absolute overflow-hidden"
-                style={{
-                  left: `${geometry.x}%`,
-                  top: `${geometry.y}%`,
-                  width: `${geometry.w}%`,
-                  height: `${geometry.h}%`,
-                  fontSize: typography?.size ? `${typography.size}px` : "14px",
-                  fontWeight: typography?.weight || 400,
-                  fontStyle: typography?.style || "normal",
-                  fontFamily: typography?.family || "inherit",
-                  color: typography?.color || "#000000",
-                  textAlign: (typography?.textAlign || "left") as React.CSSProperties["textAlign"],
-                  lineHeight: typography?.lineHeight || 1.5,
-                  pointerEvents: "none",
-                }}
-              >
-                {langData.text}
-              </div>
+                text={data.text}
+                geometry={data.geometry}
+                typography={data.typography}
+                fill={data.fill}
+                outline={data.outline}
+                index={idx}
+                isSelected={false}
+                isSelectable={false}
+                isEditable={false}
+                onSelect={() => {}}
+                onTextChange={() => {}}
+                onEditingChange={() => {}}
+              />
             );
           })}
         </div>
@@ -187,6 +197,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
 export function PlayableThumbnailList({
   spreads,
   selectedId,
+  language,
   onSpreadClick,
 }: PlayableThumbnailListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -236,6 +247,7 @@ export function PlayableThumbnailList({
             spread={spread}
             index={index}
             isSelected={spread.id === selectedId}
+            language={language}
             onClick={() => onSpreadClick(spread.id)}
           />
         ))}

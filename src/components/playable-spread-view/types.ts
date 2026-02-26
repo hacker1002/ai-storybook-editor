@@ -107,6 +107,7 @@ export interface PlayableHeaderProps {
 export interface PlayableThumbnailListProps {
   spreads: PlayableSpread[];
   selectedId: string | null;
+  language: string;
   onSpreadClick: (spreadId: string) => void;
 }
 
