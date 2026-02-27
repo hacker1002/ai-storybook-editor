@@ -2,7 +2,7 @@
 
 /**
  * Get first language key from textbox object.
- * Data is pre-filtered to single language by consumer.
+ * Filters out meta keys (id, title, order) and returns first object-type key.
  */
 export function getFirstTextboxKey(textbox: Record<string, unknown>): string | null {
   const metaKeys = ['id', 'title', 'order'];

@@ -9,6 +9,7 @@ import {
   useToolbarPosition,
   Z_INDEX,
   getScaledDimensions,
+  getFirstTextboxKey,
   type Geometry,
   type Typography,
   type Fill,
@@ -18,7 +19,6 @@ import { PageItem } from '../canvas-spread-view/page-item';
 import { AddAnimationToolbar } from './add-animation-toolbar';
 import { SelectionOverlay } from './selection-overlay';
 import type { PlayableSpread, ItemType, AnimationMediaType, AddAnimationParams } from './types';
-import { getFirstTextboxKey } from './utils/textbox-helpers';
 
 const TEXTBOX_Z_INDEX_BASE = 300;
 

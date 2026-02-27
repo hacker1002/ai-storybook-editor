@@ -43,6 +43,7 @@ import { createMockSpread } from "./__mocks__/spread-factory";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
+import { getFirstTextboxKey } from "@/components/shared";
 
 // === Default Values ===
 const DEFAULT_MOCK_OPTIONS: MockOptions = {
@@ -366,11 +367,9 @@ export function DemoCanvasSpreadView() {
           clonedItem.id = crypto.randomUUID();
 
           // Offset geometry +5% and clamp to max 100%
-          const langKey = Object.keys(clonedItem).find(
-            (k) => k !== "id" && k !== "title"
-          ) as keyof SpreadTextbox | undefined;
+          const langKey = getFirstTextboxKey(clonedItem);
 
-          if (langKey && langKey !== "id" && langKey !== "title") {
+          if (langKey) {
             const langData = clonedItem[langKey] as {
               text: string;
               geometry: { x: number; y: number; w: number; h: number };
@@ -397,10 +396,8 @@ export function DemoCanvasSpreadView() {
           if (s.id !== spreadId) return s;
           const newTextboxes = [...s.textboxes];
           const item = newTextboxes[textboxIndex];
-          const langKey = Object.keys(item).find(
-            (k) => k !== "id" && k !== "title"
-          ) as keyof SpreadTextbox | undefined;
-          if (langKey && langKey !== "id" && langKey !== "title") {
+          const langKey = getFirstTextboxKey(item);
+          if (langKey) {
             const langData = item[langKey] as {
               text: string;
               geometry: { x: number; y: number; w: number; h: number };
@@ -431,10 +428,8 @@ export function DemoCanvasSpreadView() {
           if (s.id !== spreadId) return s;
           const newTextboxes = [...s.textboxes];
           const item = newTextboxes[textboxIndex];
-          const langKey = Object.keys(item).find(
-            (k) => k !== "id" && k !== "title"
-          ) as keyof SpreadTextbox | undefined;
-          if (langKey && langKey !== "id" && langKey !== "title") {
+          const langKey = getFirstTextboxKey(item);
+          if (langKey) {
             const langData = item[langKey] as {
               text: string;
               geometry: { x: number; y: number; w: number; h: number };
@@ -475,10 +470,7 @@ export function DemoCanvasSpreadView() {
   );
 
   const renderTextItem = useCallback((context: TextItemContext<BaseSpread>) => {
-    // Get text from first language key
-    const langKey = Object.keys(context.item).find(
-      (k) => k !== "id" && k !== "title"
-    );
+    const langKey = getFirstTextboxKey(context.item);
 
     interface TextboxContent {
       text: string;

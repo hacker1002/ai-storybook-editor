@@ -34,6 +34,7 @@ import type {
   Fill,
   Outline,
 } from './types';
+import { getFirstTextboxKey } from '../shared';
 
 // === Props Interface ===
 interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
@@ -183,7 +184,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         geometry = spread.images[element.index]?.geometry ?? null;
       } else if (element.type === 'textbox') {
         const item = spread.textboxes[element.index];
-        const langKey = Object.keys(item || {}).find((k) => k !== 'id' && k !== 'title');
+        const langKey = getFirstTextboxKey(item || {});
         geometry = langKey ? (item[langKey] as { geometry: Geometry })?.geometry ?? null : null;
       } else if (element.type === 'object') {
         geometry = spread.objects?.[element.index]?.geometry ?? null;
@@ -218,8 +219,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case 'textbox': {
         const tb = spread.textboxes[selectedElement.index];
         if (!tb) return null;
-        // Get geometry from first language key
-        const langKey = Object.keys(tb).find((k) => k !== 'id' && k !== 'title');
+        const langKey = getFirstTextboxKey(tb);
         return langKey ? (tb[langKey] as { geometry: Geometry })?.geometry ?? null : null;
       }
       case 'object':
@@ -239,7 +239,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         // Update geometry in textbox (need to preserve language structure)
         const tb = spread.textboxes[element.index];
         if (!tb) return;
-        const langKey = Object.keys(tb).find((k) => k !== 'id' && k !== 'title');
+        const langKey = getFirstTextboxKey(tb);
         if (langKey) {
           const langContent = tb[langKey] as { text: string; geometry: Geometry; typography: Typography; fill?: Fill; outline?: Outline };
           onUpdateTextbox(element.index, {
@@ -564,7 +564,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           if (selectedElement.type === 'textbox' && renderTextToolbar) {
             const textbox = spread.textboxes[selectedElement.index];
             if (!textbox) return null;
-            const langKey = Object.keys(textbox).find((k) => k !== 'id' && k !== 'title') || 'en_US';
+            const langKey = getFirstTextboxKey(textbox) || 'en_US';
             const langContent = textbox[langKey] as { text: string; geometry: Geometry; typography: Typography; fill?: Fill; outline?: Outline };
             const context = buildTextContext(textbox, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateTextbox, onDeleteTextbox);
 

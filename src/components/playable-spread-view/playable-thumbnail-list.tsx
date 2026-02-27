@@ -3,11 +3,10 @@
 
 import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { EditableTextbox, EditableObject } from "../shared";
+import { EditableTextbox, EditableObject, getFirstTextboxKey } from "../shared";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
 import type { Geometry, Typography, Fill, Outline } from "../shared/types";
 import { LAYOUT, THUMBNAIL_STYLES } from "./constants";
-import { getFirstTextboxKey } from "./utils/textbox-helpers";
 
 // === Canvas Constants (from canvas-spread-view) ===
 const CANVAS = {

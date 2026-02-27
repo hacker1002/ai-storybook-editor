@@ -32,6 +32,7 @@ export {
   getScaledDimensions,
   geometryToScreenRect,
 } from './utils/coordinate-utils';
+export { getFirstTextboxKey } from './utils/textbox-helpers';
 
 // Hooks
 export { useToolbarPosition } from './hooks/use-toolbar-position';
