@@ -10,7 +10,6 @@ import type {
   PageData,
   SpreadImage,
   SpreadTextbox,
-  SpreadAnimation,
   BaseSpread,
 } from "../shared";
 
@@ -24,18 +23,16 @@ export type {
   PageData,
   SpreadImage,
   SpreadTextbox,
-  SpreadAnimation,
   BaseSpread,
 } from "../shared";
 
 // === Enums & Literals ===
 export type ViewMode = "edit" | "grid";
-export type ItemType = "image" | "text" | "object" | "animation";
+export type ItemType = "image" | "text" | "object";
 export type SelectedElementType =
   | "image"
   | "textbox"
   | "object"
-  | "animation"
   | "page";
 export type ResizeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 export type ThumbnailListLayout = "horizontal" | "grid";
@@ -92,14 +89,6 @@ export interface ObjectItemContext<TSpread extends BaseSpread>
   onDelete: () => void;
 }
 
-export interface AnimationItemContext<TSpread extends BaseSpread>
-  extends BaseItemContext<TSpread> {
-  item: SpreadAnimation;
-  onSelect: () => void;
-  onUpdate: (updates: Partial<SpreadAnimation>) => void;
-  onDelete: () => void;
-}
-
 // === Toolbar Contexts ===
 import type { RefObject } from "react";
 
@@ -148,10 +137,4 @@ export interface ObjectToolbarContext<TSpread extends BaseSpread>
   onCut?: () => void;
   onCrop?: () => void;
   onGenerate?: () => void;
-}
-
-export interface AnimationToolbarContext<TSpread extends BaseSpread>
-  extends AnimationItemContext<TSpread> {
-  onPlayAnimation: () => void;
-  onEditAnimation: () => void;
 }

@@ -5,11 +5,9 @@ import type {
   SpreadImage,
   SpreadTextbox,
   SpreadObject,
-  SpreadAnimation,
   ImageItemContext,
   TextItemContext,
   ObjectItemContext,
-  AnimationItemContext,
   SelectedElement,
   Geometry,
   Typography,
@@ -20,7 +18,6 @@ import type {
 type UpdateImageFn = (index: number, updates: Partial<SpreadImage>) => void;
 type UpdateTextboxFn = (index: number, updates: Partial<SpreadTextbox>) => void;
 type UpdateObjectFn = (index: number, updates: Partial<SpreadObject>) => void;
-type UpdateAnimationFn = (index: number, updates: Partial<SpreadAnimation>) => void;
 type DeleteFn = (index: number) => void;
 type SelectFn = (element: SelectedElement, rect?: DOMRect) => void;
 
@@ -103,31 +100,6 @@ export function buildObjectContext<TSpread extends BaseSpread>(
     isSelected: selectedElement?.type === 'object' && selectedElement.index === index,
     isSpreadSelected: true,
     onSelect: () => onSelect({ type: 'object', index }),
-    onUpdate: (updates) => onUpdate(index, updates),
-    onDelete: () => onDelete?.(index),
-  };
-}
-
-/**
- * Build animation item context for render props
- */
-export function buildAnimationContext<TSpread extends BaseSpread>(
-  animation: SpreadAnimation,
-  index: number,
-  spread: TSpread,
-  selectedElement: SelectedElement | null,
-  onSelect: SelectFn,
-  onUpdate: UpdateAnimationFn,
-  onDelete?: DeleteFn
-): AnimationItemContext<TSpread> {
-  return {
-    item: animation,
-    itemIndex: index,
-    spreadId: spread.id,
-    spread,
-    isSelected: selectedElement?.type === 'animation' && selectedElement.index === index,
-    isSpreadSelected: true,
-    onSelect: () => onSelect({ type: 'animation', index }),
     onUpdate: (updates) => onUpdate(index, updates),
     onDelete: () => onDelete?.(index),
   };

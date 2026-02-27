@@ -59,7 +59,6 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
   renderObjectToolbar?: (context: ObjectToolbarContext<TSpread>) => ReactNode;
-  renderAnimationToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
 
   // Callbacks
   onUpdateSpread: (updates: Partial<TSpread>) => void;

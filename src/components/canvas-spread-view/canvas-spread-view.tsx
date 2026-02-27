@@ -45,7 +45,6 @@ import type {
   ImageItemContext,
   TextItemContext,
   ObjectItemContext,
-  AnimationItemContext,
   ImageToolbarContext,
   TextToolbarContext,
   PageToolbarContext,
@@ -65,14 +64,12 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
   renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
-  renderAnimationItem?: (context: AnimationItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
   renderObjectToolbar?: (context: ObjectToolbarContext<TSpread>) => ReactNode;
-  renderAnimationToolbar?: (context: unknown) => ReactNode;  // TODO: Full context TBD
 
   // Spread-level callbacks
   onSpreadSelect?: (spreadId: string) => void;
