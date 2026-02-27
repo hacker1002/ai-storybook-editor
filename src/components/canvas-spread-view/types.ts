@@ -138,3 +138,98 @@ export interface ObjectToolbarContext<TSpread extends BaseSpread>
   onCrop?: () => void;
   onGenerate?: () => void;
 }
+
+// === Spread Item Action Types ===
+export type SpreadItemType = 'page' | 'image' | 'text' | 'object';
+export type SpreadItemActionType = 'add' | 'update' | 'delete';
+
+export interface SpreadItemActionParams<TData = unknown> {
+  spreadId: string;
+  itemType: SpreadItemType;
+  action: SpreadItemActionType;
+  itemId: number | string | null;  // page index: number, other id: string, null for add
+  data: TData | null;     // null for delete
+}
+
+// Image actions (itemId: string = UUID)
+export type ImageAddAction = SpreadItemActionParams<SpreadImage> & {
+  itemType: 'image';
+  action: 'add';
+  itemId: null;
+};
+
+export type ImageUpdateAction = SpreadItemActionParams<Partial<SpreadImage>> & {
+  itemType: 'image';
+  action: 'update';
+  itemId: string;
+};
+
+export type ImageDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'image';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
+// Textbox actions (itemId: string = UUID)
+export type TextAddAction = SpreadItemActionParams<SpreadTextbox> & {
+  itemType: 'text';
+  action: 'add';
+  itemId: null;
+};
+
+export type TextUpdateAction = SpreadItemActionParams<Partial<SpreadTextbox>> & {
+  itemType: 'text';
+  action: 'update';
+  itemId: string;
+};
+
+export type TextDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'text';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
+// Object actions (itemId: string = UUID)
+export type ObjectAddAction = SpreadItemActionParams<SpreadObject> & {
+  itemType: 'object';
+  action: 'add';
+  itemId: null;
+};
+
+export type ObjectUpdateAction = SpreadItemActionParams<Partial<SpreadObject>> & {
+  itemType: 'object';
+  action: 'update';
+  itemId: string;
+};
+
+export type ObjectDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'object';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
+// Page actions (itemId: number = page index 0|1)
+export type PageUpdateAction = SpreadItemActionParams<Partial<PageData>> & {
+  itemType: 'page';
+  action: 'update';
+  itemId: number;
+};
+
+// Union of all actions
+export type SpreadItemActionUnion =
+  | ImageAddAction
+  | ImageUpdateAction
+  | ImageDeleteAction
+  | TextAddAction
+  | TextUpdateAction
+  | TextDeleteAction
+  | ObjectAddAction
+  | ObjectUpdateAction
+  | ObjectDeleteAction
+  | PageUpdateAction;
+
+// Handler type
+export type OnUpdateSpreadItemFn = (params: SpreadItemActionUnion) => void;

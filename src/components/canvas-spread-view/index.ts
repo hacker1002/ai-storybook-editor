@@ -52,6 +52,10 @@ export type {
 
   // Config types
   LayoutOption,
+
+  // Action types
+  SpreadItemActionUnion,
+  OnUpdateSpreadItemFn,
 } from './types';
 
 // Utilities
@@ -75,6 +79,7 @@ export {
 export {
   buildImageContext,
   buildTextContext,
+  buildTextToolbarContext,
   buildObjectContext,
   buildViewOnlyImageContext,
   buildViewOnlyTextContext,

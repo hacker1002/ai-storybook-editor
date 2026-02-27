@@ -18,11 +18,9 @@ import {
   type TextToolbarContext,
   type PageToolbarContext,
   type ObjectToolbarContext,
-  type Fill,
-  type Outline,
-  type Typography,
   type SpreadType,
   type ItemType,
+  type SpreadItemActionUnion,
 } from "@/components/canvas-spread-view";
 import { DemoImageToolbar } from "./demo-image-toolbar";
 import { DemoTextToolbar } from "./demo-text-toolbar";
@@ -44,6 +42,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 import { getFirstTextboxKey } from "@/components/shared";
+import type { SpreadTextboxContent } from "@/components/shared/types";
 
 // === Default Values ===
 const DEFAULT_MOCK_OPTIONS: MockOptions = {
@@ -209,120 +208,91 @@ export function DemoCanvasSpreadView() {
     [renumberPages]
   );
 
-  // === Item-level handlers ===
-  const handleUpdateSpread = useCallback(
-    (spreadId: string, updates: Partial<BaseSpread>) => {
-      setSpreads((prev) =>
-        prev.map((s) => (s.id === spreadId ? { ...s, ...updates } : s))
-      );
-    },
-    []
-  );
+  // === Unified Item Handler ===
+  const handleSpreadItemAction = useCallback(
+    (params: SpreadItemActionUnion) => {
+      const { spreadId, itemType, action, itemId, data } = params;
 
-  const handleUpdateImage = useCallback(
-    (spreadId: string, imageIndex: number, updates: Partial<SpreadImage>) => {
       setSpreads((prev) =>
         prev.map((s) => {
           if (s.id !== spreadId) return s;
-          const newImages = [...s.images];
-          newImages[imageIndex] = { ...newImages[imageIndex], ...updates };
-          return { ...s, images: newImages };
-        })
-      );
-    },
-    []
-  );
 
-  const handleUpdateTextbox = useCallback(
-    (
-      spreadId: string,
-      textboxIndex: number,
-      updates: Partial<SpreadTextbox>
-    ) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          const newTextboxes = [...s.textboxes];
-          newTextboxes[textboxIndex] = {
-            ...newTextboxes[textboxIndex],
-            ...updates,
-          };
-          return { ...s, textboxes: newTextboxes };
-        })
-      );
-    },
-    []
-  );
+          switch (itemType) {
+            case "image":
+              if (action === "update" && itemId !== null && data) {
+                return {
+                  ...s,
+                  images: s.images.map((img) =>
+                    img.id === itemId ? { ...img, ...data } : img
+                  ),
+                };
+              }
+              if (action === "delete" && itemId !== null) {
+                return {
+                  ...s,
+                  images: s.images.filter((img) => img.id !== itemId),
+                };
+              }
+              if (action === "add" && data) {
+                return { ...s, images: [...s.images, data as SpreadImage] };
+              }
+              break;
 
-  const handleDeleteImage = useCallback(
-    (spreadId: string, imageIndex: number) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          return { ...s, images: s.images.filter((_, i) => i !== imageIndex) };
-        })
-      );
-    },
-    []
-  );
+            case "text":
+              if (action === "update" && itemId !== null && data) {
+                return {
+                  ...s,
+                  textboxes: s.textboxes.map((t) =>
+                    t.id === itemId ? { ...t, ...data } : t
+                  ),
+                };
+              }
+              if (action === "delete" && itemId !== null) {
+                return {
+                  ...s,
+                  textboxes: s.textboxes.filter((t) => t.id !== itemId),
+                };
+              }
+              if (action === "add" && data) {
+                return {
+                  ...s,
+                  textboxes: [...s.textboxes, data as SpreadTextbox],
+                };
+              }
+              break;
 
-  const handleDeleteTextbox = useCallback(
-    (spreadId: string, textboxIndex: number) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          return {
-            ...s,
-            textboxes: s.textboxes.filter((_, i) => i !== textboxIndex),
-          };
-        })
-      );
-    },
-    []
-  );
+            case "object":
+              if (action === "update" && itemId !== null && data) {
+                return {
+                  ...s,
+                  objects: (s.objects || []).map((o) =>
+                    o.id === itemId ? { ...o, ...data } : o
+                  ),
+                };
+              }
+              if (action === "delete" && itemId !== null) {
+                return {
+                  ...s,
+                  objects: (s.objects || []).filter((o) => o.id !== itemId),
+                };
+              }
+              if (action === "add" && data) {
+                return {
+                  ...s,
+                  objects: [...(s.objects || []), data as SpreadObject],
+                };
+              }
+              break;
 
-  const handleUpdatePage = useCallback(
-    (
-      spreadId: string,
-      pageIndex: number,
-      updates: Partial<BaseSpread["pages"][number]>
-    ) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          const newPages = [...s.pages];
-          newPages[pageIndex] = { ...newPages[pageIndex], ...updates };
-          return { ...s, pages: newPages };
-        })
-      );
-    },
-    []
-  );
-
-  // Object handlers (no clone for objects per validation)
-  const handleUpdateObject = useCallback(
-    (spreadId: string, objectIndex: number, updates: Partial<SpreadObject>) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          const newObjects = [...(s.objects || [])];
-          newObjects[objectIndex] = { ...newObjects[objectIndex], ...updates };
-          return { ...s, objects: newObjects };
-        })
-      );
-    },
-    []
-  );
-
-  const handleDeleteObject = useCallback(
-    (spreadId: string, objectIndex: number) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          return {
-            ...s,
-            objects: (s.objects || []).filter((_, i) => i !== objectIndex),
-          };
+            case "page":
+              if (action === "update" && typeof itemId === "number" && data) {
+                const newPages = [...s.pages];
+                newPages[itemId] = { ...newPages[itemId], ...data };
+                return { ...s, pages: newPages };
+              }
+              break;
+          }
+          return s;
         })
       );
     },
@@ -352,107 +322,6 @@ export function DemoCanvasSpreadView() {
     []
   );
 
-  const handleCloneTextbox = useCallback(
-    (spreadId: string, textboxIndex: number) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          const item = s.textboxes[textboxIndex];
-          if (!item) return s;
-
-          // Deep copy using structuredClone
-          const clonedItem: SpreadTextbox = structuredClone(item);
-
-          // Generate new UUID
-          clonedItem.id = crypto.randomUUID();
-
-          // Offset geometry +5% and clamp to max 100%
-          const langKey = getFirstTextboxKey(clonedItem);
-
-          if (langKey) {
-            const langData = clonedItem[langKey] as {
-              text: string;
-              geometry: { x: number; y: number; w: number; h: number };
-            };
-            // Calculate max position accounting for textbox dimensions
-            const maxX = Math.max(0, 100 - langData.geometry.w);
-            const maxY = Math.max(0, 100 - langData.geometry.h);
-
-            langData.geometry.x = Math.min(maxX, langData.geometry.x + 5);
-            langData.geometry.y = Math.min(maxY, langData.geometry.y + 5);
-          }
-
-          return { ...s, textboxes: [...s.textboxes, clonedItem] };
-        })
-      );
-    },
-    []
-  );
-
-  const handleUpdateTextboxBackground = useCallback(
-    (spreadId: string, textboxIndex: number, bg: Partial<Fill>) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          const newTextboxes = [...s.textboxes];
-          const item = newTextboxes[textboxIndex];
-          const langKey = getFirstTextboxKey(item);
-          if (langKey) {
-            const langData = item[langKey] as {
-              text: string;
-              geometry: { x: number; y: number; w: number; h: number };
-              typography: Typography;
-              fill?: Fill;
-              outline?: Outline;
-            };
-            const updatedTextbox: SpreadTextbox = {
-              ...item,
-              [langKey]: {
-                ...langData,
-                fill: { ...langData.fill, ...bg } as Fill,
-              },
-            };
-            newTextboxes[textboxIndex] = updatedTextbox;
-          }
-          return { ...s, textboxes: newTextboxes };
-        })
-      );
-    },
-    []
-  );
-
-  const handleUpdateTextboxOutline = useCallback(
-    (spreadId: string, textboxIndex: number, outline: Partial<Outline>) => {
-      setSpreads((prev) =>
-        prev.map((s) => {
-          if (s.id !== spreadId) return s;
-          const newTextboxes = [...s.textboxes];
-          const item = newTextboxes[textboxIndex];
-          const langKey = getFirstTextboxKey(item);
-          if (langKey) {
-            const langData = item[langKey] as {
-              text: string;
-              geometry: { x: number; y: number; w: number; h: number };
-              typography: Typography;
-              fill?: Fill;
-              outline?: Outline;
-            };
-            const updatedTextbox: SpreadTextbox = {
-              ...item,
-              [langKey]: {
-                ...langData,
-                outline: { ...langData.outline, ...outline } as Outline,
-              },
-            };
-            newTextboxes[textboxIndex] = updatedTextbox;
-          }
-          return { ...s, textboxes: newTextboxes };
-        })
-      );
-    },
-    []
-  );
-
   // === Render Props ===
   const renderImageItem = useCallback(
     (context: ImageItemContext<BaseSpread>) => (
@@ -469,43 +338,27 @@ export function DemoCanvasSpreadView() {
     []
   );
 
+  const renderImageToolbar = useCallback(
+    (context: ImageToolbarContext<BaseSpread>) => {
+      return (
+        <DemoImageToolbar
+          context={{
+            ...context,
+            onClone: () =>
+              handleCloneImage(context.spreadId, context.itemIndex),
+          }}
+        />
+      );
+    },
+    [handleCloneImage]
+  );
+
+  // Render Text
   const renderTextItem = useCallback((context: TextItemContext<BaseSpread>) => {
     const langKey = getFirstTextboxKey(context.item);
 
-    interface TextboxContent {
-      text: string;
-      geometry: {
-        x: number;
-        y: number;
-        w: number;
-        h: number;
-      };
-      typography: {
-        size?: number;
-        weight?: number;
-        style?: "normal" | "italic";
-        family?: string;
-        color?: string;
-        lineHeight?: number;
-        letterSpacing?: number;
-        decoration?: "none" | "underline" | "line-through";
-        textAlign?: "left" | "center" | "right";
-        textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
-      };
-      fill?: {
-        color: string;
-        opacity: number;
-      };
-      outline?: {
-        color: string;
-        width: number;
-        radius: number;
-        type: "solid" | "dashed" | "dotted";
-      };
-    }
-
     const langContent = langKey
-      ? (context.item[langKey] as TextboxContent)
+      ? (context.item[langKey] as SpreadTextboxContent)
       : null;
 
     if (!langContent) return null;
@@ -528,52 +381,14 @@ export function DemoCanvasSpreadView() {
     );
   }, []);
 
-  const renderImageToolbar = useCallback(
-    (context: ImageToolbarContext<BaseSpread>) => {
-      return (
-        <DemoImageToolbar
-          context={{
-            ...context,
-            onClone: () =>
-              handleCloneImage(context.spreadId, context.itemIndex),
-          }}
-        />
-      );
-    },
-    [handleCloneImage]
-  );
-
   const renderTextToolbar = useCallback(
-    (context: TextToolbarContext<BaseSpread>) => {
-      return (
-        <DemoTextToolbar
-          context={{
-            ...context,
-            onClone: () =>
-              handleCloneTextbox(context.spreadId, context.itemIndex),
-            onUpdateBackground: (bg) =>
-              handleUpdateTextboxBackground(
-                context.spreadId,
-                context.itemIndex,
-                bg
-              ),
-            onUpdateOutline: (outline) =>
-              handleUpdateTextboxOutline(
-                context.spreadId,
-                context.itemIndex,
-                outline
-              ),
-          }}
-        />
-      );
-    },
-    [
-      handleCloneTextbox,
-      handleUpdateTextboxBackground,
-      handleUpdateTextboxOutline,
-    ]
+    (context: TextToolbarContext<BaseSpread>) => (
+      <DemoTextToolbar context={context} />
+    ),
+    []
   );
 
+  // Render page toolbar
   const renderPageToolbar = useCallback(
     (context: PageToolbarContext<BaseSpread>) => {
       return <DemoPageToolbar context={context} />;
@@ -581,7 +396,7 @@ export function DemoCanvasSpreadView() {
     []
   );
 
-  // Object render props
+  // Render object
   const renderObjectItem = useCallback(
     (context: ObjectItemContext<BaseSpread>) => (
       <EditableObject
@@ -590,13 +405,11 @@ export function DemoCanvasSpreadView() {
         isSelected={context.isSelected}
         isEditable={context.isSpreadSelected}
         onSelect={context.onSelect}
-        onUpdate={(updates) =>
-          handleUpdateObject(context.spreadId, context.itemIndex, updates)
-        }
-        onDelete={() => handleDeleteObject(context.spreadId, context.itemIndex)}
+        onUpdate={context.onUpdate}
+        onDelete={context.onDelete}
       />
     ),
-    [handleUpdateObject, handleDeleteObject]
+    []
   );
 
   const renderObjectToolbar = useCallback(
@@ -608,7 +421,7 @@ export function DemoCanvasSpreadView() {
             onRotate: () => {
               // Rotate 90°: swap width and height
               const geo = context.item.geometry;
-              handleUpdateObject(context.spreadId, context.itemIndex, {
+              context.onUpdate({
                 geometry: { ...geo, w: geo.h, h: geo.w },
               });
             },
@@ -616,7 +429,7 @@ export function DemoCanvasSpreadView() {
         />
       );
     },
-    [handleUpdateObject]
+    []
   );
 
   return (
@@ -695,14 +508,7 @@ export function DemoCanvasSpreadView() {
               onSpreadReorder={handleSpreadReorder}
               onSpreadAdd={handleSpreadAdd}
               onDeleteSpread={handleSpreadDelete}
-              onUpdateSpread={handleUpdateSpread}
-              onUpdateImage={handleUpdateImage}
-              onUpdateTextbox={handleUpdateTextbox}
-              onUpdateObject={handleUpdateObject}
-              onUpdatePage={handleUpdatePage}
-              onDeleteImage={handleDeleteImage}
-              onDeleteTextbox={handleDeleteTextbox}
-              onDeleteObject={handleDeleteObject}
+              onUpdateSpreadItem={handleSpreadItemAction}
               isEditable={featureFlags.isEditable}
               canAddSpread={featureFlags.canAddSpread}
               canReorderSpread={featureFlags.canReorderSpread}

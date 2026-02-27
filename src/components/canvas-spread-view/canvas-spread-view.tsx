@@ -39,9 +39,6 @@ function saveViewPreferences(prefs: ViewPreferences): void {
 import type {
   BaseSpread,
   ItemType,
-  SpreadImage,
-  SpreadTextbox,
-  SpreadObject,
   ImageItemContext,
   TextItemContext,
   ObjectItemContext,
@@ -50,6 +47,8 @@ import type {
   PageToolbarContext,
   ObjectToolbarContext,
   LayoutOption,
+  OnUpdateSpreadItemFn,
+  SpreadItemActionUnion,
 } from './types';
 
 // === Props Interface ===
@@ -77,15 +76,8 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   onSpreadAdd?: (type: SpreadType) => void;
   onDeleteSpread?: (spreadId: string) => void;
 
-  // Item-level callbacks
-  onUpdateSpread?: (spreadId: string, updates: Partial<TSpread>) => void;
-  onUpdateImage?: (spreadId: string, imageIndex: number, updates: Partial<SpreadImage>) => void;
-  onUpdateTextbox?: (spreadId: string, textboxIndex: number, updates: Partial<SpreadTextbox>) => void;
-  onUpdateObject?: (spreadId: string, objectIndex: number, updates: Partial<SpreadObject>) => void;
-  onUpdatePage?: (spreadId: string, pageIndex: number, updates: Partial<TSpread['pages'][number]>) => void;
-  onDeleteImage?: (spreadId: string, imageIndex: number) => void;
-  onDeleteTextbox?: (spreadId: string, textboxIndex: number) => void;
-  onDeleteObject?: (spreadId: string, objectIndex: number) => void;
+  // Item-level callbacks - Unified API
+  onUpdateSpreadItem?: OnUpdateSpreadItemFn;
 
   // Feature flags
   isEditable?: boolean;
@@ -120,14 +112,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   onSpreadReorder,
   onSpreadAdd,
   onDeleteSpread,
-  onUpdateSpread,
-  onUpdateImage,
-  onUpdateTextbox,
-  onUpdateObject,
-  onUpdatePage,
-  onDeleteImage,
-  onDeleteTextbox,
-  onDeleteObject,
+  onUpdateSpreadItem,
   isEditable = true,
   canAddSpread = false,
   canReorderSpread = false,
@@ -295,38 +280,14 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     }
   }, [spreads, selectedId, onDeleteSpread, onSpreadSelect]);
 
-  // Wrap callbacks to include spreadId
-  const handleUpdateSpread = useCallback((updates: Partial<TSpread>) => {
-    if (selectedId) onUpdateSpread?.(selectedId, updates);
-  }, [selectedId, onUpdateSpread]);
-
-  const handleUpdateImage = useCallback((imageIndex: number, updates: Partial<SpreadImage>) => {
-    if (selectedId) onUpdateImage?.(selectedId, imageIndex, updates);
-  }, [selectedId, onUpdateImage]);
-
-  const handleUpdateTextbox = useCallback((textboxIndex: number, updates: Partial<SpreadTextbox>) => {
-    if (selectedId) onUpdateTextbox?.(selectedId, textboxIndex, updates);
-  }, [selectedId, onUpdateTextbox]);
-
-  const handleUpdateObject = useCallback((objectIndex: number, updates: Partial<SpreadObject>) => {
-    if (selectedId) onUpdateObject?.(selectedId, objectIndex, updates);
-  }, [selectedId, onUpdateObject]);
-
-  const handleUpdatePage = useCallback((pageIndex: number, updates: Partial<TSpread['pages'][number]>) => {
-    if (selectedId) onUpdatePage?.(selectedId, pageIndex, updates);
-  }, [selectedId, onUpdatePage]);
-
-  const handleDeleteImage = useCallback((imageIndex: number) => {
-    if (selectedId) onDeleteImage?.(selectedId, imageIndex);
-  }, [selectedId, onDeleteImage]);
-
-  const handleDeleteTextbox = useCallback((textboxIndex: number) => {
-    if (selectedId) onDeleteTextbox?.(selectedId, textboxIndex);
-  }, [selectedId, onDeleteTextbox]);
-
-  const handleDeleteObject = useCallback((objectIndex: number) => {
-    if (selectedId) onDeleteObject?.(selectedId, objectIndex);
-  }, [selectedId, onDeleteObject]);
+  // Unified spread item action handler (injects spreadId)
+  const handleSpreadItemAction = useCallback(
+    (params: Omit<SpreadItemActionUnion, 'spreadId'>) => {
+      if (!selectedId || !onUpdateSpreadItem) return;
+      onUpdateSpreadItem({ ...params, spreadId: selectedId } as SpreadItemActionUnion);
+    },
+    [onUpdateSpreadItem, selectedId]
+  );
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -360,14 +321,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderTextToolbar={renderTextToolbar}
                 renderPageToolbar={renderPageToolbar}
                 renderObjectToolbar={renderObjectToolbar}
-                onUpdateSpread={handleUpdateSpread}
-                onUpdateImage={handleUpdateImage}
-                onUpdateTextbox={handleUpdateTextbox}
-                onUpdateObject={handleUpdateObject}
-                onUpdatePage={handleUpdatePage}
-                onDeleteImage={handleDeleteImage}
-                onDeleteTextbox={handleDeleteTextbox}
-                onDeleteObject={handleDeleteObject}
+                onSpreadItemAction={handleSpreadItemAction}
                 canAddItem={canAddItem}
                 canDeleteItem={canDeleteItem}
                 canResizeItem={canResizeItem}

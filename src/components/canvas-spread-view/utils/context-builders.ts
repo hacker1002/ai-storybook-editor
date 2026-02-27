@@ -8,17 +8,19 @@ import type {
   ImageItemContext,
   TextItemContext,
   ObjectItemContext,
+  TextToolbarContext,
   SelectedElement,
   Geometry,
   Typography,
   Fill,
   Outline,
+  SpreadItemActionUnion,
 } from '../types';
+import { getFirstTextboxKey } from '../../shared';
+import type { SpreadTextboxContent } from '../../shared/types';
+import type { RefObject } from 'react';
 
-type UpdateImageFn = (index: number, updates: Partial<SpreadImage>) => void;
-type UpdateTextboxFn = (index: number, updates: Partial<SpreadTextbox>) => void;
-type UpdateObjectFn = (index: number, updates: Partial<SpreadObject>) => void;
-type DeleteFn = (index: number) => void;
+type SpreadItemActionHandler = (params: Omit<SpreadItemActionUnion, 'spreadId'>) => void;
 type SelectFn = (element: SelectedElement, rect?: DOMRect) => void;
 
 /**
@@ -30,8 +32,7 @@ export function buildImageContext<TSpread extends BaseSpread>(
   spread: TSpread,
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
-  onUpdate: UpdateImageFn,
-  onDelete?: DeleteFn,
+  onAction: SpreadItemActionHandler,
   onEditingChange?: (isEditing: boolean) => void
 ): ImageItemContext<TSpread> {
   return {
@@ -42,9 +43,24 @@ export function buildImageContext<TSpread extends BaseSpread>(
     isSelected: selectedElement?.type === 'image' && selectedElement.index === index,
     isSpreadSelected: true,
     onSelect: (rect?: DOMRect) => onSelect({ type: 'image', index }, rect),
-    onUpdate: (updates) => onUpdate(index, updates),
-    onDelete: () => onDelete?.(index),
-    onArtNoteChange: (artNote) => onUpdate(index, { art_note: artNote }),
+    onUpdate: (updates) => onAction({
+      itemType: 'image',
+      action: 'update',
+      itemId: image.id,
+      data: updates
+    }),
+    onDelete: () => onAction({
+      itemType: 'image',
+      action: 'delete',
+      itemId: image.id,
+      data: null
+    }),
+    onArtNoteChange: (artNote) => onAction({
+      itemType: 'image',
+      action: 'update',
+      itemId: image.id,
+      data: { art_note: artNote }
+    }),
     onEditingChange,
   };
 }
@@ -58,12 +74,13 @@ export function buildTextContext<TSpread extends BaseSpread>(
   spread: TSpread,
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
-  onUpdate: UpdateTextboxFn,
-  onDelete?: DeleteFn,
-  languageKey = 'en_US',
+  onAction: SpreadItemActionHandler,
   onEditingChange?: (isEditing: boolean) => void
 ): TextItemContext<TSpread> {
-  const langContent = textbox[languageKey] as { text: string; geometry: Geometry; typography: Typography; fill?: Fill; outline?: Outline } | undefined;
+  const langKey = getFirstTextboxKey(textbox);
+  const langContent = langKey
+    ? (textbox[langKey] as SpreadTextboxContent)
+    : undefined;
 
   return {
     item: textbox,
@@ -73,10 +90,128 @@ export function buildTextContext<TSpread extends BaseSpread>(
     isSelected: selectedElement?.type === 'textbox' && selectedElement.index === index,
     isSpreadSelected: true,
     onSelect: (rect?: DOMRect) => onSelect({ type: 'textbox', index }, rect),
-    onTextChange: (text) => onUpdate(index, { [languageKey]: { ...langContent, text } } as Partial<SpreadTextbox>),
-    onUpdate: (updates) => onUpdate(index, updates),
-    onDelete: () => onDelete?.(index),
+    onTextChange: (text) => {
+      if (!langKey) return;
+      onAction({
+        itemType: 'text',
+        action: 'update',
+        itemId: textbox.id,
+        data: { [langKey]: { ...langContent, text } } as Partial<SpreadTextbox>
+      });
+    },
+    onUpdate: (updates) => onAction({
+      itemType: 'text',
+      action: 'update',
+      itemId: textbox.id,
+      data: updates
+    }),
+    onDelete: () => onAction({
+      itemType: 'text',
+      action: 'delete',
+      itemId: textbox.id,
+      data: null
+    }),
     onEditingChange,
+  };
+}
+
+/**
+ * Build text toolbar context with formatting callbacks
+ */
+export function buildTextToolbarContext<TSpread extends BaseSpread>(
+  textbox: SpreadTextbox,
+  index: number,
+  spread: TSpread,
+  selectedElement: SelectedElement | null,
+  onSelect: SelectFn,
+  onAction: SpreadItemActionHandler,
+  canvasRef: RefObject<HTMLDivElement | null>,
+  selectedGeometry: Geometry | null,
+  onEditingChange?: (isEditing: boolean) => void
+): TextToolbarContext<TSpread> {
+  const langKey = getFirstTextboxKey(textbox);
+  const langContent = langKey
+    ? (textbox[langKey] as SpreadTextboxContent)
+    : undefined;
+
+  const baseContext = buildTextContext(
+    textbox,
+    index,
+    spread,
+    selectedElement,
+    onSelect,
+    onAction,
+    onEditingChange
+  );
+
+  return {
+    ...baseContext,
+    selectedGeometry,
+    canvasRef,
+    onFormatText: (format: Partial<Typography>) => {
+      if (!langKey) return;
+      onAction({
+        itemType: 'text',
+        action: 'update',
+        itemId: textbox.id,
+        data: {
+          [langKey]: {
+            ...langContent,
+            typography: { ...langContent?.typography, ...format },
+          },
+        } as Partial<SpreadTextbox>,
+      });
+    },
+    onClone: () => {
+      const clonedItem: SpreadTextbox = structuredClone(textbox);
+      clonedItem.id = crypto.randomUUID();
+
+      const cloneLangKey = getFirstTextboxKey(clonedItem);
+      if (cloneLangKey) {
+        const cloneLangData = clonedItem[cloneLangKey] as SpreadTextboxContent;
+        const maxX = Math.max(0, 100 - cloneLangData.geometry.w);
+        const maxY = Math.max(0, 100 - cloneLangData.geometry.h);
+        cloneLangData.geometry.x = Math.min(maxX, cloneLangData.geometry.x + 5);
+        cloneLangData.geometry.y = Math.min(maxY, cloneLangData.geometry.y + 5);
+      }
+
+      onAction({
+        itemType: 'text',
+        action: 'add',
+        itemId: null,
+        data: clonedItem,
+      });
+    },
+    onUpdateBackground: (bg: Partial<Fill>) => {
+      if (!langKey) return;
+      const defaultFill: Fill = { color: '#ffffff', opacity: 0 };
+      onAction({
+        itemType: 'text',
+        action: 'update',
+        itemId: textbox.id,
+        data: {
+          [langKey]: {
+            ...langContent,
+            fill: { ...(langContent?.fill || defaultFill), ...bg },
+          },
+        } as Partial<SpreadTextbox>,
+      });
+    },
+    onUpdateOutline: (outlineUpdates: Partial<Outline>) => {
+      if (!langKey) return;
+      const defaultOutline: Outline = { color: '#000000', width: 2, radius: 8, type: 'solid' };
+      onAction({
+        itemType: 'text',
+        action: 'update',
+        itemId: textbox.id,
+        data: {
+          [langKey]: {
+            ...langContent,
+            outline: { ...(langContent?.outline || defaultOutline), ...outlineUpdates },
+          },
+        } as Partial<SpreadTextbox>,
+      });
+    },
   };
 }
 
@@ -89,8 +224,7 @@ export function buildObjectContext<TSpread extends BaseSpread>(
   spread: TSpread,
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
-  onUpdate: UpdateObjectFn,
-  onDelete?: DeleteFn
+  onAction: SpreadItemActionHandler
 ): ObjectItemContext<TSpread> {
   return {
     item: object,
@@ -100,8 +234,18 @@ export function buildObjectContext<TSpread extends BaseSpread>(
     isSelected: selectedElement?.type === 'object' && selectedElement.index === index,
     isSpreadSelected: true,
     onSelect: () => onSelect({ type: 'object', index }),
-    onUpdate: (updates) => onUpdate(index, updates),
-    onDelete: () => onDelete?.(index),
+    onUpdate: (updates) => onAction({
+      itemType: 'object',
+      action: 'update',
+      itemId: object.id,
+      data: updates
+    }),
+    onDelete: () => onAction({
+      itemType: 'object',
+      action: 'delete',
+      itemId: object.id,
+      data: null
+    }),
   };
 }
 

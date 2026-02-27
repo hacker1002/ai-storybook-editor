@@ -7,6 +7,7 @@ import { PageItem } from './page-item';
 import {
   buildImageContext,
   buildTextContext,
+  buildTextToolbarContext,
   buildObjectContext,
 } from './utils/context-builders';
 import { applyDragDelta, applyResizeDelta, applyNudge } from './utils/geometry-utils';
@@ -14,9 +15,7 @@ import { getScaledDimensions } from './utils/coordinate-utils';
 import { CANVAS, Z_INDEX } from './constants';
 import type {
   BaseSpread,
-  SpreadImage,
   SpreadTextbox,
-  SpreadObject,
   ItemType,
   SelectedElement,
   ResizeHandle,
@@ -33,6 +32,7 @@ import type {
   Typography,
   Fill,
   Outline,
+  SpreadItemActionUnion,
 } from './types';
 import { getFirstTextboxKey } from '../shared';
 
@@ -61,14 +61,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderObjectToolbar?: (context: ObjectToolbarContext<TSpread>) => ReactNode;
 
   // Callbacks
-  onUpdateSpread: (updates: Partial<TSpread>) => void;
-  onUpdateImage: (imageIndex: number, updates: Partial<SpreadImage>) => void;
-  onUpdateTextbox: (textboxIndex: number, updates: Partial<SpreadTextbox>) => void;
-  onUpdateObject?: (objectIndex: number, updates: Partial<SpreadObject>) => void;
-  onUpdatePage?: (pageIndex: number, updates: Partial<TSpread['pages'][number]>) => void;
-  onDeleteImage?: (imageIndex: number) => void;
-  onDeleteTextbox?: (textboxIndex: number) => void;
-  onDeleteObject?: (objectIndex: number) => void;
+  onSpreadItemAction?: (params: Omit<SpreadItemActionUnion, 'spreadId'>) => void;
 
   // Item-level feature flags
   canAddItem?: boolean;
@@ -105,13 +98,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderTextToolbar,
   renderPageToolbar,
   renderObjectToolbar,
-  onUpdateImage,
-  onUpdateTextbox,
-  onUpdateObject,
-  onUpdatePage,
-  onDeleteImage,
-  onDeleteTextbox,
-  onDeleteObject,
+  onSpreadItemAction,
   canDeleteItem = false,
   canResizeItem = true,
   canDragItem = true,
@@ -230,28 +217,51 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Geometry Update ===
   const updateElementGeometry = useCallback((element: SelectedElement, geometry: Geometry) => {
+    if (!onSpreadItemAction) return;
+
     switch (element.type) {
-      case 'image':
-        onUpdateImage(element.index, { geometry });
+      case 'image': {
+        const image = spread.images[element.index];
+        if (!image?.id) return;
+        onSpreadItemAction({
+          itemType: 'image',
+          action: 'update',
+          itemId: image.id,
+          data: { geometry },
+        });
         break;
+      }
       case 'textbox': {
         // Update geometry in textbox (need to preserve language structure)
         const tb = spread.textboxes[element.index];
-        if (!tb) return;
+        if (!tb?.id) return;
         const langKey = getFirstTextboxKey(tb);
         if (langKey) {
           const langContent = tb[langKey] as { text: string; geometry: Geometry; typography: Typography; fill?: Fill; outline?: Outline };
-          onUpdateTextbox(element.index, {
-            [langKey]: { ...langContent, geometry },
-          } as Partial<SpreadTextbox>);
+          onSpreadItemAction({
+            itemType: 'text',
+            action: 'update',
+            itemId: tb.id,
+            data: {
+              [langKey]: { ...langContent, geometry },
+            } as Partial<SpreadTextbox>,
+          });
         }
         break;
       }
-      case 'object':
-        onUpdateObject?.(element.index, { geometry });
+      case 'object': {
+        const obj = spread.objects?.[element.index];
+        if (!obj?.id) return;
+        onSpreadItemAction({
+          itemType: 'object',
+          action: 'update',
+          itemId: obj.id,
+          data: { geometry },
+        });
         break;
+      }
     }
-  }, [spread.textboxes, onUpdateImage, onUpdateTextbox, onUpdateObject]);
+  }, [spread.images, spread.textboxes, spread.objects, onSpreadItemAction]);
 
   // === Drag Handlers ===
   const handleDragStart = useCallback(() => {
@@ -297,7 +307,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     const { selectedElement, originalGeometry } = state;
     if (!selectedElement || !originalGeometry) return;
 
-    let newGeometry = applyResizeDelta(originalGeometry, handle, delta.x, delta.y);
+    const newGeometry = applyResizeDelta(originalGeometry, handle, delta.x, delta.y);
 
     // Helper: parse aspect ratio string to numeric value
     const parseAspectRatio = (ratio: string | undefined): number | null => {
@@ -424,14 +434,61 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case 'Delete':
       case 'Backspace':
         // Don't delete element if user is editing text
-        if (canDeleteItem && !state.isTextboxEditing && !state.isImageEditing) {
-          if (selectedElement.type === 'image') onDeleteImage?.(selectedElement.index);
-          if (selectedElement.type === 'textbox') onDeleteTextbox?.(selectedElement.index);
+        if (canDeleteItem && !state.isTextboxEditing && !state.isImageEditing && onSpreadItemAction) {
+          if (selectedElement.type === 'image') {
+            const image = spread.images[selectedElement.index];
+            if (image?.id) {
+              onSpreadItemAction({
+                itemType: 'image',
+                action: 'delete',
+                itemId: image.id,
+                data: null,
+              });
+            }
+          }
+          if (selectedElement.type === 'textbox') {
+            const textbox = spread.textboxes[selectedElement.index];
+            if (textbox?.id) {
+              onSpreadItemAction({
+                itemType: 'text',
+                action: 'delete',
+                itemId: textbox.id,
+                data: null,
+              });
+            }
+          }
+          if (selectedElement.type === 'object') {
+            const obj = spread.objects?.[selectedElement.index];
+            if (obj?.id) {
+              onSpreadItemAction({
+                itemType: 'object',
+                action: 'delete',
+                itemId: obj.id,
+                data: null,
+              });
+            }
+          }
           handleElementSelect(null);
         }
         break;
     }
-  }, [state, isEditable, getSelectedGeometry, updateElementGeometry, handleElementSelect, canDeleteItem, onDeleteImage, onDeleteTextbox]);
+  }, [state, isEditable, getSelectedGeometry, updateElementGeometry, handleElementSelect, canDeleteItem, onSpreadItemAction, spread.images, spread.textboxes, spread.objects]);
+
+  // === Wrapper callback for page updates (used by PageItem) ===
+  const handleUpdatePage = useCallback((pageIndex: number, updates: Partial<TSpread['pages'][number]>) => {
+    if (!onSpreadItemAction) return;
+    onSpreadItemAction({
+      itemType: 'page',
+      action: 'update',
+      itemId: pageIndex,
+      data: updates,
+    });
+  }, [onSpreadItemAction]);
+
+  // Unified action handler for context builders
+  const handleSpreadItemAction = useCallback((params: Omit<SpreadItemActionUnion, 'spreadId'>) => {
+    onSpreadItemAction?.(params);
+  }, [onSpreadItemAction]);
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
@@ -466,7 +523,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             position={spread.pages.length === 1 ? 'single' : pageIndex === 0 ? 'left' : 'right'}
             isSelected={state.selectedElement?.type === 'page' && state.selectedElement.index === pageIndex}
             onSelect={renderPageToolbar ? () => handleElementSelect({ type: 'page', index: pageIndex }) : undefined}
-            onUpdatePage={(updates) => onUpdatePage?.(pageIndex, updates)}
+            onUpdatePage={(updates) => handleUpdatePage(pageIndex, updates)}
             renderPageToolbar={renderPageToolbar}
             availableLayouts={availableLayouts}
           />
@@ -488,8 +545,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             spread,
             state.selectedElement,
             handleElementSelect,
-            onUpdateImage,
-            onDeleteImage,
+            handleSpreadItemAction,
             handleImageEditingChange
           );
           return <div key={image.id || index}>{renderImageItem(context)}</div>;
@@ -503,9 +559,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             spread,
             state.selectedElement,
             handleElementSelect,
-            onUpdateTextbox,
-            onDeleteTextbox,
-            'en_US',
+            handleSpreadItemAction,
             handleTextboxEditingChange
           );
           return <div key={textbox.id || index}>{renderTextItem(context)}</div>;
@@ -513,14 +567,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
         {/* Objects */}
         {renderItems.includes('object') && spread.objects?.map((obj, index) => {
-          if (!renderObjectItem || !onUpdateObject) return null;
+          if (!renderObjectItem) return null;
           const context = buildObjectContext(
             obj,
             index,
             spread,
             state.selectedElement,
             handleElementSelect,
-            onUpdateObject
+            handleSpreadItemAction
           );
           return <div key={obj.id || index}>{renderObjectItem(context)}</div>;
         })}
@@ -550,7 +604,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           if (selectedElement.type === 'image' && renderImageToolbar) {
             const image = spread.images[selectedElement.index];
             if (!image) return null;
-            const context = buildImageContext(image, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateImage, onDeleteImage);
+            const context = buildImageContext(image, selectedElement.index, spread, selectedElement, handleElementSelect, handleSpreadItemAction);
             return renderImageToolbar({
               ...context,
               selectedGeometry: state.selectedGeometry,
@@ -563,36 +617,25 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           if (selectedElement.type === 'textbox' && renderTextToolbar) {
             const textbox = spread.textboxes[selectedElement.index];
             if (!textbox) return null;
-            const langKey = getFirstTextboxKey(textbox) || 'en_US';
-            const langContent = textbox[langKey] as { text: string; geometry: Geometry; typography: Typography; fill?: Fill; outline?: Outline };
-            const context = buildTextContext(textbox, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateTextbox, onDeleteTextbox);
 
-            return renderTextToolbar({
-              ...context,
-              selectedGeometry: state.selectedGeometry,
+            const context = buildTextToolbarContext(
+              textbox,
+              selectedElement.index,
+              spread,
+              selectedElement,
+              handleElementSelect,
+              handleSpreadItemAction,
               canvasRef,
-              onFormatText: (format: Partial<Typography>) => {
-                onUpdateTextbox(selectedElement.index, {
-                  [langKey]: { ...langContent, typography: { ...langContent?.typography, ...format } },
-                } as Partial<SpreadTextbox>);
-              },
-              onUpdateBackground: (bg: Partial<Fill>) => {
-                onUpdateTextbox(selectedElement.index, {
-                  [langKey]: { ...langContent, fill: { ...(langContent?.fill || { color: '#ffffff', opacity: 0 }), ...bg } },
-                } as Partial<SpreadTextbox>);
-              },
-              onUpdateOutline: (outlineUpdates: Partial<Outline>) => {
-                onUpdateTextbox(selectedElement.index, {
-                  [langKey]: { ...langContent, outline: { ...(langContent?.outline || { color: '#000000', width: 2, radius: 8, type: 'solid' }), ...outlineUpdates } },
-                } as Partial<SpreadTextbox>);
-              },
-            });
+              state.selectedGeometry
+            );
+
+            return renderTextToolbar(context);
           }
 
-          if (selectedElement.type === 'object' && renderObjectToolbar && onUpdateObject) {
+          if (selectedElement.type === 'object' && renderObjectToolbar) {
             const obj = spread.objects?.[selectedElement.index];
             if (!obj) return null;
-            const context = buildObjectContext(obj, selectedElement.index, spread, selectedElement, handleElementSelect, onUpdateObject, onDeleteObject);
+            const context = buildObjectContext(obj, selectedElement.index, spread, selectedElement, handleElementSelect, handleSpreadItemAction);
 
             return renderObjectToolbar({
               ...context,

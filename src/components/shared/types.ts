@@ -7,24 +7,24 @@ export interface Point {
 }
 
 export interface Geometry {
-  x: number;      // percentage 0-100
-  y: number;      // percentage 0-100
-  w: number;      // percentage 0-100
-  h: number;      // percentage 0-100
+  x: number; // percentage 0-100
+  y: number; // percentage 0-100
+  w: number; // percentage 0-100
+  h: number; // percentage 0-100
 }
 
 // === Typography ===
 export interface Typography {
   size?: number;
   weight?: number;
-  style?: 'normal' | 'italic';
+  style?: "normal" | "italic";
   family?: string;
   color?: string;
   lineHeight?: number;
   letterSpacing?: number;
-  decoration?: 'none' | 'underline' | 'line-through';
-  textAlign?: 'left' | 'center' | 'right';
-  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  decoration?: "none" | "underline" | "line-through";
+  textAlign?: "left" | "center" | "right";
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
 }
 
 // === Fill & Outline ===
@@ -37,7 +37,7 @@ export interface Outline {
   color: string;
   width: number;
   radius: number;
-  type: 'solid' | 'dashed' | 'dotted';
+  type: "solid" | "dashed" | "dotted";
 }
 
 // === Spread Object ===
@@ -46,20 +46,28 @@ export interface SpreadObject {
   original_image_id?: string;
   name: string;
   state?: string;
-  type: 'raw' | 'character' | 'prop' | 'background' | 'foreground' | 'other';
+  type: "raw" | "character" | "prop" | "background" | "foreground" | "other";
   media_url?: string;
-  media_type?: 'image' | 'video' | 'audio';
+  media_type?: "image" | "video" | "audio";
   geometry: Geometry;
   zIndex: number;
   player_visible: boolean;
   editor_visible: boolean;
-  aspect_ratio?: 'free' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '2:3' | '3:2';
+  aspect_ratio?:
+    | "free"
+    | "1:1"
+    | "4:3"
+    | "3:4"
+    | "16:9"
+    | "9:16"
+    | "2:3"
+    | "3:2";
 }
 
 // === Page Types ===
 export interface PageData {
   number: string | number;
-  type: 'normal_page' | 'front_matter' | 'back_matter' | 'dedication';
+  type: "normal_page" | "front_matter" | "back_matter" | "dedication";
   layout: string | null;
   background: {
     color: string;
@@ -76,28 +84,38 @@ export interface SpreadImage {
   art_note?: string;
   visual_description?: string;
   image_references?: Array<{ title: string; media_url: string }>;
-  sketches?: Array<{ media_url: string; created_time: string; is_selected: boolean }>;
-  illustrations?: Array<{ media_url: string; created_time: string; is_selected: boolean }>;
+  sketches?: Array<{
+    media_url: string;
+    created_time: string;
+    is_selected: boolean;
+  }>;
+  illustrations?: Array<{
+    media_url: string;
+    created_time: string;
+    is_selected: boolean;
+  }>;
   final_hires_media_url?: string;
 }
 
 export interface SpreadTextbox {
   id: string;
   title?: string;
-  [languageKey: string]: {
-    text: string;
-    geometry: Geometry;
-    typography: Typography;
-    fill?: Fill;
-    outline?: Outline;
-  } | string | undefined;
+  [languageKey: string]: SpreadTextboxContent | string | undefined;
+}
+
+export interface SpreadTextboxContent {
+  text: string;
+  geometry: Geometry;
+  typography: Typography;
+  fill?: Fill;
+  outline?: Outline;
 }
 
 export interface SpreadAnimation {
   order: number;
-  type: 'textbox' | 'image' | 'video' | 'audio';
-  target: { id: string; type: 'textbox' | 'object' };
-  trigger_type: 'on_click' | 'with_previous' | 'after_previous';
+  type: "textbox" | "image" | "video" | "audio";
+  target: { id: string; type: "textbox" | "object" };
+  trigger_type: "on_click" | "with_previous" | "after_previous";
   effect: {
     type: number;
     geometry?: Geometry;
@@ -105,7 +123,7 @@ export interface SpreadAnimation {
     duration?: number;
     loop?: number;
     amount?: number;
-    direction?: 'left' | 'right' | 'up' | 'down';
+    direction?: "left" | "right" | "up" | "down";
   };
 }
 
