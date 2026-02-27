@@ -28,6 +28,7 @@ import { DemoImageToolbar } from "./demo-image-toolbar";
 import { DemoTextToolbar } from "./demo-text-toolbar";
 import { DemoPageToolbar } from "./demo-page-toolbar";
 import { DemoObjectToolbar } from "./demo-object-toolbar";
+import { ImportSpreadsDialog } from "./import-spreads-dialog";
 import {
   createMockSnapshot,
   type CreateSnapshotOptions,
@@ -51,7 +52,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { Settings, RefreshCw } from "lucide-react";
+import { Settings, RefreshCw, Upload } from "lucide-react";
 
 // === Mock Data Options ===
 interface MockOptions {
@@ -88,6 +89,12 @@ interface FeatureFlags {
   renderTextToolbar: boolean;
   renderPageToolbar: boolean;
   renderObjectToolbar: boolean;
+}
+
+// === Item Visibility Flags ===
+interface ItemFlags {
+  showImages: boolean;
+  showTexts: boolean;
   showObjects: boolean;
 }
 
@@ -96,7 +103,7 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   canAddSpread: true,
   canReorderSpread: true,
   canDeleteSpread: true,
-  canAddItem: false,
+  canAddItem: true,
   canDeleteItem: true,
   canResizeItem: true,
   canDragItem: true,
@@ -104,6 +111,11 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   renderTextToolbar: true,
   renderPageToolbar: true,
   renderObjectToolbar: true,
+};
+
+const DEFAULT_ITEM_FLAGS: ItemFlags = {
+  showImages: true,
+  showTexts: true,
   showObjects: true,
 };
 
@@ -114,6 +126,7 @@ export function DemoCanvasSpreadView() {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(
     DEFAULT_FEATURE_FLAGS
   );
+  const [itemFlags, setItemFlags] = useState<ItemFlags>(DEFAULT_ITEM_FLAGS);
 
   // Generate spreads from options
   const generateSpreads = useCallback((opts: MockOptions): BaseSpread[] => {
@@ -140,12 +153,21 @@ export function DemoCanvasSpreadView() {
   );
   const selectedSpread = spreads.find((s) => s.id === selectedSpreadId) ?? null;
 
+  // Import dialog state
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+
   // Regenerate mock data with current options
   const handleRegenerate = useCallback(() => {
     const newSpreads = generateSpreads(mockOptions);
     setSpreads(newSpreads);
     setSelectedSpreadId(newSpreads[0]?.id ?? null);
   }, [mockOptions, generateSpreads]);
+
+  // Import spreads from JSON
+  const handleImportSpreads = useCallback((importedSpreads: BaseSpread[]) => {
+    setSpreads(importedSpreads);
+    setSelectedSpreadId(importedSpreads[0]?.id ?? null);
+  }, []);
 
   // Option updaters
   const updateMockOption = useCallback(
@@ -158,6 +180,13 @@ export function DemoCanvasSpreadView() {
   const updateFeatureFlag = useCallback(
     <K extends keyof FeatureFlags>(key: K, value: FeatureFlags[K]) => {
       setFeatureFlags((prev) => ({ ...prev, [key]: value }));
+    },
+    []
+  );
+
+  const updateItemFlag = useCallback(
+    <K extends keyof ItemFlags>(key: K, value: ItemFlags[K]) => {
+      setItemFlags((prev) => ({ ...prev, [key]: value }));
     },
     []
   );
@@ -198,23 +227,29 @@ export function DemoCanvasSpreadView() {
     [renumberPages]
   );
 
-  const handleSpreadAdd = useCallback((type: SpreadType) => {
-    const newSpread = createMockSpread({
-      spreadIndex: spreads.length,
-      isDPS: type === 'double',
-      imageCount: 0,
-      textboxCount: 0,
-    });
-    setSpreads((prev) => [...prev, newSpread]);
-    setSelectedSpreadId(newSpread.id);
-  }, [spreads.length]);
+  const handleSpreadAdd = useCallback(
+    (type: SpreadType) => {
+      const newSpread = createMockSpread({
+        spreadIndex: spreads.length,
+        isDPS: type === "double",
+        imageCount: 0,
+        textboxCount: 0,
+      });
+      setSpreads((prev) => [...prev, newSpread]);
+      setSelectedSpreadId(newSpread.id);
+    },
+    [spreads.length]
+  );
 
-  const handleSpreadDelete = useCallback((spreadId: string) => {
-    setSpreads((prev) => {
-      const filtered = prev.filter((s) => s.id !== spreadId);
-      return renumberPages(filtered);
-    });
-  }, [renumberPages]);
+  const handleSpreadDelete = useCallback(
+    (spreadId: string) => {
+      setSpreads((prev) => {
+        const filtered = prev.filter((s) => s.id !== spreadId);
+        return renumberPages(filtered);
+      });
+    },
+    [renumberPages]
+  );
 
   // === Item-level handlers ===
   const handleUpdateSpread = useCallback(
@@ -289,7 +324,11 @@ export function DemoCanvasSpreadView() {
   );
 
   const handleUpdatePage = useCallback(
-    (spreadId: string, pageIndex: number, updates: Partial<BaseSpread["pages"][number]>) => {
+    (
+      spreadId: string,
+      pageIndex: number,
+      updates: Partial<BaseSpread["pages"][number]>
+    ) => {
       setSpreads((prev) =>
         prev.map((s) => {
           if (s.id !== spreadId) return s;
@@ -546,7 +585,8 @@ export function DemoCanvasSpreadView() {
         <DemoImageToolbar
           context={{
             ...context,
-            onClone: () => handleCloneImage(context.spreadId, context.itemIndex),
+            onClone: () =>
+              handleCloneImage(context.spreadId, context.itemIndex),
           }}
         />
       );
@@ -560,16 +600,29 @@ export function DemoCanvasSpreadView() {
         <DemoTextToolbar
           context={{
             ...context,
-            onClone: () => handleCloneTextbox(context.spreadId, context.itemIndex),
+            onClone: () =>
+              handleCloneTextbox(context.spreadId, context.itemIndex),
             onUpdateBackground: (bg) =>
-              handleUpdateTextboxBackground(context.spreadId, context.itemIndex, bg),
+              handleUpdateTextboxBackground(
+                context.spreadId,
+                context.itemIndex,
+                bg
+              ),
             onUpdateOutline: (outline) =>
-              handleUpdateTextboxOutline(context.spreadId, context.itemIndex, outline),
+              handleUpdateTextboxOutline(
+                context.spreadId,
+                context.itemIndex,
+                outline
+              ),
           }}
         />
       );
     },
-    [handleCloneTextbox, handleUpdateTextboxBackground, handleUpdateTextboxOutline]
+    [
+      handleCloneTextbox,
+      handleUpdateTextboxBackground,
+      handleUpdateTextboxOutline,
+    ]
   );
 
   const renderPageToolbar = useCallback(
@@ -588,7 +641,9 @@ export function DemoCanvasSpreadView() {
         isSelected={context.isSelected}
         isEditable={context.isSpreadSelected}
         onSelect={context.onSelect}
-        onUpdate={(updates) => handleUpdateObject(context.spreadId, context.itemIndex, updates)}
+        onUpdate={(updates) =>
+          handleUpdateObject(context.spreadId, context.itemIndex, updates)
+        }
         onDelete={() => handleDeleteObject(context.spreadId, context.itemIndex)}
       />
     ),
@@ -627,165 +682,213 @@ export function DemoCanvasSpreadView() {
               {mockOptions.textboxCount} text • {mockOptions.objectCount} obj
             </p>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9">
-                <Settings className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Demo Settings</h4>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRegenerate}
-                    className="h-7 gap-1.5 text-xs"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Regenerate
-                  </Button>
-                </div>
-
-                <Separator />
-
-                {/* Mock Data Options */}
-                <div className="space-y-3">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    MOCK DATA
-                  </Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">
-                        Spreads: {mockOptions.spreadCount}
-                      </Label>
-                      <Slider
-                        value={[mockOptions.spreadCount]}
-                        onValueChange={([v]) =>
-                          updateMockOption("spreadCount", v)
-                        }
-                        min={1}
-                        max={20}
-                        step={1}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">
-                        Images: {mockOptions.imageCount}
-                      </Label>
-                      <Slider
-                        value={[mockOptions.imageCount]}
-                        onValueChange={([v]) =>
-                          updateMockOption("imageCount", v)
-                        }
-                        min={0}
-                        max={5}
-                        step={1}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">
-                        Textboxes: {mockOptions.textboxCount}
-                      </Label>
-                      <Slider
-                        value={[mockOptions.textboxCount]}
-                        onValueChange={([v]) =>
-                          updateMockOption("textboxCount", v)
-                        }
-                        min={0}
-                        max={5}
-                        step={1}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">
-                        Objects: {mockOptions.objectCount}
-                      </Label>
-                      <Slider
-                        value={[mockOptions.objectCount]}
-                        onValueChange={([v]) =>
-                          updateMockOption("objectCount", v)
-                        }
-                        min={0}
-                        max={5}
-                        step={1}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Language</Label>
-                      <Select
-                        value={mockOptions.language}
-                        onValueChange={(v) =>
-                          updateMockOption("language", v as "en_US" | "vi_VN")
-                        }
-                      >
-                        <SelectTrigger className="h-7 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="en_US">English</SelectItem>
-                          <SelectItem value="vi_VN">Vietnamese</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setImportDialogOpen(true)}
+              className="h-9 gap-1.5"
+            >
+              <Upload className="h-4 w-4" />
+              Import
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium">Demo Settings</h4>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRegenerate}
+                      className="h-7 gap-1.5 text-xs"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Regenerate
+                    </Button>
                   </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <Switch
-                        id="isDPS"
-                        checked={mockOptions.isDPS}
-                        onCheckedChange={(v) => updateMockOption("isDPS", v)}
-                        className="scale-75"
-                      />
-                      <Label htmlFor="isDPS" className="text-xs">
-                        DPS
-                      </Label>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Switch
-                        id="withImages"
-                        checked={mockOptions.withGeneratedImages}
-                        onCheckedChange={(v) =>
-                          updateMockOption("withGeneratedImages", v)
-                        }
-                        className="scale-75"
-                      />
-                      <Label htmlFor="withImages" className="text-xs">
-                        Images
-                      </Label>
-                    </div>
-                  </div>
-                </div>
 
-                <Separator />
+                  <Separator />
 
-                {/* Feature Flags */}
-                <div className="space-y-3">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    FEATURE FLAGS
-                  </Label>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                    {(
-                      Object.keys(featureFlags) as Array<keyof FeatureFlags>
-                    ).map((key) => (
-                      <div key={key} className="flex items-center gap-1.5">
+                  {/* Mock Data Options */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      MOCK DATA
+                    </Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">
+                          Spreads: {mockOptions.spreadCount}
+                        </Label>
+                        <Slider
+                          value={[mockOptions.spreadCount]}
+                          onValueChange={([v]) =>
+                            updateMockOption("spreadCount", v)
+                          }
+                          min={1}
+                          max={20}
+                          step={1}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">
+                          Images: {mockOptions.imageCount}
+                        </Label>
+                        <Slider
+                          value={[mockOptions.imageCount]}
+                          onValueChange={([v]) =>
+                            updateMockOption("imageCount", v)
+                          }
+                          min={0}
+                          max={5}
+                          step={1}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">
+                          Textboxes: {mockOptions.textboxCount}
+                        </Label>
+                        <Slider
+                          value={[mockOptions.textboxCount]}
+                          onValueChange={([v]) =>
+                            updateMockOption("textboxCount", v)
+                          }
+                          min={0}
+                          max={5}
+                          step={1}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">
+                          Objects: {mockOptions.objectCount}
+                        </Label>
+                        <Slider
+                          value={[mockOptions.objectCount]}
+                          onValueChange={([v]) =>
+                            updateMockOption("objectCount", v)
+                          }
+                          min={0}
+                          max={5}
+                          step={1}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Language</Label>
+                        <Select
+                          value={mockOptions.language}
+                          onValueChange={(v) =>
+                            updateMockOption("language", v as "en_US" | "vi_VN")
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="en_US">English</SelectItem>
+                            <SelectItem value="vi_VN">Vietnamese</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      <div className="flex items-center gap-1.5">
                         <Switch
-                          id={key}
-                          checked={featureFlags[key]}
-                          onCheckedChange={(v) => updateFeatureFlag(key, v)}
+                          id="isDPS"
+                          checked={mockOptions.isDPS}
+                          onCheckedChange={(v) => updateMockOption("isDPS", v)}
                           className="scale-75"
                         />
-                        <Label htmlFor={key} className="text-xs">
-                          {key}
+                        <Label htmlFor="isDPS" className="text-xs">
+                          DPS
                         </Label>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          id="withImages"
+                          checked={mockOptions.withGeneratedImages}
+                          onCheckedChange={(v) =>
+                            updateMockOption("withGeneratedImages", v)
+                          }
+                          className="scale-75"
+                        />
+                        <Label htmlFor="withImages" className="text-xs">
+                          Images
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Item Flags */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      ITEM FLAGS
+                    </Label>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {(["showImages", "showTexts"] as const).map((key) => (
+                        <div key={key} className="flex items-center gap-1.5">
+                          <Switch
+                            id={key}
+                            checked={itemFlags[key]}
+                            onCheckedChange={(v) => updateItemFlag(key, v)}
+                            className="scale-75"
+                          />
+                          <Label htmlFor={key} className="text-xs">
+                            {key}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Switch
+                        id="showObjects"
+                        checked={itemFlags.showObjects}
+                        onCheckedChange={(v) =>
+                          updateItemFlag("showObjects", v)
+                        }
+                        className="scale-75"
+                      />
+                      <Label htmlFor="showObjects" className="text-xs">
+                        showObjects
+                      </Label>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Feature Flags */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      FEATURE FLAGS
+                    </Label>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {(
+                        Object.keys(featureFlags) as Array<keyof FeatureFlags>
+                      ).map((key) => (
+                        <div key={key} className="flex items-center gap-1.5">
+                          <Switch
+                            id={key}
+                            checked={featureFlags[key]}
+                            onCheckedChange={(v) => updateFeatureFlag(key, v)}
+                            className="scale-75"
+                          />
+                          <Label htmlFor={key} className="text-xs">
+                            {key}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+              </PopoverContent>
+            </Popover>
+          </div>
         </header>
 
         {/* Main Content */}
@@ -795,24 +898,34 @@ export function DemoCanvasSpreadView() {
             <CanvasSpreadView
               spreads={spreads}
               renderItems={
-                featureFlags.showObjects
-                  ? (["image", "text", "object"] as ItemType[])
-                  : (["image", "text"] as ItemType[])
+                [
+                  itemFlags.showImages && "image",
+                  itemFlags.showTexts && "text",
+                  itemFlags.showObjects && "object",
+                ].filter(Boolean) as ItemType[]
               }
-              renderImageItem={renderImageItem}
-              renderTextItem={renderTextItem}
-              renderObjectItem={featureFlags.showObjects ? renderObjectItem : undefined}
+              renderImageItem={
+                itemFlags.showImages ? renderImageItem : undefined
+              }
+              renderTextItem={itemFlags.showTexts ? renderTextItem : undefined}
+              renderObjectItem={
+                itemFlags.showObjects ? renderObjectItem : undefined
+              }
               renderImageToolbar={
-                featureFlags.renderImageToolbar ? renderImageToolbar : undefined
+                featureFlags.renderImageToolbar && itemFlags.showImages
+                  ? renderImageToolbar
+                  : undefined
               }
               renderTextToolbar={
-                featureFlags.renderTextToolbar ? renderTextToolbar : undefined
+                featureFlags.renderTextToolbar && itemFlags.showTexts
+                  ? renderTextToolbar
+                  : undefined
               }
               renderPageToolbar={
                 featureFlags.renderPageToolbar ? renderPageToolbar : undefined
               }
               renderObjectToolbar={
-                featureFlags.renderObjectToolbar && featureFlags.showObjects
+                featureFlags.renderObjectToolbar && itemFlags.showObjects
                   ? renderObjectToolbar
                   : undefined
               }
@@ -837,11 +950,12 @@ export function DemoCanvasSpreadView() {
               canResizeItem={featureFlags.canResizeItem}
               canDragItem={featureFlags.canDragItem}
               initialViewMode="edit"
+              initialSelectedId={spreads[0].id}
             />
           </div>
 
           {/* JSON Data Panel */}
-          <div className="w-80 border-l bg-muted/30 flex flex-col">
+          <div className="w-100 border-l bg-muted/30 flex flex-col">
             <div className="p-3 border-b bg-background">
               <h3 className="text-sm font-medium">Spread Data</h3>
               <p className="text-xs text-muted-foreground">
@@ -864,6 +978,12 @@ export function DemoCanvasSpreadView() {
           </div>
         </main>
       </div>
+
+      <ImportSpreadsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImport={handleImportSpreads}
+      />
     </TooltipProvider>
   );
 }
