@@ -307,7 +307,6 @@ export function DemoPlayableSpreadView() {
           <PlayableSpreadView
             mode={operationMode}
             spreads={spreads}
-            language={mockOptions.language}
             onAddAnimation={handleAddAnimation}
             onAssetSwap={handleAssetSwap}
             onTextChange={handleTextChange}

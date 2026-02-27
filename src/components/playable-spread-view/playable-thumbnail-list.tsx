@@ -16,15 +16,13 @@ const CANVAS = {
 
 const TEXTBOX_Z_INDEX_BASE = 300;
 
-// Helper to find language key in textbox (same pattern as animation-editor-canvas)
-function getTextboxLanguageKey(textbox: Record<string, unknown>, preferredLang: string): string | null {
-  if (textbox[preferredLang] && typeof textbox[preferredLang] === 'object') {
-    return preferredLang;
-  }
-  const langKey = Object.keys(textbox).find(
-    (k) => k !== 'id' && k !== 'title' && typeof textbox[k] === 'object'
+// Helper to get first textbox language key (data is pre-filtered by language)
+function getFirstTextboxKey(textbox: Record<string, unknown>): string | null {
+  const metaKeys = ['id', 'title', 'order'];
+  const langKeys = Object.keys(textbox).filter(
+    k => !metaKeys.includes(k) && typeof textbox[k] === 'object'
   );
-  return langKey || null;
+  return langKeys[0] ?? null;
 }
 
 // === PlayableThumbnail Item Component ===
@@ -32,7 +30,6 @@ interface PlayableThumbnailProps {
   spread: PlayableSpread;
   index: number;
   isSelected: boolean;
-  language: string;
   onClick: () => void;
 }
 
@@ -40,7 +37,6 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
   spread,
   index,
   isSelected,
-  language,
   onClick,
 }: PlayableThumbnailProps) {
   // Scale factor: thumbnail width / canvas base width
@@ -54,11 +50,11 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
-  // Memoized textboxes with resolved language (same pattern as animation-editor-canvas)
+  // Memoized textboxes with resolved language (data is pre-filtered)
   const textboxesWithLang = useMemo(() => {
     if (!spread.textboxes) return [];
     return spread.textboxes.map((textbox) => {
-      const langKey = getTextboxLanguageKey(textbox, language);
+      const langKey = getFirstTextboxKey(textbox);
       if (!langKey) return null;
       const data = textbox[langKey] as {
         text: string;
@@ -70,7 +66,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
       if (!data?.geometry) return null;
       return { textbox, langKey, data };
     }).filter(Boolean);
-  }, [spread.textboxes, language]);
+  }, [spread.textboxes]);
 
   return (
     <button
@@ -200,7 +196,6 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
 export function PlayableThumbnailList({
   spreads,
   selectedId,
-  language,
   onSpreadClick,
 }: PlayableThumbnailListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -250,7 +245,6 @@ export function PlayableThumbnailList({
             spread={spread}
             index={index}
             isSelected={spread.id === selectedId}
-            language={language}
             onClick={() => onSpreadClick(spread.id)}
           />
         ))}

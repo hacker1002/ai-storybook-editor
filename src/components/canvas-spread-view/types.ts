@@ -1,6 +1,19 @@
 // types.ts - Core type definitions
 
 // === Re-export all shared types ===
+import type {
+  Geometry,
+  Typography,
+  Fill,
+  Outline,
+  SpreadObject,
+  PageData,
+  SpreadImage,
+  SpreadTextbox,
+  SpreadAnimation,
+  BaseSpread,
+} from "../shared";
+
 export type {
   Point,
   Geometry,
@@ -13,15 +26,20 @@ export type {
   SpreadTextbox,
   SpreadAnimation,
   BaseSpread,
-} from '../shared';
+} from "../shared";
 
 // === Enums & Literals ===
-export type ViewMode = 'edit' | 'grid';
-export type ItemType = 'image' | 'text' | 'object' | 'animation';
-export type SelectedElementType = 'image' | 'textbox' | 'object' | 'animation' | 'page';
-export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
-export type ThumbnailListLayout = 'horizontal' | 'grid';
-export type TextureOption = 'paper' | 'canvas' | 'linen' | 'watercolor' | null;
+export type ViewMode = "edit" | "grid";
+export type ItemType = "image" | "text" | "object" | "animation";
+export type SelectedElementType =
+  | "image"
+  | "textbox"
+  | "object"
+  | "animation"
+  | "page";
+export type ResizeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
+export type ThumbnailListLayout = "horizontal" | "grid";
+export type TextureOption = "paper" | "canvas" | "linen" | "watercolor" | null;
 
 export interface LayoutOption {
   id: string;
@@ -46,7 +64,8 @@ export interface BaseItemContext<TSpread extends BaseSpread> {
   isSpreadSelected: boolean;
 }
 
-export interface ImageItemContext<TSpread extends BaseSpread> extends BaseItemContext<TSpread> {
+export interface ImageItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
   item: SpreadImage;
   onSelect: () => void;
   onUpdate: (updates: Partial<SpreadImage>) => void;
@@ -55,7 +74,8 @@ export interface ImageItemContext<TSpread extends BaseSpread> extends BaseItemCo
   onEditingChange?: (isEditing: boolean) => void;
 }
 
-export interface TextItemContext<TSpread extends BaseSpread> extends BaseItemContext<TSpread> {
+export interface TextItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
   item: SpreadTextbox;
   onSelect: () => void;
   onTextChange: (text: string) => void;
@@ -64,14 +84,16 @@ export interface TextItemContext<TSpread extends BaseSpread> extends BaseItemCon
   onEditingChange?: (isEditing: boolean) => void;
 }
 
-export interface ObjectItemContext<TSpread extends BaseSpread> extends BaseItemContext<TSpread> {
+export interface ObjectItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
   item: SpreadObject;
   onSelect: () => void;
   onUpdate: (updates: Partial<SpreadObject>) => void;
   onDelete: () => void;
 }
 
-export interface AnimationItemContext<TSpread extends BaseSpread> extends BaseItemContext<TSpread> {
+export interface AnimationItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
   item: SpreadAnimation;
   onSelect: () => void;
   onUpdate: (updates: Partial<SpreadAnimation>) => void;
@@ -79,7 +101,7 @@ export interface AnimationItemContext<TSpread extends BaseSpread> extends BaseIt
 }
 
 // === Toolbar Contexts ===
-import type { RefObject } from 'react';
+import type { RefObject } from "react";
 
 // Base toolbar context with positioning data
 export interface BaseToolbarContext {
@@ -90,7 +112,7 @@ export interface BaseToolbarContext {
 export interface PageToolbarContext<TSpread extends BaseSpread> {
   page: PageData;
   pageIndex: number;
-  position: 'left' | 'right' | 'single';
+  position: "left" | "right" | "single";
   spread: TSpread;
   spreadId: string;
   isSelected: boolean;
@@ -102,27 +124,34 @@ export interface PageToolbarContext<TSpread extends BaseSpread> {
   isLayoutLocked: boolean;
 }
 
-export interface ImageToolbarContext<TSpread extends BaseSpread> extends ImageItemContext<TSpread>, BaseToolbarContext {
+export interface ImageToolbarContext<TSpread extends BaseSpread>
+  extends ImageItemContext<TSpread>,
+    BaseToolbarContext {
   onGenerateImage: () => void;
   onReplaceImage: () => void;
   onClone?: () => void;
 }
 
-export interface TextToolbarContext<TSpread extends BaseSpread> extends TextItemContext<TSpread>, BaseToolbarContext {
+export interface TextToolbarContext<TSpread extends BaseSpread>
+  extends TextItemContext<TSpread>,
+    BaseToolbarContext {
   onFormatText: (format: Partial<Typography>) => void;
   onClone?: () => void;
   onUpdateBackground?: (bg: Partial<Fill>) => void;
   onUpdateOutline?: (outline: Partial<Outline>) => void;
 }
 
-export interface ObjectToolbarContext<TSpread extends BaseSpread> extends ObjectItemContext<TSpread>, BaseToolbarContext {
+export interface ObjectToolbarContext<TSpread extends BaseSpread>
+  extends ObjectItemContext<TSpread>,
+    BaseToolbarContext {
   onRotate?: () => void;
   onCut?: () => void;
   onCrop?: () => void;
   onGenerate?: () => void;
 }
 
-export interface AnimationToolbarContext<TSpread extends BaseSpread> extends AnimationItemContext<TSpread> {
+export interface AnimationToolbarContext<TSpread extends BaseSpread>
+  extends AnimationItemContext<TSpread> {
   onPlayAnimation: () => void;
   onEditAnimation: () => void;
 }

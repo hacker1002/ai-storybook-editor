@@ -1,19 +1,15 @@
 // playable-spread-view.tsx - Root container component for playable spread view
-import { useState, useEffect, useCallback } from 'react';
-import type {
-  PlayableSpreadViewProps,
-  ActiveCanvas,
-  PlayMode,
-} from './types';
-import { VOLUME, KEYBOARD_SHORTCUTS } from './constants';
-import { PlayableHeader } from './playable-header';
-import { PlayableThumbnailList } from './playable-thumbnail-list';
-import { AnimationEditorCanvas } from './animation-editor-canvas';
+import { useState, useEffect, useCallback } from "react";
+import type { PlayableSpreadViewProps, ActiveCanvas, PlayMode } from "./types";
+import { VOLUME, KEYBOARD_SHORTCUTS } from "./constants";
+import { PlayableHeader } from "./playable-header";
+import { PlayableThumbnailList } from "./playable-thumbnail-list";
+import { AnimationEditorCanvas } from "./animation-editor-canvas";
 
+// Spread data textbox NEED pre-filtered with language by consumer
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   mode,
   spreads,
-  language = 'en',
   assets: _assets,
   onAddAnimation,
   onAssetSwap: _onAssetSwap,
@@ -23,7 +19,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playMode, setPlayMode] = useState<PlayMode>('off');
+  const [playMode, setPlayMode] = useState<PlayMode>("off");
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
@@ -41,9 +37,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
 
   // === Canvas Switching Handlers ===
   const handlePlayToggle = useCallback(() => {
-    if (activeCanvas !== 'player') {
+    if (activeCanvas !== "player") {
       // Switch to player and start playing
-      setActiveCanvas('player');
+      setActiveCanvas("player");
       setIsPlaying(true);
     } else {
       // Toggle playback on player
@@ -71,15 +67,18 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }, [hasNext, spreads, selectedIndex, onSpreadSelect]);
 
   // === Volume Handlers ===
-  const handleVolumeChange = useCallback((newVolume: number) => {
-    setVolume(newVolume);
-    if (newVolume > 0 && isMuted) {
-      setIsMuted(false); // Auto unmute when increasing from muted
-    }
-    if (newVolume === 0) {
-      setIsMuted(true); // Auto mute at 0
-    }
-  }, [isMuted]);
+  const handleVolumeChange = useCallback(
+    (newVolume: number) => {
+      setVolume(newVolume);
+      if (newVolume > 0 && isMuted) {
+        setIsMuted(false); // Auto unmute when increasing from muted
+      }
+      if (newVolume === 0) {
+        setIsMuted(true); // Auto mute at 0
+      }
+    },
+    [isMuted]
+  );
 
   const handleMuteToggle = useCallback(() => {
     setIsMuted((prev) => !prev);
@@ -160,8 +159,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     volume,
     spreads,
@@ -198,10 +197,11 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
 
       {/* Canvas Area */}
       <div className="flex-1 overflow-hidden flex items-center justify-center bg-muted/10">
-        {activeCanvas === 'animation-editor' && selectedSpread && onAddAnimation ? (
+        {activeCanvas === "animation-editor" &&
+        selectedSpread &&
+        onAddAnimation ? (
           <AnimationEditorCanvas
             spread={selectedSpread}
-            language={language}
             onAddAnimation={onAddAnimation}
           />
         ) : (
@@ -210,13 +210,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             <div className="text-2xl font-semibold">Canvas: {activeCanvas}</div>
             <div className="text-muted-foreground">Mode: {mode}</div>
             <div className="text-muted-foreground">
-              Spread: {selectedSpreadId || 'None'}
+              Spread: {selectedSpreadId || "None"}
             </div>
             <div className="text-sm">
-              {isPlaying ? '▶️ Playing' : '⏸️ Paused'}
+              {isPlaying ? "▶️ Playing" : "⏸️ Paused"}
             </div>
             <div className="text-xs text-muted-foreground">
-              Volume: {isMuted ? 'Muted' : `${volume}%`}
+              Volume: {isMuted ? "Muted" : `${volume}%`}
             </div>
             <div className="text-xs text-muted-foreground mt-4">
               PlayMode: {playMode}
@@ -230,7 +230,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         <PlayableThumbnailList
           spreads={spreads}
           selectedId={selectedSpreadId}
-          language={language}
           onSpreadClick={handleSpreadClick}
         />
       </div>

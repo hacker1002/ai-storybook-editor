@@ -23,26 +23,21 @@ const TEXTBOX_Z_INDEX_BASE = 300;
 
 interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
-  language: string;
   zoomLevel?: number;
   onAddAnimation: (params: AddAnimationParams) => void;
 }
 
-// Helper to find language key in textbox
-function getTextboxLanguageKey(textbox: Record<string, unknown>, preferredLang: string): string | null {
-  if (textbox[preferredLang] && typeof textbox[preferredLang] === 'object') {
-    return preferredLang;
-  }
-  // Fallback: find first language key (not 'id' or 'title')
-  const langKey = Object.keys(textbox).find(
-    (k) => k !== 'id' && k !== 'title' && typeof textbox[k] === 'object'
+// Helper to get first textbox language key (data is pre-filtered to single language)
+function getFirstTextboxKey(textbox: Record<string, unknown>): string | null {
+  const metaKeys = ['id', 'title', 'order'];
+  const langKeys = Object.keys(textbox).filter(
+    k => !metaKeys.includes(k) && typeof textbox[k] === 'object'
   );
-  return langKey || null;
+  return langKeys[0] ?? null;
 }
 
 export function AnimationEditorCanvas({
   spread,
-  language,
   zoomLevel = 100,
   onAddAnimation,
 }: AnimationEditorCanvasProps) {
@@ -138,7 +133,7 @@ export function AnimationEditorCanvas({
     const textbox = spread.textboxes?.find((tb) => tb.id === textboxId);
     if (!textbox) return;
 
-    const langKey = getTextboxLanguageKey(textbox, language);
+    const langKey = getFirstTextboxKey(textbox);
     if (!langKey) return;
 
     const textboxData = textbox[langKey] as { geometry: Geometry };
@@ -148,7 +143,7 @@ export function AnimationEditorCanvas({
     setSelectedItemType('textbox');
     setSelectedGeometry(textboxData.geometry);
     setToolbarOpen(true);
-  }, [spread.textboxes, language]);
+  }, [spread.textboxes]);
 
   // Toolbar option select handler
   const handleToolbarOptionSelect = useCallback(
@@ -176,7 +171,7 @@ export function AnimationEditorCanvas({
   const textboxesWithLang = useMemo(() => {
     if (!spread.textboxes) return [];
     return spread.textboxes.map((textbox) => {
-      const langKey = getTextboxLanguageKey(textbox, language);
+      const langKey = getFirstTextboxKey(textbox);
       if (!langKey) return null;
       const data = textbox[langKey] as {
         text: string;
@@ -188,7 +183,7 @@ export function AnimationEditorCanvas({
       if (!data?.geometry) return null;
       return { textbox, langKey, data };
     }).filter(Boolean);
-  }, [spread.textboxes, language]);
+  }, [spread.textboxes]);
 
   return (
     <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">

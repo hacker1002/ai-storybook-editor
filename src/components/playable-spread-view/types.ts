@@ -79,7 +79,6 @@ export interface AssetSwapParams {
 export interface PlayableSpreadViewProps {
   mode: OperationMode;
   spreads: PlayableSpread[];
-  language?: string;
   assets?: RemixAsset[];
   onAddAnimation?: (params: AddAnimationParams) => void;
   onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
@@ -107,14 +106,12 @@ export interface PlayableHeaderProps {
 export interface PlayableThumbnailListProps {
   spreads: PlayableSpread[];
   selectedId: string | null;
-  language: string;
   onSpreadClick: (spreadId: string) => void;
 }
 
 // === Canvas Props ===
 export interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
-  language: string;
   zoomLevel?: number;
   onAddAnimation: (params: AddAnimationParams) => void;
 }
