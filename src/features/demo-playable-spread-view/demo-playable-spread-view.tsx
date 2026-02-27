@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ interface MockOptions {
   textboxCount: number;
   objectCount: number;
   language: "en_US" | "vi_VN";
+  isDPS: boolean;
 }
 
 const DEFAULT_MOCK_OPTIONS: MockOptions = {
@@ -46,6 +48,7 @@ const DEFAULT_MOCK_OPTIONS: MockOptions = {
   textboxCount: 1,
   objectCount: 3,
   language: "en_US",
+  isDPS: true,
 };
 
 export function DemoPlayableSpreadView() {
@@ -65,6 +68,7 @@ export function DemoPlayableSpreadView() {
         textboxCount: opts.textboxCount,
         objectCount: opts.objectCount,
         language: opts.language,
+        isDPS: opts.isDPS,
       };
       return createPlayableSpreads(factoryOpts);
     },
@@ -277,6 +281,17 @@ export function DemoPlayableSpreadView() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Switch
+                      id="isDPS"
+                      checked={mockOptions.isDPS}
+                      onCheckedChange={(v) => updateMockOption("isDPS", v)}
+                      className="scale-75"
+                    />
+                    <Label htmlFor="isDPS" className="text-xs">
+                      DPS (Double Page Spread)
+                    </Label>
                   </div>
                 </div>
               </div>

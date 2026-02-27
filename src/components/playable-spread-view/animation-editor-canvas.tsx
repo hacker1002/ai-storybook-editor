@@ -13,6 +13,8 @@ import { SelectionOverlay } from './selection-overlay';
 import type { PlayableSpread, ItemType, AnimationMediaType, AddAnimationParams } from './types';
 import type { Geometry, Typography, Fill, Outline } from '../shared/types';
 
+const TEXTBOX_Z_INDEX_BASE = 300;
+
 interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
   language: string;
@@ -245,6 +247,7 @@ export function AnimationEditorCanvas({
               fill={data.fill}
               outline={data.outline}
               index={index}
+              zIndex={TEXTBOX_Z_INDEX_BASE + index}
               isSelected={selectedItemId === textbox.id && selectedItemType === 'textbox'}
               isSelectable={true}
               isEditable={false}

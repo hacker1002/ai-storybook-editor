@@ -14,6 +14,8 @@ const CANVAS = {
   BASE_HEIGHT: 600,
 } as const;
 
+const TEXTBOX_Z_INDEX_BASE = 300;
+
 // Helper to find language key in textbox (same pattern as animation-editor-canvas)
 function getTextboxLanguageKey(textbox: Record<string, unknown>, preferredLang: string): string | null {
   if (textbox[preferredLang] && typeof textbox[preferredLang] === 'object') {
@@ -170,6 +172,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
                 fill={data.fill}
                 outline={data.outline}
                 index={idx}
+                zIndex={TEXTBOX_Z_INDEX_BASE + idx}
                 isSelected={false}
                 isSelectable={false}
                 isEditable={false}

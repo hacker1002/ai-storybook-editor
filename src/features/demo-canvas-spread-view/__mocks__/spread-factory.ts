@@ -21,33 +21,172 @@ function randomBetween(min: number, max: number): number {
 }
 
 // === Constants ===
-const IMAGE_ASPECT_RATIO = 4 / 3;   // Target image aspect ratio
-const CANVAS_ASPECT_RATIO = 4 / 3;  // Canvas spread aspect ratio (800x600)
+const CANVAS_RATIO = 4 / 3; // Canvas aspect ratio (800x600)
 
-// === Helper: Random geometry ===
-function randomGeometry(page: 'left' | 'right' | 'full' = 'full', forImage = false): Geometry {
-  let xMin = 0, xMax = 70;
+// Available image ratios with picsum dimensions
+const IMAGE_RATIOS = [
+  { w: 400, h: 300 },  // 4:3 landscape
+  { w: 300, h: 400 },  // 3:4 portrait
+  { w: 400, h: 400 },  // 1:1 square
+  { w: 480, h: 270 },  // 16:9 wide
+  { w: 300, h: 200 },  // 3:2 landscape
+];
 
-  if (page === 'left') {
-    xMin = 5;
-    xMax = 40;
-  } else if (page === 'right') {
-    xMin = 55;
-    xMax = 90;
+// Available object ratios with picsum dimensions
+const OBJECT_RATIOS = [
+  { w: 200, h: 300 },  // 2:3 portrait (character)
+  { w: 300, h: 300 },  // 1:1 square (prop)
+  { w: 400, h: 300 },  // 4:3 landscape (background)
+  { w: 200, h: 400 },  // 1:2 tall portrait
+  { w: 300, h: 200 },  // 3:2 landscape
+];
+
+// Position templates (x, y only - w/h calculated from ratio)
+const IMAGE_POSITIONS = [
+  { x: 3, y: 5 },    // Top-left
+  { x: 5, y: 45 },   // Bottom-left
+  { x: 52, y: 5 },   // Top-right
+  { x: 50, y: 50 },  // Bottom-right
+  { x: 8, y: 20 },   // Left center
+];
+
+const TEXTBOX_GEOMETRIES: Geometry[] = [
+  { x: 53, y: 65, w: 42, h: 28 },
+  { x: 55, y: 10, w: 40, h: 20 },
+  { x: 5, y: 70, w: 40, h: 22 },
+  { x: 5, y: 5, w: 38, h: 18 },
+  { x: 30, y: 80, w: 45, h: 15 },
+];
+
+// Object position templates by type
+const OBJECT_POSITIONS: Record<string, { x: number; y: number }[]> = {
+  background: [{ x: 0, y: 0 }],
+  character: [
+    { x: 55, y: 15 },
+    { x: 10, y: 20 },
+    { x: 35, y: 25 },
+    { x: 62, y: 30 },
+  ],
+  prop: [
+    { x: 70, y: 55 },
+    { x: 15, y: 60 },
+    { x: 42, y: 65 },
+    { x: 78, y: 10 },
+  ],
+  foreground: [
+    { x: 0, y: 55 },
+    { x: 0, y: 0 },
+    { x: 75, y: 0 },
+  ],
+};
+
+// Size ranges by object type (base width in %)
+const OBJECT_SIZE_RANGES: Record<string, { min: number; max: number }> = {
+  background: { min: 100, max: 100 },
+  character: { min: 15, max: 28 },
+  prop: { min: 6, max: 15 },
+  foreground: { min: 20, max: 100 },
+};
+
+// Track usage indices
+let imageGeoIndex = 0;
+let textboxGeoIndex = 0;
+const objectGeoIndices: Record<string, number> = {
+  background: 0, character: 0, prop: 0, foreground: 0, raw: 0, other: 0,
+};
+
+export function resetGeometryIndices(): void {
+  imageGeoIndex = 0;
+  textboxGeoIndex = 0;
+  Object.keys(objectGeoIndices).forEach(k => objectGeoIndices[k] = 0);
+}
+
+// Calculate h% from w% to match image ratio on canvas
+// Formula: displayedRatio = (w%/h%) * canvasRatio
+// So: h% = w% * canvasRatio / imageRatio
+function calcHeightPercent(widthPercent: number, imgW: number, imgH: number): number {
+  const imageRatio = imgW / imgH;
+  return Math.round(widthPercent * CANVAS_RATIO / imageRatio * 10) / 10;
+}
+
+// Clamp geometry to stay within canvas bounds (x+w <= 100, y+h <= 100)
+function clampGeometryToBounds(geo: Geometry): Geometry {
+  let { x, y, w, h } = geo;
+
+  // Ensure w and h don't exceed 100%
+  w = Math.min(w, 100);
+  h = Math.min(h, 100);
+
+  // Clamp x so x+w <= 100
+  if (x + w > 100) {
+    x = Math.max(0, 100 - w);
   }
 
-  const w = randomBetween(20, 40);
-  // Formula: actualAspect = (w%/h%) * canvasAspect
-  // To get IMAGE_ASPECT: h% = w% * canvasAspect / imageAspect
-  const h = forImage
-    ? w * CANVAS_ASPECT_RATIO / IMAGE_ASPECT_RATIO  // w * (4/3) / (4/3) = w
-    : randomBetween(20, 50);
+  // Clamp y so y+h <= 100
+  if (y + h > 100) {
+    y = Math.max(0, 100 - h);
+  }
+
+  return { x, y, w, h };
+}
+
+// Get random image with geometry matching its ratio
+interface ImageWithGeometry {
+  geometry: Geometry;
+  dimensions: { w: number; h: number };
+}
+
+function getRandomImageGeometry(): ImageWithGeometry {
+  const ratio = IMAGE_RATIOS[randomBetween(0, IMAGE_RATIOS.length - 1)];
+  const pos = IMAGE_POSITIONS[imageGeoIndex % IMAGE_POSITIONS.length];
+  imageGeoIndex++;
+
+  const baseW = randomBetween(28, 42);
+  const h = calcHeightPercent(baseW, ratio.w, ratio.h);
 
   return {
-    x: randomBetween(xMin, xMax),
-    y: randomBetween(5, 40),
-    w,
-    h: Math.round(h * 10) / 10, // Round to 1 decimal for clean values
+    geometry: clampGeometryToBounds({ x: pos.x, y: pos.y, w: baseW, h }),
+    dimensions: ratio,
+  };
+}
+
+function getTextboxGeometry(): Geometry {
+  const geo = TEXTBOX_GEOMETRIES[textboxGeoIndex % TEXTBOX_GEOMETRIES.length];
+  textboxGeoIndex++;
+  return clampGeometryToBounds({ ...geo });
+}
+
+// Fixed background ratios
+const BACKGROUND_RATIO_DPS = { w: 400, h: 300 };   // 4:3 landscape for DPS
+const BACKGROUND_RATIO_SINGLE = { w: 200, h: 300 }; // 2:3 portrait for non-DPS
+
+// Get random object with geometry matching its ratio
+interface ObjectWithGeometry {
+  geometry: Geometry;
+  dimensions: { w: number; h: number };
+}
+
+function getRandomObjectGeometry(type: string, isDPS = true): ObjectWithGeometry {
+  const typeKey = type in objectGeoIndices ? type : 'other';
+  const positions = OBJECT_POSITIONS[typeKey] || OBJECT_POSITIONS.prop;
+  const sizeRange = OBJECT_SIZE_RANGES[typeKey] || OBJECT_SIZE_RANGES.prop;
+
+  const idx = objectGeoIndices[typeKey] % positions.length;
+  objectGeoIndices[typeKey]++;
+
+  const pos = positions[idx];
+
+  // Background uses fixed ratio based on DPS/non-DPS
+  const ratio = type === 'background'
+    ? (isDPS ? BACKGROUND_RATIO_DPS : BACKGROUND_RATIO_SINGLE)
+    : OBJECT_RATIOS[randomBetween(0, OBJECT_RATIOS.length - 1)];
+
+  const baseW = randomBetween(sizeRange.min, sizeRange.max);
+  const h = calcHeightPercent(baseW, ratio.w, ratio.h);
+
+  return {
+    geometry: clampGeometryToBounds({ x: pos.x, y: pos.y, w: baseW, h }),
+    dimensions: ratio,
   };
 }
 
@@ -96,15 +235,24 @@ const defaultTypography: Typography = {
 
 // === Create Single Image ===
 export function createMockImage(overrides: Partial<SpreadImage> = {}): SpreadImage {
+  const artNoteIdx = randomBetween(0, ART_NOTES.length - 1);
+  const { geometry, dimensions } = getRandomImageGeometry();
+
   return {
     id: generateUUID(),
     title: `Image ${randomBetween(1, 100)}`,
-    geometry: randomGeometry('left', true), // forImage=true for 4:3 ratio
-    art_note: ART_NOTES[randomBetween(0, ART_NOTES.length - 1)],
-    visual_description: ART_NOTES[randomBetween(0, ART_NOTES.length - 1)],
+    geometry,
+    art_note: ART_NOTES[artNoteIdx],
+    visual_description: ART_NOTES[artNoteIdx],
     image_references: [],
     sketches: [],
-    illustrations: [],
+    illustrations: [
+      {
+        media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${dimensions.h}`,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      },
+    ],
     ...overrides,
   };
 }
@@ -119,14 +267,16 @@ const OBJECT_STATES: Record<string, string[]> = {
   background_1: ['day', 'night'],
 };
 
-export function createMockObject(overrides: Partial<SpreadObject> = {}): SpreadObject {
+export function createMockObject(
+  overrides: Partial<SpreadObject> = {},
+  isDPS = true
+): SpreadObject {
   const typeIndex = randomBetween(0, OBJECT_TYPES.length - 1);
   const type = OBJECT_TYPES[typeIndex];
   const name = OBJECT_NAMES[typeIndex] || 'unnamed';
   const states = OBJECT_STATES[name] || ['default'];
   const state = states[randomBetween(0, states.length - 1)];
 
-  // Z-index defaults by type
   const zIndexMap: Record<SpreadObject['type'], number> = {
     background: 50,
     character: 125,
@@ -136,19 +286,16 @@ export function createMockObject(overrides: Partial<SpreadObject> = {}): SpreadO
     other: 150,
   };
 
+  const { geometry, dimensions } = getRandomObjectGeometry(type, isDPS);
+
   return {
     id: generateUUID(),
     name,
     state,
     type,
-    media_url: `https://picsum.photos/seed/${generateUUID()}/200/300`,
+    media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${dimensions.h}`,
     media_type: 'image',
-    geometry: {
-      x: randomBetween(50, 70),
-      y: randomBetween(10, 40),
-      w: randomBetween(15, 30),
-      h: randomBetween(20, 40),
-    },
+    geometry,
     zIndex: zIndexMap[type],
     player_visible: true,
     editor_visible: true,
@@ -169,7 +316,7 @@ export function createMockTextbox(
     title: `Textbox ${randomBetween(1, 100)}`,
     [language]: {
       text,
-      geometry: randomGeometry('right'),
+      geometry: getTextboxGeometry(),
       typography: { ...defaultTypography },
       fill: { color: '#ffffff', opacity: 0 },
       outline: { color: '#000000', width: 0, radius: 0, type: 'solid' },
@@ -224,20 +371,9 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     ? [createMockPage(`${leftPageNum}-${rightPageNum}`)]
     : [createMockPage(leftPageNum), createMockPage(rightPageNum)];
 
-  // Create images
-  const images: SpreadImage[] = Array.from({ length: imageCount }, (_, i) =>
-    createMockImage({
-      geometry: randomGeometry(i % 2 === 0 ? 'left' : 'right', true), // forImage=true for 4:3 ratio
-      illustrations: withGeneratedImages
-        ? [
-            {
-              media_url: `https://picsum.photos/seed/${generateUUID()}/400/300`,
-              created_time: new Date().toISOString(),
-              is_selected: true,
-            },
-          ]
-        : [],
-    })
+  // Create images with random ratios (illustrations always included with matching dimensions)
+  const images: SpreadImage[] = Array.from({ length: imageCount }, () =>
+    createMockImage(withGeneratedImages ? {} : { illustrations: [] })
   );
 
   // Create textboxes
@@ -245,9 +381,9 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     createMockTextbox(language)
   );
 
-  // Create objects
+  // Create objects (pass isDPS for background ratio)
   const objects: SpreadObject[] = Array.from({ length: objectCount }, () =>
-    createMockObject()
+    createMockObject({}, isDPS)
   );
 
   return {
@@ -266,6 +402,7 @@ export function createMockSpreads(
   count: number,
   options: Omit<CreateSpreadOptions, 'spreadIndex'> = {}
 ): BaseSpread[] {
+  resetGeometryIndices();
   return Array.from({ length: count }, (_, i) =>
     createMockSpread({ ...options, spreadIndex: i })
   );

@@ -13,6 +13,7 @@ interface EditableTextboxProps {
   fill?: Fill;
   outline?: Outline;
   index: number;
+  zIndex?: number;
   isSelected: boolean;
   isSelectable: boolean;  // NEW: Controls click selection behavior
   isEditable: boolean;    // Controls double-click edit mode
@@ -60,6 +61,7 @@ export function EditableTextbox({
   fill,
   outline,
   index,
+  zIndex,
   isSelected,
   isSelectable,
   isEditable,
@@ -213,6 +215,7 @@ export function EditableTextbox({
         top: `${geometry.y}%`,
         width: `${geometry.w}%`,
         height: `${geometry.h}%`,
+        zIndex,
         outlineColor: COLORS.HOVER_OUTLINE,
         ...typographyStyle,
         ...fillStyle,
