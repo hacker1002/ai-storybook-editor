@@ -7,6 +7,7 @@ import { EditableTextbox, EditableObject } from "../shared";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
 import type { Geometry, Typography, Fill, Outline } from "../shared/types";
 import { LAYOUT, THUMBNAIL_STYLES } from "./constants";
+import { getFirstTextboxKey } from "./utils/textbox-helpers";
 
 // === Canvas Constants (from canvas-spread-view) ===
 const CANVAS = {
@@ -15,15 +16,6 @@ const CANVAS = {
 } as const;
 
 const TEXTBOX_Z_INDEX_BASE = 300;
-
-// Helper to get first textbox language key (data is pre-filtered by language)
-function getFirstTextboxKey(textbox: Record<string, unknown>): string | null {
-  const metaKeys = ['id', 'title', 'order'];
-  const langKeys = Object.keys(textbox).filter(
-    k => !metaKeys.includes(k) && typeof textbox[k] === 'object'
-  );
-  return langKeys[0] ?? null;
-}
 
 // === PlayableThumbnail Item Component ===
 interface PlayableThumbnailProps {

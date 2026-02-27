@@ -18,6 +18,7 @@ import { PageItem } from '../canvas-spread-view/page-item';
 import { AddAnimationToolbar } from './add-animation-toolbar';
 import { SelectionOverlay } from './selection-overlay';
 import type { PlayableSpread, ItemType, AnimationMediaType, AddAnimationParams } from './types';
+import { getFirstTextboxKey } from './utils/textbox-helpers';
 
 const TEXTBOX_Z_INDEX_BASE = 300;
 
@@ -25,15 +26,6 @@ interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
   zoomLevel?: number;
   onAddAnimation: (params: AddAnimationParams) => void;
-}
-
-// Helper to get first textbox language key (data is pre-filtered to single language)
-function getFirstTextboxKey(textbox: Record<string, unknown>): string | null {
-  const metaKeys = ['id', 'title', 'order'];
-  const langKeys = Object.keys(textbox).filter(
-    k => !metaKeys.includes(k) && typeof textbox[k] === 'object'
-  );
-  return langKeys[0] ?? null;
 }
 
 export function AnimationEditorCanvas({
