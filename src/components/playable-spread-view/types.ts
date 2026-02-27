@@ -1,6 +1,6 @@
 // types.ts - Type definitions for PlayableSpreadView component family
 
-import type { BaseSpread } from '../canvas-spread-view/types';
+import type { BaseSpread } from '../shared';
 
 // === Core Enums/Types ===
 export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';

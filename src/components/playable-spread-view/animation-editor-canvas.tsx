@@ -3,15 +3,21 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { EditableTextbox, EditableObject } from '../shared';
-import { useToolbarPosition } from '../canvas-spread-view/hooks/use-toolbar-position';
+import {
+  EditableTextbox,
+  EditableObject,
+  useToolbarPosition,
+  Z_INDEX,
+  getScaledDimensions,
+  type Geometry,
+  type Typography,
+  type Fill,
+  type Outline,
+} from '../shared';
 import { PageItem } from '../canvas-spread-view/page-item';
-import { Z_INDEX } from '../canvas-spread-view/constants';
-import { getScaledDimensions } from '../canvas-spread-view/utils/coordinate-utils';
 import { AddAnimationToolbar } from './add-animation-toolbar';
 import { SelectionOverlay } from './selection-overlay';
 import type { PlayableSpread, ItemType, AnimationMediaType, AddAnimationParams } from './types';
-import type { Geometry, Typography, Fill, Outline } from '../shared/types';
 
 const TEXTBOX_Z_INDEX_BASE = 300;
 

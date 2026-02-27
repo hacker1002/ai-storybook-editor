@@ -55,3 +55,68 @@ export interface SpreadObject {
   editor_visible: boolean;
   aspect_ratio?: 'free' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '2:3' | '3:2';
 }
+
+// === Page Types ===
+export interface PageData {
+  number: string | number;
+  type: 'normal_page' | 'front_matter' | 'back_matter' | 'dedication';
+  layout: string | null;
+  background: {
+    color: string;
+    texture: string | null;
+  };
+}
+
+// === Spread Item Types ===
+export interface SpreadImage {
+  id: string;
+  title?: string;
+  geometry: Geometry;
+  setting?: string;
+  art_note?: string;
+  visual_description?: string;
+  image_references?: Array<{ title: string; media_url: string }>;
+  sketches?: Array<{ media_url: string; created_time: string; is_selected: boolean }>;
+  illustrations?: Array<{ media_url: string; created_time: string; is_selected: boolean }>;
+  final_hires_media_url?: string;
+}
+
+export interface SpreadTextbox {
+  id: string;
+  title?: string;
+  [languageKey: string]: {
+    text: string;
+    geometry: Geometry;
+    typography: Typography;
+    fill?: Fill;
+    outline?: Outline;
+  } | string | undefined;
+}
+
+export interface SpreadAnimation {
+  order: number;
+  type: 'textbox' | 'image' | 'video' | 'audio';
+  target: { id: string; type: 'textbox' | 'object' };
+  trigger_type: 'on_click' | 'with_previous' | 'after_previous';
+  effect: {
+    type: number;
+    geometry?: Geometry;
+    delay?: number;
+    duration?: number;
+    loop?: number;
+    amount?: number;
+    direction?: 'left' | 'right' | 'up' | 'down';
+  };
+}
+
+// === Base Spread Interface ===
+export interface BaseSpread {
+  id: string;
+  pages: PageData[];
+  images: SpreadImage[];
+  textboxes: SpreadTextbox[];
+  objects?: SpreadObject[];
+  animations?: SpreadAnimation[];
+  manuscript?: string;
+  tiny_sketch_media_url?: string;
+}

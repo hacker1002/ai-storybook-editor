@@ -93,13 +93,9 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
     return () => observer.disconnect();
   }, [size]);
 
-  // Scale factor: small uses fixed, medium calculates from container width
-  const scale =
-    size === "small"
-      ? THUMBNAIL.SMALL_SCALE
-      : containerWidth > 0
-      ? containerWidth / CANVAS.BASE_WIDTH
-      : 0;
+  // Scale factor: calculated from container width (unified for both sizes)
+  const effectiveWidth = size === "small" ? THUMBNAIL.SMALL_WIDTH : containerWidth;
+  const scale = effectiveWidth > 0 ? effectiveWidth / CANVAS.BASE_WIDTH : 0;
 
   // Page label
   const label = useMemo(() => {
@@ -185,11 +181,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
         style={{
           // Maintain aspect ratio (4:3) regardless of container width
           aspectRatio: `${CANVAS.ASPECT_RATIO}`,
-          // Small size: fixed dimensions, Medium: responsive
-          ...(size === "small" && {
-            width: THUMBNAIL.SMALL_SIZE.width,
-            height: THUMBNAIL.SMALL_SIZE.height,
-          }),
+          // Small size: fixed width, Medium: responsive (aspectRatio handles height)
+          ...(size === "small" && { width: THUMBNAIL.SMALL_WIDTH }),
           contain: "layout style paint",
         }}
       >

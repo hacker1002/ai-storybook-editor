@@ -8,3 +8,20 @@ export const COLORS = {
   PLACEHOLDER_TEXT: "#9e9e9e",
   SELECTION: "#2196F3",
 } as const;
+
+export const CANVAS = {
+  BASE_WIDTH: 800,
+  BASE_HEIGHT: 600,
+  ASPECT_RATIO: 4 / 3,
+  MIN_ELEMENT_SIZE: 5,
+  NUDGE_STEP: 1,
+  NUDGE_STEP_SHIFT: 5,
+} as const;
+
+export const Z_INDEX = {
+  PAGE_BACKGROUND: -999,
+  IMAGE_BASE: 0,
+  TEXTBOX_BASE: 1000,
+  OBJECT_BASE: 2000,
+  SELECTION_FRAME: 10000,
+} as const;

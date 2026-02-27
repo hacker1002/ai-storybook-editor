@@ -1,8 +1,19 @@
 // types.ts - Core type definitions
 
-// === Import and re-export from shared ===
-import type { Point, Geometry, Typography, Fill, Outline, SpreadObject } from '../shared';
-export type { Point, Geometry, Typography, Fill, Outline, SpreadObject };
+// === Re-export all shared types ===
+export type {
+  Point,
+  Geometry,
+  Typography,
+  Fill,
+  Outline,
+  SpreadObject,
+  PageData,
+  SpreadImage,
+  SpreadTextbox,
+  SpreadAnimation,
+  BaseSpread,
+} from '../shared';
 
 // === Enums & Literals ===
 export type ViewMode = 'edit' | 'grid';
@@ -12,78 +23,11 @@ export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 export type ThumbnailListLayout = 'horizontal' | 'grid';
 export type TextureOption = 'paper' | 'canvas' | 'linen' | 'watercolor' | null;
 
-// === Page Types ===
-export interface PageData {
-  number: string | number;  // DPS: "0-1" | non-DPS: 0, 1
-  type: 'normal_page' | 'front_matter' | 'back_matter' | 'dedication';
-  layout: string | null;    // UUID FK → template_layouts
-  background: {
-    color: string;
-    texture: string | null;
-  };
-}
-
 export interface LayoutOption {
   id: string;
   title: string;
   thumbnail_url: string;
-  type: 1 | 2;  // 1: double page, 2: single page
-}
-
-// === Spread Item Types ===
-export interface SpreadImage {
-  id: string;
-  title?: string;
-  geometry: Geometry;
-  setting?: string;  // @stage_key/setting_key
-  art_note?: string;
-  visual_description?: string;
-  image_references?: Array<{ title: string; media_url: string }>;
-  sketches?: Array<{ media_url: string; created_time: string; is_selected: boolean }>;
-  illustrations?: Array<{ media_url: string; created_time: string; is_selected: boolean }>;
-  final_hires_media_url?: string;
-}
-
-export interface SpreadTextbox {
-  id: string;
-  title?: string;
-  [languageKey: string]: {
-    text: string;
-    geometry: Geometry;
-    typography: Typography;
-    fill?: Fill;
-    outline?: Outline;
-  } | string | undefined;
-}
-
-// SpreadObject is now re-exported from shared (see top of file)
-
-export interface SpreadAnimation {
-  order: number;
-  type: 'textbox' | 'image' | 'video' | 'audio';
-  target: { id: string; type: 'textbox' | 'object' };
-  trigger_type: 'on_click' | 'with_previous' | 'after_previous';
-  effect: {
-    type: number;
-    geometry?: Geometry;
-    delay?: number;
-    duration?: number;
-    loop?: number;
-    amount?: number;
-    direction?: 'left' | 'right' | 'up' | 'down';
-  };
-}
-
-// === Base Spread Interface ===
-export interface BaseSpread {
-  id: string;
-  pages: PageData[];
-  images: SpreadImage[];
-  textboxes: SpreadTextbox[];
-  objects?: SpreadObject[];
-  animations?: SpreadAnimation[];
-  manuscript?: string;
-  tiny_sketch_media_url?: string;
+  type: 1 | 2;
 }
 
 // === Selection State ===

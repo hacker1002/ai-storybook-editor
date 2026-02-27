@@ -36,13 +36,8 @@ export function NewSpreadButton({ size, onAdd }: NewSpreadButtonProps) {
               'cursor-pointer',
             )}
             style={{
-              ...(size === 'small' && {
-                width: THUMBNAIL.SMALL_SIZE.width,
-                height: THUMBNAIL.SMALL_SIZE.height,
-              }),
-              ...(size === 'medium' && {
-                aspectRatio: `${CANVAS.ASPECT_RATIO}`,
-              }),
+              aspectRatio: `${CANVAS.ASPECT_RATIO}`,
+              ...(size === 'small' && { width: THUMBNAIL.SMALL_WIDTH }),
             }}
             aria-label="Add new spread"
           >

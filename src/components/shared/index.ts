@@ -12,7 +12,27 @@ export type {
   Fill,
   Outline,
   SpreadObject,
+  PageData,
+  SpreadImage,
+  SpreadTextbox,
+  SpreadAnimation,
+  BaseSpread,
 } from './types';
 
 // Constants
-export { COLORS } from './constants';
+export { COLORS, CANVAS, Z_INDEX } from './constants';
+
+// Utils
+export {
+  toPixel,
+  toPercent,
+  mouseToCanvasPercent,
+  calculateDelta,
+  clamp,
+  getScaledDimensions,
+  geometryToScreenRect,
+} from './utils/coordinate-utils';
+
+// Hooks
+export { useToolbarPosition } from './hooks/use-toolbar-position';
+export type { ToolbarPosition } from './hooks/use-toolbar-position';

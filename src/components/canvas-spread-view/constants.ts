@@ -1,13 +1,7 @@
 // constants.ts - Layout and style constants
 
-export const CANVAS = {
-  BASE_WIDTH: 800,
-  BASE_HEIGHT: 600,
-  ASPECT_RATIO: 4 / 3,
-  MIN_ELEMENT_SIZE: 5, // percentage
-  NUDGE_STEP: 1, // percentage
-  NUDGE_STEP_SHIFT: 5, // percentage
-} as const;
+// Re-export shared constants
+export { CANVAS, Z_INDEX, COLORS } from '../shared';
 
 export const ZOOM = {
   MIN: 25,
@@ -29,18 +23,8 @@ export const SELECTION = {
   COLOR: "#2196F3",
 } as const;
 
-export const Z_INDEX = {
-  PAGE_BACKGROUND: -999,
-  IMAGE_BASE: 0,
-  TEXTBOX_BASE: 1000,
-  OBJECT_BASE: 2000,
-  SELECTION_FRAME: 10000,
-} as const;
-
 export const THUMBNAIL = {
-  SMALL_SCALE: 0.15,
-  MEDIUM_SCALE: 0.25,
-  SMALL_SIZE: { width: 100, height: 80 },
+  SMALL_WIDTH: 100,
   GAP: 8,
 } as const;
 
@@ -72,9 +56,6 @@ export const HANDLE_CURSORS: Record<string, string> = {
   s: "ns-resize",
   se: "nwse-resize",
 };
-
-// Re-export COLORS from shared
-export { COLORS } from '../shared';
 
 export const AVAILABLE_TEXTURES = [
   "paper",
