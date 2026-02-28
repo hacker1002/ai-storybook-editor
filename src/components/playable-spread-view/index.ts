@@ -34,3 +34,4 @@ export { RemixEditorCanvas } from './remix-editor-canvas';
 export { PromptToolbar } from './prompt-toolbar';
 export { SelectionOverlay } from './selection-overlay';
 export { AddAnimationToolbar } from './add-animation-toolbar';
+export { PlayerCanvas } from './player-canvas';

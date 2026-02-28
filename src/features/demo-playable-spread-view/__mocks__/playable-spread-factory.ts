@@ -11,6 +11,7 @@ import type {
   Geometry,
   Typography,
 } from '@/components/canvas-spread-view/types';
+import { EFFECT_TYPE, ANIMATION_PRESETS } from '@/components/playable-spread-view/constants';
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {
@@ -108,6 +109,69 @@ function clampGeometryToBounds(geo: Geometry): Geometry {
   }
 
   return { x, y, w, h };
+}
+
+// === Animation Helper Functions ===
+function createMockAnimation(
+  order: number,
+  targetId: string,
+  targetType: 'textbox' | 'object',
+  preset: keyof typeof ANIMATION_PRESETS,
+  triggerType: Animation['trigger_type'] = 'after_previous',
+  delay: number = 0
+): Animation {
+  const presetData = ANIMATION_PRESETS[preset];
+  return {
+    order,
+    type: targetType === 'textbox' ? 'textbox' : 'image',
+    target: { id: targetId, type: targetType },
+    trigger_type: triggerType,
+    effect: {
+      ...presetData,
+      delay,
+    },
+  };
+}
+
+function generateSpreadAnimations(
+  objects: SpreadObject[],
+  textboxes: SpreadTextbox[]
+): Animation[] {
+  const animations: Animation[] = [];
+  let order = 0;
+
+  // 1. Background fade in first
+  const background = objects.find(o => o.type === 'background');
+  if (background) {
+    animations.push(createMockAnimation(order++, background.id, 'object', 'fadeIn', 'after_previous', 0));
+  }
+
+  // 2. Characters fly in (with_previous for simultaneous)
+  const characters = objects.filter(o => o.type === 'character');
+  characters.forEach((char, idx) => {
+    const preset = idx % 2 === 0 ? 'flyInLeft' : 'flyInRight';
+    const triggerType = idx === 0 ? 'after_previous' : 'with_previous';
+    animations.push(createMockAnimation(order++, char.id, 'object', preset, triggerType, idx * 100));
+  });
+
+  // 3. Props zoom in after characters
+  const props = objects.filter(o => o.type === 'prop');
+  props.forEach((prop, idx) => {
+    const triggerType = idx === 0 ? 'after_previous' : 'with_previous';
+    animations.push(createMockAnimation(order++, prop.id, 'object', 'zoomIn', triggerType, 0));
+  });
+
+  // 4. Textboxes fade in sequentially
+  textboxes.forEach((textbox) => {
+    animations.push(createMockAnimation(order++, textbox.id, 'textbox', 'fadeIn', 'after_previous', 200));
+  });
+
+  // 5. Optional: Add teeter emphasis to first character
+  if (characters.length > 0) {
+    animations.push(createMockAnimation(order++, characters[0].id, 'object', 'teeter', 'after_previous', 0));
+  }
+
+  return animations;
 }
 
 function getTextboxGeometry(): Geometry {
@@ -333,8 +397,8 @@ export function createPlayableSpreads(options: CreatePlayableSpreadOptions): Pla
       createMockObject({}, isDPS)
     );
 
-    // Empty animations array (will be populated in animation-editor mode)
-    const animations: Animation[] = [];
+    // Generate sample animations for demo testing
+    const animations = generateSpreadAnimations(objects, textboxes);
 
     // Playable spread data
     const spread: PlayableSpread = {

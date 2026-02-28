@@ -19,9 +19,7 @@ import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
 import type { PlayableSpread, RemixAsset, AssetSwapParams } from "./types";
-// REMIX_STYLES moved to EditableObject component
-
-const TEXTBOX_Z_INDEX_BASE = 300;
+import { TEXTBOX_Z_INDEX_BASE } from "./constants";
 
 interface RemixEditorCanvasProps {
   spread: PlayableSpread;

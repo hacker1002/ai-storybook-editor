@@ -6,6 +6,7 @@ import { PlayableHeader } from "./playable-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
 import { RemixEditorCanvas } from "./remix-editor-canvas";
+import { PlayerCanvas } from "./player-canvas";
 
 // Spread data textbox NEED pre-filtered with language by consumer
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
@@ -104,6 +105,25 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       onSpreadSelect?.(spreadId); // Notify parent of selection change
     },
     [onSpreadSelect]
+  );
+
+  // === Spread Complete Handler ===
+  const handleSpreadComplete = useCallback(
+    // @ts-ignore - TS6133: spreadId is required by interface but not used yet
+    (_spreadId: string) => {
+      if (playMode === 'auto') {
+        if (hasNext) {
+          handleSkipNext();
+        } else {
+          setIsPlaying(false);
+        }
+      } else if (playMode === 'semi-auto') {
+        setIsPlaying(false);
+      } else {
+        setIsPlaying(false);
+      }
+    },
+    [playMode, hasNext, handleSkipNext]
   );
 
   // === Keyboard Shortcuts ===
@@ -222,27 +242,17 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             onAssetSwap={onAssetSwap}
             onTextChange={onTextChange}
           />
+        ) : activeCanvas === 'player' && selectedSpread ? (
+          <PlayerCanvas
+            spread={selectedSpread}
+            isPlaying={isPlaying}
+            volume={volume}
+            isMuted={isMuted}
+            onSpreadComplete={handleSpreadComplete}
+          />
         ) : (
-          /* Mock for player (future implementation) */
-          <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">
-            <div className="text-center space-y-2 p-8 rounded-lg bg-background border shadow-sm">
-              <div className="text-2xl font-semibold">
-                Canvas: {activeCanvas}
-              </div>
-              <div className="text-muted-foreground">Mode: {mode}</div>
-              <div className="text-muted-foreground">
-                Spread: {selectedSpreadId || "None"}
-              </div>
-              <div className="text-sm">
-                {isPlaying ? "▶️ Playing" : "⏸️ Paused"}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Volume: {isMuted ? "Muted" : `${volume}%`}
-              </div>
-              <div className="text-xs text-muted-foreground mt-4">
-                PlayMode: {playMode}
-              </div>
-            </div>
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            No spread selected
           </div>
         )}
       </div>

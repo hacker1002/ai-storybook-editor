@@ -19,8 +19,7 @@ import { PageItem } from '../canvas-spread-view/page-item';
 import { AddAnimationToolbar } from './add-animation-toolbar';
 import { SelectionOverlay } from './selection-overlay';
 import type { PlayableSpread, ItemType, AnimationMediaType, AddAnimationParams } from './types';
-
-const TEXTBOX_Z_INDEX_BASE = 300;
+import { TEXTBOX_Z_INDEX_BASE } from './constants';
 
 interface AnimationEditorCanvasProps {
   spread: PlayableSpread;

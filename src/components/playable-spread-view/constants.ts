@@ -58,3 +58,61 @@ export const REMIX_STYLES = {
   SELECTION_BORDER: '2px solid #2196F3',
   FOCUS_RING: '2px solid #2196F3',
 } as const;
+
+// === Z-Index Constants ===
+export const TEXTBOX_Z_INDEX_BASE = 300;
+
+// === Effect Type Constants ===
+export const EFFECT_TYPE = {
+  PLAY: 1,
+  APPEAR: 2,
+  FADE_IN: 3,
+  FLY_IN: 4,
+  FLOAT_IN: 5,
+  ZOOM: 6,
+  SPIN: 7,
+  GROW_SHRINK: 8,
+  TEETER: 9,
+  TRANSPARENCY: 10,
+  READ_ALONG: 11,
+  DISAPPEAR: 12,
+  FADE_OUT: 13,
+  FLY_OUT: 14,
+  FLOAT_OUT: 15,
+  LINES: 16,
+  ARCS: 17,
+} as const;
+
+export const EFFECT_TYPE_NAMES: Record<number, string> = {
+  1: 'Play',
+  2: 'Appear',
+  3: 'Fade In',
+  4: 'Fly In',
+  5: 'Float In',
+  6: 'Zoom',
+  7: 'Spin',
+  8: 'Grow/Shrink',
+  9: 'Teeter',
+  10: 'Transparency',
+  11: 'Read-along',
+  12: 'Disappear',
+  13: 'Fade Out',
+  14: 'Fly Out',
+  15: 'Float Out',
+  16: 'Lines',
+  17: 'Arcs',
+};
+
+// === Animation Presets ===
+export const ANIMATION_PRESETS = {
+  fadeIn: { type: EFFECT_TYPE.FADE_IN, duration: 500 },
+  flyInLeft: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'left' as const },
+  flyInRight: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'right' as const },
+  flyInTop: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'up' as const },
+  zoomIn: { type: EFFECT_TYPE.ZOOM, duration: 500 },
+  spin: { type: EFFECT_TYPE.SPIN, duration: 800, amount: 1, loop: 0 },
+  teeter: { type: EFFECT_TYPE.TEETER, duration: 400, loop: 2 },
+  grow: { type: EFFECT_TYPE.GROW_SHRINK, duration: 400, amount: 1.2 },
+  fadeOut: { type: EFFECT_TYPE.FADE_OUT, duration: 500 },
+  flyOutRight: { type: EFFECT_TYPE.FLY_OUT, duration: 600, direction: 'right' as const },
+};

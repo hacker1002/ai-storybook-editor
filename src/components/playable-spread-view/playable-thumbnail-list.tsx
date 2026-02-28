@@ -6,15 +6,13 @@ import { cn } from "@/lib/utils";
 import { EditableTextbox, EditableObject, getFirstTextboxKey } from "../shared";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
 import type { Geometry, Typography, Fill, Outline } from "../shared/types";
-import { LAYOUT, THUMBNAIL_STYLES } from "./constants";
+import { LAYOUT, THUMBNAIL_STYLES, TEXTBOX_Z_INDEX_BASE } from "./constants";
 
 // === Canvas Constants (from canvas-spread-view) ===
 const CANVAS = {
   BASE_WIDTH: 800,
   BASE_HEIGHT: 600,
 } as const;
-
-const TEXTBOX_Z_INDEX_BASE = 300;
 
 // === PlayableThumbnail Item Component ===
 interface PlayableThumbnailProps {
