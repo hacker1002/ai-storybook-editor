@@ -2,11 +2,11 @@
 import { ImageIcon, VideoIcon, Volume2, Type } from 'lucide-react';
 import type { AddAnimationToolbarProps, AnimationMediaType } from './types';
 
-// Animation options for object items (image, video, sound)
+// Animation options for object items (image, video, audio)
 const OBJECT_OPTIONS: { type: AnimationMediaType; label: string; icon: typeof ImageIcon }[] = [
   { type: 'image', label: 'Image', icon: ImageIcon },
   { type: 'video', label: 'Video', icon: VideoIcon },
-  { type: 'sound', label: 'Sound', icon: Volume2 },
+  { type: 'audio', label: 'Audio', icon: Volume2 },
 ];
 
 // Animation options for textbox items (textbox only)

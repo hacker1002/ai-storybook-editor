@@ -7,7 +7,7 @@ export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
 export type PlayMode = 'off' | 'semi-auto' | 'auto';
 export type ItemType = 'object' | 'textbox';
-export type AnimationMediaType = 'image' | 'video' | 'sound' | 'textbox';
+export type AnimationMediaType = 'image' | 'video' | 'audio' | 'textbox';
 
 // === Animation Editor State ===
 export interface AnimationEditorState {

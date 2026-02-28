@@ -1,7 +1,7 @@
 // constants.ts - Layout and style constants
 
 // Re-export shared constants
-export { CANVAS, Z_INDEX, COLORS } from '../shared';
+export { CANVAS, Z_INDEX, COLORS } from "../shared";
 
 export const ZOOM = {
   MIN: 25,
@@ -29,7 +29,6 @@ export const THUMBNAIL = {
 } as const;
 
 export const HEADER = {
-  HEIGHT: 48,
   TOGGLE_SIZE: 36,
   SLIDER_WIDTH: 120,
   GAP: 8,

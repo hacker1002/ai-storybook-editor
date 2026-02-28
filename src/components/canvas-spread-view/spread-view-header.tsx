@@ -1,14 +1,18 @@
 // spread-view-header.tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Grid2X2, Minus, Plus } from 'lucide-react';
-import { HEADER, ZOOM, COLUMNS } from './constants';
-import type { ViewMode } from './types';
-import { useSpreadViewKeyboard } from './hooks/use-spread-view-keyboard';
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Grid2X2, Minus, Plus } from "lucide-react";
+import { HEADER, ZOOM, COLUMNS } from "./constants";
+import type { ViewMode } from "./types";
+import { useSpreadViewKeyboard } from "./hooks/use-spread-view-keyboard";
 
 // === Props Interface ===
 interface SpreadViewHeaderProps {
@@ -31,7 +35,7 @@ export function SpreadViewHeader({
   onColumnsChange,
   enableKeyboardShortcuts = true,
 }: SpreadViewHeaderProps) {
-  const [announcement, setAnnouncement] = useState('');
+  const [announcement, setAnnouncement] = useState("");
 
   // Keyboard shortcuts hook
   useSpreadViewKeyboard({
@@ -46,10 +50,7 @@ export function SpreadViewHeader({
   });
 
   return (
-    <header
-      className="flex items-center justify-between px-4 border-b bg-background"
-      style={{ height: HEADER.HEIGHT }}
-    >
+    <header className="flex items-center justify-between px-4 border-b bg-background h-14">
       {/* Left: View Toggle */}
       <ViewToggle viewMode={viewMode} onToggle={onViewModeToggle} />
 
@@ -85,31 +86,24 @@ interface ViewToggleProps {
 }
 
 function ViewToggle({ viewMode, onToggle }: ViewToggleProps) {
-  const tooltipText = viewMode === 'edit'
-    ? 'Show spread grid view'
-    : 'Show full spread view';
+  const tooltipText =
+    viewMode === "edit" ? "Show spread grid view" : "Show full spread view";
 
-  const isEditMode = viewMode === 'edit';
+  const isEditMode = viewMode === "edit";
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant={isEditMode ? 'default' : 'ghost'}
+          variant={isEditMode ? "default" : "ghost"}
           size="icon"
           onClick={onToggle}
-          aria-pressed={viewMode === 'grid'}
-          aria-label={`Switch to ${viewMode === 'edit' ? 'grid' : 'edit'} view`}
+          aria-pressed={viewMode === "grid"}
+          aria-label={`Switch to ${viewMode === "edit" ? "grid" : "edit"} view`}
           style={{ width: HEADER.TOGGLE_SIZE, height: HEADER.TOGGLE_SIZE }}
-          className={
-            isEditMode
-              ? 'pointer-events-auto'
-              : 'hover:bg-muted/50'
-          }
+          className={isEditMode ? "pointer-events-auto" : "hover:bg-muted/50"}
         >
-          <Grid2X2
-            className={isEditMode ? 'h-4 w-4' : 'h-4 w-4 opacity-60'}
-          />
+          <Grid2X2 className={isEditMode ? "h-4 w-4" : "h-4 w-4 opacity-60"} />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
@@ -135,7 +129,7 @@ function DualPurposeSlider({
   onZoomChange,
   onColumnsChange,
 }: DualPurposeSliderProps) {
-  const isEditMode = viewMode === 'edit';
+  const isEditMode = viewMode === "edit";
 
   // Config based on mode
   const config = isEditMode
@@ -146,7 +140,7 @@ function DualPurposeSlider({
         step: ZOOM.STEP,
         label: `${zoomLevel}%`,
         onChange: onZoomChange,
-        ariaLabel: 'Zoom level',
+        ariaLabel: "Zoom level",
       }
     : {
         value: columnsPerRow,
@@ -155,7 +149,7 @@ function DualPurposeSlider({
         step: 1,
         label: `${columnsPerRow}`,
         onChange: onColumnsChange,
-        ariaLabel: 'Columns per row',
+        ariaLabel: "Columns per row",
       };
 
   const handleDecrease = () => {
@@ -180,7 +174,7 @@ function DualPurposeSlider({
         size="icon"
         onClick={handleDecrease}
         disabled={config.value <= config.min}
-        aria-label={`Decrease ${isEditMode ? 'zoom' : 'columns'}`}
+        aria-label={`Decrease ${isEditMode ? "zoom" : "columns"}`}
         className="h-8 w-8"
       >
         <Minus className="h-4 w-4" />
@@ -203,7 +197,7 @@ function DualPurposeSlider({
         size="icon"
         onClick={handleIncrease}
         disabled={config.value >= config.max}
-        aria-label={`Increase ${isEditMode ? 'zoom' : 'columns'}`}
+        aria-label={`Increase ${isEditMode ? "zoom" : "columns"}`}
         className="h-8 w-8"
       >
         <Plus className="h-4 w-4" />

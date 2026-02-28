@@ -196,7 +196,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       </div>
 
       {/* Canvas Area */}
-      <div className="flex-1 overflow-hidden flex items-center justify-center bg-muted/10">
+      <div className="flex-1 overflow-hidden flex">
         {activeCanvas === "animation-editor" &&
         selectedSpread &&
         onAddAnimation ? (
@@ -206,20 +206,24 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           />
         ) : (
           /* Mock for remix-editor and player (future implementation) */
-          <div className="text-center space-y-2 p-8 rounded-lg bg-background border shadow-sm">
-            <div className="text-2xl font-semibold">Canvas: {activeCanvas}</div>
-            <div className="text-muted-foreground">Mode: {mode}</div>
-            <div className="text-muted-foreground">
-              Spread: {selectedSpreadId || "None"}
-            </div>
-            <div className="text-sm">
-              {isPlaying ? "▶️ Playing" : "⏸️ Paused"}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Volume: {isMuted ? "Muted" : `${volume}%`}
-            </div>
-            <div className="text-xs text-muted-foreground mt-4">
-              PlayMode: {playMode}
+          <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">
+            <div className="text-center space-y-2 p-8 rounded-lg bg-background border shadow-sm">
+              <div className="text-2xl font-semibold">
+                Canvas: {activeCanvas}
+              </div>
+              <div className="text-muted-foreground">Mode: {mode}</div>
+              <div className="text-muted-foreground">
+                Spread: {selectedSpreadId || "None"}
+              </div>
+              <div className="text-sm">
+                {isPlaying ? "▶️ Playing" : "⏸️ Paused"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Volume: {isMuted ? "Muted" : `${volume}%`}
+              </div>
+              <div className="text-xs text-muted-foreground mt-4">
+                PlayMode: {playMode}
+              </div>
             </div>
           </div>
         )}
