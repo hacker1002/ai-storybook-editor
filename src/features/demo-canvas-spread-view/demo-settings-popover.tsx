@@ -35,7 +35,6 @@ export interface FeatureFlags {
   canAddSpread: boolean;
   canReorderSpread: boolean;
   canDeleteSpread: boolean;
-  canAddItem: boolean;
   canDeleteItem: boolean;
   canResizeItem: boolean;
   canDragItem: boolean;
@@ -55,9 +54,18 @@ interface DemoSettingsPopoverProps {
   mockOptions: MockOptions;
   featureFlags: FeatureFlags;
   itemFlags: ItemFlags;
-  onMockOptionChange: <K extends keyof MockOptions>(key: K, value: MockOptions[K]) => void;
-  onFeatureFlagChange: <K extends keyof FeatureFlags>(key: K, value: FeatureFlags[K]) => void;
-  onItemFlagChange: <K extends keyof ItemFlags>(key: K, value: ItemFlags[K]) => void;
+  onMockOptionChange: <K extends keyof MockOptions>(
+    key: K,
+    value: MockOptions[K]
+  ) => void;
+  onFeatureFlagChange: <K extends keyof FeatureFlags>(
+    key: K,
+    value: FeatureFlags[K]
+  ) => void;
+  onItemFlagChange: <K extends keyof ItemFlags>(
+    key: K,
+    value: ItemFlags[K]
+  ) => void;
   onRegenerate: () => void;
 }
 

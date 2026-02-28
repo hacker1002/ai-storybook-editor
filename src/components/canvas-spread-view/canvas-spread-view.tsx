@@ -84,7 +84,6 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   canAddSpread?: boolean;
   canReorderSpread?: boolean;
   canDeleteSpread?: boolean;
-  canAddItem?: boolean;
   canDeleteItem?: boolean;
   canResizeItem?: boolean;
   canDragItem?: boolean;
@@ -117,7 +116,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   canAddSpread = false,
   canReorderSpread = false,
   canDeleteSpread = false,
-  canAddItem = false,
   canDeleteItem = false,
   canResizeItem = true,
   canDragItem = true,
@@ -168,54 +166,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     () => spreads.findIndex((s) => s.id === selectedId),
     [spreads, selectedId]
   );
-
-  // === Global Keyboard Shortcuts (Navigation only) ===
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if user is typing in an input/textarea
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
-
-      switch (e.key.toLowerCase()) {
-        case 'arrowleft':
-          // Navigate to previous spread
-          if (selectedIndex > 0) {
-            const prevSpread = spreads[selectedIndex - 1];
-            setSelectedId(prevSpread.id);
-            onSpreadSelect?.(prevSpread.id);
-          }
-          break;
-        case 'arrowright':
-          // Navigate to next spread
-          if (selectedIndex < spreads.length - 1) {
-            const nextSpread = spreads[selectedIndex + 1];
-            setSelectedId(nextSpread.id);
-            onSpreadSelect?.(nextSpread.id);
-          }
-          break;
-        case 'home':
-          // Jump to first spread
-          if (spreads.length > 0) {
-            setSelectedId(spreads[0].id);
-            onSpreadSelect?.(spreads[0].id);
-          }
-          break;
-        case 'end':
-          // Jump to last spread
-          if (spreads.length > 0) {
-            const lastSpread = spreads[spreads.length - 1];
-            setSelectedId(lastSpread.id);
-            onSpreadSelect?.(lastSpread.id);
-          }
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIndex, spreads, onSpreadSelect]);
 
   // === Handlers ===
   const handleViewModeToggle = useCallback(() => {
@@ -289,6 +239,42 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     [onUpdateSpreadItem, selectedId]
   );
 
+  // === Global Keyboard Shortcuts ===
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case 'home':
+          if (spreads.length > 0) {
+            setSelectedId(spreads[0].id);
+            onSpreadSelect?.(spreads[0].id);
+          }
+          break;
+        case 'end':
+          if (spreads.length > 0) {
+            const lastSpread = spreads[spreads.length - 1];
+            setSelectedId(lastSpread.id);
+            onSpreadSelect?.(lastSpread.id);
+          }
+          break;
+        case 'delete':
+        case 'backspace':
+          if (canDeleteSpread && selectedId) {
+            e.preventDefault();
+            handleDeleteSpread(selectedId);
+          }
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [spreads, selectedId, onSpreadSelect, canDeleteSpread, handleDeleteSpread]);
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
@@ -322,7 +308,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderPageToolbar={renderPageToolbar}
                 renderObjectToolbar={renderObjectToolbar}
                 onSpreadItemAction={handleSpreadItemAction}
-                canAddItem={canAddItem}
                 canDeleteItem={canDeleteItem}
                 canResizeItem={canResizeItem}
                 canDragItem={canDragItem}

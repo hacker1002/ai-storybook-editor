@@ -64,7 +64,6 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   onSpreadItemAction?: (params: Omit<SpreadItemActionUnion, 'spreadId'>) => void;
 
   // Item-level feature flags
-  canAddItem?: boolean;
   canDeleteItem?: boolean;
   canResizeItem?: boolean;
   canDragItem?: boolean;
@@ -408,29 +407,21 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       return;
     }
 
-    // For geometry operations, need valid geometry (not for page type)
-    const geometry = getSelectedGeometry();
-    if (!geometry) return;
-
-    const step = e.shiftKey ? CANVAS.NUDGE_STEP_SHIFT : CANVAS.NUDGE_STEP;
-
     switch (e.key) {
       case 'ArrowUp':
-        e.preventDefault();
-        updateElementGeometry(selectedElement, applyNudge(geometry, 'up', step));
-        break;
       case 'ArrowDown':
-        e.preventDefault();
-        updateElementGeometry(selectedElement, applyNudge(geometry, 'down', step));
-        break;
       case 'ArrowLeft':
+      case 'ArrowRight': {
+        if (state.isTextboxEditing || state.isImageEditing) return;
+        if (!canDragItem) return;
+        const geometry = getSelectedGeometry();
+        if (!geometry) return;
         e.preventDefault();
-        updateElementGeometry(selectedElement, applyNudge(geometry, 'left', step));
+        const step = e.shiftKey ? CANVAS.NUDGE_STEP_SHIFT : CANVAS.NUDGE_STEP;
+        const direction = e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowDown' ? 'down' : e.key === 'ArrowLeft' ? 'left' : 'right';
+        updateElementGeometry(selectedElement, applyNudge(geometry, direction, step));
         break;
-      case 'ArrowRight':
-        e.preventDefault();
-        updateElementGeometry(selectedElement, applyNudge(geometry, 'right', step));
-        break;
+      }
       case 'Delete':
       case 'Backspace':
         // Don't delete element if user is editing text
@@ -472,7 +463,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         }
         break;
     }
-  }, [state, isEditable, getSelectedGeometry, updateElementGeometry, handleElementSelect, canDeleteItem, onSpreadItemAction, spread.images, spread.textboxes, spread.objects]);
+  }, [state, isEditable, getSelectedGeometry, updateElementGeometry, handleElementSelect, canDeleteItem, canDragItem, onSpreadItemAction, spread.images, spread.textboxes, spread.objects]);
 
   // === Wrapper callback for page updates (used by PageItem) ===
   const handleUpdatePage = useCallback((pageIndex: number, updates: Partial<TSpread['pages'][number]>) => {
