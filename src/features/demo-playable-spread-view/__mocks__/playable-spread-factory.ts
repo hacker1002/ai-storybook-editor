@@ -223,22 +223,54 @@ function createMockTextbox(
 }
 
 // === Create Single Object ===
-const OBJECT_TYPES: SpreadObject['type'][] = ['character', 'prop', 'background', 'foreground'];
-const OBJECT_NAMES = ['main_character', 'side_character', 'prop_1', 'background_1'];
+// Weighted type distribution: character/prop appear more often than background/foreground
+const OBJECT_TYPE_WEIGHTS: { type: SpreadObject['type']; weight: number }[] = [
+  { type: 'character', weight: 40 },
+  { type: 'prop', weight: 40 },
+  { type: 'background', weight: 10 },
+  { type: 'foreground', weight: 10 },
+];
+
+function getWeightedRandomType(): SpreadObject['type'] {
+  const totalWeight = OBJECT_TYPE_WEIGHTS.reduce((sum, t) => sum + t.weight, 0);
+  let random = Math.random() * totalWeight;
+  for (const item of OBJECT_TYPE_WEIGHTS) {
+    random -= item.weight;
+    if (random <= 0) return item.type;
+  }
+  return 'prop';
+}
+
+// Type-specific name pools (background names must NOT start with prop/character)
+const OBJECT_NAMES_BY_TYPE: Record<string, string[]> = {
+  character: ['main_character', 'side_character', 'character_npc'],
+  prop: ['prop_1', 'prop_2', 'prop_item'],
+  background: ['background_1', 'background_scene', 'bg_layer'],
+  foreground: ['foreground_1', 'foreground_overlay', 'fg_layer'],
+};
+
 const OBJECT_STATES: Record<string, string[]> = {
   main_character: ['default', 'happy', 'sad'],
   side_character: ['default', 'talking'],
+  character_npc: ['default', 'idle'],
   prop_1: ['default'],
+  prop_2: ['default'],
+  prop_item: ['default'],
   background_1: ['day', 'night'],
+  background_scene: ['default'],
+  bg_layer: ['default'],
+  foreground_1: ['default'],
+  foreground_overlay: ['default'],
+  fg_layer: ['default'],
 };
 
 function createMockObject(
   overrides: Partial<SpreadObject> = {},
   isDPS = true
 ): SpreadObject {
-  const typeIndex = randomBetween(0, OBJECT_TYPES.length - 1);
-  const type = OBJECT_TYPES[typeIndex];
-  const name = OBJECT_NAMES[typeIndex] || 'unnamed';
+  const type = getWeightedRandomType();
+  const namesForType = OBJECT_NAMES_BY_TYPE[type] || ['unnamed'];
+  const name = namesForType[randomBetween(0, namesForType.length - 1)];
   const states = OBJECT_STATES[name] || ['default'];
   const state = states[randomBetween(0, states.length - 1)];
 

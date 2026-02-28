@@ -19,7 +19,7 @@ import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
 import type { PlayableSpread, RemixAsset, AssetSwapParams } from "./types";
-import { REMIX_STYLES } from "./constants";
+// REMIX_STYLES moved to EditableObject component
 
 const TEXTBOX_Z_INDEX_BASE = 300;
 
@@ -297,57 +297,17 @@ export function RemixEditorCanvas({
         )}
 
         {/* Objects (swappable ones are selectable) */}
-        {spread.objects?.map((object, index) => {
-          const swappable = isSwappable(object.name);
-          const selected = selectedSwappableId === object.id;
-
-          return (
-            <div
-              key={object.id}
-              className="absolute"
-              style={{
-                left: `${object.geometry.x}%`,
-                top: `${object.geometry.y}%`,
-                width: `${object.geometry.w}%`,
-                height: `${object.geometry.h}%`,
-                border: selected
-                  ? REMIX_STYLES.SELECTION_BORDER
-                  : swappable
-                  ? REMIX_STYLES.SWAPPABLE_BORDER_IDLE
-                  : "none",
-                cursor: swappable ? "pointer" : "default",
-                pointerEvents: swappable ? "auto" : "none",
-                transition: "border 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (swappable && !selected) {
-                  e.currentTarget.style.border =
-                    REMIX_STYLES.SWAPPABLE_BORDER_HOVER;
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (swappable && !selected) {
-                  e.currentTarget.style.border =
-                    REMIX_STYLES.SWAPPABLE_BORDER_IDLE;
-                }
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (swappable) {
-                  handleObjectSelect(object.id);
-                }
-              }}
-            >
-              <EditableObject
-                object={object}
-                index={index}
-                isSelected={selected}
-                isEditable={false}
-                onSelect={() => {}}
-              />
-            </div>
-          );
-        })}
+        {spread.objects?.map((object, index) => (
+          <EditableObject
+            key={object.id}
+            object={object}
+            index={index}
+            isSelected={selectedSwappableId === object.id}
+            isEditable={false}
+            isSwappable={isSwappable(object.name)}
+            onSelect={() => handleObjectSelect(object.id)}
+          />
+        ))}
 
         {/* Textboxes (selectable and editable) */}
         {textboxesWithLang.map((item, index) => {

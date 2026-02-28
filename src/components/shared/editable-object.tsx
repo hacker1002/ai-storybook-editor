@@ -7,6 +7,13 @@ import { cn } from '@/lib/utils';
 import type { SpreadObject } from './types';
 import { COLORS } from './constants';
 
+// Border styles for remix mode
+const REMIX_BORDER = {
+  IDLE: '1px dashed #9E9E9E',
+  HOVER: '1px solid #757575',
+  SELECTED: '2px solid #2196F3',
+};
+
 interface EditableObjectProps {
   object: SpreadObject;
   index: number;
@@ -15,6 +22,8 @@ interface EditableObjectProps {
   onSelect: (rect?: DOMRect) => void;
   onUpdate?: (updates: Partial<SpreadObject>) => void;
   onDelete?: () => void;
+  /** Remix mode: object is swappable (shows border, clickable) */
+  isSwappable?: boolean;
 }
 
 // Z-Index mapping by object type (fallback if no explicit zIndex)
@@ -33,11 +42,15 @@ export function EditableObject({
   isSelected,
   isEditable,
   onSelect,
+  isSwappable,
 }: EditableObjectProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isLoading, setIsLoading] = useState(!!object.media_url);
   const [hasError, setHasError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Remix mode: isSwappable defined means we're in remix mode
+  const isRemixMode = isSwappable !== undefined;
 
   // Determine z-index: explicit or default by type
   const zIndex = object.zIndex ?? DEFAULT_Z_INDEX[object.type];
@@ -58,15 +71,18 @@ export function EditableObject({
   const imageUrl = object.media_url;
   const showImage = imageUrl && !hasError;
 
+  // Clickable in remix mode only if swappable, otherwise use isEditable
+  const isClickable = isRemixMode ? isSwappable : isEditable;
+
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       e.stopPropagation();
-      if (isEditable) {
+      if (isClickable) {
         const rect = containerRef.current?.getBoundingClientRect();
         onSelect(rect);
       }
     },
-    [isEditable, onSelect]
+    [isClickable, onSelect]
   );
 
   const handleImageLoad = useCallback(() => {
@@ -77,6 +93,15 @@ export function EditableObject({
     setIsLoading(false);
     setHasError(true);
   }, []);
+
+  // Determine border for remix mode
+  const getRemixBorder = (): string | undefined => {
+    if (!isRemixMode) return undefined;
+    if (isSelected) return REMIX_BORDER.SELECTED;
+    if (isSwappable && isHovered) return REMIX_BORDER.HOVER;
+    if (isSwappable) return REMIX_BORDER.IDLE;
+    return 'none';
+  };
 
   // Container styles
   const containerStyle: React.CSSProperties = {
@@ -91,6 +116,13 @@ export function EditableObject({
       border: '2px dashed rgba(0, 0, 0, 0.3)',
       backgroundColor: 'transparent',
     }),
+    // Remix mode styling
+    ...(isRemixMode && {
+      border: getRemixBorder(),
+      cursor: isSwappable ? 'pointer' : 'default',
+      pointerEvents: isSwappable ? 'auto' : 'none',
+      transition: 'border 0.15s ease',
+    }),
   };
 
   return (
@@ -98,14 +130,15 @@ export function EditableObject({
       ref={containerRef}
       role="img"
       aria-label={object.name || `Object ${index + 1}`}
-      tabIndex={isEditable ? 0 : -1}
+      tabIndex={isClickable ? 0 : -1}
       onClick={handleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
         'absolute overflow-hidden',
-        isEditable && 'cursor-pointer',
-        !isSelected && isHovered && 'outline-dashed outline-1'
+        isClickable && 'cursor-pointer',
+        // Hover outline only in non-remix mode
+        !isRemixMode && !isSelected && isHovered && 'outline-dashed outline-1'
       )}
       style={containerStyle}
     >
