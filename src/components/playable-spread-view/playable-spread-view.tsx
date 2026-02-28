@@ -5,20 +5,28 @@ import { VOLUME, KEYBOARD_SHORTCUTS } from "./constants";
 import { PlayableHeader } from "./playable-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
+import { RemixEditorCanvas } from "./remix-editor-canvas";
 
 // Spread data textbox NEED pre-filtered with language by consumer
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   mode,
   spreads,
-  assets: _assets,
+  assets,
   onAddAnimation,
-  onAssetSwap: _onAssetSwap,
-  onTextChange: _onTextChange,
+  onAssetSwap,
+  onTextChange,
   onSpreadSelect,
 }) => {
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Sync activeCanvas when mode prop changes (unless in player mode from play action)
+  useEffect(() => {
+    if (!isPlaying) {
+      setActiveCanvas(mode);
+    }
+  }, [mode, isPlaying]);
   const [playMode, setPlayMode] = useState<PlayMode>("off");
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
@@ -204,8 +212,18 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             spread={selectedSpread}
             onAddAnimation={onAddAnimation}
           />
+        ) : activeCanvas === "remix-editor" &&
+          selectedSpread &&
+          assets &&
+          onAssetSwap ? (
+          <RemixEditorCanvas
+            spread={selectedSpread}
+            assets={assets}
+            onAssetSwap={onAssetSwap}
+            onTextChange={onTextChange}
+          />
         ) : (
-          /* Mock for remix-editor and player (future implementation) */
+          /* Mock for player (future implementation) */
           <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">
             <div className="text-center space-y-2 p-8 rounded-lg bg-background border shadow-sm">
               <div className="text-2xl font-semibold">

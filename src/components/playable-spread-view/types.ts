@@ -51,13 +51,40 @@ export interface Animation {
   };
 }
 
-// === Remix Asset ===
+// === Remix Asset (align with DB schema) ===
 export interface RemixAsset {
-  id: string;
-  name: string;
-  type: 'character' | 'prop' | 'background' | 'foreground';
-  media_url: string;
-  visual_description?: string;
+  name: string;           // Display name
+  key: string;            // Asset key (e.g., "miu_cat")
+  type: 'character' | 'prop';
+  image_url: string;      // Current swapped image URL
+  target: {
+    name: string;         // Original asset name
+    key: string;          // Original asset key
+  };
+}
+
+// === Remix Editor State ===
+export interface RemixEditorState {
+  selectedItemId: string | null;
+  selectedAssetKey: string | null;
+  toolbarPosition: { x: number; y: number } | null;
+  prompt: string;
+  referenceImage: File | null;
+  isSubmitting: boolean;
+  editingTextboxId: string | null;
+}
+
+// === PromptToolbar Props ===
+export interface PromptToolbarProps {
+  position: { top: number; left: number } | null;
+  prompt: string;
+  referenceImage: File | null;
+  isSubmitting: boolean;
+  error?: string | null;  // inline error display for file upload
+  onPromptChange: (prompt: string) => void;
+  onReferenceUpload: (file: File | null) => void;
+  onSubmit: () => void;
+  onClose: () => void;
 }
 
 // === Action Parameters ===
@@ -70,7 +97,7 @@ export interface AddAnimationParams {
 
 export interface AssetSwapParams {
   prompt: string;
-  referenceImage?: File;
+  referenceImage: File | null;
   targetId: string;
   spreadId: string;
 }
@@ -119,6 +146,7 @@ export interface AnimationEditorCanvasProps {
 export interface RemixEditorCanvasProps {
   spread: PlayableSpread;
   assets: RemixAsset[];
+  zoomLevel?: number;
   onAssetSwap: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
 }

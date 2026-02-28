@@ -114,10 +114,12 @@ export function EditableTextbox({
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isEditable && isSelected) {
+    // Allow direct edit mode entry when editable, even if not pre-selected
+    // This enables remix-editor pattern where double-click directly edits
+    if (isEditable) {
       enterEditMode();
     }
-  }, [isEditable, isSelected, enterEditMode]);
+  }, [isEditable, enterEditMode]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (isSelected && !isEditing && e.key === 'Enter') {
@@ -199,6 +201,7 @@ export function EditableTextbox({
         'aria-label': `Textbox ${index + 1}`,
         'aria-multiline': 'true',
       })}
+      data-textbox
       tabIndex={isSelectable ? 0 : -1}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}

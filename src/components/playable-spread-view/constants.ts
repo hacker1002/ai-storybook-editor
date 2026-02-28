@@ -42,3 +42,19 @@ export const KEYBOARD_SHORTCUTS = {
   FIRST_SPREAD: 'Home',
   LAST_SPREAD: 'End',
 } as const;
+
+// === Remix Editor Constants ===
+export const REMIX_EDITOR = {
+  PROMPT_MAX_LENGTH: 500,
+  REFERENCE_MAX_SIZE_MB: 10,
+  TOOLBAR_MIN_WIDTH: 320,
+  TOOLBAR_GAP: 8,
+} as const;
+
+// === Remix Visual Styles ===
+export const REMIX_STYLES = {
+  SWAPPABLE_BORDER_IDLE: '1px dashed #9E9E9E',
+  SWAPPABLE_BORDER_HOVER: '1px solid #757575',
+  SELECTION_BORDER: '2px solid #2196F3',
+  FOCUS_RING: '2px solid #2196F3',
+} as const;

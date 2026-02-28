@@ -10,6 +10,7 @@ export type {
   PlayableSpread,
   Animation,
   RemixAsset,
+  RemixEditorState,
   AddAnimationParams,
   AssetSwapParams,
   PlayableSpreadViewProps,
@@ -17,6 +18,7 @@ export type {
   PlayableThumbnailListProps,
   AnimationEditorCanvasProps,
   RemixEditorCanvasProps,
+  PromptToolbarProps,
   PlayerCanvasProps,
 } from './types';
 
@@ -28,5 +30,7 @@ export { PlayableSpreadView } from './playable-spread-view';
 export { PlayableHeader } from './playable-header';
 export { PlayableThumbnailList } from './playable-thumbnail-list';
 export { AnimationEditorCanvas } from './animation-editor-canvas';
+export { RemixEditorCanvas } from './remix-editor-canvas';
+export { PromptToolbar } from './prompt-toolbar';
 export { SelectionOverlay } from './selection-overlay';
 export { AddAnimationToolbar } from './add-animation-toolbar';

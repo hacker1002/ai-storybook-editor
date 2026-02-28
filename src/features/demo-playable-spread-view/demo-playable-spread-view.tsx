@@ -10,10 +10,12 @@ import {
   type AddAnimationParams,
   type AssetSwapParams,
 } from "@/components/playable-spread-view";
+import { getFirstTextboxKey } from "@/components/shared";
 import {
   createPlayableSpreads,
   type CreatePlayableSpreadOptions,
 } from "./__mocks__/playable-spread-factory";
+import { createMockRemixAssets } from "./__mocks__/remix-mock-factory";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -77,6 +79,9 @@ export function DemoPlayableSpreadView() {
     generateSpreads(DEFAULT_MOCK_OPTIONS)
   );
 
+  // Remix assets state
+  const [remixAssets] = useState(() => createMockRemixAssets(3));
+
   // Selected spread tracking
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     () => spreads[0]?.id ?? null
@@ -137,12 +142,38 @@ export function DemoPlayableSpreadView() {
   const handleAssetSwap = useCallback(
     async (params: AssetSwapParams): Promise<void> => {
       console.log("Asset swap:", params);
+      // Simulate API delay
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      console.log("Asset swap completed");
     },
     []
   );
 
   const handleTextChange = useCallback((textboxId: string, newText: string) => {
-    console.log("Text change:", textboxId, newText);
+    setSpreads((prevSpreads) =>
+      prevSpreads.map((spread) => {
+        const textboxIndex = spread.textboxes?.findIndex((tb) => tb.id === textboxId);
+        if (textboxIndex === undefined || textboxIndex === -1) return spread;
+
+        const textbox = spread.textboxes[textboxIndex];
+        const langKey = getFirstTextboxKey(textbox);
+        if (!langKey) return spread;
+
+        const langData = textbox[langKey];
+        if (!langData || typeof langData !== "object") return spread;
+
+        const updatedTextboxes = [...spread.textboxes];
+        updatedTextboxes[textboxIndex] = {
+          ...textbox,
+          [langKey]: {
+            ...langData,
+            text: newText,
+          },
+        };
+
+        return { ...spread, textboxes: updatedTextboxes };
+      })
+    );
   }, []);
 
   const handleSpreadSelect = useCallback((spreadId: string) => {
@@ -301,6 +332,7 @@ export function DemoPlayableSpreadView() {
             <PlayableSpreadView
               mode={operationMode}
               spreads={spreads}
+              assets={remixAssets}
               onAddAnimation={handleAddAnimation}
               onAssetSwap={handleAssetSwap}
               onTextChange={handleTextChange}
@@ -329,6 +361,24 @@ export function DemoPlayableSpreadView() {
                 </p>
               )}
             </div>
+
+            {/* Remix Assets Panel - only in remix-editor mode */}
+            {operationMode === "remix-editor" && (
+              <>
+                <Separator />
+                <div className="p-3 border-b bg-background">
+                  <h3 className="text-sm font-medium">Remix Assets</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {remixAssets.length} assets configured
+                  </p>
+                </div>
+                <div className="flex-1 overflow-auto p-3 max-h-64">
+                  <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+                    {JSON.stringify(remixAssets, null, 2)}
+                  </pre>
+                </div>
+              </>
+            )}
           </div>
         </main>
       </div>
