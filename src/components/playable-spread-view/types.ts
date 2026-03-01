@@ -153,8 +153,9 @@ export interface RemixEditorCanvasProps {
 
 export interface PlayerCanvasProps {
   spread: PlayableSpread;
+  playMode: PlayMode;
   isPlaying: boolean;
-  volume: number;
-  isMuted: boolean;
+  volume: number; // 0-100, where 0 means muted
+  hasNext: boolean; // Has next spread available
   onSpreadComplete: (spreadId: string) => void;
 }

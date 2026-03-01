@@ -62,6 +62,14 @@ export const REMIX_STYLES = {
 // === Z-Index Constants ===
 export const TEXTBOX_Z_INDEX_BASE = 300;
 
+// === Animation Trigger Delays (in seconds) ===
+export const TRIGGER_DELAY = {
+  AFTER_PREVIOUS: 0.5,    // Delay after previous animation ends
+  ON_CLICK_AUTO: 1.0,     // Delay for on_click in semi-auto/auto mode
+  FIRST_ANIMATION: 0.5,   // Delay for first animation with after_previous
+  AUTO_SPREAD_COMPLETE: 1.0, // Delay before advancing to next spread in auto mode
+} as const;
+
 // === Effect Type Constants ===
 export const EFFECT_TYPE = {
   PLAY: 1,

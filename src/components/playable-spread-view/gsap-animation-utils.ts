@@ -7,7 +7,6 @@ import type { Animation } from './types';
 // Register MotionPathPlugin (expected to be registered in app entry)
 gsap.registerPlugin(MotionPathPlugin);
 
-type TriggerType = 'on_click' | 'with_previous' | 'after_previous';
 type Direction = 'left' | 'right' | 'up' | 'down';
 
 interface Geometry {
@@ -15,24 +14,6 @@ interface Geometry {
   y: number;
   w: number;
   h: number;
-}
-
-/**
- * Map trigger type to GSAP timeline position parameter
- * @param triggerType - Animation trigger type
- * @returns GSAP position string ('<' for with_previous, '>' for after/on_click)
- */
-export function getTimelinePosition(triggerType: TriggerType): string {
-  switch (triggerType) {
-    case 'with_previous':
-      return '<';
-    case 'after_previous':
-      return '>';
-    case 'on_click':
-      return '>'; // Treat as after_previous in player
-    default:
-      return '>';
-  }
 }
 
 /**

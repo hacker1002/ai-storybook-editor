@@ -11,7 +11,7 @@ import type {
   Geometry,
   Typography,
 } from '@/components/canvas-spread-view/types';
-import { EFFECT_TYPE, ANIMATION_PRESETS } from '@/components/playable-spread-view/constants';
+import { ANIMATION_PRESETS } from '@/components/playable-spread-view/constants';
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {
@@ -140,36 +140,15 @@ function generateSpreadAnimations(
   const animations: Animation[] = [];
   let order = 0;
 
-  // 1. Background fade in first
-  const background = objects.find(o => o.type === 'background');
-  if (background) {
-    animations.push(createMockAnimation(order++, background.id, 'object', 'fadeIn', 'after_previous', 0));
-  }
-
-  // 2. Characters fly in (with_previous for simultaneous)
-  const characters = objects.filter(o => o.type === 'character');
-  characters.forEach((char, idx) => {
-    const preset = idx % 2 === 0 ? 'flyInLeft' : 'flyInRight';
-    const triggerType = idx === 0 ? 'after_previous' : 'with_previous';
-    animations.push(createMockAnimation(order++, char.id, 'object', preset, triggerType, idx * 100));
+  // All objects fade in on click
+  objects.forEach((obj) => {
+    animations.push(createMockAnimation(order++, obj.id, 'object', 'fadeIn', 'on_click', 0));
   });
 
-  // 3. Props zoom in after characters
-  const props = objects.filter(o => o.type === 'prop');
-  props.forEach((prop, idx) => {
-    const triggerType = idx === 0 ? 'after_previous' : 'with_previous';
-    animations.push(createMockAnimation(order++, prop.id, 'object', 'zoomIn', triggerType, 0));
-  });
-
-  // 4. Textboxes fade in sequentially
+  // All textboxes fade in on click
   textboxes.forEach((textbox) => {
-    animations.push(createMockAnimation(order++, textbox.id, 'textbox', 'fadeIn', 'after_previous', 200));
+    animations.push(createMockAnimation(order++, textbox.id, 'textbox', 'fadeIn', 'on_click', 0));
   });
-
-  // 5. Optional: Add teeter emphasis to first character
-  if (characters.length > 0) {
-    animations.push(createMockAnimation(order++, characters[0].id, 'object', 'teeter', 'after_previous', 0));
-  }
 
   return animations;
 }

@@ -1,7 +1,7 @@
 // playable-spread-view.tsx - Root container component for playable spread view
 import { useState, useEffect, useCallback } from "react";
 import type { PlayableSpreadViewProps, ActiveCanvas, PlayMode } from "./types";
-import { VOLUME, KEYBOARD_SHORTCUTS } from "./constants";
+import { VOLUME, KEYBOARD_SHORTCUTS, TRIGGER_DELAY } from "./constants";
 import { PlayableHeader } from "./playable-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
@@ -111,17 +111,16 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const handleSpreadComplete = useCallback(
     // @ts-ignore - TS6133: spreadId is required by interface but not used yet
     (_spreadId: string) => {
-      if (playMode === 'auto') {
-        if (hasNext) {
+      if (!hasNext) {
+        // Last spread: stop playing
+        setIsPlaying(false);
+      } else if (playMode === 'auto') {
+        // Auto-advance to next spread
+        setTimeout(() => {
           handleSkipNext();
-        } else {
-          setIsPlaying(false);
-        }
-      } else if (playMode === 'semi-auto') {
-        setIsPlaying(false);
-      } else {
-        setIsPlaying(false);
+        }, TRIGGER_DELAY.AUTO_SPREAD_COMPLETE * 1000);
       }
+      // Off/semi-auto with hasNext: PlayerCanvas handles hint via isEndPlaying
     },
     [playMode, hasNext, handleSkipNext]
   );
@@ -245,9 +244,10 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         ) : activeCanvas === 'player' && selectedSpread ? (
           <PlayerCanvas
             spread={selectedSpread}
+            playMode={playMode}
             isPlaying={isPlaying}
-            volume={volume}
-            isMuted={isMuted}
+            volume={isMuted ? 0 : volume}
+            hasNext={hasNext}
             onSpreadComplete={handleSpreadComplete}
           />
         ) : (
