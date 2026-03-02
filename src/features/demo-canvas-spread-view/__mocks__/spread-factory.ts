@@ -233,10 +233,60 @@ const defaultTypography: Typography = {
   textTransform: 'none',
 };
 
+// === Generate Illustrations Helper ===
+/**
+ * Generates multiple illustrations with decreasing timestamps
+ * @param count - Number of illustrations to generate
+ * @param dimensions - Image dimensions for picsum URLs
+ * @returns Array of illustrations with newest first, only first is selected
+ */
+function generateIllustrations(
+  count: number,
+  dimensions: { w: number; h: number }
+): Array<{ media_url: string; created_time: string; is_selected: boolean }> {
+  const now = new Date();
+  const illustrations = [];
+
+  for (let i = 0; i < count; i++) {
+    // Subtract hours from current time to create history (newest first)
+    const timestamp = new Date(now.getTime() - i * 60 * 60 * 1000); // 1 hour intervals
+
+    illustrations.push({
+      media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${dimensions.h}`,
+      created_time: timestamp.toISOString(),
+      is_selected: i === 0, // Only first (newest) illustration is selected
+    });
+  }
+
+  return illustrations;
+}
+
 // === Create Single Image ===
-export function createMockImage(overrides: Partial<SpreadImage> = {}): SpreadImage {
+export interface CreateMockImageOptions {
+  withGeneratedImages?: boolean;
+  illustrationCount?: number;
+  overrides?: Partial<SpreadImage>;
+}
+
+export function createMockImage(
+  options: CreateMockImageOptions | Partial<SpreadImage> = {}
+): SpreadImage {
+  // Support backward compatibility: if options doesn't have withGeneratedImages, treat as overrides
+  const isLegacyCall = !('withGeneratedImages' in options);
+  const withGeneratedImages = isLegacyCall ? true : options.withGeneratedImages ?? true;
+  const illustrationCount = isLegacyCall ? undefined : (options as CreateMockImageOptions).illustrationCount;
+  const overrides = isLegacyCall ? (options as Partial<SpreadImage>) : (options as CreateMockImageOptions).overrides ?? {};
+
   const artNoteIdx = randomBetween(0, ART_NOTES.length - 1);
   const { geometry, dimensions } = getRandomImageGeometry();
+
+  // Generate illustrations based on withGeneratedImages flag
+  const illustrations = withGeneratedImages
+    ? generateIllustrations(
+        illustrationCount ?? randomBetween(3, 5), // Random 3-5 if not specified
+        dimensions
+      )
+    : [];
 
   return {
     id: generateUUID(),
@@ -246,13 +296,7 @@ export function createMockImage(overrides: Partial<SpreadImage> = {}): SpreadIma
     visual_description: ART_NOTES[artNoteIdx],
     image_references: [],
     sketches: [],
-    illustrations: [
-      {
-        media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${dimensions.h}`,
-        created_time: new Date().toISOString(),
-        is_selected: true,
-      },
-    ],
+    illustrations,
     ...overrides,
   };
 }
@@ -371,9 +415,9 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     ? [createMockPage(`${leftPageNum}-${rightPageNum}`)]
     : [createMockPage(leftPageNum), createMockPage(rightPageNum)];
 
-  // Create images with random ratios (illustrations always included with matching dimensions)
+  // Create images with random ratios (illustrations based on withGeneratedImages flag)
   const images: SpreadImage[] = Array.from({ length: imageCount }, () =>
-    createMockImage(withGeneratedImages ? {} : { illustrations: [] })
+    createMockImage({ withGeneratedImages })
   );
 
   // Create textboxes

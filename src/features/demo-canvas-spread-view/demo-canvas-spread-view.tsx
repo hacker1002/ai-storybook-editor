@@ -27,6 +27,7 @@ import { DemoTextToolbar } from "./demo-text-toolbar";
 import { DemoPageToolbar } from "./demo-page-toolbar";
 import { DemoObjectToolbar } from "./demo-object-toolbar";
 import { ImportSpreadsDialog } from "./import-spreads-dialog";
+import { GenerateImageModal } from "@/components/canvas-spread-view";
 import {
   DemoSettingsPopover,
   type MockOptions,
@@ -111,6 +112,10 @@ export function DemoCanvasSpreadView() {
 
   // Import dialog state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+
+  // Generate image modal state
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generateModalImage, setGenerateModalImage] = useState<SpreadImage | null>(null);
 
   // Regenerate mock data with current options
   const handleRegenerate = useCallback(() => {
@@ -321,6 +326,28 @@ export function DemoCanvasSpreadView() {
     []
   );
 
+  const openGenerateModal = useCallback(
+    (image: SpreadImage) => {
+      setGenerateModalImage(image);
+      setGenerateModalOpen(true);
+    },
+    [setGenerateModalImage, setGenerateModalOpen]
+  );
+
+  const handleGenerateImageUpdate = useCallback(
+    (imageId: string, updates: Partial<SpreadImage>) => {
+      if (!selectedSpreadId) return;
+      handleSpreadItemAction({
+        spreadId: selectedSpreadId,
+        itemType: "image",
+        action: "update",
+        itemId: imageId,
+        data: updates,
+      });
+    },
+    [selectedSpreadId, handleSpreadItemAction]
+  );
+
   // === Render Props ===
   const renderImageItem = useCallback(
     (context: ImageItemContext<BaseSpread>) => (
@@ -345,11 +372,12 @@ export function DemoCanvasSpreadView() {
             ...context,
             onClone: () =>
               handleCloneImage(context.spreadId, context.itemIndex),
+            onGenerateImage: () => openGenerateModal(context.item),
           }}
         />
       );
     },
-    [handleCloneImage]
+    [handleCloneImage, openGenerateModal]
   );
 
   // Render Text
@@ -550,6 +578,22 @@ export function DemoCanvasSpreadView() {
         onOpenChange={setImportDialogOpen}
         onImport={handleImportSpreads}
       />
+
+      {generateModalImage && (
+        <GenerateImageModal
+          open={generateModalOpen}
+          onOpenChange={setGenerateModalOpen}
+          image={generateModalImage}
+          onUpdateImage={(updates) => {
+            if (generateModalImage) {
+              handleGenerateImageUpdate(generateModalImage.id, updates);
+              setGenerateModalImage((prev) =>
+                prev ? { ...prev, ...updates } : null
+              );
+            }
+          }}
+        />
+      )}
     </TooltipProvider>
   );
 }

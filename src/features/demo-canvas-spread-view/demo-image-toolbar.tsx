@@ -33,7 +33,7 @@ export function DemoImageToolbar<TSpread extends BaseSpread>({
   context,
 }: DemoImageToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const { item, onUpdate, onDelete, onClone, selectedGeometry, canvasRef } = context;
+  const { item, onUpdate, onDelete, onClone, onGenerateImage, selectedGeometry, canvasRef } = context;
   const { geometry } = item;
 
   const position = useToolbarPosition({ geometry: selectedGeometry, canvasRef, toolbarRef });
@@ -137,7 +137,10 @@ export function DemoImageToolbar<TSpread extends BaseSpread>({
       {/* Footer */}
       <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
         <div className="flex items-center gap-1">
-          <button disabled className="p-1 text-muted-foreground/50 rounded cursor-not-allowed">
+          <button
+            onClick={() => onGenerateImage?.()}
+            className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+          >
             <Sparkles className="w-4 h-4" />
           </button>
           <button disabled className="p-1 text-muted-foreground/50 rounded cursor-not-allowed">
