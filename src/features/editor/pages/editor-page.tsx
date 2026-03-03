@@ -14,7 +14,9 @@ import { PIPELINE_STEP_MAP } from '@/constants/book-enums';
 import { EditorHeader } from '../components/editor-header';
 import { IconRail } from '../components/icon-rail';
 import { DocCreativeSpace } from '../components/doc-creative-space';
+import { DummyCreativeSpace } from '../components/dummy-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
 
 const MOCK_USER_POINTS = { current: 750, total: 1000 };
@@ -30,7 +32,7 @@ export function EditorPage() {
   const bookError = useBooksError();
 
   // Snapshot store
-  const { fetchSnapshot, resetSnapshot } = useSnapshotActions();
+  const { fetchSnapshot, resetSnapshot, saveSnapshot } = useSnapshotActions();
   const isDirty = useIsDirty();
   const isSaving = useIsSaving();
   const snapshotLoading = useSnapshotFetchLoading();
@@ -120,14 +122,13 @@ export function EditorPage() {
     console.log(`Language changed from ${prevLang.code} to ${newLang.code}`);
   };
 
-  const handleTitleEdit = (newTitle: string) => {
-    // TODO: Update book title via Supabase
-    console.log('Title edit:', newTitle);
+  const handleTitleEdit = async (newTitle: string) => {
+    if (!bookId) return;
+    await useBookStore.getState().updateBookTitle(bookId, newTitle);
   };
 
   const handleSave = async () => {
-    // TODO: Save snapshot to Supabase
-    console.log('Saving...');
+    await saveSnapshot();
   };
 
   const handleNavigateHome = () => {
@@ -144,6 +145,7 @@ export function EditorPage() {
       case 'doc':
         return <DocCreativeSpace />;
       case 'dummy':
+        return <DummyCreativeSpace />;
       case 'sketch':
       case 'character':
       case 'prop':
@@ -164,54 +166,56 @@ export function EditorPage() {
   };
 
   return (
-    <div className="flex h-screen flex-col">
-      {/* Header */}
-      <EditorHeader
-        bookTitle={book.title}
-        saveStatus={saveStatus}
-        notificationCount={notificationCount}
-        userPoints={MOCK_USER_POINTS}
-        editorMode={book.type === 1 ? 'book' : 'asset'}
-        onTitleEdit={handleTitleEdit}
-        onSave={handleSave}
-        onNotificationClick={handleNotificationClick}
-        onNavigateHome={handleNavigateHome}
-        onStepChange={handleStepChange}
-        onLanguageChange={handleLanguageChange}
-      />
-
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Icon Rail */}
-        <IconRail
-          activeCreativeSpace={activeCreativeSpace}
-          onCreativeSpaceChange={setActiveCreativeSpace}
+    <TooltipProvider delayDuration={300}>
+      <div className="flex h-screen w-screen max-w-full flex-col overflow-hidden">
+        {/* Header */}
+        <EditorHeader
+          bookTitle={book.title}
+          saveStatus={saveStatus}
+          notificationCount={notificationCount}
+          userPoints={MOCK_USER_POINTS}
+          editorMode={book.type === 1 ? 'book' : 'asset'}
+          onTitleEdit={handleTitleEdit}
+          onSave={handleSave}
+          onNotificationClick={handleNotificationClick}
+          onNavigateHome={handleNavigateHome}
+          onStepChange={handleStepChange}
+          onLanguageChange={handleLanguageChange}
         />
 
-        {/* Creative Space */}
-        <div className="flex-1 overflow-hidden">{renderCreativeSpace()}</div>
+        {/* Main Content */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Icon Rail */}
+          <IconRail
+            activeCreativeSpace={activeCreativeSpace}
+            onCreativeSpaceChange={setActiveCreativeSpace}
+          />
 
-        {/* Right Sidebar (AI) - Mock */}
-        {isSidebarOpen && (
-          <aside className="w-80 border-l bg-background p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">AI Assistant</h3>
-              <button onClick={() => setIsSidebarOpen(false)}>×</button>
-            </div>
-            <p className="mt-4 text-sm text-muted-foreground">Coming soon...</p>
-          </aside>
+          {/* Creative Space */}
+          <div className="flex-1 overflow-hidden">{renderCreativeSpace()}</div>
+
+          {/* Right Sidebar (AI) - Mock */}
+          {isSidebarOpen && (
+            <aside className="w-80 border-l bg-background p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">AI Assistant</h3>
+                <button onClick={() => setIsSidebarOpen(false)}>×</button>
+              </div>
+              <p className="mt-4 text-sm text-muted-foreground">Coming soon...</p>
+            </aside>
+          )}
+        </div>
+
+        {/* AI Toggle Button (when sidebar closed) */}
+        {!isSidebarOpen && (
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="fixed bottom-6 right-6 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90"
+          >
+            💬
+          </button>
         )}
       </div>
-
-      {/* AI Toggle Button (when sidebar closed) */}
-      {!isSidebarOpen && (
-        <button
-          onClick={() => setIsSidebarOpen(true)}
-          className="fixed bottom-6 right-6 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90"
-        >
-          💬
-        </button>
-      )}
-    </div>
+    </TooltipProvider>
   );
 }

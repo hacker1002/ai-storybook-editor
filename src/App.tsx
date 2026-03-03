@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AppLayout } from '@/components/layout/app-layout';
 import { HomePage } from '@/features/home';
 import { LoginPage } from '@/features/auth';
@@ -42,8 +43,10 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
+    <>
+      <Toaster position="top-right" richColors closeButton />
+      <BrowserRouter>
+        <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/editor/:bookId" element={<EditorPage />} />
         <Route path="/demo/canvas-spread-view" element={<DemoCanvasSpreadView />} />
@@ -58,7 +61,8 @@ export default function App() {
           <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </>
   );
 }

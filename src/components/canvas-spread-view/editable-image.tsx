@@ -7,6 +7,11 @@ import { cn } from '@/lib/utils';
 import type { SpreadImage } from './types';
 import { COLORS } from './constants';
 
+interface ArtNoteTypography {
+  size?: number;
+  color?: string;
+}
+
 interface EditableImageProps {
   image: SpreadImage;
   index: number;
@@ -15,6 +20,7 @@ interface EditableImageProps {
   onSelect: (rect?: DOMRect) => void;
   onArtNoteChange?: (artNote: string) => void;
   onEditingChange?: (isEditing: boolean) => void;
+  artNoteTypography?: ArtNoteTypography;
 }
 
 export function EditableImage({
@@ -25,6 +31,7 @@ export function EditableImage({
   onSelect,
   onArtNoteChange,
   onEditingChange,
+  artNoteTypography,
 }: EditableImageProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -165,6 +172,7 @@ export function EditableImage({
           canEdit={!!canEditArtNote}
           editableRef={editableRef}
           onBlur={handleBlur}
+          typography={artNoteTypography}
         />
       )}
     </div>
@@ -178,9 +186,15 @@ interface ImagePlaceholderProps {
   canEdit: boolean;
   editableRef: React.RefObject<HTMLDivElement | null>;
   onBlur: () => void;
+  typography?: ArtNoteTypography;
 }
 
-function ImagePlaceholder({ content, isEditing, canEdit, editableRef, onBlur }: ImagePlaceholderProps) {
+function ImagePlaceholder({ content, isEditing, canEdit, editableRef, onBlur, typography }: ImagePlaceholderProps) {
+  const textStyle: React.CSSProperties = {
+    color: typography?.color || COLORS.PLACEHOLDER_TEXT,
+    fontSize: typography?.size ? `${typography.size}px` : undefined,
+  };
+
   return (
     <div
       className="w-full h-full flex flex-col items-center justify-center gap-2 p-2 border-2 border-dashed"
@@ -196,17 +210,18 @@ function ImagePlaceholder({ content, isEditing, canEdit, editableRef, onBlur }: 
           contentEditable
           suppressContentEditableWarning
           onBlur={onBlur}
-          className="text-xs text-center outline-none w-full max-h-20 overflow-auto"
-          style={{ color: COLORS.PLACEHOLDER_TEXT }}
+          className="text-center outline-none w-full max-h-20 overflow-auto"
+          style={textStyle}
         />
       ) : (
         <p
           className={cn(
-            'text-xs text-center line-clamp-3',
+            'text-center line-clamp-3',
             canEdit && 'cursor-text',
             !content && 'italic',
+            !typography?.size && 'text-xs',
           )}
-          style={{ color: COLORS.PLACEHOLDER_TEXT }}
+          style={textStyle}
         >
           {content || 'Double-click to add art note'}
         </p>

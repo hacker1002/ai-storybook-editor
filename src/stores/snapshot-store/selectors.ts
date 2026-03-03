@@ -1,6 +1,7 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType } from '@/types/editor';
+import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
@@ -18,6 +19,19 @@ export const useDocByType = (type: DocType) =>
 export const useSnapshotFetchLoading = () => useSnapshotStore((s) => s.fetchLoading);
 export const useSnapshotFetchError = () => useSnapshotStore((s) => s.fetchError);
 
+// Dummies selectors
+export const useDummies = (): ManuscriptDummy[] => useSnapshotStore((s) => s.dummies);
+export const useDummyIds = (): string[] =>
+  useSnapshotStore(useShallow((s) => s.dummies.map((d) => d.id)));
+export const useDummyById = (dummyId: string): ManuscriptDummy | undefined =>
+  useSnapshotStore((s) => s.dummies.find((d) => d.id === dummyId));
+export const useDummySpreads = (dummyId: string): DummySpread[] =>
+  useSnapshotStore((s) => s.dummies.find((d) => d.id === dummyId)?.spreads ?? []);
+export const useDummySpreadIds = (dummyId: string): string[] =>
+  useSnapshotStore(
+    useShallow((s) => s.dummies.find((d) => d.id === dummyId)?.spreads.map((sp) => sp.id) ?? [])
+  );
+
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>
   useSnapshotStore(
@@ -28,6 +42,16 @@ export const useSnapshotActions = () =>
       updateDoc: s.updateDoc,
       updateDocTitle: s.updateDocTitle,
       deleteDoc: s.deleteDoc,
+      // Dummies
+      setDummies: s.setDummies,
+      addDummy: s.addDummy,
+      updateDummy: s.updateDummy,
+      deleteDummy: s.deleteDummy,
+      addDummySpread: s.addDummySpread,
+      updateDummySpread: s.updateDummySpread,
+      deleteDummySpread: s.deleteDummySpread,
+      reorderDummySpreads: s.reorderDummySpreads,
+      updateDummySpreads: s.updateDummySpreads,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,

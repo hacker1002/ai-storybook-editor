@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import type { SnapshotStore } from './types';
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';
 import { createMetaSlice } from './slices/meta-slice';
+import { createDummiesSlice } from './slices/dummies-slice';
 
 export const useSnapshotStore = create<SnapshotStore>()(
   devtools(
@@ -12,6 +13,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
       immer((...args) => ({
         ...createDocsSlice(...args),
         ...createMetaSlice(...args),
+        ...createDummiesSlice(...args),
 
         // Fetch state
         fetchLoading: false,
@@ -47,9 +49,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.version = data.version;
               state.meta.tag = data.tag;
               state.docs = data.docs?.length ? data.docs : DEFAULT_DOCS;
+              state.dummies = data.dummies ?? [];
             } else {
               state.meta.bookId = bookId;
               state.docs = DEFAULT_DOCS;
+              state.dummies = [];
             }
             state.fetchLoading = false;
             state.sync.isDirty = false;
@@ -58,7 +62,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, sync } = get();
+          const { meta, docs, dummies, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
 
@@ -73,6 +77,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           const snapshotData = {
             book_id: meta.bookId,
             docs,
+            dummies,
             version,
             save_type: 1, // manual save
           };
@@ -81,7 +86,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           if (meta.id) {
             result = await supabase
               .from('snapshots')
-              .update({ docs, version })
+              .update({ docs, dummies, version })
               .eq('id', meta.id)
               .select()
               .single();
@@ -115,6 +120,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           const [set] = args;
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
+            state.dummies = data.dummies ?? [];
             if (data.meta) {
               Object.assign(state.meta, data.meta);
             }
@@ -126,6 +132,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           const [set] = args;
           set((state) => {
             state.docs = DEFAULT_DOCS;
+            state.dummies = [];
             state.meta = { id: null, bookId: null, version: null, tag: null };
             state.sync = { isDirty: false, lastSavedAt: null, isSaving: false, error: null };
             state.fetchLoading = false;

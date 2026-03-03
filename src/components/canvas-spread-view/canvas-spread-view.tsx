@@ -316,7 +316,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             )}
 
             {/* Edit Mode: Thumbnail Filmstrip */}
-            <div className="border-t">
+            <div className="border-t overflow-hidden">
               <SpreadThumbnailList
                 spreads={spreads}
                 selectedId={selectedId}

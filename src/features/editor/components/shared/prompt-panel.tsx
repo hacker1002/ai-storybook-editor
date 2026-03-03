@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { Sparkles, Loader2, Paperclip, FileText, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,10 +59,8 @@ export function PromptPanel({
 
     const { valid, rejected } = validateFiles(e.target.files);
 
-    // Log rejected files to console
     if (rejected.length > 0) {
-      console.warn('Some files were not added:', rejected);
-      // TODO: Show user-friendly notification when toast component is available
+      rejected.forEach((r) => toast.warning(`${r.name}: ${r.reason}`));
     }
 
     if (valid.length > 0) {

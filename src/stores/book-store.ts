@@ -12,6 +12,7 @@ interface BookStore {
 
   fetchBooks: () => Promise<void>;
   fetchBook: (bookId: string) => Promise<Book | null>;
+  updateBookTitle: (bookId: string, title: string) => Promise<boolean>;
   setCurrentBook: (book: Book | null) => void;
   clearBooks: () => void;
 }
@@ -71,6 +72,30 @@ export const useBookStore = create<BookStore>()(
 
           set({ currentBook: data, isLoading: false });
           return data;
+        },
+
+        updateBookTitle: async (bookId, title) => {
+          const { error } = await supabase
+            .from('books')
+            .update({ title, updated_at: new Date().toISOString() })
+            .eq('id', bookId);
+
+          if (error) {
+            console.error('[book-store] updateBookTitle error:', error);
+            return false;
+          }
+
+          set((state) => ({
+            currentBook: state.currentBook?.id === bookId
+              ? { ...state.currentBook, title }
+              : state.currentBook,
+            books: state.books.map((b) =>
+              b.id === bookId ? { ...b, title } : b
+            ),
+            lastFetchedAt: null,
+          }));
+
+          return true;
         },
 
         setCurrentBook: (book) => set({ currentBook: book }),

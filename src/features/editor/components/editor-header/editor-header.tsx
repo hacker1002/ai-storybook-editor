@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, ChevronRight, Bell, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Menu, ChevronRight, Bell, Check, AlertCircle, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCurrentStep } from '@/stores/editor-settings-store';
@@ -85,12 +85,18 @@ export function EditorHeader({
             autoFocus
           />
         ) : (
-          <button
-            onClick={handleTitleClick}
-            className="max-w-[200px] truncate text-sm font-medium hover:text-primary"
-          >
-            {bookTitle}
-          </button>
+          <div className="group flex items-center gap-1">
+            <span className="max-w-[200px] truncate text-sm font-medium">
+              {bookTitle}
+            </span>
+            <button
+              onClick={handleTitleClick}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted"
+              aria-label="Edit title"
+            >
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
         )}
       </div>
 
