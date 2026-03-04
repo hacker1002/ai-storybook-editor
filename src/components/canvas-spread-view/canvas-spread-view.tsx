@@ -145,16 +145,33 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     saveViewPreferences({ viewMode, zoomLevel, columnsPerRow });
   }, [viewMode, zoomLevel, columnsPerRow]);
 
-  // Auto-select newly added spread (when spreads array grows)
-  const prevSpreadsLengthRef = useRef(spreads.length);
+  // Auto-select spread when spreads change
+  // - Complete replacement (generation): select first spread
+  // - Single addition: select last (newly added) spread
+  const prevSpreadIdsRef = useRef<string[]>(spreads.map((s) => s.id));
   useEffect(() => {
-    if (spreads.length > prevSpreadsLengthRef.current && spreads.length > 0) {
+    if (spreads.length === 0) {
+      prevSpreadIdsRef.current = [];
+      return;
+    }
+
+    const prevIds = new Set(prevSpreadIdsRef.current);
+    const currentIds = spreads.map((s) => s.id);
+    const hasSharedIds = currentIds.some((id) => prevIds.has(id));
+
+    if (!hasSharedIds && spreads.length > 0) {
+      // Complete replacement (no shared IDs) - select first
+      setSelectedId(spreads[0].id);
+      onSpreadSelect?.(spreads[0].id);
+    } else if (spreads.length > prevSpreadIdsRef.current.length) {
+      // Addition - select last (newly added)
       const newSpread = spreads[spreads.length - 1];
       setSelectedId(newSpread.id);
       onSpreadSelect?.(newSpread.id);
     }
-    prevSpreadsLengthRef.current = spreads.length;
-  }, [spreads.length, spreads, onSpreadSelect]);
+
+    prevSpreadIdsRef.current = currentIds;
+  }, [spreads, onSpreadSelect]);
 
   // === Derived State ===
   const selectedSpread = useMemo(
