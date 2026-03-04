@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocTabItem } from './doc-tab-item';
-import type { ManuscriptDoc, DocType, AttachedFile } from '@/types/editor';
+import type { ManuscriptDoc, AttachedFile } from '@/types/editor';
 
-const FIXED_DOC_TYPES: DocType[] = ['brief', 'draft', 'script'];
 
 interface DocSidebarProps {
   docs: ManuscriptDoc[];
@@ -103,11 +102,14 @@ export function DocSidebar({
 
       {/* Accordion Doc List */}
       <div className="flex-1 overflow-auto p-2">
-        {docs.map((doc, index) => {
-          const isActive = index === activeDocIndex;
-          const isExpanded = expandedIndex === index;
-          const canEditTitle = !FIXED_DOC_TYPES.includes(doc.type);
-          const canDelete = !FIXED_DOC_TYPES.includes(doc.type);
+        {(() => {
+          const scriptCount = docs.filter((d) => d.type === 'script').length;
+          return docs.map((doc, index) => {
+            const isActive = index === activeDocIndex;
+            const isExpanded = expandedIndex === index;
+            const isScript = doc.type === 'script';
+            const canEditTitle = isScript;
+            const canDelete = isScript && scriptCount >= 2;
 
           return (
             <DocTabItem
@@ -129,7 +131,8 @@ export function DocSidebar({
               onGenerate={() => handleGenerate(index)}
             />
           );
-        })}
+          });
+        })()}
       </div>
     </aside>
   );

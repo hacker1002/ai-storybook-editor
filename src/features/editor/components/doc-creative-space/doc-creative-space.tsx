@@ -1,22 +1,27 @@
-import { useState } from 'react';
-import { useDocs, useSnapshotActions } from '@/stores/snapshot-store';
-import { useCurrentBook } from '@/stores/book-store';
-import { generateDoc, buildLLMContext, prepareAttachments } from '@/lib/doc-api';
-import { DocSidebar } from './doc-sidebar';
-import { ManuscriptDocEditor } from './manuscript-doc-editor';
-import type { DocType, AttachedFile } from '@/types/editor';
+import { useState } from "react";
+import { useDocs, useSnapshotActions } from "@/stores/snapshot-store";
+import { useCurrentBook } from "@/stores/book-store";
+import {
+  generateDoc,
+  buildLLMContext,
+  prepareAttachments,
+} from "@/lib/doc-api";
+import { DocSidebar } from "./doc-sidebar";
+import { ManuscriptDocEditor } from "./manuscript-doc-editor";
+import type { DocType, AttachedFile } from "@/types/editor";
 
 export function DocCreativeSpace() {
   const docs = useDocs();
   const book = useCurrentBook();
-  const { updateDoc, addDoc, updateDocTitle, deleteDoc, saveSnapshot } = useSnapshotActions();
+  const { updateDoc, addDoc, updateDocTitle, deleteDoc, saveSnapshot } =
+    useSnapshotActions();
   const [activeDocIndex, setActiveDocIndex] = useState(0);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
   const activeDoc = docs[activeDocIndex] ?? null;
 
   const handleAddDoc = () => {
-    addDoc({ type: 'other', title: 'Other', content: '' });
+    addDoc({ type: "script", title: "New Script", content: "" });
     setActiveDocIndex(docs.length);
   };
 
@@ -31,45 +36,52 @@ export function DocCreativeSpace() {
     updateDoc(activeDocIndex, { content });
   };
 
-  const handleGenerate = async (index: number, prompt: string, attachments: AttachedFile[]) => {
+  const handleGenerate = async (
+    index: number,
+    prompt: string,
+    attachments: AttachedFile[]
+  ) => {
     const doc = docs[index];
-    if (!doc || doc.type === 'other') return;
+    if (!doc) return;
 
     setGenerateError(null);
 
     if (!book) {
-      setGenerateError('Book data not loaded');
+      setGenerateError("Book data not loaded");
       return;
     }
 
     const llmContext = buildLLMContext(book);
     if (!llmContext) {
-      setGenerateError('Book settings incomplete (audience, core value, genre required)');
+      setGenerateError(
+        "Book settings incomplete (audience, core value, genre required)"
+      );
       return;
     }
 
     // Convert files to API format
-    const apiAttachments = attachments.length > 0
-      ? await prepareAttachments(attachments)
-      : undefined;
+    const apiAttachments =
+      attachments.length > 0
+        ? await prepareAttachments(attachments)
+        : undefined;
 
-    const docType = doc.type as Exclude<DocType, 'other'>;
+    const docType = doc.type as Exclude<DocType, "other">;
     let result;
 
-    if (docType === 'brief') {
-      result = await generateDoc('brief', {
+    if (docType === "brief") {
+      result = await generateDoc("brief", {
         prompt,
         currentBrief: doc.content || undefined,
         attachments: apiAttachments,
         llmContext,
       });
-    } else if (docType === 'draft') {
-      const briefDoc = docs.find((d) => d.type === 'brief');
+    } else if (docType === "draft") {
+      const briefDoc = docs.find((d) => d.type === "brief");
       if (!briefDoc?.content?.trim()) {
-        setGenerateError('Brief content required to generate draft');
+        setGenerateError("Brief content required to generate draft");
         return;
       }
-      result = await generateDoc('draft', {
+      result = await generateDoc("draft", {
         brief: briefDoc.content,
         prompt,
         currentDraft: doc.content || undefined,
@@ -77,12 +89,12 @@ export function DocCreativeSpace() {
         llmContext,
       });
     } else {
-      const draftDoc = docs.find((d) => d.type === 'draft');
+      const draftDoc = docs.find((d) => d.type === "draft");
       if (!draftDoc?.content?.trim()) {
-        setGenerateError('Draft content required to generate script');
+        setGenerateError("Draft content required to generate script");
         return;
       }
-      result = await generateDoc('script', {
+      result = await generateDoc("script", {
         draft: draftDoc.content,
         prompt,
         currentScript: doc.content || undefined,
@@ -92,7 +104,7 @@ export function DocCreativeSpace() {
     }
 
     if (!result.success || !result.data) {
-      setGenerateError(result.error || 'Generation failed');
+      setGenerateError(result.error || "Generation failed");
       return;
     }
 
@@ -115,7 +127,10 @@ export function DocCreativeSpace() {
         onClearError={() => setGenerateError(null)}
       />
       <main className="flex-1" aria-label="Document editor">
-        <ManuscriptDocEditor doc={activeDoc} onContentChange={handleContentChange} />
+        <ManuscriptDocEditor
+          doc={activeDoc}
+          onContentChange={handleContentChange}
+        />
       </main>
     </div>
   );
