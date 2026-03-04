@@ -124,7 +124,7 @@ export function EditorPage() {
 
   const handleTitleEdit = async (newTitle: string) => {
     if (!bookId) return;
-    await useBookStore.getState().updateBookTitle(bookId, newTitle);
+    await useBookStore.getState().updateBook(bookId, { title: newTitle });
   };
 
   const handleSave = async () => {

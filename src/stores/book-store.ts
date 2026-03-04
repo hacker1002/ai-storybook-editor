@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { persist, devtools } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
 import type { Book, BookListItem } from '@/types/editor';
@@ -12,7 +13,8 @@ interface BookStore {
 
   fetchBooks: () => Promise<void>;
   fetchBook: (bookId: string) => Promise<Book | null>;
-  updateBookTitle: (bookId: string, title: string) => Promise<boolean>;
+  updateBook: (bookId: string, updates: Partial<Book>) => Promise<boolean>;
+  deleteBook: (bookId: string) => Promise<boolean>;
   setCurrentBook: (book: Book | null) => void;
   clearBooks: () => void;
 }
@@ -32,7 +34,6 @@ export const useBookStore = create<BookStore>()(
         fetchBooks: async () => {
           const { lastFetchedAt, books } = get();
 
-          // Skip if cache fresh
           if (lastFetchedAt && Date.now() - lastFetchedAt < CACHE_DURATION && books.length > 0) {
             return;
           }
@@ -74,26 +75,56 @@ export const useBookStore = create<BookStore>()(
           return data;
         },
 
-        updateBookTitle: async (bookId, title) => {
-          const { error } = await supabase
-            .from('books')
-            .update({ title, updated_at: new Date().toISOString() })
-            .eq('id', bookId);
+        updateBook: async (bookId, updates) => {
+          const previousBook = get().currentBook;
+          const previousBooks = get().books;
 
-          if (error) {
-            console.error('[book-store] updateBookTitle error:', error);
-            return false;
-          }
-
+          // Optimistic update
           set((state) => ({
             currentBook: state.currentBook?.id === bookId
-              ? { ...state.currentBook, title }
+              ? { ...state.currentBook, ...updates }
               : state.currentBook,
             books: state.books.map((b) =>
-              b.id === bookId ? { ...b, title } : b
+              b.id === bookId ? { ...b, ...updates } : b
             ),
             lastFetchedAt: null,
           }));
+
+          const { error } = await supabase
+            .from('books')
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq('id', bookId);
+
+          if (error) {
+            console.error('[book-store] updateBook error:', error);
+            // Rollback on error
+            set({ currentBook: previousBook, books: previousBooks });
+            return false;
+          }
+
+          return true;
+        },
+
+        deleteBook: async (bookId) => {
+          const previousBooks = get().books;
+
+          // Optimistic update
+          set((state) => ({
+            books: state.books.filter((b) => b.id !== bookId),
+            currentBook: state.currentBook?.id === bookId ? null : state.currentBook,
+          }));
+
+          const { error } = await supabase
+            .from('books')
+            .delete()
+            .eq('id', bookId);
+
+          if (error) {
+            console.error('[book-store] deleteBook error:', error);
+            // Rollback on error
+            set({ books: previousBooks });
+            return false;
+          }
 
           return true;
         },
@@ -120,8 +151,26 @@ export const useBookStore = create<BookStore>()(
   )
 );
 
-// Selectors
+// State selectors
 export const useBooks = () => useBookStore((s) => s.books);
 export const useCurrentBook = () => useBookStore((s) => s.currentBook);
 export const useBooksLoading = () => useBookStore((s) => s.isLoading);
 export const useBooksError = () => useBookStore((s) => s.error);
+
+// Computed selectors
+export const useBookTitle = () => useBookStore((s) => s.currentBook?.title ?? null);
+export const useBookStep = () => useBookStore((s) => s.currentBook?.step ?? null);
+export const useIsSourceBook = () => useBookStore((s) => s.currentBook?.type === 0);
+
+// Actions hook (stable reference, no re-render)
+export const useBookActions = () =>
+  useBookStore(
+    useShallow((s) => ({
+      fetchBooks: s.fetchBooks,
+      fetchBook: s.fetchBook,
+      updateBook: s.updateBook,
+      deleteBook: s.deleteBook,
+      setCurrentBook: s.setCurrentBook,
+      clearBooks: s.clearBooks,
+    }))
+  );
