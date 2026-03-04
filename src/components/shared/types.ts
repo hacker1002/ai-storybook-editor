@@ -84,11 +84,11 @@ export interface SpreadImage {
   art_note?: string;
   visual_description?: string;
   image_references?: Array<{ title: string; media_url: string }>;
-  sketches?: Array<{
-    media_url: string;
-    created_time: string;
-    is_selected: boolean;
-  }>;
+
+  // Sketch images (step 2) - direct URL, no illustration variants
+  media_url?: string;
+
+  // Illustration images (step 3) - multiple variants, one selected
   illustrations?: Array<{
     media_url: string;
     created_time: string;

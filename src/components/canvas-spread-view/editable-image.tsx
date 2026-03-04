@@ -39,10 +39,11 @@ export function EditableImage({
   const [isEditing, setIsEditing] = useState(false);
   const editableRef = useRef<HTMLDivElement>(null);
 
-  // Get image URL (prefer final, then selected illustration)
+  // Image URL priority: final_hires > illustrations[selected] > illustrations[0] > media_url (sketch)
   const imageUrl = image.final_hires_media_url
     || image.illustrations?.find(i => i.is_selected)?.media_url
-    || image.illustrations?.[0]?.media_url;
+    || image.illustrations?.[0]?.media_url
+    || image.media_url;
 
   // Get display content for placeholder
   const artNoteText = image.art_note || image.visual_description || '';
