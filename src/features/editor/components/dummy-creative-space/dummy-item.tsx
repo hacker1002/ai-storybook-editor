@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Pencil, ChevronDown, Copy, Trash, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,11 @@ export function DummyItem({
   onDelete,
 }: DummyItemProps) {
   const [localTitle, setLocalTitle] = useState(dummy.title);
+
+  // Sync local title when dummy.title changes externally (e.g., after generation)
+  useEffect(() => {
+    setLocalTitle(dummy.title);
+  }, [dummy.title]);
 
   const handleTitleSave = () => {
     if (localTitle.trim()) {
