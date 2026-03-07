@@ -4,10 +4,14 @@ import type {
   BaseSpread,
   SpreadImage,
   SpreadTextbox,
-  SpreadObject,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
   PageData,
   Geometry,
   Typography,
+  ShapeFill,
+  ShapeOutline,
 } from '@/components/canvas-spread-view';
 
 // === Helper: Generate UUID ===
@@ -32,13 +36,12 @@ const IMAGE_RATIOS = [
   { w: 300, h: 200 },  // 3:2 landscape
 ];
 
-// Available object ratios with picsum dimensions
-const OBJECT_RATIOS = [
-  { w: 200, h: 300 },  // 2:3 portrait (character)
-  { w: 300, h: 300 },  // 1:1 square (prop)
-  { w: 400, h: 300 },  // 4:3 landscape (background)
-  { w: 200, h: 400 },  // 1:2 tall portrait
-  { w: 300, h: 200 },  // 3:2 landscape
+// Shape preset geometries
+const SHAPE_GEOMETRIES: Geometry[] = [
+  { x: 60, y: 10, w: 30, h: 25 },
+  { x: 5, y: 60, w: 25, h: 30 },
+  { x: 40, y: 40, w: 20, h: 20 },
+  { x: 70, y: 70, w: 25, h: 20 },
 ];
 
 // Position templates (x, y only - w/h calculated from ratio)
@@ -58,47 +61,25 @@ const TEXTBOX_GEOMETRIES: Geometry[] = [
   { x: 30, y: 80, w: 45, h: 15 },
 ];
 
-// Object position templates by type
-const OBJECT_POSITIONS: Record<string, { x: number; y: number }[]> = {
-  background: [{ x: 0, y: 0 }],
-  character: [
-    { x: 55, y: 15 },
-    { x: 10, y: 20 },
-    { x: 35, y: 25 },
-    { x: 62, y: 30 },
-  ],
-  prop: [
-    { x: 70, y: 55 },
-    { x: 15, y: 60 },
-    { x: 42, y: 65 },
-    { x: 78, y: 10 },
-  ],
-  foreground: [
-    { x: 0, y: 55 },
-    { x: 0, y: 0 },
-    { x: 75, y: 0 },
-  ],
-};
-
-// Size ranges by object type (base width in %)
-const OBJECT_SIZE_RANGES: Record<string, { min: number; max: number }> = {
-  background: { min: 100, max: 100 },
-  character: { min: 15, max: 28 },
-  prop: { min: 6, max: 15 },
-  foreground: { min: 20, max: 100 },
-};
+// Video/Audio preset geometries
+const MEDIA_GEOMETRIES: Geometry[] = [
+  { x: 5, y: 5, w: 20, h: 15 },
+  { x: 75, y: 5, w: 20, h: 15 },
+  { x: 5, y: 80, w: 15, h: 12 },
+  { x: 80, y: 80, w: 15, h: 12 },
+];
 
 // Track usage indices
 let imageGeoIndex = 0;
 let textboxGeoIndex = 0;
-const objectGeoIndices: Record<string, number> = {
-  background: 0, character: 0, prop: 0, foreground: 0, raw: 0, other: 0,
-};
+let shapeGeoIndex = 0;
+let mediaGeoIndex = 0;
 
 export function resetGeometryIndices(): void {
   imageGeoIndex = 0;
   textboxGeoIndex = 0;
-  Object.keys(objectGeoIndices).forEach(k => objectGeoIndices[k] = 0);
+  shapeGeoIndex = 0;
+  mediaGeoIndex = 0;
 }
 
 // Calculate h% from w% to match image ratio on canvas
@@ -156,38 +137,16 @@ function getTextboxGeometry(): Geometry {
   return clampGeometryToBounds({ ...geo });
 }
 
-// Fixed background ratios
-const BACKGROUND_RATIO_DPS = { w: 400, h: 300 };   // 4:3 landscape for DPS
-const BACKGROUND_RATIO_SINGLE = { w: 200, h: 300 }; // 2:3 portrait for non-DPS
-
-// Get random object with geometry matching its ratio
-interface ObjectWithGeometry {
-  geometry: Geometry;
-  dimensions: { w: number; h: number };
+function getShapeGeometry(): Geometry {
+  const geo = SHAPE_GEOMETRIES[shapeGeoIndex % SHAPE_GEOMETRIES.length];
+  shapeGeoIndex++;
+  return clampGeometryToBounds({ ...geo });
 }
 
-function getRandomObjectGeometry(type: string, isDPS = true): ObjectWithGeometry {
-  const typeKey = type in objectGeoIndices ? type : 'other';
-  const positions = OBJECT_POSITIONS[typeKey] || OBJECT_POSITIONS.prop;
-  const sizeRange = OBJECT_SIZE_RANGES[typeKey] || OBJECT_SIZE_RANGES.prop;
-
-  const idx = objectGeoIndices[typeKey] % positions.length;
-  objectGeoIndices[typeKey]++;
-
-  const pos = positions[idx];
-
-  // Background uses fixed ratio based on DPS/non-DPS
-  const ratio = type === 'background'
-    ? (isDPS ? BACKGROUND_RATIO_DPS : BACKGROUND_RATIO_SINGLE)
-    : OBJECT_RATIOS[randomBetween(0, OBJECT_RATIOS.length - 1)];
-
-  const baseW = randomBetween(sizeRange.min, sizeRange.max);
-  const h = calcHeightPercent(baseW, ratio.w, ratio.h);
-
-  return {
-    geometry: clampGeometryToBounds({ x: pos.x, y: pos.y, w: baseW, h }),
-    dimensions: ratio,
-  };
+function getMediaGeometry(): Geometry {
+  const geo = MEDIA_GEOMETRIES[mediaGeoIndex % MEDIA_GEOMETRIES.length];
+  mediaGeoIndex++;
+  return clampGeometryToBounds({ ...geo });
 }
 
 // === Sample Text Content ===
@@ -301,48 +260,74 @@ export function createMockImage(
   };
 }
 
-// === Create Single Object ===
-const OBJECT_TYPES: SpreadObject['type'][] = ['character', 'prop', 'background', 'foreground'];
-const OBJECT_NAMES = ['main_character', 'side_character', 'prop_1', 'background_1'];
-const OBJECT_STATES: Record<string, string[]> = {
-  main_character: ['default', 'happy', 'sad'],
-  side_character: ['default', 'talking'],
-  prop_1: ['default'],
-  background_1: ['day', 'night'],
-};
+// === Shape fill/outline colors ===
+const SHAPE_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
 
-export function createMockObject(
-  overrides: Partial<SpreadObject> = {},
-  isDPS = true
-): SpreadObject {
-  const typeIndex = randomBetween(0, OBJECT_TYPES.length - 1);
-  const type = OBJECT_TYPES[typeIndex];
-  const name = OBJECT_NAMES[typeIndex] || 'unnamed';
-  const states = OBJECT_STATES[name] || ['default'];
-  const state = states[randomBetween(0, states.length - 1)];
+// === Create Single Shape ===
+export function createMockShape(overrides: Partial<SpreadShape> = {}): SpreadShape {
+  const color = SHAPE_COLORS[randomBetween(0, SHAPE_COLORS.length - 1)];
+  const outlineColor = SHAPE_COLORS[randomBetween(0, SHAPE_COLORS.length - 1)];
 
-  const zIndexMap: Record<SpreadObject['type'], number> = {
-    background: 50,
-    character: 125,
-    prop: 175,
-    foreground: 250,
-    raw: 150,
-    other: 150,
+  const fill: ShapeFill = {
+    is_filled: Math.random() > 0.3,
+    color,
+    opacity: 0.5 + Math.random() * 0.5,
   };
 
-  const { geometry, dimensions } = getRandomObjectGeometry(type, isDPS);
+  const outline: ShapeOutline = {
+    color: outlineColor,
+    width: randomBetween(1, 3),
+    radius: randomBetween(0, 10),
+    type: randomBetween(0, 2) as 0 | 1 | 2,
+  };
 
   return {
     id: generateUUID(),
-    name,
-    state,
-    type,
-    media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${dimensions.h}`,
-    media_type: 'image',
-    geometry,
-    zIndex: zIndexMap[type],
+    type: 'rectangle',
+    title: `Shape ${randomBetween(1, 100)}`,
+    geometry: getShapeGeometry(),
+    fill,
+    outline,
     player_visible: true,
     editor_visible: true,
+    ...overrides,
+  };
+}
+
+// === Create Single Video ===
+export function createMockVideo(overrides: Partial<SpreadVideo> = {}): SpreadVideo {
+  const names = ['intro_video', 'scene_transition', 'character_action', 'ambient_clip'];
+  const name = names[randomBetween(0, names.length - 1)];
+
+  return {
+    id: generateUUID(),
+    title: `Video ${randomBetween(1, 100)}`,
+    geometry: getMediaGeometry(),
+    'z-index': 100 + randomBetween(0, 50),
+    player_visible: true,
+    editor_visible: true,
+    name,
+    type: 'other',
+    media_url: undefined, // Placeholder - renders icon
+    ...overrides,
+  };
+}
+
+// === Create Single Audio ===
+export function createMockAudio(overrides: Partial<SpreadAudio> = {}): SpreadAudio {
+  const names = ['bgm_track', 'sfx_click', 'narration', 'ambient_sound'];
+  const name = names[randomBetween(0, names.length - 1)];
+
+  return {
+    id: generateUUID(),
+    title: `Audio ${randomBetween(1, 100)}`,
+    geometry: getMediaGeometry(),
+    'z-index': 50 + randomBetween(0, 25),
+    player_visible: true,
+    editor_visible: true,
+    name,
+    type: 'other',
+    media_url: undefined, // Placeholder - renders icon
     ...overrides,
   };
 }
@@ -391,7 +376,9 @@ export interface CreateSpreadOptions {
   isDPS?: boolean;
   imageCount?: number;
   textboxCount?: number;
-  objectCount?: number;
+  shapeCount?: number;
+  videoCount?: number;
+  audioCount?: number;
   language?: string;
   withGeneratedImages?: boolean;
 }
@@ -402,7 +389,9 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     isDPS = true,
     imageCount = 1,
     textboxCount = 1,
-    objectCount = 0,
+    shapeCount = 0,
+    videoCount = 0,
+    audioCount = 0,
     language = 'en_US',
     withGeneratedImages = false,
   } = options;
@@ -425,9 +414,19 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     createMockTextbox(language)
   );
 
-  // Create objects (pass isDPS for background ratio)
-  const objects: SpreadObject[] = Array.from({ length: objectCount }, () =>
-    createMockObject({}, isDPS)
+  // Create shapes
+  const shapes: SpreadShape[] = Array.from({ length: shapeCount }, () =>
+    createMockShape()
+  );
+
+  // Create videos
+  const videos: SpreadVideo[] = Array.from({ length: videoCount }, () =>
+    createMockVideo()
+  );
+
+  // Create audios
+  const audios: SpreadAudio[] = Array.from({ length: audioCount }, () =>
+    createMockAudio()
   );
 
   return {
@@ -435,7 +434,9 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
     pages,
     images,
     textboxes,
-    objects,
+    shapes,
+    videos,
+    audios,
     animations: [],
     manuscript: SAMPLE_TEXTS[language as keyof typeof SAMPLE_TEXTS]?.[spreadIndex % 6] || '',
   };
@@ -455,7 +456,9 @@ export function createMockSpreads(
 export default {
   createMockImage,
   createMockTextbox,
-  createMockObject,
+  createMockShape,
+  createMockVideo,
+  createMockAudio,
   createMockPage,
   createMockSpread,
   createMockSpreads,

@@ -40,28 +40,68 @@ export interface Outline {
   type: "solid" | "dashed" | "dotted";
 }
 
-// === Spread Object ===
-export interface SpreadObject {
+// === Shape Fill & Outline (different from textbox Fill/Outline) ===
+export interface ShapeFill {
+  is_filled: boolean;
+  color: string;
+  opacity: number;
+}
+
+export interface ShapeOutline {
+  color: string;
+  width: number;
+  radius: number;
+  type: 0 | 1 | 2; // 0=solid, 1=dashed, 2=dotted
+}
+
+// === Spread Shape ===
+export interface SpreadShape {
   id: string;
+  type: "rectangle";
+  title?: string;
+  geometry: Geometry;
+  fill: ShapeFill;
+  outline: ShapeOutline;
+  // Retouch only
+  player_visible?: boolean;
+  editor_visible?: boolean;
+}
+
+// === Spread Video ===
+export type SpreadItemMediaType =
+  | "raw"
+  | "character"
+  | "prop"
+  | "background"
+  | "foreground"
+  | "other";
+
+export interface SpreadVideo {
+  id: string;
+  title?: string;
+  geometry: Geometry;
+  "z-index": number;
+  player_visible: boolean;
+  editor_visible: boolean;
   original_image_id?: string;
   name: string;
   state?: string;
-  type: "raw" | "character" | "prop" | "background" | "foreground" | "other";
+  type: SpreadItemMediaType;
   media_url?: string;
-  media_type?: "image" | "video" | "audio";
+}
+
+// === Spread Audio ===
+export interface SpreadAudio {
+  id: string;
+  title?: string;
   geometry: Geometry;
-  zIndex: number;
+  "z-index": number;
   player_visible: boolean;
   editor_visible: boolean;
-  aspect_ratio?:
-    | "free"
-    | "1:1"
-    | "4:3"
-    | "3:4"
-    | "16:9"
-    | "9:16"
-    | "2:3"
-    | "3:2";
+  name: string;
+  state?: string;
+  type: SpreadItemMediaType;
+  media_url?: string;
 }
 
 // === Page Types ===
@@ -95,6 +135,16 @@ export interface SpreadImage {
     is_selected: boolean;
   }>;
   final_hires_media_url?: string;
+
+  // Retouch-specific optional fields
+  "z-index"?: number;
+  player_visible?: boolean;
+  editor_visible?: boolean;
+  aspect_ratio?: string;
+  original_image_id?: string;
+  name?: string;
+  state?: string;
+  type?: SpreadItemMediaType;
 }
 
 export interface SpreadTextbox {
@@ -113,9 +163,17 @@ export interface SpreadTextboxContent {
 
 export interface SpreadAnimation {
   order: number;
-  type: "textbox" | "image" | "video" | "audio";
-  target: { id: string; type: "textbox" | "object" };
-  trigger_type: "on_click" | "with_previous" | "after_previous";
+  type: 0 | 1; // 0=story timeline, 1=object interactive
+  group?: string;
+  target: {
+    id: string;
+    type: "textbox" | "image" | "video" | "audio" | "shape";
+  };
+  trigger_type:
+    | "on_click_spread"
+    | "on_click_object"
+    | "with_previous"
+    | "after_previous";
   effect: {
     type: number;
     geometry?: Geometry;
@@ -133,7 +191,9 @@ export interface BaseSpread {
   pages: PageData[];
   images: SpreadImage[];
   textboxes: SpreadTextbox[];
-  objects?: SpreadObject[];
+  shapes?: SpreadShape[];
+  videos?: SpreadVideo[];
+  audios?: SpreadAudio[];
   animations?: SpreadAnimation[];
   manuscript?: string;
   tiny_sketch_media_url?: string;

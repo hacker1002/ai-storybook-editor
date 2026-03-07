@@ -21,7 +21,9 @@ import type {
   ThumbnailListLayout,
   ImageItemContext,
   TextItemContext,
-  ObjectItemContext,
+  ShapeItemContext,
+  VideoItemContext,
+  AudioItemContext,
 } from './types';
 import { COLUMNS } from './constants';
 
@@ -38,7 +40,9 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   renderItems: ItemType[];
   renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
-  renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
+  renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
+  renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
+  renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
 
   // Feature flags
   canAdd: boolean;
@@ -62,7 +66,9 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
   renderItems,
   renderImageItem,
   renderTextItem,
-  renderObjectItem,
+  renderShapeItem,
+  renderVideoItem,
+  renderAudioItem,
   canAdd,
   canReorder,
   canDelete,
@@ -91,7 +97,9 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
     return (
       spread.images.length > 0 ||
       spread.textboxes.length > 0 ||
-      (spread.objects?.length ?? 0) > 0
+      (spread.shapes?.length ?? 0) > 0 ||
+      (spread.videos?.length ?? 0) > 0 ||
+      (spread.audios?.length ?? 0) > 0
     );
   }, []);
 
@@ -239,7 +247,9 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
               renderItems={renderItems}
               renderImageItem={renderImageItem}
               renderTextItem={renderTextItem}
-              renderObjectItem={renderObjectItem}
+              renderShapeItem={renderShapeItem}
+              renderVideoItem={renderVideoItem}
+              renderAudioItem={renderAudioItem}
               isDragEnabled={canReorder}
               isDragging={spread.id === draggedId}
               isDropTarget={spread.id === dropTargetId}

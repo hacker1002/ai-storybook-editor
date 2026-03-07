@@ -6,18 +6,24 @@ import {
   CanvasSpreadView,
   EditableImage,
   EditableTextbox,
-  EditableObject,
+  EditableShape,
+  EditableVideo,
+  EditableAudio,
   type BaseSpread,
   type SpreadImage,
   type SpreadTextbox,
-  type SpreadObject,
+  type SpreadShape,
+  type SpreadVideo,
+  type SpreadAudio,
   type ImageItemContext,
   type TextItemContext,
-  type ObjectItemContext,
+  type ShapeItemContext,
+  type VideoItemContext,
+  type AudioItemContext,
   type ImageToolbarContext,
   type TextToolbarContext,
   type PageToolbarContext,
-  type ObjectToolbarContext,
+  type ShapeToolbarContext,
   type SpreadType,
   type ItemType,
   type SpreadItemActionUnion,
@@ -25,7 +31,7 @@ import {
 import { DemoImageToolbar } from "./demo-image-toolbar";
 import { DemoTextToolbar } from "./demo-text-toolbar";
 import { DemoPageToolbar } from "./demo-page-toolbar";
-import { DemoObjectToolbar } from "./demo-object-toolbar";
+import { DemoShapeToolbar } from "./demo-shape-toolbar";
 import { ImportSpreadsDialog } from "./import-spreads-dialog";
 import { GenerateImageModal } from "@/components/canvas-spread-view";
 import {
@@ -50,7 +56,9 @@ const DEFAULT_MOCK_OPTIONS: MockOptions = {
   spreadCount: 8,
   imageCount: 2,
   textboxCount: 1,
-  objectCount: 3,
+  shapeCount: 2,
+  videoCount: 0,
+  audioCount: 0,
   withGeneratedImages: true,
   isDPS: true,
   language: "en_US",
@@ -67,13 +75,15 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   renderImageToolbar: true,
   renderTextToolbar: true,
   renderPageToolbar: true,
-  renderObjectToolbar: true,
+  renderShapeToolbar: true,
 };
 
 const DEFAULT_ITEM_FLAGS: ItemFlags = {
   showImages: true,
   showTexts: true,
-  showObjects: false,
+  showShapes: true,
+  showVideos: false,
+  showAudios: false,
 };
 
 export function DemoCanvasSpreadView() {
@@ -91,7 +101,9 @@ export function DemoCanvasSpreadView() {
       spreadCount: opts.spreadCount,
       imageCount: opts.imageCount,
       textboxCount: opts.textboxCount,
-      objectCount: opts.objectCount,
+      shapeCount: opts.shapeCount,
+      videoCount: opts.videoCount,
+      audioCount: opts.audioCount,
       withGeneratedImages: opts.withGeneratedImages,
       isDPS: opts.isDPS,
       language: opts.language,
@@ -265,25 +277,71 @@ export function DemoCanvasSpreadView() {
               }
               break;
 
-            case "object":
+            case "shape":
               if (action === "update" && itemId !== null && data) {
                 return {
                   ...s,
-                  objects: (s.objects || []).map((o) =>
-                    o.id === itemId ? { ...o, ...data } : o
+                  shapes: (s.shapes || []).map((sh) =>
+                    sh.id === itemId ? { ...sh, ...data } : sh
                   ),
                 };
               }
               if (action === "delete" && itemId !== null) {
                 return {
                   ...s,
-                  objects: (s.objects || []).filter((o) => o.id !== itemId),
+                  shapes: (s.shapes || []).filter((sh) => sh.id !== itemId),
                 };
               }
               if (action === "add" && data) {
                 return {
                   ...s,
-                  objects: [...(s.objects || []), data as SpreadObject],
+                  shapes: [...(s.shapes || []), data as SpreadShape],
+                };
+              }
+              break;
+
+            case "video":
+              if (action === "update" && itemId !== null && data) {
+                return {
+                  ...s,
+                  videos: (s.videos || []).map((v) =>
+                    v.id === itemId ? { ...v, ...data } : v
+                  ),
+                };
+              }
+              if (action === "delete" && itemId !== null) {
+                return {
+                  ...s,
+                  videos: (s.videos || []).filter((v) => v.id !== itemId),
+                };
+              }
+              if (action === "add" && data) {
+                return {
+                  ...s,
+                  videos: [...(s.videos || []), data as SpreadVideo],
+                };
+              }
+              break;
+
+            case "audio":
+              if (action === "update" && itemId !== null && data) {
+                return {
+                  ...s,
+                  audios: (s.audios || []).map((a) =>
+                    a.id === itemId ? { ...a, ...data } : a
+                  ),
+                };
+              }
+              if (action === "delete" && itemId !== null) {
+                return {
+                  ...s,
+                  audios: (s.audios || []).filter((a) => a.id !== itemId),
+                };
+              }
+              if (action === "add" && data) {
+                return {
+                  ...s,
+                  audios: [...(s.audios || []), data as SpreadAudio],
                 };
               }
               break;
@@ -423,39 +481,54 @@ export function DemoCanvasSpreadView() {
     []
   );
 
-  // Render object
-  const renderObjectItem = useCallback(
-    (context: ObjectItemContext<BaseSpread>) => (
-      <EditableObject
-        object={context.item}
+  // Render shape
+  const renderShapeItem = useCallback(
+    (context: ShapeItemContext<BaseSpread>) => (
+      <EditableShape
+        shape={context.item}
         index={context.itemIndex}
         isSelected={context.isSelected}
         isEditable={context.isSpreadSelected}
         onSelect={context.onSelect}
-        onUpdate={context.onUpdate}
-        onDelete={context.onDelete}
       />
     ),
     []
   );
 
-  const renderObjectToolbar = useCallback(
-    (context: ObjectToolbarContext<BaseSpread>) => {
-      return (
-        <DemoObjectToolbar
-          context={{
-            ...context,
-            onRotate: () => {
-              // Rotate 90°: swap width and height
-              const geo = context.item.geometry;
-              context.onUpdate({
-                geometry: { ...geo, w: geo.h, h: geo.w },
-              });
-            },
-          }}
-        />
-      );
-    },
+  const renderShapeToolbar = useCallback(
+    (context: ShapeToolbarContext<BaseSpread>) => (
+      <DemoShapeToolbar context={context} />
+    ),
+    []
+  );
+
+  // Render video
+  const renderVideoItem = useCallback(
+    (context: VideoItemContext<BaseSpread>) => (
+      <EditableVideo
+        video={context.item}
+        index={context.itemIndex}
+        isSelected={context.isSelected}
+        isEditable={context.isSpreadSelected}
+        isThumbnail={context.isThumbnail}
+        onSelect={context.onSelect}
+      />
+    ),
+    []
+  );
+
+  // Render audio
+  const renderAudioItem = useCallback(
+    (context: AudioItemContext<BaseSpread>) => (
+      <EditableAudio
+        audio={context.item}
+        index={context.itemIndex}
+        isSelected={context.isSelected}
+        isEditable={context.isSpreadSelected}
+        isThumbnail={context.isThumbnail}
+        onSelect={context.onSelect}
+      />
+    ),
     []
   );
 
@@ -468,7 +541,7 @@ export function DemoCanvasSpreadView() {
             <h1 className="text-xl font-semibold">CanvasSpreadView Demo</h1>
             <p className="text-sm text-muted-foreground">
               {spreads.length} spreads • {mockOptions.imageCount} img •{" "}
-              {mockOptions.textboxCount} text • {mockOptions.objectCount} obj
+              {mockOptions.textboxCount} text • {mockOptions.shapeCount} shape
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -503,15 +576,23 @@ export function DemoCanvasSpreadView() {
                 [
                   itemFlags.showImages && "image",
                   itemFlags.showTexts && "text",
-                  itemFlags.showObjects && "object",
+                  itemFlags.showShapes && "shape",
+                  itemFlags.showVideos && "video",
+                  itemFlags.showAudios && "audio",
                 ].filter(Boolean) as ItemType[]
               }
               renderImageItem={
                 itemFlags.showImages ? renderImageItem : undefined
               }
               renderTextItem={itemFlags.showTexts ? renderTextItem : undefined}
-              renderObjectItem={
-                itemFlags.showObjects ? renderObjectItem : undefined
+              renderShapeItem={
+                itemFlags.showShapes ? renderShapeItem : undefined
+              }
+              renderVideoItem={
+                itemFlags.showVideos ? renderVideoItem : undefined
+              }
+              renderAudioItem={
+                itemFlags.showAudios ? renderAudioItem : undefined
               }
               renderImageToolbar={
                 featureFlags.renderImageToolbar && itemFlags.showImages
@@ -526,9 +607,9 @@ export function DemoCanvasSpreadView() {
               renderPageToolbar={
                 featureFlags.renderPageToolbar ? renderPageToolbar : undefined
               }
-              renderObjectToolbar={
-                featureFlags.renderObjectToolbar && itemFlags.showObjects
-                  ? renderObjectToolbar
+              renderShapeToolbar={
+                featureFlags.renderShapeToolbar && itemFlags.showShapes
+                  ? renderShapeToolbar
                   : undefined
               }
               onSpreadSelect={handleSpreadSelect}

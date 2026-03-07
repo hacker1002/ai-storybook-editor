@@ -3,7 +3,8 @@
 
 import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { EditableTextbox, EditableObject, getFirstTextboxKey } from "../shared";
+import { EditableTextbox, getFirstTextboxKey } from "../shared";
+import { EditableImage } from "../canvas-spread-view";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
 import type { Geometry, Typography, Fill, Outline } from "../shared/types";
 import { LAYOUT, THUMBNAIL_STYLES, TEXTBOX_Z_INDEX_BASE } from "./constants";
@@ -132,14 +133,15 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300" />
           )}
 
-          {/* Objects (using EditableObject component) */}
-          {spread.objects?.map((object, idx) => (
-            <EditableObject
-              key={object.id || idx}
-              object={object}
+          {/* Images (using EditableImage component) */}
+          {spread.images?.map((image, idx) => (
+            <EditableImage
+              key={image.id || idx}
+              image={image}
               index={idx}
               isSelected={false}
               isEditable={false}
+              isThumbnail={true}
               onSelect={() => {}}
             />
           ))}

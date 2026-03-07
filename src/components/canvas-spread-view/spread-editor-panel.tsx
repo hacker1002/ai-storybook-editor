@@ -8,7 +8,9 @@ import {
   buildImageContext,
   buildTextContext,
   buildTextToolbarContext,
-  buildObjectContext,
+  buildShapeContext,
+  buildVideoContext,
+  buildAudioContext,
 } from './utils/context-builders';
 import { applyDragDelta, applyResizeDelta, applyNudge } from './utils/geometry-utils';
 import { getScaledDimensions } from './utils/coordinate-utils';
@@ -23,15 +25,17 @@ import type {
   Geometry,
   ImageItemContext,
   TextItemContext,
-  ObjectItemContext,
+  ShapeItemContext,
+  VideoItemContext,
+  AudioItemContext,
   ImageToolbarContext,
   TextToolbarContext,
   PageToolbarContext,
-  ObjectToolbarContext,
+  ShapeToolbarContext,
+  VideoToolbarContext,
+  AudioToolbarContext,
   LayoutOption,
   Typography,
-  Fill,
-  Outline,
   SpreadItemActionUnion,
 } from './types';
 import { getFirstTextboxKey } from '../shared';
@@ -52,13 +56,17 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   // Item render functions (optional - skip rendering if not provided)
   renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
-  renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
+  renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
+  renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
+  renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
-  renderObjectToolbar?: (context: ObjectToolbarContext<TSpread>) => ReactNode;
+  renderShapeToolbar?: (context: ShapeToolbarContext<TSpread>) => ReactNode;
+  renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
+  renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
 
   // Callbacks
   onSpreadItemAction?: (params: Omit<SpreadItemActionUnion, 'spreadId'>) => void;
@@ -92,11 +100,15 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderItems,
   renderImageItem,
   renderTextItem,
-  renderObjectItem,
+  renderShapeItem,
+  renderVideoItem,
+  renderAudioItem,
   renderImageToolbar,
   renderTextToolbar,
   renderPageToolbar,
-  renderObjectToolbar,
+  renderShapeToolbar,
+  renderVideoToolbar,
+  renderAudioToolbar,
   onSpreadItemAction,
   canDeleteItem = false,
   canResizeItem = true,
@@ -171,8 +183,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         const item = spread.textboxes[element.index];
         const langKey = getFirstTextboxKey(item || {});
         geometry = langKey ? (item[langKey] as { geometry: Geometry })?.geometry ?? null : null;
-      } else if (element.type === 'object') {
-        geometry = spread.objects?.[element.index]?.geometry ?? null;
+      } else if (element.type === 'shape') {
+        geometry = spread.shapes?.[element.index]?.geometry ?? null;
+      } else if (element.type === 'video') {
+        geometry = spread.videos?.[element.index]?.geometry ?? null;
+      } else if (element.type === 'audio') {
+        geometry = spread.audios?.[element.index]?.geometry ?? null;
       }
     }
 
@@ -207,8 +223,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         const langKey = getFirstTextboxKey(tb);
         return langKey ? (tb[langKey] as { geometry: Geometry })?.geometry ?? null : null;
       }
-      case 'object':
-        return spread.objects?.[selectedElement.index]?.geometry ?? null;
+      case 'shape':
+        return spread.shapes?.[selectedElement.index]?.geometry ?? null;
+      case 'video':
+        return spread.videos?.[selectedElement.index]?.geometry ?? null;
+      case 'audio':
+        return spread.audios?.[selectedElement.index]?.geometry ?? null;
       default:
         return null;
     }
@@ -231,12 +251,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         break;
       }
       case 'textbox': {
-        // Update geometry in textbox (need to preserve language structure)
         const tb = spread.textboxes[element.index];
         if (!tb?.id) return;
         const langKey = getFirstTextboxKey(tb);
         if (langKey) {
-          const langContent = tb[langKey] as { text: string; geometry: Geometry; typography: Typography; fill?: Fill; outline?: Outline };
+          const langContent = tb[langKey] as { text: string; geometry: Geometry; typography: Typography };
           onSpreadItemAction({
             itemType: 'text',
             action: 'update',
@@ -248,19 +267,41 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         }
         break;
       }
-      case 'object': {
-        const obj = spread.objects?.[element.index];
-        if (!obj?.id) return;
+      case 'shape': {
+        const shape = spread.shapes?.[element.index];
+        if (!shape?.id) return;
         onSpreadItemAction({
-          itemType: 'object',
+          itemType: 'shape',
           action: 'update',
-          itemId: obj.id,
+          itemId: shape.id,
+          data: { geometry },
+        });
+        break;
+      }
+      case 'video': {
+        const video = spread.videos?.[element.index];
+        if (!video?.id) return;
+        onSpreadItemAction({
+          itemType: 'video',
+          action: 'update',
+          itemId: video.id,
+          data: { geometry },
+        });
+        break;
+      }
+      case 'audio': {
+        const audio = spread.audios?.[element.index];
+        if (!audio?.id) return;
+        onSpreadItemAction({
+          itemType: 'audio',
+          action: 'update',
+          itemId: audio.id,
           data: { geometry },
         });
         break;
       }
     }
-  }, [spread.images, spread.textboxes, spread.objects, onSpreadItemAction]);
+  }, [spread.images, spread.textboxes, spread.shapes, spread.videos, spread.audios, onSpreadItemAction]);
 
   // === Drag Handlers ===
   const handleDragStart = useCallback(() => {
@@ -308,14 +349,6 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
     const newGeometry = applyResizeDelta(originalGeometry, handle, delta.x, delta.y);
 
-    // Helper: parse aspect ratio string to numeric value
-    const parseAspectRatio = (ratio: string | undefined): number | null => {
-      if (!ratio || ratio === 'free') return null;
-      const [w, h] = ratio.split(':').map(Number);
-      if (!w || !h) return null;
-      return w / h;
-    };
-
     // Helper: apply aspect ratio lock to geometry
     const applyAspectLock = (geo: Geometry, aspect: number) => {
       if (handle === 'e' || handle === 'w') {
@@ -350,20 +383,17 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       applyAspectLock(newGeometry, originalAspect);
     }
 
-    // Aspect ratio lock for Object items (when aspect_ratio is set)
-    if (selectedElement.type === 'object') {
-      const obj = spread.objects?.[selectedElement.index];
-      const aspect = parseAspectRatio(obj?.aspect_ratio);
-      if (aspect) {
-        applyAspectLock(newGeometry, aspect);
-      }
+    // Aspect ratio lock for Video items (when aspect_ratio is set)
+    if (selectedElement.type === 'video') {
+      const originalAspect = originalGeometry.w / originalGeometry.h;
+      applyAspectLock(newGeometry, originalAspect);
     }
 
     updateElementGeometry(selectedElement, newGeometry);
 
     // Update selectedGeometry for toolbar positioning
     setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
-  }, [state, updateElementGeometry, spread.images, spread.objects]);
+  }, [state, updateElementGeometry]);
 
   const handleResizeEnd = useCallback(() => {
     setState((prev) => ({
@@ -429,41 +459,38 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           if (selectedElement.type === 'image') {
             const image = spread.images[selectedElement.index];
             if (image?.id) {
-              onSpreadItemAction({
-                itemType: 'image',
-                action: 'delete',
-                itemId: image.id,
-                data: null,
-              });
+              onSpreadItemAction({ itemType: 'image', action: 'delete', itemId: image.id, data: null });
             }
           }
           if (selectedElement.type === 'textbox') {
             const textbox = spread.textboxes[selectedElement.index];
             if (textbox?.id) {
-              onSpreadItemAction({
-                itemType: 'text',
-                action: 'delete',
-                itemId: textbox.id,
-                data: null,
-              });
+              onSpreadItemAction({ itemType: 'text', action: 'delete', itemId: textbox.id, data: null });
             }
           }
-          if (selectedElement.type === 'object') {
-            const obj = spread.objects?.[selectedElement.index];
-            if (obj?.id) {
-              onSpreadItemAction({
-                itemType: 'object',
-                action: 'delete',
-                itemId: obj.id,
-                data: null,
-              });
+          if (selectedElement.type === 'shape') {
+            const shape = spread.shapes?.[selectedElement.index];
+            if (shape?.id) {
+              onSpreadItemAction({ itemType: 'shape', action: 'delete', itemId: shape.id, data: null });
+            }
+          }
+          if (selectedElement.type === 'video') {
+            const video = spread.videos?.[selectedElement.index];
+            if (video?.id) {
+              onSpreadItemAction({ itemType: 'video', action: 'delete', itemId: video.id, data: null });
+            }
+          }
+          if (selectedElement.type === 'audio') {
+            const audio = spread.audios?.[selectedElement.index];
+            if (audio?.id) {
+              onSpreadItemAction({ itemType: 'audio', action: 'delete', itemId: audio.id, data: null });
             }
           }
           handleElementSelect(null);
         }
         break;
     }
-  }, [state, isEditable, getSelectedGeometry, updateElementGeometry, handleElementSelect, canDeleteItem, canDragItem, onSpreadItemAction, spread.images, spread.textboxes, spread.objects]);
+  }, [state, isEditable, getSelectedGeometry, updateElementGeometry, handleElementSelect, canDeleteItem, canDragItem, onSpreadItemAction, spread.images, spread.textboxes, spread.shapes, spread.videos, spread.audios]);
 
   // === Wrapper callback for page updates (used by PageItem) ===
   const handleUpdatePage = useCallback((pageIndex: number, updates: Partial<TSpread['pages'][number]>) => {
@@ -542,6 +569,24 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           return <div key={image.id || index}>{renderImageItem(context)}</div>;
         })}
 
+        {/* Videos */}
+        {renderItems.includes('video') && renderVideoItem && spread.videos?.map((video, index) => {
+          const context = buildVideoContext(video, index, spread, state.selectedElement, handleElementSelect, handleSpreadItemAction);
+          return <div key={video.id || index}>{renderVideoItem(context)}</div>;
+        })}
+
+        {/* Audios */}
+        {renderItems.includes('audio') && renderAudioItem && spread.audios?.map((audio, index) => {
+          const context = buildAudioContext(audio, index, spread, state.selectedElement, handleElementSelect, handleSpreadItemAction);
+          return <div key={audio.id || index}>{renderAudioItem(context)}</div>;
+        })}
+
+        {/* Shapes */}
+        {renderItems.includes('shape') && renderShapeItem && spread.shapes?.map((shape, index) => {
+          const context = buildShapeContext(shape, index, spread, state.selectedElement, handleElementSelect, handleSpreadItemAction);
+          return <div key={shape.id || index}>{renderShapeItem(context)}</div>;
+        })}
+
         {/* Textboxes - skip if renderTextItem not provided */}
         {renderItems.includes('text') && renderTextItem && spread.textboxes.map((textbox, index) => {
           const context = buildTextContext(
@@ -554,20 +599,6 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             handleTextboxEditingChange
           );
           return <div key={textbox.id || index}>{renderTextItem(context)}</div>;
-        })}
-
-        {/* Objects */}
-        {renderItems.includes('object') && spread.objects?.map((obj, index) => {
-          if (!renderObjectItem) return null;
-          const context = buildObjectContext(
-            obj,
-            index,
-            spread,
-            state.selectedElement,
-            handleElementSelect,
-            handleSpreadItemAction
-          );
-          return <div key={obj.id || index}>{renderObjectItem(context)}</div>;
         })}
 
         {/* Selection Frame - frame border allows drag, center passes through for editing */}
@@ -623,15 +654,40 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             return renderTextToolbar(context);
           }
 
-          if (selectedElement.type === 'object' && renderObjectToolbar) {
-            const obj = spread.objects?.[selectedElement.index];
-            if (!obj) return null;
-            const context = buildObjectContext(obj, selectedElement.index, spread, selectedElement, handleElementSelect, handleSpreadItemAction);
-
-            return renderObjectToolbar({
+          if (selectedElement.type === 'shape' && renderShapeToolbar) {
+            const shape = spread.shapes?.[selectedElement.index];
+            if (!shape) return null;
+            const context = buildShapeContext(shape, selectedElement.index, spread, selectedElement, handleElementSelect, handleSpreadItemAction);
+            return renderShapeToolbar({
               ...context,
               selectedGeometry: state.selectedGeometry,
               canvasRef,
+              onUpdateFill: (fill) => onSpreadItemAction?.({ itemType: 'shape', action: 'update', itemId: shape.id, data: { fill: { ...shape.fill, ...fill } } }),
+              onUpdateOutline: (outline) => onSpreadItemAction?.({ itemType: 'shape', action: 'update', itemId: shape.id, data: { outline: { ...shape.outline, ...outline } } }),
+            });
+          }
+
+          if (selectedElement.type === 'video' && renderVideoToolbar) {
+            const video = spread.videos?.[selectedElement.index];
+            if (!video) return null;
+            const context = buildVideoContext(video, selectedElement.index, spread, selectedElement, handleElementSelect, handleSpreadItemAction);
+            return renderVideoToolbar({
+              ...context,
+              selectedGeometry: state.selectedGeometry,
+              canvasRef,
+              onReplaceVideo: () => {},
+            });
+          }
+
+          if (selectedElement.type === 'audio' && renderAudioToolbar) {
+            const audio = spread.audios?.[selectedElement.index];
+            if (!audio) return null;
+            const context = buildAudioContext(audio, selectedElement.index, spread, selectedElement, handleElementSelect, handleSpreadItemAction);
+            return renderAudioToolbar({
+              ...context,
+              selectedGeometry: state.selectedGeometry,
+              canvasRef,
+              onReplaceAudio: () => {},
             });
           }
 

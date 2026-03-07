@@ -5,7 +5,6 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   EditableTextbox,
-  EditableObject,
   useToolbarPosition,
   Z_INDEX,
   getScaledDimensions,
@@ -15,6 +14,7 @@ import {
   type Fill,
   type Outline,
 } from '../shared';
+import { EditableImage } from '../canvas-spread-view';
 import { PageItem } from '../canvas-spread-view/page-item';
 import { AddAnimationToolbar } from './add-animation-toolbar';
 import { SelectionOverlay } from './selection-overlay';
@@ -108,16 +108,16 @@ export function AnimationEditorCanvas({
     }
   }, [handleDeselect]);
 
-  // Object selection handler
-  const handleObjectSelect = useCallback((objectId: string) => {
-    const object = spread.objects?.find((obj) => obj.id === objectId);
-    if (!object) return;
+  // Image selection handler
+  const handleImageSelect = useCallback((imageId: string) => {
+    const image = spread.images?.find((img) => img.id === imageId);
+    if (!image) return;
 
-    setSelectedItemId(objectId);
-    setSelectedItemType('object');
-    setSelectedGeometry(object.geometry);
+    setSelectedItemId(imageId);
+    setSelectedItemType('image');
+    setSelectedGeometry(image.geometry);
     setToolbarOpen(true);
-  }, [spread.objects]);
+  }, [spread.images]);
 
   // Textbox selection handler
   const handleTextboxSelect = useCallback((textboxId: string) => {
@@ -214,15 +214,15 @@ export function AnimationEditorCanvas({
           />
         )}
 
-        {/* Objects (selectable) */}
-        {spread.objects?.map((object, index) => (
-          <EditableObject
-            key={object.id}
-            object={object}
+        {/* Images (selectable) */}
+        {spread.images?.map((image, index) => (
+          <EditableImage
+            key={image.id}
+            image={image}
             index={index}
-            isSelected={selectedItemId === object.id && selectedItemType === 'object'}
+            isSelected={selectedItemId === image.id && selectedItemType === 'image'}
             isEditable={true}
-            onSelect={() => handleObjectSelect(object.id)}
+            onSelect={() => handleImageSelect(image.id)}
           />
         ))}
 

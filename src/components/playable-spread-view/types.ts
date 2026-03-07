@@ -6,7 +6,7 @@ import type { BaseSpread } from '../shared';
 export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
 export type PlayMode = 'off' | 'semi-auto' | 'auto';
-export type ItemType = 'object' | 'textbox';
+export type ItemType = 'image' | 'textbox';
 export type AnimationMediaType = 'image' | 'video' | 'audio' | 'textbox';
 
 // === Animation Editor State ===
@@ -33,7 +33,7 @@ export interface PlayableSpread extends BaseSpread {
 export interface Animation {
   order: number;
   type: 'textbox' | 'image' | 'video' | 'audio';
-  target: { id: string; type: 'textbox' | 'object' };
+  target: { id: string; type: 'textbox' | 'image' };
   trigger_type: 'on_click' | 'with_previous' | 'after_previous';
   effect: {
     type: number;

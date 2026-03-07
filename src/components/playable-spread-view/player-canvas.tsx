@@ -6,7 +6,6 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import {
   EditableTextbox,
-  EditableObject,
   getScaledDimensions,
   getFirstTextboxKey,
   Z_INDEX,
@@ -15,6 +14,7 @@ import {
   type Fill,
   type Outline,
 } from "../shared";
+import { EditableImage } from "../canvas-spread-view";
 import { PageItem } from "../canvas-spread-view/page-item";
 import type { PlayerCanvasProps, Animation, PlayMode } from "./types";
 import {
@@ -413,15 +413,15 @@ export function PlayerCanvas({
           />
         )}
 
-        {/* Objects (wrapped for GSAP ref, pointer-events-none to allow click-through) */}
-        {spread.objects?.map((object, index) => (
+        {/* Images (wrapped for GSAP ref, pointer-events-none to allow click-through) */}
+        {spread.images?.map((image, index) => (
           <div
-            key={object.id}
-            ref={registerElement(object.id)}
+            key={image.id}
+            ref={registerElement(image.id)}
             className="pointer-events-none"
           >
-            <EditableObject
-              object={object}
+            <EditableImage
+              image={image}
               index={index}
               isSelected={false}
               isEditable={false}

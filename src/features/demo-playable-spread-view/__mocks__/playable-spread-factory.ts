@@ -7,9 +7,10 @@ import type {
 import type {
   PageData,
   SpreadTextbox,
-  SpreadObject,
+  SpreadImage,
   Geometry,
   Typography,
+  SpreadItemMediaType,
 } from '@/components/canvas-spread-view/types';
 import { ANIMATION_PRESETS } from '@/components/playable-spread-view/constants';
 
@@ -24,14 +25,13 @@ function randomBetween(min: number, max: number): number {
 }
 
 // === Constants ===
-const CANVAS_RATIO = 4 / 3; // Canvas aspect ratio (800x600)
+const CANVAS_RATIO = 4 / 3;
 
-// Available object ratios with picsum dimensions
-const OBJECT_RATIOS = [
-  { w: 200, h: 300 },  // 2:3 portrait (character)
-  { w: 300, h: 300 },  // 1:1 square (prop)
-  { w: 400, h: 300 },  // 4:3 landscape (background)
-  { w: 200, h: 400 },  // 1:2 tall portrait
+// Image ratios with picsum dimensions
+const IMAGE_RATIOS = [
+  { w: 200, h: 300 },  // 2:3 portrait
+  { w: 300, h: 300 },  // 1:1 square
+  { w: 400, h: 300 },  // 4:3 landscape
   { w: 300, h: 200 },  // 3:2 landscape
 ];
 
@@ -43,8 +43,8 @@ const TEXTBOX_GEOMETRIES: Geometry[] = [
   { x: 30, y: 80, w: 45, h: 15 },
 ];
 
-// Object position templates by type
-const OBJECT_POSITIONS: Record<string, { x: number; y: number }[]> = {
+// Image position templates by type
+const IMAGE_POSITIONS: Record<SpreadItemMediaType, { x: number; y: number }[]> = {
   background: [{ x: 0, y: 0 }],
   character: [
     { x: 55, y: 15 },
@@ -63,51 +63,53 @@ const OBJECT_POSITIONS: Record<string, { x: number; y: number }[]> = {
     { x: 0, y: 0 },
     { x: 75, y: 0 },
   ],
+  raw: [{ x: 20, y: 20 }],
+  other: [{ x: 30, y: 30 }],
 };
 
-// Size ranges by object type (base width in %)
-const OBJECT_SIZE_RANGES: Record<string, { min: number; max: number }> = {
+// Size ranges by image type (base width in %)
+const IMAGE_SIZE_RANGES: Record<SpreadItemMediaType, { min: number; max: number }> = {
   background: { min: 100, max: 100 },
   character: { min: 15, max: 28 },
   prop: { min: 6, max: 15 },
   foreground: { min: 20, max: 100 },
+  raw: { min: 20, max: 40 },
+  other: { min: 15, max: 30 },
+};
+
+// Z-Index mapping
+const Z_INDEX_BY_TYPE: Record<SpreadItemMediaType, number> = {
+  background: 50,
+  character: 125,
+  prop: 175,
+  foreground: 250,
+  raw: 150,
+  other: 150,
 };
 
 // Track usage indices
 let textboxGeoIndex = 0;
-const objectGeoIndices: Record<string, number> = {
+const imageGeoIndices: Record<SpreadItemMediaType, number> = {
   background: 0, character: 0, prop: 0, foreground: 0, raw: 0, other: 0,
 };
 
 function resetGeometryIndices(): void {
   textboxGeoIndex = 0;
-  Object.keys(objectGeoIndices).forEach(k => objectGeoIndices[k] = 0);
+  const keys: SpreadItemMediaType[] = ['background', 'character', 'prop', 'foreground', 'raw', 'other'];
+  keys.forEach(k => imageGeoIndices[k] = 0);
 }
 
-// Calculate h% from w% to match image ratio on canvas
 function calcHeightPercent(widthPercent: number, imgW: number, imgH: number): number {
   const imageRatio = imgW / imgH;
   return Math.round(widthPercent * CANVAS_RATIO / imageRatio * 10) / 10;
 }
 
-// Clamp geometry to stay within canvas bounds (x+w <= 100, y+h <= 100)
 function clampGeometryToBounds(geo: Geometry): Geometry {
   let { x, y, w, h } = geo;
-
-  // Ensure w and h don't exceed 100%
   w = Math.min(w, 100);
   h = Math.min(h, 100);
-
-  // Clamp x so x+w <= 100
-  if (x + w > 100) {
-    x = Math.max(0, 100 - w);
-  }
-
-  // Clamp y so y+h <= 100
-  if (y + h > 100) {
-    y = Math.max(0, 100 - h);
-  }
-
+  if (x + w > 100) x = Math.max(0, 100 - w);
+  if (y + h > 100) y = Math.max(0, 100 - h);
   return { x, y, w, h };
 }
 
@@ -115,7 +117,7 @@ function clampGeometryToBounds(geo: Geometry): Geometry {
 function createMockAnimation(
   order: number,
   targetId: string,
-  targetType: 'textbox' | 'object',
+  targetType: 'textbox' | 'image',
   preset: keyof typeof ANIMATION_PRESETS,
   triggerType: Animation['trigger_type'] = 'after_previous',
   delay: number = 0
@@ -134,15 +136,15 @@ function createMockAnimation(
 }
 
 function generateSpreadAnimations(
-  objects: SpreadObject[],
+  images: SpreadImage[],
   textboxes: SpreadTextbox[]
 ): Animation[] {
   const animations: Animation[] = [];
   let order = 0;
 
-  // All objects fade in on click
-  objects.forEach((obj) => {
-    animations.push(createMockAnimation(order++, obj.id, 'object', 'fadeIn', 'on_click', 0));
+  // All images fade in on click
+  images.forEach((img) => {
+    animations.push(createMockAnimation(order++, img.id, 'image', 'fadeIn', 'on_click', 0));
   });
 
   // All textboxes fade in on click
@@ -159,30 +161,26 @@ function getTextboxGeometry(): Geometry {
   return clampGeometryToBounds({ ...geo });
 }
 
-// Fixed background ratios
-const BACKGROUND_RATIO_DPS = { w: 400, h: 300 };   // 4:3 landscape for DPS
-const BACKGROUND_RATIO_SINGLE = { w: 200, h: 300 }; // 2:3 portrait for non-DPS
+const BACKGROUND_RATIO_DPS = { w: 400, h: 300 };
+const BACKGROUND_RATIO_SINGLE = { w: 200, h: 300 };
 
-// Get random object with geometry matching its ratio
-interface ObjectWithGeometry {
+interface ImageWithGeometry {
   geometry: Geometry;
   dimensions: { w: number; h: number };
 }
 
-function getRandomObjectGeometry(type: string, isDPS = true): ObjectWithGeometry {
-  const typeKey = type in objectGeoIndices ? type : 'other';
-  const positions = OBJECT_POSITIONS[typeKey] || OBJECT_POSITIONS.prop;
-  const sizeRange = OBJECT_SIZE_RANGES[typeKey] || OBJECT_SIZE_RANGES.prop;
+function getRandomImageGeometry(type: SpreadItemMediaType, isDPS = true): ImageWithGeometry {
+  const positions = IMAGE_POSITIONS[type] || IMAGE_POSITIONS.other;
+  const sizeRange = IMAGE_SIZE_RANGES[type] || IMAGE_SIZE_RANGES.other;
 
-  const idx = objectGeoIndices[typeKey] % positions.length;
-  objectGeoIndices[typeKey]++;
+  const idx = imageGeoIndices[type] % positions.length;
+  imageGeoIndices[type]++;
 
   const pos = positions[idx];
 
-  // Background uses fixed ratio based on DPS/non-DPS
   const ratio = type === 'background'
     ? (isDPS ? BACKGROUND_RATIO_DPS : BACKGROUND_RATIO_SINGLE)
-    : OBJECT_RATIOS[randomBetween(0, OBJECT_RATIOS.length - 1)];
+    : IMAGE_RATIOS[randomBetween(0, IMAGE_RATIOS.length - 1)];
 
   const baseW = randomBetween(sizeRange.min, sizeRange.max);
   const h = calcHeightPercent(baseW, ratio.w, ratio.h);
@@ -213,7 +211,6 @@ const SAMPLE_TEXTS = {
   ],
 };
 
-// === Default Typography ===
 const defaultTypography: Typography = {
   size: 16,
   weight: 400,
@@ -227,7 +224,6 @@ const defaultTypography: Typography = {
   textTransform: 'none',
 };
 
-// === Create Page Data ===
 function createMockPage(
   pageNumber: number | string,
   type: PageData['type'] = 'normal_page'
@@ -243,7 +239,6 @@ function createMockPage(
   };
 }
 
-// === Create Single Textbox ===
 function createMockTextbox(
   language = 'en_US',
   overrides: Partial<SpreadTextbox> = {}
@@ -265,80 +260,56 @@ function createMockTextbox(
   };
 }
 
-// === Create Single Object ===
-// Weighted type distribution: character/prop appear more often than background/foreground
-const OBJECT_TYPE_WEIGHTS: { type: SpreadObject['type']; weight: number }[] = [
+// Weighted type distribution for images
+const IMAGE_TYPE_WEIGHTS: { type: SpreadItemMediaType; weight: number }[] = [
   { type: 'character', weight: 40 },
   { type: 'prop', weight: 40 },
   { type: 'background', weight: 10 },
   { type: 'foreground', weight: 10 },
 ];
 
-function getWeightedRandomType(): SpreadObject['type'] {
-  const totalWeight = OBJECT_TYPE_WEIGHTS.reduce((sum, t) => sum + t.weight, 0);
+function getWeightedRandomType(): SpreadItemMediaType {
+  const totalWeight = IMAGE_TYPE_WEIGHTS.reduce((sum, t) => sum + t.weight, 0);
   let random = Math.random() * totalWeight;
-  for (const item of OBJECT_TYPE_WEIGHTS) {
+  for (const item of IMAGE_TYPE_WEIGHTS) {
     random -= item.weight;
     if (random <= 0) return item.type;
   }
   return 'prop';
 }
 
-// Type-specific name pools (background names must NOT start with prop/character)
-const OBJECT_NAMES_BY_TYPE: Record<string, string[]> = {
+// Type-specific name pools
+const IMAGE_NAMES_BY_TYPE: Record<SpreadItemMediaType, string[]> = {
   character: ['main_character', 'side_character', 'character_npc'],
   prop: ['prop_1', 'prop_2', 'prop_item'],
   background: ['background_1', 'background_scene', 'bg_layer'],
   foreground: ['foreground_1', 'foreground_overlay', 'fg_layer'],
+  raw: ['raw_image'],
+  other: ['other_item'],
 };
 
-const OBJECT_STATES: Record<string, string[]> = {
-  main_character: ['default', 'happy', 'sad'],
-  side_character: ['default', 'talking'],
-  character_npc: ['default', 'idle'],
-  prop_1: ['default'],
-  prop_2: ['default'],
-  prop_item: ['default'],
-  background_1: ['day', 'night'],
-  background_scene: ['default'],
-  bg_layer: ['default'],
-  foreground_1: ['default'],
-  foreground_overlay: ['default'],
-  fg_layer: ['default'],
-};
-
-function createMockObject(
-  overrides: Partial<SpreadObject> = {},
+// Create SpreadImage with retouch fields (z-index, player_visible, editor_visible, name, type)
+function createMockImage(
+  overrides: Partial<SpreadImage> = {},
   isDPS = true
-): SpreadObject {
-  const type = getWeightedRandomType();
-  const namesForType = OBJECT_NAMES_BY_TYPE[type] || ['unnamed'];
+): SpreadImage {
+  const type: SpreadItemMediaType = getWeightedRandomType();
+  const namesForType = IMAGE_NAMES_BY_TYPE[type] || ['unnamed'];
   const name = namesForType[randomBetween(0, namesForType.length - 1)];
-  const states = OBJECT_STATES[name] || ['default'];
-  const state = states[randomBetween(0, states.length - 1)];
 
-  const zIndexMap: Record<SpreadObject['type'], number> = {
-    background: 50,
-    character: 125,
-    prop: 175,
-    foreground: 250,
-    raw: 150,
-    other: 150,
-  };
-
-  const { geometry, dimensions } = getRandomObjectGeometry(type, isDPS);
+  const { geometry, dimensions } = getRandomImageGeometry(type, isDPS);
 
   return {
     id: generateUUID(),
-    name,
-    state,
-    type,
-    media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${dimensions.h}`,
-    media_type: 'image',
+    title: `Image ${randomBetween(1, 100)}`,
     geometry,
-    zIndex: zIndexMap[type],
+    media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${dimensions.h}`,
+    // Retouch fields
+    'z-index': Z_INDEX_BY_TYPE[type],
     player_visible: true,
     editor_visible: true,
+    name,
+    type,
     ...overrides,
   };
 }
@@ -347,45 +318,39 @@ function createMockObject(
 export interface CreatePlayableSpreadOptions {
   spreadCount: number;
   textboxCount: number;
-  objectCount: number;
+  imageCount: number;
   language: 'en_US' | 'vi_VN';
   isDPS?: boolean;
 }
 
 // === Create Multiple Playable Spreads ===
 export function createPlayableSpreads(options: CreatePlayableSpreadOptions): PlayableSpread[] {
-  const { spreadCount, textboxCount, objectCount, language, isDPS = true } = options;
+  const { spreadCount, textboxCount, imageCount, language, isDPS = true } = options;
   resetGeometryIndices();
 
   return Array.from({ length: spreadCount }, (_, spreadIndex) => {
     const leftPageNum = spreadIndex * 2;
     const rightPageNum = leftPageNum + 1;
 
-    // Create pages based on DPS setting
     const pages: PageData[] = isDPS
       ? [createMockPage(`${leftPageNum}-${rightPageNum}`)]
       : [createMockPage(leftPageNum), createMockPage(rightPageNum)];
 
-    // Create textboxes
     const textboxes: SpreadTextbox[] = Array.from({ length: textboxCount }, () =>
       createMockTextbox(language)
     );
 
-    // Create objects (pass isDPS for background ratio)
-    const objects: SpreadObject[] = Array.from({ length: objectCount }, () =>
-      createMockObject({}, isDPS)
+    const images: SpreadImage[] = Array.from({ length: imageCount }, () =>
+      createMockImage({}, isDPS)
     );
 
-    // Generate sample animations for demo testing
-    const animations = generateSpreadAnimations(objects, textboxes);
+    const animations = generateSpreadAnimations(images, textboxes);
 
-    // Playable spread data
     const spread: PlayableSpread = {
       id: generateUUID(),
       pages,
-      images: [], // No images per plan
+      images,
       textboxes,
-      objects,
       animations,
       manuscript: SAMPLE_TEXTS[language]?.[spreadIndex % 6] || '',
     };

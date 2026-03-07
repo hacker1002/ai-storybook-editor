@@ -40,7 +40,7 @@ import { Settings, RefreshCw } from "lucide-react";
 interface MockOptions {
   spreadCount: number;
   textboxCount: number;
-  objectCount: number;
+  imageCount: number;
   language: "en_US" | "vi_VN";
   isDPS: boolean;
 }
@@ -48,7 +48,7 @@ interface MockOptions {
 const DEFAULT_MOCK_OPTIONS: MockOptions = {
   spreadCount: 8,
   textboxCount: 1,
-  objectCount: 3,
+  imageCount: 3,
   language: "en_US",
   isDPS: true,
 };
@@ -67,7 +67,7 @@ export function DemoPlayableSpreadView() {
     const factoryOpts: CreatePlayableSpreadOptions = {
       spreadCount: opts.spreadCount,
       textboxCount: opts.textboxCount,
-      objectCount: opts.objectCount,
+      imageCount: opts.imageCount,
       language: opts.language,
       isDPS: opts.isDPS,
     };
@@ -272,15 +272,15 @@ export function DemoPlayableSpreadView() {
                         />
                       </div>
 
-                      {/* Object count */}
+                      {/* Image count */}
                       <div className="space-y-1.5">
                         <Label className="text-xs">
-                          Objects: {mockOptions.objectCount}
+                          Images: {mockOptions.imageCount}
                         </Label>
                         <Slider
-                          value={[mockOptions.objectCount]}
+                          value={[mockOptions.imageCount]}
                           onValueChange={([v]) =>
-                            updateMockOption("objectCount", v)
+                            updateMockOption("imageCount", v)
                           }
                           min={0}
                           max={5}

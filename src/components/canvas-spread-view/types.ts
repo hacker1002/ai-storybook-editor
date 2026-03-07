@@ -6,7 +6,11 @@ import type {
   Typography,
   Fill,
   Outline,
-  SpreadObject,
+  ShapeFill,
+  ShapeOutline,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
   PageData,
   SpreadImage,
   SpreadTextbox,
@@ -19,7 +23,11 @@ export type {
   Typography,
   Fill,
   Outline,
-  SpreadObject,
+  ShapeFill,
+  ShapeOutline,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
   PageData,
   SpreadImage,
   SpreadTextbox,
@@ -28,11 +36,13 @@ export type {
 
 // === Enums & Literals ===
 export type ViewMode = "edit" | "grid";
-export type ItemType = "image" | "text" | "object";
+export type ItemType = "image" | "text" | "shape" | "video" | "audio";
 export type SelectedElementType =
   | "image"
   | "textbox"
-  | "object"
+  | "shape"
+  | "video"
+  | "audio"
   | "page";
 export type ResizeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 export type ThumbnailListLayout = "horizontal" | "grid";
@@ -81,11 +91,29 @@ export interface TextItemContext<TSpread extends BaseSpread>
   onEditingChange?: (isEditing: boolean) => void;
 }
 
-export interface ObjectItemContext<TSpread extends BaseSpread>
+export interface ShapeItemContext<TSpread extends BaseSpread>
   extends BaseItemContext<TSpread> {
-  item: SpreadObject;
+  item: SpreadShape;
   onSelect: () => void;
-  onUpdate: (updates: Partial<SpreadObject>) => void;
+  onUpdate: (updates: Partial<SpreadShape>) => void;
+  onDelete: () => void;
+}
+
+export interface VideoItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
+  item: SpreadVideo;
+  isThumbnail?: boolean;
+  onSelect: () => void;
+  onUpdate: (updates: Partial<SpreadVideo>) => void;
+  onDelete: () => void;
+}
+
+export interface AudioItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
+  item: SpreadAudio;
+  isThumbnail?: boolean;
+  onSelect: () => void;
+  onUpdate: (updates: Partial<SpreadAudio>) => void;
   onDelete: () => void;
 }
 
@@ -126,21 +154,29 @@ export interface TextToolbarContext<TSpread extends BaseSpread>
     BaseToolbarContext {
   onFormatText: (format: Partial<Typography>) => void;
   onClone?: () => void;
-  onUpdateBackground?: (bg: Partial<Fill>) => void;
-  onUpdateOutline?: (outline: Partial<Outline>) => void;
 }
 
-export interface ObjectToolbarContext<TSpread extends BaseSpread>
-  extends ObjectItemContext<TSpread>,
+export interface ShapeToolbarContext<TSpread extends BaseSpread>
+  extends ShapeItemContext<TSpread>,
     BaseToolbarContext {
-  onRotate?: () => void;
-  onCut?: () => void;
-  onCrop?: () => void;
-  onGenerate?: () => void;
+  onUpdateFill: (fill: Partial<ShapeFill>) => void;
+  onUpdateOutline: (outline: Partial<ShapeOutline>) => void;
+}
+
+export interface VideoToolbarContext<TSpread extends BaseSpread>
+  extends VideoItemContext<TSpread>,
+    BaseToolbarContext {
+  onReplaceVideo: () => void;
+}
+
+export interface AudioToolbarContext<TSpread extends BaseSpread>
+  extends AudioItemContext<TSpread>,
+    BaseToolbarContext {
+  onReplaceAudio: () => void;
 }
 
 // === Spread Item Action Types ===
-export type SpreadItemType = 'page' | 'image' | 'text' | 'object';
+export type SpreadItemType = 'page' | 'image' | 'text' | 'shape' | 'video' | 'audio';
 export type SpreadItemActionType = 'add' | 'update' | 'delete';
 
 export interface SpreadItemActionParams<TData = unknown> {
@@ -191,21 +227,61 @@ export type TextDeleteAction = SpreadItemActionParams<null> & {
   data: null;
 };
 
-// Object actions (itemId: string = UUID)
-export type ObjectAddAction = SpreadItemActionParams<SpreadObject> & {
-  itemType: 'object';
+// Shape actions (itemId: string = UUID)
+export type ShapeAddAction = SpreadItemActionParams<SpreadShape> & {
+  itemType: 'shape';
   action: 'add';
   itemId: null;
 };
 
-export type ObjectUpdateAction = SpreadItemActionParams<Partial<SpreadObject>> & {
-  itemType: 'object';
+export type ShapeUpdateAction = SpreadItemActionParams<Partial<SpreadShape>> & {
+  itemType: 'shape';
   action: 'update';
   itemId: string;
 };
 
-export type ObjectDeleteAction = SpreadItemActionParams<null> & {
-  itemType: 'object';
+export type ShapeDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'shape';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
+// Video actions (itemId: string = UUID)
+export type VideoAddAction = SpreadItemActionParams<SpreadVideo> & {
+  itemType: 'video';
+  action: 'add';
+  itemId: null;
+};
+
+export type VideoUpdateAction = SpreadItemActionParams<Partial<SpreadVideo>> & {
+  itemType: 'video';
+  action: 'update';
+  itemId: string;
+};
+
+export type VideoDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'video';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
+// Audio actions (itemId: string = UUID)
+export type AudioAddAction = SpreadItemActionParams<SpreadAudio> & {
+  itemType: 'audio';
+  action: 'add';
+  itemId: null;
+};
+
+export type AudioUpdateAction = SpreadItemActionParams<Partial<SpreadAudio>> & {
+  itemType: 'audio';
+  action: 'update';
+  itemId: string;
+};
+
+export type AudioDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'audio';
   action: 'delete';
   itemId: string;
   data: null;
@@ -226,9 +302,15 @@ export type SpreadItemActionUnion =
   | TextAddAction
   | TextUpdateAction
   | TextDeleteAction
-  | ObjectAddAction
-  | ObjectUpdateAction
-  | ObjectDeleteAction
+  | ShapeAddAction
+  | ShapeUpdateAction
+  | ShapeDeleteAction
+  | VideoAddAction
+  | VideoUpdateAction
+  | VideoDeleteAction
+  | AudioAddAction
+  | AudioUpdateAction
+  | AudioDeleteAction
   | PageUpdateAction;
 
 // Handler type

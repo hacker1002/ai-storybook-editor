@@ -5,7 +5,6 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   EditableTextbox,
-  EditableObject,
   useToolbarPosition,
   Z_INDEX,
   getScaledDimensions,
@@ -15,6 +14,7 @@ import {
   type Fill,
   type Outline,
 } from "../shared";
+import { EditableImage } from "../canvas-spread-view";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
@@ -66,15 +66,16 @@ export function RemixEditorCanvas({
     gap: 8,
   });
 
-  // Compute swappable keys from assets (use target.key to match object.name)
+  // Compute swappable keys from assets (use target.key to match image.name)
   const swappableKeys = useMemo(() => {
     return assets.map((a) => a.target.key);
   }, [assets]);
 
-  // Check if object is swappable
+  // Check if image is swappable
   const isSwappable = useCallback(
-    (objectName: string) => {
-      return swappableKeys.includes(objectName);
+    (imageName: string | undefined) => {
+      if (!imageName) return false;
+      return swappableKeys.includes(imageName);
     },
     [swappableKeys]
   );
@@ -154,23 +155,23 @@ export function RemixEditorCanvas({
     [handleDeselectAll]
   );
 
-  // Object selection handler - only for swappable objects
-  const handleObjectSelect = useCallback(
-    (objectId: string) => {
-      const object = spread.objects?.find((obj) => obj.id === objectId);
-      if (!object) return;
+  // Image selection handler - only for swappable images
+  const handleImageSelect = useCallback(
+    (imageId: string) => {
+      const image = spread.images?.find((img) => img.id === imageId);
+      if (!image) return;
 
       // Only select if swappable
-      if (!isSwappable(object.name)) return;
+      if (!isSwappable(image.name)) return;
 
-      setSelectedSwappableId(objectId);
-      setSelectedSwappableGeometry(object.geometry);
+      setSelectedSwappableId(imageId);
+      setSelectedSwappableGeometry(image.geometry);
       setSelectedTextboxId(null);
       setPrompt("");
       setReferenceImage(null);
       setEditingTextboxId(null);
     },
-    [spread.objects, isSwappable]
+    [spread.images, isSwappable]
   );
 
   // Textbox selection handler - deselects swappable, no toolbar
@@ -294,16 +295,15 @@ export function RemixEditorCanvas({
           />
         )}
 
-        {/* Objects (swappable ones are selectable) */}
-        {spread.objects?.map((object, index) => (
-          <EditableObject
-            key={object.id}
-            object={object}
+        {/* Images (swappable ones are selectable) */}
+        {spread.images?.map((image, index) => (
+          <EditableImage
+            key={image.id}
+            image={image}
             index={index}
-            isSelected={selectedSwappableId === object.id}
-            isEditable={false}
-            isSwappable={isSwappable(object.name)}
-            onSelect={() => handleObjectSelect(object.id)}
+            isSelected={selectedSwappableId === image.id}
+            isEditable={isSwappable(image.name)}
+            onSelect={() => handleImageSelect(image.id)}
           />
         ))}
 

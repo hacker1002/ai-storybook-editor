@@ -24,7 +24,9 @@ export interface MockOptions {
   spreadCount: number;
   imageCount: number;
   textboxCount: number;
-  objectCount: number;
+  shapeCount: number;
+  videoCount: number;
+  audioCount: number;
   withGeneratedImages: boolean;
   isDPS: boolean;
   language: "en_US" | "vi_VN";
@@ -41,13 +43,15 @@ export interface FeatureFlags {
   renderImageToolbar: boolean;
   renderTextToolbar: boolean;
   renderPageToolbar: boolean;
-  renderObjectToolbar: boolean;
+  renderShapeToolbar: boolean;
 }
 
 export interface ItemFlags {
   showImages: boolean;
   showTexts: boolean;
-  showObjects: boolean;
+  showShapes: boolean;
+  showVideos: boolean;
+  showAudios: boolean;
 }
 
 interface DemoSettingsPopoverProps {
@@ -146,14 +150,14 @@ export function DemoSettingsPopover({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">
-                  Objects: {mockOptions.objectCount}
+                  Shapes: {mockOptions.shapeCount}
                 </Label>
                 <Slider
-                  value={[mockOptions.objectCount]}
-                  onValueChange={([v]) => onMockOptionChange("objectCount", v)}
+                  value={[mockOptions.shapeCount]}
+                  onValueChange={([v]) => onMockOptionChange("shapeCount", v)}
                   min={0}
-                  max={5}
-                  step={3}
+                  max={4}
+                  step={1}
                 />
               </div>
               <div className="space-y-1.5">
@@ -210,7 +214,7 @@ export function DemoSettingsPopover({
               ITEM FLAGS
             </Label>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              {(["showImages", "showTexts"] as const).map((key) => (
+              {(["showImages", "showTexts", "showShapes", "showVideos", "showAudios"] as const).map((key) => (
                 <div key={key} className="flex items-center gap-1.5">
                   <Switch
                     id={key}
@@ -223,17 +227,6 @@ export function DemoSettingsPopover({
                   </Label>
                 </div>
               ))}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Switch
-                id="showObjects"
-                checked={itemFlags.showObjects}
-                onCheckedChange={(v) => onItemFlagChange("showObjects", v)}
-                className="scale-75"
-              />
-              <Label htmlFor="showObjects" className="text-xs">
-                showObjects
-              </Label>
             </div>
           </div>
 

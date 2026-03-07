@@ -41,11 +41,15 @@ import type {
   ItemType,
   ImageItemContext,
   TextItemContext,
-  ObjectItemContext,
+  ShapeItemContext,
+  VideoItemContext,
+  AudioItemContext,
   ImageToolbarContext,
   TextToolbarContext,
   PageToolbarContext,
-  ObjectToolbarContext,
+  ShapeToolbarContext,
+  VideoToolbarContext,
+  AudioToolbarContext,
   LayoutOption,
   OnUpdateSpreadItemFn,
   SpreadItemActionUnion,
@@ -62,13 +66,17 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Item render functions (optional - skip rendering if not provided)
   renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
-  renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
+  renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
+  renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
+  renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
   renderTextToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
-  renderObjectToolbar?: (context: ObjectToolbarContext<TSpread>) => ReactNode;
+  renderShapeToolbar?: (context: ShapeToolbarContext<TSpread>) => ReactNode;
+  renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
+  renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
 
   // Spread-level callbacks
   onSpreadSelect?: (spreadId: string) => void;
@@ -102,11 +110,15 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   renderItems,
   renderImageItem,
   renderTextItem,
-  renderObjectItem,
+  renderShapeItem,
+  renderVideoItem,
+  renderAudioItem,
   renderImageToolbar,
   renderTextToolbar,
   renderPageToolbar,
-  renderObjectToolbar,
+  renderShapeToolbar,
+  renderVideoToolbar,
+  renderAudioToolbar,
   onSpreadSelect,
   onSpreadReorder,
   onSpreadAdd,
@@ -319,11 +331,15 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderItems={renderItems}
                 renderImageItem={renderImageItem}
                 renderTextItem={renderTextItem}
-                renderObjectItem={renderObjectItem}
+                renderShapeItem={renderShapeItem}
+                renderVideoItem={renderVideoItem}
+                renderAudioItem={renderAudioItem}
                 renderImageToolbar={renderImageToolbar}
                 renderTextToolbar={renderTextToolbar}
                 renderPageToolbar={renderPageToolbar}
-                renderObjectToolbar={renderObjectToolbar}
+                renderShapeToolbar={renderShapeToolbar}
+                renderVideoToolbar={renderVideoToolbar}
+                renderAudioToolbar={renderAudioToolbar}
                 onSpreadItemAction={handleSpreadItemAction}
                 canDeleteItem={canDeleteItem}
                 canResizeItem={canResizeItem}
@@ -341,7 +357,9 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderItems={renderItems}
                 renderImageItem={renderImageItem}
                 renderTextItem={renderTextItem}
-                renderObjectItem={renderObjectItem}
+                renderShapeItem={renderShapeItem}
+                renderVideoItem={renderVideoItem}
+                renderAudioItem={renderAudioItem}
                 canAdd={canAddSpread}
                 canReorder={canReorderSpread}
                 canDelete={canDeleteSpread}
@@ -363,7 +381,9 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             renderItems={renderItems}
             renderImageItem={renderImageItem}
             renderTextItem={renderTextItem}
-            renderObjectItem={renderObjectItem}
+            renderShapeItem={renderShapeItem}
+            renderVideoItem={renderVideoItem}
+            renderAudioItem={renderAudioItem}
             canAdd={canAddSpread}
             canReorder={canReorderSpread}
             canDelete={canDeleteSpread}

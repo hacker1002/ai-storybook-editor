@@ -4,16 +4,18 @@ import type {
   BaseSpread,
   SpreadImage,
   SpreadTextbox,
-  SpreadObject,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
   ImageItemContext,
   TextItemContext,
-  ObjectItemContext,
+  ShapeItemContext,
+  VideoItemContext,
+  AudioItemContext,
   TextToolbarContext,
   SelectedElement,
   Geometry,
   Typography,
-  Fill,
-  Outline,
   SpreadItemActionUnion,
 } from '../types';
 import { getFirstTextboxKey } from '../../shared';
@@ -182,68 +184,110 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
         data: clonedItem,
       });
     },
-    onUpdateBackground: (bg: Partial<Fill>) => {
-      if (!langKey) return;
-      const defaultFill: Fill = { color: '#ffffff', opacity: 0 };
-      onAction({
-        itemType: 'text',
-        action: 'update',
-        itemId: textbox.id,
-        data: {
-          [langKey]: {
-            ...langContent,
-            fill: { ...(langContent?.fill || defaultFill), ...bg },
-          },
-        } as Partial<SpreadTextbox>,
-      });
-    },
-    onUpdateOutline: (outlineUpdates: Partial<Outline>) => {
-      if (!langKey) return;
-      const defaultOutline: Outline = { color: '#000000', width: 2, radius: 8, type: 'solid' };
-      onAction({
-        itemType: 'text',
-        action: 'update',
-        itemId: textbox.id,
-        data: {
-          [langKey]: {
-            ...langContent,
-            outline: { ...(langContent?.outline || defaultOutline), ...outlineUpdates },
-          },
-        } as Partial<SpreadTextbox>,
-      });
-    },
   };
 }
 
 /**
- * Build object item context for render props
+ * Build shape item context for render props
  */
-export function buildObjectContext<TSpread extends BaseSpread>(
-  object: SpreadObject,
+export function buildShapeContext<TSpread extends BaseSpread>(
+  shape: SpreadShape,
   index: number,
   spread: TSpread,
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
   onAction: SpreadItemActionHandler
-): ObjectItemContext<TSpread> {
+): ShapeItemContext<TSpread> {
   return {
-    item: object,
+    item: shape,
     itemIndex: index,
     spreadId: spread.id,
     spread,
-    isSelected: selectedElement?.type === 'object' && selectedElement.index === index,
+    isSelected: selectedElement?.type === 'shape' && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: () => onSelect({ type: 'object', index }),
+    onSelect: () => onSelect({ type: 'shape', index }),
     onUpdate: (updates) => onAction({
-      itemType: 'object',
+      itemType: 'shape',
       action: 'update',
-      itemId: object.id,
+      itemId: shape.id,
       data: updates
     }),
     onDelete: () => onAction({
-      itemType: 'object',
+      itemType: 'shape',
       action: 'delete',
-      itemId: object.id,
+      itemId: shape.id,
+      data: null
+    }),
+  };
+}
+
+/**
+ * Build video item context for render props
+ */
+export function buildVideoContext<TSpread extends BaseSpread>(
+  video: SpreadVideo,
+  index: number,
+  spread: TSpread,
+  selectedElement: SelectedElement | null,
+  onSelect: SelectFn,
+  onAction: SpreadItemActionHandler,
+  isThumbnail = false
+): VideoItemContext<TSpread> {
+  return {
+    item: video,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: selectedElement?.type === 'video' && selectedElement.index === index,
+    isSpreadSelected: true,
+    isThumbnail,
+    onSelect: () => onSelect({ type: 'video', index }),
+    onUpdate: (updates) => onAction({
+      itemType: 'video',
+      action: 'update',
+      itemId: video.id,
+      data: updates
+    }),
+    onDelete: () => onAction({
+      itemType: 'video',
+      action: 'delete',
+      itemId: video.id,
+      data: null
+    }),
+  };
+}
+
+/**
+ * Build audio item context for render props
+ */
+export function buildAudioContext<TSpread extends BaseSpread>(
+  audio: SpreadAudio,
+  index: number,
+  spread: TSpread,
+  selectedElement: SelectedElement | null,
+  onSelect: SelectFn,
+  onAction: SpreadItemActionHandler,
+  isThumbnail = false
+): AudioItemContext<TSpread> {
+  return {
+    item: audio,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: selectedElement?.type === 'audio' && selectedElement.index === index,
+    isSpreadSelected: true,
+    isThumbnail,
+    onSelect: () => onSelect({ type: 'audio', index }),
+    onUpdate: (updates) => onAction({
+      itemType: 'audio',
+      action: 'update',
+      itemId: audio.id,
+      data: updates
+    }),
+    onDelete: () => onAction({
+      itemType: 'audio',
+      action: 'delete',
+      itemId: audio.id,
       data: null
     }),
   };
@@ -294,20 +338,64 @@ export function buildViewOnlyTextContext<TSpread extends BaseSpread>(
 }
 
 /**
- * Build view-only object context for thumbnails
+ * Build view-only shape context for thumbnails
  */
-export function buildViewOnlyObjectContext<TSpread extends BaseSpread>(
-  object: SpreadObject,
+export function buildViewOnlyShapeContext<TSpread extends BaseSpread>(
+  shape: SpreadShape,
   index: number,
   spread: TSpread
-): ObjectItemContext<TSpread> {
+): ShapeItemContext<TSpread> {
   return {
-    item: object,
+    item: shape,
     itemIndex: index,
     spreadId: spread.id,
     spread,
     isSelected: false,
     isSpreadSelected: false,
+    onSelect: () => {},
+    onUpdate: () => {},
+    onDelete: () => {},
+  };
+}
+
+/**
+ * Build view-only video context for thumbnails
+ */
+export function buildViewOnlyVideoContext<TSpread extends BaseSpread>(
+  video: SpreadVideo,
+  index: number,
+  spread: TSpread
+): VideoItemContext<TSpread> {
+  return {
+    item: video,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: false,
+    isSpreadSelected: false,
+    isThumbnail: true,
+    onSelect: () => {},
+    onUpdate: () => {},
+    onDelete: () => {},
+  };
+}
+
+/**
+ * Build view-only audio context for thumbnails
+ */
+export function buildViewOnlyAudioContext<TSpread extends BaseSpread>(
+  audio: SpreadAudio,
+  index: number,
+  spread: TSpread
+): AudioItemContext<TSpread> {
+  return {
+    item: audio,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: false,
+    isSpreadSelected: false,
+    isThumbnail: true,
     onSelect: () => {},
     onUpdate: () => {},
     onDelete: () => {},

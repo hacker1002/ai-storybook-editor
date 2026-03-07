@@ -2,8 +2,8 @@
 import { ImageIcon, VideoIcon, Volume2, Type } from 'lucide-react';
 import type { AddAnimationToolbarProps, AnimationMediaType } from './types';
 
-// Animation options for object items (image, video, audio)
-const OBJECT_OPTIONS: { type: AnimationMediaType; label: string; icon: typeof ImageIcon }[] = [
+// Animation options for image items (image, video, audio)
+const IMAGE_OPTIONS: { type: AnimationMediaType; label: string; icon: typeof ImageIcon }[] = [
   { type: 'image', label: 'Image', icon: ImageIcon },
   { type: 'video', label: 'Video', icon: VideoIcon },
   { type: 'audio', label: 'Audio', icon: Volume2 },
@@ -28,7 +28,7 @@ export function AddAnimationToolbar({
 }: AddAnimationToolbarProps) {
   if (!position) return null;
 
-  const options = targetType === 'object' ? OBJECT_OPTIONS : TEXTBOX_OPTIONS;
+  const options = targetType === 'image' ? IMAGE_OPTIONS : TEXTBOX_OPTIONS;
 
   return (
     <div

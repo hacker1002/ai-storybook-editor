@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
 import {
   buildViewOnlyImageContext,
   buildViewOnlyTextContext,
-  buildViewOnlyObjectContext,
+  buildViewOnlyShapeContext,
+  buildViewOnlyVideoContext,
+  buildViewOnlyAudioContext,
 } from "./utils/context-builders";
 import { CANVAS, THUMBNAIL } from "./constants";
 import type {
@@ -20,7 +22,9 @@ import type {
   ItemType,
   ImageItemContext,
   TextItemContext,
-  ObjectItemContext,
+  ShapeItemContext,
+  VideoItemContext,
+  AudioItemContext,
 } from "./types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
@@ -36,7 +40,9 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   renderItems: ItemType[];
   renderImageItem?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
-  renderObjectItem?: (context: ObjectItemContext<TSpread>) => ReactNode;
+  renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
+  renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
+  renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
 
   // Drag state
   isDragEnabled?: boolean;
@@ -62,7 +68,9 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   renderItems,
   renderImageItem,
   renderTextItem,
-  renderObjectItem,
+  renderShapeItem,
+  renderVideoItem,
+  renderAudioItem,
   isDragEnabled = false,
   isDragging = false,
   isDropTarget = false,
@@ -123,14 +131,32 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
     }));
   }, [spread.textboxes, spread.id, renderItems, renderTextItem]);
 
-  // Memoize object contexts - skip if renderObjectItem not provided
-  const objectContexts = useMemo(() => {
-    if (!renderItems.includes("object") || !renderObjectItem || !spread.objects) return [];
-    return spread.objects.map((object, idx) => ({
-      object,
-      context: buildViewOnlyObjectContext(object, idx, spread),
+  // Memoize shape contexts - skip if renderShapeItem not provided
+  const shapeContexts = useMemo(() => {
+    if (!renderItems.includes("shape") || !renderShapeItem || !spread.shapes) return [];
+    return spread.shapes.map((shape, idx) => ({
+      shape,
+      context: buildViewOnlyShapeContext(shape, idx, spread),
     }));
-  }, [spread.objects, spread.id, renderItems, renderObjectItem]);
+  }, [spread.shapes, spread.id, renderItems, renderShapeItem]);
+
+  // Memoize video contexts - skip if renderVideoItem not provided
+  const videoContexts = useMemo(() => {
+    if (!renderItems.includes("video") || !renderVideoItem || !spread.videos) return [];
+    return spread.videos.map((video, idx) => ({
+      video,
+      context: buildViewOnlyVideoContext(video, idx, spread),
+    }));
+  }, [spread.videos, spread.id, renderItems, renderVideoItem]);
+
+  // Memoize audio contexts - skip if renderAudioItem not provided
+  const audioContexts = useMemo(() => {
+    if (!renderItems.includes("audio") || !renderAudioItem || !spread.audios) return [];
+    return spread.audios.map((audio, idx) => ({
+      audio,
+      context: buildViewOnlyAudioContext(audio, idx, spread),
+    }));
+  }, [spread.audios, spread.id, renderItems, renderAudioItem]);
 
   // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
   const cursor = isDragging ? "grabbing" : isDragEnabled ? "grab" : "pointer";
@@ -239,17 +265,31 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
             </div>
           ))}
 
+          {/* Videos (view-only, pointer-events: none) - skip if renderVideoItem not provided */}
+          {renderVideoItem && videoContexts.map(({ video, context }, index) => (
+            <div key={video.id || index} style={{ pointerEvents: "none" }}>
+              {renderVideoItem(context)}
+            </div>
+          ))}
+
+          {/* Audios (view-only, pointer-events: none) - skip if renderAudioItem not provided */}
+          {renderAudioItem && audioContexts.map(({ audio, context }, index) => (
+            <div key={audio.id || index} style={{ pointerEvents: "none" }}>
+              {renderAudioItem(context)}
+            </div>
+          ))}
+
+          {/* Shapes (view-only, pointer-events: none) - skip if renderShapeItem not provided */}
+          {renderShapeItem && shapeContexts.map(({ shape, context }, index) => (
+            <div key={shape.id || index} style={{ pointerEvents: "none" }}>
+              {renderShapeItem(context)}
+            </div>
+          ))}
+
           {/* Textboxes (view-only, pointer-events: none) - skip if renderTextItem not provided */}
           {renderTextItem && textContexts.map(({ textbox, context }, index) => (
             <div key={textbox.id || index} style={{ pointerEvents: "none" }}>
               {renderTextItem(context)}
-            </div>
-          ))}
-
-          {/* Objects (view-only, pointer-events: none) - skip if renderObjectItem not provided */}
-          {renderObjectItem && objectContexts.map(({ object, context }, index) => (
-            <div key={object.id || index} style={{ pointerEvents: "none" }}>
-              {renderObjectItem(context)}
             </div>
           ))}
         </div>

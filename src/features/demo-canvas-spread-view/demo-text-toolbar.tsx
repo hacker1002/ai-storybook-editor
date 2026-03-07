@@ -25,8 +25,6 @@ import {
   type BaseSpread,
   type TextToolbarContext,
   type Typography,
-  type Fill,
-  type Outline,
   type Geometry,
 } from "@/components/canvas-spread-view";
 
@@ -53,8 +51,6 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
     onFormatText,
     onDelete,
     onClone,
-    onUpdateBackground,
-    onUpdateOutline,
     selectedGeometry,
     canvasRef,
   } = context;
@@ -68,17 +64,12 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
     text: string;
     geometry: Geometry;
     typography: Typography;
-    fill?: Fill;
-    outline?: Outline;
   };
 
   const geometry = langData?.geometry || { x: 0, y: 0, w: 20, h: 10 };
   const typography = langData?.typography || {};
-  const fill = langData?.fill || { color: "#ffffff", opacity: 0 };
-  const outline = langData?.outline || { color: "#000000", width: 2, radius: 8, type: "solid" as const };
 
   const [fontSize, setFontSize] = useState(typography.size || 18);
-  const [bgOpacity, setBgOpacity] = useState((fill.opacity || 0) * 100);
 
   const handleFontChange = useCallback(
     (fontFamily: string) => {
@@ -135,45 +126,6 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
   const handleTextAlignChange = useCallback((align: 'left' | 'center' | 'right') => {
     onFormatText?.({ textAlign: align });
   }, [onFormatText]);
-
-  const handleOpacityChange = useCallback(
-    (delta: number) => {
-      const newOpacity = Math.max(0, Math.min(100, bgOpacity + delta));
-      setBgOpacity(newOpacity);
-      onUpdateBackground?.({ opacity: newOpacity / 100 });
-    },
-    [bgOpacity, onUpdateBackground]
-  );
-
-  const handleBgColorChange = useCallback(
-    (color: string) => {
-      onUpdateBackground?.({ color });
-    },
-    [onUpdateBackground]
-  );
-
-  const handleOutlineChange = useCallback(
-    (field: keyof Outline, delta: number) => {
-      const currentValue = outline[field as keyof typeof outline] as number;
-      const newValue = Math.max(0, currentValue + delta);
-      onUpdateOutline?.({ [field]: newValue } as Partial<Outline>);
-    },
-    [outline, onUpdateOutline]
-  );
-
-  const handleOutlineStyleChange = useCallback(
-    (value: string) => {
-      onUpdateOutline?.({ type: value as "solid" | "dashed" | "dotted" });
-    },
-    [onUpdateOutline]
-  );
-
-  const handleOutlineColorChange = useCallback(
-    (color: string) => {
-      onUpdateOutline?.({ color });
-    },
-    [onUpdateOutline]
-  );
 
   const handleGeometryChange = useCallback(
     (field: keyof Geometry, value: string) => {
@@ -335,102 +287,6 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
               className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
             />
             <span className="px-1.5 text-sm text-muted-foreground border-l border-border">px</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Background Section */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase">Background</Label>
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14">Opacity</Label>
-          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-            <button
-              onClick={() => handleOpacityChange(-5)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="w-10 text-center text-sm font-medium">{Math.round(bgOpacity)}%</span>
-            <button
-              onClick={() => handleOpacityChange(5)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-          <Label className="text-xs text-muted-foreground ml-2">Color</Label>
-          <Input
-            type="color"
-            value={fill.color || "#000000"}
-            onChange={(e) => handleBgColorChange(e.target.value)}
-            className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent p-1"
-          />
-        </div>
-      </div>
-
-      {/* Outline Section */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase">Outline</Label>
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14">Width</Label>
-          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-            <button
-              onClick={() => handleOutlineChange("width", -1)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="w-8 text-center text-sm font-medium">{outline.width}</span>
-            <button
-              onClick={() => handleOutlineChange("width", 1)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-          <span className="text-sm text-muted-foreground">px</span>
-          <Label className="text-xs text-muted-foreground ml-2">Color</Label>
-          <Input
-            type="color"
-            value={outline.color}
-            onChange={(e) => handleOutlineColorChange(e.target.value)}
-            className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent p-1"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14">Radius</Label>
-          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-            <button
-              onClick={() => handleOutlineChange("radius", -1)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="w-8 text-center text-sm font-medium">{outline.radius}</span>
-            <button
-              onClick={() => handleOutlineChange("radius", 1)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-          <span className="text-sm text-muted-foreground">px</span>
-          <Label className="text-xs text-muted-foreground ml-2">Style</Label>
-          <div className="relative flex-1">
-            <Select
-              onValueChange={handleOutlineStyleChange}
-              defaultValue={outline.type}
-            >
-              <SelectTrigger className="h-7 px-3 pr-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="solid">Solid</SelectItem>
-                <SelectItem value="dashed">Dashed</SelectItem>
-                <SelectItem value="dotted">Dotted</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
       </div>

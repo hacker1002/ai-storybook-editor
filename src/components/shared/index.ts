@@ -2,7 +2,6 @@
 
 // Components
 export { EditableTextbox } from './editable-textbox';
-export { EditableObject } from './editable-object';
 
 // Types
 export type {
@@ -11,10 +10,16 @@ export type {
   Typography,
   Fill,
   Outline,
-  SpreadObject,
+  ShapeFill,
+  ShapeOutline,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
+  SpreadItemMediaType,
   PageData,
   SpreadImage,
   SpreadTextbox,
+  SpreadTextboxContent,
   SpreadAnimation,
   BaseSpread,
 } from './types';

@@ -15,8 +15,11 @@ export { NewSpreadButton, type SpreadType } from './new-spread-button';
 
 // Utility components
 export { EditableImage } from './editable-image';
+export { EditableShape } from './editable-shape';
+export { EditableVideo } from './editable-video';
+export { EditableAudio } from './editable-audio';
 export { GenerateImageModal } from './generate-image-modal';
-export { EditableTextbox, EditableObject } from '../shared';
+export { EditableTextbox } from '../shared';
 export { SelectionFrame } from './selection-frame';
 export { PageItem } from './page-item';
 
@@ -33,7 +36,11 @@ export type {
   BaseSpread,
   SpreadImage,
   SpreadTextbox,
-  SpreadObject,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
+  ShapeFill,
+  ShapeOutline,
   PageData,
   Geometry,
   Point,
@@ -45,11 +52,15 @@ export type {
   // Context types
   ImageItemContext,
   TextItemContext,
-  ObjectItemContext,
+  ShapeItemContext,
+  VideoItemContext,
+  AudioItemContext,
   PageToolbarContext,
   ImageToolbarContext,
   TextToolbarContext,
-  ObjectToolbarContext,
+  ShapeToolbarContext,
+  VideoToolbarContext,
+  AudioToolbarContext,
 
   // Config types
   LayoutOption,
@@ -81,10 +92,14 @@ export {
   buildImageContext,
   buildTextContext,
   buildTextToolbarContext,
-  buildObjectContext,
+  buildShapeContext,
+  buildVideoContext,
+  buildAudioContext,
   buildViewOnlyImageContext,
   buildViewOnlyTextContext,
-  buildViewOnlyObjectContext,
+  buildViewOnlyShapeContext,
+  buildViewOnlyVideoContext,
+  buildViewOnlyAudioContext,
 } from './utils/context-builders';
 
 // Constants
