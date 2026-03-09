@@ -102,7 +102,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   }, [size]);
 
   // Scale factor: calculated from container width (unified for both sizes)
-  const effectiveWidth = size === "small" ? THUMBNAIL.SMALL_WIDTH : containerWidth;
+  const effectiveWidth =
+    size === "small" ? THUMBNAIL.SMALL_WIDTH : containerWidth;
   const scale = effectiveWidth > 0 ? effectiveWidth / CANVAS.BASE_WIDTH : 0;
 
   // Page label
@@ -133,7 +134,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
   // Memoize shape contexts - skip if renderShapeItem not provided
   const shapeContexts = useMemo(() => {
-    if (!renderItems.includes("shape") || !renderShapeItem || !spread.shapes) return [];
+    if (!renderItems.includes("shape") || !renderShapeItem || !spread.shapes)
+      return [];
     return spread.shapes.map((shape, idx) => ({
       shape,
       context: buildViewOnlyShapeContext(shape, idx, spread),
@@ -142,7 +144,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
   // Memoize video contexts - skip if renderVideoItem not provided
   const videoContexts = useMemo(() => {
-    if (!renderItems.includes("video") || !renderVideoItem || !spread.videos) return [];
+    if (!renderItems.includes("video") || !renderVideoItem || !spread.videos)
+      return [];
     return spread.videos.map((video, idx) => ({
       video,
       context: buildViewOnlyVideoContext(video, idx, spread),
@@ -151,7 +154,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
   // Memoize audio contexts - skip if renderAudioItem not provided
   const audioContexts = useMemo(() => {
-    if (!renderItems.includes("audio") || !renderAudioItem || !spread.audios) return [];
+    if (!renderItems.includes("audio") || !renderAudioItem || !spread.audios)
+      return [];
     return spread.audios.map((audio, idx) => ({
       audio,
       context: buildViewOnlyAudioContext(audio, idx, spread),
@@ -259,39 +263,44 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
           )}
 
           {/* Images (view-only, pointer-events: none) - skip if renderImageItem not provided */}
-          {renderImageItem && imageContexts.map(({ image, context }, index) => (
-            <div key={image.id || index} style={{ pointerEvents: "none" }}>
-              {renderImageItem(context)}
-            </div>
-          ))}
+          {renderImageItem &&
+            imageContexts.map(({ image, context }, index) => (
+              <div key={image.id || index} style={{ pointerEvents: "none" }}>
+                {renderImageItem(context)}
+              </div>
+            ))}
 
           {/* Videos (view-only, pointer-events: none) - skip if renderVideoItem not provided */}
-          {renderVideoItem && videoContexts.map(({ video, context }, index) => (
-            <div key={video.id || index} style={{ pointerEvents: "none" }}>
-              {renderVideoItem(context)}
-            </div>
-          ))}
-
-          {/* Audios (view-only, pointer-events: none) - skip if renderAudioItem not provided */}
-          {renderAudioItem && audioContexts.map(({ audio, context }, index) => (
-            <div key={audio.id || index} style={{ pointerEvents: "none" }}>
-              {renderAudioItem(context)}
-            </div>
-          ))}
+          {renderVideoItem &&
+            videoContexts.map(({ video, context }, index) => (
+              <div key={video.id || index} style={{ pointerEvents: "none" }}>
+                {renderVideoItem(context)}
+              </div>
+            ))}
 
           {/* Shapes (view-only, pointer-events: none) - skip if renderShapeItem not provided */}
-          {renderShapeItem && shapeContexts.map(({ shape, context }, index) => (
-            <div key={shape.id || index} style={{ pointerEvents: "none" }}>
-              {renderShapeItem(context)}
-            </div>
-          ))}
+          {renderShapeItem &&
+            shapeContexts.map(({ shape, context }, index) => (
+              <div key={shape.id || index} style={{ pointerEvents: "none" }}>
+                {renderShapeItem(context)}
+              </div>
+            ))}
 
           {/* Textboxes (view-only, pointer-events: none) - skip if renderTextItem not provided */}
-          {renderTextItem && textContexts.map(({ textbox, context }, index) => (
-            <div key={textbox.id || index} style={{ pointerEvents: "none" }}>
-              {renderTextItem(context)}
-            </div>
-          ))}
+          {renderTextItem &&
+            textContexts.map(({ textbox, context }, index) => (
+              <div key={textbox.id || index} style={{ pointerEvents: "none" }}>
+                {renderTextItem(context)}
+              </div>
+            ))}
+
+          {/* Audios (view-only, pointer-events: none) - skip if renderAudioItem not provided */}
+          {renderAudioItem &&
+            audioContexts.map(({ audio, context }, index) => (
+              <div key={audio.id || index} style={{ pointerEvents: "none" }}>
+                {renderAudioItem(context)}
+              </div>
+            ))}
         </div>
 
         {/* Click Overlay - captures all clicks/double-clicks */}

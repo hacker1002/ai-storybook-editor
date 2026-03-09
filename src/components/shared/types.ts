@@ -169,11 +169,7 @@ export interface SpreadAnimation {
     id: string;
     type: "textbox" | "image" | "video" | "audio" | "shape";
   };
-  trigger_type:
-    | "on_click_spread"
-    | "on_click_object"
-    | "with_previous"
-    | "after_previous";
+  trigger_type: "on_click" | "on_next" | "with_previous" | "after_previous";
   effect: {
     type: number;
     geometry?: Geometry;
