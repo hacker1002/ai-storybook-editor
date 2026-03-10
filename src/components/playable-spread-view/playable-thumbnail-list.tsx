@@ -141,7 +141,6 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
               index={idx}
               isSelected={false}
               isEditable={false}
-              isThumbnail={true}
               onSelect={() => {}}
             />
           ))}

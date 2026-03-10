@@ -4,8 +4,6 @@
 import type {
   Geometry,
   Typography,
-  Fill,
-  Outline,
   ShapeFill,
   ShapeOutline,
   SpreadShape,
@@ -21,8 +19,6 @@ export type {
   Point,
   Geometry,
   Typography,
-  Fill,
-  Outline,
   ShapeFill,
   ShapeOutline,
   SpreadShape,

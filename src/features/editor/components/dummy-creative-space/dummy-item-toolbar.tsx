@@ -62,11 +62,12 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
       );
 
       if (data.type === 'image') {
-        onUpdate?.({ typography: { size: newSize, color: typography.color } });
+        // DummyImage has its own typography shape — cast for compatibility
+        onUpdate?.({ typography: { size: newSize, color: typography.color } } as never);
       } else if (langData && langKey) {
         onUpdate?.({
           [langKey]: { ...langData, typography: { ...langData.typography, size: newSize } },
-        });
+        } as never);
       }
     },
     [data.type, typography, langData, langKey, onUpdate]
@@ -75,11 +76,11 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
   const handleColorChange = useCallback(
     (color: string) => {
       if (data.type === 'image') {
-        onUpdate?.({ typography: { size: typography.size, color } });
+        onUpdate?.({ typography: { size: typography.size, color } } as never);
       } else if (langData && langKey) {
         onUpdate?.({
           [langKey]: { ...langData, typography: { ...langData.typography, color } },
-        });
+        } as never);
       }
     },
     [data.type, typography.size, langData, langKey, onUpdate]
@@ -98,9 +99,9 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
       const newGeometry = { ...geometry, [field]: clampedValue };
 
       if (data.type === 'image') {
-        onUpdate?.({ geometry: newGeometry });
+        onUpdate?.({ geometry: newGeometry } as never);
       } else if (langData && langKey) {
-        onUpdate?.({ [langKey]: { ...langData, geometry: newGeometry } });
+        onUpdate?.({ [langKey]: { ...langData, geometry: newGeometry } } as never);
       }
     },
     [data.type, geometry, langData, langKey, onUpdate]

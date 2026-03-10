@@ -1,6 +1,5 @@
 // animation-tween-builders.ts - GSAP tween builders for 17 animation effect types
 
-import gsap from "gsap";
 import type { SpreadAnimation } from "../shared";
 import { CANVAS } from "../shared/constants";
 import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from "./constants";
@@ -35,7 +34,7 @@ interface TweenOptions {
  * @param options - Optional volume and container reference
  */
 export function addTweenToTimeline(
-  timeline: gsap.core.Timeline,
+  timeline: ReturnType<typeof import("gsap").default.timeline>,
   animation: SpreadAnimation,
   element: HTMLElement,
   position: number | string,
@@ -414,16 +413,18 @@ export function addTweenToTimeline(
 
   // Attach start/end logs to all tweens added by this call
   const newChildren = timeline.getChildren().slice(childCountBefore);
-  const logPrefix = `[Animation] ${effectName} | target="${targetId}" | trigger="${animation.trigger_type}"`;
+  const prefix = `[Animation] ${effectName} | target="${targetId}" | trigger="${animation.trigger_type}"`;
   for (const child of newChildren) {
     const prevOnStart = child.eventCallback("onStart") as (() => void) | null;
     const prevOnComplete = child.eventCallback("onComplete") as
       | (() => void)
       | null;
     child.eventCallback("onStart", () => {
+      console.log(`${prefix} → START`);
       prevOnStart?.();
     });
     child.eventCallback("onComplete", () => {
+      console.log(`${prefix} → END`);
       prevOnComplete?.();
     });
   }

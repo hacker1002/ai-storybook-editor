@@ -45,8 +45,6 @@ export type {
   Geometry,
   Point,
   Typography,
-  Fill,
-  Outline,
   SelectedElement,
 
   // Context types

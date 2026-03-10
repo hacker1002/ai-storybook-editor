@@ -3,14 +3,16 @@
 import type {
   PlayableSpread,
 } from '@/components/playable-spread-view/types';
-import type { SpreadAnimation } from '@/components/shared';
+import type {
+  SpreadAnimation,
+  SpreadItemMediaType,
+} from '@/components/shared';
 import type {
   PageData,
   SpreadTextbox,
   SpreadImage,
   Geometry,
   Typography,
-  SpreadItemMediaType,
 } from '@/components/canvas-spread-view/types';
 import { ANIMATION_PRESETS } from '@/components/playable-spread-view/constants';
 

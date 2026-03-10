@@ -254,7 +254,6 @@ export function createMockImage(
     art_note: ART_NOTES[artNoteIdx],
     visual_description: ART_NOTES[artNoteIdx],
     image_references: [],
-    sketches: [],
     illustrations,
     ...overrides,
   };
