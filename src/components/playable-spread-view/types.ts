@@ -2,6 +2,44 @@
 
 import type { BaseSpread, SpreadAnimation } from '../shared';
 
+// === Player Phases ===
+export type PlayerPhase = 'idle' | 'playing' | 'awaiting_next' | 'awaiting_click' | 'complete';
+
+// === Animation Step ===
+// Each step = 1 trigger + all following after_previous/with_previous animations
+export interface AnimationStep {
+  index: number;
+  triggerType: 'on_next' | 'on_click' | 'auto';
+  targetId?: string;        // only when triggerType = 'on_click'
+  clickLoop?: number;       // only when triggerType = 'on_click', replay count
+  animations: SpreadAnimation[];
+}
+
+// === Replayable Item (click_loop tracking) ===
+export interface ReplayableItem {
+  itemId: string;
+  stepIndex: number;
+  remainingReplays: number;
+}
+
+// === Player State ===
+export interface PlayerState {
+  phase: PlayerPhase;
+  steps: AnimationStep[];
+  currentStepIndex: number;           // -1 = not started
+  pendingClickTargetId: string | null;
+  replayableItems: Map<string, ReplayableItem>;
+}
+
+// === Player Actions (Events) ===
+export type PlayerAction =
+  | { type: 'RESET'; steps: AnimationStep[] }
+  | { type: 'USER_NEXT' }
+  | { type: 'USER_BACK' }
+  | { type: 'USER_CLICK'; itemId: string }
+  | { type: 'STEP_COMPLETE' }
+  | { type: 'CLICK_LOOP_REPLAY'; itemId: string };
+
 // === Core Enums/Types ===
 export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';

@@ -114,27 +114,61 @@ function clampGeometryToBounds(geo: Geometry): Geometry {
 }
 
 // === Animation Helper Functions ===
-function createMockAnimation(
+
+type EntrancePreset = 'appear' | 'fadeIn' | 'flyInLeft' | 'flyInRight' | 'flyInTop' | 'flyInBottom' | 'floatInUp' | 'floatInDown' | 'floatInLeft' | 'zoomIn';
+type ExitPreset = 'disappear' | 'fadeOut' | 'flyOutRight' | 'flyOutLeft' | 'flyOutTop' | 'floatOutUp' | 'floatOutDown';
+type EmphasisPreset = 'spin' | 'spinDouble' | 'grow' | 'shrink' | 'teeter' | 'transparency';
+type MotionPreset = 'lineMove' | 'arcMove';
+type AnimationPreset = EntrancePreset | ExitPreset | EmphasisPreset | MotionPreset;
+
+const ENTRANCE_PRESETS: EntrancePreset[] = ['appear', 'fadeIn', 'flyInLeft', 'flyInRight', 'flyInTop', 'flyInBottom', 'floatInUp', 'floatInDown', 'floatInLeft', 'zoomIn'];
+const EXIT_PRESETS: ExitPreset[] = ['disappear', 'fadeOut', 'flyOutRight', 'flyOutLeft', 'flyOutTop', 'floatOutUp', 'floatOutDown'];
+const EMPHASIS_PRESETS: EmphasisPreset[] = ['spin', 'spinDouble', 'grow', 'shrink', 'teeter', 'transparency'];
+
+function randomEntrance(): EntrancePreset {
+  return ENTRANCE_PRESETS[randomBetween(0, ENTRANCE_PRESETS.length - 1)];
+}
+
+function randomExit(): ExitPreset {
+  return EXIT_PRESETS[randomBetween(0, EXIT_PRESETS.length - 1)];
+}
+
+function randomEmphasis(): EmphasisPreset {
+  return EMPHASIS_PRESETS[randomBetween(0, EMPHASIS_PRESETS.length - 1)];
+}
+
+/** Create a SpreadAnimation from a preset key */
+function createAnimation(
   order: number,
   targetId: string,
-  targetType: 'textbox' | 'image',
-  preset: keyof typeof ANIMATION_PRESETS,
+  targetType: SpreadAnimation['target']['type'],
+  preset: AnimationPreset,
   triggerType: SpreadAnimation['trigger_type'] = 'after_previous',
-  delay: number = 0
+  overrides: Partial<SpreadAnimation['effect']> = {}
 ): SpreadAnimation {
   const presetData = ANIMATION_PRESETS[preset];
   return {
     order,
-    type: 1, // object-interactive
+    type: 0,
     target: { id: targetId, type: targetType },
     trigger_type: triggerType,
-    effect: {
-      ...presetData,
-      delay,
-    },
+    effect: { ...presetData, ...overrides },
   };
 }
 
+/**
+ * Generate animation sequence using Fade In/Out and Fly In/Out.
+ *
+ * Randomly picks entrance (fadeIn, flyIn*) and exit (fadeOut, flyOut*) presets
+ * to cover all animation types for testing.
+ *
+ * Covers all trigger types:
+ *   - auto: background entrance on spread load
+ *   - on_next: characters, textboxes, props entrance
+ *   - on_click: character exit (interactive)
+ *   - after_previous / with_previous: chained animations
+ *   - exit: textboxes and characters exit
+ */
 function generateSpreadAnimations(
   images: SpreadImage[],
   textboxes: SpreadTextbox[]
@@ -142,14 +176,97 @@ function generateSpreadAnimations(
   const animations: SpreadAnimation[] = [];
   let order = 0;
 
-  // All images fade in on click
-  images.forEach((img) => {
-    animations.push(createMockAnimation(order++, img.id, 'image', 'fadeIn', 'on_click', 0));
+  const bgImages = images.filter(img => img.type === 'background');
+  const characterImages = images.filter(img => img.type === 'character');
+  const propImages = images.filter(img => img.type === 'prop');
+  const otherImages = images.filter(img =>
+    !['background', 'character', 'prop'].includes(img.type ?? '')
+  );
+
+  // ── Auto: background entrance on spread load ──
+  bgImages.forEach((bg) => {
+    animations.push(createAnimation(
+      order++, bg.id, 'image', randomEntrance(),
+      order === 1 ? 'after_previous' : 'with_previous'
+    ));
   });
 
-  // All textboxes fade in on click
-  textboxes.forEach((textbox) => {
-    animations.push(createMockAnimation(order++, textbox.id, 'textbox', 'fadeIn', 'on_click', 0));
+  // ── on_next: characters entrance (first triggers step, rest with_previous) ──
+  characterImages.forEach((char, i) => {
+    animations.push(createAnimation(
+      order++, char.id, 'image', randomEntrance(),
+      i === 0 ? 'on_next' : 'with_previous',
+      { delay: i * 200 }
+    ));
+  });
+
+  // ── on_next: textboxes entrance (sequential via after_previous) ──
+  textboxes.forEach((tb, i) => {
+    animations.push(createAnimation(
+      order++, tb.id, 'textbox', randomEntrance(),
+      i === 0 ? 'on_next' : 'after_previous'
+    ));
+  });
+
+  // ── on_next: props entrance ──
+  propImages.forEach((prop, i) => {
+    animations.push(createAnimation(
+      order++, prop.id, 'image', randomEntrance(),
+      i === 0 ? 'on_next' : 'with_previous'
+    ));
+  });
+
+  // ── on_click: emphasis on characters (spin/grow/shrink/teeter/transparency) ──
+  characterImages.forEach((char, i) => {
+    const preset = randomEmphasis();
+    const overrides: Partial<SpreadAnimation['effect']> = {};
+    if (preset === 'grow') overrides.amount = 1.5;
+    if (preset === 'shrink') overrides.amount = 0.6;
+    if (preset === 'transparency') overrides.amount = 0.3;
+    const anim = createAnimation(
+      order++, char.id, 'image', preset,
+      i === 0 ? 'on_click' : 'with_previous',
+      overrides
+    );
+    anim.click_loop = randomBetween(3, 5);
+    animations.push(anim);
+  });
+
+  // ── on_click: Lines motion on first prop ──
+  if (propImages.length > 0) {
+    const target = propImages[0];
+    const destX = randomBetween(10, 70);
+    const destY = randomBetween(10, 70);
+    const anim = createAnimation(
+      order++, target.id, 'image', 'lineMove', 'on_click',
+      { geometry: { x: destX, y: destY, w: target.geometry.w, h: target.geometry.h } }
+    );
+    anim.click_loop = randomBetween(3, 5);
+    animations.push(anim);
+  }
+
+  // ── on_next: textboxes exit ──
+  textboxes.forEach((tb, i) => {
+    animations.push(createAnimation(
+      order++, tb.id, 'textbox', randomExit(),
+      i === 0 ? 'on_next' : 'after_previous'
+    ));
+  });
+
+  // ── on_next: remaining characters exit ──
+  characterImages.slice(1).forEach((char, i) => {
+    animations.push(createAnimation(
+      order++, char.id, 'image', randomExit(),
+      i === 0 ? 'on_next' : 'with_previous'
+    ));
+  });
+
+  // ── on_next: other images entrance ──
+  otherImages.forEach((img, i) => {
+    animations.push(createAnimation(
+      order++, img.id, 'image', randomEntrance(),
+      i === 0 ? 'on_next' : 'with_previous'
+    ));
   });
 
   return animations;

@@ -1,7 +1,7 @@
 // playable-spread-view.tsx - Root container component for playable spread view
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { PlayableSpreadViewProps, ActiveCanvas, PlayMode } from "./types";
-import { VOLUME, KEYBOARD_SHORTCUTS, TRIGGER_DELAY } from "./constants";
+import { VOLUME, KEYBOARD_SHORTCUTS } from "./constants";
 import { PlayableHeader } from "./playable-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
@@ -28,7 +28,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       setActiveCanvas(mode);
     }
   }, [mode, isPlaying]);
-  const [playMode, setPlayMode] = useState<PlayMode>("off");
+  const [playMode, setPlayMode] = useState<PlayMode>("semi-auto");
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
@@ -91,18 +91,15 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   );
 
   // === Spread Complete Handler ===
+  // Auto-advance logic moved to PlayerCanvas.buildAndPlayFullTimeline for consistency
   const handleSpreadComplete = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     (_spreadId: string) => {
       if (!hasNext) {
         setIsPlaying(false);
-      } else if (playMode === "auto") {
-        setTimeout(() => {
-          handleSkipNext();
-        }, TRIGGER_DELAY.AUTO_SPREAD_COMPLETE * 1000);
       }
     },
-    [playMode, hasNext, handleSkipNext]
+    [hasNext]
   );
 
   // === Spread Change Handler (from PlayerCanvas) ===
