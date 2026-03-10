@@ -4,7 +4,7 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { EditableTextbox, getFirstTextboxKey } from "../shared";
-import { EditableImage } from "../canvas-spread-view";
+import { EditableImage, EditableShape, EditableVideo, EditableAudio } from "../canvas-spread-view";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
 import type { Geometry, Typography, Fill, Outline } from "../shared/types";
 import { LAYOUT, THUMBNAIL_STYLES, TEXTBOX_Z_INDEX_BASE } from "./constants";
@@ -146,6 +146,44 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             />
           ))}
 
+          {/* Shapes (thumbnail) */}
+          {spread.shapes?.map((shape, idx) => (
+            <EditableShape
+              key={shape.id || idx}
+              shape={shape}
+              index={idx}
+              isSelected={false}
+              isEditable={false}
+              onSelect={() => {}}
+            />
+          ))}
+
+          {/* Videos (thumbnail - static) */}
+          {spread.videos?.map((video, idx) => (
+            <EditableVideo
+              key={video.id || idx}
+              video={video}
+              index={idx}
+              isSelected={false}
+              isEditable={false}
+              isThumbnail={true}
+              onSelect={() => {}}
+            />
+          ))}
+
+          {/* Audios (thumbnail - icon only) */}
+          {spread.audios?.map((audio, idx) => (
+            <EditableAudio
+              key={audio.id || idx}
+              audio={audio}
+              index={idx}
+              isSelected={false}
+              isEditable={false}
+              isThumbnail={true}
+              onSelect={() => {}}
+            />
+          ))}
+
           {/* Textboxes (using EditableTextbox component) */}
           {textboxesWithLang.map((item, idx) => {
             if (!item) return null;
@@ -244,4 +282,3 @@ export function PlayableThumbnailList({
   );
 }
 
-export default PlayableThumbnailList;

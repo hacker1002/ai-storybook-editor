@@ -1,54 +1,17 @@
 // types.ts - Type definitions for PlayableSpreadView component family
 
-import type { BaseSpread } from '../shared';
+import type { BaseSpread, SpreadAnimation } from '../shared';
 
 // === Core Enums/Types ===
 export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
 export type PlayMode = 'off' | 'semi-auto' | 'auto';
-export type ItemType = 'image' | 'textbox';
-export type AnimationMediaType = 'image' | 'video' | 'audio' | 'textbox';
-
-// === Animation Editor State ===
-export interface AnimationEditorState {
-  selectedItemId: string | null;
-  selectedItemType: ItemType | null;
-  toolbarOpen: boolean;
-}
-
-export interface AddAnimationToolbarProps {
-  position: { top: number; left: number } | null;
-  targetType: ItemType;
-  onSelectOption: (type: AnimationMediaType) => void;
-  onClose: () => void;
-}
+export type ItemType = 'image' | 'textbox' | 'shape' | 'video' | 'audio';
 
 // === PlayableSpread ===
-// Extend from BaseSpread, add animations array
+// Extend from BaseSpread, animations is required for playable context
 export interface PlayableSpread extends BaseSpread {
-  animations?: Animation[];
-}
-
-// === Animation Interface ===
-export interface Animation {
-  order: number;
-  type: 'textbox' | 'image' | 'video' | 'audio';
-  target: { id: string; type: 'textbox' | 'image' };
-  trigger_type: 'on_click' | 'with_previous' | 'after_previous';
-  effect: {
-    type: number;
-    geometry?: {
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-    };
-    delay?: number;
-    duration?: number;
-    loop?: number;
-    amount?: number;
-    direction?: 'left' | 'right' | 'up' | 'down';
-  };
+  animations: SpreadAnimation[];
 }
 
 // === Remix Asset (align with DB schema) ===
@@ -88,13 +51,6 @@ export interface PromptToolbarProps {
 }
 
 // === Action Parameters ===
-export interface AddAnimationParams {
-  type: AnimationMediaType;
-  targetId: string | null;
-  targetType: ItemType | null;
-  spreadId: string;
-}
-
 export interface AssetSwapParams {
   prompt: string;
   referenceImage: File | null;
@@ -107,7 +63,7 @@ export interface PlayableSpreadViewProps {
   mode: OperationMode;
   spreads: PlayableSpread[];
   assets?: RemixAsset[];
-  onAddAnimation?: (params: AddAnimationParams) => void;
+  onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
   onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
   onSpreadSelect?: (spreadId: string) => void;
@@ -117,17 +73,15 @@ export interface PlayableSpreadViewProps {
 export interface PlayableHeaderProps {
   playMode: PlayMode;
   isPlaying: boolean;
-  volume: number;
-  isMuted: boolean;
+  volume: number;            // 0-100; 0 = muted
   hasPrevious: boolean;
   hasNext: boolean;
-  playDisabled: boolean;
   onPlayModeChange: (mode: PlayMode) => void;
   onPlayToggle: () => void;
   onSkipPrevious: () => void;
   onSkipNext: () => void;
   onVolumeChange: (volume: number) => void;
-  onMuteToggle: () => void;
+  onMuteToggle: () => void;  // toggle volume 0 ↔ previousVolume (managed by parent)
 }
 
 export interface PlayableThumbnailListProps {
@@ -139,14 +93,12 @@ export interface PlayableThumbnailListProps {
 // === Canvas Props ===
 export interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
-  zoomLevel?: number;
-  onAddAnimation: (params: AddAnimationParams) => void;
+  onItemSelect: (itemType: ItemType | null, itemId: string | null) => void;
 }
 
 export interface RemixEditorCanvasProps {
   spread: PlayableSpread;
   assets: RemixAsset[];
-  zoomLevel?: number;
   onAssetSwap: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
 }
@@ -155,7 +107,9 @@ export interface PlayerCanvasProps {
   spread: PlayableSpread;
   playMode: PlayMode;
   isPlaying: boolean;
-  volume: number; // 0-100, where 0 means muted
-  hasNext: boolean; // Has next spread available
+  volume: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
   onSpreadComplete: (spreadId: string) => void;
+  onSpreadChange: (direction: 'prev' | 'next') => void;
 }

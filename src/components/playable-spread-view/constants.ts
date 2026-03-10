@@ -4,7 +4,7 @@ import type { PlayMode } from './types';
 
 // === Layout Constants ===
 export const LAYOUT = {
-  HEADER_HEIGHT: 48,      // px
+  HEADER_HEIGHT: 56,      // px
   FOOTER_HEIGHT: 120,     // px
   THUMBNAIL_WIDTH: 100,   // px
   THUMBNAIL_HEIGHT: 80,   // px

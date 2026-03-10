@@ -14,25 +14,16 @@ import {
   type Fill,
   type Outline,
 } from "../shared";
-import { EditableImage } from "../canvas-spread-view";
+import { EditableImage, EditableShape, EditableVideo, EditableAudio } from "../canvas-spread-view";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
-import type { PlayableSpread, RemixAsset, AssetSwapParams } from "./types";
+import type { RemixEditorCanvasProps } from "./types";
 import { TEXTBOX_Z_INDEX_BASE } from "./constants";
-
-interface RemixEditorCanvasProps {
-  spread: PlayableSpread;
-  assets: RemixAsset[];
-  zoomLevel?: number;
-  onAssetSwap: (params: AssetSwapParams) => Promise<void>;
-  onTextChange?: (textboxId: string, newText: string) => void;
-}
 
 export function RemixEditorCanvas({
   spread,
   assets,
-  zoomLevel = 100,
   onAssetSwap,
   onTextChange,
 }: RemixEditorCanvasProps) {
@@ -56,7 +47,7 @@ export function RemixEditorCanvas({
 
   // Scaled dimensions
   const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(zoomLevel);
+    getScaledDimensions(100);
 
   // Calculate toolbar position
   const toolbarPosition = useToolbarPosition({
@@ -307,6 +298,43 @@ export function RemixEditorCanvas({
           />
         ))}
 
+        {/* Shapes (render-only) */}
+        {spread.shapes?.map((shape, index) => (
+          <EditableShape
+            key={shape.id}
+            shape={shape}
+            index={index}
+            isSelected={false}
+            isEditable={false}
+            onSelect={() => {}}
+          />
+        ))}
+
+        {/* Videos (render-only) */}
+        {spread.videos?.map((video, index) => (
+          <EditableVideo
+            key={video.id}
+            video={video}
+            index={index}
+            isSelected={false}
+            isEditable={false}
+            onSelect={() => {}}
+          />
+        ))}
+
+        {/* Audios (render-only) */}
+        {spread.audios?.map((audio, index) => (
+          <EditableAudio
+            key={audio.id}
+            audio={audio}
+            index={index}
+            isThumbnail={false}
+            isSelected={false}
+            isEditable={false}
+            onSelect={() => {}}
+          />
+        ))}
+
         {/* Textboxes (selectable and editable) */}
         {textboxesWithLang.map((item, index) => {
           if (!item) return null;
@@ -369,5 +397,3 @@ export function RemixEditorCanvas({
     </div>
   );
 }
-
-export default RemixEditorCanvas;

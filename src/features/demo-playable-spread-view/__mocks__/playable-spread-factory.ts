@@ -2,8 +2,8 @@
 
 import type {
   PlayableSpread,
-  Animation,
 } from '@/components/playable-spread-view/types';
+import type { SpreadAnimation } from '@/components/shared';
 import type {
   PageData,
   SpreadTextbox,
@@ -119,13 +119,13 @@ function createMockAnimation(
   targetId: string,
   targetType: 'textbox' | 'image',
   preset: keyof typeof ANIMATION_PRESETS,
-  triggerType: Animation['trigger_type'] = 'after_previous',
+  triggerType: SpreadAnimation['trigger_type'] = 'after_previous',
   delay: number = 0
-): Animation {
+): SpreadAnimation {
   const presetData = ANIMATION_PRESETS[preset];
   return {
     order,
-    type: targetType === 'textbox' ? 'textbox' : 'image',
+    type: 1, // object-interactive
     target: { id: targetId, type: targetType },
     trigger_type: triggerType,
     effect: {
@@ -138,8 +138,8 @@ function createMockAnimation(
 function generateSpreadAnimations(
   images: SpreadImage[],
   textboxes: SpreadTextbox[]
-): Animation[] {
-  const animations: Animation[] = [];
+): SpreadAnimation[] {
+  const animations: SpreadAnimation[] = [];
   let order = 0;
 
   // All images fade in on click

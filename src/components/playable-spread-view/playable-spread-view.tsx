@@ -1,5 +1,5 @@
 // playable-spread-view.tsx - Root container component for playable spread view
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { PlayableSpreadViewProps, ActiveCanvas, PlayMode } from "./types";
 import { VOLUME, KEYBOARD_SHORTCUTS, TRIGGER_DELAY } from "./constants";
 import { PlayableHeader } from "./playable-header";
@@ -13,7 +13,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   mode,
   spreads,
   assets,
-  onAddAnimation,
+  onItemSelect,
   onAssetSwap,
   onTextChange,
   onSpreadSelect,
@@ -33,7 +33,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     spreads[0]?.id ?? null
   );
   const [volume, setVolume] = useState<number>(VOLUME.DEFAULT);
-  const [isMuted, setIsMuted] = useState(false);
+  const previousVolumeRef = useRef<number>(VOLUME.DEFAULT);
 
   // === Derived State ===
   const selectedSpread = spreads.find((s) => s.id === selectedSpreadId);
@@ -41,20 +41,16 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const hasPrevious = selectedIndex > 0;
   const hasNext = selectedIndex < spreads.length - 1;
 
-  // Check if spread has playable content (simplified for demo)
-  const playDisabled = !selectedSpread;
-
   // === Canvas Switching Handlers ===
   const handlePlayToggle = useCallback(() => {
+    if (playMode === "off") return;
     if (activeCanvas !== "player") {
-      // Switch to player and start playing
       setActiveCanvas("player");
       setIsPlaying(true);
     } else {
-      // Toggle playback on player
       setIsPlaying((prev) => !prev);
     }
-  }, [activeCanvas]);
+  }, [activeCanvas, playMode]);
 
   const handleStop = useCallback(() => {
     setIsPlaying(false);
@@ -76,21 +72,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }, [hasNext, spreads, selectedIndex, onSpreadSelect]);
 
   // === Volume Handlers ===
-  const handleVolumeChange = useCallback(
-    (newVolume: number) => {
-      setVolume(newVolume);
-      if (newVolume > 0 && isMuted) {
-        setIsMuted(false); // Auto unmute when increasing from muted
-      }
-      if (newVolume === 0) {
-        setIsMuted(true); // Auto mute at 0
-      }
-    },
-    [isMuted]
-  );
-
-  const handleMuteToggle = useCallback(() => {
-    setIsMuted((prev) => !prev);
+  const handleVolumeChange = useCallback((newVolume: number) => {
+    setVolume(newVolume);
   }, []);
 
   // === PlayMode Handler ===
@@ -102,33 +85,48 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const handleSpreadClick = useCallback(
     (spreadId: string) => {
       setSelectedSpreadId(spreadId);
-      onSpreadSelect?.(spreadId); // Notify parent of selection change
+      onSpreadSelect?.(spreadId);
     },
     [onSpreadSelect]
   );
 
   // === Spread Complete Handler ===
   const handleSpreadComplete = useCallback(
-    // @ts-ignore - TS6133: spreadId is required by interface but not used yet
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     (_spreadId: string) => {
       if (!hasNext) {
-        // Last spread: stop playing
         setIsPlaying(false);
-      } else if (playMode === 'auto') {
-        // Auto-advance to next spread
+      } else if (playMode === "auto") {
         setTimeout(() => {
           handleSkipNext();
         }, TRIGGER_DELAY.AUTO_SPREAD_COMPLETE * 1000);
       }
-      // Off/semi-auto with hasNext: PlayerCanvas handles hint via isEndPlaying
     },
     [playMode, hasNext, handleSkipNext]
   );
 
+  // === Spread Change Handler (from PlayerCanvas) ===
+  const handleSpreadChange = useCallback(
+    (direction: "prev" | "next") => {
+      if (direction === "prev") handleSkipPrevious();
+      if (direction === "next") handleSkipNext();
+    },
+    [handleSkipPrevious, handleSkipNext]
+  );
+
+  // === Mute Toggle (M key) ===
+  const handleMuteToggle = useCallback(() => {
+    if (volume > 0) {
+      previousVolumeRef.current = volume;
+      setVolume(0);
+    } else {
+      setVolume(previousVolumeRef.current || VOLUME.DEFAULT);
+    }
+  }, [volume]);
+
   // === Keyboard Shortcuts ===
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't handle shortcuts if user is typing in an input or contentEditable
       const target = e.target as HTMLElement;
       if (
         target instanceof HTMLInputElement ||
@@ -138,7 +136,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         return;
       }
 
-      // Guard against empty spreads
       if (spreads.length === 0) return;
 
       switch (e.key) {
@@ -209,10 +206,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           playMode={playMode}
           isPlaying={isPlaying}
           volume={volume}
-          isMuted={isMuted}
           hasPrevious={hasPrevious}
           hasNext={hasNext}
-          playDisabled={playDisabled}
           onPlayModeChange={handlePlayModeChange}
           onPlayToggle={handlePlayToggle}
           onSkipPrevious={handleSkipPrevious}
@@ -224,12 +219,10 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
 
       {/* Canvas Area */}
       <div className="flex-1 overflow-hidden flex">
-        {activeCanvas === "animation-editor" &&
-        selectedSpread &&
-        onAddAnimation ? (
+        {activeCanvas === "animation-editor" && selectedSpread ? (
           <AnimationEditorCanvas
             spread={selectedSpread}
-            onAddAnimation={onAddAnimation}
+            onItemSelect={onItemSelect ?? (() => {})}
           />
         ) : activeCanvas === "remix-editor" &&
           selectedSpread &&
@@ -241,14 +234,16 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             onAssetSwap={onAssetSwap}
             onTextChange={onTextChange}
           />
-        ) : activeCanvas === 'player' && selectedSpread ? (
+        ) : activeCanvas === "player" && selectedSpread ? (
           <PlayerCanvas
             spread={selectedSpread}
             playMode={playMode}
             isPlaying={isPlaying}
-            volume={isMuted ? 0 : volume}
+            volume={volume}
             hasNext={hasNext}
+            hasPrevious={hasPrevious}
             onSpreadComplete={handleSpreadComplete}
+            onSpreadChange={handleSpreadChange}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">

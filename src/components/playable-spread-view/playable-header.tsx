@@ -6,22 +6,12 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-rea
 import type { PlayableHeaderProps } from './types';
 import { PLAY_MODE_CYCLE } from './constants';
 
-/**
- * PlayableHeader Component
- *
- * Header toolbar with three sections:
- * - Left: PlayMode toggle (custom SVG switch)
- * - Center: Player controls (skip prev, play/pause, skip next)
- * - Right: Volume controls (slider + mute button)
- */
 export function PlayableHeader({
   playMode,
   isPlaying,
   volume,
-  isMuted,
   hasPrevious,
   hasNext,
-  playDisabled,
   onPlayModeChange,
   onPlayToggle,
   onSkipPrevious,
@@ -36,11 +26,7 @@ export function PlayableHeader({
   };
 
   const handleVolumeChange = (values: number[]) => {
-    const newVolume = values[0];
-    if (newVolume > 0 && isMuted) {
-      onMuteToggle();
-    }
-    onVolumeChange(newVolume);
+    onVolumeChange(values[0]);
   };
 
   // Circle fill states: off=both empty, semi-auto=left filled, auto=both filled
@@ -132,7 +118,7 @@ export function PlayableHeader({
           size="icon"
           className="h-10 w-10 rounded-lg"
           onClick={onPlayToggle}
-          disabled={playDisabled && !isPlaying}
+          disabled={playMode === 'off'}
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -157,7 +143,7 @@ export function PlayableHeader({
       {/* Right: Volume Controls */}
       <div className="flex items-center gap-2 w-32 justify-end">
         <Slider
-          value={[isMuted ? 0 : volume]}
+          value={[volume]}
           min={0}
           max={100}
           step={1}
@@ -170,9 +156,9 @@ export function PlayableHeader({
           size="icon"
           className="h-8 w-8 flex-shrink-0"
           onClick={onMuteToggle}
-          aria-label={isMuted || volume === 0 ? 'Unmute' : 'Mute'}
+          aria-label={volume === 0 ? 'Unmute' : 'Mute'}
         >
-          {isMuted || volume === 0 ? (
+          {volume === 0 ? (
             <VolumeX className="h-4 w-4" />
           ) : (
             <Volume2 className="h-4 w-4" />

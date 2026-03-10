@@ -6,8 +6,7 @@ import {
   PlayableSpreadView,
   type OperationMode,
   type PlayableSpread,
-  type Animation,
-  type AddAnimationParams,
+  type ItemType,
   type AssetSwapParams,
 } from "@/components/playable-spread-view";
 import { getFirstTextboxKey } from "@/components/shared";
@@ -104,39 +103,8 @@ export function DemoPlayableSpreadView() {
   );
 
   // === PlayableSpreadView Handlers ===
-  const handleAddAnimation = useCallback((params: AddAnimationParams) => {
-    console.log("Add animation:", params);
-
-    if (!params.targetId || !params.targetType) {
-      console.warn("Missing target info for animation");
-      return;
-    }
-
-    setSpreads((prevSpreads) =>
-      prevSpreads.map((spread) => {
-        if (spread.id !== params.spreadId) return spread;
-
-        const existingAnimations = spread.animations ?? [];
-        const newAnimation: Animation = {
-          order: existingAnimations.length + 1,
-          type: params.type,
-          target: {
-            id: params.targetId!,
-            type: params.targetType!,
-          },
-          trigger_type: "on_click",
-          effect: {
-            type: 1, // Default effect type
-            duration: 1000,
-          },
-        };
-
-        return {
-          ...spread,
-          animations: [...existingAnimations, newAnimation],
-        };
-      })
-    );
+  const handleItemSelect = useCallback((itemType: ItemType | null, itemId: string | null) => {
+    console.log("Item selected:", { itemType, itemId });
   }, []);
 
   const handleAssetSwap = useCallback(
@@ -333,7 +301,7 @@ export function DemoPlayableSpreadView() {
               mode={operationMode}
               spreads={spreads}
               assets={remixAssets}
-              onAddAnimation={handleAddAnimation}
+              onItemSelect={handleItemSelect}
               onAssetSwap={handleAssetSwap}
               onTextChange={handleTextChange}
               onSpreadSelect={handleSpreadSelect}

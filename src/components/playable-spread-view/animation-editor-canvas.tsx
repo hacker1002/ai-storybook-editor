@@ -2,10 +2,8 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import {
   EditableTextbox,
-  useToolbarPosition,
   Z_INDEX,
   getScaledDimensions,
   getFirstTextboxKey,
@@ -14,58 +12,40 @@ import {
   type Fill,
   type Outline,
 } from '../shared';
-import { EditableImage } from '../canvas-spread-view';
+import { EditableImage, EditableShape, EditableVideo, EditableAudio } from '../canvas-spread-view';
 import { PageItem } from '../canvas-spread-view/page-item';
-import { AddAnimationToolbar } from './add-animation-toolbar';
 import { SelectionOverlay } from './selection-overlay';
-import type { PlayableSpread, ItemType, AnimationMediaType, AddAnimationParams } from './types';
+import type { ItemType, AnimationEditorCanvasProps } from './types';
 import { TEXTBOX_Z_INDEX_BASE } from './constants';
-
-interface AnimationEditorCanvasProps {
-  spread: PlayableSpread;
-  zoomLevel?: number;
-  onAddAnimation: (params: AddAnimationParams) => void;
-}
 
 export function AnimationEditorCanvas({
   spread,
-  zoomLevel = 100,
-  onAddAnimation,
+  onItemSelect,
 }: AnimationEditorCanvasProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemType, setSelectedItemType] = useState<ItemType | null>(null);
-  const [toolbarOpen, setToolbarOpen] = useState(false);
   const [selectedGeometry, setSelectedGeometry] = useState<Geometry | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null);
 
-  // Scaled dimensions (same as spread-editor-panel)
-  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(zoomLevel);
-
-  // Calculate toolbar position
-  const toolbarPosition = useToolbarPosition({
-    geometry: selectedGeometry,
-    canvasRef,
-    toolbarRef,
-    gap: 8,
-  });
+  // Scaled dimensions at 100%
+  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(100);
 
   // Reset selection when spread changes
   useEffect(() => {
     setSelectedItemId(null);
     setSelectedItemType(null);
-    setToolbarOpen(false);
     setSelectedGeometry(null);
-  }, [spread.id]);
+    onItemSelect(null, null);
+  }, [spread.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deselect handler
   const handleDeselect = useCallback(() => {
     setSelectedItemId(null);
     setSelectedItemType(null);
-    setToolbarOpen(false);
     setSelectedGeometry(null);
-  }, []);
+    onItemSelect(null, null);
+  }, [onItemSelect]);
 
   // Click outside handler
   const handleClickOutside = useCallback(
@@ -116,8 +96,8 @@ export function AnimationEditorCanvas({
     setSelectedItemId(imageId);
     setSelectedItemType('image');
     setSelectedGeometry(image.geometry);
-    setToolbarOpen(true);
-  }, [spread.images]);
+    onItemSelect('image', imageId);
+  }, [spread.images, onItemSelect]);
 
   // Textbox selection handler
   const handleTextboxSelect = useCallback((textboxId: string) => {
@@ -133,30 +113,36 @@ export function AnimationEditorCanvas({
     setSelectedItemId(textboxId);
     setSelectedItemType('textbox');
     setSelectedGeometry(textboxData.geometry);
-    setToolbarOpen(true);
-  }, [spread.textboxes]);
+    onItemSelect('textbox', textboxId);
+  }, [spread.textboxes, onItemSelect]);
 
-  // Toolbar option select handler
-  const handleToolbarOptionSelect = useCallback(
-    (type: AnimationMediaType) => {
-      if (!selectedItemId || !selectedItemType) return;
+  // Shape selection handler
+  const handleShapeSelect = useCallback((shapeId: string) => {
+    const shape = spread.shapes?.find((s) => s.id === shapeId);
+    if (!shape) return;
+    setSelectedItemId(shapeId);
+    setSelectedItemType('shape');
+    setSelectedGeometry(shape.geometry);
+    onItemSelect('shape', shapeId);
+  }, [spread.shapes, onItemSelect]);
 
-      onAddAnimation({
-        type,
-        targetId: selectedItemId,
-        targetType: selectedItemType,
-        spreadId: spread.id,
-      });
+  // Video selection handler
+  const handleVideoSelect = useCallback((videoId: string) => {
+    const video = spread.videos?.find((v) => v.id === videoId);
+    if (!video) return;
+    setSelectedItemId(videoId);
+    setSelectedItemType('video');
+    setSelectedGeometry(video.geometry);
+    onItemSelect('video', videoId);
+  }, [spread.videos, onItemSelect]);
 
-      setToolbarOpen(false);
-    },
-    [selectedItemId, selectedItemType, spread.id, onAddAnimation]
-  );
-
-  // Toolbar close handler
-  const handleToolbarClose = useCallback(() => {
-    setToolbarOpen(false);
-  }, []);
+  // Audio selection handler (audios may not have visual geometry)
+  const handleAudioSelect = useCallback((audioId: string) => {
+    setSelectedItemId(audioId);
+    setSelectedItemType('audio');
+    setSelectedGeometry(null);
+    onItemSelect('audio', audioId);
+  }, [onItemSelect]);
 
   // Memoized textboxes with resolved language
   const textboxesWithLang = useMemo(() => {
@@ -226,6 +212,43 @@ export function AnimationEditorCanvas({
           />
         ))}
 
+        {/* Shapes (selectable) */}
+        {spread.shapes?.map((shape, index) => (
+          <EditableShape
+            key={shape.id}
+            shape={shape}
+            index={index}
+            isSelected={selectedItemId === shape.id && selectedItemType === 'shape'}
+            isEditable={false}
+            onSelect={() => handleShapeSelect(shape.id)}
+          />
+        ))}
+
+        {/* Videos (selectable) */}
+        {spread.videos?.map((video, index) => (
+          <EditableVideo
+            key={video.id}
+            video={video}
+            index={index}
+            isSelected={selectedItemId === video.id && selectedItemType === 'video'}
+            isEditable={false}
+            onSelect={() => handleVideoSelect(video.id)}
+          />
+        ))}
+
+        {/* Audios (selectable) */}
+        {spread.audios?.map((audio, index) => (
+          <EditableAudio
+            key={audio.id}
+            audio={audio}
+            index={index}
+            isSelected={selectedItemId === audio.id && selectedItemType === 'audio'}
+            isEditable={false}
+            isThumbnail={false}
+            onSelect={() => handleAudioSelect(audio.id)}
+          />
+        ))}
+
         {/* Textboxes (selectable, not editable) */}
         {textboxesWithLang.map((item, index) => {
           if (!item) return null;
@@ -253,32 +276,6 @@ export function AnimationEditorCanvas({
         {/* Selection overlay */}
         {selectedGeometry && <SelectionOverlay geometry={selectedGeometry} />}
       </div>
-
-      {/* Toolbar (portal to document.body) - always render when open to allow measurement */}
-      {toolbarOpen && selectedItemType && typeof window !== 'undefined' &&
-        createPortal(
-          <div
-            ref={toolbarRef}
-            data-toolbar
-            style={{
-              position: 'fixed',
-              top: toolbarPosition?.top ?? -9999,
-              left: toolbarPosition?.left ?? -9999,
-              zIndex: 9999,
-              visibility: toolbarPosition ? 'visible' : 'hidden',
-            }}
-          >
-            <AddAnimationToolbar
-              position={toolbarPosition ?? { top: 0, left: 0 }}
-              targetType={selectedItemType}
-              onSelectOption={handleToolbarOptionSelect}
-              onClose={handleToolbarClose}
-            />
-          </div>,
-          document.body
-        )}
     </div>
   );
 }
-
-export default AnimationEditorCanvas;
