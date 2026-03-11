@@ -110,6 +110,26 @@ export const EFFECT_TYPE_NAMES: Record<number, string> = {
   17: 'Arcs',
 };
 
+// === Rapid Next Debounce ===
+export const RAPID_NEXT_THRESHOLD = 150; // ms
+
+// === Sidebar Layout ===
+export const SIDEBAR = {
+  WIDTH: 56,
+  PADDING_VERTICAL: 16,
+  BG_COLOR: '#FFFFFF',
+  BORDER_LEFT: '1px solid #E0E0E0',
+} as const;
+
+// === Sidebar Button Sizes ===
+export const SIDEBAR_BUTTONS = {
+  PLAY_MODE_TOGGLE: 32,
+  BACK_FWD: 28,
+  PLAY_PAUSE: 40,
+  SPEAKER: 32,
+  VOLUME_SLIDER_HEIGHT: 96,
+} as const;
+
 // === Animation Presets ===
 export const ANIMATION_PRESETS = {
   // Entrance effects (2-6)

@@ -1,9 +1,7 @@
-// player-canvas.tsx - Animation playback canvas with GSAP engine, 3 play modes, 17 effect types
+// player-canvas.tsx - Animation playback canvas wired to Zustand store + GSAP engine hook
 'use client';
 
-import { useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import gsap from 'gsap';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   EditableTextbox,
   Z_INDEX,
@@ -17,16 +15,18 @@ import {
 import { EditableImage, EditableShape, EditableVideo, EditableAudio } from '../canvas-spread-view';
 import { PageItem } from '../canvas-spread-view/page-item';
 import type { PlayerCanvasProps, AnimationStep } from './types';
-import { TEXTBOX_Z_INDEX_BASE, TRIGGER_DELAY } from './constants';
-import { usePlayerEngine, isReplayableClick } from './use-player-engine';
-import { buildAnimationSteps } from './animation-step-grouping';
-import { addTweenToTimeline } from './animation-tween-builders';
+import { TEXTBOX_Z_INDEX_BASE, RAPID_NEXT_THRESHOLD } from './constants';
+import { isReplayableClick, buildAnimationSteps, findPrevOnNextStep } from './player-utils';
+import { usePlayerGsapEngine } from './hooks/use-player-gsap-engine';
 import {
-  applyInitialStates,
-  resetElementStyles,
-  resolveInitialState,
-  resolveAnimationEndState,
-} from './player-initial-states';
+  usePlaybackStore,
+  usePlaybackActions,
+  usePlayerPhase,
+  useCurrentStepIndex,
+  usePendingClickTargetId,
+  useReplayableItems,
+} from './stores/playback-store';
+import { PlayerControlSidebar } from './player-control-sidebar';
 
 // === CSS for click-hint-pulse ===
 // IMPORTANT: Apply filter to the CHILD element (> :first-child), not the wrapper div.
@@ -46,445 +46,179 @@ const CLICK_HINT_STYLE = `
 export function PlayerCanvas({
   spread,
   playMode,
-  isPlaying,
-  volume,
   hasNext,
   hasPrevious,
   onSpreadComplete,
-  onSpreadChange,
+  onSkipSpread,
+  onPlayModeChange,
   onPlaybackStatusChange,
 }: PlayerCanvasProps) {
-  // === Hooks & Refs ===
-  const { state, dispatch } = usePlayerEngine();
-  const timelineRef = useRef<gsap.core.Timeline | null>(null);
-  const replayTimelineRef = useRef<gsap.core.Timeline | null>(null);
-  const elementRefsMap = useRef<Map<string, HTMLElement>>(new Map());
-  const spreadContainerRef = useRef<HTMLDivElement>(null);
-  const prevStepIndexRef = useRef<number>(-1);
-  const pendingRafRef = useRef<number | null>(null);
-  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // === Store selectors ===
+  const playbackActions = usePlaybackActions();
+  const phase = usePlayerPhase();
+  const currentStepIndex = useCurrentStepIndex();
+  const pendingClickTargetId = usePendingClickTargetId();
+  const replayableItems = useReplayableItems();
+  const steps = usePlaybackStore((s) => s.steps);
+
+  // === GSAP engine hook ===
+  const {
+    spreadContainerRef,
+    registerRef,
+    handleClickLoopReplay,
+    killTimeline,
+    applyStepFinalStates,
+    reApplyInitialStates,
+  } = usePlayerGsapEngine({ spread, onSpreadComplete, hasNext, onPlaybackStatusChange });
 
   const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(100);
 
-  // === Helpers ===
-  const killTimeline = useCallback(() => {
-    if (timelineRef.current) {
-      timelineRef.current.kill();
-      timelineRef.current = null;
-    }
-  }, []);
+  // === Store sync effects ===
 
-  const killReplayTimeline = useCallback(() => {
-    if (replayTimelineRef.current) {
-      replayTimelineRef.current.kill();
-      replayTimelineRef.current = null;
-    }
-  }, []);
+  // 1. Sync playMode from props into store
+  useEffect(() => {
+    playbackActions.setPlayMode(playMode);
+  }, [playMode, playbackActions]);
 
-  const cancelPendingRaf = useCallback(() => {
-    if (pendingRafRef.current !== null) {
-      cancelAnimationFrame(pendingRafRef.current);
-      pendingRafRef.current = null;
-    }
-  }, []);
+  // 2. Reset steps on spread change & ensure playback starts
+  useEffect(() => {
+    const newSteps = buildAnimationSteps(spread.animations);
+    playbackActions.reset(newSteps);
+    playbackActions.play();
+  }, [spread.id]); // eslint-disable-line
 
-  const cancelAutoAdvance = useCallback(() => {
-    if (autoAdvanceTimerRef.current !== null) {
-      clearTimeout(autoAdvanceTimerRef.current);
-      autoAdvanceTimerRef.current = null;
-    }
-  }, []);
+  // 3. Cleanup on unmount
+  useEffect(() => {
+    return () => playbackActions.resetStore();
+  }, []); // eslint-disable-line
 
-  const registerRef = useCallback((itemId: string) => {
-    return (el: HTMLDivElement | null) => {
-      if (el) {
-        // Target the inner visual element (position:absolute with explicit geometry)
-        // instead of the 0x0 wrapper div. GSAP transforms on the wrapper would create
-        // a containing block, collapsing the inner element's percentage-based dimensions.
-        const visualChild = el.firstElementChild as HTMLElement;
-        elementRefsMap.current.set(itemId, visualChild ?? el);
-      } else {
-        elementRefsMap.current.delete(itemId);
+  // 4. Keyboard shortcuts: volume/mute (moved from root)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable
+      ) return;
+      switch (e.key) {
+        case 'm':
+        case 'M':
+          playbackActions.toggleMute();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          playbackActions.setVolume(usePlaybackStore.getState().volume + 10);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          playbackActions.setVolume(usePlaybackStore.getState().volume - 10);
+          break;
       }
     };
-  }, []);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [playbackActions]);
 
-  // === Pre-compute container dimensions (avoid repeated getBoundingClientRect) ===
-  const getContainerDims = useCallback(() => {
-    const rect = spreadContainerRef.current?.getBoundingClientRect();
-    return {
-      containerWidth: rect?.width ?? scaledWidth,
-      containerHeight: rect?.height ?? scaledHeight,
-    };
-  }, [scaledWidth, scaledHeight]);
+  // === Navigation handlers ===
 
-  // === Item geometry lookup for Lines/Arcs delta calculation ===
-  const findItemGeometry = useCallback((targetId: string): { x: number; y: number } | undefined => {
-    const items: Array<{ id: string; geometry: { x: number; y: number } }> = [
-      ...(spread.images || []),
-      ...(spread.shapes || []),
-      ...(spread.videos || []),
-      ...(spread.audios || []),
-    ];
-    return items.find(i => i.id === targetId)?.geometry;
-  }, [spread.images, spread.shapes, spread.videos, spread.audios]);
-
-  // === Timeline Builders ===
-  const buildAndPlayStepTimeline = useCallback((step: AnimationStep) => {
-    killTimeline();
-    const tl = gsap.timeline({
-      onComplete: () => dispatch({ type: 'STEP_COMPLETE' }),
-    });
-
-    const dims = getContainerDims();
-
-    step.animations.forEach((anim, i) => {
-      const el = elementRefsMap.current.get(anim.target.id);
-      if (!el) {
-        console.warn(`[PlayerCanvas] Element not found: ${anim.target.id}`);
-        return;
-      }
-
-      let position: number | string;
-      if (i === 0) {
-        position = 0;
-      } else if (anim.trigger_type === 'with_previous') {
-        position = '<';
-      } else {
-        // after_previous
-        position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-      }
-
-      addTweenToTimeline(tl, anim, el, position, {
-        volume: volume / 100,
-        spreadContainer: spreadContainerRef.current,
-        itemGeometry: findItemGeometry(anim.target.id),
-        ...dims,
-      });
-    });
-
-    timelineRef.current = tl;
-    tl.play();
-  }, [killTimeline, volume, dispatch, getContainerDims, findItemGeometry]);
-
-  const buildAndPlayFullTimeline = useCallback(() => {
-    killTimeline();
-    cancelAutoAdvance();
-    const tl = gsap.timeline({
-      onComplete: () => {
-        onSpreadComplete(spread.id);
-        if (hasNext) {
-          autoAdvanceTimerRef.current = setTimeout(() => {
-            autoAdvanceTimerRef.current = null;
-            onSpreadChange('next');
-          }, TRIGGER_DELAY.AUTO_SPREAD_COMPLETE * 1000);
-        }
-      },
-    });
-
-    const dims = getContainerDims();
-    const animations = [...spread.animations].sort((a, b) => a.order - b.order);
-
-    animations.forEach((anim, i) => {
-      const el = elementRefsMap.current.get(anim.target.id);
-      if (!el) {
-        console.warn(`[PlayerCanvas] Element not found: ${anim.target.id}`);
-        return;
-      }
-
-      let position: number | string;
-      if (i === 0) {
-        position = 0;
-      } else if (anim.trigger_type === 'with_previous') {
-        position = '<';
-      } else if (anim.trigger_type === 'after_previous') {
-        position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-      } else {
-        // on_click or on_next in auto mode → play with delay
-        position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
-      }
-
-      addTweenToTimeline(tl, anim, el, position, {
-        volume: volume / 100,
-        spreadContainer: spreadContainerRef.current,
-        itemGeometry: findItemGeometry(anim.target.id),
-        ...dims,
-      });
-    });
-
-    timelineRef.current = tl;
-    tl.play();
-  }, [killTimeline, cancelAutoAdvance, volume, spread.animations, spread.id, hasNext, onSpreadComplete, onSpreadChange, getContainerDims, findItemGeometry]);
-
-  // === Click Loop Replay (independent timeline) ===
-  const handleClickLoopReplay = useCallback((step: AnimationStep) => {
-    killReplayTimeline();
-
-    // Emit active indices for sidebar highlight during replay
-    if (onPlaybackStatusChange) {
-      const indices = step.animations.map((a) => a.order);
-      onPlaybackStatusChange({ activeAnimationIndices: indices });
-    }
-
-    const replayTl = gsap.timeline({
-      onComplete: () => {
-        // Clear highlights when replay finishes
-        onPlaybackStatusChange?.({ activeAnimationIndices: [] });
-      },
-    });
-    const dims = getContainerDims();
-
-    step.animations.forEach((anim, i) => {
-      const el = elementRefsMap.current.get(anim.target.id);
-      if (!el) return;
-
-      // Clear transforms from previous play, then reset to initial state.
-      // Emphasis effects (Spin, Grow/Shrink, Teeter) leave residual rotation/scale;
-      // without clearing, absolute tweens (e.g. rotation: 5) would be a no-op.
-      gsap.set(el, { clearProps: 'transform,transformOrigin' });
-      const initialProps = resolveInitialState(anim, spreadContainerRef.current);
-      if (Object.keys(initialProps).length > 0) {
-        gsap.set(el, initialProps);
-      }
-
-      let position: number | string;
-      if (i === 0) position = 0;
-      else if (anim.trigger_type === 'with_previous') position = '<';
-      else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-
-      addTweenToTimeline(replayTl, anim, el, position, {
-        volume: volume / 100,
-        spreadContainer: spreadContainerRef.current,
-        itemGeometry: findItemGeometry(anim.target.id),
-        ...dims,
-      });
-    });
-
-    replayTimelineRef.current = replayTl;
-    replayTl.play();
-  }, [killReplayTimeline, volume, getContainerDims, findItemGeometry, onPlaybackStatusChange]);
-
-  // === Lifecycle: Cleanup on unmount ===
-  useLayoutEffect(() => {
-    return () => {
-      cancelPendingRaf();
-      cancelAutoAdvance();
-      killTimeline();
-      killReplayTimeline();
-    };
-  }, [cancelPendingRaf, cancelAutoAdvance, killTimeline, killReplayTimeline]);
-
-  // === Lifecycle: Spread change → RESET ===
-  useEffect(() => {
-    cancelPendingRaf();
-    cancelAutoAdvance();
-    killTimeline();
-    killReplayTimeline();
-    resetElementStyles(elementRefsMap.current);
-    applyInitialStates(spread.animations, elementRefsMap.current, spreadContainerRef.current);
-
-    const steps = buildAnimationSteps(spread.animations);
-    dispatch({ type: 'RESET', steps });
-    prevStepIndexRef.current = -1;
-
-    // Auto mode: rebuild full timeline on spread change
-    if (playMode === 'auto' && isPlaying) {
-      pendingRafRef.current = requestAnimationFrame(() => {
-        pendingRafRef.current = null;
-        buildAndPlayFullTimeline();
-      });
-    }
-
-    return () => {
-      cancelPendingRaf();
-      cancelAutoAdvance();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spread.id]);
-
-  // === Lifecycle: Phase change → build timeline (semi-auto) ===
-  useEffect(() => {
-    if (playMode !== 'semi-auto') return;
-    if (state.phase !== 'playing' || state.currentStepIndex < 0) return;
-
-    const currentIdx = state.currentStepIndex;
-    const prevIdx = prevStepIndexRef.current;
-
-    // Detect USER_BACK: currentStepIndex decreased
-    if (prevIdx >= 0 && currentIdx < prevIdx) {
-      // Re-apply: reset affected items, then set end states for steps 0..currentIdx-1
-      const affectedTargets = new Set<string>();
-      for (let i = currentIdx + 1; i <= prevIdx; i++) {
-        state.steps[i]?.animations.forEach((a) => affectedTargets.add(a.target.id));
-      }
-      affectedTargets.forEach((tid) => {
-        const el = elementRefsMap.current.get(tid);
-        if (el) gsap.set(el, { clearProps: 'opacity,visibility,transform,transformOrigin' });
-      });
-
-      // Re-apply initial states for affected targets
-      const allAnimations = spread.animations;
-      applyInitialStates(
-        allAnimations.filter((a) => affectedTargets.has(a.target.id)),
-        elementRefsMap.current,
-        spreadContainerRef.current
-      );
-
-      // Re-apply end states for steps 0..currentIdx-1
-      for (let i = 0; i < currentIdx; i++) {
-        state.steps[i]?.animations.forEach((anim) => {
-          const el = elementRefsMap.current.get(anim.target.id);
-          if (!el) return;
-          const endState = resolveAnimationEndState(anim, spreadContainerRef.current, findItemGeometry(anim.target.id));
-          if (Object.keys(endState).length > 0) gsap.set(el, endState);
-        });
-      }
-    }
-
-    prevStepIndexRef.current = currentIdx;
-    const step = state.steps[currentIdx];
-    if (step) buildAndPlayStepTimeline(step);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.phase, state.currentStepIndex, playMode]);
-
-  // === Lifecycle: Auto mode — spread change or play toggle ===
-  useEffect(() => {
-    if (playMode !== 'auto') return;
-
-    if (isPlaying) {
-      if (!timelineRef.current || state.phase === 'complete') {
-        cancelPendingRaf();
-        pendingRafRef.current = requestAnimationFrame(() => {
-          pendingRafRef.current = null;
-          resetElementStyles(elementRefsMap.current);
-          applyInitialStates(spread.animations, elementRefsMap.current, spreadContainerRef.current);
-          buildAndPlayFullTimeline();
-        });
-      } else {
-        timelineRef.current.resume();
-      }
-    } else {
-      timelineRef.current?.pause();
-    }
-
-    return () => {
-      cancelPendingRaf();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, playMode]);
-
-  // === Lifecycle: Semi-auto pause ===
-  useEffect(() => {
-    if (playMode !== 'semi-auto') return;
-    if (!isPlaying) {
-      timelineRef.current?.pause();
-    }
-  }, [isPlaying, playMode]);
-
-  // === Lifecycle: Volume sync ===
-  useEffect(() => {
-    const container = spreadContainerRef.current;
-    if (!container) return;
-    const mediaEls = container.querySelectorAll('audio, video');
-    mediaEls.forEach((el) => {
-      (el as HTMLMediaElement).volume = volume / 100;
-    });
-  }, [volume]);
-
-  // === Lifecycle: Emit playback status for sidebar highlight ===
-  useEffect(() => {
-    if (!onPlaybackStatusChange) return;
-
-    if (state.phase === 'playing' && state.currentStepIndex >= 0) {
-      const step = state.steps[state.currentStepIndex];
-      if (step) {
-        const indices = step.animations.map((a) => a.order);
-        onPlaybackStatusChange({ activeAnimationIndices: indices });
-        return;
-      }
-    }
-    // Not playing → clear highlights
-    onPlaybackStatusChange({ activeAnimationIndices: [] });
-  }, [state.phase, state.currentStepIndex, state.steps, onPlaybackStatusChange]);
-
-  // === Navigation Handlers ===
-  const handleBack = useCallback(() => {
-    if (playMode === 'off') {
-      onSpreadChange('prev');
-      return;
-    }
-    if (playMode === 'semi-auto') {
-      if (state.currentStepIndex > 0) {
-        killTimeline();
-        dispatch({ type: 'USER_BACK' });
-      } else if (hasPrevious) {
-        onSpreadChange('prev');
-      }
-    }
-  }, [playMode, state.currentStepIndex, hasPrevious, onSpreadChange, killTimeline, dispatch]);
+  const lastNextTimeRef = useRef<number>(0);
+  const lastBackTimeRef = useRef<number>(0);
 
   const handleNext = useCallback(() => {
-    if (playMode === 'off') {
-      onSpreadChange('next');
+    if (playMode !== 'semi-auto') return;
+    if (phase === 'playing') {
+      const currentStep = steps[currentStepIndex];
+      if (currentStep?.mustComplete) return;
+      const now = Date.now();
+      if (now - lastNextTimeRef.current < RAPID_NEXT_THRESHOLD) return;
+      lastNextTimeRef.current = now;
+      killTimeline();
+      if (currentStep) applyStepFinalStates(currentStep);
+      const isLastStep = currentStepIndex >= steps.length - 1;
+      playbackActions.cancelAndNext();
+      if (isLastStep && hasNext) onSkipSpread('next');
       return;
     }
-    if (playMode === 'semi-auto') {
-      if (state.phase === 'complete') {
-        if (hasNext) onSpreadChange('next');
-      } else {
-        killTimeline();
-        dispatch({ type: 'USER_NEXT' });
-      }
+    if (phase === 'complete') {
+      if (hasNext) onSkipSpread('next');
+      return;
     }
-  }, [playMode, state.phase, hasNext, onSpreadChange, killTimeline, dispatch]);
+    playbackActions.userNext();
+  }, [playMode, phase, steps, currentStepIndex, hasNext, killTimeline, applyStepFinalStates, playbackActions, onSkipSpread]);
+
+  const handleBack = useCallback(() => {
+    if (playMode !== 'semi-auto') return;
+    // No previous on_next step exists → skip to previous spread
+    // Handles: step 0, before start, or first interactive step preceded only by 'auto' steps
+    const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
+    if (currentStepIndex <= 0 || prevOnNextIdx < 0) {
+      if (hasPrevious) onSkipSpread('prev');
+      return;
+    }
+    if (phase === 'playing') {
+      const currentStep = steps[currentStepIndex];
+      if (currentStep?.mustComplete) return;
+      const now = Date.now();
+      if (now - lastBackTimeRef.current < RAPID_NEXT_THRESHOLD) return;
+      lastBackTimeRef.current = now;
+      killTimeline();
+      reApplyInitialStates(currentStepIndex);
+    }
+    playbackActions.userBack();
+  }, [playMode, currentStepIndex, hasPrevious, phase, steps, killTimeline, reApplyInitialStates, playbackActions, onSkipSpread]);
 
   const handleItemClick = useCallback((itemId: string) => {
     if (playMode !== 'semi-auto') return;
-
-    // Priority 1: main flow pending click
-    if (state.pendingClickTargetId === itemId) {
-      dispatch({ type: 'USER_CLICK', itemId });
+    if (pendingClickTargetId === itemId) {
+      playbackActions.userClick(itemId);
       return;
     }
-
-    // Priority 2: click loop replay (self-handle pattern)
-    if (isReplayableClick(state.replayableItems, itemId) && state.phase !== 'playing') {
-      const replayable = state.replayableItems.get(itemId);
-      if (replayable) {
-        const step = state.steps[replayable.stepIndex];
-        dispatch({ type: 'CLICK_LOOP_REPLAY', itemId });
-        if (step) handleClickLoopReplay(step);
-      }
+    if (isReplayableClick(replayableItems, itemId) && phase !== 'playing') {
+      const result = playbackActions.clickLoopReplay(itemId);
+      if (result.shouldReplay && result.step) handleClickLoopReplay(result.step as AnimationStep);
+      return;
     }
-  }, [playMode, state, dispatch, handleClickLoopReplay]);
+    playbackActions.userClick(itemId);
+  }, [playMode, pendingClickTargetId, replayableItems, phase, playbackActions, handleClickLoopReplay]);
 
   // === Pointer & Highlight Logic ===
+
   const getPointerClasses = useCallback((itemId: string): string => {
     if (playMode === 'semi-auto') {
-      if (state.pendingClickTargetId === itemId) return 'pointer-events-auto cursor-pointer';
-      if (isReplayableClick(state.replayableItems, itemId)) return 'pointer-events-auto cursor-pointer';
+      if (pendingClickTargetId === itemId) return 'pointer-events-auto cursor-pointer';
+      if (isReplayableClick(replayableItems, itemId)) return 'pointer-events-auto cursor-pointer';
     }
     return 'pointer-events-none';
-  }, [playMode, state.pendingClickTargetId, state.replayableItems]);
+  }, [playMode, pendingClickTargetId, replayableItems]);
 
   const getHighlightClass = useCallback((itemId: string): string => {
-    return state.pendingClickTargetId === itemId ? 'click-hint-pulse' : '';
-  }, [state.pendingClickTargetId]);
+    return pendingClickTargetId === itemId ? 'click-hint-pulse' : '';
+  }, [pendingClickTargetId]);
+
+  // === Computed navigation state ===
 
   const canGoBack = useMemo(() => {
-    if (playMode === 'off') return hasPrevious;
-    if (playMode === 'semi-auto') return state.currentStepIndex > 0 || hasPrevious;
-    return false;
-  }, [playMode, hasPrevious, state.currentStepIndex]);
+    if (playMode !== 'semi-auto') return false;
+    // No previous on_next step → can go back only if previous spread exists
+    const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
+    if (currentStepIndex <= 0 || prevOnNextIdx < 0) return hasPrevious;
+    if (phase === 'playing') {
+      const step = steps[currentStepIndex];
+      return !step?.mustComplete;
+    }
+    return true;
+  }, [playMode, currentStepIndex, hasPrevious, phase, steps]);
 
   const canGoNext = useMemo(() => {
-    if (playMode === 'off') return hasNext;
-    if (playMode === 'semi-auto') {
-      if (state.phase !== 'complete') return true;
-      return hasNext;
+    if (playMode !== 'semi-auto') return false;
+    if (phase === 'playing') {
+      const step = steps[currentStepIndex];
+      return !step?.mustComplete;
     }
-    return false;
-  }, [playMode, hasNext, state.phase]);
+    if (phase === 'complete') return hasNext;
+    return true;
+  }, [playMode, phase, currentStepIndex, steps, hasNext]);
 
   // === Memoized textboxes with resolved language ===
   const textboxesWithLang = useMemo(() => {
@@ -506,8 +240,7 @@ export function PlayerCanvas({
 
   // === Render ===
   return (
-    <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">
-      {/* Inject pulse animation CSS */}
+    <div className="relative flex-1 overflow-auto flex items-center justify-center p-4 pr-[72px] bg-muted/30">
       <style>{CLICK_HINT_STYLE}</style>
 
       {/* Spread container */}
@@ -655,29 +388,14 @@ export function PlayerCanvas({
         })}
       </div>
 
-      {/* Navigation Sidebar (off + semi-auto only) */}
-      {playMode !== 'auto' && (
-        <div className="flex flex-col gap-2 ml-4">
-          <button
-            type="button"
-            onClick={handleBack}
-            disabled={!canGoBack}
-            className="p-2 rounded-full bg-white shadow-md hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            aria-label="Previous"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={!canGoNext}
-            className="p-2 rounded-full bg-white shadow-md hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            aria-label="Next"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-      )}
+      {/* Player controls sidebar */}
+      <PlayerControlSidebar
+        onPlayModeChange={onPlayModeChange}
+        onNext={handleNext}
+        onBack={handleBack}
+        canNext={canGoNext}
+        canBack={canGoBack}
+      />
     </div>
   );
 }

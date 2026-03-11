@@ -12,6 +12,7 @@ export interface AnimationStep {
   triggerType: 'on_next' | 'on_click' | 'auto';
   targetId?: string;        // only when triggerType = 'on_click'
   clickLoop?: number;       // only when triggerType = 'on_click', replay count
+  mustComplete: boolean;    // blocks back/fwd during playback
   animations: SpreadAnimation[];
 }
 
@@ -144,11 +145,18 @@ export interface RemixEditorCanvasProps {
 export interface PlayerCanvasProps {
   spread: PlayableSpread;
   playMode: PlayMode;
-  isPlaying: boolean;
-  volume: number;
   hasNext: boolean;
   hasPrevious: boolean;
   onSpreadComplete: (spreadId: string) => void;
-  onSpreadChange: (direction: 'prev' | 'next') => void;
+  onSkipSpread: (direction: 'next' | 'prev') => void;
+  onPlayModeChange: (mode: PlayMode) => void;
   onPlaybackStatusChange?: (status: PlaybackStatus) => void;
+}
+
+export interface PlayerControlSidebarProps {
+  onPlayModeChange: (mode: PlayMode) => void;
+  onNext: () => void;
+  onBack: () => void;
+  canNext: boolean;
+  canBack: boolean;
 }

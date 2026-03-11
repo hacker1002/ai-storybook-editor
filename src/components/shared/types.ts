@@ -171,6 +171,7 @@ export interface SpreadAnimation {
   };
   trigger_type: "on_click" | "on_next" | "with_previous" | "after_previous";
   click_loop?: number;
+  must_complete?: boolean;
   effect: {
     type: number;
     geometry?: Geometry;

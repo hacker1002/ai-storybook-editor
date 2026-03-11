@@ -1,7 +1,9 @@
-// animation-step-grouping.ts - Groups SpreadAnimation[] into AnimationStep[] for playback
+// player-utils.ts - Utility functions for building and navigating animation steps
 
 import type { SpreadAnimation } from '../shared';
 import type { AnimationStep } from './types';
+
+// === Building steps from raw animations ===
 
 /**
  * Groups sorted animations into discrete playback steps.
@@ -29,6 +31,7 @@ export function buildAnimationSteps(animations: SpreadAnimation[]): AnimationSte
       currentStep = {
         index: steps.length,
         triggerType: trigger === 'on_next' ? 'on_next' : 'on_click',
+        mustComplete: false,
         animations: [anim],
       };
 
@@ -48,6 +51,7 @@ export function buildAnimationSteps(animations: SpreadAnimation[]): AnimationSte
         currentStep = {
           index: steps.length,
           triggerType: 'auto',
+          mustComplete: false,
           animations: [anim],
         };
         steps.push(currentStep);
@@ -55,5 +59,56 @@ export function buildAnimationSteps(animations: SpreadAnimation[]): AnimationSte
     }
   }
 
+  // Compute mustComplete from animation data
+  for (const step of steps) {
+    step.mustComplete = step.animations.some(a => !!a.must_complete);
+  }
+
   return steps;
+}
+
+// === Navigating steps by trigger type ===
+
+/** Find the next step with triggerType='on_next' starting from `fromIndex` */
+export function findNextOnNextStep(
+  steps: AnimationStep[],
+  fromIndex: number
+): number {
+  for (let i = fromIndex; i < steps.length; i++) {
+    if (steps[i].triggerType === 'on_next') return i;
+  }
+  return -1;
+}
+
+/** Find the previous step with triggerType='on_next' searching backward from `fromIndex - 1` */
+export function findPrevOnNextStep(
+  steps: AnimationStep[],
+  fromIndex: number
+): number {
+  for (let i = fromIndex - 1; i >= 0; i--) {
+    if (steps[i].triggerType === 'on_next') return i;
+  }
+  return -1;
+}
+
+/** Find on_click step matching targetId within consecutive on_click chain after afterIndex */
+export function findOnClickStepForTarget(
+  steps: AnimationStep[],
+  afterIndex: number,
+  targetId: string
+): number {
+  for (let i = afterIndex + 1; i < steps.length; i++) {
+    if (steps[i].triggerType !== 'on_click') break; // stop at non-on_click
+    if (steps[i].targetId === targetId) return i;
+  }
+  return -1;
+}
+
+/** Check if an item has remaining click loop replays */
+export function isReplayableClick(
+  replayableItems: Map<string, { remainingReplays: number }>,
+  itemId: string
+): boolean {
+  const entry = replayableItems.get(itemId);
+  return !!entry && entry.remainingReplays > 0;
 }

@@ -23,6 +23,9 @@ export type {
 // === Constants ===
 export { LAYOUT, THUMBNAIL_STYLES, PLAY_MODE_CYCLE, VOLUME, KEYBOARD_SHORTCUTS } from './constants';
 
+// === Types - new ===
+export type { PlayerControlSidebarProps } from './types';
+
 // === Components ===
 export { PlayableSpreadView } from './playable-spread-view';
 export { PlayableHeader } from './playable-header';
@@ -32,3 +35,18 @@ export { RemixEditorCanvas } from './remix-editor-canvas';
 export { PromptToolbar } from './prompt-toolbar';
 export { SelectionOverlay } from './selection-overlay';
 export { PlayerCanvas } from './player-canvas';
+
+// === Components - new ===
+export { PlayerControlSidebar } from './player-control-sidebar';
+
+// === Store selectors ===
+export {
+  usePlayMode,
+  useIsPlaying,
+  useVolume,
+  usePlayerPhase,
+  usePlaybackActions,
+} from './stores/playback-store';
+
+// === Constants - new ===
+export { RAPID_NEXT_THRESHOLD, SIDEBAR, SIDEBAR_BUTTONS } from './constants';
