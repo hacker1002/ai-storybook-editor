@@ -1,170 +1,35 @@
-// playable-header.tsx - Header toolbar for PlayableSpreadView
+// playable-header.tsx - Floating play/stop button for PlayableSpreadView
 import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import { Play, Square } from 'lucide-react';
 import type { PlayableHeaderProps } from './types';
-import { PLAY_MODE_CYCLE } from './constants';
 
-export function PlayableHeader({
-  playMode,
-  isPlaying,
-  volume,
-  hasPrevious,
-  hasNext,
-  onPlayModeChange,
-  onPlayToggle,
-  onSkipPrevious,
-  onSkipNext,
-  onVolumeChange,
-  onMuteToggle,
-}: PlayableHeaderProps) {
-  const handleModeClick = () => {
-    const currentIndex = PLAY_MODE_CYCLE.indexOf(playMode);
-    const nextIndex = (currentIndex + 1) % PLAY_MODE_CYCLE.length;
-    onPlayModeChange(PLAY_MODE_CYCLE[nextIndex]);
-  };
-
-  const handleVolumeChange = (values: number[]) => {
-    onVolumeChange(values[0]);
-  };
-
-  // Circle fill states: off=both empty, semi-auto=left filled, auto=both filled
-  const leftFilled = playMode !== 'off';
-  const rightFilled = playMode === 'auto';
-  const modeLabel = playMode === 'semi-auto' ? 'Semi-auto' : playMode === 'auto' ? 'Auto' : 'Off';
+export function PlayableHeader({ activeCanvas, playMode, onPlay, onStop }: PlayableHeaderProps) {
+  const isPlayerActive = activeCanvas === 'player';
 
   return (
-    <div
-      className="h-14 px-4 flex items-center justify-between border-b bg-background"
-      role="toolbar"
-      aria-label="Playback controls"
-    >
-      {/* Left: PlayMode Toggle */}
-      <div className="flex items-center w-32">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={handleModeClick}
-              className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-secondary"
-              aria-label={`Play mode: ${modeLabel}. Click to cycle.`}
-            >
-              <svg width="24" height="14" viewBox="0 0 24 14" className="flex-shrink-0">
-                {/* Pill outline */}
-                <rect
-                  x="1"
-                  y="1"
-                  width="22"
-                  height="12"
-                  rx="6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  className="text-muted-foreground"
-                />
-                {/* Left circle */}
-                <circle
-                  cx="7"
-                  cy="7"
-                  r="3"
-                  fill={leftFilled ? 'currentColor' : 'none'}
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  className={leftFilled ? 'text-primary' : 'text-muted-foreground/30'}
-                />
-                {/* Divider */}
-                <line
-                  x1="12"
-                  y1="3"
-                  x2="12"
-                  y2="11"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  className="text-muted-foreground/30"
-                />
-                {/* Right circle */}
-                <circle
-                  cx="17"
-                  cy="7"
-                  r="3"
-                  fill={rightFilled ? 'currentColor' : 'none'}
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  className={rightFilled ? 'text-primary' : 'text-muted-foreground/30'}
-                />
-              </svg>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p>Play mode: {modeLabel}</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-
-      {/* Center: Player Controls */}
-      <div className="flex items-center gap-1">
+    <div className="absolute top-2 right-2 z-10">
+      {isPlayerActive ? (
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
-          onClick={onSkipPrevious}
-          disabled={!hasPrevious}
-          aria-label="Previous spread"
+          className="h-8 w-8 hover:bg-secondary"
+          onClick={onStop}
+          aria-label="Stop playback"
         >
-          <SkipBack className="h-4 w-4" />
+          <Square className="h-4 w-4" />
         </Button>
-
+      ) : (
         <Button
+          variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-lg"
-          onClick={onPlayToggle}
+          className="h-8 w-8 hover:bg-secondary"
+          onClick={onPlay}
           disabled={playMode === 'off'}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
+          aria-label="Play"
         >
-          {isPlaying ? (
-            <Pause className="h-5 w-5" />
-          ) : (
-            <Play className="h-5 w-5 ml-0.5" />
-          )}
+          <Play className="h-4 w-4" />
         </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={onSkipNext}
-          disabled={!hasNext}
-          aria-label="Next spread"
-        >
-          <SkipForward className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Right: Volume Controls */}
-      <div className="flex items-center gap-2 w-32 justify-end">
-        <Slider
-          value={[volume]}
-          min={0}
-          max={100}
-          step={1}
-          onValueChange={handleVolumeChange}
-          className="w-24"
-          aria-label="Volume"
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 flex-shrink-0"
-          onClick={onMuteToggle}
-          aria-label={volume === 0 ? 'Unmute' : 'Mute'}
-        >
-          {volume === 0 ? (
-            <VolumeX className="h-4 w-4" />
-          ) : (
-            <Volume2 className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

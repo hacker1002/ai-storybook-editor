@@ -29,6 +29,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       setActiveCanvas(mode);
     }
   }, [mode, isPlaying]);
+  // setPlayMode kept for future PlayerControlSidebar
   const [playMode, setPlayMode] = useState<PlayMode>("semi-auto");
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
@@ -43,6 +44,18 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const hasNext = selectedIndex < spreads.length - 1;
 
   // === Canvas Switching Handlers ===
+  const handlePlay = useCallback(() => {
+    if (playMode === "off") return;
+    setActiveCanvas("player");
+    setIsPlaying(true);
+  }, [playMode]);
+
+  const handleStop = useCallback(() => {
+    setIsPlaying(false);
+    setActiveCanvas(mode); // Return to mode-determined canvas
+  }, [mode]);
+
+  // Keep handlePlayToggle for keyboard Space shortcut (toggle behavior in player mode)
   const handlePlayToggle = useCallback(() => {
     if (playMode === "off") return;
     if (activeCanvas !== "player") {
@@ -52,11 +65,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       setIsPlaying((prev) => !prev);
     }
   }, [activeCanvas, playMode]);
-
-  const handleStop = useCallback(() => {
-    setIsPlaying(false);
-    setActiveCanvas(mode); // Return to mode-determined canvas
-  }, [mode]);
 
   const handleSkipPrevious = useCallback(() => {
     if (!hasPrevious) return;
@@ -75,11 +83,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // === Volume Handlers ===
   const handleVolumeChange = useCallback((newVolume: number) => {
     setVolume(newVolume);
-  }, []);
-
-  // === PlayMode Handler ===
-  const handlePlayModeChange = useCallback((newMode: PlayMode) => {
-    setPlayMode(newMode);
   }, []);
 
   // === Spread Selection Handler ===
@@ -197,25 +200,16 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
 
   // === Render ===
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="h-14 flex-shrink-0">
-        <PlayableHeader
-          playMode={playMode}
-          isPlaying={isPlaying}
-          volume={volume}
-          hasPrevious={hasPrevious}
-          hasNext={hasNext}
-          onPlayModeChange={handlePlayModeChange}
-          onPlayToggle={handlePlayToggle}
-          onSkipPrevious={handleSkipPrevious}
-          onSkipNext={handleSkipNext}
-          onVolumeChange={handleVolumeChange}
-          onMuteToggle={handleMuteToggle}
-        />
-      </div>
+    <div className="relative flex flex-col h-full">
+      {/* PlayableHeader - absolute top-right, positioned internally by header component */}
+      <PlayableHeader
+        activeCanvas={activeCanvas}
+        playMode={playMode}
+        onPlay={handlePlay}
+        onStop={handleStop}
+      />
 
-      {/* Canvas Area */}
+      {/* Canvas Area - full height (no header row) */}
       <div className="flex-1 overflow-hidden flex">
         {activeCanvas === "animation-editor" && selectedSpread ? (
           <AnimationEditorCanvas

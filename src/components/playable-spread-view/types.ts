@@ -116,17 +116,10 @@ export interface PlayableSpreadViewProps {
 
 // === Child Component Props ===
 export interface PlayableHeaderProps {
+  activeCanvas: ActiveCanvas;
   playMode: PlayMode;
-  isPlaying: boolean;
-  volume: number;            // 0-100; 0 = muted
-  hasPrevious: boolean;
-  hasNext: boolean;
-  onPlayModeChange: (mode: PlayMode) => void;
-  onPlayToggle: () => void;
-  onSkipPrevious: () => void;
-  onSkipNext: () => void;
-  onVolumeChange: (volume: number) => void;
-  onMuteToggle: () => void;  // toggle volume 0 ↔ previousVolume (managed by parent)
+  onPlay: () => void;   // switch to player canvas
+  onStop: () => void;   // return to editor canvas
 }
 
 export interface PlayableThumbnailListProps {
