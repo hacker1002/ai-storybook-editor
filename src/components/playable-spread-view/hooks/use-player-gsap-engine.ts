@@ -33,7 +33,7 @@ export interface UsePlayerGsapEngineParams {
 }
 
 export interface UsePlayerGsapEngineReturn {
-  spreadContainerRef: React.RefObject<HTMLDivElement>;
+  spreadContainerRef: React.RefObject<HTMLDivElement | null>;
   registerRef: (itemId: string) => (el: HTMLElement | null) => void;
   handleClickLoopReplay: (step: AnimationStep) => void;
   killTimeline: () => void;
