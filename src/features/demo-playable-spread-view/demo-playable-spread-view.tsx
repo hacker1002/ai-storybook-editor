@@ -9,6 +9,8 @@ import {
   type ItemType,
   type AssetSwapParams,
 } from "@/components/playable-spread-view";
+import { AnimationEditorSidebar } from '@/features/editor/components/animations-creative-space';
+import { useDemoAnimationState } from './use-demo-animation-state';
 import { getFirstTextboxKey } from "@/components/shared";
 import {
   createPlayableSpreads,
@@ -87,6 +89,13 @@ export function DemoPlayableSpreadView() {
   );
   const selectedSpread = spreads.find((s) => s.id === selectedSpreadId) ?? null;
 
+  // Animation state hook (for animation-editor mode)
+  const animState = useDemoAnimationState({
+    spreads,
+    selectedSpreadId,
+    setSpreads,
+  });
+
   // Regenerate mock data
   const handleRegenerate = useCallback(() => {
     const newSpreads = generateSpreads(mockOptions);
@@ -105,7 +114,8 @@ export function DemoPlayableSpreadView() {
   // === PlayableSpreadView Handlers ===
   const handleItemSelect = useCallback((itemType: ItemType | null, itemId: string | null) => {
     console.log("Item selected:", { itemType, itemId });
-  }, []);
+    animState.handleItemSelect(itemType, itemId);
+  }, [animState.handleItemSelect]);
 
   const handleAssetSwap = useCallback(
     async (params: AssetSwapParams): Promise<void> => {
@@ -295,6 +305,24 @@ export function DemoPlayableSpreadView() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden flex">
+          {/* Animation Editor Sidebar - only in animation-editor mode */}
+          {operationMode === 'animation-editor' && (
+            <AnimationEditorSidebar
+              animations={animState.filteredAnimations}
+              allAnimations={animState.allAnimations}
+              selectedItem={animState.selectedItem}
+              expandedAnimationIndex={animState.expandedAnimationIndex}
+              availableEffects={animState.availableEffects}
+              filterState={animState.filterState}
+              objectFilterOptions={animState.objectFilterOptions}
+              onFilterChange={animState.handleFilterChange}
+              onExpandChange={animState.handleExpandChange}
+              onAddAnimation={animState.handleAddAnimation}
+              onUpdateAnimation={animState.handleUpdateAnimation}
+              onDeleteAnimation={animState.handleDeleteAnimation}
+              onReorderAnimation={animState.handleReorderAnimation}
+            />
+          )}
           {/* PlayableSpreadView Component */}
           <div className="flex-1 overflow-hidden">
             <PlayableSpreadView

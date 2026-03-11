@@ -89,6 +89,17 @@ export function playerReducer(
           replayableItems,
         };
       }
+      // On-click step[0] → wait for user to click the target item
+      if (steps[0].triggerType === "on_click") {
+        return {
+          phase: "awaiting_click",
+          steps,
+          currentStepIndex: -1,
+          pendingClickTargetId: steps[0].targetId ?? null,
+          replayableItems,
+        };
+      }
+      // on_next → idle, wait for user to press Next
       return {
         phase: "idle",
         steps,
@@ -115,6 +126,8 @@ export function playerReducer(
           pendingClickTargetId: null,
         };
       }
+      // No on_next step found — if currently awaiting_click, stay (user must click target)
+      if (state.phase === "awaiting_click") return state;
       return { ...state, phase: "complete", pendingClickTargetId: null };
     }
 

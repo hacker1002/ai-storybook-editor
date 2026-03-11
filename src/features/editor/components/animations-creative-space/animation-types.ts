@@ -1,0 +1,43 @@
+// animation-types.ts - Type definitions for AnimationsCreativeSpace feature
+
+import type { SpreadAnimation, Geometry } from '@/components/shared/types';
+import type { ItemType } from '@/components/playable-spread-view/types';
+
+// Re-export for consumer convenience
+export type { SpreadAnimation, Geometry };
+export type { ItemType };
+
+export type EffectCategory = 'play' | 'entrance' | 'emphasis' | 'exit' | 'motion-paths';
+
+export type TargetItemIcon = 'image' | 'audio' | 'video' | 'text' | 'shape';
+
+export interface ResolvedAnimation {
+  animation: SpreadAnimation;
+  originalIndex: number;
+  displayTitle: string;
+  effectCategory: EffectCategory;
+  targetItemIcon: TargetItemIcon;
+}
+
+export interface AnimationFilterState {
+  objectFilter: string; // 'all' | item id
+  effectFilter: string; // 'all' | EffectCategory
+  triggerFilters: Set<string>; // empty = show all
+}
+
+export interface ObjectFilterOption {
+  id: string; // target item id, or 'all'
+  label: string; // "All", "Elara", "Magic Sword"
+  type?: ItemType; // undefined for 'all' option
+}
+
+export interface AvailableEffect {
+  id: number; // effect type number (1-17)
+  name: string; // display name from EFFECT_TYPE_NAMES
+  category: EffectCategory;
+}
+
+export interface SelectedItem {
+  id: string;
+  type: ItemType;
+}

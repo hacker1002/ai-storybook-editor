@@ -52,9 +52,10 @@ export function AnimationEditorCanvas({
     (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!canvasRef.current?.contains(target)) {
-        // Click outside canvas
+        // Click outside canvas — skip deselect for known UI panels
         if (target.closest('[data-toolbar]')) return;
         if (target.closest('[data-radix-popper-content-wrapper]')) return;
+        if (target.closest('[role="navigation"]')) return; // animation editor sidebar
         handleDeselect();
       }
     },
