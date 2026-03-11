@@ -17,6 +17,7 @@ export type {
   RemixEditorCanvasProps,
   PromptToolbarProps,
   PlayerCanvasProps,
+  PlaybackStatus,
 } from './types';
 
 // === Constants ===

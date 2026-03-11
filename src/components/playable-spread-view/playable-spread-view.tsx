@@ -17,6 +17,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   onAssetSwap,
   onTextChange,
   onSpreadSelect,
+  onPlaybackStatusChange,
 }) => {
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
@@ -241,6 +242,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             hasPrevious={hasPrevious}
             onSpreadComplete={handleSpreadComplete}
             onSpreadChange={handleSpreadChange}
+            onPlaybackStatusChange={onPlaybackStatusChange}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">

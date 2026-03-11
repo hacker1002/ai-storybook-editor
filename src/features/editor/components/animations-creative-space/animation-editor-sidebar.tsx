@@ -39,6 +39,9 @@ interface AnimationEditorSidebarProps {
   onUpdateAnimation: (index: number, updates: Partial<SpreadAnimation>) => void;
   onDeleteAnimation: (index: number) => void;
   onReorderAnimation: (fromIndex: number, toIndex: number) => void;
+
+  /** order values of SpreadAnimations currently playing in the player canvas */
+  playingAnimationIndices?: number[];
 }
 
 export function AnimationEditorSidebar({
@@ -54,6 +57,7 @@ export function AnimationEditorSidebar({
   onUpdateAnimation,
   onDeleteAnimation,
   onReorderAnimation,
+  playingAnimationIndices,
 }: AnimationEditorSidebarProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
@@ -264,6 +268,7 @@ export function AnimationEditorSidebar({
               stepNumber={stepNumbers[index]}
               isExpanded={index === expandedAnimationIndex}
               isHighlighted={selectedItem?.id === resolvedAnim.animation.target.id}
+              isPlaying={playingAnimationIndices?.includes(resolvedAnim.originalIndex) ?? false}
               isDragOver={index === dragOverIndex}
               onClick={() =>
                 onExpandChange(index === expandedAnimationIndex ? null : index)

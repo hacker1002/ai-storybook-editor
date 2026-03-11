@@ -8,6 +8,7 @@ import {
   type PlayableSpread,
   type ItemType,
   type AssetSwapParams,
+  type PlaybackStatus,
 } from "@/components/playable-spread-view";
 import { AnimationEditorSidebar } from '@/features/editor/components/animations-creative-space';
 import { useDemoAnimationState } from './use-demo-animation-state';
@@ -95,6 +96,12 @@ export function DemoPlayableSpreadView() {
     selectedSpreadId,
     setSpreads,
   });
+
+  // Playback status (for sidebar highlight of currently playing animations)
+  const [playingAnimationIndices, setPlayingAnimationIndices] = useState<number[]>([]);
+  const handlePlaybackStatusChange = useCallback((status: PlaybackStatus) => {
+    setPlayingAnimationIndices(status.activeAnimationIndices);
+  }, []);
 
   // Regenerate mock data
   const handleRegenerate = useCallback(() => {
@@ -321,6 +328,7 @@ export function DemoPlayableSpreadView() {
               onUpdateAnimation={animState.handleUpdateAnimation}
               onDeleteAnimation={animState.handleDeleteAnimation}
               onReorderAnimation={animState.handleReorderAnimation}
+              playingAnimationIndices={playingAnimationIndices}
             />
           )}
           {/* PlayableSpreadView Component */}
@@ -333,6 +341,7 @@ export function DemoPlayableSpreadView() {
               onAssetSwap={handleAssetSwap}
               onTextChange={handleTextChange}
               onSpreadSelect={handleSpreadSelect}
+              onPlaybackStatusChange={handlePlaybackStatusChange}
             />
           </div>
 

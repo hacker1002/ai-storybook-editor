@@ -52,6 +52,7 @@ export function PlayerCanvas({
   hasPrevious,
   onSpreadComplete,
   onSpreadChange,
+  onPlaybackStatusChange,
 }: PlayerCanvasProps) {
   // === Hooks & Refs ===
   const { state, dispatch } = usePlayerEngine();
@@ -218,7 +219,19 @@ export function PlayerCanvas({
   // === Click Loop Replay (independent timeline) ===
   const handleClickLoopReplay = useCallback((step: AnimationStep) => {
     killReplayTimeline();
-    const replayTl = gsap.timeline();
+
+    // Emit active indices for sidebar highlight during replay
+    if (onPlaybackStatusChange) {
+      const indices = step.animations.map((a) => a.order);
+      onPlaybackStatusChange({ activeAnimationIndices: indices });
+    }
+
+    const replayTl = gsap.timeline({
+      onComplete: () => {
+        // Clear highlights when replay finishes
+        onPlaybackStatusChange?.({ activeAnimationIndices: [] });
+      },
+    });
     const dims = getContainerDims();
 
     step.animations.forEach((anim, i) => {
@@ -249,7 +262,7 @@ export function PlayerCanvas({
 
     replayTimelineRef.current = replayTl;
     replayTl.play();
-  }, [killReplayTimeline, volume, getContainerDims, findItemGeometry]);
+  }, [killReplayTimeline, volume, getContainerDims, findItemGeometry, onPlaybackStatusChange]);
 
   // === Lifecycle: Cleanup on unmount ===
   useLayoutEffect(() => {
@@ -377,6 +390,22 @@ export function PlayerCanvas({
       (el as HTMLMediaElement).volume = volume / 100;
     });
   }, [volume]);
+
+  // === Lifecycle: Emit playback status for sidebar highlight ===
+  useEffect(() => {
+    if (!onPlaybackStatusChange) return;
+
+    if (state.phase === 'playing' && state.currentStepIndex >= 0) {
+      const step = state.steps[state.currentStepIndex];
+      if (step) {
+        const indices = step.animations.map((a) => a.order);
+        onPlaybackStatusChange({ activeAnimationIndices: indices });
+        return;
+      }
+    }
+    // Not playing → clear highlights
+    onPlaybackStatusChange({ activeAnimationIndices: [] });
+  }, [state.phase, state.currentStepIndex, state.steps, onPlaybackStatusChange]);
 
   // === Navigation Handlers ===
   const handleBack = useCallback(() => {

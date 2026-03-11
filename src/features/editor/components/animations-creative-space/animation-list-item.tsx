@@ -15,6 +15,7 @@ interface AnimationListItemProps {
   stepNumber: number | null;
   isExpanded: boolean;
   isHighlighted: boolean;
+  isPlaying: boolean;
   isDragOver: boolean;
   onClick: () => void;
   onDelete: () => void;
@@ -62,6 +63,7 @@ export function AnimationListItem({
   stepNumber,
   isExpanded,
   isHighlighted,
+  isPlaying,
   isDragOver,
   onClick,
   onDelete,
@@ -135,9 +137,11 @@ export function AnimationListItem({
         'focus-visible:ring-2 focus-visible:ring-ring',
         isDragOver
           ? 'border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/30'
-          : isHighlighted
-            ? 'border bg-blue-50 dark:bg-blue-950/20'
-            : 'border bg-card',
+          : isPlaying
+            ? 'border border-green-400 bg-green-50 dark:bg-green-950/20'
+            : isHighlighted
+              ? 'border bg-blue-50 dark:bg-blue-950/20'
+              : 'border bg-card',
         isDragging ? 'opacity-50' : '',
       ].join(' ')}
     >
@@ -147,9 +151,13 @@ export function AnimationListItem({
         className="flex items-center gap-2 px-2.5 py-2 cursor-grab active:cursor-grabbing"
         onClick={onClick}
       >
-        {/* Step number (on_next/on_click) or sub-indicator (with/after previous) */}
+        {/* Playing indicator or step number */}
         <span className="text-xs font-mono w-5 text-muted-foreground shrink-0 text-center">
-          {stepNumber !== null ? stepNumber : ''}
+          {isPlaying ? (
+            <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          ) : (
+            stepNumber !== null ? stepNumber : ''
+          )}
         </span>
 
         {/* Effect category star */}
