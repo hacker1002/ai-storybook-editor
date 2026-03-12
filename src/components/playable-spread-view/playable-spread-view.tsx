@@ -1,7 +1,7 @@
 // playable-spread-view.tsx - Root container component for playable spread view
 import { useState, useEffect, useCallback } from "react";
 import type { PlayableSpreadViewProps, ActiveCanvas, PlayMode } from "./types";
-import { KEYBOARD_SHORTCUTS } from "./constants";
+import { KEYBOARD_SHORTCUTS, PLAYABLE_ZOOM } from "./constants";
 import { PlayableHeader } from "./playable-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
@@ -32,6 +32,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }, [mode]); // eslint-disable-line
 
   const [playMode, setPlayMode] = useState<PlayMode>("semi-auto");
+  const [zoomLevel, setZoomLevel] = useState<number>(PLAYABLE_ZOOM.DEFAULT);
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
@@ -167,10 +168,12 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // === Render ===
   return (
     <div className="relative flex flex-col h-full">
-      {/* PlayableHeader - absolute top-right, positioned internally by header component */}
+      {/* PlayableHeader - with play/stop button and zoom slider */}
       <PlayableHeader
         activeCanvas={activeCanvas}
         playMode={playMode}
+        zoomLevel={zoomLevel}
+        onZoomChange={setZoomLevel}
         onPlay={handlePlay}
         onStop={handleStop}
       />
@@ -180,6 +183,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         {activeCanvas === "animation-editor" && selectedSpread ? (
           <AnimationEditorCanvas
             spread={selectedSpread}
+            zoomLevel={zoomLevel}
             selectedItemId={externalSelectedItemId}
             selectedItemType={externalSelectedItemType}
             onItemSelect={onItemSelect ?? (() => {})}
@@ -190,6 +194,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           onAssetSwap ? (
           <RemixEditorCanvas
             spread={selectedSpread}
+            zoomLevel={zoomLevel}
             assets={assets}
             onAssetSwap={onAssetSwap}
             onTextChange={onTextChange}
@@ -197,6 +202,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         ) : activeCanvas === "player" && selectedSpread ? (
           <PlayerCanvas
             spread={selectedSpread}
+            zoomLevel={zoomLevel}
             playMode={playMode}
             hasNext={hasNext}
             hasPrevious={hasPrevious}

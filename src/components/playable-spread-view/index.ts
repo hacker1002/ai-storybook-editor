@@ -49,4 +49,4 @@ export {
 } from './stores/playback-store';
 
 // === Constants - new ===
-export { RAPID_NEXT_THRESHOLD, SIDEBAR, SIDEBAR_BUTTONS } from './constants';
+export { RAPID_NEXT_THRESHOLD, SIDEBAR, SIDEBAR_BUTTONS, PLAYABLE_ZOOM } from './constants';

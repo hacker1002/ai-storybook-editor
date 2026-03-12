@@ -27,6 +27,7 @@ import { getScaledDimensions } from '../../shared';
 
 export interface UsePlayerGsapEngineParams {
   spread: PlayableSpread;
+  zoomLevel: number;
   onSpreadComplete: (spreadId: string) => void;
   hasNext: boolean;
   onPlaybackStatusChange?: (status: PlaybackStatus) => void;
@@ -50,6 +51,7 @@ export interface UsePlayerGsapEngineReturn {
  */
 export function usePlayerGsapEngine({
   spread,
+  zoomLevel,
   onSpreadComplete,
   hasNext: _hasNext,
   onPlaybackStatusChange,
@@ -72,7 +74,7 @@ export function usePlayerGsapEngine({
   const prevStepIndexRef = useRef<number>(-1);
   const pendingRafRef = useRef<number | null>(null);
 
-  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(100);
+  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(zoomLevel);
 
   // === Helpers ===
 
@@ -442,10 +444,12 @@ export function usePlayerGsapEngine({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, playMode]);
 
-  // === Lifecycle: Semi-auto pause ===
+  // === Lifecycle: Semi-auto pause/resume ===
   useEffect(() => {
     if (playMode !== 'semi-auto') return;
-    if (!isPlaying) {
+    if (isPlaying) {
+      timelineRef.current?.resume();
+    } else {
       timelineRef.current?.pause();
     }
   }, [isPlaying, playMode]);

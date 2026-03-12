@@ -126,6 +126,8 @@ export interface PlayableSpreadViewProps {
 export interface PlayableHeaderProps {
   activeCanvas: ActiveCanvas;
   playMode: PlayMode;
+  zoomLevel: number;
+  onZoomChange: (level: number) => void;
   onPlay: () => void;   // switch to player canvas
   onStop: () => void;   // return to editor canvas
 }
@@ -139,6 +141,7 @@ export interface PlayableThumbnailListProps {
 // === Canvas Props ===
 export interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
+  zoomLevel: number;
   /** Externally-controlled selected item (sidebar → canvas sync) */
   selectedItemId?: string | null;
   selectedItemType?: ItemType | null;
@@ -147,6 +150,7 @@ export interface AnimationEditorCanvasProps {
 
 export interface RemixEditorCanvasProps {
   spread: PlayableSpread;
+  zoomLevel: number;
   assets: RemixAsset[];
   onAssetSwap: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
@@ -154,6 +158,7 @@ export interface RemixEditorCanvasProps {
 
 export interface PlayerCanvasProps {
   spread: PlayableSpread;
+  zoomLevel: number;
   playMode: PlayMode;
   hasNext: boolean;
   hasPrevious: boolean;

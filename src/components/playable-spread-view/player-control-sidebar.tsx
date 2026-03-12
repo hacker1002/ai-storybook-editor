@@ -2,14 +2,12 @@
 
 // player-control-sidebar.tsx - Vertical sidebar with play mode toggle, player controls, and volume controls
 
-import { SkipBack, SkipForward, Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause } from 'lucide-react';
 import type { PlayerControlSidebarProps, PlayMode } from './types';
 import { PLAY_MODE_CYCLE } from './constants';
 import {
   usePlayMode,
   useIsPlaying,
-  useVolume,
-  useIsMuted,
   usePlaybackActions,
 } from './stores/playback-store';
 
@@ -55,8 +53,6 @@ export function PlayerControlSidebar({
 }: PlayerControlSidebarProps) {
   const playMode = usePlayMode();
   const isPlaying = useIsPlaying();
-  const volume = useVolume();
-  const isMuted = useIsMuted();
   const playbackActions = usePlaybackActions();
 
   // Cycle play mode: off → semi-auto → auto → off
@@ -65,8 +61,6 @@ export function PlayerControlSidebar({
     const nextMode = PLAY_MODE_CYCLE[(currentIndex + 1) % PLAY_MODE_CYCLE.length];
     onPlayModeChange(nextMode);
   }
-
-  const isSpeakerMuted = isMuted || volume === 0;
 
   return (
     <div
@@ -140,32 +134,8 @@ export function PlayerControlSidebar({
         )}
       </div>
 
-      {/* Bottom section — Volume Controls */}
-      <div className="flex flex-col items-center gap-2">
-        {/* Vertical volume slider — rotated -90deg */}
-        <div className="h-24 flex items-center justify-center">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={volume}
-            onChange={(e) => playbackActions.setVolume(parseInt(e.target.value, 10))}
-            aria-label="Volume"
-            aria-orientation="vertical"
-            className="rotate-[-90deg] w-20 accent-primary"
-          />
-        </div>
-
-        {/* Speaker mute toggle */}
-        <button
-          type="button"
-          onClick={() => playbackActions.toggleMute()}
-          aria-label={isSpeakerMuted ? 'Unmute' : 'Mute'}
-          className="flex items-center justify-center w-8 h-8 rounded-md text-foreground hover:bg-accent transition-colors"
-        >
-          {isSpeakerMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </button>
-      </div>
+      {/* Bottom spacer */}
+      <div />
     </div>
   );
 }

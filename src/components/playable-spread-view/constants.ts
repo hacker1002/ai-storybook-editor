@@ -21,6 +21,14 @@ export const THUMBNAIL_STYLES = {
 // === Play Mode Cycle ===
 export const PLAY_MODE_CYCLE: PlayMode[] = ['off', 'semi-auto', 'auto'];
 
+// === Zoom Constants (playable header) ===
+export const PLAYABLE_ZOOM = {
+  MIN: 25,
+  MAX: 200,
+  DEFAULT: 100,
+  STEP: 5,
+} as const;
+
 // === Volume Constants ===
 export const VOLUME = {
   DEFAULT: 100,

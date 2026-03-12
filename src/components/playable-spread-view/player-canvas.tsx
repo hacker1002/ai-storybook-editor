@@ -1,7 +1,7 @@
 // player-canvas.tsx - Animation playback canvas wired to Zustand store + GSAP engine hook
-'use client';
+"use client";
 
-import { useRef, useEffect, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useCallback } from "react";
 import {
   EditableTextbox,
   Z_INDEX,
@@ -11,13 +11,22 @@ import {
   type Typography,
   type Fill,
   type Outline,
-} from '../shared';
-import { EditableImage, EditableShape, EditableVideo, EditableAudio } from '../canvas-spread-view';
-import { PageItem } from '../canvas-spread-view/page-item';
-import type { PlayerCanvasProps, AnimationStep } from './types';
-import { TEXTBOX_Z_INDEX_BASE, RAPID_NEXT_THRESHOLD } from './constants';
-import { isReplayableClick, buildAnimationSteps, findPrevOnNextStep } from './player-utils';
-import { usePlayerGsapEngine } from './hooks/use-player-gsap-engine';
+} from "../shared";
+import {
+  EditableImage,
+  EditableShape,
+  EditableVideo,
+  EditableAudio,
+} from "../canvas-spread-view";
+import { PageItem } from "../canvas-spread-view/page-item";
+import type { PlayerCanvasProps, AnimationStep } from "./types";
+import { TEXTBOX_Z_INDEX_BASE, RAPID_NEXT_THRESHOLD } from "./constants";
+import {
+  isReplayableClick,
+  buildAnimationSteps,
+  findPrevOnNextStep,
+} from "./player-utils";
+import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
 import {
   usePlaybackStore,
   usePlaybackActions,
@@ -25,26 +34,25 @@ import {
   useCurrentStepIndex,
   usePendingClickTargetId,
   useReplayableItems,
-} from './stores/playback-store';
-import { PlayerControlSidebar } from './player-control-sidebar';
+} from "./stores/playback-store";
+import { PlayerControlSidebar } from "./player-control-sidebar";
 
 // === CSS for click-hint-pulse ===
-// IMPORTANT: Apply filter to the CHILD element (> :first-child), not the wrapper div.
+// IMPORTANT: Apply to the CHILD element (> :first-child), not the wrapper div.
 // The wrapper div is 0x0 (children are position:absolute with their own geometry).
-// CSS filter creates a new containing block, which would break percentage-based
-// positioning of position:absolute children if applied to the wrapper.
 const CLICK_HINT_STYLE = `
 @keyframes click-hint-pulse {
-  0%, 100% { filter: drop-shadow(0 0 0px rgba(255, 165, 0, 0)); }
-  50% { filter: drop-shadow(0 0 10px rgba(255, 165, 0, 0.7)); }
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 0px rgba(255, 165, 0, 0)); }
+  50% { opacity: 0.7; filter: drop-shadow(0 0 10px rgba(255, 165, 0, 0.7)); }
 }
 .click-hint-pulse > :first-child {
-  animation: click-hint-pulse 1.5s ease-in-out infinite;
+  animation: click-hint-pulse 1.2s ease-in-out infinite;
 }
 `;
 
 export function PlayerCanvas({
   spread,
+  zoomLevel,
   playMode,
   hasNext,
   hasPrevious,
@@ -69,9 +77,16 @@ export function PlayerCanvas({
     killTimeline,
     applyStepFinalStates,
     reApplyInitialStates,
-  } = usePlayerGsapEngine({ spread, onSpreadComplete, hasNext, onPlaybackStatusChange });
+  } = usePlayerGsapEngine({
+    spread,
+    zoomLevel,
+    onSpreadComplete,
+    hasNext,
+    onPlaybackStatusChange,
+  });
 
-  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(100);
+  const { width: scaledWidth, height: scaledHeight } =
+    getScaledDimensions(zoomLevel);
 
   // === Store sync effects ===
 
@@ -100,24 +115,25 @@ export function PlayerCanvas({
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
         target.isContentEditable
-      ) return;
+      )
+        return;
       switch (e.key) {
-        case 'm':
-        case 'M':
+        case "m":
+        case "M":
           playbackActions.toggleMute();
           break;
-        case 'ArrowUp':
+        case "ArrowUp":
           e.preventDefault();
           playbackActions.setVolume(usePlaybackStore.getState().volume + 10);
           break;
-        case 'ArrowDown':
+        case "ArrowDown":
           e.preventDefault();
           playbackActions.setVolume(usePlaybackStore.getState().volume - 10);
           break;
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [playbackActions]);
 
   // === Navigation handlers ===
@@ -126,8 +142,8 @@ export function PlayerCanvas({
   const lastBackTimeRef = useRef<number>(0);
 
   const handleNext = useCallback(() => {
-    if (playMode !== 'semi-auto') return;
-    if (phase === 'playing') {
+    if (playMode !== "semi-auto") return;
+    if (phase === "playing") {
       const currentStep = steps[currentStepIndex];
       if (currentStep?.mustComplete) return;
       const now = Date.now();
@@ -137,26 +153,36 @@ export function PlayerCanvas({
       if (currentStep) applyStepFinalStates(currentStep);
       const isLastStep = currentStepIndex >= steps.length - 1;
       playbackActions.cancelAndNext();
-      if (isLastStep && hasNext) onSkipSpread('next');
+      if (isLastStep && hasNext) onSkipSpread("next");
       return;
     }
-    if (phase === 'complete') {
-      if (hasNext) onSkipSpread('next');
+    if (phase === "complete") {
+      if (hasNext) onSkipSpread("next");
       return;
     }
     playbackActions.userNext();
-  }, [playMode, phase, steps, currentStepIndex, hasNext, killTimeline, applyStepFinalStates, playbackActions, onSkipSpread]);
+  }, [
+    playMode,
+    phase,
+    steps,
+    currentStepIndex,
+    hasNext,
+    killTimeline,
+    applyStepFinalStates,
+    playbackActions,
+    onSkipSpread,
+  ]);
 
   const handleBack = useCallback(() => {
-    if (playMode !== 'semi-auto') return;
+    if (playMode !== "semi-auto") return;
     // No previous on_next step exists → skip to previous spread
     // Handles: step 0, before start, or first interactive step preceded only by 'auto' steps
     const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
     if (currentStepIndex <= 0 || prevOnNextIdx < 0) {
-      if (hasPrevious) onSkipSpread('prev');
+      if (hasPrevious) onSkipSpread("prev");
       return;
     }
-    if (phase === 'playing') {
+    if (phase === "playing") {
       const currentStep = steps[currentStepIndex];
       if (currentStep?.mustComplete) return;
       const now = Date.now();
@@ -166,44 +192,73 @@ export function PlayerCanvas({
       reApplyInitialStates(currentStepIndex);
     }
     playbackActions.userBack();
-  }, [playMode, currentStepIndex, hasPrevious, phase, steps, killTimeline, reApplyInitialStates, playbackActions, onSkipSpread]);
+  }, [
+    playMode,
+    currentStepIndex,
+    hasPrevious,
+    phase,
+    steps,
+    killTimeline,
+    reApplyInitialStates,
+    playbackActions,
+    onSkipSpread,
+  ]);
 
-  const handleItemClick = useCallback((itemId: string) => {
-    if (playMode !== 'semi-auto') return;
-    if (pendingClickTargetId === itemId) {
+  const handleItemClick = useCallback(
+    (itemId: string) => {
+      if (playMode !== "semi-auto") return;
+      if (pendingClickTargetId === itemId) {
+        playbackActions.userClick(itemId);
+        return;
+      }
+      if (isReplayableClick(replayableItems, itemId) && phase !== "playing") {
+        const result = playbackActions.clickLoopReplay(itemId);
+        if (result.shouldReplay && result.step)
+          handleClickLoopReplay(result.step as AnimationStep);
+        return;
+      }
       playbackActions.userClick(itemId);
-      return;
-    }
-    if (isReplayableClick(replayableItems, itemId) && phase !== 'playing') {
-      const result = playbackActions.clickLoopReplay(itemId);
-      if (result.shouldReplay && result.step) handleClickLoopReplay(result.step as AnimationStep);
-      return;
-    }
-    playbackActions.userClick(itemId);
-  }, [playMode, pendingClickTargetId, replayableItems, phase, playbackActions, handleClickLoopReplay]);
+    },
+    [
+      playMode,
+      pendingClickTargetId,
+      replayableItems,
+      phase,
+      playbackActions,
+      handleClickLoopReplay,
+    ]
+  );
 
   // === Pointer & Highlight Logic ===
 
-  const getPointerClasses = useCallback((itemId: string): string => {
-    if (playMode === 'semi-auto') {
-      if (pendingClickTargetId === itemId) return 'pointer-events-auto cursor-pointer';
-      if (isReplayableClick(replayableItems, itemId)) return 'pointer-events-auto cursor-pointer';
-    }
-    return 'pointer-events-none';
-  }, [playMode, pendingClickTargetId, replayableItems]);
+  const getPointerClasses = useCallback(
+    (itemId: string): string => {
+      if (playMode === "semi-auto") {
+        if (pendingClickTargetId === itemId)
+          return "pointer-events-auto cursor-pointer";
+        if (isReplayableClick(replayableItems, itemId))
+          return "pointer-events-auto cursor-pointer";
+      }
+      return "pointer-events-none";
+    },
+    [playMode, pendingClickTargetId, replayableItems]
+  );
 
-  const getHighlightClass = useCallback((itemId: string): string => {
-    return pendingClickTargetId === itemId ? 'click-hint-pulse' : '';
-  }, [pendingClickTargetId]);
+  const getHighlightClass = useCallback(
+    (itemId: string): string => {
+      return pendingClickTargetId === itemId ? "click-hint-pulse" : "";
+    },
+    [pendingClickTargetId]
+  );
 
   // === Computed navigation state ===
 
   const canGoBack = useMemo(() => {
-    if (playMode !== 'semi-auto') return false;
+    if (playMode !== "semi-auto") return false;
     // No previous on_next step → can go back only if previous spread exists
     const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
     if (currentStepIndex <= 0 || prevOnNextIdx < 0) return hasPrevious;
-    if (phase === 'playing') {
+    if (phase === "playing") {
       const step = steps[currentStepIndex];
       return !step?.mustComplete;
     }
@@ -211,31 +266,33 @@ export function PlayerCanvas({
   }, [playMode, currentStepIndex, hasPrevious, phase, steps]);
 
   const canGoNext = useMemo(() => {
-    if (playMode !== 'semi-auto') return false;
-    if (phase === 'playing') {
+    if (playMode !== "semi-auto") return false;
+    if (phase === "playing") {
       const step = steps[currentStepIndex];
       return !step?.mustComplete;
     }
-    if (phase === 'complete') return hasNext;
+    if (phase === "complete") return hasNext;
     return true;
   }, [playMode, phase, currentStepIndex, steps, hasNext]);
 
   // === Memoized textboxes with resolved language ===
   const textboxesWithLang = useMemo(() => {
     if (!spread.textboxes) return [];
-    return spread.textboxes.map((textbox) => {
-      const langKey = getFirstTextboxKey(textbox);
-      if (!langKey) return null;
-      const data = textbox[langKey] as {
-        text: string;
-        geometry: Geometry;
-        typography: Typography;
-        fill?: Fill;
-        outline?: Outline;
-      };
-      if (!data?.geometry) return null;
-      return { textbox, langKey, data };
-    }).filter(Boolean);
+    return spread.textboxes
+      .map((textbox) => {
+        const langKey = getFirstTextboxKey(textbox);
+        if (!langKey) return null;
+        const data = textbox[langKey] as {
+          text: string;
+          geometry: Geometry;
+          typography: Typography;
+          fill?: Fill;
+          outline?: Outline;
+        };
+        if (!data?.geometry) return null;
+        return { textbox, langKey, data };
+      })
+      .filter(Boolean);
   }, [spread.textboxes]);
 
   // === Render ===
@@ -247,7 +304,11 @@ export function PlayerCanvas({
       <div
         ref={spreadContainerRef}
         className="relative bg-white shadow-lg"
-        style={{ width: scaledWidth, height: scaledHeight, willChange: 'transform' }}
+        style={{
+          width: scaledWidth,
+          height: scaledHeight,
+          willChange: "transform",
+        }}
       >
         {/* Pages */}
         {spread.pages.map((page, pageIndex) => (
@@ -257,7 +318,13 @@ export function PlayerCanvas({
             pageIndex={pageIndex}
             spread={spread}
             spreadId={spread.id}
-            position={spread.pages.length === 1 ? 'single' : pageIndex === 0 ? 'left' : 'right'}
+            position={
+              spread.pages.length === 1
+                ? "single"
+                : pageIndex === 0
+                ? "left"
+                : "right"
+            }
             isSelected={false}
             onUpdatePage={() => {}}
             availableLayouts={[]}
@@ -268,7 +335,7 @@ export function PlayerCanvas({
         {spread.pages.length > 1 && (
           <div
             className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: '50%', zIndex: Z_INDEX.IMAGE_BASE - 1 }}
+            style={{ left: "50%", zIndex: Z_INDEX.IMAGE_BASE - 1 }}
           />
         )}
 
@@ -279,7 +346,9 @@ export function PlayerCanvas({
             <div
               key={image.id}
               ref={registerRef(image.id)}
-              className={`${getPointerClasses(image.id)} ${getHighlightClass(image.id)}`}
+              className={`${getPointerClasses(image.id)} ${getHighlightClass(
+                image.id
+              )}`}
               onClickCapture={() => handleItemClick(image.id)}
             >
               <EditableImage
@@ -300,7 +369,9 @@ export function PlayerCanvas({
             <div
               key={shape.id}
               ref={registerRef(shape.id)}
-              className={`${getPointerClasses(shape.id)} ${getHighlightClass(shape.id)}`}
+              className={`${getPointerClasses(shape.id)} ${getHighlightClass(
+                shape.id
+              )}`}
               onClickCapture={() => handleItemClick(shape.id)}
             >
               <EditableShape
@@ -321,7 +392,9 @@ export function PlayerCanvas({
             <div
               key={video.id}
               ref={registerRef(video.id)}
-              className={`${getPointerClasses(video.id)} ${getHighlightClass(video.id)}`}
+              className={`${getPointerClasses(video.id)} ${getHighlightClass(
+                video.id
+              )}`}
               onClickCapture={() => handleItemClick(video.id)}
             >
               <EditableVideo
@@ -342,7 +415,9 @@ export function PlayerCanvas({
             <div
               key={audio.id}
               ref={registerRef(audio.id)}
-              className={`${getPointerClasses(audio.id)} ${getHighlightClass(audio.id)}`}
+              className={`${getPointerClasses(audio.id)} ${getHighlightClass(
+                audio.id
+              )}`}
               onClickCapture={() => handleItemClick(audio.id)}
             >
               <EditableAudio
@@ -365,7 +440,9 @@ export function PlayerCanvas({
             <div
               key={textbox.id}
               ref={registerRef(textbox.id)}
-              className={`${getPointerClasses(textbox.id)} ${getHighlightClass(textbox.id)}`}
+              className={`${getPointerClasses(textbox.id)} ${getHighlightClass(
+                textbox.id
+              )}`}
               onClickCapture={() => handleItemClick(textbox.id)}
             >
               <EditableTextbox

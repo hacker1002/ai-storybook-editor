@@ -23,6 +23,7 @@ import { TEXTBOX_Z_INDEX_BASE } from "./constants";
 
 export function RemixEditorCanvas({
   spread,
+  zoomLevel,
   assets,
   onAssetSwap,
   onTextChange,
@@ -45,9 +46,8 @@ export function RemixEditorCanvas({
   const canvasRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
-  // Scaled dimensions
   const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(100);
+    getScaledDimensions(zoomLevel);
 
   // Calculate toolbar position
   const toolbarPosition = useToolbarPosition({

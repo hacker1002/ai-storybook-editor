@@ -20,6 +20,7 @@ import { TEXTBOX_Z_INDEX_BASE } from './constants';
 
 export function AnimationEditorCanvas({
   spread,
+  zoomLevel,
   selectedItemId: externalItemId,
   selectedItemType: externalItemType,
   onItemSelect,
@@ -30,8 +31,7 @@ export function AnimationEditorCanvas({
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Scaled dimensions at 100%
-  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(100);
+  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(zoomLevel);
 
   // Reset selection when spread changes
   useEffect(() => {
