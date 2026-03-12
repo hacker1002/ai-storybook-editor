@@ -42,7 +42,7 @@ export const useBookStore = create<BookStore>()(
 
           const { data, error } = await supabase
             .from('books')
-            .select('id, title, description, cover, step, type, updated_at')
+            .select('id, title, description, cover, owner_id, step, type, created_at, updated_at')
             .order('updated_at', { ascending: false });
 
           if (error) {

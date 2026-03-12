@@ -1,44 +1,48 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Send, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StoryCard } from '../components/story-card'
-import { fetchBooks, fetchUserBooks } from '@/api'
+import { useBookStore } from '@/stores/book-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Story } from '@/types/story'
+import type { BookListItem } from '@/types/editor'
+
+function bookToStory(book: BookListItem): Story {
+  return {
+    id: book.id,
+    title: book.title,
+    description: book.description ?? undefined,
+    cover: book.cover ?? undefined,
+    ownerId: book.owner_id,
+    createdAt: new Date(book.created_at),
+    updatedAt: new Date(book.updated_at),
+  }
+}
 
 export function HomePage() {
   const [storyIdea, setStoryIdea] = useState('')
-  const [recentStories, setRecentStories] = useState<Story[]>([])
-  const [userStories, setUserStories] = useState<Story[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const { user } = useAuthStore()
+  const userId = user?.id
+  const { books, isLoading, error, fetchBooks } = useBookStore()
 
   useEffect(() => {
-    async function loadBooks() {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const recent = await fetchBooks(12)
-        setRecentStories(recent)
+    fetchBooks()
+  }, [fetchBooks])
 
-        if (user?.id) {
-          const owned = await fetchUserBooks(user.id, 12)
-          setUserStories(owned)
-        }
-      } catch (err) {
-        console.error('[HomePage] Failed to load books:', err)
-        setError('Failed to load books')
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const recentStories = useMemo(
+    () => books.slice(0, 12).map(bookToStory),
+    [books]
+  )
 
-    loadBooks()
-  }, [user?.id])
+  const userStories = useMemo(
+    () => userId
+      ? books.filter((b) => b.owner_id === userId).slice(0, 12).map(bookToStory)
+      : [],
+    [books, userId]
+  )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

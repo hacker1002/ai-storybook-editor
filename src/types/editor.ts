@@ -89,9 +89,11 @@ export interface BookListItem {
   id: string;
   title: string;
   description: string | null;
-  cover: { thumbnail_url?: string } | null;
+  cover: { thumbnail_url?: string; normal_url?: string } | null;
+  owner_id: string;
   step: number;
   type: number;
+  created_at: string;
   updated_at: string;
 }
 

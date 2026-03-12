@@ -1,9 +1,7 @@
 import type { AttachedFile } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import { prepareAttachments, type Attachment, type LLMContext } from './doc-api';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_API_KEY = import.meta.env.VITE_SUPABASE_API_ANON_KEY;
+import { callEdgeFunction } from './edge-function-client';
 
 export interface GenerateDummyRequest {
   script: string;
@@ -32,30 +30,10 @@ export interface GenerateDummyResult {
 export async function generateDummy(
   params: GenerateDummyRequest
 ): Promise<GenerateDummyResult> {
-  const url = `${SUPABASE_URL}/functions/v1/dummy-generate-dummy`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${SUPABASE_API_KEY}`,
-      },
-      body: JSON.stringify(params),
-    });
-
-    const data = (await response.json()) as GenerateDummyResult;
-
-    if (!response.ok) {
-      console.error('[dummy-api] generate-dummy error:', data);
-      return { success: false, error: data.error || `HTTP ${response.status}` };
-    }
-
-    return data;
-  } catch (error) {
-    console.error('[dummy-api] generate-dummy fetch error:', error);
-    return { success: false, error: 'Network error. Please try again.' };
-  }
+  return callEdgeFunction<GenerateDummyResult>(
+    'dummy-generate-dummy',
+    params
+  );
 }
 
 export interface GenerateDummyParams {

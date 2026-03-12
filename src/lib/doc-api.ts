@@ -1,5 +1,6 @@
 import type { DocType, AttachedFile } from '@/types/editor';
 import { fileToBase64 } from './file-utils';
+import { callEdgeFunction } from './edge-function-client';
 
 // API attachment format (matches edge function types)
 export interface Attachment {
@@ -56,9 +57,6 @@ const FUNCTION_MAP: Record<Exclude<DocType, 'other'>, string> = {
   script: 'doc-generate-script',
 };
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_API_KEY = import.meta.env.VITE_SUPABASE_API_ANON_KEY;
-
 // Function overloads for type-safe parameter matching
 export async function generateDoc(docType: 'brief', params: GenerateBriefParams): Promise<GenerateDocResult>;
 export async function generateDoc(docType: 'draft', params: GenerateDraftParams): Promise<GenerateDocResult>;
@@ -68,30 +66,7 @@ export async function generateDoc(
   params: GenerateParams
 ): Promise<GenerateDocResult> {
   const functionName = FUNCTION_MAP[docType];
-  const url = `${SUPABASE_URL}/functions/v1/${functionName}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-      },
-      body: JSON.stringify(params),
-    });
-
-    const data = await response.json() as GenerateDocResult;
-
-    if (!response.ok) {
-      console.error(`[doc-api] ${functionName} error:`, data);
-      return { success: false, error: data.error || `HTTP ${response.status}` };
-    }
-
-    return data;
-  } catch (error) {
-    console.error(`[doc-api] ${functionName} fetch error:`, error);
-    return { success: false, error: 'Network error. Please try again.' };
-  }
+  return callEdgeFunction<GenerateDocResult>(functionName, params);
 }
 
 /**
