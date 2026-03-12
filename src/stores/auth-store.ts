@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/apis/supabase';
 import type { User } from '@/types/auth';
 import type { Session } from '@supabase/supabase-js';
 import { mapSupabaseUser } from '@/types/auth';

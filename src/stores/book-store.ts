@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { persist, devtools } from 'zustand/middleware';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/apis/supabase';
 import type { Book, BookListItem } from '@/types/editor';
 
 interface BookStore {

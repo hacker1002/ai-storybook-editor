@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 import type { SpreadShape, ShapeFill, ShapeOutline } from './types';
 import { COLORS } from './constants';
 

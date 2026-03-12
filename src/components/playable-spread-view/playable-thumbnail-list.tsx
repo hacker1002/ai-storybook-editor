@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useRef, useEffect, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/utils";
 import { EditableTextbox, getFirstTextboxKey } from "../shared";
 import { EditableImage, EditableShape, EditableVideo, EditableAudio } from "../canvas-spread-view";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";

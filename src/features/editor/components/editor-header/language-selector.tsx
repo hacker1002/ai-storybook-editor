@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useCurrentLanguage, useEditorSettingsActions } from '@/stores/editor-settings-store';
 import { AVAILABLE_LANGUAGES } from '@/constants/editor-constants';
 import type { Language } from '@/types/editor';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 
 interface LanguageSelectorProps {
   onLanguageChange?: (newLang: Language, prevLang: Language) => void;

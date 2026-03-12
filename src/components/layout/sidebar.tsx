@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthStore } from '@/stores/auth-store'
-import { cn } from '@/lib/utils'
+import { cn } from '@/utils/utils'
 
 const navItems = [
   { to: '/explore', icon: Compass, label: 'Explore Community' },

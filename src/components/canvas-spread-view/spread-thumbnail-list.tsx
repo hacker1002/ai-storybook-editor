@@ -2,7 +2,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 import { SpreadThumbnail } from './spread-thumbnail';
 import { NewSpreadButton, type SpreadType } from './new-spread-button';
 import {

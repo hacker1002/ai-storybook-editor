@@ -14,7 +14,7 @@ import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { PromptPanel } from "@/components/shared/prompt-panel";
 import type { ManuscriptDoc, AttachedFile } from "@/types/editor";
 import type { ManuscriptDummy } from "@/types/dummy";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/utils";
 
 interface DummyItemProps {
   dummy: ManuscriptDummy;

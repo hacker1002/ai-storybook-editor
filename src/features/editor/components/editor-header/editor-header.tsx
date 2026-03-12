@@ -7,7 +7,7 @@ import { PIPELINE_STEPS } from '@/constants/editor-constants';
 import { MenuPopover } from './menu-popover';
 import { LanguageSelector } from './language-selector';
 import type { PipelineStep, SaveStatus, Language, UserPoints, EditorMode } from '@/types/editor';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 
 interface EditorHeaderProps {
   bookTitle: string;

@@ -5,7 +5,7 @@ import {
   generateDoc,
   buildLLMContext,
   prepareAttachments,
-} from "@/lib/doc-api";
+} from "@/apis/doc-api";
 import { DocSidebar } from "./doc-sidebar";
 import { ManuscriptDocEditor } from "./manuscript-doc-editor";
 import type { DocType, AttachedFile } from "@/types/editor";

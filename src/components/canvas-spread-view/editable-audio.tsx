@@ -3,7 +3,7 @@
 
 import { useState, useCallback } from 'react';
 import { Volume2, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 import type { SpreadAudio } from './types';
 import { COLORS } from './constants';
 

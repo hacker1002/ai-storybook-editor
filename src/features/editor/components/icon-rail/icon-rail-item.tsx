@@ -1,7 +1,7 @@
 import * as Icons from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { IconRailItemConfig } from '@/types/editor';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 
 interface IconRailItemProps {
   item: IconRailItemConfig;

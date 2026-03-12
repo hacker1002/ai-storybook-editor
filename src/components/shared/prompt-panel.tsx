@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { AttachedFile } from "@/types/editor";
 import { FILE_CONSTRAINTS } from "@/types/editor";
-import { validateFiles, mergeAttachments, truncateFilename } from "@/lib/file-utils";
+import { validateFiles, mergeAttachments, truncateFilename } from "@/utils/file-utils";
 
 interface PromptPanelProps {
   promptValue: string;

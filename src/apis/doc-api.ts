@@ -1,5 +1,5 @@
 import type { DocType, AttachedFile } from '@/types/editor';
-import { fileToBase64 } from './file-utils';
+import { fileToBase64 } from '../utils/file-utils';
 import { callEdgeFunction } from './edge-function-client';
 
 // API attachment format (matches edge function types)

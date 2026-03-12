@@ -3,7 +3,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { ImageIcon, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 import type { SpreadImage } from './types';
 import { COLORS } from './constants';
 

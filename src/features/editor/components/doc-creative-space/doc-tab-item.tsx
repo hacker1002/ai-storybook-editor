@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PromptPanel } from '@/components/shared/prompt-panel';
 import type { ManuscriptDoc, AttachedFile } from '@/types/editor';
-import { cn } from '@/lib/utils';
+import { cn } from '@/utils/utils';
 
 interface DocTabItemProps {
   doc: ManuscriptDoc;
