@@ -45,6 +45,8 @@ export type PlayerAction =
 export interface PlaybackStatus {
   /** order values of SpreadAnimations currently animating */
   activeAnimationIndices: number[];
+  /** order values of SpreadAnimations pending next (awaiting click/next trigger) */
+  pendingNextAnimationIndices: number[];
 }
 
 // === Core Enums/Types ===
@@ -108,11 +110,16 @@ export interface PlayableSpreadViewProps {
   mode: OperationMode;
   spreads: PlayableSpread[];
   assets?: RemixAsset[];
+  /** Externally-controlled selected item (e.g. sidebar click → canvas selection) */
+  selectedItemId?: string | null;
+  selectedItemType?: ItemType | null;
   onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
   onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
   onSpreadSelect?: (spreadId: string) => void;
   onPlaybackStatusChange?: (status: PlaybackStatus) => void;
+  onPreview?: () => void;
+  onStopPreview?: () => void;
 }
 
 // === Child Component Props ===
@@ -132,6 +139,9 @@ export interface PlayableThumbnailListProps {
 // === Canvas Props ===
 export interface AnimationEditorCanvasProps {
   spread: PlayableSpread;
+  /** Externally-controlled selected item (sidebar → canvas sync) */
+  selectedItemId?: string | null;
+  selectedItemType?: ItemType | null;
   onItemSelect: (itemType: ItemType | null, itemId: string | null) => void;
 }
 

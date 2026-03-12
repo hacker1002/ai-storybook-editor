@@ -66,6 +66,16 @@
 @keyframes slideInFromLeft { from { transform: translateX(-8px); } }
 @keyframes slideInFromRight { from { transform: translateX(8px); } }
 
+/* Sidebar blink animation for pending-next animation items */
+@keyframes sidebarBlink {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: hsl(var(--primary) / 0.15); }
+}
+
+@utility animate-sidebar-blink {
+  animation: sidebarBlink 1.2s ease-in-out infinite;
+}
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

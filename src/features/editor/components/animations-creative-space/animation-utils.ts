@@ -39,6 +39,8 @@ export function resolveAnimations(
       animation,
       originalIndex: index,
       displayTitle: `${title} #${count}`,
+      targetItemName: title,
+      effectName: EFFECT_TYPE_NAMES[animation.effect.type] ?? `Effect ${animation.effect.type}`,
       effectCategory: EFFECT_CATEGORY_MAP[animation.effect.type] ?? 'entrance',
       targetItemIcon: (TARGET_ICON_MAP[itemType] ?? 'image') as TargetItemIcon,
     };

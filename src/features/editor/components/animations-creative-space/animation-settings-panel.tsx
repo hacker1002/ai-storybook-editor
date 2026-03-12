@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { EffectTypeGrid } from './effect-type-grid';
 
 interface AnimationSettingsPanelProps {
@@ -19,6 +20,7 @@ interface AnimationSettingsPanelProps {
   onTriggerTypeChange: (trigger: SpreadAnimation['trigger_type']) => void;
   onClickLoopChange: (value: number) => void;
   onEffectOptionChange: (field: string, value: number | string) => void;
+  onMustCompleteChange: (value: boolean) => void;
 }
 
 // ---- EffectOptionsForm ----
@@ -124,6 +126,7 @@ interface EffectOptionsFormProps {
   onTriggerTypeChange: (trigger: SpreadAnimation['trigger_type']) => void;
   onClickLoopChange: (value: number) => void;
   onEffectOptionChange: (field: string, value: number | string) => void;
+  onMustCompleteChange: (value: boolean) => void;
 }
 
 function EffectOptionsForm({
@@ -131,8 +134,9 @@ function EffectOptionsForm({
   onTriggerTypeChange,
   onClickLoopChange,
   onEffectOptionChange,
+  onMustCompleteChange,
 }: EffectOptionsFormProps) {
-  const { effect, trigger_type, click_loop } = animation.animation;
+  const { effect, trigger_type, click_loop, must_complete } = animation.animation;
   const visibleOptions = EFFECT_OPTIONS_MAP[effect.type] ?? [];
   const showClickLoop = trigger_type === 'on_click';
 
@@ -172,6 +176,19 @@ function EffectOptionsForm({
           />
         </div>
       )}
+
+      {/* Must complete toggle */}
+      <div className="flex items-center justify-between">
+        <Label htmlFor={`must-complete-${animation.originalIndex}`} className="text-xs">
+          Must Complete
+        </Label>
+        <Switch
+          id={`must-complete-${animation.originalIndex}`}
+          checked={must_complete ?? false}
+          onCheckedChange={onMustCompleteChange}
+          className="scale-75"
+        />
+      </div>
 
       {/* Dynamic effect options */}
       {/* Note: delay/duration stored in ms, displayed in seconds */}
@@ -240,6 +257,7 @@ export function AnimationSettingsPanel({
   onTriggerTypeChange,
   onClickLoopChange,
   onEffectOptionChange,
+  onMustCompleteChange,
 }: AnimationSettingsPanelProps) {
   return (
     <div className="p-3 space-y-4">
@@ -252,6 +270,7 @@ export function AnimationSettingsPanel({
         onTriggerTypeChange={onTriggerTypeChange}
         onClickLoopChange={onClickLoopChange}
         onEffectOptionChange={onEffectOptionChange}
+        onMustCompleteChange={onMustCompleteChange}
       />
     </div>
   );

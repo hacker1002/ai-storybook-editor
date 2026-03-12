@@ -13,11 +13,15 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   mode,
   spreads,
   assets,
+  selectedItemId: externalSelectedItemId,
+  selectedItemType: externalSelectedItemType,
   onItemSelect,
   onAssetSwap,
   onTextChange,
   onSpreadSelect,
   onPlaybackStatusChange,
+  onPreview,
+  onStopPreview,
 }) => {
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
@@ -42,11 +46,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const handlePlay = useCallback(() => {
     if (playMode === "off") return;
     setActiveCanvas("player");
-  }, [playMode]);
+    onPreview?.();
+  }, [playMode, onPreview]);
 
   const handleStop = useCallback(() => {
     setActiveCanvas(mode); // Return to mode-determined canvas
-  }, [mode]);
+    onStopPreview?.();
+  }, [mode, onStopPreview]);
 
   const handleSkipPrevious = useCallback(() => {
     if (!hasPrevious) return;
@@ -174,6 +180,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         {activeCanvas === "animation-editor" && selectedSpread ? (
           <AnimationEditorCanvas
             spread={selectedSpread}
+            selectedItemId={externalSelectedItemId}
+            selectedItemType={externalSelectedItemType}
             onItemSelect={onItemSelect ?? (() => {})}
           />
         ) : activeCanvas === "remix-editor" &&

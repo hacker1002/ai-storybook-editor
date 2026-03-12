@@ -15,6 +15,8 @@ export interface ResolvedAnimation {
   animation: SpreadAnimation;
   originalIndex: number;
   displayTitle: string;
+  targetItemName: string;         // raw object name without counter suffix
+  effectName: string;             // human-readable effect name (e.g., "Fade In")
   effectCategory: EffectCategory;
   targetItemIcon: TargetItemIcon;
 }

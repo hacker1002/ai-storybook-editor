@@ -97,11 +97,18 @@ export function DemoPlayableSpreadView() {
     setSpreads,
   });
 
-  // Playback status (for sidebar highlight of currently playing animations)
+  // Playback status (for sidebar highlight of currently playing & pending-next animations)
   const [playingAnimationIndices, setPlayingAnimationIndices] = useState<number[]>([]);
+  const [pendingNextAnimationIndices, setPendingNextAnimationIndices] = useState<number[]>([]);
   const handlePlaybackStatusChange = useCallback((status: PlaybackStatus) => {
     setPlayingAnimationIndices(status.activeAnimationIndices);
+    setPendingNextAnimationIndices(status.pendingNextAnimationIndices);
   }, []);
+
+  // Preview state (true when player canvas is active — disables sidebar editing)
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const handlePreview = useCallback(() => setIsPreviewing(true), []);
+  const handleStopPreview = useCallback(() => setIsPreviewing(false), []);
 
   // Regenerate mock data
   const handleRegenerate = useCallback(() => {
@@ -312,8 +319,8 @@ export function DemoPlayableSpreadView() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden flex">
-          {/* Animation Editor Sidebar - only in animation-editor mode */}
-          {operationMode === 'animation-editor' && (
+          {/* Animation Editor Sidebar - visible in animation-editor and player modes */}
+          {(operationMode === 'animation-editor' || operationMode === 'player') && (
             <AnimationEditorSidebar
               animations={animState.filteredAnimations}
               allAnimations={animState.allAnimations}
@@ -328,7 +335,10 @@ export function DemoPlayableSpreadView() {
               onUpdateAnimation={animState.handleUpdateAnimation}
               onDeleteAnimation={animState.handleDeleteAnimation}
               onReorderAnimation={animState.handleReorderAnimation}
+              onItemSelect={handleItemSelect}
               playingAnimationIndices={playingAnimationIndices}
+              pendingNextAnimationIndices={pendingNextAnimationIndices}
+              isPlayerMode={operationMode === 'player' || isPreviewing}
             />
           )}
           {/* PlayableSpreadView Component */}
@@ -337,11 +347,15 @@ export function DemoPlayableSpreadView() {
               mode={operationMode}
               spreads={spreads}
               assets={remixAssets}
+              selectedItemId={animState.selectedItem?.id ?? null}
+              selectedItemType={animState.selectedItem?.type ?? null}
               onItemSelect={handleItemSelect}
               onAssetSwap={handleAssetSwap}
               onTextChange={handleTextChange}
               onSpreadSelect={handleSpreadSelect}
               onPlaybackStatusChange={handlePlaybackStatusChange}
+              onPreview={handlePreview}
+              onStopPreview={handleStopPreview}
             />
           </div>
 

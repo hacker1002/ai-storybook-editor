@@ -228,13 +228,13 @@ export function usePlayerGsapEngine({
       // Emit active indices for sidebar highlight during replay
       if (onPlaybackStatusChange) {
         const indices = step.animations.map((a) => a.order);
-        onPlaybackStatusChange({ activeAnimationIndices: indices });
+        onPlaybackStatusChange({ activeAnimationIndices: indices, pendingNextAnimationIndices: [] });
       }
 
       const replayTl = gsap.timeline({
         onComplete: () => {
           // Clear highlights when replay finishes
-          onPlaybackStatusChange?.({ activeAnimationIndices: [] });
+          onPlaybackStatusChange?.({ activeAnimationIndices: [], pendingNextAnimationIndices: [] });
         },
       });
       const dims = getContainerDims();
@@ -468,12 +468,21 @@ export function usePlayerGsapEngine({
       const step = steps[currentStepIndex];
       if (step) {
         const indices = step.animations.map((a) => a.order);
-        onPlaybackStatusChange({ activeAnimationIndices: indices });
+        onPlaybackStatusChange({ activeAnimationIndices: indices, pendingNextAnimationIndices: [] });
         return;
       }
     }
-    // Not playing → clear highlights
-    onPlaybackStatusChange({ activeAnimationIndices: [] });
+
+    // Awaiting next/click → compute pending-next animation indices from next step
+    if ((phase === 'awaiting_next' || phase === 'awaiting_click') && currentStepIndex >= 0) {
+      const nextStep = steps[currentStepIndex + 1];
+      const pendingIndices = nextStep ? nextStep.animations.map((a) => a.order) : [];
+      onPlaybackStatusChange({ activeAnimationIndices: [], pendingNextAnimationIndices: pendingIndices });
+      return;
+    }
+
+    // Idle/complete → clear everything
+    onPlaybackStatusChange({ activeAnimationIndices: [], pendingNextAnimationIndices: [] });
   }, [phase, currentStepIndex, steps, onPlaybackStatusChange]);
 
   // === Return ===

@@ -1,60 +1,90 @@
-// animation-list-item.tsx - Single animation entry in the sidebar list with drag-to-reorder support
+// animation-list-item.tsx - Single animation entry in the sidebar list with compact 4-row layout
+// Layout: Row1=trigger icon | Row2=object name + type icon | Row3=effect name + star | Row4=delay/duration/cLoop/eLoop
 
-import { useState } from 'react';
-import type { ResolvedAnimation, SpreadAnimation } from './animation-types';
-import { STAR_COLOR_MAP, TRIGGER_TYPE_LABELS } from './animation-constants';
-import { AnimationSettingsPanel } from './animation-settings-panel';
-import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { Trash2, Image, Volume2, Film, Square, Star } from 'lucide-react';
+import { useState } from "react";
+import type { ResolvedAnimation, SpreadAnimation } from "./animation-types";
+import { STAR_COLOR_MAP, TRIGGER_TYPE_LABELS } from "./animation-constants";
+import { AnimationSettingsPanel } from "./animation-settings-panel";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import {
+  Trash2,
+  Image,
+  Volume2,
+  Film,
+  Square,
+  Star,
+  Hand,
+  ArrowRight,
+  Timer,
+  Hourglass,
+} from "lucide-react";
 
 interface AnimationListItemProps {
   animation: ResolvedAnimation;
   index: number;
-  /** Step number for on_next/on_click triggers, null for with_previous/after_previous */
   stepNumber: number | null;
   isExpanded: boolean;
   isHighlighted: boolean;
   isPlaying: boolean;
+  isPendingNext: boolean;
   isDragOver: boolean;
+  disabled: boolean;
   onClick: () => void;
   onDelete: () => void;
+  onSelectTarget: () => void;
   onDragStart: (index: number) => void;
   onDragOver: (e: React.DragEvent, index: number) => void;
   onDragEnd: () => void;
   onDrop: (index: number) => void;
   onEffectTypeChange: (newEffectType: number) => void;
-  onTriggerTypeChange: (trigger: SpreadAnimation['trigger_type']) => void;
+  onTriggerTypeChange: (trigger: SpreadAnimation["trigger_type"]) => void;
   onClickLoopChange: (value: number) => void;
   onEffectOptionChange: (field: string, value: number | string) => void;
+  onMustCompleteChange: (value: boolean) => void;
 }
 
-/** Renders the appropriate icon for the animation's target item type */
-function TargetIcon({ icon }: { icon: ResolvedAnimation['targetItemIcon'] }) {
-  const cls = 'h-3.5 w-3.5 text-muted-foreground';
+function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
+  const cls = "h-3 w-3 text-muted-foreground";
   switch (icon) {
-    case 'image': return <Image className={cls} />;
-    case 'audio': return <Volume2 className={cls} />;
-    case 'video': return <Film className={cls} />;
-    case 'text':  return <span className="text-xs font-bold text-muted-foreground">T</span>;
-    case 'shape': return <Square className={cls} />;
+    case "image":
+      return <Image className={cls} />;
+    case "audio":
+      return <Volume2 className={cls} />;
+    case "video":
+      return <Film className={cls} />;
+    case "text":
+      return (
+        <span className="text-[10px] font-bold text-muted-foreground leading-none">
+          T
+        </span>
+      );
+    case "shape":
+      return <Square className={cls} />;
   }
 }
 
-/** Format ms value to seconds display (e.g., 500 → "0.5s", 1200 → "1.2s") */
+function TriggerIcon({
+  trigger,
+}: {
+  trigger: SpreadAnimation["trigger_type"];
+}) {
+  const cls = "h-3.5 w-3.5";
+  switch (trigger) {
+    case "on_click":
+      return <Hand className={cls} />;
+    case "on_next":
+      return <ArrowRight className={cls} />;
+    case "with_previous":
+      return <Timer className={cls} />;
+    case "after_previous":
+      return <Hourglass className={cls} />;
+  }
+}
+
 function msToSec(ms: number): string {
   const s = ms / 1000;
   return Number.isInteger(s) ? `${s}s` : `${parseFloat(s.toFixed(1))}s`;
-}
-
-/** Builds a compact summary line from non-default animation option values */
-function buildSummaryParts(anim: SpreadAnimation): string[] {
-  const parts: string[] = [];
-  const { effect } = anim;
-  if (effect.loop !== undefined && effect.loop > 0) parts.push(`Loop: ${effect.loop}`);
-  if (effect.delay !== undefined && effect.delay > 0) parts.push(`Delay: ${msToSec(effect.delay)}`);
-  if (effect.duration !== undefined && effect.duration > 0) parts.push(`Duration: ${msToSec(effect.duration)}`);
-  return parts;
 }
 
 export function AnimationListItem({
@@ -64,9 +94,12 @@ export function AnimationListItem({
   isExpanded,
   isHighlighted,
   isPlaying,
+  isPendingNext,
   isDragOver,
+  disabled,
   onClick,
   onDelete,
+  onSelectTarget,
   onDragStart,
   onDragOver,
   onDragEnd: onDragEndProp,
@@ -75,16 +108,17 @@ export function AnimationListItem({
   onTriggerTypeChange,
   onClickLoopChange,
   onEffectOptionChange,
+  onMustCompleteChange,
 }: AnimationListItemProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const anim = animation.animation;
   const starColor = STAR_COLOR_MAP[animation.effectCategory];
-  const triggerLabel = TRIGGER_TYPE_LABELS[anim.trigger_type] ?? anim.trigger_type;
-  const summaryParts = buildSummaryParts(anim);
+  const { effect, trigger_type } = anim;
 
   function handleDragStart(e: React.DragEvent) {
-    e.dataTransfer.effectAllowed = 'move';
+    if (disabled) return;
+    e.dataTransfer.effectAllowed = "move";
     setIsDragging(true);
     onDragStart(index);
   }
@@ -106,77 +140,127 @@ export function AnimationListItem({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') {
-      onClick();
-    } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      onDelete();
-    }
+    if (disabled) return;
+    if (e.key === "Enter") onClick();
+    else if (e.key === "Delete" || e.key === "Backspace") onDelete();
   }
 
   function handleDeleteClick(e: React.MouseEvent) {
     e.stopPropagation();
-    onDelete();
+    if (!disabled) onDelete();
   }
 
-  // Shared drag props for header & summary rows (drag source zones)
-  const dragSourceProps = {
-    draggable: true as const,
-    onDragStart: handleDragStart,
-    onDragEnd: handleDragEnd,
-  };
+  function handleClick() {
+    if (disabled) return;
+    onSelectTarget();
+    onClick();
+  }
+
+  const dragSourceProps = disabled
+    ? {}
+    : {
+        draggable: true as const,
+        onDragStart: handleDragStart,
+        onDragEnd: handleDragEnd,
+      };
 
   return (
     <div
       role="button"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onKeyDown={handleKeyDown}
+      aria-disabled={disabled}
       className={[
-        'group rounded select-none outline-none transition-colors',
-        'focus-visible:ring-2 focus-visible:ring-ring',
+        "group rounded select-none outline-none transition-colors",
+        "focus-visible:ring-2 focus-visible:ring-ring",
+        disabled ? "pointer-events-none opacity-60" : "",
+        isPendingNext ? "animate-sidebar-blink" : "",
         isDragOver
-          ? 'border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/30'
+          ? "border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/30"
           : isPlaying
-            ? 'border border-green-400 bg-green-50 dark:bg-green-950/20'
-            : isHighlighted
-              ? 'border bg-blue-50 dark:bg-blue-950/20'
-              : 'border bg-card',
-        isDragging ? 'opacity-50' : '',
-      ].join(' ')}
+          ? "border border-green-400 bg-green-50 dark:bg-green-950/20"
+          : isExpanded
+          ? "border border-blue-500 bg-blue-50/50 dark:bg-blue-950/20"
+          : isHighlighted
+          ? "border bg-blue-50/30 dark:bg-blue-950/10"
+          : "border bg-card",
+        isDragging ? "opacity-50" : "",
+      ].join(" ")}
     >
-      {/* Header row — drag source + click to toggle expand/collapse */}
+      {/* Compact header — 3 rows of info */}
       <div
         {...dragSourceProps}
-        className="flex items-center gap-2 px-2.5 py-2 cursor-grab active:cursor-grabbing"
-        onClick={onClick}
+        className={[
+          "relative flex gap-2 px-2 py-1.5",
+          disabled ? "" : "cursor-grab active:cursor-grabbing",
+        ].join(" ")}
+        onClick={handleClick}
       >
-        {/* Playing indicator or step number */}
-        <span className="text-xs font-mono w-5 text-muted-foreground shrink-0 text-center">
+        {/* Step number — fixed top-left corner */}
+        {stepNumber !== null && (
+          <span className="absolute top-1 left-1 z-10 flex items-center justify-center h-4 w-4 rounded-full bg-muted text-[12px] font-semibold text-muted-foreground border border-border">
+            {stepNumber}
+          </span>
+        )}
+
+        {/* Left column: trigger icon centered vertically */}
+        <div className="flex items-center justify-center shrink-0 w-6">
           {isPlaying ? (
             <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           ) : (
-            stepNumber !== null ? stepNumber : ''
+            <TriggerIcon trigger={trigger_type} />
           )}
-        </span>
+        </div>
 
-        {/* Effect category star */}
-        <Star
-          className="h-3 w-3 shrink-0"
-          style={{ fill: starColor, stroke: starColor }}
-        />
+        {/* Right column: object info + effect info + timing */}
+        <div className="flex-1 min-w-0 space-y-0.5">
+          {/* Row 1: Object name + type icon */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-medium truncate flex-1">
+              {animation.targetItemName}
+            </span>
+            <TargetIcon icon={animation.targetItemIcon} />
+          </div>
 
-        {/* Animation display title */}
-        <span className="text-sm truncate flex-1">{animation.displayTitle}</span>
+          {/* Row 2: Effect name + star icon */}
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] text-muted-foreground truncate flex-1">
+              {animation.effectName}
+            </span>
+            <Star
+              className="h-2.5 w-2.5 shrink-0"
+              style={{ fill: starColor, stroke: starColor }}
+            />
+          </div>
 
-        {/* Target item type icon */}
-        <TargetIcon icon={animation.targetItemIcon} />
+          {/* Row 3: Timing values — always show all */}
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span title="Delay">
+              <span className="opacity-60">Delay:</span>
+              {msToSec(effect.delay ?? 0)}
+            </span>
+            <span title="Duration">
+              <span className="opacity-60">Dur:</span>
+              {msToSec(effect.duration ?? 0)}
+            </span>
+            <span title="Click Loop">
+              <span className="opacity-60">cLoop:</span>
+              {anim.click_loop ?? 0}
+            </span>
+            <span title="Effect Loop">
+              <span className="opacity-60">eLoop:</span>
+              {effect.loop ?? 0}
+            </span>
+          </div>
+        </div>
 
         {/* Delete button — visible on hover */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 self-start mt-0.5"
           onClick={handleDeleteClick}
           tabIndex={-1}
           aria-label="Delete animation"
@@ -185,29 +269,18 @@ export function AnimationListItem({
         </Button>
       </div>
 
-      {/* Summary row (collapsed state) — drag source + click to expand */}
-      {!isExpanded && (
-        <div
-          {...dragSourceProps}
-          className="px-2.5 pb-1.5 text-xs text-muted-foreground cursor-grab active:cursor-grabbing"
-          onClick={onClick}
-        >
-          <span>Trigger: {triggerLabel}</span>
-          {summaryParts.length > 0 && (
-            <span className="ml-2">{summaryParts.join(' · ')}</span>
-          )}
-        </div>
-      )}
-
-      {/* Expanded settings panel — clicks here should NOT toggle collapse */}
+      {/* Expanded settings panel */}
       <Collapsible open={isExpanded}>
-        <CollapsibleContent onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+        <CollapsibleContent
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
           <AnimationSettingsPanel
             animation={animation}
             onEffectTypeChange={onEffectTypeChange}
             onTriggerTypeChange={onTriggerTypeChange}
             onClickLoopChange={onClickLoopChange}
             onEffectOptionChange={onEffectOptionChange}
+            onMustCompleteChange={onMustCompleteChange}
           />
         </CollapsibleContent>
       </Collapsible>

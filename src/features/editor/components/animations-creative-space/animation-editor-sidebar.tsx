@@ -40,8 +40,17 @@ interface AnimationEditorSidebarProps {
   onDeleteAnimation: (index: number) => void;
   onReorderAnimation: (fromIndex: number, toIndex: number) => void;
 
+  // Canvas selection — clicking sidebar item selects its target on canvas
+  onItemSelect?: (itemType: string, itemId: string) => void;
+
   /** order values of SpreadAnimations currently playing in the player canvas */
   playingAnimationIndices?: number[];
+
+  /** order values of SpreadAnimations pending next playback — triggers blink */
+  pendingNextAnimationIndices?: number[];
+
+  /** When true, sidebar is view-only (player mode) */
+  isPlayerMode?: boolean;
 }
 
 export function AnimationEditorSidebar({
@@ -57,21 +66,22 @@ export function AnimationEditorSidebar({
   onUpdateAnimation,
   onDeleteAnimation,
   onReorderAnimation,
+  onItemSelect,
   playingAnimationIndices,
+  pendingNextAnimationIndices,
+  isPlayerMode = false,
 }: AnimationEditorSidebarProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Compute header state
-  const isAddEnabled = selectedItem !== null;
+  const isAddEnabled = selectedItem !== null && !isPlayerMode;
   const hasActiveFilter =
     filterState.objectFilter !== 'all' ||
     filterState.effectFilter !== 'all' ||
     filterState.triggerFilters.size > 0;
 
-  // Group availableEffects by category for the add dropdown
   const effectsByCategory = useMemo(() => {
     const grouped = new Map<EffectCategory, AvailableEffect[]>();
     for (const effect of availableEffects) {
@@ -82,10 +92,9 @@ export function AnimationEditorSidebar({
     return grouped;
   }, [availableEffects]);
 
-  // Category display order
   const categoryOrder: EffectCategory[] = ['play', 'entrance', 'emphasis', 'exit', 'motion-paths'];
 
-  // Compute step numbers: only on_next/on_click get a number, others get null
+  // Step numbers: only on_next/on_click get a number
   const stepNumbers = useMemo(() => {
     let step = 0;
     return animations.map((resolved) => {
@@ -94,7 +103,7 @@ export function AnimationEditorSidebar({
         step += 1;
         return step;
       }
-      return null; // with_previous / after_previous
+      return null;
     });
   }, [animations]);
 
@@ -153,12 +162,25 @@ export function AnimationEditorSidebar({
     };
   }
 
+  function makeMustCompleteChange(animOriginalIndex: number) {
+    return (value: boolean) => {
+      onUpdateAnimation(animOriginalIndex, { must_complete: value });
+    };
+  }
+
   function makeEffectOptionChange(animOriginalIndex: number, animation: ResolvedAnimation) {
     return (field: string, value: number | string) => {
       const currentEffect = animation.animation.effect;
       onUpdateAnimation(animOriginalIndex, {
         effect: { ...currentEffect, [field]: value },
       });
+    };
+  }
+
+  function makeSelectTarget(animation: ResolvedAnimation) {
+    return () => {
+      const { target } = animation.animation;
+      onItemSelect?.(target.type, target.id);
     };
   }
 
@@ -186,6 +208,7 @@ export function AnimationEditorSidebar({
             size="icon"
             className="h-7 w-7"
             aria-label="Filter animations"
+            disabled={isPlayerMode}
           >
             <Filter
               className={[
@@ -269,11 +292,14 @@ export function AnimationEditorSidebar({
               isExpanded={index === expandedAnimationIndex}
               isHighlighted={selectedItem?.id === resolvedAnim.animation.target.id}
               isPlaying={playingAnimationIndices?.includes(resolvedAnim.originalIndex) ?? false}
+              isPendingNext={pendingNextAnimationIndices?.includes(resolvedAnim.originalIndex) ?? false}
               isDragOver={index === dragOverIndex}
+              disabled={isPlayerMode}
               onClick={() =>
                 onExpandChange(index === expandedAnimationIndex ? null : index)
               }
               onDelete={() => onDeleteAnimation(resolvedAnim.originalIndex)}
+              onSelectTarget={makeSelectTarget(resolvedAnim)}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
@@ -282,6 +308,7 @@ export function AnimationEditorSidebar({
               onTriggerTypeChange={makeTriggerTypeChange(resolvedAnim.originalIndex)}
               onClickLoopChange={makeClickLoopChange(resolvedAnim.originalIndex)}
               onEffectOptionChange={makeEffectOptionChange(resolvedAnim.originalIndex, resolvedAnim)}
+              onMustCompleteChange={makeMustCompleteChange(resolvedAnim.originalIndex)}
             />
           ))
         )}

@@ -20,6 +20,8 @@ import { TEXTBOX_Z_INDEX_BASE } from './constants';
 
 export function AnimationEditorCanvas({
   spread,
+  selectedItemId: externalItemId,
+  selectedItemType: externalItemType,
   onItemSelect,
 }: AnimationEditorCanvasProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -38,6 +40,39 @@ export function AnimationEditorCanvas({
     setSelectedGeometry(null);
     onItemSelect(null, null);
   }, [spread.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync from external selection (sidebar click → canvas highlight)
+  useEffect(() => {
+    if (externalItemId === undefined || externalItemType === undefined) return;
+    if (externalItemId === selectedItemId && externalItemType === selectedItemType) return;
+
+    if (!externalItemId || !externalItemType) {
+      setSelectedItemId(null);
+      setSelectedItemType(null);
+      setSelectedGeometry(null);
+      return;
+    }
+
+    setSelectedItemId(externalItemId);
+    setSelectedItemType(externalItemType);
+
+    // Resolve geometry for selection overlay
+    let geometry: Geometry | null = null;
+    if (externalItemType === 'image') {
+      geometry = spread.images?.find((i) => i.id === externalItemId)?.geometry ?? null;
+    } else if (externalItemType === 'textbox') {
+      const tb = spread.textboxes?.find((t) => t.id === externalItemId);
+      if (tb) {
+        const langKey = getFirstTextboxKey(tb);
+        if (langKey) geometry = (tb[langKey] as { geometry: Geometry })?.geometry ?? null;
+      }
+    } else if (externalItemType === 'shape') {
+      geometry = spread.shapes?.find((s) => s.id === externalItemId)?.geometry ?? null;
+    } else if (externalItemType === 'video') {
+      geometry = spread.videos?.find((v) => v.id === externalItemId)?.geometry ?? null;
+    }
+    setSelectedGeometry(geometry);
+  }, [externalItemId, externalItemType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deselect handler
   const handleDeselect = useCallback(() => {
