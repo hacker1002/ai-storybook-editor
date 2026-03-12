@@ -148,7 +148,6 @@ export function AnimationListItem({
   function handleKeyDown(e: React.KeyboardEvent) {
     if (disabled) return;
     if (e.key === "Enter") onClick();
-    else if (e.key === "Delete" || e.key === "Backspace") onDelete();
   }
 
   function handleDeleteClick(e: React.MouseEvent) {

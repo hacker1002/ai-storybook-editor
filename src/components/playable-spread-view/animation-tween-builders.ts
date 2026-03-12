@@ -415,7 +415,9 @@ export function addTweenToTimeline(
       break;
   }
 
-  // Attach start/end logs to all tweens added by this call
+  // Attach start/end callbacks to all tweens added by this call.
+  // GSAP quirk: timeline.set() (zero-duration tweens) may skip onStart via eventCallback().
+  // Track with a flag so onComplete can fire onTweenStart as fallback to ensure store updates.
   const newChildren = timeline.getChildren().slice(childCountBefore);
   const prefix = `[Animation] ${effectName} | target="${targetId}" | trigger="${animation.trigger_type}"`;
   for (const child of newChildren) {
@@ -423,12 +425,21 @@ export function addTweenToTimeline(
     const prevOnComplete = child.eventCallback("onComplete") as
       | (() => void)
       | null;
+    const isInstant = child.duration() === 0;
+    let startFired = false;
+
     child.eventCallback("onStart", () => {
       console.log(`${prefix} → START`);
+      startFired = true;
       prevOnStart?.();
       options?.onTweenStart?.();
     });
+
     child.eventCallback("onComplete", () => {
+      if (isInstant && !startFired) {
+        console.log(`${prefix} → START (instant)`);
+        options?.onTweenStart?.();
+      }
       console.log(`${prefix} → END`);
       prevOnComplete?.();
       options?.onTweenComplete?.();
