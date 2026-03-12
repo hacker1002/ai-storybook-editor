@@ -41,7 +41,7 @@ interface AnimationEditorSidebarProps {
   onReorderAnimation: (fromIndex: number, toIndex: number) => void;
 
   // Canvas selection — clicking sidebar item selects its target on canvas
-  onItemSelect?: (itemType: string, itemId: string) => void;
+  onItemSelect?: (itemType: string | null, itemId: string | null) => void;
 
   /** order values of SpreadAnimations currently playing in the player canvas */
   playingAnimationIndices?: number[];

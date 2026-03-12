@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import type { ResolvedAnimation, SpreadAnimation } from "./animation-types";
-import { STAR_COLOR_MAP, TRIGGER_TYPE_LABELS } from "./animation-constants";
+import { STAR_COLOR_MAP } from "./animation-constants";
 import { AnimationSettingsPanel } from "./animation-settings-panel";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
