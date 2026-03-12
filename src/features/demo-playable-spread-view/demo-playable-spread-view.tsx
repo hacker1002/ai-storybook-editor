@@ -9,7 +9,7 @@ import {
   type ItemType,
   type AssetSwapParams,
 } from "@/components/playable-spread-view";
-import { AnimationEditorSidebar } from '@/features/editor/components/animations-creative-space';
+import { AnimationEditorSidebar, PlayerAnimationSidebar } from '@/features/editor/components/animations-creative-space';
 import { useDemoAnimationState } from './use-demo-animation-state';
 import { getFirstTextboxKey } from "@/components/shared";
 import {
@@ -310,8 +310,8 @@ export function DemoPlayableSpreadView() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden flex">
-          {/* Animation Editor Sidebar - visible in animation-editor and player modes */}
-          {(operationMode === 'animation-editor' || operationMode === 'player') && (
+          {/* Animation Editor Sidebar - editor mode only, not during preview */}
+          {operationMode === 'animation-editor' && !isPreviewing && (
             <AnimationEditorSidebar
               animations={animState.filteredAnimations}
               allAnimations={animState.allAnimations}
@@ -327,7 +327,13 @@ export function DemoPlayableSpreadView() {
               onDeleteAnimation={animState.handleDeleteAnimation}
               onReorderAnimation={animState.handleReorderAnimation}
               onItemSelect={handleItemSelect}
-              isPlayerMode={operationMode === 'player' || isPreviewing}
+            />
+          )}
+
+          {/* Player Animation Sidebar - player mode or preview mode (read-only) */}
+          {(operationMode === 'player' || isPreviewing) && (
+            <PlayerAnimationSidebar
+              animations={animState.allAnimations}
             />
           )}
           {/* PlayableSpreadView Component */}

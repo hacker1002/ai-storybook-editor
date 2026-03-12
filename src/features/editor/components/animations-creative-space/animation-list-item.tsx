@@ -26,10 +26,7 @@ interface AnimationListItemProps {
   stepNumber: number | null;
   isExpanded: boolean;
   isHighlighted: boolean;
-  isPlaying: boolean;
-  isPendingNext: boolean;
   isDragOver: boolean;
-  disabled: boolean;
   onClick: () => void;
   onDelete: () => void;
   onSelectTarget: () => void;
@@ -42,6 +39,14 @@ interface AnimationListItemProps {
   onClickLoopChange: (value: number) => void;
   onEffectOptionChange: (field: string, value: number | string) => void;
   onMustCompleteChange: (value: boolean) => void;
+  /** Player mode: green highlight when animation is playing */
+  isPlaying?: boolean;
+  /** Player mode: blink animation for pending next */
+  isPendingNext?: boolean;
+  /** When true, sidebar item is non-interactive (player mode) */
+  disabled?: boolean;
+  /** Override cLoop display value (player uses remaining replays instead of DB value) */
+  displayClickLoop?: number;
 }
 
 function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
@@ -93,10 +98,7 @@ export function AnimationListItem({
   stepNumber,
   isExpanded,
   isHighlighted,
-  isPlaying,
-  isPendingNext,
   isDragOver,
-  disabled,
   onClick,
   onDelete,
   onSelectTarget,
@@ -109,6 +111,10 @@ export function AnimationListItem({
   onClickLoopChange,
   onEffectOptionChange,
   onMustCompleteChange,
+  isPlaying = false,
+  isPendingNext = false,
+  disabled = false,
+  displayClickLoop,
 }: AnimationListItemProps) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -175,7 +181,7 @@ export function AnimationListItem({
       className={[
         "group rounded select-none outline-none transition-colors",
         "focus-visible:ring-2 focus-visible:ring-ring",
-        disabled ? "pointer-events-none opacity-60" : "",
+        disabled ? "pointer-events-none" : "",
         isPendingNext ? "animate-sidebar-blink" : "",
         isDragOver
           ? "border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/30"
@@ -247,7 +253,7 @@ export function AnimationListItem({
             </span>
             <span title="Click Loop">
               <span className="opacity-60">cLoop:</span>
-              {anim.click_loop ?? 0}
+              {displayClickLoop ?? anim.click_loop ?? 0}
             </span>
             <span title="Effect Loop">
               <span className="opacity-60">eLoop:</span>

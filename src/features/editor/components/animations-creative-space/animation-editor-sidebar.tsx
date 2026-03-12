@@ -1,8 +1,7 @@
 // animation-editor-sidebar.tsx - Sidebar panel for the animation editor (280px)
-// Composes SidebarHeader, AnimationFilterPopover, AnimationListItem list, and EmptyState
+// Pure editor component: CRUD, filter, drag-reorder. No player/playback logic.
 
-import { useState, useMemo, useEffect } from 'react';
-import { useActiveAnimationOrders, usePlayerPhase, useMaxActivatedOrder } from '@/stores/animation-playback-store';
+import { useState, useMemo } from 'react';
 import type { ItemType } from '@/components/playable-spread-view/types';
 import type {
   ResolvedAnimation,
@@ -44,9 +43,6 @@ interface AnimationEditorSidebarProps {
 
   // Canvas selection — clicking sidebar item selects its target on canvas
   onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
-
-  /** When true, sidebar is view-only (player mode) */
-  isPlayerMode?: boolean;
 }
 
 export function AnimationEditorSidebar({
@@ -63,34 +59,13 @@ export function AnimationEditorSidebar({
   onDeleteAnimation,
   onReorderAnimation,
   onItemSelect,
-  isPlayerMode = false,
 }: AnimationEditorSidebarProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Subscribe to store for sidebar highlight during playback
-  const activeAnimationOrders = useActiveAnimationOrders();
-  const phase = usePlayerPhase();
-
-  // Pending next: computed after all current animations complete, persists during awaiting.
-  // Uses store's maxActivatedOrder (sync Zustand set, immune to React batching).
-  const maxActivatedOrder = useMaxActivatedOrder();
-  const [pendingNextOrder, setPendingNextOrder] = useState<number | null>(null);
-  useEffect(() => {
-    if (phase === 'idle' || phase === 'complete') {
-      setPendingNextOrder(null);
-      return;
-    }
-    if (activeAnimationOrders.length > 0) return; // still playing, don't update pending
-    if (maxActivatedOrder >= 0) {
-      const sortedOrders = animations.map((a) => a.animation.order).sort((a, b) => a - b);
-      setPendingNextOrder(sortedOrders.find((o) => o > maxActivatedOrder) ?? null);
-    }
-  }, [activeAnimationOrders, animations, phase, maxActivatedOrder]);
-
-  const isAddEnabled = selectedItem !== null && !isPlayerMode;
+  const isAddEnabled = selectedItem !== null;
   const hasActiveFilter =
     filterState.objectFilter !== 'all' ||
     filterState.effectFilter !== 'all' ||
@@ -222,7 +197,6 @@ export function AnimationEditorSidebar({
             size="icon"
             className="h-7 w-7"
             aria-label="Filter animations"
-            disabled={isPlayerMode}
           >
             <Filter
               className={[
@@ -305,10 +279,7 @@ export function AnimationEditorSidebar({
               stepNumber={stepNumbers[index]}
               isExpanded={index === expandedAnimationIndex}
               isHighlighted={selectedItem?.id === resolvedAnim.animation.target.id}
-              isPlaying={activeAnimationOrders.includes(resolvedAnim.animation.order)}
-              isPendingNext={resolvedAnim.animation.order === pendingNextOrder}
               isDragOver={index === dragOverIndex}
-              disabled={isPlayerMode}
               onClick={() =>
                 onExpandChange(index === expandedAnimationIndex ? null : index)
               }

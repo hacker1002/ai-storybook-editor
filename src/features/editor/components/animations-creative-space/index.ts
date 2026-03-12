@@ -43,4 +43,5 @@ export { AnimationFilterPopover } from './animation-filter-popover';
 export { AnimationSettingsPanel } from './animation-settings-panel';
 export { AnimationListItem } from './animation-list-item';
 export { AnimationEditorSidebar } from './animation-editor-sidebar';
+export { PlayerAnimationSidebar } from './player-animation-sidebar';
 export { AnimationsCreativeSpace } from './animations-creative-space';
