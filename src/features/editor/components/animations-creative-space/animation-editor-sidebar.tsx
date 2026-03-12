@@ -2,6 +2,7 @@
 // Composes SidebarHeader, AnimationFilterPopover, AnimationListItem list, and EmptyState
 
 import { useState, useMemo } from 'react';
+import type { ItemType } from '@/components/playable-spread-view/types';
 import type {
   ResolvedAnimation,
   AnimationFilterState,
@@ -41,7 +42,7 @@ interface AnimationEditorSidebarProps {
   onReorderAnimation: (fromIndex: number, toIndex: number) => void;
 
   // Canvas selection — clicking sidebar item selects its target on canvas
-  onItemSelect?: (itemType: string | null, itemId: string | null) => void;
+  onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
 
   /** order values of SpreadAnimations currently playing in the player canvas */
   playingAnimationIndices?: number[];
