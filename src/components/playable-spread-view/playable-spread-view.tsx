@@ -19,7 +19,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   onAssetSwap,
   onTextChange,
   onSpreadSelect,
-  onPlaybackStatusChange,
   onPreview,
   onStopPreview,
 }) => {
@@ -209,7 +208,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             onSpreadComplete={handleSpreadComplete}
             onSkipSpread={handleSkipSpread}
             onPlayModeChange={setPlayMode}
-            onPlaybackStatusChange={onPlaybackStatusChange}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">

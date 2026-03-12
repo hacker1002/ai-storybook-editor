@@ -41,14 +41,6 @@ export type PlayerAction =
   | { type: 'STEP_COMPLETE' }
   | { type: 'CLICK_LOOP_REPLAY'; itemId: string };
 
-// === Playback Status (emitted from PlayerCanvas for sidebar highlight) ===
-export interface PlaybackStatus {
-  /** order values of SpreadAnimations currently animating */
-  activeAnimationIndices: number[];
-  /** order values of SpreadAnimations pending next (awaiting click/next trigger) */
-  pendingNextAnimationIndices: number[];
-}
-
 // === Core Enums/Types ===
 export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
@@ -117,7 +109,6 @@ export interface PlayableSpreadViewProps {
   onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
   onSpreadSelect?: (spreadId: string) => void;
-  onPlaybackStatusChange?: (status: PlaybackStatus) => void;
   onPreview?: () => void;
   onStopPreview?: () => void;
 }
@@ -165,7 +156,6 @@ export interface PlayerCanvasProps {
   onSpreadComplete: (spreadId: string) => void;
   onSkipSpread: (direction: 'next' | 'prev') => void;
   onPlayModeChange: (mode: PlayMode) => void;
-  onPlaybackStatusChange?: (status: PlaybackStatus) => void;
 }
 
 export interface PlayerControlSidebarProps {

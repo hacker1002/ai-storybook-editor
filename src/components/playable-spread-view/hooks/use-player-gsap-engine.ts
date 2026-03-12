@@ -3,7 +3,7 @@
 
 import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import gsap from 'gsap';
-import type { AnimationStep, PlayableSpread, PlaybackStatus } from '../types';
+import type { AnimationStep, PlayableSpread } from '../types';
 import { TRIGGER_DELAY } from '../constants';
 import {
   usePlaybackStore,
@@ -13,7 +13,7 @@ import {
   useIsPlaying,
   useVolume,
   usePlaybackActions,
-} from '../stores/playback-store';
+} from '../../../stores/animation-playback-store';
 import { addTweenToTimeline } from '../animation-tween-builders';
 import {
   applyInitialStates,
@@ -29,8 +29,6 @@ export interface UsePlayerGsapEngineParams {
   spread: PlayableSpread;
   zoomLevel: number;
   onSpreadComplete: (spreadId: string) => void;
-  hasNext: boolean;
-  onPlaybackStatusChange?: (status: PlaybackStatus) => void;
 }
 
 export interface UsePlayerGsapEngineReturn {
@@ -53,8 +51,6 @@ export function usePlayerGsapEngine({
   spread,
   zoomLevel,
   onSpreadComplete,
-  hasNext: _hasNext,
-  onPlaybackStatusChange,
 }: UsePlayerGsapEngineParams): UsePlayerGsapEngineReturn {
   // === Store Subscriptions ===
   const phase = usePlayerPhase();
@@ -141,6 +137,7 @@ export function usePlayerGsapEngine({
   const buildAndPlayStepTimeline = useCallback(
     (step: AnimationStep) => {
       killTimeline();
+      usePlaybackStore.getState().setActiveAnimationOrders([]);
       const tl = gsap.timeline({
         onComplete: () => playbackActions.stepComplete(),
       });
@@ -169,6 +166,8 @@ export function usePlayerGsapEngine({
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           ...dims,
+          onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
+          onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
         });
       });
 
@@ -180,6 +179,7 @@ export function usePlayerGsapEngine({
 
   const buildAndPlayFullTimeline = useCallback(() => {
     killTimeline();
+    usePlaybackStore.getState().setActiveAnimationOrders([]);
     const tl = gsap.timeline({
       onComplete: () => {
         // Root component handles auto-advance; we only signal completion
@@ -214,6 +214,8 @@ export function usePlayerGsapEngine({
         spreadContainer: spreadContainerRef.current,
         itemGeometry: findItemGeometry(anim.target.id),
         ...dims,
+        onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
+        onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
       });
     });
 
@@ -226,17 +228,12 @@ export function usePlayerGsapEngine({
   const handleClickLoopReplay = useCallback(
     (step: AnimationStep) => {
       killReplayTimeline();
-
-      // Emit active indices for sidebar highlight during replay
-      if (onPlaybackStatusChange) {
-        const indices = step.animations.map((a) => a.order);
-        onPlaybackStatusChange({ activeAnimationIndices: indices, pendingNextAnimationIndices: [] });
-      }
+      usePlaybackStore.getState().setActiveAnimationOrders([]);
 
       const replayTl = gsap.timeline({
         onComplete: () => {
-          // Clear highlights when replay finishes
-          onPlaybackStatusChange?.({ activeAnimationIndices: [], pendingNextAnimationIndices: [] });
+          // Clear active orders when replay finishes
+          usePlaybackStore.getState().setActiveAnimationOrders([]);
         },
       });
       const dims = getContainerDims();
@@ -264,13 +261,15 @@ export function usePlayerGsapEngine({
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           ...dims,
+          onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
+          onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
         });
       });
 
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, volume, getContainerDims, findItemGeometry, onPlaybackStatusChange]
+    [killReplayTimeline, volume, getContainerDims, findItemGeometry]
   );
 
   // === Returned utility functions ===
@@ -464,30 +463,12 @@ export function usePlayerGsapEngine({
     });
   }, [volume]);
 
-  // === Lifecycle: Emit playback status for sidebar highlight ===
+  // === Lifecycle: Clear active animation orders when playback stops ===
   useEffect(() => {
-    if (!onPlaybackStatusChange) return;
-
-    if (phase === 'playing' && currentStepIndex >= 0) {
-      const step = steps[currentStepIndex];
-      if (step) {
-        const indices = step.animations.map((a) => a.order);
-        onPlaybackStatusChange({ activeAnimationIndices: indices, pendingNextAnimationIndices: [] });
-        return;
-      }
+    if (phase === 'idle' || phase === 'complete' || phase === 'awaiting_next' || phase === 'awaiting_click') {
+      usePlaybackStore.getState().setActiveAnimationOrders([]);
     }
-
-    // Awaiting next/click → compute pending-next animation indices from next step
-    if ((phase === 'awaiting_next' || phase === 'awaiting_click') && currentStepIndex >= 0) {
-      const nextStep = steps[currentStepIndex + 1];
-      const pendingIndices = nextStep ? nextStep.animations.map((a) => a.order) : [];
-      onPlaybackStatusChange({ activeAnimationIndices: [], pendingNextAnimationIndices: pendingIndices });
-      return;
-    }
-
-    // Idle/complete → clear everything
-    onPlaybackStatusChange({ activeAnimationIndices: [], pendingNextAnimationIndices: [] });
-  }, [phase, currentStepIndex, steps, onPlaybackStatusChange]);
+  }, [phase]);
 
   // === Return ===
   return {

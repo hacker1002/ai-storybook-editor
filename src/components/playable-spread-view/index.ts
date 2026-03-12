@@ -17,7 +17,6 @@ export type {
   RemixEditorCanvasProps,
   PromptToolbarProps,
   PlayerCanvasProps,
-  PlaybackStatus,
 } from './types';
 
 // === Constants ===
@@ -46,7 +45,7 @@ export {
   useVolume,
   usePlayerPhase,
   usePlaybackActions,
-} from './stores/playback-store';
+} from '../../stores/animation-playback-store';
 
 // === Constants - new ===
 export { RAPID_NEXT_THRESHOLD, SIDEBAR, SIDEBAR_BUTTONS, PLAYABLE_ZOOM } from './constants';

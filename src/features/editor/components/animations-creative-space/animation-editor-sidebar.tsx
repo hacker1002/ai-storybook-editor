@@ -1,7 +1,8 @@
 // animation-editor-sidebar.tsx - Sidebar panel for the animation editor (280px)
 // Composes SidebarHeader, AnimationFilterPopover, AnimationListItem list, and EmptyState
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useActiveAnimationOrders, usePlayerPhase, useMaxActivatedOrder } from '@/stores/animation-playback-store';
 import type { ItemType } from '@/components/playable-spread-view/types';
 import type {
   ResolvedAnimation,
@@ -44,12 +45,6 @@ interface AnimationEditorSidebarProps {
   // Canvas selection — clicking sidebar item selects its target on canvas
   onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
 
-  /** order values of SpreadAnimations currently playing in the player canvas */
-  playingAnimationIndices?: number[];
-
-  /** order values of SpreadAnimations pending next playback — triggers blink */
-  pendingNextAnimationIndices?: number[];
-
   /** When true, sidebar is view-only (player mode) */
   isPlayerMode?: boolean;
 }
@@ -68,14 +63,32 @@ export function AnimationEditorSidebar({
   onDeleteAnimation,
   onReorderAnimation,
   onItemSelect,
-  playingAnimationIndices,
-  pendingNextAnimationIndices,
   isPlayerMode = false,
 }: AnimationEditorSidebarProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Subscribe to store for sidebar highlight during playback
+  const activeAnimationOrders = useActiveAnimationOrders();
+  const phase = usePlayerPhase();
+
+  // Pending next: computed after all current animations complete, persists during awaiting.
+  // Uses store's maxActivatedOrder (sync Zustand set, immune to React batching).
+  const maxActivatedOrder = useMaxActivatedOrder();
+  const [pendingNextOrder, setPendingNextOrder] = useState<number | null>(null);
+  useEffect(() => {
+    if (phase === 'idle' || phase === 'complete') {
+      setPendingNextOrder(null);
+      return;
+    }
+    if (activeAnimationOrders.length > 0) return; // still playing, don't update pending
+    if (maxActivatedOrder >= 0) {
+      const sortedOrders = animations.map((a) => a.animation.order).sort((a, b) => a - b);
+      setPendingNextOrder(sortedOrders.find((o) => o > maxActivatedOrder) ?? null);
+    }
+  }, [activeAnimationOrders, animations, phase, maxActivatedOrder]);
 
   const isAddEnabled = selectedItem !== null && !isPlayerMode;
   const hasActiveFilter =
@@ -292,8 +305,8 @@ export function AnimationEditorSidebar({
               stepNumber={stepNumbers[index]}
               isExpanded={index === expandedAnimationIndex}
               isHighlighted={selectedItem?.id === resolvedAnim.animation.target.id}
-              isPlaying={playingAnimationIndices?.includes(resolvedAnim.originalIndex) ?? false}
-              isPendingNext={pendingNextAnimationIndices?.includes(resolvedAnim.originalIndex) ?? false}
+              isPlaying={activeAnimationOrders.includes(resolvedAnim.animation.order)}
+              isPendingNext={resolvedAnim.animation.order === pendingNextOrder}
               isDragOver={index === dragOverIndex}
               disabled={isPlayerMode}
               onClick={() =>

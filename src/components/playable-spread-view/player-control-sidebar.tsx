@@ -9,7 +9,7 @@ import {
   usePlayMode,
   useIsPlaying,
   usePlaybackActions,
-} from './stores/playback-store';
+} from '../../stores/animation-playback-store';
 
 // === PlayModeIcon — pill SVG with 2 circles indicating current play mode ===
 

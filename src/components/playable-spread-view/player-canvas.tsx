@@ -34,7 +34,7 @@ import {
   useCurrentStepIndex,
   usePendingClickTargetId,
   useReplayableItems,
-} from "./stores/playback-store";
+} from "../../stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
 
 // === CSS for click-hint-pulse ===
@@ -59,7 +59,6 @@ export function PlayerCanvas({
   onSpreadComplete,
   onSkipSpread,
   onPlayModeChange,
-  onPlaybackStatusChange,
 }: PlayerCanvasProps) {
   // === Store selectors ===
   const playbackActions = usePlaybackActions();
@@ -81,8 +80,6 @@ export function PlayerCanvas({
     spread,
     zoomLevel,
     onSpreadComplete,
-    hasNext,
-    onPlaybackStatusChange,
   });
 
   const { width: scaledWidth, height: scaledHeight } =

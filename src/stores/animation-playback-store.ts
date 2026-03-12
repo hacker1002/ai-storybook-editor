@@ -1,14 +1,14 @@
-// playback-store.ts - Zustand store for playback state machine (migrated from usePlayerEngine/playerReducer)
+// animation-playback-store.ts - Zustand store for playback state machine (migrated from usePlayerEngine/playerReducer)
 
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type { AnimationStep, PlayerPhase, PlayMode, ReplayableItem } from '../types';
+import type { AnimationStep, PlayerPhase, PlayMode, ReplayableItem } from '../components/playable-spread-view/types';
 import {
   findNextOnNextStep,
   findPrevOnNextStep,
   findOnClickStepForTarget,
-} from '../player-utils';
+} from '../components/playable-spread-view/player-utils';
 
 // === State & Actions interfaces ===
 
@@ -22,6 +22,8 @@ interface PlaybackState {
   currentStepIndex: number;  // -1 = not started
   pendingClickTargetId: string | null;
   replayableItems: Map<string, ReplayableItem>;
+  activeAnimationOrders: number[];
+  maxActivatedOrder: number; // highest order ever passed to addActiveAnimationOrder (reset per phase)
 }
 
 interface PlaybackActions {
@@ -38,6 +40,9 @@ interface PlaybackActions {
   cancelAndNext: () => void;
   clickLoopReplay: (itemId: string) => { shouldReplay: boolean; step?: AnimationStep };
   resetStore: () => void;
+  setActiveAnimationOrders: (orders: number[]) => void;
+  addActiveAnimationOrder: (order: number) => void;
+  removeActiveAnimationOrder: (order: number) => void;
 }
 
 // === Initial state ===
@@ -52,6 +57,8 @@ const INITIAL_STATE: PlaybackState = {
   currentStepIndex: -1,
   pendingClickTargetId: null,
   replayableItems: new Map(),
+  activeAnimationOrders: [],
+  maxActivatedOrder: -1,
 };
 
 // === Store creation ===
@@ -96,6 +103,8 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             currentStepIndex: -1,
             pendingClickTargetId: null,
             replayableItems,
+            activeAnimationOrders: [],
+            maxActivatedOrder: -1,
           });
           return;
         }
@@ -108,6 +117,8 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             currentStepIndex: 0,
             pendingClickTargetId: null,
             replayableItems,
+            activeAnimationOrders: [],
+            maxActivatedOrder: -1,
           });
           return;
         }
@@ -120,6 +131,8 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             currentStepIndex: -1,
             pendingClickTargetId: steps[0].targetId ?? null,
             replayableItems,
+            activeAnimationOrders: [],
+            maxActivatedOrder: -1,
           });
           return;
         }
@@ -131,6 +144,8 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           currentStepIndex: -1,
           pendingClickTargetId: null,
           replayableItems,
+          activeAnimationOrders: [],
+          maxActivatedOrder: -1,
         });
       },
 
@@ -143,7 +158,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         // From idle, awaiting_next, or awaiting_click → find next on_next step
         const nextIdx = findNextOnNextStep(steps, currentStepIndex + 1);
         if (nextIdx >= 0) {
-          set({ phase: 'playing', currentStepIndex: nextIdx, pendingClickTargetId: null });
+          set({ phase: 'playing', currentStepIndex: nextIdx, pendingClickTargetId: null, maxActivatedOrder: -1 });
           return;
         }
 
@@ -160,7 +175,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
         const prevIdx = findPrevOnNextStep(steps, currentStepIndex);
         if (prevIdx >= 0) {
-          set({ phase: 'playing', currentStepIndex: prevIdx, pendingClickTargetId: null });
+          set({ phase: 'playing', currentStepIndex: prevIdx, pendingClickTargetId: null, maxActivatedOrder: -1 });
         }
         // No previous on_next step found — stay
       },
@@ -173,7 +188,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
         const clickIdx = findOnClickStepForTarget(steps, currentStepIndex, itemId);
         if (clickIdx >= 0) {
-          set({ phase: 'playing', currentStepIndex: clickIdx, pendingClickTargetId: null });
+          set({ phase: 'playing', currentStepIndex: clickIdx, pendingClickTargetId: null, maxActivatedOrder: -1 });
         }
         // Wrong target — ignore
       },
@@ -216,6 +231,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             phase: 'playing',
             currentStepIndex: nextIdx,
             replayableItems: newReplayableItems,
+            maxActivatedOrder: -1,
           });
           return;
         }
@@ -250,7 +266,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
         const nextStep = steps[nextIdx];
         if (nextStep.triggerType === 'auto') {
-          set({ phase: 'playing', currentStepIndex: nextIdx });
+          set({ phase: 'playing', currentStepIndex: nextIdx, maxActivatedOrder: -1 });
           return;
         }
         if (nextStep.triggerType === 'on_click') {
@@ -291,7 +307,33 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           ...INITIAL_STATE,
           isPlaying: false,
           replayableItems: new Map(),
+          activeAnimationOrders: [],
+          maxActivatedOrder: -1,
         }),
+
+      // ── ACTIVE / PENDING ANIMATION ORDERS — for sidebar highlight ─────────
+
+      setActiveAnimationOrders: (orders) => set({
+        activeAnimationOrders: orders,
+        ...(orders.length === 0 ? {} : { maxActivatedOrder: Math.max(...orders) }),
+      }),
+
+      addActiveAnimationOrder: (order) => {
+        const current = get().activeAnimationOrders;
+        if (current.includes(order)) return;
+        set({
+          activeAnimationOrders: [...current, order],
+          maxActivatedOrder: Math.max(get().maxActivatedOrder, order),
+        });
+      },
+
+      removeActiveAnimationOrder: (order) => {
+        const current = get().activeAnimationOrders;
+        const filtered = current.filter((o) => o !== order);
+        if (filtered.length !== current.length) {
+          set({ activeAnimationOrders: filtered });
+        }
+      },
     })),
     { name: 'playback-store' }
   )
@@ -312,6 +354,9 @@ export const useCurrentStep = () =>
   usePlaybackStore((s) =>
     s.currentStepIndex >= 0 ? s.steps[s.currentStepIndex] ?? null : null
   );
+
+export const useActiveAnimationOrders = () => usePlaybackStore((s) => s.activeAnimationOrders);
+export const useMaxActivatedOrder = () => usePlaybackStore((s) => s.maxActivatedOrder);
 
 export const usePlaybackActions = () =>
   usePlaybackStore(

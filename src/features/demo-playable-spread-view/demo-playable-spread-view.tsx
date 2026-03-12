@@ -8,7 +8,6 @@ import {
   type PlayableSpread,
   type ItemType,
   type AssetSwapParams,
-  type PlaybackStatus,
 } from "@/components/playable-spread-view";
 import { AnimationEditorSidebar } from '@/features/editor/components/animations-creative-space';
 import { useDemoAnimationState } from './use-demo-animation-state';
@@ -96,14 +95,6 @@ export function DemoPlayableSpreadView() {
     selectedSpreadId,
     setSpreads,
   });
-
-  // Playback status (for sidebar highlight of currently playing & pending-next animations)
-  const [playingAnimationIndices, setPlayingAnimationIndices] = useState<number[]>([]);
-  const [pendingNextAnimationIndices, setPendingNextAnimationIndices] = useState<number[]>([]);
-  const handlePlaybackStatusChange = useCallback((status: PlaybackStatus) => {
-    setPlayingAnimationIndices(status.activeAnimationIndices);
-    setPendingNextAnimationIndices(status.pendingNextAnimationIndices);
-  }, []);
 
   // Preview state (true when player canvas is active — disables sidebar editing)
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -336,8 +327,6 @@ export function DemoPlayableSpreadView() {
               onDeleteAnimation={animState.handleDeleteAnimation}
               onReorderAnimation={animState.handleReorderAnimation}
               onItemSelect={handleItemSelect}
-              playingAnimationIndices={playingAnimationIndices}
-              pendingNextAnimationIndices={pendingNextAnimationIndices}
               isPlayerMode={operationMode === 'player' || isPreviewing}
             />
           )}
@@ -353,7 +342,6 @@ export function DemoPlayableSpreadView() {
               onAssetSwap={handleAssetSwap}
               onTextChange={handleTextChange}
               onSpreadSelect={handleSpreadSelect}
-              onPlaybackStatusChange={handlePlaybackStatusChange}
               onPreview={handlePreview}
               onStopPreview={handleStopPreview}
             />

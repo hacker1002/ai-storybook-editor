@@ -22,6 +22,10 @@ interface TweenOptions {
   containerHeight?: number;
   /** Item's original geometry position (%) — needed for Lines/Arcs delta calculation */
   itemGeometry?: { x: number; y: number };
+  /** Called when any tween in this animation starts — used for sidebar highlight */
+  onTweenStart?: () => void;
+  /** Called when any tween in this animation completes — used to remove from active list */
+  onTweenComplete?: () => void;
 }
 
 /**
@@ -422,10 +426,12 @@ export function addTweenToTimeline(
     child.eventCallback("onStart", () => {
       console.log(`${prefix} → START`);
       prevOnStart?.();
+      options?.onTweenStart?.();
     });
     child.eventCallback("onComplete", () => {
       console.log(`${prefix} → END`);
       prevOnComplete?.();
+      options?.onTweenComplete?.();
     });
   }
 }
