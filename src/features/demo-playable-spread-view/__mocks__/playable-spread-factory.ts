@@ -6,6 +6,9 @@ import type {
 import type {
   SpreadAnimation,
   SpreadItemMediaType,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
 } from '@/components/shared';
 import type {
   PageData,
@@ -14,7 +17,7 @@ import type {
   Geometry,
   Typography,
 } from '@/components/canvas-spread-view/types';
-import { ANIMATION_PRESETS } from '@/components/playable-spread-view/constants';
+import { ANIMATION_PRESETS, EFFECT_TYPE } from '@/components/playable-spread-view/constants';
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {
@@ -79,6 +82,31 @@ const IMAGE_SIZE_RANGES: Record<SpreadItemMediaType, { min: number; max: number 
   other: { min: 15, max: 30 },
 };
 
+// Shape position templates (decorative elements scattered around canvas)
+const SHAPE_POSITIONS: Geometry[] = [
+  { x: 70, y: 5, w: 20, h: 15 },
+  { x: 5, y: 40, w: 25, h: 20 },
+  { x: 60, y: 75, w: 18, h: 12 },
+  { x: 35, y: 10, w: 22, h: 18 },
+  { x: 80, y: 45, w: 15, h: 10 },
+];
+
+const SHAPE_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'];
+
+// Video position templates (center-ish, like character/prop)
+const VIDEO_POSITIONS: Geometry[] = [
+  { x: 55, y: 20, w: 28, h: 21 },
+  { x: 15, y: 30, w: 30, h: 22 },
+  { x: 40, y: 15, w: 25, h: 19 },
+];
+
+// Audio position templates (bottom area, small icon-like)
+const AUDIO_POSITIONS: Geometry[] = [
+  { x: 5, y: 88, w: 10, h: 7 },
+  { x: 20, y: 85, w: 8, h: 6 },
+  { x: 85, y: 90, w: 10, h: 7 },
+];
+
 // Z-Index mapping
 const Z_INDEX_BY_TYPE: Record<SpreadItemMediaType, number> = {
   background: 50,
@@ -139,6 +167,42 @@ function randomEmphasis(): EmphasisPreset {
   return EMPHASIS_PRESETS[randomBetween(0, EMPHASIS_PRESETS.length - 1)];
 }
 
+// Video entrance: exclude zoomIn (effect 6 not in ALLOWED_EFFECTS_BY_TARGET.video)
+const VIDEO_ENTRANCE_PRESETS: EntrancePreset[] = [
+  'appear', 'fadeIn', 'flyInLeft', 'flyInRight', 'flyInTop', 'flyInBottom',
+  'floatInUp', 'floatInDown', 'floatInLeft',
+];
+
+// Video/shape exit: exclude zoom-based exits for safety
+const MEDIA_EXIT_PRESETS: ExitPreset[] = [
+  'disappear', 'fadeOut', 'flyOutRight', 'flyOutLeft', 'flyOutTop', 'floatOutUp', 'floatOutDown',
+];
+
+function randomVideoEntrance(): EntrancePreset {
+  return VIDEO_ENTRANCE_PRESETS[randomBetween(0, VIDEO_ENTRANCE_PRESETS.length - 1)];
+}
+
+function randomMediaExit(): ExitPreset {
+  return MEDIA_EXIT_PRESETS[randomBetween(0, MEDIA_EXIT_PRESETS.length - 1)];
+}
+
+/** Create a PLAY animation directly (no preset lookup — ANIMATION_PRESETS has no 'play' key) */
+function createPlayAnimation(
+  order: number,
+  targetId: string,
+  targetType: SpreadAnimation['target']['type'],
+  triggerType: SpreadAnimation['trigger_type'] = 'after_previous',
+  duration = 5000
+): SpreadAnimation {
+  return {
+    order,
+    type: 0,
+    target: { id: targetId, type: targetType },
+    trigger_type: triggerType,
+    effect: { type: EFFECT_TYPE.PLAY, duration },
+  };
+}
+
 /** Create a SpreadAnimation from a preset key */
 function createAnimation(
   order: number,
@@ -173,7 +237,10 @@ function createAnimation(
  */
 function generateSpreadAnimations(
   images: SpreadImage[],
-  textboxes: SpreadTextbox[]
+  textboxes: SpreadTextbox[],
+  shapes: SpreadShape[] = [],
+  videos: SpreadVideo[] = [],
+  audios: SpreadAudio[] = []
 ): SpreadAnimation[] {
   const animations: SpreadAnimation[] = [];
   let order = 0;
@@ -218,6 +285,29 @@ function generateSpreadAnimations(
     ));
   });
 
+  // ── on_next: shapes entrance (entrance only, no emphasis — decorative) ──
+  shapes.forEach((shape, i) => {
+    animations.push(createAnimation(
+      order++, shape.id, 'shape', randomEntrance(),
+      i === 0 ? 'on_next' : 'with_previous'
+    ));
+  });
+
+  // ── on_next: videos entrance (exclude zoomIn) + PLAY after entrance ──
+  videos.forEach((video, i) => {
+    animations.push(createAnimation(
+      order++, video.id, 'video', randomVideoEntrance(),
+      i === 0 ? 'on_next' : 'with_previous'
+    ));
+    // PLAY runs after entrance completes — video only plays when 100% visible
+    animations.push(createPlayAnimation(order++, video.id, 'video', 'after_previous'));
+  });
+
+  // ── after_previous: audios PLAY only (no entrance/exit — small UI icon) ──
+  audios.forEach((audio) => {
+    animations.push(createPlayAnimation(order++, audio.id, 'audio', 'after_previous'));
+  });
+
   // ── on_click: emphasis on characters (spin/grow/shrink/teeter/transparency) ──
   characterImages.forEach((char, i) => {
     const preset = randomEmphasis();
@@ -259,6 +349,22 @@ function generateSpreadAnimations(
   characterImages.slice(1).forEach((char, i) => {
     animations.push(createAnimation(
       order++, char.id, 'image', randomExit(),
+      i === 0 ? 'on_next' : 'with_previous'
+    ));
+  });
+
+  // ── on_next: shapes exit ──
+  shapes.forEach((shape, i) => {
+    animations.push(createAnimation(
+      order++, shape.id, 'shape', randomMediaExit(),
+      i === 0 ? 'on_next' : 'with_previous'
+    ));
+  });
+
+  // ── on_next: videos exit ──
+  videos.forEach((video, i) => {
+    animations.push(createAnimation(
+      order++, video.id, 'video', randomMediaExit(),
       i === 0 ? 'on_next' : 'with_previous'
     ));
   });
@@ -433,18 +539,75 @@ function createMockImage(
   };
 }
 
+// === Shape / Video / Audio Mock Creators ===
+
+function createMockShape(overrides: Partial<SpreadShape> = {}): SpreadShape {
+  const pos = SHAPE_POSITIONS[randomBetween(0, SHAPE_POSITIONS.length - 1)];
+  const color = SHAPE_COLORS[randomBetween(0, SHAPE_COLORS.length - 1)];
+  return {
+    id: generateUUID(),
+    type: 'rectangle',
+    title: `Shape ${randomBetween(1, 100)}`,
+    geometry: clampGeometryToBounds({ ...pos }),
+    fill: { is_filled: true, color, opacity: randomBetween(70, 100) / 100 },
+    outline: { color: '#333333', width: randomBetween(1, 3), radius: randomBetween(0, 8), type: 0 },
+    player_visible: true,
+    editor_visible: true,
+    ...overrides,
+  };
+}
+
+function createMockVideo(overrides: Partial<SpreadVideo> = {}): SpreadVideo {
+  const pos = VIDEO_POSITIONS[randomBetween(0, VIDEO_POSITIONS.length - 1)];
+  return {
+    id: generateUUID(),
+    title: `Video ${randomBetween(1, 100)}`,
+    geometry: clampGeometryToBounds({ ...pos }),
+    'z-index': 200,
+    player_visible: true,
+    editor_visible: true,
+    name: `video_clip_${randomBetween(1, 20)}`,
+    type: 'prop',
+    media_url: 'https://www.w3schools.com/tags/mov_bbb.mp4',
+    ...overrides,
+  };
+}
+
+function createMockAudio(overrides: Partial<SpreadAudio> = {}): SpreadAudio {
+  const pos = AUDIO_POSITIONS[randomBetween(0, AUDIO_POSITIONS.length - 1)];
+  return {
+    id: generateUUID(),
+    title: `Audio ${randomBetween(1, 100)}`,
+    geometry: clampGeometryToBounds({ ...pos }),
+    'z-index': 300,
+    player_visible: true,
+    editor_visible: true,
+    name: `audio_track_${randomBetween(1, 10)}`,
+    type: 'other',
+    media_url: 'https://commondatastorage.googleapis.com/codeskulptor-assets/Epoq-Lepidoptera.ogg',
+    ...overrides,
+  };
+}
+
 // === Factory Options ===
 export interface CreatePlayableSpreadOptions {
   spreadCount: number;
   textboxCount: number;
   imageCount: number;
+  shapeCount: number;
+  videoCount: number;
+  audioCount: number;
   language: 'en_US' | 'vi_VN';
   isDPS?: boolean;
 }
 
 // === Create Multiple Playable Spreads ===
 export function createPlayableSpreads(options: CreatePlayableSpreadOptions): PlayableSpread[] {
-  const { spreadCount, textboxCount, imageCount, language, isDPS = true } = options;
+  const {
+    spreadCount, textboxCount, imageCount,
+    shapeCount, videoCount, audioCount,
+    language, isDPS = true,
+  } = options;
   resetGeometryIndices();
 
   return Array.from({ length: spreadCount }, (_, spreadIndex) => {
@@ -458,18 +621,29 @@ export function createPlayableSpreads(options: CreatePlayableSpreadOptions): Pla
     const textboxes: SpreadTextbox[] = Array.from({ length: textboxCount }, () =>
       createMockTextbox(language)
     );
-
     const images: SpreadImage[] = Array.from({ length: imageCount }, () =>
       createMockImage({}, isDPS)
     );
+    const shapes: SpreadShape[] = Array.from({ length: shapeCount }, () =>
+      createMockShape()
+    );
+    const videos: SpreadVideo[] = Array.from({ length: videoCount }, () =>
+      createMockVideo()
+    );
+    const audios: SpreadAudio[] = Array.from({ length: audioCount }, () =>
+      createMockAudio()
+    );
 
-    const animations = generateSpreadAnimations(images, textboxes);
+    const animations = generateSpreadAnimations(images, textboxes, shapes, videos, audios);
 
     const spread: PlayableSpread = {
       id: generateUUID(),
       pages,
       images,
       textboxes,
+      shapes,
+      videos,
+      audios,
       animations,
       manuscript: SAMPLE_TEXTS[language]?.[spreadIndex % 6] || '',
     };

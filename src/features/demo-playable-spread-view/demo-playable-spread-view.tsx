@@ -42,6 +42,9 @@ interface MockOptions {
   spreadCount: number;
   textboxCount: number;
   imageCount: number;
+  shapeCount: number;
+  videoCount: number;
+  audioCount: number;
   language: "en_US" | "vi_VN";
   isDPS: boolean;
 }
@@ -50,6 +53,9 @@ const DEFAULT_MOCK_OPTIONS: MockOptions = {
   spreadCount: 8,
   textboxCount: 1,
   imageCount: 3,
+  shapeCount: 1,
+  videoCount: 1,
+  audioCount: 1,
   language: "en_US",
   isDPS: true,
 };
@@ -69,6 +75,9 @@ export function DemoPlayableSpreadView() {
       spreadCount: opts.spreadCount,
       textboxCount: opts.textboxCount,
       imageCount: opts.imageCount,
+      shapeCount: opts.shapeCount,
+      videoCount: opts.videoCount,
+      audioCount: opts.audioCount,
       language: opts.language,
       isDPS: opts.isDPS,
     };
@@ -267,6 +276,54 @@ export function DemoPlayableSpreadView() {
                           }
                           min={0}
                           max={5}
+                          step={1}
+                        />
+                      </div>
+
+                      {/* Shape count */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">
+                          Shapes: {mockOptions.shapeCount}
+                        </Label>
+                        <Slider
+                          value={[mockOptions.shapeCount]}
+                          onValueChange={([v]) =>
+                            updateMockOption("shapeCount", v)
+                          }
+                          min={0}
+                          max={3}
+                          step={1}
+                        />
+                      </div>
+
+                      {/* Video count */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">
+                          Videos: {mockOptions.videoCount}
+                        </Label>
+                        <Slider
+                          value={[mockOptions.videoCount]}
+                          onValueChange={([v]) =>
+                            updateMockOption("videoCount", v)
+                          }
+                          min={0}
+                          max={3}
+                          step={1}
+                        />
+                      </div>
+
+                      {/* Audio count */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">
+                          Audios: {mockOptions.audioCount}
+                        </Label>
+                        <Slider
+                          value={[mockOptions.audioCount]}
+                          onValueChange={([v]) =>
+                            updateMockOption("audioCount", v)
+                          }
+                          min={0}
+                          max={3}
                           step={1}
                         />
                       </div>
