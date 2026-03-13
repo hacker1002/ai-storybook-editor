@@ -12,7 +12,7 @@ import {
   type Fill,
   type Outline,
 } from '../shared';
-import { EditableImage, EditableShape, EditableVideo, EditableAudio } from '../canvas-spread-view';
+import { EditableImage, EditableShape, EditableVideo, EditableAudio, EditableQuiz } from '../canvas-spread-view';
 import { PageItem } from '../canvas-spread-view/page-item';
 import { SelectionOverlay } from './selection-overlay';
 import type { ItemType, AnimationEditorCanvasProps } from './types';
@@ -70,8 +70,9 @@ export function AnimationEditorCanvas({
       geometry = spread.shapes?.find((s) => s.id === externalItemId)?.geometry ?? null;
     } else if (externalItemType === 'video') {
       geometry = spread.videos?.find((v) => v.id === externalItemId)?.geometry ?? null;
-    } else if (externalItemType === 'audio') {
-      geometry = spread.audios?.find((a) => a.id === externalItemId)?.geometry ?? null;
+    } else if (externalItemType === 'audio' || externalItemType === 'quiz') {
+      // Audio/quiz use fixed-size icons — selection handled by the component itself
+      geometry = null;
     }
     setSelectedGeometry(geometry);
   }, [externalItemId, externalItemType]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -174,14 +175,21 @@ export function AnimationEditorCanvas({
     onItemSelect('video', videoId);
   }, [spread.videos, onItemSelect]);
 
-  // Audio selection handler
+  // Audio selection handler (no SelectionOverlay — component handles its own selection border)
   const handleAudioSelect = useCallback((audioId: string) => {
-    const audio = spread.audios?.find((a) => a.id === audioId);
     setSelectedItemId(audioId);
     setSelectedItemType('audio');
-    setSelectedGeometry(audio?.geometry ?? null);
+    setSelectedGeometry(null);
     onItemSelect('audio', audioId);
-  }, [spread.audios, onItemSelect]);
+  }, [onItemSelect]);
+
+  // Quiz selection handler (no SelectionOverlay — component handles its own selection border)
+  const handleQuizSelect = useCallback((quizId: string) => {
+    setSelectedItemId(quizId);
+    setSelectedItemType('quiz');
+    setSelectedGeometry(null);
+    onItemSelect('quiz', quizId);
+  }, [onItemSelect]);
 
   // Memoized textboxes with resolved language
   const textboxesWithLang = useMemo(() => {
@@ -283,8 +291,19 @@ export function AnimationEditorCanvas({
             index={index}
             isSelected={selectedItemId === audio.id && selectedItemType === 'audio'}
             isEditable={true}
-            isThumbnail={false}
             onSelect={() => handleAudioSelect(audio.id)}
+          />
+        ))}
+
+        {/* Quizzes (selectable) */}
+        {spread.quizzes?.map((quiz, index) => (
+          <EditableQuiz
+            key={quiz.id}
+            quiz={quiz}
+            index={index}
+            isSelected={selectedItemId === quiz.id && selectedItemType === 'quiz'}
+            isEditable={true}
+            onSelect={() => handleQuizSelect(quiz.id)}
           />
         ))}
 

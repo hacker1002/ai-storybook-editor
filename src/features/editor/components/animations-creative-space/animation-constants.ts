@@ -48,6 +48,7 @@ export const TARGET_ICON_MAP: Record<string, TargetItemIcon> = {
   shape: 'shape',
   video: 'video',
   audio: 'audio',
+  quiz: 'quiz',
 };
 
 export const TRIGGER_TYPE_LABELS: Record<string, string> = {
@@ -67,11 +68,12 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategory, string> = {
 
 // Effect grid filtering per target type
 export const ALLOWED_EFFECTS_BY_TARGET: Record<string, number[]> = {
-  audio: [1],
+  audio: [1, 2, 12],
   video: [1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
   textbox: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
   image: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17],
   shape: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15],
+  quiz: [1],
 };
 
 export const SIDEBAR_WIDTH = 280;

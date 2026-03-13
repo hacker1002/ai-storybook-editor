@@ -45,7 +45,7 @@ export type PlayerAction =
 export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
 export type PlayMode = 'off' | 'semi-auto' | 'auto';
-export type ItemType = 'image' | 'textbox' | 'shape' | 'video' | 'audio';
+export type ItemType = 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz';
 
 // === PlayableSpread ===
 // Extend from BaseSpread, animations is required for playable context

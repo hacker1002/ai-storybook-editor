@@ -18,6 +18,7 @@ export { EditableImage } from './editable-image';
 export { EditableShape } from './editable-shape';
 export { EditableVideo } from './editable-video';
 export { EditableAudio } from './editable-audio';
+export { EditableQuiz } from './editable-quiz';
 export { GenerateImageModal } from './generate-image-modal';
 export { EditableTextbox } from '../shared';
 export { SelectionFrame } from './selection-frame';

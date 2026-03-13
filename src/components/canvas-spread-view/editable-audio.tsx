@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Volume2, Loader2 } from 'lucide-react';
+import { Volume2 } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import type { SpreadAudio } from './types';
 import { COLORS } from './constants';
@@ -12,7 +12,6 @@ interface EditableAudioProps {
   index: number;
   isSelected: boolean;
   isEditable: boolean;
-  isThumbnail?: boolean;
   onSelect: () => void;
 }
 
@@ -21,11 +20,10 @@ export function EditableAudio({
   index,
   isSelected,
   isEditable,
-  isThumbnail = false,
   onSelect,
 }: EditableAudioProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [_isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -56,46 +54,39 @@ export function EditableAudio({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'absolute overflow-hidden',
+        'absolute',
         isEditable && 'cursor-pointer',
         !isSelected && isHovered && 'outline-dashed outline-1',
       )}
       style={{
         left: `${audio.geometry.x}%`,
         top: `${audio.geometry.y}%`,
-        width: `${audio.geometry.w}%`,
-        height: `${audio.geometry.h}%`,
         zIndex: audio['z-index'],
         outlineColor: COLORS.HOVER_OUTLINE,
       }}
     >
       <div
-        className="w-full h-full flex flex-col items-center justify-center gap-1 p-2 border-2 border-dashed"
+        className={cn(
+          'flex items-center justify-center w-8 h-8 rounded-full border-2',
+          isSelected ? 'border-solid' : 'border-dashed',
+        )}
         style={{
           backgroundColor: COLORS.PLACEHOLDER_BG,
-          borderColor: COLORS.PLACEHOLDER_BORDER,
+          borderColor: isSelected ? COLORS.SELECTION : COLORS.PLACEHOLDER_BORDER,
         }}
       >
-        {isLoading && showAudio && (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        )}
-        <Volume2 className="h-5 w-5 text-muted-foreground" />
-        <p
-          className={cn('text-center line-clamp-1 text-xs', !audio.name && 'italic')}
-          style={{ color: COLORS.PLACEHOLDER_TEXT }}
-        >
-          {audio.name || audio.title || 'Audio'}
-        </p>
-        {showAudio && !isThumbnail && (
-          <audio
-            src={audio.media_url}
-            className="w-full max-w-[90%] h-6"
-            preload="metadata"
-            onLoadedData={handleLoadedData}
-            onError={handleError}
-          />
-        )}
+        <Volume2 className="h-4 w-4 text-muted-foreground" />
       </div>
+      {/* Hidden audio element for preload */}
+      {showAudio && (
+        <audio
+          src={audio.media_url}
+          className="hidden"
+          preload="metadata"
+          onLoadedData={handleLoadedData}
+          onError={handleError}
+        />
+      )}
     </div>
   );
 }

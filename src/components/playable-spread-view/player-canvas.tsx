@@ -1,7 +1,7 @@
 // player-canvas.tsx - Animation playback canvas wired to Zustand store + GSAP engine hook
 "use client";
 
-import { useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   EditableTextbox,
   Z_INDEX,
@@ -17,6 +17,7 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
+  EditableQuiz,
 } from "../canvas-spread-view";
 import { PageItem } from "../canvas-spread-view/page-item";
 import type { PlayerCanvasProps, AnimationStep } from "./types";
@@ -36,6 +37,7 @@ import {
   useReplayableItems,
 } from "../../stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
+import { PlayQuizModal } from "./play-quiz-modal";
 
 // === CSS for click-hint-pulse ===
 // IMPORTANT: Apply to the CHILD element (> :first-child), not the wrapper div.
@@ -68,6 +70,13 @@ export function PlayerCanvas({
   const replayableItems = useReplayableItems();
   const steps = usePlaybackStore((s) => s.steps);
 
+  // === Quiz modal state ===
+  const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
+
+  const handleQuizPlay = useCallback((quizId: string) => {
+    setActiveQuizId(quizId);
+  }, []);
+
   // === GSAP engine hook ===
   const {
     spreadContainerRef,
@@ -76,11 +85,20 @@ export function PlayerCanvas({
     killTimeline,
     applyStepFinalStates,
     reApplyInitialStates,
+    resumeTimeline,
   } = usePlayerGsapEngine({
     spread,
     zoomLevel,
     onSpreadComplete,
+    onQuizPlay: handleQuizPlay,
   });
+
+  // Quiz modal close: dismiss modal then resume GSAP timeline
+  const handleQuizModalClose = useCallback((_completed: boolean) => {
+    setActiveQuizId(null);
+    // Resume on next tick so modal unmounts first
+    setTimeout(() => resumeTimeline(), 0);
+  }, [resumeTimeline]);
 
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(zoomLevel);
@@ -94,6 +112,7 @@ export function PlayerCanvas({
 
   // 2. Reset steps on spread change & ensure playback starts
   useEffect(() => {
+    setActiveQuizId(null); // Clear any open quiz modal from previous spread
     const newSteps = buildAnimationSteps(spread.animations);
     playbackActions.reset(newSteps);
     playbackActions.play();
@@ -140,6 +159,8 @@ export function PlayerCanvas({
 
   const handleNext = useCallback(() => {
     if (playMode !== "semi-auto") return;
+    // Dismiss quiz modal if open before skipping
+    if (activeQuizId) setActiveQuizId(null);
     if (phase === "playing") {
       const currentStep = steps[currentStepIndex];
       if (currentStep?.mustComplete) return;
@@ -164,6 +185,7 @@ export function PlayerCanvas({
     steps,
     currentStepIndex,
     hasNext,
+    activeQuizId,
     killTimeline,
     applyStepFinalStates,
     playbackActions,
@@ -172,6 +194,8 @@ export function PlayerCanvas({
 
   const handleBack = useCallback(() => {
     if (playMode !== "semi-auto") return;
+    // Dismiss quiz modal if open before going back
+    if (activeQuizId) setActiveQuizId(null);
     // No previous on_next step exists → skip to previous spread
     // Handles: step 0, before start, or first interactive step preceded only by 'auto' steps
     const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
@@ -195,6 +219,7 @@ export function PlayerCanvas({
     hasPrevious,
     phase,
     steps,
+    activeQuizId,
     killTimeline,
     reApplyInitialStates,
     playbackActions,
@@ -422,7 +447,29 @@ export function PlayerCanvas({
                 index={index}
                 isSelected={false}
                 isEditable={false}
-                isThumbnail={false}
+                onSelect={() => {}}
+              />
+            </div>
+          );
+        })}
+
+        {/* Quizzes */}
+        {spread.quizzes?.map((quiz, index) => {
+          if (quiz.player_visible === false) return null;
+          return (
+            <div
+              key={quiz.id}
+              ref={registerRef(quiz.id)}
+              className={`${getPointerClasses(quiz.id)} ${getHighlightClass(
+                quiz.id
+              )}`}
+              onClickCapture={() => handleItemClick(quiz.id)}
+            >
+              <EditableQuiz
+                quiz={quiz}
+                index={index}
+                isSelected={false}
+                isEditable={false}
                 onSelect={() => {}}
               />
             </div>
@@ -470,6 +517,21 @@ export function PlayerCanvas({
         canNext={canGoNext}
         canBack={canGoBack}
       />
+
+      {/* Quiz modal */}
+      {activeQuizId && (() => {
+        const activeQuiz = spread.quizzes?.find((q) => q.id === activeQuizId);
+        if (!activeQuiz) return null;
+        // Derive language key from first textbox (same language as displayed content)
+        const langKey = spread.textboxes?.[0] ? getFirstTextboxKey(spread.textboxes[0]) : null;
+        return (
+          <PlayQuizModal
+            quiz={activeQuiz}
+            languageKey={langKey || 'en_US'}
+            onClose={handleQuizModalClose}
+          />
+        );
+      })()}
     </div>
   );
 }

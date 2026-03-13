@@ -328,7 +328,6 @@ export function RemixEditorCanvas({
             key={audio.id}
             audio={audio}
             index={index}
-            isThumbnail={false}
             isSelected={false}
             isEditable={false}
             onSelect={() => {}}

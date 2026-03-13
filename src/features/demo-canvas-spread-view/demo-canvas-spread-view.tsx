@@ -525,7 +525,6 @@ export function DemoCanvasSpreadView() {
         index={context.itemIndex}
         isSelected={context.isSelected}
         isEditable={context.isSpreadSelected}
-        isThumbnail={context.isThumbnail}
         onSelect={context.onSelect}
       />
     ),

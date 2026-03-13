@@ -9,7 +9,7 @@ export type { ItemType };
 
 export type EffectCategory = 'play' | 'entrance' | 'emphasis' | 'exit' | 'motion-paths';
 
-export type TargetItemIcon = 'image' | 'audio' | 'video' | 'text' | 'shape';
+export type TargetItemIcon = 'image' | 'audio' | 'video' | 'text' | 'shape' | 'quiz';
 
 export interface ResolvedAnimation {
   animation: SpreadAnimation;

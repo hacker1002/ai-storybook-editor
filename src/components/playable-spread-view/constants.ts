@@ -68,6 +68,7 @@ export const REMIX_STYLES = {
 
 // === Z-Index Constants ===
 export const TEXTBOX_Z_INDEX_BASE = 300;
+export const QUIZ_Z_INDEX_BASE = 350;
 
 // === Animation Trigger Delays (in seconds) ===
 export const TRIGGER_DELAY = {
