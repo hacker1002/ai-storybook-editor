@@ -89,7 +89,6 @@ export function EditableVideo({
             <video
               src={video.media_url}
               className="w-full h-full object-contain"
-              controls={isSelected}
               preload="metadata"
               onLoadedData={handleLoadedData}
               onError={handleError}

@@ -18,6 +18,7 @@ export function SelectionOverlay({ geometry }: SelectionOverlayProps) {
         width: `${geometry.w}%`,
         height: `${geometry.h}%`,
         borderColor: COLORS.SELECTION,
+        zIndex: 9999,
       }}
     />
   );

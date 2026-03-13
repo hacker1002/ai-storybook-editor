@@ -74,19 +74,31 @@ export function usePlayerGsapEngine({
 
   // === Helpers ===
 
+  const pauseAllMedia = useCallback(() => {
+    const container = spreadContainerRef.current;
+    if (!container) return;
+    container.querySelectorAll<HTMLMediaElement>('audio, video').forEach((el) => {
+      if (!el.paused) {
+        el.pause();
+      }
+    });
+  }, []);
+
   const killTimeline = useCallback(() => {
     if (timelineRef.current) {
       timelineRef.current.kill();
       timelineRef.current = null;
     }
-  }, []);
+    pauseAllMedia();
+  }, [pauseAllMedia]);
 
   const killReplayTimeline = useCallback(() => {
     if (replayTimelineRef.current) {
       replayTimelineRef.current.kill();
       replayTimelineRef.current = null;
     }
-  }, []);
+    pauseAllMedia();
+  }, [pauseAllMedia]);
 
   const cancelPendingRaf = useCallback(() => {
     if (pendingRafRef.current !== null) {

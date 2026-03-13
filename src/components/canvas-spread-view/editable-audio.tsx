@@ -89,7 +89,6 @@ export function EditableAudio({
         {showAudio && !isThumbnail && (
           <audio
             src={audio.media_url}
-            controls={isSelected}
             className="w-full max-w-[90%] h-6"
             preload="metadata"
             onLoadedData={handleLoadedData}

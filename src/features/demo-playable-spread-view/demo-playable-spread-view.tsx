@@ -43,7 +43,7 @@ interface MockOptions {
   textboxCount: number;
   imageCount: number;
   shapeCount: number;
-  videoCount: number;
+  videoProbability: number;
   audioCount: number;
   language: "en_US" | "vi_VN";
   isDPS: boolean;
@@ -52,9 +52,9 @@ interface MockOptions {
 const DEFAULT_MOCK_OPTIONS: MockOptions = {
   spreadCount: 8,
   textboxCount: 1,
-  imageCount: 3,
+  imageCount: 2,
   shapeCount: 1,
-  videoCount: 1,
+  videoProbability: 0.5,
   audioCount: 1,
   language: "en_US",
   isDPS: true,
@@ -76,7 +76,7 @@ export function DemoPlayableSpreadView() {
       textboxCount: opts.textboxCount,
       imageCount: opts.imageCount,
       shapeCount: opts.shapeCount,
-      videoCount: opts.videoCount,
+      videoProbability: opts.videoProbability,
       audioCount: opts.audioCount,
       language: opts.language,
       isDPS: opts.isDPS,
@@ -296,19 +296,19 @@ export function DemoPlayableSpreadView() {
                         />
                       </div>
 
-                      {/* Video count */}
+                      {/* Video probability */}
                       <div className="space-y-1.5">
                         <Label className="text-xs">
-                          Videos: {mockOptions.videoCount}
+                          Video: {Math.round(mockOptions.videoProbability * 100)}%
                         </Label>
                         <Slider
-                          value={[mockOptions.videoCount]}
+                          value={[mockOptions.videoProbability]}
                           onValueChange={([v]) =>
-                            updateMockOption("videoCount", v)
+                            updateMockOption("videoProbability", v)
                           }
                           min={0}
-                          max={3}
-                          step={1}
+                          max={1}
+                          step={0.1}
                         />
                       </div>
 

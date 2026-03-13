@@ -70,6 +70,8 @@ export function AnimationEditorCanvas({
       geometry = spread.shapes?.find((s) => s.id === externalItemId)?.geometry ?? null;
     } else if (externalItemType === 'video') {
       geometry = spread.videos?.find((v) => v.id === externalItemId)?.geometry ?? null;
+    } else if (externalItemType === 'audio') {
+      geometry = spread.audios?.find((a) => a.id === externalItemId)?.geometry ?? null;
     }
     setSelectedGeometry(geometry);
   }, [externalItemId, externalItemType]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -172,13 +174,14 @@ export function AnimationEditorCanvas({
     onItemSelect('video', videoId);
   }, [spread.videos, onItemSelect]);
 
-  // Audio selection handler (audios may not have visual geometry)
+  // Audio selection handler
   const handleAudioSelect = useCallback((audioId: string) => {
+    const audio = spread.audios?.find((a) => a.id === audioId);
     setSelectedItemId(audioId);
     setSelectedItemType('audio');
-    setSelectedGeometry(null);
+    setSelectedGeometry(audio?.geometry ?? null);
     onItemSelect('audio', audioId);
-  }, [onItemSelect]);
+  }, [spread.audios, onItemSelect]);
 
   // Memoized textboxes with resolved language
   const textboxesWithLang = useMemo(() => {
@@ -255,7 +258,7 @@ export function AnimationEditorCanvas({
             shape={shape}
             index={index}
             isSelected={selectedItemId === shape.id && selectedItemType === 'shape'}
-            isEditable={false}
+            isEditable={true}
             onSelect={() => handleShapeSelect(shape.id)}
           />
         ))}
@@ -267,7 +270,7 @@ export function AnimationEditorCanvas({
             video={video}
             index={index}
             isSelected={selectedItemId === video.id && selectedItemType === 'video'}
-            isEditable={false}
+            isEditable={true}
             onSelect={() => handleVideoSelect(video.id)}
           />
         ))}
@@ -279,7 +282,7 @@ export function AnimationEditorCanvas({
             audio={audio}
             index={index}
             isSelected={selectedItemId === audio.id && selectedItemType === 'audio'}
-            isEditable={false}
+            isEditable={true}
             isThumbnail={false}
             onSelect={() => handleAudioSelect(audio.id)}
           />

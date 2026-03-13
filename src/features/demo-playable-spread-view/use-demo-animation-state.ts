@@ -35,14 +35,14 @@ function buildItemsMap(spread: PlayableSpread | undefined): ItemsMap {
   for (const tb of spread.textboxes ?? []) {
     map.set(tb.id, { title: tb.title ?? tb.id, type: 'textbox' });
   }
-  for (const sh of (spread as PlayableSpread & { shapes?: { id: string }[] }).shapes ?? []) {
-    map.set(sh.id, { title: sh.id, type: 'shape' });
+  for (const sh of (spread as PlayableSpread & { shapes?: { id: string; title?: string }[] }).shapes ?? []) {
+    map.set(sh.id, { title: sh.title ?? sh.id, type: 'shape' });
   }
-  for (const vid of (spread as PlayableSpread & { videos?: { id: string }[] }).videos ?? []) {
-    map.set(vid.id, { title: vid.id, type: 'video' });
+  for (const vid of (spread as PlayableSpread & { videos?: { id: string; title?: string }[] }).videos ?? []) {
+    map.set(vid.id, { title: vid.title ?? vid.id, type: 'video' });
   }
-  for (const aud of (spread as PlayableSpread & { audios?: { id: string }[] }).audios ?? []) {
-    map.set(aud.id, { title: aud.id, type: 'audio' });
+  for (const aud of (spread as PlayableSpread & { audios?: { id: string; title?: string }[] }).audios ?? []) {
+    map.set(aud.id, { title: aud.title ?? aud.id, type: 'audio' });
   }
 
   return map;
