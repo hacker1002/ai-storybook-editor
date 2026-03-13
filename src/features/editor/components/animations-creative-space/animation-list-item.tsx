@@ -13,6 +13,7 @@ import {
   Volume2,
   Film,
   Square,
+  CircleHelp,
   Star,
   Hand,
   ArrowRight,
@@ -66,6 +67,8 @@ function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
       );
     case "shape":
       return <Square className={cls} />;
+    case "quiz":
+      return <CircleHelp className={cls} />;
   }
 }
 

@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import type { PlayableSpread } from '@/components/playable-spread-view/types';
+import type { SpreadQuizContent } from '@/components/shared/types';
 import type {
   SpreadAnimation,
   AnimationFilterState,
@@ -43,6 +44,20 @@ function buildItemsMap(spread: PlayableSpread | undefined): ItemsMap {
   }
   for (const aud of (spread as PlayableSpread & { audios?: { id: string; title?: string }[] }).audios ?? []) {
     map.set(aud.id, { title: aud.title ?? aud.id, type: 'audio' });
+  }
+  for (const quiz of spread.quizzes ?? []) {
+    // Resolve quiz title from first language key content
+    const reserved = new Set(['id', 'geometry', 'z-index', 'player_visible', 'editor_visible', 'options']);
+    let quizTitle = quiz.id;
+    for (const key of Object.keys(quiz)) {
+      if (reserved.has(key)) continue;
+      const content = quiz[key] as SpreadQuizContent | undefined;
+      if (content?.title) {
+        quizTitle = content.title.length > 20 ? content.title.slice(0, 20) + '…' : content.title;
+        break;
+      }
+    }
+    map.set(quiz.id, { title: quizTitle, type: 'quiz' });
   }
 
   return map;

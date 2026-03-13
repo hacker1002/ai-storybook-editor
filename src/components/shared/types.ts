@@ -104,6 +104,35 @@ export interface SpreadAudio {
   media_url?: string;
 }
 
+// === Quiz Option ===
+export interface SpreadQuizOptionContent {
+  text?: string;
+  audio_url?: string;
+}
+
+export interface SpreadQuizOption {
+  image_url?: string;
+  is_answer: boolean;
+  [languageKey: string]: SpreadQuizOptionContent | string | boolean | undefined;
+}
+
+// === Spread Quiz Content (per language) ===
+export interface SpreadQuizContent {
+  title: string;
+  audio_url?: string;
+}
+
+// === Spread Quiz ===
+export interface SpreadQuiz {
+  id: string;
+  geometry: Geometry;
+  "z-index": number;
+  player_visible: boolean;
+  editor_visible: boolean;
+  options: SpreadQuizOption[];
+  [languageKey: string]: SpreadQuizContent | SpreadQuizOption[] | Geometry | number | boolean | string | undefined;
+}
+
 // === Page Types ===
 export interface PageData {
   number: string | number;
@@ -167,7 +196,7 @@ export interface SpreadAnimation {
   group?: string;
   target: {
     id: string;
-    type: "textbox" | "image" | "video" | "audio" | "shape";
+    type: "textbox" | "image" | "video" | "audio" | "shape" | "quiz";
   };
   trigger_type: "on_click" | "on_next" | "with_previous" | "after_previous";
   click_loop?: number;
@@ -192,6 +221,7 @@ export interface BaseSpread {
   shapes?: SpreadShape[];
   videos?: SpreadVideo[];
   audios?: SpreadAudio[];
+  quizzes?: SpreadQuiz[];
   animations?: SpreadAnimation[];
   manuscript?: string;
   tiny_sketch_media_url?: string;

@@ -4,7 +4,7 @@
 import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import gsap from 'gsap';
 import type { AnimationStep, PlayableSpread } from '../types';
-import { TRIGGER_DELAY } from '../constants';
+import { TRIGGER_DELAY, EFFECT_TYPE } from '../constants';
 import {
   usePlaybackStore,
   usePlayerPhase,
@@ -29,6 +29,7 @@ export interface UsePlayerGsapEngineParams {
   spread: PlayableSpread;
   zoomLevel: number;
   onSpreadComplete: (spreadId: string) => void;
+  onQuizPlay?: (quizId: string) => void;
 }
 
 export interface UsePlayerGsapEngineReturn {
@@ -38,6 +39,7 @@ export interface UsePlayerGsapEngineReturn {
   killTimeline: () => void;
   applyStepFinalStates: (step: AnimationStep) => void;
   reApplyInitialStates: (fromStepIndex: number) => void;
+  resumeTimeline: () => void;
 }
 
 // === Hook Implementation ===
@@ -51,6 +53,7 @@ export function usePlayerGsapEngine({
   spread,
   zoomLevel,
   onSpreadComplete,
+  onQuizPlay,
 }: UsePlayerGsapEngineParams): UsePlayerGsapEngineReturn {
   // === Store Subscriptions ===
   const phase = usePlayerPhase();
@@ -138,10 +141,11 @@ export function usePlayerGsapEngine({
         ...(spread.shapes || []),
         ...(spread.videos || []),
         ...(spread.audios || []),
+        ...(spread.quizzes || []),
       ];
       return items.find((i) => i.id === targetId)?.geometry;
     },
-    [spread.images, spread.shapes, spread.videos, spread.audios]
+    [spread.images, spread.shapes, spread.videos, spread.audios, spread.quizzes]
   );
 
   // === Timeline Builders ===
@@ -157,6 +161,17 @@ export function usePlayerGsapEngine({
       const dims = getContainerDims();
 
       step.animations.forEach((anim, i) => {
+        // Quiz PLAY: pause timeline and invoke callback instead of addTweenToTimeline
+        if (anim.effect.type === EFFECT_TYPE.PLAY && anim.target.type === 'quiz') {
+          let position: number | string;
+          if (i === 0) position = 0;
+          else if (anim.trigger_type === 'with_previous') position = '<';
+          else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
+          tl.call(() => onQuizPlay?.(anim.target.id), undefined, position);
+          tl.addPause();
+          return;
+        }
+
         const el = elementRefsMap.current.get(anim.target.id);
         if (!el) {
           console.warn(`[usePlayerGsapEngine] Element not found: ${anim.target.id}`);
@@ -186,7 +201,7 @@ export function usePlayerGsapEngine({
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, volume, playbackActions, getContainerDims, findItemGeometry]
+    [killTimeline, volume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -203,6 +218,18 @@ export function usePlayerGsapEngine({
     const animations = [...spread.animations].sort((a, b) => a.order - b.order);
 
     animations.forEach((anim, i) => {
+      // Quiz PLAY: pause timeline and invoke callback (auto mode too)
+      if (anim.effect.type === EFFECT_TYPE.PLAY && anim.target.type === 'quiz') {
+        let position: number | string;
+        if (i === 0) position = 0;
+        else if (anim.trigger_type === 'with_previous') position = '<';
+        else if (anim.trigger_type === 'after_previous') position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
+        else position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
+        tl.call(() => onQuizPlay?.(anim.target.id), undefined, position);
+        tl.addPause();
+        return;
+      }
+
       const el = elementRefsMap.current.get(anim.target.id);
       if (!el) {
         console.warn(`[usePlayerGsapEngine] Element not found: ${anim.target.id}`);
@@ -233,7 +260,7 @@ export function usePlayerGsapEngine({
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, volume, spread.animations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry]);
+  }, [killTimeline, volume, spread.animations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -251,6 +278,16 @@ export function usePlayerGsapEngine({
       const dims = getContainerDims();
 
       step.animations.forEach((anim, i) => {
+        // Quiz PLAY: invoke callback instead of addTweenToTimeline (same as playStep)
+        if (anim.effect.type === EFFECT_TYPE.PLAY && anim.target.type === 'quiz') {
+          let position: number | string;
+          if (i === 0) position = 0;
+          else if (anim.trigger_type === 'with_previous') position = '<';
+          else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
+          replayTl.call(() => onQuizPlay?.(anim.target.id), undefined, position);
+          return;
+        }
+
         const el = elementRefsMap.current.get(anim.target.id);
         if (!el) return;
 
@@ -281,7 +318,7 @@ export function usePlayerGsapEngine({
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, volume, getContainerDims, findItemGeometry]
+    [killReplayTimeline, volume, getContainerDims, findItemGeometry, onQuizPlay]
   );
 
   // === Returned utility functions ===
@@ -482,6 +519,11 @@ export function usePlayerGsapEngine({
     }
   }, [phase]);
 
+  // Resume GSAP timeline after quiz modal closes
+  const resumeTimeline = useCallback(() => {
+    timelineRef.current?.resume();
+  }, []);
+
   // === Return ===
   return {
     spreadContainerRef,
@@ -490,5 +532,6 @@ export function usePlayerGsapEngine({
     killTimeline,
     applyStepFinalStates,
     reApplyInitialStates,
+    resumeTimeline,
   };
 }
