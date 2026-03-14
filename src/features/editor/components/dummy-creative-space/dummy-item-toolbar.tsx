@@ -14,7 +14,7 @@ import type { Geometry } from '@/types/spread-types';
 
 type ToolbarContext<TSpread extends BaseSpread> =
   | { type: 'image'; context: ImageToolbarContext<TSpread>; item: DummyImage }
-  | { type: 'text'; context: TextToolbarContext<TSpread>; item: DummyTextbox };
+  | { type: 'textbox'; context: TextToolbarContext<TSpread>; item: DummyTextbox };
 
 interface DummyItemToolbarProps<TSpread extends BaseSpread> {
   data: ToolbarContext<TSpread>;

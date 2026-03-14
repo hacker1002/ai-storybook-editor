@@ -2,7 +2,7 @@
 // Centralized from components/shared/types.ts
 
 // === Unified Item Type (canvas + playable merged) ===
-export type ItemType = 'image' | 'text' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz';
+export type ItemType = 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz';
 
 // === Geometry Types ===
 export interface Point {

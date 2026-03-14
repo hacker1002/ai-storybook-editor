@@ -254,7 +254,7 @@ export function DemoCanvasSpreadView() {
               }
               break;
 
-            case "text":
+            case "textbox":
               if (action === "update" && itemId !== null && data) {
                 return {
                   ...s,

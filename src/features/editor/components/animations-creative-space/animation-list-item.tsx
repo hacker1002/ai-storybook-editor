@@ -59,7 +59,7 @@ function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
       return <Volume2 className={cls} />;
     case "video":
       return <Film className={cls} />;
-    case "text":
+    case "textbox":
       return (
         <span className="text-[10px] font-bold text-muted-foreground leading-none">
           T

@@ -95,20 +95,20 @@ export function buildTextContext<TSpread extends BaseSpread>(
     onTextChange: (text) => {
       if (!langKey) return;
       onAction({
-        itemType: 'text',
+        itemType: 'textbox',
         action: 'update',
         itemId: textbox.id,
         data: { [langKey]: { ...langContent, text } } as Partial<SpreadTextbox>
       });
     },
     onUpdate: (updates) => onAction({
-      itemType: 'text',
+      itemType: 'textbox',
       action: 'update',
       itemId: textbox.id,
       data: updates
     }),
     onDelete: () => onAction({
-      itemType: 'text',
+      itemType: 'textbox',
       action: 'delete',
       itemId: textbox.id,
       data: null
@@ -153,7 +153,7 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
     onFormatText: (format: Partial<Typography>) => {
       if (!langKey) return;
       onAction({
-        itemType: 'text',
+        itemType: 'textbox',
         action: 'update',
         itemId: textbox.id,
         data: {
@@ -178,7 +178,7 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
       }
 
       onAction({
-        itemType: 'text',
+        itemType: 'textbox',
         action: 'add',
         itemId: null,
         data: clonedItem,

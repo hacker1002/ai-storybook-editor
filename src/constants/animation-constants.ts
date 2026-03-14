@@ -44,7 +44,7 @@ export const EFFECT_OPTIONS_MAP: Record<number, string[]> = {
 
 export const TARGET_ICON_MAP: Record<string, TargetItemIcon> = {
   image: 'image',
-  textbox: 'text',
+  textbox: 'textbox',
   shape: 'shape',
   video: 'video',
   audio: 'audio',

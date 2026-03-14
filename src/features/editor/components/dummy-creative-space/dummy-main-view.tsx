@@ -138,7 +138,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
           }
           break;
 
-        case 'text':
+        case 'textbox':
           if (action === 'add') {
             const newTextbox: DummyTextbox = {
               id: crypto.randomUUID(),
@@ -300,7 +300,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
           };
           handleSpreadItemAction({
             spreadId: context.spreadId,
-            itemType: 'text',
+            itemType: 'textbox',
             action: 'add',
             itemId: null,
             data: cloned,
@@ -308,7 +308,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
         },
       };
 
-      return <DummyItemToolbar data={{ type: 'text', context: contextWithClone, item: textbox }} />;
+      return <DummyItemToolbar data={{ type: 'textbox', context: contextWithClone, item: textbox }} />;
     },
     [dummy, handleSpreadItemAction]
   );

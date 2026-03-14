@@ -41,7 +41,7 @@ export interface SelectedElement {
 }
 
 // === Spread Item Action Types ===
-export type SpreadItemType = 'page' | 'image' | 'text' | 'shape' | 'video' | 'audio';
+export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'audio';
 export type SpreadItemActionType = 'add' | 'update' | 'delete';
 
 export interface SpreadItemActionParams<TData = unknown> {
@@ -73,20 +73,20 @@ export type ImageDeleteAction = SpreadItemActionParams<null> & {
 };
 
 // Textbox actions (itemId: string = UUID)
-export type TextAddAction = SpreadItemActionParams<SpreadTextbox> & {
-  itemType: 'text';
+export type TextboxAddAction = SpreadItemActionParams<SpreadTextbox> & {
+  itemType: 'textbox';
   action: 'add';
   itemId: null;
 };
 
-export type TextUpdateAction = SpreadItemActionParams<Partial<SpreadTextbox>> & {
-  itemType: 'text';
+export type TextboxUpdateAction = SpreadItemActionParams<Partial<SpreadTextbox>> & {
+  itemType: 'textbox';
   action: 'update';
   itemId: string;
 };
 
-export type TextDeleteAction = SpreadItemActionParams<null> & {
-  itemType: 'text';
+export type TextboxDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'textbox';
   action: 'delete';
   itemId: string;
   data: null;
@@ -164,9 +164,9 @@ export type SpreadItemActionUnion =
   | ImageAddAction
   | ImageUpdateAction
   | ImageDeleteAction
-  | TextAddAction
-  | TextUpdateAction
-  | TextDeleteAction
+  | TextboxAddAction
+  | TextboxUpdateAction
+  | TextboxDeleteAction
   | ShapeAddAction
   | ShapeUpdateAction
   | ShapeDeleteAction

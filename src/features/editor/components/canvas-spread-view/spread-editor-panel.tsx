@@ -290,7 +290,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               typography: Typography;
             };
             onSpreadItemAction({
-              itemType: "text",
+              itemType: "textbox",
               action: "update",
               itemId: tb.id,
               data: {
@@ -544,7 +544,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               const textbox = spread.textboxes[selectedElement.index];
               if (textbox?.id) {
                 onSpreadItemAction({
-                  itemType: "text",
+                  itemType: "textbox",
                   action: "delete",
                   itemId: textbox.id,
                   data: null,
