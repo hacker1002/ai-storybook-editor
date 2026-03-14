@@ -13,6 +13,9 @@ import {
 import type { SpreadQuiz, SpreadQuizContent } from '@/types/spread-types';
 import { QuizOptionCard } from './quiz-option-card';
 import { useQuizAudio } from './hooks/use-quiz-audio';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'PlayQuizModal');
 
 type AnswerState = 'idle' | 'correct' | 'wrong';
 
@@ -60,6 +63,7 @@ export function PlayQuizModal({ quiz, languageKey, onClose }: PlayQuizModalProps
     if (answerState !== 'idle') return;
 
     const option = quiz.options[index];
+    log.info('handleOptionSelect', 'option selected', { index, isAnswer: option.is_answer });
     setSelectedIndex(index);
 
     if (option.is_answer) {

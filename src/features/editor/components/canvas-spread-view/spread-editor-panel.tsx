@@ -49,6 +49,9 @@ import type {
   SpreadItemActionUnion,
 } from "@/types/canvas-types";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'SpreadEditorPanel');
 
 // === Props Interface ===
 interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
@@ -193,6 +196,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // === Selection Handlers ===
   const handleElementSelect = useCallback(
     (element: SelectedElement | null) => {
+      log.info('handleElementSelect', 'element selected', { type: element?.type ?? null, index: element?.index ?? null });
       let geometry: Geometry | null = null;
 
       if (element) {
@@ -347,6 +351,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Drag Handlers ===
   const handleDragStart = useCallback(() => {
+    log.debug('handleDragStart', 'drag started');
     const geometry = getSelectedGeometry();
     setState((prev) => ({
       ...prev,

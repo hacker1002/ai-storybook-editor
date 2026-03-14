@@ -18,6 +18,9 @@ import { DummyCreativeSpace } from '../components/dummy-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'EditorPage');
 
 const MOCK_USER_POINTS = { current: 750, total: 1000 };
 
@@ -119,7 +122,7 @@ export function EditorPage() {
   };
 
   const handleLanguageChange = (newLang: Language, prevLang: Language) => {
-    console.log(`Language changed from ${prevLang.code} to ${newLang.code}`);
+    log.info('handleLanguageChange', 'changed', { from: prevLang.code, to: newLang.code });
   };
 
   const handleTitleEdit = async (newTitle: string) => {
@@ -136,7 +139,7 @@ export function EditorPage() {
   };
 
   const handleNotificationClick = () => {
-    console.log('Open notifications');
+    log.info('handleNotificationClick', 'opened');
   };
 
   // Render creative space based on activeCreativeSpace

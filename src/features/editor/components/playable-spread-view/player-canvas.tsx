@@ -41,6 +41,9 @@ import {
 } from "@/stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
 import { PlayQuizModal } from "./play-quiz-modal";
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'PlayerCanvas');
 
 // === CSS for click-hint-pulse ===
 // IMPORTANT: Apply to the CHILD element (> :first-child), not the wrapper div.
@@ -77,6 +80,7 @@ export function PlayerCanvas({
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
 
   const handleQuizPlay = useCallback((quizId: string) => {
+    log.info('handleQuizPlay', 'quiz modal opened', { quizId });
     setActiveQuizId(quizId);
   }, []);
 
@@ -232,6 +236,7 @@ export function PlayerCanvas({
   const handleItemClick = useCallback(
     (itemId: string) => {
       if (playMode !== "semi-auto") return;
+      log.info('handleItemClick', 'item clicked', { itemId, phase, pendingClickTargetId });
       if (pendingClickTargetId === itemId) {
         playbackActions.userClick(itemId);
         return;

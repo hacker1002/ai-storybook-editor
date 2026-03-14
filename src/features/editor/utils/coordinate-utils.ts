@@ -2,6 +2,9 @@
 
 import type { Point, Geometry } from '@/types/spread-types';
 import { CANVAS } from '@/constants/spread-constants';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Util', 'CoordinateUtils');
 
 export function toPixel(percent: number, dimension: number): number {
   return (percent / 100) * dimension;
@@ -19,6 +22,7 @@ export function mouseToCanvasPercent(
   const zoomFactor = zoomLevel / 100;
   const x = ((event.clientX - canvasRect.left) / zoomFactor / canvasRect.width) * 100;
   const y = ((event.clientY - canvasRect.top) / zoomFactor / canvasRect.height) * 100;
+  log.debug('mouseToCanvasPercent', 'computed', { x, y, zoomLevel });
   return { x, y };
 }
 

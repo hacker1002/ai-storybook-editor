@@ -5,6 +5,9 @@ import { useState, useRef, useCallback } from 'react';
 import { cn } from '@/utils/utils';
 import type { SpreadTextboxContent } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'EditableTextbox');
 
 interface EditableTextboxProps {
   textboxContent: SpreadTextboxContent;
@@ -68,10 +71,11 @@ export function EditableTextbox({
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (isSelectable && !isEditing) {
+      log.info('handleClick', 'textbox clicked', { index });
       const rect = e.currentTarget.getBoundingClientRect();
       onSelect(rect);
     }
-  }, [isSelectable, isEditing, onSelect]);
+  }, [isSelectable, isEditing, onSelect, index]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

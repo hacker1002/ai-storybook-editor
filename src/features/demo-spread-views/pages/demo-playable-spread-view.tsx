@@ -12,6 +12,7 @@ import {
 import { AnimationEditorSidebar, PlayerAnimationSidebar } from '@/features/editor/components/animations-creative-space';
 import { useDemoAnimationState } from '../hooks/use-demo-animation-state';
 import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
+import { createLogger } from "@/utils/logger";
 import {
   createPlayableSpreads,
   type CreatePlayableSpreadOptions,
@@ -36,6 +37,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Settings, RefreshCw } from "lucide-react";
+
+const log = createLogger('Demo', 'DemoPlayableSpreadView');
 
 // === Mock Options ===
 interface MockOptions {
@@ -127,16 +130,16 @@ export function DemoPlayableSpreadView() {
 
   // === PlayableSpreadView Handlers ===
   const handleItemSelect = useCallback((itemType: ItemType | null, itemId: string | null) => {
-    console.log("Item selected:", { itemType, itemId });
+    log.debug('handleItemSelect', 'item selected', { itemType, itemId });
     animState.handleItemSelect(itemType, itemId);
   }, [animState.handleItemSelect]);
 
   const handleAssetSwap = useCallback(
     async (params: AssetSwapParams): Promise<void> => {
-      console.log("Asset swap:", params);
+      log.info('handleAssetSwap', 'asset swap started', { targetId: params.targetId, spreadId: params.spreadId });
       // Simulate API delay
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log("Asset swap completed");
+      log.info('handleAssetSwap', 'asset swap completed', { targetId: params.targetId });
     },
     []
   );

@@ -3,6 +3,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { devtools } from 'zustand/middleware';
 import type { Language, PipelineStep } from '@/types/editor';
 import { DEFAULT_LANGUAGE } from '@/constants/editor-constants';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Store', 'EditorSettingsStore');
 
 interface EditorSettingsStore {
   currentLanguage: Language;
@@ -14,13 +17,26 @@ interface EditorSettingsStore {
 
 export const useEditorSettingsStore = create<EditorSettingsStore>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       currentLanguage: DEFAULT_LANGUAGE,
       currentStep: 'manuscript',
 
-      setCurrentLanguage: (language) => set({ currentLanguage: language }),
-      setCurrentStep: (step) => set({ currentStep: step }),
-      resetSettings: (language, step) => set({ currentLanguage: language, currentStep: step }),
+      setCurrentLanguage: (language) => {
+        const prev = get().currentLanguage.code;
+        log.info('setCurrentLanguage', 'transition', { prev, next: language.code });
+        set({ currentLanguage: language });
+      },
+
+      setCurrentStep: (step) => {
+        const prev = get().currentStep;
+        log.info('setCurrentStep', 'transition', { prev, next: step });
+        set({ currentStep: step });
+      },
+
+      resetSettings: (language, step) => {
+        log.info('resetSettings', 'reset', { language: language.code, step });
+        set({ currentLanguage: language, currentStep: step });
+      },
     }),
     { name: 'editor-settings-store' }
   )

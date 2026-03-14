@@ -7,6 +7,9 @@ import {
   calculateFlyOffset,
   calculateFloatOffset,
 } from "./player-initial-states";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger('Editor', 'AnimationTweenBuilders');
 
 // === Default Durations (seconds) ===
 const DEFAULT_ENTRANCE_DURATION = 0.5;
@@ -69,9 +72,7 @@ export function addTweenToTimeline(
         "audio, video"
       ) as HTMLMediaElement | null;
       if (!mediaEl) {
-        console.warn(
-          `[PlayerCanvas] Media element not found for target ${animation.target.id}`
-        );
+        log.warn('addTweenToTimeline', 'media element not found', { targetId: animation.target.id, effectType });
         return;
       }
       const volume = options?.volume ?? 1;
@@ -84,14 +85,10 @@ export function addTweenToTimeline(
             mediaEl.volume = volume;
             if (effect.loop && effect.loop > 0) mediaEl.loop = true;
             mediaEl.play().catch(() => {
-              console.warn(
-                `[PlayerCanvas] Autoplay blocked for ${animation.target.id}`
-              );
+              log.warn('addTweenToTimeline', 'autoplay blocked', { targetId: animation.target.id });
             });
           } catch {
-            console.warn(
-              `[PlayerCanvas] Media play error for ${animation.target.id}`
-            );
+            log.warn('addTweenToTimeline', 'media play error', { targetId: animation.target.id });
           }
         },
         undefined,
@@ -281,9 +278,7 @@ export function addTweenToTimeline(
 
     // ── Read-along (11) — DEFERRED ───────────────────────────────
     case EFFECT_TYPE.READ_ALONG:
-      console.warn(
-        "[PlayerCanvas] Read-along effect not yet implemented (deferred from v1)"
-      );
+      log.warn('addTweenToTimeline', 'read-along not yet implemented', { targetId });
       break;
 
     // ── Disappear (12) ───────────────────────────────────────────
@@ -350,9 +345,7 @@ export function addTweenToTimeline(
       const dur = (effect.duration ?? DEFAULT_MOTION_DURATION * 1000) / 1000;
       const geo = effect.geometry;
       if (!geo) {
-        console.warn(
-          `[PlayerCanvas] Lines effect missing geometry for ${animation.target.id}`
-        );
+        log.warn('addTweenToTimeline', 'lines effect missing geometry', { targetId: animation.target.id });
         return;
       }
       // effect.geometry = absolute target position (%), delta = target - item origin
@@ -382,9 +375,7 @@ export function addTweenToTimeline(
       const dur = (effect.duration ?? DEFAULT_MOTION_DURATION * 1000) / 1000;
       const geo = effect.geometry;
       if (!geo) {
-        console.warn(
-          `[PlayerCanvas] Arcs effect missing geometry for ${animation.target.id}`
-        );
+        log.warn('addTweenToTimeline', 'arcs effect missing geometry', { targetId: animation.target.id });
         return;
       }
       // effect.geometry = absolute target position (%), delta = target - item origin
@@ -411,7 +402,7 @@ export function addTweenToTimeline(
     }
 
     default:
-      console.warn(`[PlayerCanvas] Unknown effect type: ${effectType}`);
+      log.warn('addTweenToTimeline', 'unknown effect type', { effectType });
       break;
   }
 
@@ -419,7 +410,6 @@ export function addTweenToTimeline(
   // GSAP quirk: timeline.set() (zero-duration tweens) may skip onStart via eventCallback().
   // Track with a flag so onComplete can fire onTweenStart as fallback to ensure store updates.
   const newChildren = timeline.getChildren().slice(childCountBefore);
-  const prefix = `[Animation] ${effectName} | target="${targetId}" | trigger="${animation.trigger_type}"`;
   for (const child of newChildren) {
     const prevOnStart = child.eventCallback("onStart") as (() => void) | null;
     const prevOnComplete = child.eventCallback("onComplete") as
@@ -429,7 +419,7 @@ export function addTweenToTimeline(
     let startFired = false;
 
     child.eventCallback("onStart", () => {
-      console.log(`${prefix} → START`);
+      log.debug('addTweenToTimeline', 'tween start', { effectName, targetId, triggerType: animation.trigger_type });
       startFired = true;
       prevOnStart?.();
       options?.onTweenStart?.();
@@ -437,10 +427,10 @@ export function addTweenToTimeline(
 
     child.eventCallback("onComplete", () => {
       if (isInstant && !startFired) {
-        console.log(`${prefix} → START (instant)`);
+        log.debug('addTweenToTimeline', 'tween start (instant)', { effectName, targetId, triggerType: animation.trigger_type });
         options?.onTweenStart?.();
       }
-      console.log(`${prefix} → END`);
+      log.debug('addTweenToTimeline', 'tween end', { effectName, targetId, triggerType: animation.trigger_type });
       prevOnComplete?.();
       options?.onTweenComplete?.();
     });

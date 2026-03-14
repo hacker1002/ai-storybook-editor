@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useDocs, useSnapshotActions } from "@/stores/snapshot-store";
 import { useCurrentBook } from "@/stores/book-store";
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'DocCreativeSpace');
 import {
   generateDoc,
   buildLLMContext,
@@ -43,6 +46,7 @@ export function DocCreativeSpace() {
   ) => {
     const doc = docs[index];
     if (!doc) return;
+    log.info('handleGenerate', 'generating doc', { docIndex: index, docType: doc.type, hasPrompt: !!prompt.trim(), attachmentCount: attachments.length });
 
     setGenerateError(null);
 
@@ -104,6 +108,7 @@ export function DocCreativeSpace() {
     }
 
     if (!result.success || !result.data) {
+      log.error('handleGenerate', 'generation failed', { error: result.error, docIndex: index });
       setGenerateError(result.error || "Generation failed");
       return;
     }

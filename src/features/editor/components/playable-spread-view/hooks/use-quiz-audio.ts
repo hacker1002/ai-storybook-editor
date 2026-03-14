@@ -1,5 +1,8 @@
 // use-quiz-audio.ts - Manages exclusive audio playback for quiz modal + parallel SFX
 import { useRef, useCallback, useEffect } from 'react';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'useQuizAudio');
 
 const SFX_CORRECT_URL = '/audios/sfx-correct.mp3';
 const SFX_WRONG_URL = '/audios/sfx-wrong.mp3';
@@ -39,6 +42,7 @@ export function useQuizAudio() {
   }, []);
 
   const playAudio = useCallback((url: string) => {
+    log.info('playAudio', 'playing audio', { url });
     // Stop current if different or replay if same
     if (audioRef.current) {
       audioRef.current.pause();
@@ -52,7 +56,8 @@ export function useQuizAudio() {
     });
     audioRef.current = audio;
     currentUrlRef.current = url;
-    audio.play().catch(() => {
+    audio.play().catch((err) => {
+      log.error('playAudio', 'playback failed', { error: err, url });
       currentUrlRef.current = null;
     });
   }, []);

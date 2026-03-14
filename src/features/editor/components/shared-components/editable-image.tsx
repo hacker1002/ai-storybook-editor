@@ -6,6 +6,9 @@ import { ImageIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import type { SpreadImage } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'EditableImage');
 
 interface ArtNoteTypography {
   size?: number;
@@ -83,10 +86,11 @@ export function EditableImage({
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (isEditable && !isEditing) {
+      log.info('handleClick', 'image clicked', { imageId: image.id, index });
       const rect = e.currentTarget.getBoundingClientRect();
       onSelect(rect);
     }
-  }, [isEditable, isEditing, onSelect]);
+  }, [isEditable, isEditing, onSelect, image.id, index]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

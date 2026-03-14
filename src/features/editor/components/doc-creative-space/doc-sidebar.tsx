@@ -3,6 +3,9 @@ import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocTabItem } from './doc-tab-item';
 import type { ManuscriptDoc, AttachedFile } from '@/types/editor';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'DocSidebar');
 
 
 interface DocSidebarProps {
@@ -54,6 +57,7 @@ export function DocSidebar({
     const prompt = promptInputs[index] || '';
     const files = attachments[index] || [];
     if (!prompt.trim()) return;
+    log.info('handleGenerate', 'generate requested', { docIndex: index, attachmentCount: files.length });
 
     setGeneratingIndexes((prev) => new Set(prev).add(index));
     try {

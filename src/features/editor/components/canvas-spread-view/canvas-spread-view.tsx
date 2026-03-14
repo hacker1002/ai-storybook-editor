@@ -36,6 +36,7 @@ function saveViewPreferences(prefs: ViewPreferences): void {
   }
 }
 
+import { createLogger } from '@/utils/logger';
 import type {
   BaseSpread,
   ItemType,
@@ -54,6 +55,8 @@ import type {
   OnUpdateSpreadItemFn,
   SpreadItemActionUnion,
 } from '@/types/canvas-types';
+
+const log = createLogger('Editor', 'CanvasSpreadView');
 
 // === Props Interface ===
 interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
@@ -200,6 +203,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   const handleViewModeToggle = useCallback(() => {
     setViewMode((prev) => {
       const newMode = prev === 'edit' ? 'grid' : 'edit';
+      log.info('handleViewModeToggle', 'mode changed', { prev, newMode });
 
       // Auto-select first spread when switching to Edit without selection
       if (newMode === 'edit' && !selectedId && spreads.length > 0) {
@@ -221,6 +225,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   }, []);
 
   const handleSpreadClick = useCallback((spreadId: string) => {
+    log.info('handleSpreadClick', 'spread selected', { spreadId });
     setSelectedId(spreadId);
     onSpreadSelect?.(spreadId);
   }, [onSpreadSelect]);

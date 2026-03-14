@@ -1,6 +1,9 @@
 import type { DocType, AttachedFile } from '@/types/editor';
 import { fileToBase64 } from '../utils/file-utils';
 import { callEdgeFunction } from './edge-function-client';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('API', 'DocApi');
 
 // API attachment format (matches edge function types)
 export interface Attachment {
@@ -66,6 +69,7 @@ export async function generateDoc(
   params: GenerateParams
 ): Promise<GenerateDocResult> {
   const functionName = FUNCTION_MAP[docType];
+  log.info('generateDoc', 'start', { docType, functionName });
   return callEdgeFunction<GenerateDocResult>(functionName, params);
 }
 
@@ -75,6 +79,7 @@ export async function generateDoc(
 export async function prepareAttachments(
   files: AttachedFile[]
 ): Promise<Attachment[]> {
+  log.info('prepareAttachments', 'start', { fileCount: files.length });
   if (!files.length) return [];
 
   return Promise.all(
@@ -95,6 +100,12 @@ export function buildLLMContext(book: {
   era_id?: string | null;
   location_id?: string | null;
 }): LLMContext | null {
+  log.info('buildLLMContext', 'start', {
+    targetAudience: book.target_audience,
+    targetCoreValue: book.target_core_value,
+    formatGenre: book.format_genre,
+    contentGenre: book.content_genre,
+  });
   const { target_audience, target_core_value, format_genre, content_genre } = book;
 
   // Validate required fields
@@ -104,6 +115,12 @@ export function buildLLMContext(book: {
     format_genre == null ||
     content_genre == null
   ) {
+    log.warn('buildLLMContext', 'missing required fields', {
+      hasTargetAudience: target_audience != null,
+      hasTargetCoreValue: target_core_value != null,
+      hasFormatGenre: format_genre != null,
+      hasContentGenre: content_genre != null,
+    });
     return null;
   }
 

@@ -1,5 +1,8 @@
 import { useSnapshotActions, useSnapshotStore } from '@/stores/snapshot-store';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'useDummyActions');
 
 export interface DummyActions {
   addDummy: (dummy: ManuscriptDummy) => void;
@@ -21,6 +24,7 @@ export function useDummyActions(): DummyActions {
     updateDummy: actions.updateDummy,
     deleteDummy: actions.deleteDummy,
     duplicateDummy: (id: string): ManuscriptDummy => {
+      log.info('duplicateDummy', 'duplicating dummy', { dummyId: id });
       const dummy = useSnapshotStore.getState().dummies.find((d) => d.id === id);
       if (!dummy) throw new Error(`Dummy ${id} not found`);
       const newDummy: ManuscriptDummy = {

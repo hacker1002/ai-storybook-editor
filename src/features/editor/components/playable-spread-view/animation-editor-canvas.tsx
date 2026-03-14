@@ -11,6 +11,9 @@ import { PageItem } from '../canvas-spread-view/page-item';
 import { SelectionOverlay } from './selection-overlay';
 import { TEXTBOX_Z_INDEX_BASE } from '@/constants/playable-constants';
 import type { PlayableSpread } from '@/types/playable-types';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'AnimationEditorCanvas');
 
 // === Props Interface ===
 export interface AnimationEditorCanvasProps {
@@ -132,6 +135,7 @@ export function AnimationEditorCanvas({
 
   // Image selection handler
   const handleImageSelect = useCallback((imageId: string) => {
+    log.info('handleImageSelect', 'image selected', { imageId });
     const image = spread.images?.find((img) => img.id === imageId);
     if (!image) return;
 

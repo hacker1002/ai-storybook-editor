@@ -8,6 +8,9 @@ import {
   EditableTextbox,
 } from "@/features/editor/components/shared-components";
 import { useDummyById, useDummyActions } from "./hooks";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger('Editor', 'DummyMainView');
 import { DummyItemToolbar } from "./dummy-item-toolbar";
 import type {
   BaseSpread,
@@ -76,7 +79,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   }, [dummy]);
 
   const handleSpreadSelect = useCallback((spreadId: string) => {
-    console.log("Spread selected:", spreadId);
+    log.info('handleSpreadSelect', 'spread selected', { spreadId });
   }, []);
 
   const handleSpreadReorder = useCallback(

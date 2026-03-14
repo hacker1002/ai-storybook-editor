@@ -9,6 +9,9 @@ import { useBookStore } from '@/stores/book-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Story } from '@/types/story'
 import type { BookListItem } from '@/types/editor'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('Home', 'HomePage')
 
 function bookToStory(book: BookListItem): Story {
   return {
@@ -47,7 +50,7 @@ export function HomePage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!storyIdea.trim()) return
-    console.log('Creating story:', storyIdea)
+    log.info('handleSubmit', 'creating story', { storyIdea })
     setStoryIdea('')
   }
 

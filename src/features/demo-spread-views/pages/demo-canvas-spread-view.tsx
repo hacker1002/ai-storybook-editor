@@ -50,6 +50,9 @@ import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
 import type { SpreadTextboxContent } from "@/types/spread-types";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Demo", "DemoCanvasSpreadView");
 
 // === Default Values ===
 const DEFAULT_MOCK_OPTIONS: MockOptions = {
@@ -139,6 +142,7 @@ export function DemoCanvasSpreadView() {
 
   // Import spreads from JSON
   const handleImportSpreads = useCallback((importedSpreads: BaseSpread[]) => {
+    log.info("handleImportSpreads", "Importing spreads", { count: importedSpreads.length });
     setSpreads(importedSpreads);
     setSelectedSpreadId(importedSpreads[0]?.id ?? null);
   }, []);
@@ -203,6 +207,7 @@ export function DemoCanvasSpreadView() {
 
   const handleSpreadAdd = useCallback(
     (type: SpreadType) => {
+      log.info("handleSpreadAdd", "Adding new spread", { type });
       const newSpread = createMockSpread({
         spreadIndex: spreads.length,
         isDPS: type === "double",

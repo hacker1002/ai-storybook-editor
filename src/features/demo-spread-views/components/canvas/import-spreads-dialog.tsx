@@ -14,6 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Upload, ClipboardPaste, FileJson, AlertCircle } from "lucide-react";
 import type { BaseSpread } from "@/types/spread-types";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Demo", "ImportSpreadsDialog");
 
 interface ImportSpreadsDialogProps {
   open: boolean;
@@ -79,6 +82,7 @@ export function ImportSpreadsDialog({
   const handleImport = useCallback(() => {
     const spreads = parseAndValidate(jsonText);
     if (spreads) {
+      log.info("handleImport", "Importing spreads from JSON", { count: spreads.length });
       onImport(spreads);
       handleOpenChange(false);
     }

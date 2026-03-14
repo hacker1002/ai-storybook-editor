@@ -8,6 +8,9 @@ import { useToolbarPosition } from "../../hooks/use-toolbar-position";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import { Z_INDEX } from "@/constants/spread-constants";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger('Editor', 'RemixEditorCanvas');
 import type { Geometry, SpreadTextboxContent } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
@@ -214,7 +217,7 @@ export function RemixEditorCanvas({
       setPrompt("");
       setReferenceImage(null);
     } catch (error) {
-      console.error("Asset swap failed:", error);
+      log.error('handleSubmit', 'asset swap failed', { error, targetId: selectedSwappableId, spreadId: spread.id });
     } finally {
       setIsSubmitting(false);
     }

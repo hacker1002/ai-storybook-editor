@@ -1,5 +1,8 @@
 import type { AttachedFile } from '@/types/editor';
 import { FILE_CONSTRAINTS, MAX_FILENAME_DISPLAY_LENGTH } from '@/types/editor';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Util', 'FileUtils');
 
 /**
  * Validate and convert FileList to AttachedFile[]
@@ -42,7 +45,10 @@ export async function fileToBase64(file: File): Promise<string> {
       const base64 = result.split(',')[1];
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onerror = () => {
+      log.error("fileToBase64", "Failed to read file as base64", { name: file.name });
+      reject(new Error('Failed to read file'));
+    };
     reader.readAsDataURL(file);
   });
 }
@@ -83,11 +89,13 @@ export function validateFiles(files: FileList | File[]): {
 
   Array.from(files).forEach((file) => {
     if (file.size > FILE_CONSTRAINTS.maxSizeBytes) {
+      log.warn("validateFiles", "File rejected: exceeds size limit", { name: file.name, size: file.size });
       rejected.push({ name: file.name, reason: 'File exceeds 10MB limit' });
       return;
     }
     if (!(FILE_CONSTRAINTS.acceptedMimeTypes as readonly string[]).includes(file.type) &&
         !file.type.startsWith('image/')) {
+      log.warn("validateFiles", "File rejected: unsupported type", { name: file.name, type: file.type });
       rejected.push({ name: file.name, reason: 'Unsupported file type' });
       return;
     }

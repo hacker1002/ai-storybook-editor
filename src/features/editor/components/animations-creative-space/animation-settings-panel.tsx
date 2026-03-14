@@ -1,6 +1,9 @@
 // animation-settings-panel.tsx - Panel for configuring animation effect type and options
 
 import type { ResolvedAnimation, SpreadAnimation } from '@/types/animation-types';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'AnimationSettingsPanel');
 import { EFFECT_OPTIONS_MAP, TRIGGER_TYPE_LABELS } from '@/constants/animation-constants';
 import {
   Select,
@@ -259,6 +262,7 @@ export function AnimationSettingsPanel({
   onEffectOptionChange,
   onMustCompleteChange,
 }: AnimationSettingsPanelProps) {
+  log.debug('AnimationSettingsPanel', 'render', { effectType: animation.animation.effect.type, triggerType: animation.animation.trigger_type });
   return (
     <div className="p-3 space-y-4">
       <EffectTypeGrid

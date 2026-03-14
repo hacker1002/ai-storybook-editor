@@ -2,6 +2,9 @@ import type { AttachedFile } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import { prepareAttachments, type Attachment, type LLMContext } from './doc-api';
 import { callEdgeFunction } from './edge-function-client';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('API', 'DummyApi');
 
 export interface GenerateDummyRequest {
   script: string;
@@ -30,6 +33,7 @@ export interface GenerateDummyResult {
 export async function generateDummy(
   params: GenerateDummyRequest
 ): Promise<GenerateDummyResult> {
+  log.info('generateDummy', 'start', { languageKey: params.language_key, hasAttachments: !!params.attachments?.length });
   return callEdgeFunction<GenerateDummyResult>(
     'dummy-generate-dummy',
     params
@@ -47,6 +51,7 @@ export interface GenerateDummyParams {
 export async function callGenerateDummy(
   params: GenerateDummyParams
 ): Promise<GenerateDummyResult> {
+  log.info('callGenerateDummy', 'start', { languageKey: params.languageKey, attachmentCount: params.attachments.length });
   const apiAttachments = await prepareAttachments(params.attachments);
 
   return generateDummy({
@@ -62,6 +67,7 @@ export function applyDummyResult(
   existingDummy: ManuscriptDummy,
   result: NonNullable<GenerateDummyResult['data']>
 ): ManuscriptDummy {
+  log.info('applyDummyResult', 'apply', { dummyId: existingDummy.id, spreadCount: result.spreads.length, type: result.type });
   return {
     ...existingDummy,
     title: result.title,

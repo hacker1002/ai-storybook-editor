@@ -19,6 +19,9 @@ const HEADER = {
   GAP: 8,
 } as const;
 import { useSpreadViewKeyboard } from "./hooks/use-spread-view-keyboard";
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'SpreadViewHeader');
 
 // === Props Interface ===
 interface SpreadViewHeaderProps {
@@ -94,6 +97,10 @@ interface ViewToggleProps {
 function ViewToggle({ viewMode, onToggle }: ViewToggleProps) {
   const tooltipText =
     viewMode === "edit" ? "Show spread grid view" : "Show full spread view";
+  const handleToggle = () => {
+    log.info('ViewToggle', 'toggle clicked', { currentMode: viewMode });
+    onToggle();
+  };
 
   const isEditMode = viewMode === "edit";
 
@@ -103,7 +110,7 @@ function ViewToggle({ viewMode, onToggle }: ViewToggleProps) {
         <Button
           variant={isEditMode ? "default" : "ghost"}
           size="icon"
-          onClick={onToggle}
+          onClick={handleToggle}
           aria-pressed={viewMode === "grid"}
           aria-label={`Switch to ${viewMode === "edit" ? "grid" : "edit"} view`}
           style={{ width: HEADER.TOGGLE_SIZE, height: HEADER.TOGGLE_SIZE }}

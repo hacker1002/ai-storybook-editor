@@ -2,6 +2,9 @@ import * as Icons from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { IconRailItemConfig } from '@/types/editor';
 import { cn } from '@/utils/utils';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'IconRailItem');
 
 interface IconRailItemProps {
   item: IconRailItemConfig;
@@ -15,7 +18,7 @@ export function IconRailItem({ item, isActive, onClick }: IconRailItemProps) {
   }>;
 
   if (!IconComponent) {
-    console.warn(`Icon "${item.icon}" not found in lucide-react`);
+    log.warn('render', 'icon not found in lucide-react', { icon: item.icon });
     return null;
   }
 

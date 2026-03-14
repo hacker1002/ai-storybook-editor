@@ -9,6 +9,9 @@ import {
   findPrevOnNextStep,
   findOnClickStepForTarget,
 } from '@/features/editor/components/playable-spread-view/player-utils';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Store', 'AnimationPlaybackStore');
 
 // === State & Actions interfaces ===
 
@@ -70,11 +73,21 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       // ── Playback Controls ────────────────────────────────────────────────
 
-      play: () => set({ isPlaying: true }),
+      play: () => {
+        log.info('play', 'playing');
+        set({ isPlaying: true });
+      },
 
-      pause: () => set({ isPlaying: false }),
+      pause: () => {
+        log.info('pause', 'paused');
+        set({ isPlaying: false });
+      },
 
-      setPlayMode: (mode) => set({ playMode: mode }),
+      setPlayMode: (mode) => {
+        const prev = get().playMode;
+        log.info('setPlayMode', 'transition', { prev, next: mode });
+        set({ playMode: mode });
+      },
 
       setVolume: (v) => {
         const clamped = Math.min(100, Math.max(0, v));
@@ -83,6 +96,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       toggleMute: () => {
         const { isMuted, volume } = get();
+        log.info('toggleMute', 'transition', { prev: isMuted, volume });
         if (isMuted) {
           // Unmuting — if volume was 0, restore to 100
           set({ isMuted: false, ...(volume === 0 ? { volume: 100 } : {}) });
@@ -94,6 +108,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       // ── RESET — mirrors playerReducer case 'RESET' ───────────────────────
 
       reset: (steps) => {
+        log.info('reset', 'start', { stepCount: steps.length, firstTrigger: steps[0]?.triggerType });
         const replayableItems = new Map<string, ReplayableItem>();
 
         if (steps.length === 0) {
@@ -111,6 +126,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
         // Auto step[0] → start playing immediately
         if (steps[0].triggerType === 'auto') {
+          log.debug('reset', 'phase → playing (auto trigger)', { stepCount: steps.length });
           set({
             phase: 'playing',
             steps,
@@ -125,6 +141,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
         // On-click step[0] → wait for user to click the target item
         if (steps[0].triggerType === 'on_click') {
+          log.debug('reset', 'phase → awaiting_click', { targetId: steps[0].targetId });
           set({
             phase: 'awaiting_click',
             steps,
@@ -138,6 +155,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         }
 
         // on_next → idle, wait for user to press Next
+        log.debug('reset', 'phase → idle (on_next trigger)');
         set({
           phase: 'idle',
           steps,
@@ -153,6 +171,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       userNext: () => {
         const { phase, steps, currentStepIndex } = get();
+        log.info('userNext', 'action', { phase, currentStepIndex });
         if (phase === 'playing' || phase === 'complete') return;
 
         // From idle, awaiting_next, or awaiting_click → find next on_next step
@@ -171,6 +190,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       userBack: () => {
         const { currentStepIndex, steps } = get();
+        log.info('userBack', 'action', { currentStepIndex });
         if (currentStepIndex <= 0) return;
 
         const prevIdx = findPrevOnNextStep(steps, currentStepIndex);
@@ -184,6 +204,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       userClick: (itemId) => {
         const { phase, steps, currentStepIndex } = get();
+        log.info('userClick', 'action', { itemId, phase });
         if (phase !== 'awaiting_click') return;
 
         const clickIdx = findOnClickStepForTarget(steps, currentStepIndex, itemId);
@@ -197,6 +218,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       stepComplete: () => {
         const { phase, steps, currentStepIndex, replayableItems } = get();
+        log.info('stepComplete', 'action', { phase, currentStepIndex });
         if (phase !== 'playing') return;
 
         const completedStep = steps[currentStepIndex];
@@ -218,6 +240,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         // Determine next step
         const nextIdx = currentStepIndex + 1;
         if (nextIdx >= steps.length) {
+          log.debug('stepComplete', 'phase → complete');
           set({
             phase: 'complete',
             replayableItems: newReplayableItems,
@@ -236,6 +259,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           return;
         }
         if (nextStep.triggerType === 'on_click') {
+          log.debug('stepComplete', 'phase → awaiting_click', { targetId: nextStep.targetId });
           set({
             phase: 'awaiting_click',
             pendingClickTargetId: nextStep.targetId ?? null,
@@ -244,6 +268,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           return;
         }
         // on_next
+        log.debug('stepComplete', 'phase → awaiting_next');
         set({
           phase: 'awaiting_next',
           pendingClickTargetId: null,
@@ -255,6 +280,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       cancelAndNext: () => {
         const { phase, steps, currentStepIndex } = get();
+        log.info('cancelAndNext', 'action', { phase, currentStepIndex });
         if (phase !== 'playing') return;
 
         // Do NOT register click_loop replayable items — just advance
@@ -282,12 +308,16 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       clickLoopReplay: (itemId) => {
         const { phase, replayableItems, steps } = get();
+        log.info('clickLoopReplay', 'action', { itemId, phase });
 
         // Ignore during active playback
         if (phase === 'playing') return { shouldReplay: false };
 
         const replayable = replayableItems.get(itemId);
-        if (!replayable || replayable.remainingReplays <= 0) return { shouldReplay: false };
+        if (!replayable || replayable.remainingReplays <= 0) {
+          log.debug('clickLoopReplay', 'no replays remaining', { itemId });
+          return { shouldReplay: false };
+        }
 
         // Decrement remaining count and update state
         const newReplayableItems = new Map(replayableItems);
@@ -302,14 +332,16 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 
       // ── RESET_STORE — full reset with non-playing state ───────────────────
 
-      resetStore: () =>
+      resetStore: () => {
+        log.info('resetStore', 'full reset');
         set({
           ...INITIAL_STATE,
           isPlaying: false,
           replayableItems: new Map(),
           activeAnimationOrders: [],
           maxActivatedOrder: -1,
-        }),
+        });
+      },
 
       // ── ACTIVE / PENDING ANIMATION ORDERS — for sidebar highlight ─────────
 

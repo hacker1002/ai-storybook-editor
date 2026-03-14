@@ -11,6 +11,9 @@ import type {
   TextureOption,
 } from '@/types/canvas-types';
 import { Z_INDEX } from '@/constants/spread-constants';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'PageItem');
 
 const AVAILABLE_TEXTURES = [
   "paper",
@@ -77,7 +80,7 @@ export function PageItem<TSpread extends BaseSpread>({
     isSelected,
     onUpdateLayout: (layoutId: string) => {
       if (isLayoutLocked) {
-        console.warn('Layout is locked and cannot be changed');
+        log.warn('onUpdateLayout', 'layout is locked', { pageIndex, layoutId });
         return;
       }
       onUpdatePage({ layout: layoutId });

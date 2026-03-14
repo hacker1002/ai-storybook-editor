@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('API', 'Supabase');
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Supabase] Missing env vars: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY');
+  log.warn('init', 'missing env vars', { url: !!supabaseUrl, key: !!supabaseAnonKey });
 }
 
 /** Supabase client for DB queries (auth, CRUD). Uses VITE_SUPABASE_ANON_KEY. */

@@ -19,6 +19,9 @@ import { AnimationListItem } from './animation-list-item';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Filter, Plus, Star } from 'lucide-react';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'AnimationEditorSidebar');
 
 interface AnimationEditorSidebarProps {
   animations: ResolvedAnimation[];          // filtered list to display
@@ -101,6 +104,7 @@ export function AnimationEditorSidebar({
 
   function handleDrop(targetIndex: number) {
     if (dragIndex !== null && dragIndex !== targetIndex) {
+      log.info('handleDrop', 'animation reordered', { from: dragIndex, to: targetIndex });
       onReorderAnimation(
         animations[dragIndex].originalIndex,
         animations[targetIndex].originalIndex,

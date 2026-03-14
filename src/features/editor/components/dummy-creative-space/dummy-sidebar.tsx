@@ -8,6 +8,9 @@ import { buildLLMContext } from '@/apis/doc-api';
 import { callGenerateDummy, applyDummyResult } from '@/apis/dummy-api';
 import type { AttachedFile } from '@/types/editor';
 import { DEFAULT_DUMMY_TITLE } from '@/types/dummy';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'DummySidebar');
 import { toast } from 'sonner';
 
 interface DummySidebarProps {
@@ -143,7 +146,7 @@ export function DummySidebar({ selectedDummyId, onDummySelect }: DummySidebarPro
 
       toast.success('Dummy generated successfully');
     } catch (error) {
-      console.error('[DummySidebar] Generate error:', error);
+      log.error('handleGenerate', 'generation failed', { error, dummyId });
       toast.error('Unexpected error during generation');
     } finally {
       setIsGenerating((prev) => ({ ...prev, [dummyId]: false }));

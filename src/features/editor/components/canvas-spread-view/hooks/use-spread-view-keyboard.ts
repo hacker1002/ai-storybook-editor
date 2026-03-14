@@ -2,6 +2,9 @@
 import { useEffect } from 'react';
 import type { ViewMode } from '@/types/canvas-types';
 import { ZOOM, COLUMNS } from '@/constants/spread-constants';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'useSpreadViewKeyboard');
 
 interface UseSpreadViewKeyboardProps {
   viewMode: ViewMode;
@@ -50,6 +53,7 @@ export function useSpreadViewKeyboard({
       // Toggle view mode with 'G'
       if (key === 'g') {
         event.preventDefault();
+        log.info('handleKeyDown', 'toggle view mode', { currentMode: viewMode });
         onViewModeToggle();
         const newMode = viewMode === 'edit' ? 'grid' : 'edit';
         onAnnounce?.(`Switched to ${newMode} view`);

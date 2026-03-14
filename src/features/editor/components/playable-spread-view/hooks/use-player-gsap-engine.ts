@@ -22,6 +22,9 @@ import {
   resolveAnimationEndState,
 } from '../player-initial-states';
 import { getScaledDimensions } from '../../../utils/coordinate-utils';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'usePlayerGsapEngine');
 
 // === Constants ===
 const TRIGGER_DELAY = {
@@ -182,7 +185,7 @@ export function usePlayerGsapEngine({
 
         const el = elementRefsMap.current.get(anim.target.id);
         if (!el) {
-          console.warn(`[usePlayerGsapEngine] Element not found: ${anim.target.id}`);
+          log.warn('buildAndPlayStepTimeline', 'element not found', { targetId: anim.target.id });
           return;
         }
 
@@ -240,7 +243,7 @@ export function usePlayerGsapEngine({
 
       const el = elementRefsMap.current.get(anim.target.id);
       if (!el) {
-        console.warn(`[usePlayerGsapEngine] Element not found: ${anim.target.id}`);
+        log.warn('buildAndPlayFullTimeline', 'element not found', { targetId: anim.target.id });
         return;
       }
 

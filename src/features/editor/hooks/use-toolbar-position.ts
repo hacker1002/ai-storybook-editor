@@ -3,6 +3,9 @@
 import { useState, useLayoutEffect, useEffect, useRef, type RefObject } from "react";
 import type { Geometry } from "@/types/spread-types";
 import { geometryToScreenRect } from "../utils/coordinate-utils";
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'useToolbarPosition');
 
 interface UseToolbarPositionOptions {
   geometry: Geometry | null;
@@ -23,6 +26,7 @@ export function useToolbarPosition({
   toolbarRef,
   gap = 8,
 }: UseToolbarPositionOptions): ToolbarPosition | null {
+  log.info('useToolbarPosition', 'init', { hasGeometry: !!geometry });
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
   const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -107,6 +111,7 @@ export function useToolbarPosition({
       }
     }
 
+    log.debug('useToolbarPosition', 'placement resolved', { placement, top, left });
     setPosition({ top, left, placement });
   }, [geometry, canvasRect, toolbarRef, gap]);
 

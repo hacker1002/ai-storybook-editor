@@ -2,10 +2,13 @@ import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { supabase } from '@/apis/supabase';
+import { createLogger } from '@/utils/logger';
 import type { SnapshotStore } from './types';
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';
 import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
+
+const log = createLogger('Store', 'SnapshotStore');
 
 export const useSnapshotStore = create<SnapshotStore>()(
   devtools(
@@ -21,6 +24,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         fetchSnapshot: async (bookId: string) => {
           const [set] = args;
+          log.info('fetchSnapshot', 'start', { bookId });
           set((state) => {
             state.fetchLoading = true;
             state.fetchError = null;
@@ -35,6 +39,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             .maybeSingle();
 
           if (error) {
+            log.error('fetchSnapshot', 'failed', { bookId, error });
             set((state) => {
               state.fetchLoading = false;
               state.fetchError = 'Không thể tải snapshot';
@@ -42,6 +47,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             return;
           }
 
+          log.info('fetchSnapshot', 'done', { bookId, hasData: !!data, snapshotId: data?.id });
           set((state) => {
             if (data) {
               state.meta.id = data.id;
@@ -66,6 +72,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
           if (!meta.bookId || sync.isSaving) return;
 
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -99,14 +106,15 @@ export const useSnapshotStore = create<SnapshotStore>()(
           }
 
           if (result.error) {
+            log.error('saveSnapshot', 'failed', { bookId: meta.bookId, error: result.error });
             set((state) => {
               state.sync.isSaving = false;
               state.sync.error = 'Không thể lưu snapshot';
             });
-            console.error('[snapshot-store] save error:', result.error);
             return;
           }
 
+          log.info('saveSnapshot', 'done', { bookId: meta.bookId, snapshotId: result.data.id, version });
           set((state) => {
             state.meta.id = result.data.id;
             state.meta.version = result.data.version;
@@ -118,6 +126,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         initSnapshot: (data) => {
           const [set] = args;
+          log.info('initSnapshot', 'init', { hasData: !!data, hasMeta: !!data.meta });
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
             state.dummies = data.dummies ?? [];
@@ -130,6 +139,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         resetSnapshot: () => {
           const [set] = args;
+          log.info('resetSnapshot', 'reset');
           set((state) => {
             state.docs = DEFAULT_DOCS;
             state.dummies = [];

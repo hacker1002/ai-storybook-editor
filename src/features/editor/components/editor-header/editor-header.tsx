@@ -8,6 +8,9 @@ import { MenuPopover } from './menu-popover';
 import { LanguageSelector } from './language-selector';
 import type { PipelineStep, SaveStatus, Language, UserPoints, EditorMode } from '@/types/editor';
 import { cn } from '@/utils/utils';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'EditorHeader');
 
 interface EditorHeaderProps {
   bookTitle: string;
@@ -48,6 +51,7 @@ export function EditorHeader({
 
   const handleTitleSubmit = () => {
     if (editTitleValue.trim() && editTitleValue !== bookTitle) {
+      log.info('handleTitleSubmit', 'title updated', { prev: bookTitle, next: editTitleValue.trim() });
       onTitleEdit(editTitleValue.trim());
     }
     setIsEditingTitle(false);

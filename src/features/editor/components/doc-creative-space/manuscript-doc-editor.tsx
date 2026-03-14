@@ -1,5 +1,8 @@
 import MDEditor from '@uiw/react-md-editor';
 import type { ManuscriptDoc } from '@/types/editor';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'ManuscriptDocEditor');
 
 interface ManuscriptDocEditorProps {
   doc: ManuscriptDoc | null;
@@ -7,6 +10,7 @@ interface ManuscriptDocEditorProps {
 }
 
 export function ManuscriptDocEditor({ doc, onContentChange }: ManuscriptDocEditorProps) {
+  log.debug('ManuscriptDocEditor', 'render', { docType: doc?.type ?? null, hasContent: !!doc?.content });
   if (!doc) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">

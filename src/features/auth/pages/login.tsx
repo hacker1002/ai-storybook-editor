@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth-store';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Auth', 'LoginPage');
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -21,8 +24,10 @@ export function LoginPage() {
       return;
     }
 
+    log.info("handleSubmit", "Login attempt", { email });
     const result = await login(email, password);
     if (result.error) {
+      log.warn("handleSubmit", "Login failed", { email, error: result.error });
       setError(result.error);
     } else {
       navigate('/');

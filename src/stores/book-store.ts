@@ -3,6 +3,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { persist, devtools } from 'zustand/middleware';
 import { supabase } from '@/apis/supabase';
 import type { Book, BookListItem } from '@/types/editor';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Store', 'BookStore');
 
 interface BookStore {
   books: BookListItem[];
@@ -35,9 +38,11 @@ export const useBookStore = create<BookStore>()(
           const { lastFetchedAt, books } = get();
 
           if (lastFetchedAt && Date.now() - lastFetchedAt < CACHE_DURATION && books.length > 0) {
+            log.debug('fetchBooks', 'cache hit', { bookCount: books.length });
             return;
           }
 
+          log.info('fetchBooks', 'start');
           set({ isLoading: true, error: null });
 
           const { data, error } = await supabase
@@ -46,10 +51,12 @@ export const useBookStore = create<BookStore>()(
             .order('updated_at', { ascending: false });
 
           if (error) {
+            log.error('fetchBooks', 'failed', { error });
             set({ isLoading: false, error: 'Không thể tải danh sách sách' });
             return;
           }
 
+          log.info('fetchBooks', 'done', { bookCount: data?.length ?? 0 });
           set({
             books: data || [],
             isLoading: false,
@@ -58,6 +65,7 @@ export const useBookStore = create<BookStore>()(
         },
 
         fetchBook: async (bookId) => {
+          log.info('fetchBook', 'start', { bookId });
           set({ isLoading: true, error: null });
 
           const { data, error } = await supabase
@@ -67,15 +75,18 @@ export const useBookStore = create<BookStore>()(
             .single();
 
           if (error) {
+            log.error('fetchBook', 'failed', { bookId, error });
             set({ isLoading: false, error: 'Không thể tải sách' });
             return null;
           }
 
+          log.info('fetchBook', 'done', { bookId });
           set({ currentBook: data, isLoading: false });
           return data;
         },
 
         updateBook: async (bookId, updates) => {
+          log.info('updateBook', 'start', { bookId, updateKeys: Object.keys(updates) });
           const previousBook = get().currentBook;
           const previousBooks = get().books;
 
@@ -96,16 +107,18 @@ export const useBookStore = create<BookStore>()(
             .eq('id', bookId);
 
           if (error) {
-            console.error('[book-store] updateBook error:', error);
+            log.error('updateBook', 'failed, rolling back', { bookId, error });
             // Rollback on error
             set({ currentBook: previousBook, books: previousBooks });
             return false;
           }
 
+          log.info('updateBook', 'done', { bookId });
           return true;
         },
 
         deleteBook: async (bookId) => {
+          log.info('deleteBook', 'start', { bookId });
           const previousBooks = get().books;
 
           // Optimistic update
@@ -120,16 +133,22 @@ export const useBookStore = create<BookStore>()(
             .eq('id', bookId);
 
           if (error) {
-            console.error('[book-store] deleteBook error:', error);
+            log.error('deleteBook', 'failed, rolling back', { bookId, error });
             // Rollback on error
             set({ books: previousBooks });
             return false;
           }
 
+          log.info('deleteBook', 'done', { bookId });
           return true;
         },
 
-        setCurrentBook: (book) => set({ currentBook: book }),
+        setCurrentBook: (book) => {
+          const prev = get().currentBook?.id ?? null;
+          const next = book?.id ?? null;
+          log.info('setCurrentBook', 'transition', { prev, next });
+          set({ currentBook: book });
+        },
 
         clearBooks: () =>
           set({

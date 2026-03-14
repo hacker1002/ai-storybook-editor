@@ -5,6 +5,9 @@ import { DummySidebar } from "./dummy-sidebar";
 import { DummyMainView } from "./dummy-main-view";
 import { useDummyIds, useDummyActions } from "./hooks";
 import { DEFAULT_DUMMY_TITLE } from "@/types/dummy";
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'DummyCreativeSpace');
 
 function EmptyState({ onCreateDummy }: { onCreateDummy: () => void }) {
   return (
@@ -51,6 +54,7 @@ export function DummyCreativeSpace() {
   };
 
   const handleCreateDummy = () => {
+    log.info('handleCreateDummy', 'creating new dummy');
     const newDummy = {
       id: crypto.randomUUID(),
       title: DEFAULT_DUMMY_TITLE,

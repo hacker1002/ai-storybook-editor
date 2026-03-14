@@ -8,6 +8,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger('Editor', 'GenerateImageModal');
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -237,12 +240,13 @@ export function GenerateImageModal({
       }
     }
 
-    console.log("[GenerateImage] params:", {
+    log.info('handleGenerate', 'generating image', {
       prompt,
-      referenceImage: referenceImage?.filename || null,
+      hasReferenceImage: !!referenceImage,
       stageSetting: selectedStageSetting,
       edgeTreatment,
-      dimensions: { width, height },
+      width,
+      height,
     });
 
     const newIllustration: Illustration = {

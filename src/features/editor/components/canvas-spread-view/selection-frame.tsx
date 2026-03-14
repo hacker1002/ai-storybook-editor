@@ -4,6 +4,9 @@
 import { useRef, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'SelectionFrame');
 
 interface SelectionFrameProps {
   geometry: Geometry;
@@ -155,6 +158,7 @@ export function SelectionFrame({
         className={moveableClassName}
         // Drag events - use dist (cumulative) not delta (per-frame)
         onDragStart={() => {
+          log.debug('onDragStart', 'drag started', { x: geometry.x, y: geometry.y });
           startGeometryRef.current = { ...geometry };
           onDragStart();
         }}

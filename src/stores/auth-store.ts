@@ -5,6 +5,9 @@ import type { Session } from '@supabase/supabase-js';
 import { mapSupabaseUser } from '@/types/auth';
 import { useBookStore } from './book-store';
 import { useSnapshotStore } from './snapshot-store';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Store', 'AuthStore');
 
 interface AuthStore {
   user: User | null;
@@ -26,9 +29,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
   isInitialized: false,
 
   initialize: async () => {
+    log.info('initialize', 'checking session');
     const { data: { session } } = await supabase.auth.getSession();
 
     if (session?.user) {
+      log.info('initialize', 'session found', { userId: session.user.id });
       set({
         user: mapSupabaseUser(session.user),
         session,
@@ -36,11 +41,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
         isInitialized: true,
       });
     } else {
+      log.info('initialize', 'no session');
       set({ isInitialized: true });
     }
 
     // Subscribe to auth changes
     supabase.auth.onAuthStateChange((event, session) => {
+      log.info('initialize', 'auth state change', { event, hasSession: !!session });
       if (event === 'SIGNED_OUT' || !session) {
         set({ user: null, session: null, isAuthenticated: false });
       } else if (session?.user) {
@@ -54,6 +61,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   login: async (email, password) => {
+    log.info('login', 'start', { email });
     set({ isLoading: true });
 
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -62,6 +70,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     });
 
     if (error) {
+      log.error('login', 'failed', { email, error: error.message });
       set({ isLoading: false });
       return {
         error: error.message === 'Invalid login credentials'
@@ -71,6 +80,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
 
     if (data.user) {
+      log.info('login', 'success', { userId: data.user.id });
       set({
         user: mapSupabaseUser(data.user),
         session: data.session,
@@ -83,12 +93,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
+    log.info('logout', 'start');
     await supabase.auth.signOut();
 
     // Clear all data stores
     useBookStore.getState().clearBooks();
     useSnapshotStore.getState().resetSnapshot();
 
+    log.info('logout', 'done');
     set({ user: null, session: null, isAuthenticated: false });
   },
 }));

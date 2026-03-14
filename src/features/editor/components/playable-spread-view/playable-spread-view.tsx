@@ -1,5 +1,8 @@
 // playable-spread-view.tsx - Root container component for playable spread view
 import { useState, useEffect, useCallback } from "react";
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'PlayableSpreadView');
 import type {
   OperationMode,
   ActiveCanvas,
@@ -79,11 +82,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // === Canvas Switching Handlers ===
   const handlePlay = useCallback(() => {
     if (playMode === "off") return;
+    log.info('handlePlay', 'play started', { spreadId: selectedSpreadId, playMode });
     setActiveCanvas("player");
     onPreview?.();
-  }, [playMode, onPreview]);
+  }, [playMode, onPreview, selectedSpreadId]);
 
   const handleStop = useCallback(() => {
+    log.info('handleStop', 'playback stopped', { mode });
     setActiveCanvas(mode); // Return to mode-determined canvas
     onStopPreview?.();
   }, [mode, onStopPreview]);

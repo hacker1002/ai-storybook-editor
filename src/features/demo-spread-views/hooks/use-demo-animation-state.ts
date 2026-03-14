@@ -21,6 +21,9 @@ import {
   buildDefaultEffect,
   createDefaultFilterState,
 } from '@/features/editor/components/animations-creative-space';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Demo', 'useDemoAnimationState');
 
 // Items map: item id -> { title, type }
 type ItemsMap = Map<string, { title: string; type: string }>;
@@ -134,6 +137,7 @@ export function useDemoAnimationState({
   // --- Handlers ---
 
   const handleItemSelect = useCallback((itemType: ItemType | null, itemId: string | null) => {
+    log.debug("handleItemSelect", "Item selected", { itemType, itemId });
     if (itemType !== null && itemId !== null) {
       setSelectedItem({ id: itemId, type: itemType });
     } else {
@@ -148,6 +152,7 @@ export function useDemoAnimationState({
   const handleAddAnimation = useCallback(
     (effectType: number) => {
       if (!selectedItem || !selectedSpreadId) return;
+      log.info("handleAddAnimation", "Adding animation", { effectType, targetId: selectedItem.id, targetType: selectedItem.type });
 
       setSpreads((prevSpreads) =>
         prevSpreads.map((spread) => {
