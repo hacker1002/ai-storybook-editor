@@ -1,65 +1,25 @@
 // editable-textbox.tsx - Shared utility component for editable text
 'use client';
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { cn } from '@/utils/utils';
-import type { Geometry, Typography, Fill, Outline } from '@/types/spread-types';
+import type { SpreadTextboxContent } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
 
 interface EditableTextboxProps {
-  text: string;
-  geometry: Geometry;
-  typography?: Typography;
-  fill?: Fill;
-  outline?: Outline;
+  textboxContent: SpreadTextboxContent;
   index: number;
   zIndex?: number;
   isSelected: boolean;
-  isSelectable: boolean;  // NEW: Controls click selection behavior
+  isSelectable: boolean;  // Controls click selection behavior
   isEditable: boolean;    // Controls double-click edit mode
   onSelect: (rect?: DOMRect) => void;
   onTextChange: (text: string) => void;
   onEditingChange: (isEditing: boolean) => void;
 }
 
-/**
- * Helper function to convert hex color and opacity to rgba string
- */
-function hexToRgba(hex: string, opacity: number): string {
-  // Remove # if present
-  let cleanHex = hex.replace('#', '');
-
-  // Expand 3-digit hex to 6-digit (#FFF → #FFFFFF)
-  if (cleanHex.length === 3) {
-    cleanHex = cleanHex
-      .split('')
-      .map((char) => char + char)
-      .join('');
-  }
-
-  // Validate hex format
-  if (!/^[0-9A-Fa-f]{6}$/.test(cleanHex)) {
-    console.warn(`Invalid hex color: ${hex}, defaulting to transparent`);
-    return `rgba(0, 0, 0, 0)`;
-  }
-
-  // Parse hex to RGB
-  const r = parseInt(cleanHex.substring(0, 2), 16);
-  const g = parseInt(cleanHex.substring(2, 4), 16);
-  const b = parseInt(cleanHex.substring(4, 6), 16);
-
-  // Clamp opacity to [0, 1]
-  const clampedOpacity = Math.max(0, Math.min(1, opacity));
-
-  return `rgba(${r}, ${g}, ${b}, ${clampedOpacity})`;
-}
-
 export function EditableTextbox({
-  text,
-  geometry,
-  typography,
-  fill,
-  outline,
+  textboxContent,
   index,
   zIndex,
   isSelected,
@@ -69,6 +29,7 @@ export function EditableTextbox({
   onTextChange,
   onEditingChange,
 }: EditableTextboxProps) {
+  const { text, geometry, typography } = textboxContent;
   const [isEditing, setIsEditing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const editableRef = useRef<HTMLDivElement>(null);
@@ -173,25 +134,6 @@ export function EditableTextbox({
     textTransform: typography?.textTransform || 'none',
   };
 
-  // Create fill style (background) - memoized to avoid re-parsing hex on every render
-  const fillStyle: React.CSSProperties = useMemo(
-    () =>
-      fill ? { backgroundColor: hexToRgba(fill.color, fill.opacity) } : {},
-    [fill]
-  );
-
-  // Create outline style (border) - memoized to avoid re-creating object on every render
-  const outlineStyle: React.CSSProperties = useMemo(
-    () =>
-      outline
-        ? {
-            border: `${outline.width}px ${outline.type} ${outline.color}`,
-            borderRadius: `${outline.radius}px`,
-          }
-        : {},
-    [outline]
-  );
-
   const isEmpty = !text;
 
   return (
@@ -221,8 +163,6 @@ export function EditableTextbox({
         zIndex,
         outlineColor: COLORS.HOVER_OUTLINE,
         ...typographyStyle,
-        ...fillStyle,
-        ...outlineStyle,
       }}
     >
       {isEditing ? (

@@ -6,7 +6,7 @@ import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableA
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import { Z_INDEX } from "@/constants/spread-constants";
-import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
+import type { SpreadTextboxContent } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
 import type { PlayableSpread, PlayMode, AnimationStep } from "@/types/playable-types";
@@ -307,13 +307,7 @@ export function PlayerCanvas({
       .map((textbox) => {
         const langKey = getFirstTextboxKey(textbox);
         if (!langKey) return null;
-        const data = textbox[langKey] as {
-          text: string;
-          geometry: Geometry;
-          typography: Typography;
-          fill?: Fill;
-          outline?: Outline;
-        };
+        const data = textbox[langKey] as SpreadTextboxContent;
         if (!data?.geometry) return null;
         return { textbox, langKey, data };
       })
@@ -493,11 +487,7 @@ export function PlayerCanvas({
               onClickCapture={() => handleItemClick(textbox.id)}
             >
               <EditableTextbox
-                text={data.text}
-                geometry={data.geometry}
-                typography={data.typography}
-                fill={data.fill}
-                outline={data.outline}
+                textboxContent={data}
                 index={index}
                 zIndex={TEXTBOX_Z_INDEX_BASE + index}
                 isSelected={false}

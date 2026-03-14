@@ -233,9 +233,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
 
     return (
       <EditableTextbox
-        text={langData.text}
-        geometry={langData.geometry}
-        typography={langData.typography}
+        textboxContent={langData}
         index={context.itemIndex}
         isSelected={context.isSelected}
         isSelectable={context.isSpreadSelected}

@@ -6,7 +6,7 @@ import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableA
 import { getScaledDimensions } from '../../utils/coordinate-utils';
 import { getFirstTextboxKey } from '../../utils/textbox-helpers';
 import { Z_INDEX } from '@/constants/spread-constants';
-import type { Geometry, Typography, Fill, Outline, ItemType } from '@/types/spread-types';
+import type { Geometry, SpreadTextboxContent, ItemType } from '@/types/spread-types';
 import { PageItem } from '../canvas-spread-view/page-item';
 import { SelectionOverlay } from './selection-overlay';
 import { TEXTBOX_Z_INDEX_BASE } from '@/constants/playable-constants';
@@ -200,13 +200,7 @@ export function AnimationEditorCanvas({
     return spread.textboxes.map((textbox) => {
       const langKey = getFirstTextboxKey(textbox);
       if (!langKey) return null;
-      const data = textbox[langKey] as {
-        text: string;
-        geometry: Geometry;
-        typography: Typography;
-        fill?: Fill;
-        outline?: Outline;
-      };
+      const data = textbox[langKey] as SpreadTextboxContent;
       if (!data?.geometry) return null;
       return { textbox, langKey, data };
     }).filter(Boolean);
@@ -317,11 +311,7 @@ export function AnimationEditorCanvas({
           return (
             <EditableTextbox
               key={textbox.id}
-              text={data.text}
-              geometry={data.geometry}
-              typography={data.typography}
-              fill={data.fill}
-              outline={data.outline}
+              textboxContent={data}
               index={index}
               zIndex={TEXTBOX_Z_INDEX_BASE + index}
               isSelected={selectedItemId === textbox.id && selectedItemType === 'textbox'}

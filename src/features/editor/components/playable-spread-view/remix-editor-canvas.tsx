@@ -8,7 +8,7 @@ import { useToolbarPosition } from "../../hooks/use-toolbar-position";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import { Z_INDEX } from "@/constants/spread-constants";
-import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
+import type { Geometry, SpreadTextboxContent } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
@@ -232,13 +232,7 @@ export function RemixEditorCanvas({
       .map((textbox) => {
         const langKey = getFirstTextboxKey(textbox);
         if (!langKey) return null;
-        const data = textbox[langKey] as {
-          text: string;
-          geometry: Geometry;
-          typography: Typography;
-          fill?: Fill;
-          outline?: Outline;
-        };
+        const data = textbox[langKey] as SpreadTextboxContent;
         if (!data?.geometry) return null;
         return { textbox, langKey, data };
       })
@@ -347,11 +341,7 @@ export function RemixEditorCanvas({
           return (
             <EditableTextbox
               key={textbox.id}
-              text={data.text}
-              geometry={data.geometry}
-              typography={data.typography}
-              fill={data.fill}
-              outline={data.outline}
+              textboxContent={data}
               index={index}
               zIndex={TEXTBOX_Z_INDEX_BASE + index}
               isSelected={isTextboxSelected || isEditing}

@@ -5,7 +5,7 @@ import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/utils/utils";
 import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio } from "../shared-components";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
-import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
+import type { SpreadTextboxContent } from "@/types/spread-types";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 
@@ -69,13 +69,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
     return spread.textboxes.map((textbox) => {
       const langKey = getFirstTextboxKey(textbox);
       if (!langKey) return null;
-      const data = textbox[langKey] as {
-        text: string;
-        geometry: Geometry;
-        typography: Typography;
-        fill?: Fill;
-        outline?: Outline;
-      };
+      const data = textbox[langKey] as SpreadTextboxContent;
       if (!data?.geometry) return null;
       return { textbox, langKey, data };
     }).filter(Boolean);
@@ -211,11 +205,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             return (
               <EditableTextbox
                 key={textbox.id || idx}
-                text={data.text}
-                geometry={data.geometry}
-                typography={data.typography}
-                fill={data.fill}
-                outline={data.outline}
+                textboxContent={data}
                 index={idx}
                 zIndex={TEXTBOX_Z_INDEX_BASE + idx}
                 isSelected={false}

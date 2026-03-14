@@ -31,20 +31,7 @@ export interface Typography {
   textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
 }
 
-// === Fill & Outline ===
-export interface Fill {
-  color: string;
-  opacity: number;
-}
-
-export interface Outline {
-  color: string;
-  width: number;
-  radius: number;
-  type: "solid" | "dashed" | "dotted";
-}
-
-// === Shape Fill & Outline (different from textbox Fill/Outline) ===
+// === Shape Fill & Outline ===
 export interface ShapeFill {
   is_filled: boolean;
   color: string;
@@ -190,8 +177,6 @@ export interface SpreadTextboxContent {
   text: string;
   geometry: Geometry;
   typography: Typography;
-  fill?: Fill;
-  outline?: Outline;
 }
 
 export interface SpreadAnimation {

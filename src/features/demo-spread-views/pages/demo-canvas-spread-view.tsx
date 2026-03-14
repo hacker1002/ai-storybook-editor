@@ -451,11 +451,7 @@ export function DemoCanvasSpreadView() {
 
     return (
       <EditableTextbox
-        text={langContent.text}
-        geometry={langContent.geometry}
-        typography={langContent.typography}
-        fill={langContent.fill}
-        outline={langContent.outline}
+        textboxContent={langContent}
         index={context.itemIndex}
         isSelected={context.isSelected}
         isSelectable={context.isSpreadSelected}
