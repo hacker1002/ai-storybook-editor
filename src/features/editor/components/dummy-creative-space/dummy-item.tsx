@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
-import { PromptPanel } from "@/features/editor/components/editor-shared/prompt-panel";
+import { PromptPanel } from "@/features/editor/components/shared-components/prompt-panel";
 import type { ManuscriptDoc, AttachedFile } from "@/types/editor";
 import type { ManuscriptDummy } from "@/types/dummy";
 import { cn } from "@/utils/utils";

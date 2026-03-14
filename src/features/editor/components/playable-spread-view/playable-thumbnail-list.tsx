@@ -3,8 +3,8 @@
 
 import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/utils/utils";
-import { EditableTextbox, getFirstTextboxKey } from "../editor-shared";
-import { EditableImage, EditableShape, EditableVideo, EditableAudio } from "../canvas-spread-view";
+import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio } from "../shared-components";
+import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
 import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
 import { LAYOUT, THUMBNAIL_STYLES, TEXTBOX_Z_INDEX_BASE } from "./constants";

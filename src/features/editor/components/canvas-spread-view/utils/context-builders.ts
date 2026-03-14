@@ -18,7 +18,7 @@ import type {
   Typography,
   SpreadItemActionUnion,
 } from '../types';
-import { getFirstTextboxKey } from '../../editor-shared';
+import { getFirstTextboxKey } from '../../../utils/textbox-helpers';
 import type { SpreadTextboxContent } from '@/types/spread-types';
 import type { RefObject } from 'react';
 

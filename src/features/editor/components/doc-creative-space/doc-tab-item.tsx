@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PromptPanel } from '@/features/editor/components/editor-shared/prompt-panel';
+import { PromptPanel } from '@/features/editor/components/shared-components/prompt-panel';
 import type { ManuscriptDoc, AttachedFile } from '@/types/editor';
 import { cn } from '@/utils/utils';
 

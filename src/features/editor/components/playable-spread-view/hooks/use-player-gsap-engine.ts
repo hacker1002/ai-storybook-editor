@@ -21,7 +21,7 @@ import {
   resolveInitialState,
   resolveAnimationEndState,
 } from '../player-initial-states';
-import { getScaledDimensions } from '../../editor-shared';
+import { getScaledDimensions } from '../../../utils/coordinate-utils';
 
 // === Hook Interfaces ===
 

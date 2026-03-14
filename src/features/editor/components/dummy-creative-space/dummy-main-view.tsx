@@ -3,8 +3,7 @@
 
 import { useMemo, useCallback } from 'react';
 import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
-import { EditableImage } from '@/features/editor/components/canvas-spread-view/editable-image';
-import { EditableTextbox } from '@/features/editor/components/editor-shared/editable-textbox';
+import { EditableImage, EditableTextbox } from '@/features/editor/components/shared-components';
 import { useDummyById, useDummyActions } from './hooks';
 import { DummyItemToolbar } from './dummy-item-toolbar';
 import type {

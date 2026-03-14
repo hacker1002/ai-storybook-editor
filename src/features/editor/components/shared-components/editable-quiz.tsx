@@ -5,7 +5,7 @@ import { useState, useCallback } from 'react';
 import { CircleHelp } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import type { SpreadQuiz } from '@/types/spread-types';
-import { COLORS } from './constants';
+import { COLORS } from '@/constants/spread-constants';
 
 interface EditableQuizProps {
   quiz: SpreadQuiz;

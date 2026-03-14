@@ -3,8 +3,8 @@
 
 import { useState, useCallback } from 'react';
 import { cn } from '@/utils/utils';
-import type { SpreadShape, ShapeFill, ShapeOutline } from './types';
-import { COLORS } from './constants';
+import type { SpreadShape, ShapeFill, ShapeOutline } from '@/types/spread-types';
+import { COLORS } from '@/constants/spread-constants';
 
 interface EditableShapeProps {
   shape: SpreadShape;

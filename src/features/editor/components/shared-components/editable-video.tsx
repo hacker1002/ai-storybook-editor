@@ -4,8 +4,8 @@
 import { useState, useCallback } from 'react';
 import { Video, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/utils';
-import type { SpreadVideo } from './types';
-import { COLORS } from './constants';
+import type { SpreadVideo } from '@/types/spread-types';
+import { COLORS } from '@/constants/spread-constants';
 
 interface EditableVideoProps {
   video: SpreadVideo;

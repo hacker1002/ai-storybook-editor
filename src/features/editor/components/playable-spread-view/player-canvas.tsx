@@ -2,16 +2,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { EditableTextbox, getScaledDimensions, getFirstTextboxKey } from "../editor-shared";
+import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio, EditableQuiz } from "../shared-components";
+import { getScaledDimensions } from "../../utils/coordinate-utils";
+import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import { Z_INDEX } from "@/constants/spread-constants";
 import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
-import {
-  EditableImage,
-  EditableShape,
-  EditableVideo,
-  EditableAudio,
-  EditableQuiz,
-} from "../canvas-spread-view";
 import { PageItem } from "../canvas-spread-view/page-item";
 import type { PlayerCanvasProps, AnimationStep } from "./types";
 import { TEXTBOX_Z_INDEX_BASE, RAPID_NEXT_THRESHOLD } from "./constants";

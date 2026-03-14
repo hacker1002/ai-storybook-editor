@@ -48,7 +48,7 @@ import type {
   Typography,
   SpreadItemActionUnion,
 } from "./types";
-import { getFirstTextboxKey } from "../editor-shared";
+import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 
 // === Props Interface ===
 interface SpreadEditorPanelProps<TSpread extends BaseSpread> {

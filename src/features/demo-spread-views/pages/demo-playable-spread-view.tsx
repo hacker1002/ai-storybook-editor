@@ -10,8 +10,8 @@ import {
   type AssetSwapParams,
 } from "@/features/editor/components/playable-spread-view";
 import { AnimationEditorSidebar, PlayerAnimationSidebar } from '@/features/editor/components/animations-creative-space';
-import { useDemoAnimationState } from '../components/playable/use-demo-animation-state';
-import { getFirstTextboxKey } from "@/features/editor/components/editor-shared";
+import { useDemoAnimationState } from '../hooks/use-demo-animation-state';
+import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
 import {
   createPlayableSpreads,
   type CreatePlayableSpreadOptions,

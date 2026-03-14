@@ -1,7 +1,7 @@
 // coordinate-utils.ts - Coordinate conversion utilities shared across spread views
 
-import type { Point, Geometry } from '../types';
-import { CANVAS } from '../constants';
+import type { Point, Geometry } from '@/types/spread-types';
+import { CANVAS } from '@/constants/spread-constants';
 
 export function toPixel(percent: number, dimension: number): number {
   return (percent / 100) * dimension;

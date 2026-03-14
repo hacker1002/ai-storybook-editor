@@ -3,10 +3,12 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { EditableTextbox, useToolbarPosition, getScaledDimensions, getFirstTextboxKey } from "../editor-shared";
+import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio } from "../shared-components";
+import { useToolbarPosition } from "../../hooks/use-toolbar-position";
+import { getScaledDimensions } from "../../utils/coordinate-utils";
+import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import { Z_INDEX } from "@/constants/spread-constants";
 import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
-import { EditableImage, EditableShape, EditableVideo, EditableAudio } from "../canvas-spread-view";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";

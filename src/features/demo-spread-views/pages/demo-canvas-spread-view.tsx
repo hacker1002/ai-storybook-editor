@@ -28,18 +28,18 @@ import {
   type ItemType,
   type SpreadItemActionUnion,
 } from "@/features/editor/components/canvas-spread-view";
-import { DemoImageToolbar } from "../components/canvas/demo-image-toolbar";
-import { DemoTextToolbar } from "../components/canvas/demo-text-toolbar";
-import { DemoPageToolbar } from "../components/canvas/demo-page-toolbar";
-import { DemoShapeToolbar } from "../components/canvas/demo-shape-toolbar";
-import { ImportSpreadsDialog } from "../components/canvas/import-spreads-dialog";
-import { GenerateImageModal } from "@/features/editor/components/canvas-spread-view";
 import {
+  DemoImageToolbar,
+  DemoTextToolbar,
+  DemoPageToolbar,
+  DemoShapeToolbar,
   DemoSettingsPopover,
+  ImportSpreadsDialog,
   type MockOptions,
   type FeatureFlags,
   type ItemFlags,
-} from "../components/canvas/demo-settings-popover";
+} from "../components/canvas";
+import { GenerateImageModal } from "@/features/editor/components/canvas-spread-view";
 import {
   createMockSnapshot,
   type CreateSnapshotOptions,
@@ -48,7 +48,7 @@ import { createMockSpread } from "../__mocks__/spread-factory";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
-import { getFirstTextboxKey } from "@/features/editor/components/editor-shared";
+import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
 import type { SpreadTextboxContent } from "@/types/spread-types";
 
 // === Default Values ===

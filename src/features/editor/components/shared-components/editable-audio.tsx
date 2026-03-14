@@ -4,8 +4,8 @@
 import { useState, useCallback } from 'react';
 import { Volume2 } from 'lucide-react';
 import { cn } from '@/utils/utils';
-import type { SpreadAudio } from './types';
-import { COLORS } from './constants';
+import type { SpreadAudio } from '@/types/spread-types';
+import { COLORS } from '@/constants/spread-constants';
 
 interface EditableAudioProps {
   audio: SpreadAudio;

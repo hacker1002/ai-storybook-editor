@@ -1,7 +1,7 @@
 // use-toolbar-position.ts - Shared hook for positioning toolbars relative to selected elements
 
 import { useState, useLayoutEffect, useEffect, useRef, type RefObject } from "react";
-import type { Geometry } from "../types";
+import type { Geometry } from "@/types/spread-types";
 import { geometryToScreenRect } from "../utils/coordinate-utils";
 
 interface UseToolbarPositionOptions {

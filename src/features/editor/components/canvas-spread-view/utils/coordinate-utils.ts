@@ -1,4 +1,4 @@
-// utils/coordinate-utils.ts - Re-export from shared
+// utils/coordinate-utils.ts - Re-export from feature-level utils
 
 export {
   toPixel,
@@ -8,4 +8,4 @@ export {
   clamp,
   getScaledDimensions,
   geometryToScreenRect,
-} from '../../editor-shared';
+} from '../../../utils/coordinate-utils';

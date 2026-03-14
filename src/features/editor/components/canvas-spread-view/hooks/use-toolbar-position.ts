@@ -1,4 +1,4 @@
-// use-toolbar-position.ts - Re-export from shared
+// use-toolbar-position.ts - Re-export from feature-level hooks
 
-export { useToolbarPosition } from '../../editor-shared';
-export type { ToolbarPosition } from '../../editor-shared';
+export { useToolbarPosition } from '../../../hooks/use-toolbar-position';
+export type { ToolbarPosition } from '../../../hooks/use-toolbar-position';

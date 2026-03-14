@@ -3,7 +3,7 @@
 
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { cn } from '@/utils/utils';
-import type { Geometry, Typography, Fill, Outline } from './types';
+import type { Geometry, Typography, Fill, Outline } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
 
 interface EditableTextboxProps {

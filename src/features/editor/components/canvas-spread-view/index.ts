@@ -13,14 +13,16 @@ export { SpreadThumbnailList } from './spread-thumbnail-list';
 export { SpreadThumbnail } from './spread-thumbnail';
 export { NewSpreadButton, type SpreadType } from './new-spread-button';
 
-// Utility components
-export { EditableImage } from './editable-image';
-export { EditableShape } from './editable-shape';
-export { EditableVideo } from './editable-video';
-export { EditableAudio } from './editable-audio';
-export { EditableQuiz } from './editable-quiz';
-export { GenerateImageModal } from './generate-image-modal';
-export { EditableTextbox } from '../editor-shared';
+// Shared components (re-export from shared-components for backward compatibility)
+export {
+  EditableImage,
+  EditableShape,
+  EditableVideo,
+  EditableAudio,
+  EditableQuiz,
+  EditableTextbox,
+  GenerateImageModal,
+} from '../shared-components';
 export { SelectionFrame } from './selection-frame';
 export { PageItem } from './page-item';
 
