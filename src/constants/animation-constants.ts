@@ -1,6 +1,6 @@
 // animation-constants.ts - Mapping constants for AnimationsCreativeSpace feature
 
-import type { EffectCategory, TargetItemIcon } from './animation-types';
+import type { EffectCategory, TargetItemIcon } from '@/types/animation-types';
 import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from '@/components/playable-spread-view/constants';
 
 // Re-export for convenience
@@ -75,5 +75,3 @@ export const ALLOWED_EFFECTS_BY_TARGET: Record<string, number[]> = {
   shape: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15],
   quiz: [1],
 };
-
-export const SIDEBAR_WIDTH = 280;

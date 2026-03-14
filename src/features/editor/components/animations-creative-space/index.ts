@@ -1,32 +1,6 @@
 // animations-creative-space barrel exports
-
-// Types
-export type {
-  EffectCategory,
-  TargetItemIcon,
-  ResolvedAnimation,
-  AnimationFilterState,
-  ObjectFilterOption,
-  AvailableEffect,
-  SelectedItem,
-  SpreadAnimation,
-  Geometry,
-  ItemType,
-} from './animation-types';
-
-// Constants
-export {
-  EFFECT_TYPE,
-  EFFECT_TYPE_NAMES,
-  EFFECT_CATEGORY_MAP,
-  STAR_COLOR_MAP,
-  EFFECT_OPTIONS_MAP,
-  TARGET_ICON_MAP,
-  TRIGGER_TYPE_LABELS,
-  EFFECT_CATEGORY_LABELS,
-  ALLOWED_EFFECTS_BY_TARGET,
-  SIDEBAR_WIDTH,
-} from './animation-constants';
+// Types → @/types/animation-types
+// Constants → @/constants/animation-constants
 
 // Utils
 export {

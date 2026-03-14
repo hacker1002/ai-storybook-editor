@@ -1,4 +1,4 @@
-// features/demo-canvas-spread-view/demo-canvas-spread-view.tsx
+// features/demo-spread-views/pages/demo-canvas-spread-view.tsx
 "use client";
 
 import { useState, useCallback } from "react";
@@ -28,23 +28,23 @@ import {
   type ItemType,
   type SpreadItemActionUnion,
 } from "@/components/canvas-spread-view";
-import { DemoImageToolbar } from "./demo-image-toolbar";
-import { DemoTextToolbar } from "./demo-text-toolbar";
-import { DemoPageToolbar } from "./demo-page-toolbar";
-import { DemoShapeToolbar } from "./demo-shape-toolbar";
-import { ImportSpreadsDialog } from "./import-spreads-dialog";
+import { DemoImageToolbar } from "../components/canvas/demo-image-toolbar";
+import { DemoTextToolbar } from "../components/canvas/demo-text-toolbar";
+import { DemoPageToolbar } from "../components/canvas/demo-page-toolbar";
+import { DemoShapeToolbar } from "../components/canvas/demo-shape-toolbar";
+import { ImportSpreadsDialog } from "../components/canvas/import-spreads-dialog";
 import { GenerateImageModal } from "@/components/canvas-spread-view";
 import {
   DemoSettingsPopover,
   type MockOptions,
   type FeatureFlags,
   type ItemFlags,
-} from "./demo-settings-popover";
+} from "../components/canvas/demo-settings-popover";
 import {
   createMockSnapshot,
   type CreateSnapshotOptions,
-} from "./__mocks__/snapshot-factory";
-import { createMockSpread } from "./__mocks__/spread-factory";
+} from "../__mocks__/snapshot-factory";
+import { createMockSpread } from "../__mocks__/spread-factory";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";

@@ -11,8 +11,8 @@ import type {
   SelectedItem,
   SpreadAnimation,
   EffectCategory,
-} from './animation-types';
-import { STAR_COLOR_MAP, EFFECT_CATEGORY_LABELS } from './animation-constants';
+} from '@/types/animation-types';
+import { STAR_COLOR_MAP, EFFECT_CATEGORY_LABELS } from '@/constants/animation-constants';
 import { buildDefaultEffect } from './animation-utils';
 import { AnimationFilterPopover } from './animation-filter-popover';
 import { AnimationListItem } from './animation-list-item';

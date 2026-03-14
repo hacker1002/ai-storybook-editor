@@ -1,4 +1,4 @@
-// features/demo-canvas-spread-view/demo-settings-popover.tsx
+// features/demo-spread-views/components/canvas/demo-settings-popover.tsx
 "use client";
 
 import { Button } from "@/components/ui/button";

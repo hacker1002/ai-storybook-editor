@@ -1,4 +1,4 @@
-// features/demo-playable-spread-view/demo-playable-spread-view.tsx
+// features/demo-spread-views/pages/demo-playable-spread-view.tsx
 "use client";
 
 import { useState, useCallback } from "react";
@@ -10,13 +10,13 @@ import {
   type AssetSwapParams,
 } from "@/components/playable-spread-view";
 import { AnimationEditorSidebar, PlayerAnimationSidebar } from '@/features/editor/components/animations-creative-space';
-import { useDemoAnimationState } from './use-demo-animation-state';
+import { useDemoAnimationState } from '../components/playable/use-demo-animation-state';
 import { getFirstTextboxKey } from "@/components/shared";
 import {
   createPlayableSpreads,
   type CreatePlayableSpreadOptions,
-} from "./__mocks__/playable-spread-factory";
-import { createMockRemixAssets } from "./__mocks__/remix-mock-factory";
+} from "../__mocks__/playable-spread-factory";
+import { createMockRemixAssets } from "../__mocks__/remix-mock-factory";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";

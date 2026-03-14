@@ -2,8 +2,8 @@
 // Layout: Row1=trigger icon | Row2=object name + type icon | Row3=effect name + star | Row4=delay/duration/cLoop/eLoop
 
 import { useState } from "react";
-import type { ResolvedAnimation, SpreadAnimation } from "./animation-types";
-import { STAR_COLOR_MAP } from "./animation-constants";
+import type { ResolvedAnimation, SpreadAnimation } from "@/types/animation-types";
+import { STAR_COLOR_MAP } from "@/constants/animation-constants";
 import { AnimationSettingsPanel } from "./animation-settings-panel";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";

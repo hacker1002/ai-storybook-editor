@@ -10,7 +10,7 @@ import {
   useMaxActivatedOrder,
   useReplayableItems,
 } from "@/stores/animation-playback-store";
-import type { ResolvedAnimation } from "./animation-types";
+import type { ResolvedAnimation } from "@/types/animation-types";
 import { AnimationListItem } from "./animation-list-item";
 
 interface PlayerAnimationSidebarProps {

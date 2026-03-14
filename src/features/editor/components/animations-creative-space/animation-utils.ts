@@ -8,14 +8,14 @@ import type {
   AvailableEffect,
   TargetItemIcon,
   ItemType,
-} from './animation-types';
+} from '@/types/animation-types';
 import {
   EFFECT_CATEGORY_MAP,
   TARGET_ICON_MAP,
   EFFECT_TYPE_NAMES,
   EFFECT_OPTIONS_MAP,
   ALLOWED_EFFECTS_BY_TARGET,
-} from './animation-constants';
+} from '@/constants/animation-constants';
 
 // Items map: item id -> { title, type }
 type ItemsMap = Map<string, { title: string; type: string }>;

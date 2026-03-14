@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { Star } from 'lucide-react';
-import type { ResolvedAnimation, AvailableEffect, EffectCategory } from './animation-types';
+import type { ResolvedAnimation, AvailableEffect, EffectCategory } from '@/types/animation-types';
 import {
   STAR_COLOR_MAP,
   EFFECT_CATEGORY_LABELS,
-} from './animation-constants';
+} from '@/constants/animation-constants';
 import { getAvailableEffects } from './animation-utils';
 
 interface EffectTypeGridProps {

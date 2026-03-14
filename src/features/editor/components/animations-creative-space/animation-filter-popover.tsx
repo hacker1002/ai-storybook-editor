@@ -1,8 +1,8 @@
 // animation-filter-popover.tsx - Filter popover for AnimationsCreativeSpace
 // Filters: object, effect category, trigger type — changes apply immediately
 
-import type { AnimationFilterState, ObjectFilterOption, EffectCategory } from './animation-types';
-import { EFFECT_CATEGORY_LABELS, STAR_COLOR_MAP, TRIGGER_TYPE_LABELS } from './animation-constants';
+import type { AnimationFilterState, ObjectFilterOption, EffectCategory } from '@/types/animation-types';
+import { EFFECT_CATEGORY_LABELS, STAR_COLOR_MAP, TRIGGER_TYPE_LABELS } from '@/constants/animation-constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 

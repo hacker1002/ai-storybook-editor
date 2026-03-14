@@ -12,7 +12,7 @@ import type {
   ObjectFilterOption,
   AvailableEffect,
   ItemType,
-} from '../editor/components/animations-creative-space/animation-types';
+} from '@/types/animation-types';
 import {
   resolveAnimations,
   filterAnimations,
@@ -20,7 +20,7 @@ import {
   getAvailableEffects,
   buildDefaultEffect,
   createDefaultFilterState,
-} from '../editor/components/animations-creative-space/animation-utils';
+} from '@/features/editor/components/animations-creative-space/animation-utils';
 
 // Items map: item id -> { title, type }
 type ItemsMap = Map<string, { title: string; type: string }>;

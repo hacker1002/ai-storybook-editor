@@ -1,7 +1,7 @@
 // animation-settings-panel.tsx - Panel for configuring animation effect type and options
 
-import type { ResolvedAnimation, SpreadAnimation } from './animation-types';
-import { EFFECT_OPTIONS_MAP, TRIGGER_TYPE_LABELS } from './animation-constants';
+import type { ResolvedAnimation, SpreadAnimation } from '@/types/animation-types';
+import { EFFECT_OPTIONS_MAP, TRIGGER_TYPE_LABELS } from '@/constants/animation-constants';
 import {
   Select,
   SelectContent,

@@ -5,8 +5,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { HomePage } from '@/features/home';
 import { LoginPage } from '@/features/auth';
 import { EditorPage } from '@/features/editor';
-import { DemoCanvasSpreadView } from '@/features/demo-canvas-spread-view';
-import { DemoPlayableSpreadView } from '@/features/demo-playable-spread-view';
+import { DemoCanvasSpreadView, DemoPlayableSpreadView } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
 
 function PlaceholderPage({ title }: { title: string }) {
