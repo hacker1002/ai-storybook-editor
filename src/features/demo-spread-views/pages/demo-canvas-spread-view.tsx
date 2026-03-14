@@ -27,13 +27,13 @@ import {
   type SpreadType,
   type ItemType,
   type SpreadItemActionUnion,
-} from "@/components/canvas-spread-view";
+} from "@/features/editor/components/canvas-spread-view";
 import { DemoImageToolbar } from "../components/canvas/demo-image-toolbar";
 import { DemoTextToolbar } from "../components/canvas/demo-text-toolbar";
 import { DemoPageToolbar } from "../components/canvas/demo-page-toolbar";
 import { DemoShapeToolbar } from "../components/canvas/demo-shape-toolbar";
 import { ImportSpreadsDialog } from "../components/canvas/import-spreads-dialog";
-import { GenerateImageModal } from "@/components/canvas-spread-view";
+import { GenerateImageModal } from "@/features/editor/components/canvas-spread-view";
 import {
   DemoSettingsPopover,
   type MockOptions,
@@ -48,8 +48,8 @@ import { createMockSpread } from "../__mocks__/spread-factory";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
-import { getFirstTextboxKey } from "@/components/shared";
-import type { SpreadTextboxContent } from "@/components/shared/types";
+import { getFirstTextboxKey } from "@/features/editor/components/editor-shared";
+import type { SpreadTextboxContent } from "@/types/spread-types";
 
 // === Default Values ===
 const DEFAULT_MOCK_OPTIONS: MockOptions = {

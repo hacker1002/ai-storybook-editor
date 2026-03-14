@@ -2,9 +2,9 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
-import { CanvasSpreadView } from '@/components/canvas-spread-view';
-import { EditableImage } from '@/components/canvas-spread-view/editable-image';
-import { EditableTextbox } from '@/components/shared/editable-textbox';
+import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
+import { EditableImage } from '@/features/editor/components/canvas-spread-view/editable-image';
+import { EditableTextbox } from '@/features/editor/components/editor-shared/editable-textbox';
 import { useDummyById, useDummyActions } from './hooks';
 import { DummyItemToolbar } from './dummy-item-toolbar';
 import type {
@@ -16,8 +16,8 @@ import type {
   TextToolbarContext,
   SpreadItemActionUnion,
   PageData,
-} from '@/components/canvas-spread-view/types';
-import type { SpreadType } from '@/components/canvas-spread-view';
+} from '@/features/editor/components/canvas-spread-view/types';
+import type { SpreadType } from '@/features/editor/components/canvas-spread-view';
 import type {
   DummySpread,
   DummyImage,

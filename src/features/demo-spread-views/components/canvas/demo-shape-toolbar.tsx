@@ -17,7 +17,7 @@ import {
   type Geometry,
   type ShapeFill,
   type ShapeOutline,
-} from "@/components/canvas-spread-view";
+} from "@/features/editor/components/canvas-spread-view";
 
 interface DemoShapeToolbarProps<TSpread extends BaseSpread> {
   context: ShapeToolbarContext<TSpread>;

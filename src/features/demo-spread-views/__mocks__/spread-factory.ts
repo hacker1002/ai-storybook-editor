@@ -12,7 +12,7 @@ import type {
   Typography,
   ShapeFill,
   ShapeOutline,
-} from '@/components/canvas-spread-view';
+} from '@/features/editor/components/canvas-spread-view';
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {

@@ -1,5 +1,5 @@
 // remix-mock-factory.ts - Mock factory for RemixAsset data
-import type { RemixAsset } from '@/components/playable-spread-view/types';
+import type { RemixAsset } from '@/types/playable-types';
 
 // Sample remix assets - target.key MUST match SpreadImage.name for swappability
 // Image names from playable-spread-factory: main_character, side_character, prop_1, background_1

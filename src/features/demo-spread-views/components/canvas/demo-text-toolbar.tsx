@@ -26,7 +26,7 @@ import {
   type TextToolbarContext,
   type Typography,
   type Geometry,
-} from "@/components/canvas-spread-view";
+} from "@/features/editor/components/canvas-spread-view";
 
 interface DemoTextToolbarProps<TSpread extends BaseSpread> {
   context: TextToolbarContext<TSpread>;

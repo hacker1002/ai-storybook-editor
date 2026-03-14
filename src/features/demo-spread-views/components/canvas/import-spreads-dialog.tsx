@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Upload, ClipboardPaste, FileJson, AlertCircle } from "lucide-react";
-import type { BaseSpread } from "@/components/canvas-spread-view";
+import type { BaseSpread } from "@/types/spread-types";
 
 interface ImportSpreadsDialogProps {
   open: boolean;

@@ -1,6 +1,6 @@
 // __mocks__/playable-spread-factory.ts - Mock factory for PlayableSpread data
 
-import type { PlayableSpread } from "@/components/playable-spread-view/types";
+import type { PlayableSpread } from "@/types/playable-types";
 import type {
   SpreadAnimation,
   SpreadItemMediaType,
@@ -8,18 +8,14 @@ import type {
   SpreadVideo,
   SpreadAudio,
   SpreadQuiz,
-} from "@/components/shared";
-import type {
   PageData,
   SpreadTextbox,
   SpreadImage,
   Geometry,
   Typography,
-} from "@/components/canvas-spread-view/types";
-import {
-  ANIMATION_PRESETS,
-  EFFECT_TYPE,
-} from "@/components/playable-spread-view/constants";
+} from "@/types/spread-types";
+import { ANIMATION_PRESETS } from "@/features/editor/components/playable-spread-view/constants";
+import { EFFECT_TYPE } from "@/constants/playable-constants";
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {

@@ -2,8 +2,8 @@
 // Manages selected item, filter state, expanded index, and all CRUD animation handlers
 
 import { useState, useMemo, useCallback } from 'react';
-import type { PlayableSpread } from '@/components/playable-spread-view/types';
-import type { SpreadQuizContent } from '@/components/shared/types';
+import type { PlayableSpread } from '@/types/playable-types';
+import type { SpreadQuizContent } from '@/types/spread-types';
 import type {
   SpreadAnimation,
   AnimationFilterState,
@@ -156,7 +156,7 @@ export function useDemoAnimationState({
           const newAnimation: SpreadAnimation = {
             order: currentAnimations.length,
             type: 0,
-            target: { id: selectedItem.id, type: selectedItem.type },
+            target: { id: selectedItem.id, type: selectedItem.type as SpreadAnimation['target']['type'] },
             trigger_type: 'after_previous',
             effect: buildDefaultEffect(effectType),
           };

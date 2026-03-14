@@ -15,7 +15,7 @@ import type {
   BaseSpread,
   PageToolbarContext,
   TextureOption,
-} from "@/components/canvas-spread-view";
+} from "@/features/editor/components/canvas-spread-view";
 
 const LAYOUT_OPTIONS = [
   { id: "default", label: "Default" },

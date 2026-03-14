@@ -1,5 +1,5 @@
 // Dummy types for DummyCreativeSpace feature
-import type { Geometry, Typography, PageData } from '@/components/shared/types';
+import type { Geometry, Typography, PageData } from '@/types/spread-types';
 
 export type DummyType = 'prose' | 'verse' | 'poetry';
 

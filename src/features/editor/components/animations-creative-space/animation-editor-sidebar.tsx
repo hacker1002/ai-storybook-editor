@@ -2,7 +2,7 @@
 // Pure editor component: CRUD, filter, drag-reorder. No player/playback logic.
 
 import { useState, useMemo } from 'react';
-import type { ItemType } from '@/components/playable-spread-view/types';
+import type { ItemType } from '@/types/spread-types';
 import type {
   ResolvedAnimation,
   AnimationFilterState,

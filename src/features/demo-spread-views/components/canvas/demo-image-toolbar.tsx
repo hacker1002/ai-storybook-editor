@@ -2,7 +2,7 @@ import { useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Upload, Copy, Trash2, ChevronDown } from "lucide-react";
-import { useToolbarPosition, CANVAS, type BaseSpread, type ImageToolbarContext } from "@/components/canvas-spread-view";
+import { useToolbarPosition, CANVAS, type BaseSpread, type ImageToolbarContext } from "@/features/editor/components/canvas-spread-view";
 
 const COMMON_RATIOS = [
   { label: '1:1', value: 1 },

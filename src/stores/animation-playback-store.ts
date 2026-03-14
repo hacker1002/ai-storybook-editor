@@ -3,12 +3,12 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type { AnimationStep, PlayerPhase, PlayMode, ReplayableItem } from '../components/playable-spread-view/types';
+import type { AnimationStep, PlayerPhase, PlayMode, ReplayableItem } from '@/types/playable-types';
 import {
   findNextOnNextStep,
   findPrevOnNextStep,
   findOnClickStepForTarget,
-} from '../components/playable-spread-view/player-utils';
+} from '@/features/editor/components/playable-spread-view/player-utils';
 
 // === State & Actions interfaces ===
 

@@ -1,7 +1,7 @@
 // animation-types.ts - Type definitions for AnimationsCreativeSpace feature
 
-import type { SpreadAnimation, Geometry } from '@/components/shared/types';
-import type { ItemType } from '@/components/playable-spread-view/types';
+import type { SpreadAnimation, Geometry } from '@/types/spread-types';
+import type { ItemType } from '@/types/spread-types';
 
 // Re-export for consumer convenience
 export type { SpreadAnimation, Geometry };

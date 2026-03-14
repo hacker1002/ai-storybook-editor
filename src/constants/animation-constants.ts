@@ -1,7 +1,7 @@
 // animation-constants.ts - Mapping constants for AnimationsCreativeSpace feature
 
 import type { EffectCategory, TargetItemIcon } from '@/types/animation-types';
-import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from '@/components/playable-spread-view/constants';
+import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from '@/constants/playable-constants';
 
 // Re-export for convenience
 export { EFFECT_TYPE, EFFECT_TYPE_NAMES };

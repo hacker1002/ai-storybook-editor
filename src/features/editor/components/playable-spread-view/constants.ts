@@ -1,0 +1,137 @@
+// constants.ts - Layout and UI constants for PlayableSpreadView
+
+import type { PlayMode } from './types';
+
+// === Layout Constants ===
+export const LAYOUT = {
+  FOOTER_HEIGHT: 120,     // px
+  THUMBNAIL_WIDTH: 100,   // px
+  THUMBNAIL_HEIGHT: 80,   // px
+  THUMBNAIL_GAP: 8,       // px
+} as const;
+
+// === Visual Constants ===
+export const THUMBNAIL_STYLES = {
+  SELECTED_BORDER: '2px solid #2196F3',
+  UNSELECTED_BORDER: '1px solid #E0E0E0',
+  HOVER_BG: '#E3F2FD',
+  BORDER_RADIUS: 4,       // px
+} as const;
+
+// === Play Mode Cycle ===
+export const PLAY_MODE_CYCLE: PlayMode[] = ['off', 'semi-auto', 'auto'];
+
+// === Zoom Constants (playable header) ===
+export const PLAYABLE_ZOOM = {
+  MIN: 25,
+  MAX: 200,
+  DEFAULT: 100,
+  STEP: 5,
+} as const;
+
+// === Volume Constants ===
+export const VOLUME = {
+  DEFAULT: 100,
+  STEP: 10,
+  MIN: 0,
+  MAX: 100,
+} as const;
+
+// === Keyboard Shortcuts ===
+export const KEYBOARD_SHORTCUTS = {
+  TOGGLE_PLAY: ' ',       // Space
+  STOP: 'Escape',
+  PREV_SPREAD: 'ArrowLeft',
+  NEXT_SPREAD: 'ArrowRight',
+  TOGGLE_MUTE: 'm',
+  VOLUME_UP: 'ArrowUp',
+  VOLUME_DOWN: 'ArrowDown',
+  FIRST_SPREAD: 'Home',
+  LAST_SPREAD: 'End',
+} as const;
+
+// === Remix Editor Constants ===
+export const REMIX_EDITOR = {
+  PROMPT_MAX_LENGTH: 500,
+  REFERENCE_MAX_SIZE_MB: 10,
+  TOOLBAR_MIN_WIDTH: 320,
+  TOOLBAR_GAP: 8,
+} as const;
+
+// === Remix Visual Styles ===
+export const REMIX_STYLES = {
+  SWAPPABLE_BORDER_IDLE: '1px dashed #9E9E9E',
+  SWAPPABLE_BORDER_HOVER: '1px solid #757575',
+  SELECTION_BORDER: '2px solid #2196F3',
+  FOCUS_RING: '2px solid #2196F3',
+} as const;
+
+// === Z-Index Constants ===
+export const TEXTBOX_Z_INDEX_BASE = 300;
+export const QUIZ_Z_INDEX_BASE = 350;
+
+// === Animation Trigger Delays (in seconds) ===
+export const TRIGGER_DELAY = {
+  AFTER_PREVIOUS: 0.5,    // Delay after previous animation ends
+  ON_CLICK_AUTO: 1.0,     // Delay for on_click in semi-auto/auto mode
+  FIRST_ANIMATION: 0.5,   // Delay for first animation with after_previous
+  AUTO_SPREAD_COMPLETE: 1.0, // Delay before advancing to next spread in auto mode
+} as const;
+
+// === Effect Type Constants (centralized to @/constants/playable-constants) ===
+import { EFFECT_TYPE } from '@/constants/playable-constants';
+export { EFFECT_TYPE };
+export { EFFECT_TYPE_NAMES } from '@/constants/playable-constants';
+
+// === Rapid Next Debounce ===
+export const RAPID_NEXT_THRESHOLD = 150; // ms
+
+// === Sidebar Layout ===
+export const SIDEBAR = {
+  WIDTH: 56,
+  PADDING_VERTICAL: 16,
+  BG_COLOR: '#FFFFFF',
+  BORDER_LEFT: '1px solid #E0E0E0',
+} as const;
+
+// === Sidebar Button Sizes ===
+export const SIDEBAR_BUTTONS = {
+  PLAY_MODE_TOGGLE: 32,
+  BACK_FWD: 28,
+  PLAY_PAUSE: 40,
+  SPEAKER: 32,
+  VOLUME_SLIDER_HEIGHT: 96,
+} as const;
+
+// === Animation Presets ===
+export const ANIMATION_PRESETS = {
+  // Entrance effects (2-6)
+  appear: { type: EFFECT_TYPE.APPEAR, duration: 0 },
+  fadeIn: { type: EFFECT_TYPE.FADE_IN, duration: 500 },
+  flyInLeft: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'left' as const },
+  flyInRight: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'right' as const },
+  flyInTop: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'up' as const },
+  flyInBottom: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'down' as const },
+  floatInUp: { type: EFFECT_TYPE.FLOAT_IN, duration: 500, direction: 'up' as const },
+  floatInDown: { type: EFFECT_TYPE.FLOAT_IN, duration: 500, direction: 'down' as const },
+  floatInLeft: { type: EFFECT_TYPE.FLOAT_IN, duration: 500, direction: 'left' as const },
+  zoomIn: { type: EFFECT_TYPE.ZOOM, duration: 500, amount: 1 },
+  // Emphasis effects (7-10)
+  spin: { type: EFFECT_TYPE.SPIN, duration: 800, amount: 1, loop: 0 },
+  spinDouble: { type: EFFECT_TYPE.SPIN, duration: 1000, amount: 2, loop: 0 },
+  teeter: { type: EFFECT_TYPE.TEETER, duration: 400, loop: 2 },
+  grow: { type: EFFECT_TYPE.GROW_SHRINK, duration: 400, amount: 1.2 },
+  shrink: { type: EFFECT_TYPE.GROW_SHRINK, duration: 400, amount: 0.8 },
+  transparency: { type: EFFECT_TYPE.TRANSPARENCY, duration: 500, amount: 0.5 },
+  // Exit effects (12-15)
+  disappear: { type: EFFECT_TYPE.DISAPPEAR, duration: 0 },
+  fadeOut: { type: EFFECT_TYPE.FADE_OUT, duration: 500 },
+  flyOutRight: { type: EFFECT_TYPE.FLY_OUT, duration: 600, direction: 'right' as const },
+  flyOutLeft: { type: EFFECT_TYPE.FLY_OUT, duration: 600, direction: 'left' as const },
+  flyOutTop: { type: EFFECT_TYPE.FLY_OUT, duration: 600, direction: 'up' as const },
+  floatOutUp: { type: EFFECT_TYPE.FLOAT_OUT, duration: 500, direction: 'up' as const },
+  floatOutDown: { type: EFFECT_TYPE.FLOAT_OUT, duration: 500, direction: 'down' as const },
+  // Motion effects (16-17) — geometry set per-animation
+  lineMove: { type: EFFECT_TYPE.LINES, duration: 800 },
+  arcMove: { type: EFFECT_TYPE.ARCS, duration: 1000 },
+};

@@ -7,10 +7,10 @@ import {
   type BaseSpread,
   type ImageToolbarContext,
   type TextToolbarContext,
-} from '@/components/canvas-spread-view';
+} from '@/features/editor/components/canvas-spread-view';
 import type { DummyImage, DummyTextbox, DummyTextboxContent } from '@/types/dummy';
 import { FONT_SIZE_CONFIG, GEOMETRY_CONFIG, DEFAULT_COLOR, getFirstTextboxKey } from '@/types/dummy';
-import type { Geometry } from '@/components/shared/types';
+import type { Geometry } from '@/types/spread-types';
 
 type ToolbarContext<TSpread extends BaseSpread> =
   | { type: 'image'; context: ImageToolbarContext<TSpread>; item: DummyImage }
