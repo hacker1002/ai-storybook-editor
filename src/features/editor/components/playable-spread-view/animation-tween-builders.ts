@@ -2,7 +2,7 @@
 
 import type { SpreadAnimation } from "@/types/spread-types";
 import { CANVAS } from "@/constants/spread-constants";
-import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from "./constants";
+import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from "@/constants/playable-constants";
 import {
   calculateFlyOffset,
   calculateFloatOffset,

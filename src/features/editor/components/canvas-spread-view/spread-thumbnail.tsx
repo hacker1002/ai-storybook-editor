@@ -16,7 +16,7 @@ import {
   buildViewOnlyVideoContext,
   buildViewOnlyAudioContext,
 } from "./utils/context-builders";
-import { CANVAS, THUMBNAIL } from "./constants";
+import { CANVAS, THUMBNAIL } from "@/constants/spread-constants";
 import type {
   BaseSpread,
   ItemType,
@@ -25,7 +25,7 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
-} from "./types";
+} from "@/types/canvas-types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   // Data
@@ -125,7 +125,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 
   // Memoize text contexts - skip if renderTextItem not provided
   const textContexts = useMemo(() => {
-    if (!renderItems.includes("text") || !renderTextItem) return [];
+    if (!renderItems.includes("textbox") || !renderTextItem) return [];
     return spread.textboxes.map((textbox, idx) => ({
       textbox,
       context: buildViewOnlyTextContext(textbox, idx, spread),

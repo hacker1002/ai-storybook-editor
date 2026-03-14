@@ -26,3 +26,21 @@ export const Z_INDEX = {
   OBJECT_BASE: 2000,
   SELECTION_FRAME: 10000,
 } as const;
+
+export const ZOOM = {
+  MIN: 25,
+  MAX: 200,
+  DEFAULT: 100,
+  STEP: 5,
+} as const;
+
+export const COLUMNS = {
+  MIN: 2,
+  MAX: 6,
+  DEFAULT: 4,
+} as const;
+
+export const THUMBNAIL = {
+  SMALL_WIDTH: 100,
+  GAP: 8,
+} as const;

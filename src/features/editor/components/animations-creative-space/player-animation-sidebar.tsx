@@ -10,8 +10,9 @@ import {
   useMaxActivatedOrder,
   useReplayableItems,
 } from "@/stores/animation-playback-store";
-import type { ResolvedAnimation } from "@/types/animation-types";
+import type { ResolvedAnimation, SpreadAnimation } from "@/types/animation-types";
 import { AnimationListItem } from "./animation-list-item";
+import { computeStepNumbers } from "./utils";
 
 interface PlayerAnimationSidebarProps {
   animations: ResolvedAnimation[];
@@ -19,9 +20,11 @@ interface PlayerAnimationSidebarProps {
 
 // No-op callbacks for disabled AnimationListItem (editor callbacks required by interface)
 const noop = () => {};
-const noopIndex = () => {};
+const noopNumber = (_v: number) => {};
 const noopDrag = (_e: React.DragEvent, _i: number) => {};
-const noopStr = (_f: string, _v: number | string) => {};
+const noopEffectOption = (_f: string, _v: number | string) => {};
+const noopTriggerType = (_t: SpreadAnimation["trigger_type"]) => {};
+const noopBoolean = (_v: boolean) => {};
 
 export function PlayerAnimationSidebar({
   animations,
@@ -52,18 +55,7 @@ export function PlayerAnimationSidebar({
     }
   }, [activeAnimationOrders, animations, phase, maxActivatedOrder]);
 
-  // Step numbers: only on_next/on_click get a number
-  const stepNumbers = useMemo(() => {
-    let step = 0;
-    return animations.map((resolved) => {
-      const trigger = resolved.animation.trigger_type;
-      if (trigger === "on_next" || trigger === "on_click") {
-        step += 1;
-        return step;
-      }
-      return null;
-    });
-  }, [animations]);
+  const stepNumbers = useMemo(() => computeStepNumbers(animations), [animations]);
 
   // Build remaining cLoop map from store's replayableItems
   // Key: animation order, Value: remaining replays
@@ -132,15 +124,15 @@ export function PlayerAnimationSidebar({
               onClick={noop}
               onDelete={noop}
               onSelectTarget={noop}
-              onDragStart={noopIndex}
+              onDragStart={noopNumber}
               onDragOver={noopDrag}
               onDragEnd={noop}
-              onDrop={noopIndex}
-              onEffectTypeChange={noopIndex}
-              onTriggerTypeChange={noop as any}
-              onClickLoopChange={noopIndex}
-              onEffectOptionChange={noopStr}
-              onMustCompleteChange={noop as any}
+              onDrop={noopNumber}
+              onEffectTypeChange={noopNumber}
+              onTriggerTypeChange={noopTriggerType}
+              onClickLoopChange={noopNumber}
+              onEffectOptionChange={noopEffectOption}
+              onMustCompleteChange={noopBoolean}
             />
           ))
         )}

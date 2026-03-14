@@ -14,7 +14,7 @@ import type {
   Geometry,
   Typography,
 } from "@/types/spread-types";
-import { ANIMATION_PRESETS } from "@/features/editor/components/playable-spread-view/constants";
+import { ANIMATION_PRESETS } from "@/constants/playable-constants";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
 
 // === Helper: Generate UUID ===

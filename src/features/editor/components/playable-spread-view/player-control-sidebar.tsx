@@ -3,13 +3,22 @@
 // player-control-sidebar.tsx - Vertical sidebar with play mode toggle, player controls, and volume controls
 
 import { SkipBack, SkipForward, Play, Pause } from 'lucide-react';
-import type { PlayerControlSidebarProps, PlayMode } from './types';
-import { PLAY_MODE_CYCLE } from './constants';
+import type { PlayMode } from '@/types/playable-types';
 import {
   usePlayMode,
   useIsPlaying,
   usePlaybackActions,
 } from '@/stores/animation-playback-store';
+
+interface PlayerControlSidebarProps {
+  onPlayModeChange: (mode: PlayMode) => void;
+  onNext: () => void;
+  onBack: () => void;
+  canNext: boolean;
+  canBack: boolean;
+}
+
+const PLAY_MODE_CYCLE: PlayMode[] = ['off', 'semi-auto', 'auto'];
 
 // === PlayModeIcon — pill SVG with 2 circles indicating current play mode ===
 

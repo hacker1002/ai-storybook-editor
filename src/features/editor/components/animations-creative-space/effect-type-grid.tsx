@@ -7,7 +7,7 @@ import {
   STAR_COLOR_MAP,
   EFFECT_CATEGORY_LABELS,
 } from '@/constants/animation-constants';
-import { getAvailableEffects } from './animation-utils';
+import { getAvailableEffects } from './utils';
 
 interface EffectTypeGridProps {
   animation: ResolvedAnimation;

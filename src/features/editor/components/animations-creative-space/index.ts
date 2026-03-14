@@ -10,7 +10,8 @@ export {
   buildObjectFilterOptions,
   filterAnimations,
   createDefaultFilterState,
-} from './animation-utils';
+  computeStepNumbers,
+} from './utils';
 
 // Components
 export { AnimationFilterPopover } from './animation-filter-popover';

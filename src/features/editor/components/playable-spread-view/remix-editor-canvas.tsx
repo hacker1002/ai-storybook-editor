@@ -12,8 +12,17 @@ import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
-import type { RemixEditorCanvasProps } from "./types";
-import { TEXTBOX_Z_INDEX_BASE } from "./constants";
+import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
+import type { PlayableSpread, RemixAsset, AssetSwapParams } from "@/types/playable-types";
+
+// === Props Interface ===
+export interface RemixEditorCanvasProps {
+  spread: PlayableSpread;
+  zoomLevel: number;
+  assets: RemixAsset[];
+  onAssetSwap: (params: AssetSwapParams) => Promise<void>;
+  onTextChange?: (textboxId: string, newText: string) => void;
+}
 
 export function RemixEditorCanvas({
   spread,

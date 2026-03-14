@@ -1,7 +1,7 @@
 // use-spread-view-keyboard.ts
 import { useEffect } from 'react';
-import type { ViewMode } from '../types';
-import { ZOOM, COLUMNS } from '../constants';
+import type { ViewMode } from '@/types/canvas-types';
+import { ZOOM, COLUMNS } from '@/constants/spread-constants';
 
 interface UseSpreadViewKeyboardProps {
   viewMode: ViewMode;

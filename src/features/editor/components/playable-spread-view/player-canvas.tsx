@@ -8,14 +8,29 @@ import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import { Z_INDEX } from "@/constants/spread-constants";
 import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
-import type { PlayerCanvasProps, AnimationStep } from "./types";
-import { TEXTBOX_Z_INDEX_BASE, RAPID_NEXT_THRESHOLD } from "./constants";
+import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
+import type { PlayableSpread, PlayMode, AnimationStep } from "@/types/playable-types";
 import {
   isReplayableClick,
   buildAnimationSteps,
   findPrevOnNextStep,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
+
+// === Constants ===
+const RAPID_NEXT_THRESHOLD = 150; // ms
+
+// === Props Interface ===
+export interface PlayerCanvasProps {
+  spread: PlayableSpread;
+  zoomLevel: number;
+  playMode: PlayMode;
+  hasNext: boolean;
+  hasPrevious: boolean;
+  onSpreadComplete: (spreadId: string) => void;
+  onSkipSpread: (direction: 'next' | 'prev') => void;
+  onPlayModeChange: (mode: PlayMode) => void;
+}
 import {
   usePlaybackStore,
   usePlaybackActions,

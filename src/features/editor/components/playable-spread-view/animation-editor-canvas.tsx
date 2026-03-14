@@ -6,11 +6,20 @@ import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableA
 import { getScaledDimensions } from '../../utils/coordinate-utils';
 import { getFirstTextboxKey } from '../../utils/textbox-helpers';
 import { Z_INDEX } from '@/constants/spread-constants';
-import type { Geometry, Typography, Fill, Outline } from '@/types/spread-types';
+import type { Geometry, Typography, Fill, Outline, ItemType } from '@/types/spread-types';
 import { PageItem } from '../canvas-spread-view/page-item';
 import { SelectionOverlay } from './selection-overlay';
-import type { ItemType, AnimationEditorCanvasProps } from './types';
-import { TEXTBOX_Z_INDEX_BASE } from './constants';
+import { TEXTBOX_Z_INDEX_BASE } from '@/constants/playable-constants';
+import type { PlayableSpread } from '@/types/playable-types';
+
+// === Props Interface ===
+export interface AnimationEditorCanvasProps {
+  spread: PlayableSpread;
+  zoomLevel: number;
+  selectedItemId?: string | null;
+  selectedItemType?: ItemType | null;
+  onItemSelect: (itemType: ItemType | null, itemId: string | null) => void;
+}
 
 export function AnimationEditorCanvas({
   spread,

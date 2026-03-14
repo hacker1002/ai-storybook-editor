@@ -20,7 +20,7 @@ import {
   getAvailableEffects,
   buildDefaultEffect,
   createDefaultFilterState,
-} from '@/features/editor/components/animations-creative-space/animation-utils';
+} from '@/features/editor/components/animations-creative-space';
 
 // Items map: item id -> { title, type }
 type ItemsMap = Map<string, { title: string; type: string }>;

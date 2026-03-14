@@ -5,15 +5,38 @@ import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/utils/utils";
 import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio } from "../shared-components";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
-import type { PlayableThumbnailListProps, PlayableSpread } from "./types";
 import type { Geometry, Typography, Fill, Outline } from "@/types/spread-types";
-import { LAYOUT, THUMBNAIL_STYLES, TEXTBOX_Z_INDEX_BASE } from "./constants";
+import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
+import type { PlayableSpread } from "@/types/playable-types";
 
 // === Canvas Constants (from canvas-spread-view) ===
 const CANVAS = {
   BASE_WIDTH: 800,
   BASE_HEIGHT: 600,
 } as const;
+
+// === Layout Constants ===
+const LAYOUT = {
+  FOOTER_HEIGHT: 120,
+  THUMBNAIL_WIDTH: 100,
+  THUMBNAIL_HEIGHT: 80,
+  THUMBNAIL_GAP: 8,
+} as const;
+
+// === Thumbnail Styles ===
+const THUMBNAIL_STYLES = {
+  SELECTED_BORDER: '2px solid #2196F3',
+  UNSELECTED_BORDER: '1px solid #E0E0E0',
+  HOVER_BG: '#E3F2FD',
+  BORDER_RADIUS: 4,
+} as const;
+
+// === Props Interface ===
+export interface PlayableThumbnailListProps {
+  spreads: PlayableSpread[];
+  selectedId: string | null;
+  onSpreadClick: (spreadId: string) => void;
+}
 
 // === PlayableThumbnail Item Component ===
 interface PlayableThumbnailProps {

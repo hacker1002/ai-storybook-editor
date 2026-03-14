@@ -1,35 +1,39 @@
 // dummy-main-view.tsx - Main editor view for dummy creative space
-'use client';
+"use client";
 
-import { useMemo, useCallback } from 'react';
-import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
-import { EditableImage, EditableTextbox } from '@/features/editor/components/shared-components';
-import { useDummyById, useDummyActions } from './hooks';
-import { DummyItemToolbar } from './dummy-item-toolbar';
+import { useMemo, useCallback } from "react";
+import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
+import {
+  EditableImage,
+  EditableTextbox,
+} from "@/features/editor/components/shared-components";
+import { useDummyById, useDummyActions } from "./hooks";
+import { DummyItemToolbar } from "./dummy-item-toolbar";
 import type {
   BaseSpread,
-  ItemType,
   ImageItemContext,
   TextItemContext,
   ImageToolbarContext,
   TextToolbarContext,
   SpreadItemActionUnion,
   PageData,
-} from '@/features/editor/components/canvas-spread-view/types';
-import type { SpreadType } from '@/features/editor/components/canvas-spread-view';
+} from "@/types/canvas-types";
+import type { SpreadType } from "@/features/editor/components/canvas-spread-view";
 import type {
   DummySpread,
   DummyImage,
   DummyTextbox,
   DummyTextboxContent,
-} from '@/types/dummy';
-import { getFirstTextboxKey } from '@/types/dummy';
+} from "@/types/dummy";
+import { getFirstTextboxKey } from "@/types/dummy";
 
 interface DummyMainViewProps {
   selectedDummyId: string;
 }
 
-function convertDummySpreadsToBaseSpreads(dummySpreads: DummySpread[]): BaseSpread[] {
+function convertDummySpreadsToBaseSpreads(
+  dummySpreads: DummySpread[]
+): BaseSpread[] {
   return dummySpreads.map((spread) => ({
     id: spread.id,
     pages: spread.pages,
@@ -49,17 +53,14 @@ function convertDummySpreadsToBaseSpreads(dummySpreads: DummySpread[]): BaseSpre
 function createEmptySpread(spreadIndex: number): DummySpread {
   const basePage: PageData = {
     number: spreadIndex * 2,
-    type: 'normal_page',
+    type: "normal_page",
     layout: null,
-    background: { color: '#ffffff', texture: null },
+    background: { color: "#ffffff", texture: null },
   };
 
   return {
     id: crypto.randomUUID(),
-    pages: [
-      basePage,
-      { ...basePage, number: spreadIndex * 2 + 1 },
-    ],
+    pages: [basePage, { ...basePage, number: spreadIndex * 2 + 1 }],
     images: [],
     textboxes: [],
   };
@@ -75,7 +76,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   }, [dummy]);
 
   const handleSpreadSelect = useCallback((spreadId: string) => {
-    console.log('Spread selected:', spreadId);
+    console.log("Spread selected:", spreadId);
   }, []);
 
   const handleSpreadReorder = useCallback(
@@ -89,7 +90,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
     (type: SpreadType) => {
       if (!dummy) return;
       const newSpread = createEmptySpread(dummy.spreads.length);
-      if (type !== 'double') {
+      if (type !== "double") {
         newSpread.pages = [newSpread.pages[0]];
       }
       actions.addDummySpread(selectedDummyId, newSpread);
@@ -113,55 +114,55 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       if (!spread) return;
 
       switch (itemType) {
-        case 'image':
-          if (action === 'add') {
+        case "image":
+          if (action === "add") {
             const newImage: DummyImage = {
               id: crypto.randomUUID(),
-              art_note: '',
+              art_note: "",
               geometry: { x: 10, y: 10, w: 30, h: 30 },
-              typography: { size: 12, color: '#000000' },
+              typography: { size: 12, color: "#000000" },
             };
             actions.updateDummySpread(selectedDummyId, spreadId, {
               images: [...spread.images, newImage],
             });
-          } else if (action === 'update' && itemId && data) {
+          } else if (action === "update" && itemId && data) {
             actions.updateDummySpread(selectedDummyId, spreadId, {
               images: spread.images.map((img) =>
                 img.id === itemId ? { ...img, ...data } : img
               ),
             });
-          } else if (action === 'delete' && itemId) {
+          } else if (action === "delete" && itemId) {
             actions.updateDummySpread(selectedDummyId, spreadId, {
               images: spread.images.filter((img) => img.id !== itemId),
             });
           }
           break;
 
-        case 'textbox':
-          if (action === 'add') {
+        case "textbox":
+          if (action === "add") {
             const newTextbox: DummyTextbox = {
               id: crypto.randomUUID(),
               en_US: {
-                text: '',
+                text: "",
                 geometry: { x: 10, y: 10, w: 30, h: 20 },
                 typography: {
-                  family: 'Arial',
+                  family: "Arial",
                   size: 14,
                   weight: 400,
-                  style: 'normal',
-                  textAlign: 'left',
+                  style: "normal",
+                  textAlign: "left",
                   lineHeight: 1.5,
                   letterSpacing: 0,
-                  color: '#000000',
-                  decoration: 'none',
-                  textTransform: 'none',
+                  color: "#000000",
+                  decoration: "none",
+                  textTransform: "none",
                 },
               },
             };
             actions.updateDummySpread(selectedDummyId, spreadId, {
               textboxes: [...spread.textboxes, newTextbox],
             });
-          } else if (action === 'update' && itemId && data) {
+          } else if (action === "update" && itemId && data) {
             actions.updateDummySpread(selectedDummyId, spreadId, {
               textboxes: spread.textboxes.map((tb) =>
                 tb.id === itemId
@@ -169,18 +170,23 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
                   : tb
               ) as DummyTextbox[],
             });
-          } else if (action === 'delete' && itemId) {
+          } else if (action === "delete" && itemId) {
             actions.updateDummySpread(selectedDummyId, spreadId, {
               textboxes: spread.textboxes.filter((tb) => tb.id !== itemId),
             });
           }
           break;
 
-        case 'page':
-          if (action === 'update' && typeof itemId === 'number' && data) {
+        case "page":
+          if (action === "update" && typeof itemId === "number" && data) {
             const newPages = [...spread.pages];
-            newPages[itemId] = { ...newPages[itemId], ...(data as Partial<PageData>) };
-            actions.updateDummySpread(selectedDummyId, spreadId, { pages: newPages });
+            newPages[itemId] = {
+              ...newPages[itemId],
+              ...(data as Partial<PageData>),
+            };
+            actions.updateDummySpread(selectedDummyId, spreadId, {
+              pages: newPages,
+            });
           }
           break;
       }
@@ -191,14 +197,16 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   const renderImageItem = useCallback(
     (context: ImageItemContext<BaseSpread>) => {
       const spread = dummy?.spreads.find((s) => s.id === context.spreadId);
-      const dummyImage = spread?.images.find((img) => img.id === context.item.id);
+      const dummyImage = spread?.images.find(
+        (img) => img.id === context.item.id
+      );
 
       return (
         <EditableImage
           image={{
             id: context.item.id,
-            art_note: context.item.art_note || '',
-            visual_description: context.item.art_note || '',
+            art_note: context.item.art_note || "",
+            visual_description: context.item.art_note || "",
             geometry: context.item.geometry,
             illustrations: [],
             final_hires_media_url: undefined,
@@ -216,35 +224,32 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
     [dummy]
   );
 
-  const renderTextItem = useCallback(
-    (context: TextItemContext<BaseSpread>) => {
-      const textbox = context.item as unknown as DummyTextbox;
-      const langKey = getFirstTextboxKey(textbox);
-      if (!langKey) return null;
+  const renderTextItem = useCallback((context: TextItemContext<BaseSpread>) => {
+    const textbox = context.item as unknown as DummyTextbox;
+    const langKey = getFirstTextboxKey(textbox);
+    if (!langKey) return null;
 
-      const langData = textbox[langKey] as DummyTextboxContent;
+    const langData = textbox[langKey] as DummyTextboxContent;
 
-      return (
-        <EditableTextbox
-          text={langData.text}
-          geometry={langData.geometry}
-          typography={langData.typography}
-          index={context.itemIndex}
-          isSelected={context.isSelected}
-          isSelectable={context.isSpreadSelected}
-          isEditable={context.isSpreadSelected}
-          onSelect={context.onSelect}
-          onTextChange={(newText) => {
-            context.onUpdate({
-              [langKey]: { ...langData, text: newText },
-            } as unknown as Partial<DummyTextbox>);
-          }}
-          onEditingChange={context.onEditingChange ?? (() => {})}
-        />
-      );
-    },
-    []
-  );
+    return (
+      <EditableTextbox
+        text={langData.text}
+        geometry={langData.geometry}
+        typography={langData.typography}
+        index={context.itemIndex}
+        isSelected={context.isSelected}
+        isSelectable={context.isSpreadSelected}
+        isEditable={context.isSpreadSelected}
+        onSelect={context.onSelect}
+        onTextChange={(newText) => {
+          context.onUpdate({
+            [langKey]: { ...langData, text: newText },
+          } as unknown as Partial<DummyTextbox>);
+        }}
+        onEditingChange={context.onEditingChange ?? (() => {})}
+      />
+    );
+  }, []);
 
   const renderImageToolbar = useCallback(
     (context: ImageToolbarContext<BaseSpread>) => {
@@ -259,19 +264,27 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
           const cloned: DummyImage = {
             ...image,
             id: crypto.randomUUID(),
-            geometry: { ...image.geometry, x: image.geometry.x + 5, y: image.geometry.y + 5 },
+            geometry: {
+              ...image.geometry,
+              x: image.geometry.x + 5,
+              y: image.geometry.y + 5,
+            },
           };
           handleSpreadItemAction({
             spreadId: context.spreadId,
-            itemType: 'image',
-            action: 'add',
+            itemType: "image",
+            action: "add",
             itemId: null,
             data: cloned,
           });
         },
       };
 
-      return <DummyItemToolbar data={{ type: 'image', context: contextWithClone, item: image }} />;
+      return (
+        <DummyItemToolbar
+          data={{ type: "image", context: contextWithClone, item: image }}
+        />
+      );
     },
     [dummy, handleSpreadItemAction]
   );
@@ -294,20 +307,28 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
             id: crypto.randomUUID(),
             [langKey]: {
               ...langData,
-              geometry: { ...langData.geometry, x: langData.geometry.x + 5, y: langData.geometry.y + 5 },
+              geometry: {
+                ...langData.geometry,
+                x: langData.geometry.x + 5,
+                y: langData.geometry.y + 5,
+              },
             },
           };
           handleSpreadItemAction({
             spreadId: context.spreadId,
-            itemType: 'textbox',
-            action: 'add',
+            itemType: "textbox",
+            action: "add",
             itemId: null,
             data: cloned,
           });
         },
       };
 
-      return <DummyItemToolbar data={{ type: 'textbox', context: contextWithClone, item: textbox }} />;
+      return (
+        <DummyItemToolbar
+          data={{ type: "textbox", context: contextWithClone, item: textbox }}
+        />
+      );
     },
     [dummy, handleSpreadItemAction]
   );
@@ -323,7 +344,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   return (
     <CanvasSpreadView
       spreads={baseSpreads}
-      renderItems={['image', 'text'] as ItemType[]}
+      renderItems={["image", "textbox"]}
       renderImageItem={renderImageItem}
       renderTextItem={renderTextItem}
       renderImageToolbar={renderImageToolbar}

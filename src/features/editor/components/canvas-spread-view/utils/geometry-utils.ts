@@ -1,7 +1,7 @@
 // utils/geometry-utils.ts - Geometry calculation utilities
 
-import type { Geometry, ResizeHandle } from '../types';
-import { CANVAS } from '../constants';
+import type { Geometry, ResizeHandle } from '@/types/canvas-types';
+import { CANVAS } from '@/constants/spread-constants';
 import { clamp } from './coordinate-utils';
 
 /**

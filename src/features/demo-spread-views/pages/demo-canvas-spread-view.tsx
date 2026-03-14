@@ -127,7 +127,8 @@ export function DemoCanvasSpreadView() {
 
   // Generate image modal state
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [generateModalImage, setGenerateModalImage] = useState<SpreadImage | null>(null);
+  const [generateModalImage, setGenerateModalImage] =
+    useState<SpreadImage | null>(null);
 
   // Regenerate mock data with current options
   const handleRegenerate = useCallback(() => {
@@ -574,7 +575,7 @@ export function DemoCanvasSpreadView() {
               renderItems={
                 [
                   itemFlags.showImages && "image",
-                  itemFlags.showTexts && "text",
+                  itemFlags.showTexts && "textbox",
                   itemFlags.showShapes && "shape",
                   itemFlags.showVideos && "video",
                   itemFlags.showAudios && "audio",

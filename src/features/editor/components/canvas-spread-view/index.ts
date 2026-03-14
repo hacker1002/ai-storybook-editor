@@ -69,7 +69,7 @@ export type {
   // Action types
   SpreadItemActionUnion,
   OnUpdateSpreadItemFn,
-} from './types';
+} from '@/types/canvas-types';
 
 // Utilities
 export {
@@ -103,5 +103,5 @@ export {
   buildViewOnlyAudioContext,
 } from './utils/context-builders';
 
-// Constants
-export { CANVAS, ZOOM, COLUMNS, SELECTION, Z_INDEX, THUMBNAIL, COLORS } from './constants';
+// Constants - re-exported from centralized @/constants/ for barrel consumers
+export { CANVAS, ZOOM, COLUMNS, Z_INDEX, THUMBNAIL, COLORS } from '@/constants/spread-constants';

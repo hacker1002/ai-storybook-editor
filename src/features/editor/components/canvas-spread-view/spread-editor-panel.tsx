@@ -24,7 +24,7 @@ import {
   applyNudge,
 } from "./utils/geometry-utils";
 import { getScaledDimensions } from "./utils/coordinate-utils";
-import { CANVAS, Z_INDEX } from "./constants";
+import { CANVAS, Z_INDEX } from "@/constants/spread-constants";
 import type {
   BaseSpread,
   SpreadTextbox,
@@ -47,7 +47,7 @@ import type {
   LayoutOption,
   Typography,
   SpreadItemActionUnion,
-} from "./types";
+} from "@/types/canvas-types";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 
 // === Props Interface ===
@@ -741,7 +741,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           })}
 
         {/* Textboxes - skip if renderTextItem not provided */}
-        {renderItems.includes("text") &&
+        {renderItems.includes("textbox") &&
           renderTextItem &&
           spread.textboxes.map((textbox, index) => {
             const context = buildTextContext(

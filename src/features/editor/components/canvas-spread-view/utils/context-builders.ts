@@ -17,7 +17,7 @@ import type {
   Geometry,
   Typography,
   SpreadItemActionUnion,
-} from '../types';
+} from '@/types/canvas-types';
 import { getFirstTextboxKey } from '../../../utils/textbox-helpers';
 import type { SpreadTextboxContent } from '@/types/spread-types';
 import type { RefObject } from 'react';

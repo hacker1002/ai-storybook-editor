@@ -3,8 +3,8 @@
 
 import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import gsap from 'gsap';
-import type { AnimationStep, PlayableSpread } from '../types';
-import { TRIGGER_DELAY, EFFECT_TYPE } from '../constants';
+import type { AnimationStep, PlayableSpread } from '@/types/playable-types';
+import { EFFECT_TYPE } from '@/constants/playable-constants';
 import {
   usePlaybackStore,
   usePlayerPhase,
@@ -22,6 +22,14 @@ import {
   resolveAnimationEndState,
 } from '../player-initial-states';
 import { getScaledDimensions } from '../../../utils/coordinate-utils';
+
+// === Constants ===
+const TRIGGER_DELAY = {
+  AFTER_PREVIOUS: 0.5,
+  ON_CLICK_AUTO: 1.0,
+  FIRST_ANIMATION: 0.5,
+  AUTO_SPREAD_COMPLETE: 1.0,
+} as const;
 
 // === Hook Interfaces ===
 

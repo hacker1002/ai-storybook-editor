@@ -1,29 +1,25 @@
 // index.ts - Barrel exports for PlayableSpreadView component family
 
-// === Types ===
+// === Domain Types (re-export from @/types for barrel consumers) ===
 export type {
   OperationMode,
   ActiveCanvas,
   PlayMode,
-  ItemType,
   PlayableSpread,
   RemixAsset,
   RemixEditorState,
   AssetSwapParams,
-  PlayableSpreadViewProps,
-  PlayableHeaderProps,
-  PlayableThumbnailListProps,
-  AnimationEditorCanvasProps,
-  RemixEditorCanvasProps,
-  PromptToolbarProps,
-  PlayerCanvasProps,
-} from './types';
+  PlayerPhase,
+  AnimationStep,
+  ReplayableItem,
+  PlayerState,
+  PlayerAction,
+} from '@/types/playable-types';
 
-// === Constants ===
-export { LAYOUT, THUMBNAIL_STYLES, PLAY_MODE_CYCLE, VOLUME, KEYBOARD_SHORTCUTS } from './constants';
+export type { ItemType } from '@/types/spread-types';
 
-// === Types - new ===
-export type { PlayerControlSidebarProps } from './types';
+// === Shared Constants (re-export from @/constants for barrel consumers) ===
+export { TEXTBOX_Z_INDEX_BASE, PLAYABLE_ZOOM, ANIMATION_PRESETS } from '@/constants/playable-constants';
 
 // === Components ===
 export { PlayableSpreadView } from './playable-spread-view';
@@ -34,8 +30,6 @@ export { RemixEditorCanvas } from './remix-editor-canvas';
 export { PromptToolbar } from './prompt-toolbar';
 export { SelectionOverlay } from './selection-overlay';
 export { PlayerCanvas } from './player-canvas';
-
-// === Components - new ===
 export { PlayerControlSidebar } from './player-control-sidebar';
 
 // === Store selectors ===
@@ -46,6 +40,3 @@ export {
   usePlayerPhase,
   usePlaybackActions,
 } from '@/stores/animation-playback-store';
-
-// === Constants - new ===
-export { RAPID_NEXT_THRESHOLD, SIDEBAR, SIDEBAR_BUTTONS, PLAYABLE_ZOOM } from './constants';

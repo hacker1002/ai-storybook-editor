@@ -1,4 +1,4 @@
-// animation-utils.ts - Pure utility functions for animation data transformation
+// utils.ts - Pure utility functions for animation data transformation
 
 import type {
   SpreadAnimation,
@@ -138,4 +138,20 @@ export function createDefaultFilterState(): AnimationFilterState {
     effectFilter: 'all',
     triggerFilters: new Set(),
   };
+}
+
+/**
+ * Compute step numbers for animation list display.
+ * Only on_next/on_click triggers get an incrementing step number; others return null.
+ */
+export function computeStepNumbers(animations: ResolvedAnimation[]): (number | null)[] {
+  let step = 0;
+  return animations.map((resolved) => {
+    const trigger = resolved.animation.trigger_type;
+    if (trigger === 'on_next' || trigger === 'on_click') {
+      step += 1;
+      return step;
+    }
+    return null;
+  });
 }

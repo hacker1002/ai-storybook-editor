@@ -5,9 +5,9 @@ import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } fro
 import { SpreadViewHeader } from './spread-view-header';
 import { SpreadEditorPanel } from './spread-editor-panel';
 import { SpreadThumbnailList } from './spread-thumbnail-list';
-import { ZOOM, COLUMNS } from './constants';
+import { ZOOM, COLUMNS } from '@/constants/spread-constants';
 import type { SpreadType } from './new-spread-button';
-import type { ViewMode } from './types';
+import type { ViewMode } from '@/types/canvas-types';
 
 const STORAGE_KEY = 'spread-view-prefs';
 
@@ -53,7 +53,7 @@ import type {
   LayoutOption,
   OnUpdateSpreadItemFn,
   SpreadItemActionUnion,
-} from './types';
+} from '@/types/canvas-types';
 
 // === Props Interface ===
 interface CanvasSpreadViewProps<TSpread extends BaseSpread> {

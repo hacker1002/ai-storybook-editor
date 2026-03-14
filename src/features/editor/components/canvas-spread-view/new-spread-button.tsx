@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Plus, BookOpen, FileText } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CANVAS, THUMBNAIL } from './constants';
+import { CANVAS, THUMBNAIL } from '@/constants/spread-constants';
 
 export type SpreadType = 'double' | 'single';
 

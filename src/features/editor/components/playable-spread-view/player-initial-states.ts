@@ -3,7 +3,7 @@
 import gsap from 'gsap';
 import type { SpreadAnimation } from '@/types/spread-types';
 import { CANVAS } from '@/constants/spread-constants';
-import { EFFECT_TYPE } from './constants';
+import { EFFECT_TYPE } from '@/constants/playable-constants';
 
 // === Offset Helpers ===
 

@@ -10,8 +10,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Grid2X2, Minus, Plus } from "lucide-react";
-import { HEADER, ZOOM, COLUMNS } from "./constants";
-import type { ViewMode } from "./types";
+import { ZOOM, COLUMNS } from "@/constants/spread-constants";
+import type { ViewMode } from "@/types/canvas-types";
+
+const HEADER = {
+  TOGGLE_SIZE: 36,
+  SLIDER_WIDTH: 120,
+  GAP: 8,
+} as const;
 import { useSpreadViewKeyboard } from "./hooks/use-spread-view-keyboard";
 
 // === Props Interface ===

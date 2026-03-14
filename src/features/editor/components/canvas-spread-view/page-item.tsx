@@ -9,8 +9,16 @@ import type {
   PageToolbarContext,
   LayoutOption,
   TextureOption,
-} from './types';
-import { Z_INDEX, AVAILABLE_TEXTURES } from './constants';
+} from '@/types/canvas-types';
+import { Z_INDEX } from '@/constants/spread-constants';
+
+const AVAILABLE_TEXTURES = [
+  "paper",
+  "canvas",
+  "linen",
+  "watercolor",
+  null,
+] as const;
 
 interface PageItemProps<TSpread extends BaseSpread> {
   // Data

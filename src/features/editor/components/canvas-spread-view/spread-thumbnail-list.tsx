@@ -24,8 +24,8 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
-} from './types';
-import { COLUMNS } from './constants';
+} from '@/types/canvas-types';
+import { COLUMNS } from '@/constants/spread-constants';
 
 interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   // Data

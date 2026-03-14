@@ -1,12 +1,46 @@
 // playable-spread-view.tsx - Root container component for playable spread view
 import { useState, useEffect, useCallback } from "react";
-import type { PlayableSpreadViewProps, ActiveCanvas, PlayMode } from "./types";
-import { KEYBOARD_SHORTCUTS, PLAYABLE_ZOOM } from "./constants";
+import type {
+  OperationMode,
+  ActiveCanvas,
+  PlayMode,
+  PlayableSpread,
+  RemixAsset,
+  AssetSwapParams,
+} from "@/types/playable-types";
+import type { ItemType } from "@/types/spread-types";
+import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 import { PlayableHeader } from "./playable-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
 import { RemixEditorCanvas } from "./remix-editor-canvas";
 import { PlayerCanvas } from "./player-canvas";
+
+interface PlayableSpreadViewProps {
+  mode: OperationMode;
+  spreads: PlayableSpread[];
+  assets?: RemixAsset[];
+  selectedItemId?: string | null;
+  selectedItemType?: ItemType | null;
+  onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
+  onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
+  onTextChange?: (textboxId: string, newText: string) => void;
+  onSpreadSelect?: (spreadId: string) => void;
+  onPreview?: () => void;
+  onStopPreview?: () => void;
+}
+
+const KEYBOARD_SHORTCUTS = {
+  TOGGLE_PLAY: ' ',
+  STOP: 'Escape',
+  PREV_SPREAD: 'ArrowLeft',
+  NEXT_SPREAD: 'ArrowRight',
+  TOGGLE_MUTE: 'm',
+  VOLUME_UP: 'ArrowUp',
+  VOLUME_DOWN: 'ArrowDown',
+  FIRST_SPREAD: 'Home',
+  LAST_SPREAD: 'End',
+} as const;
 
 // Spread data textbox NEED pre-filtered with language by consumer
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({

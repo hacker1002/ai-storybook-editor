@@ -2,8 +2,17 @@
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Play, Square, Minus, Plus } from "lucide-react";
-import type { PlayableHeaderProps } from "./types";
-import { PLAYABLE_ZOOM } from "./constants";
+import type { ActiveCanvas, PlayMode } from "@/types/playable-types";
+import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
+
+interface PlayableHeaderProps {
+  activeCanvas: ActiveCanvas;
+  playMode: PlayMode;
+  zoomLevel: number;
+  onZoomChange: (level: number) => void;
+  onPlay: () => void;
+  onStop: () => void;
+}
 
 export function PlayableHeader({
   activeCanvas,

@@ -1,7 +1,7 @@
 // player-utils.ts - Utility functions for building and navigating animation steps
 
 import type { SpreadAnimation } from '@/types/spread-types';
-import type { AnimationStep } from './types';
+import type { AnimationStep } from '@/types/playable-types';
 
 // === Building steps from raw animations ===
 

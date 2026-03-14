@@ -1,8 +1,25 @@
 // prompt-toolbar.tsx - AI Remix prompt input toolbar
 import { Paperclip, Send, X, Loader2 } from 'lucide-react';
 import { useRef, useEffect, type ChangeEvent, type KeyboardEvent } from 'react';
-import type { PromptToolbarProps } from './types';
-import { REMIX_EDITOR } from './constants';
+
+interface PromptToolbarProps {
+  position: { top: number; left: number } | null;
+  prompt: string;
+  referenceImage: File | null;
+  isSubmitting: boolean;
+  error?: string | null;
+  onPromptChange: (prompt: string) => void;
+  onReferenceUpload: (file: File | null) => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}
+
+const REMIX_EDITOR = {
+  PROMPT_MAX_LENGTH: 500,
+  REFERENCE_MAX_SIZE_MB: 10,
+  TOOLBAR_MIN_WIDTH: 320,
+  TOOLBAR_GAP: 8,
+} as const;
 
 const MAX_FILE_SIZE = REMIX_EDITOR.REFERENCE_MAX_SIZE_MB * 1024 * 1024;
 

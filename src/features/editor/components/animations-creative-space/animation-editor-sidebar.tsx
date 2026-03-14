@@ -13,7 +13,7 @@ import type {
   EffectCategory,
 } from '@/types/animation-types';
 import { STAR_COLOR_MAP, EFFECT_CATEGORY_LABELS } from '@/constants/animation-constants';
-import { buildDefaultEffect } from './animation-utils';
+import { buildDefaultEffect, computeStepNumbers } from './utils';
 import { AnimationFilterPopover } from './animation-filter-popover';
 import { AnimationListItem } from './animation-list-item';
 import { Button } from '@/components/ui/button';
@@ -83,18 +83,7 @@ export function AnimationEditorSidebar({
 
   const categoryOrder: EffectCategory[] = ['play', 'entrance', 'emphasis', 'exit', 'motion-paths'];
 
-  // Step numbers: only on_next/on_click get a number
-  const stepNumbers = useMemo(() => {
-    let step = 0;
-    return animations.map((resolved) => {
-      const trigger = resolved.animation.trigger_type;
-      if (trigger === 'on_next' || trigger === 'on_click') {
-        step += 1;
-        return step;
-      }
-      return null;
-    });
-  }, [animations]);
+  const stepNumbers = useMemo(() => computeStepNumbers(animations), [animations]);
 
   // ---------- Drag reorder handlers ----------
 

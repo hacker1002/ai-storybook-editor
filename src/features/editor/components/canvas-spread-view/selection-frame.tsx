@@ -3,7 +3,7 @@
 
 import { useRef, useEffect } from 'react';
 import Moveable from 'react-moveable';
-import type { Geometry, Point, ResizeHandle } from './types';
+import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
 
 interface SelectionFrameProps {
   geometry: Geometry;
