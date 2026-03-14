@@ -346,8 +346,6 @@ export function createMockTextbox(
       text,
       geometry: getTextboxGeometry(),
       typography: { ...defaultTypography },
-      fill: { color: '#ffffff', opacity: 0 },
-      outline: { color: '#000000', width: 0, radius: 0, type: 'solid' },
     },
     ...overrides,
   };

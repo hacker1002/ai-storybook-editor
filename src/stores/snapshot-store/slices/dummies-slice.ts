@@ -1,24 +1,9 @@
-import type { StateCreator } from 'zustand';
-import type { SnapshotStore } from '../types';
-import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
-
-export interface DummiesSlice {
-  dummies: ManuscriptDummy[];
-  setDummies: (dummies: ManuscriptDummy[]) => void;
-  addDummy: (dummy: ManuscriptDummy) => void;
-  updateDummy: (dummyId: string, updates: Partial<ManuscriptDummy>) => void;
-  deleteDummy: (dummyId: string) => void;
-  getDummy: (dummyId: string) => ManuscriptDummy | undefined;
-  addDummySpread: (dummyId: string, spread: DummySpread) => void;
-  updateDummySpread: (dummyId: string, spreadId: string, updates: Partial<DummySpread>) => void;
-  deleteDummySpread: (dummyId: string, spreadId: string) => void;
-  reorderDummySpreads: (dummyId: string, fromIndex: number, toIndex: number) => void;
-  updateDummySpreads: (dummyId: string, spreads: DummySpread[]) => void;
-}
+import type { StateCreator } from "zustand";
+import type { SnapshotStore, DummiesSlice } from "../types";
 
 export const createDummiesSlice: StateCreator<
   SnapshotStore,
-  [['zustand/immer', never]],
+  [["zustand/immer", never]],
   [],
   DummiesSlice
 > = (set, get) => ({
@@ -85,7 +70,13 @@ export const createDummiesSlice: StateCreator<
   reorderDummySpreads: (dummyId, fromIndex, toIndex) =>
     set((state) => {
       const dummy = state.dummies.find((d) => d.id === dummyId);
-      if (dummy && fromIndex >= 0 && toIndex >= 0 && fromIndex < dummy.spreads.length && toIndex < dummy.spreads.length) {
+      if (
+        dummy &&
+        fromIndex >= 0 &&
+        toIndex >= 0 &&
+        fromIndex < dummy.spreads.length &&
+        toIndex < dummy.spreads.length
+      ) {
         const [removed] = dummy.spreads.splice(fromIndex, 1);
         dummy.spreads.splice(toIndex, 0, removed);
         state.sync.isDirty = true;
