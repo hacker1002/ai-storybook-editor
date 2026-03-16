@@ -2,6 +2,17 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
+import type { RetouchData } from '@/types/retouch-types';
+import type {
+  BaseSpread,
+  SpreadImage,
+  SpreadTextbox,
+  SpreadShape,
+  SpreadVideo,
+  SpreadAudio,
+  SpreadQuiz,
+  SpreadAnimation,
+} from '@/types/spread-types';
 
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
@@ -32,6 +43,47 @@ export const useDummySpreadIds = (dummyId: string): string[] =>
     useShallow((s) => s.dummies.find((d) => d.id === dummyId)?.spreads.map((sp) => sp.id) ?? [])
   );
 
+// Retouch selectors
+export const useRetouch = (): RetouchData => useSnapshotStore((s) => s.retouch);
+export const useRetouchSpreads = (): BaseSpread[] => useSnapshotStore((s) => s.retouch.spreads);
+export const useRetouchSpreadIds = (): string[] =>
+  useSnapshotStore(useShallow((s) => s.retouch.spreads.map((sp) => sp.id)));
+export const useRetouchSpreadById = (spreadId: string): BaseSpread | undefined =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId));
+export const useRetouchSpreadCount = (): number => useSnapshotStore((s) => s.retouch.spreads.length);
+
+export const useRetouchImageById = (spreadId: string, imageId: string): SpreadImage | undefined =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.images.find((i) => i.id === imageId));
+export const useRetouchTextboxById = (spreadId: string, textboxId: string): SpreadTextbox | undefined =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.textboxes.find((t) => t.id === textboxId));
+export const useRetouchShapeById = (spreadId: string, shapeId: string): SpreadShape | undefined =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.shapes?.find((sh) => sh.id === shapeId));
+export const useRetouchVideoById = (spreadId: string, videoId: string): SpreadVideo | undefined =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.videos?.find((v) => v.id === videoId));
+export const useRetouchAudioById = (spreadId: string, audioId: string): SpreadAudio | undefined =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.audios?.find((a) => a.id === audioId));
+export const useRetouchQuizById = (spreadId: string, quizId: string): SpreadQuiz | undefined =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId));
+export const useRetouchQuizzes = (spreadId: string): SpreadQuiz[] =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.quizzes ?? []);
+export const useRetouchAnimations = (spreadId: string): SpreadAnimation[] =>
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.animations ?? []);
+
+// Computed: find all images/videos derived from a specific original illustration image
+export const useRetouchObjectsByImageId = (
+  spreadId: string,
+  originalImageId: string,
+): (SpreadImage | SpreadVideo)[] =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const spread = s.retouch.spreads.find((sp) => sp.id === spreadId);
+      if (!spread) return [];
+      const images = spread.images.filter((i) => i.original_image_id === originalImageId);
+      const videos = (spread.videos ?? []).filter((v) => v.original_image_id === originalImageId);
+      return [...images, ...videos];
+    }),
+  );
+
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>
   useSnapshotStore(
@@ -52,6 +104,35 @@ export const useSnapshotActions = () =>
       deleteDummySpread: s.deleteDummySpread,
       reorderDummySpreads: s.reorderDummySpreads,
       updateDummySpreads: s.updateDummySpreads,
+      // Retouch
+      setRetouch: s.setRetouch,
+      addRetouchSpread: s.addRetouchSpread,
+      updateRetouchSpread: s.updateRetouchSpread,
+      deleteRetouchSpread: s.deleteRetouchSpread,
+      reorderRetouchSpreads: s.reorderRetouchSpreads,
+      addRetouchImage: s.addRetouchImage,
+      updateRetouchImage: s.updateRetouchImage,
+      deleteRetouchImage: s.deleteRetouchImage,
+      addRetouchTextbox: s.addRetouchTextbox,
+      updateRetouchTextbox: s.updateRetouchTextbox,
+      deleteRetouchTextbox: s.deleteRetouchTextbox,
+      addRetouchShape: s.addRetouchShape,
+      updateRetouchShape: s.updateRetouchShape,
+      deleteRetouchShape: s.deleteRetouchShape,
+      addRetouchVideo: s.addRetouchVideo,
+      updateRetouchVideo: s.updateRetouchVideo,
+      deleteRetouchVideo: s.deleteRetouchVideo,
+      addRetouchAudio: s.addRetouchAudio,
+      updateRetouchAudio: s.updateRetouchAudio,
+      deleteRetouchAudio: s.deleteRetouchAudio,
+      addRetouchQuiz: s.addRetouchQuiz,
+      updateRetouchQuiz: s.updateRetouchQuiz,
+      deleteRetouchQuiz: s.deleteRetouchQuiz,
+      addRetouchAnimation: s.addRetouchAnimation,
+      updateRetouchAnimation: s.updateRetouchAnimation,
+      deleteRetouchAnimation: s.deleteRetouchAnimation,
+      reorderRetouchAnimations: s.reorderRetouchAnimations,
+      clearRetouch: s.clearRetouch,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,
@@ -63,5 +144,5 @@ export const useSnapshotActions = () =>
       resetSnapshot: s.resetSnapshot,
       fetchSnapshot: s.fetchSnapshot,
       saveSnapshot: s.saveSnapshot,
-    }))
+    })),
   );

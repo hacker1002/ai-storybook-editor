@@ -7,6 +7,7 @@ import type { SnapshotStore } from './types';
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';
 import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
+import { createRetouchSlice } from './slices/retouch-slice';
 
 const log = createLogger('Store', 'SnapshotStore');
 
@@ -17,6 +18,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createDocsSlice(...args),
         ...createMetaSlice(...args),
         ...createDummiesSlice(...args),
+        ...createRetouchSlice(...args),
 
         // Fetch state
         fetchLoading: false,
@@ -56,10 +58,12 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.tag = data.tag;
               state.docs = data.docs?.length ? data.docs : DEFAULT_DOCS;
               state.dummies = data.dummies ?? [];
+              state.retouch = data.retouch ?? { spreads: [] };
             } else {
               state.meta.bookId = bookId;
               state.docs = DEFAULT_DOCS;
               state.dummies = [];
+              state.retouch = { spreads: [] };
             }
             state.fetchLoading = false;
             state.sync.isDirty = false;
@@ -68,11 +72,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, dummies, sync } = get();
+          const { meta, docs, dummies, retouch, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
 
-          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length });
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, retouchSpreadCount: retouch.spreads.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -85,6 +89,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             book_id: meta.bookId,
             docs,
             dummies,
+            retouch,
             version,
             save_type: 1, // manual save
           };
@@ -93,7 +98,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           if (meta.id) {
             result = await supabase
               .from('snapshots')
-              .update({ docs, dummies, version })
+              .update({ docs, dummies, retouch, version })
               .eq('id', meta.id)
               .select()
               .single();
@@ -130,6 +135,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
             state.dummies = data.dummies ?? [];
+            state.retouch = data.retouch ?? { spreads: [] };
             if (data.meta) {
               Object.assign(state.meta, data.meta);
             }
@@ -143,6 +149,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           set((state) => {
             state.docs = DEFAULT_DOCS;
             state.dummies = [];
+            state.retouch = { spreads: [] };
             state.meta = { id: null, bookId: null, version: null, tag: null };
             state.sync = { isDirty: false, lastSavedAt: null, isSaving: false, error: null };
             state.fetchLoading = false;

@@ -2,7 +2,13 @@
 // Centralized from components/shared/types.ts
 
 // === Unified Item Type (canvas + playable merged) ===
-export type ItemType = 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz';
+export type ItemType =
+  | "image"
+  | "textbox"
+  | "shape"
+  | "video"
+  | "audio"
+  | "quiz";
 
 // === Geometry Types ===
 export interface Point {
@@ -121,7 +127,14 @@ export interface SpreadQuiz {
   player_visible: boolean;
   editor_visible: boolean;
   options: SpreadQuizOption[];
-  [languageKey: string]: SpreadQuizContent | SpreadQuizOption[] | Geometry | number | boolean | string | undefined;
+  [languageKey: string]:
+    | SpreadQuizContent
+    | SpreadQuizOption[]
+    | Geometry
+    | number
+    | boolean
+    | string
+    | undefined;
 }
 
 // === Page Types ===
@@ -170,13 +183,26 @@ export interface SpreadImage {
 export interface SpreadTextbox {
   id: string;
   title?: string;
-  [languageKey: string]: SpreadTextboxContent | string | undefined;
+  [languageKey: string]: SpreadTextboxContent | string | boolean | undefined;
+  // Retouch only
+  player_visible?: boolean;
+  editor_visible?: boolean;
+}
+
+// === Textbox Audio (retouch phase TTS) ===
+export interface TextboxAudio {
+  script: string;
+  media_url: string;
+  speed: number;
+  emotion: string;
+  voice: string;
 }
 
 export interface SpreadTextboxContent {
   text: string;
   geometry: Geometry;
   typography: Typography;
+  audio?: TextboxAudio; // retouch phase only
 }
 
 export interface SpreadAnimation {

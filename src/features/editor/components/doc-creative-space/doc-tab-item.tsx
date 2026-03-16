@@ -67,11 +67,19 @@ export function DocTabItem({
       )}
     >
       {/* Tab Header */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
         aria-expanded={isExpanded}
         className={cn(
-          'group flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm',
+          'group flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-sm',
           'transition-colors hover:bg-accent/50',
           isActive && 'font-medium'
         )}
@@ -131,7 +139,7 @@ export function DocTabItem({
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         )}
-      </button>
+      </div>
 
       {/* Expandable PromptPanel */}
       {isExpanded && (
