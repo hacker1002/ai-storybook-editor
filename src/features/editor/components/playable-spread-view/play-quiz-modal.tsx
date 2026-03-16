@@ -7,8 +7,6 @@ import { cn } from '@/utils/utils';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from '@/components/ui/dialog';
 import type { SpreadQuiz, SpreadQuizContent } from '@/types/spread-types';
 import { QuizOptionCard } from './quiz-option-card';
@@ -50,6 +48,14 @@ export function PlayQuizModal({ quiz, languageKey, onClose }: PlayQuizModalProps
   const completedRef = useRef(false);
 
   const { playAudio, stopAll, playSfx } = useQuizAudio();
+
+  // Auto-play question audio when modal opens
+  useEffect(() => {
+    if (quizContent?.audio_url) {
+      playAudio(quizContent.audio_url);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -106,15 +112,10 @@ export function PlayQuizModal({ quiz, languageKey, onClose }: PlayQuizModalProps
         onEscapeKeyDown={() => handleClose()}
         onInteractOutside={(e) => e.preventDefault()}
       >
-        {/* Header */}
-        <DialogHeader className="px-5 py-3 border-b">
-          <DialogTitle className="text-base font-semibold">Quiz</DialogTitle>
-        </DialogHeader>
-
         <div className="px-5 py-4 space-y-4">
-          {/* Title section */}
-          <div className="flex items-start gap-3">
-            <p className="flex-1 text-lg font-medium leading-snug">
+          {/* Question with audio button inline */}
+          <div className="flex items-center gap-2">
+            <p className="text-lg font-medium leading-snug">
               {quizContent?.title || 'Quiz'}
             </p>
             {quizContent?.audio_url && (
@@ -127,12 +128,6 @@ export function PlayQuizModal({ quiz, languageKey, onClose }: PlayQuizModalProps
                 <Volume2 className="h-5 w-5 text-indigo-500" />
               </button>
             )}
-          </div>
-
-          {/* Separator */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 font-medium whitespace-nowrap">Chọn đáp án</span>
-            <div className="flex-1 h-px bg-gray-200" />
           </div>
 
           {/* Options grid */}
