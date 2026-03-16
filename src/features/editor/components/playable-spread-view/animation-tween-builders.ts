@@ -78,8 +78,11 @@ export function addTweenToTimeline(
       const volume = options?.volume ?? 1;
       const durationSec = (effect.duration ?? 0) / 1000;
 
+      // timeline.call() creates DelayedCall children that don't support eventCallback(),
+      // so we fire onTweenStart/onTweenComplete directly inside the lambdas.
       timeline.call(
         () => {
+          options?.onTweenStart?.();
           try {
             mediaEl.currentTime = 0;
             mediaEl.volume = volume;
@@ -100,10 +103,14 @@ export function addTweenToTimeline(
         timeline.call(
           () => {
             mediaEl.pause();
+            options?.onTweenComplete?.();
           },
           undefined,
           `>+=${durationSec}`
         );
+      } else {
+        // No duration — complete immediately after play starts
+        timeline.call(() => { options?.onTweenComplete?.(); });
       }
       break;
     }
@@ -405,6 +412,10 @@ export function addTweenToTimeline(
       log.warn('addTweenToTimeline', 'unknown effect type', { effectType });
       break;
   }
+
+  // PLAY effects fire onTweenStart/onTweenComplete inline (DelayedCall doesn't support eventCallback).
+  // Skip the generic callback attachment below to avoid duplicate calls.
+  if (effectType === EFFECT_TYPE.PLAY) return;
 
   // Attach start/end callbacks to all tweens added by this call.
   // GSAP quirk: timeline.set() (zero-duration tweens) may skip onStart via eventCallback().

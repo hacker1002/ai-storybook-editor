@@ -319,6 +319,11 @@ function createAnimation(
   };
 }
 
+// Slow mock durations (2–5s) so animations are easy to follow in the demo
+function mockDuration(): number {
+  return randomBetween(2000, 5000);
+}
+
 /**
  * Generate animation sequence using Fade In/Out and Fly In/Out.
  *
@@ -358,7 +363,8 @@ function generateSpreadAnimations(
         bg.id,
         "image",
         randomEntrance(),
-        order === 1 ? "after_previous" : "with_previous"
+        order === 1 ? "after_previous" : "with_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -372,7 +378,7 @@ function generateSpreadAnimations(
         "image",
         randomEntrance(),
         i === 0 ? "on_next" : "with_previous",
-        { delay: i * 200 }
+        { duration: mockDuration(), delay: i * 500 }
       )
     );
   });
@@ -385,7 +391,8 @@ function generateSpreadAnimations(
         tb.id,
         "textbox",
         randomEntrance(),
-        i === 0 ? "on_next" : "after_previous"
+        i === 0 ? "on_next" : "after_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -398,7 +405,8 @@ function generateSpreadAnimations(
         prop.id,
         "image",
         randomEntrance(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -411,7 +419,8 @@ function generateSpreadAnimations(
         shape.id,
         "shape",
         randomEntrance(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -424,7 +433,8 @@ function generateSpreadAnimations(
         video.id,
         "video",
         randomVideoEntrance(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
     // PLAY runs after entrance completes — video only plays when 100% visible
@@ -441,7 +451,8 @@ function generateSpreadAnimations(
         audio.id,
         "audio",
         randomEntrance(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
     animations.push(
@@ -459,7 +470,8 @@ function generateSpreadAnimations(
         audio.id,
         "audio",
         randomMediaExit(),
-        "after_previous"
+        "after_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -479,7 +491,7 @@ function generateSpreadAnimations(
   // ── on_click: emphasis on characters (spin/grow/shrink/teeter/transparency) ──
   characterImages.forEach((char, i) => {
     const preset = randomEmphasis();
-    const overrides: Partial<SpreadAnimation["effect"]> = {};
+    const overrides: Partial<SpreadAnimation["effect"]> = { duration: mockDuration() };
     if (preset === "grow") overrides.amount = 1.5;
     if (preset === "shrink") overrides.amount = 0.6;
     if (preset === "transparency") overrides.amount = 0.3;
@@ -507,6 +519,7 @@ function generateSpreadAnimations(
       "lineMove",
       "on_click",
       {
+        duration: mockDuration(),
         geometry: {
           x: destX,
           y: destY,
@@ -527,7 +540,8 @@ function generateSpreadAnimations(
         tb.id,
         "textbox",
         randomExit(),
-        i === 0 ? "on_next" : "after_previous"
+        i === 0 ? "on_next" : "after_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -540,7 +554,8 @@ function generateSpreadAnimations(
         char.id,
         "image",
         randomExit(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -553,7 +568,8 @@ function generateSpreadAnimations(
         shape.id,
         "shape",
         randomMediaExit(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -566,7 +582,8 @@ function generateSpreadAnimations(
         video.id,
         "video",
         randomMediaExit(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
   });
@@ -579,7 +596,8 @@ function generateSpreadAnimations(
         img.id,
         "image",
         randomEntrance(),
-        i === 0 ? "on_next" : "with_previous"
+        i === 0 ? "on_next" : "with_previous",
+        { duration: mockDuration() }
       )
     );
   });

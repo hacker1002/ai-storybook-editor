@@ -35,16 +35,17 @@ export function PlayerAnimationSidebar({
   const maxActivatedOrder = useMaxActivatedOrder();
   const replayableItems = useReplayableItems();
 
-  // Pending next animation order (blink indicator)
+  // Pending next animation order (blink indicator) — only when awaiting user input
   const [pendingNextOrder, setPendingNextOrder] = useState<number | null>(null);
 
   useEffect(() => {
-    if (phase === "idle" || phase === "complete") {
+    // Only show pending indicator when awaiting user input, not during active playback.
+    // During 'playing', gaps between sequential tweens momentarily empty activeAnimationOrders
+    // which would incorrectly flash the pending indicator.
+    if (phase !== 'awaiting_next' && phase !== 'awaiting_click') {
       setPendingNextOrder(null);
       return;
     }
-    // Still playing, don't update pending
-    if (activeAnimationOrders.length > 0) return;
     if (maxActivatedOrder >= 0) {
       const sortedOrders = animations
         .map((a) => a.animation.order)
@@ -53,7 +54,7 @@ export function PlayerAnimationSidebar({
         sortedOrders.find((o) => o > maxActivatedOrder) ?? null
       );
     }
-  }, [activeAnimationOrders, animations, phase, maxActivatedOrder]);
+  }, [animations, phase, maxActivatedOrder]);
 
   const stepNumbers = useMemo(() => computeStepNumbers(animations), [animations]);
 

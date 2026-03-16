@@ -92,7 +92,7 @@ export function PlayerCanvas({
     killTimeline,
     applyStepFinalStates,
     reApplyInitialStates,
-    resumeTimeline,
+    handleQuizComplete,
   } = usePlayerGsapEngine({
     spread,
     zoomLevel,
@@ -100,12 +100,13 @@ export function PlayerCanvas({
     onQuizPlay: handleQuizPlay,
   });
 
-  // Quiz modal close: dismiss modal then resume GSAP timeline
+  // Quiz modal close: dismiss modal then complete quiz step
   const handleQuizModalClose = useCallback((_completed: boolean) => {
     setActiveQuizId(null);
-    // Resume on next tick so modal unmounts first
-    setTimeout(() => resumeTimeline(), 0);
-  }, [resumeTimeline]);
+    // Next tick so modal unmounts first; handleQuizComplete resumes timeline
+    // (mixed step / auto) or calls stepComplete (quiz-only step).
+    setTimeout(() => handleQuizComplete(), 0);
+  }, [handleQuizComplete]);
 
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(zoomLevel);

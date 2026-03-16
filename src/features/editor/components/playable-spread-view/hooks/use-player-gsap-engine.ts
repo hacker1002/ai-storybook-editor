@@ -51,6 +51,7 @@ export interface UsePlayerGsapEngineReturn {
   applyStepFinalStates: (step: AnimationStep) => void;
   reApplyInitialStates: (fromStepIndex: number) => void;
   resumeTimeline: () => void;
+  handleQuizComplete: () => void;
 }
 
 // === Hook Implementation ===
@@ -165,6 +166,28 @@ export function usePlayerGsapEngine({
     (step: AnimationStep) => {
       killTimeline();
       usePlaybackStore.getState().setActiveAnimationOrders([]);
+
+      // Quiz-only step: bypass GSAP timeline entirely.
+      // tl.call() + tl.addPause() with zero-duration timelines is unreliable —
+      // GSAP may fire onComplete immediately or skip the pause.
+      // Handle quiz PLAY synchronously instead.
+      const isQuizOnlyStep = step.animations.every(
+        (a) => a.effect.type === EFFECT_TYPE.PLAY && a.target.type === 'quiz'
+      );
+
+      if (isQuizOnlyStep) {
+        log.debug('buildAndPlayStepTimeline', 'quiz-only step — skipping GSAP timeline', {
+          animCount: step.animations.length,
+        });
+        timelineRef.current = null;
+        step.animations.forEach((anim) => {
+          usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+          onQuizPlay?.(anim.target.id);
+        });
+        // stepComplete is called by handleQuizComplete when modal closes
+        return;
+      }
+
       const tl = gsap.timeline({
         onComplete: () => playbackActions.stepComplete(),
       });
@@ -172,14 +195,18 @@ export function usePlayerGsapEngine({
       const dims = getContainerDims();
 
       step.animations.forEach((anim, i) => {
-        // Quiz PLAY: pause timeline and invoke callback instead of addTweenToTimeline
+        // Quiz PLAY in a mixed step: pause timeline and invoke callback
         if (anim.effect.type === EFFECT_TYPE.PLAY && anim.target.type === 'quiz') {
           let position: number | string;
           if (i === 0) position = 0;
           else if (anim.trigger_type === 'with_previous') position = '<';
           else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-          tl.call(() => onQuizPlay?.(anim.target.id), undefined, position);
+          tl.call(() => {
+            usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+            onQuizPlay?.(anim.target.id);
+          }, undefined, position);
           tl.addPause();
+          tl.call(() => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order), undefined, '+=0.01');
           return;
         }
 
@@ -236,8 +263,13 @@ export function usePlayerGsapEngine({
         else if (anim.trigger_type === 'with_previous') position = '<';
         else if (anim.trigger_type === 'after_previous') position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
         else position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
-        tl.call(() => onQuizPlay?.(anim.target.id), undefined, position);
+        tl.call(() => {
+          usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+          onQuizPlay?.(anim.target.id);
+        }, undefined, position);
         tl.addPause();
+        // Offset past pause so it only fires after resume
+        tl.call(() => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order), undefined, '+=0.01');
         return;
       }
 
@@ -295,7 +327,12 @@ export function usePlayerGsapEngine({
           if (i === 0) position = 0;
           else if (anim.trigger_type === 'with_previous') position = '<';
           else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-          replayTl.call(() => onQuizPlay?.(anim.target.id), undefined, position);
+          replayTl.call(() => {
+            usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+            onQuizPlay?.(anim.target.id);
+          }, undefined, position);
+          // No addPause in replay — just clear highlight after quiz callback
+          replayTl.call(() => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order));
           return;
         }
 
@@ -535,6 +572,20 @@ export function usePlayerGsapEngine({
     timelineRef.current?.resume();
   }, []);
 
+  // Called when quiz modal closes — handles both quiz-only steps (no timeline)
+  // and mixed steps / auto mode (timeline exists, resume it).
+  const handleQuizComplete = useCallback(() => {
+    if (timelineRef.current) {
+      // Mixed step or auto mode: GSAP callback at +=0.01 removes the quiz order,
+      // then timeline.onComplete fires stepComplete.
+      timelineRef.current.resume();
+    } else {
+      // Quiz-only step (semi-auto): no timeline, clear orders and complete step directly.
+      usePlaybackStore.getState().setActiveAnimationOrders([]);
+      playbackActions.stepComplete();
+    }
+  }, [playbackActions]);
+
   // === Return ===
   return {
     spreadContainerRef,
@@ -544,5 +595,6 @@ export function usePlayerGsapEngine({
     applyStepFinalStates,
     reApplyInitialStates,
     resumeTimeline,
+    handleQuizComplete,
   };
 }

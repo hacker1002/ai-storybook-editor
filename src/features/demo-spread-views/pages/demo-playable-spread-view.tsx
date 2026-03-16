@@ -138,7 +138,7 @@ export function DemoPlayableSpreadView() {
     async (params: AssetSwapParams): Promise<void> => {
       log.info('handleAssetSwap', 'asset swap started', { targetId: params.targetId, spreadId: params.spreadId });
       // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       log.info('handleAssetSwap', 'asset swap completed', { targetId: params.targetId });
     },
     []
