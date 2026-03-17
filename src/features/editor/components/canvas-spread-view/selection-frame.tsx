@@ -5,6 +5,7 @@ import { useRef, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
 import { createLogger } from '@/utils/logger';
+import { Z_INDEX } from '@/constants/spread-constants';
 
 const log = createLogger('Editor', 'SelectionFrame');
 
@@ -111,7 +112,7 @@ export function SelectionFrame({
           top: `${geometry.y}%`,
           width: `${geometry.w}%`,
           height: `${geometry.h}%`,
-          zIndex: 10000,
+          zIndex: Z_INDEX.SELECTION_FRAME,
           pointerEvents: 'none',
         }}
       >

@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Plus, Filter } from "lucide-react";
+import { Plus, Filter, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/utils/utils";
 import {
   useRetouchSpreadById,
@@ -217,15 +217,29 @@ function AddElementDropdown({
 }
 
 /** Visual divider between layer groups */
-function LayerDivider({ label, zRange }: { label: string; zRange: string }) {
+function LayerDivider({
+  label,
+  allVisible,
+  onToggleVisibility,
+}: {
+  label: string;
+  allVisible: boolean;
+  onToggleVisibility: () => void;
+}) {
+  const Icon = allVisible ? Eye : EyeOff;
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/60 border-y border-border/50 select-none">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1">
         {label}
       </span>
-      <span className="text-[9px] text-muted-foreground/60 ml-auto">
-        z: {zRange}
-      </span>
+      <button
+        type="button"
+        onClick={onToggleVisibility}
+        className="p-0.5 rounded hover:bg-muted-foreground/20 transition-colors"
+        aria-label={allVisible ? `Hide all in ${label}` : `Show all in ${label}`}
+      >
+        <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+      </button>
     </div>
   );
 }
@@ -332,6 +346,52 @@ export function ObjectsSidebar({
       }
     },
     [actions, selectedSpreadId]
+  );
+
+  const handleLayerVisibilityToggle = useCallback(
+    (group: LayerGroup) => {
+      const layerEntries = allEntries.filter((e) => {
+        const eLayer = getLayerForType(e.type);
+        return eLayer?.label === group.layer.label;
+      });
+      const anyVisible = layerEntries.some((e) => e.editorVisible);
+      const newVisible = !anyVisible;
+
+      log.debug("handleLayerVisibilityToggle", "toggling layer", {
+        layer: group.layer.label,
+        count: layerEntries.length,
+        newVisible,
+      });
+
+      for (const entry of layerEntries) {
+        const updates = { editor_visible: newVisible };
+        switch (entry.type) {
+          case "image":
+            actions.updateRetouchImage(selectedSpreadId, entry.id, updates);
+            break;
+          case "text":
+            actions.updateRetouchTextbox(
+              selectedSpreadId,
+              entry.id,
+              updates as Partial<SpreadTextbox>
+            );
+            break;
+          case "shape":
+            actions.updateRetouchShape(selectedSpreadId, entry.id, updates);
+            break;
+          case "video":
+            actions.updateRetouchVideo(selectedSpreadId, entry.id, updates);
+            break;
+          case "audio":
+            actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
+            break;
+          case "quiz":
+            actions.updateRetouchQuiz(selectedSpreadId, entry.id, updates);
+            break;
+        }
+      }
+    },
+    [allEntries, actions, selectedSpreadId]
   );
 
   const handleLockToggle = useCallback((entryId: string) => {
@@ -666,12 +726,18 @@ export function ObjectsSidebar({
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          {layerGroups.map((group) => (
+          {layerGroups.map((group) => {
+            const layerItems = allEntries.filter(
+              (e) => getLayerForType(e.type)?.label === group.layer.label
+            );
+            const layerAllVisible = layerItems.length > 0 && layerItems.some((e) => e.editorVisible);
+            return (
             <div key={group.layer.label}>
               {/* Layer divider header */}
               <LayerDivider
                 label={group.layer.label}
-                zRange={`${group.layer.min}..${group.layer.max}`}
+                allVisible={layerAllVisible}
+                onToggleVisibility={() => handleLayerVisibilityToggle(group)}
               />
               {/* Items within this layer */}
               {group.entries.map((entry, index) => (
@@ -698,7 +764,8 @@ export function ObjectsSidebar({
                 />
               ))}
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
     </nav>
