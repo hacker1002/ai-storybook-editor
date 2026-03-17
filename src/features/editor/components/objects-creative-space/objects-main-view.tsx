@@ -12,7 +12,9 @@ import {
   EditableAudio,
   EditableQuiz,
   GenerateImageModal,
+  SplitImageModal,
 } from "@/features/editor/components/shared-components";
+import type { SplitLayerResult } from "@/features/editor/components/shared-components";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import type { Geometry } from "@/types/canvas-types";
 import {
@@ -20,6 +22,10 @@ import {
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
+import {
+  calculateZIndexShifts,
+  collectPictorialZItems,
+} from "@/features/editor/utils/z-index-cascade-utils";
 import { createLogger } from "@/utils/logger";
 import type { SelectedItem } from "./objects-creative-space";
 import type { SpreadType } from "@/features/editor/components/canvas-spread-view";
@@ -106,6 +112,87 @@ export function ObjectsMainView({
       actions.updateRetouchImage(generateModalSpreadId, imageId, updates);
     },
     [generateModalSpreadId, actions]
+  );
+
+  // Split image modal state
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
+  const [splitModalImage, setSplitModalImage] = useState<SpreadImage | null>(null);
+  const [splitModalSpreadId, setSplitModalSpreadId] = useState<string>("");
+
+  const openSplitModal = useCallback((image: SpreadImage) => {
+    setSplitModalImage(image);
+    setSplitModalSpreadId(selectedSpreadId);
+    setSplitModalOpen(true);
+  }, [selectedSpreadId]);
+
+  const handleSplitModalClose = useCallback((open: boolean) => {
+    setSplitModalOpen(open);
+    if (!open) setSplitModalImage(null);
+  }, []);
+
+  const handleSplitCreateImages = useCallback(
+    (layers: SplitLayerResult[]) => {
+      if (!splitModalImage) return;
+      const orig = splitModalImage.geometry;
+      const origZ = splitModalImage["z-index"] ?? 0;
+      const isFullScreen = orig.w >= 100 && orig.h >= 100;
+      const spread = retouchSpreads.find((s) => s.id === splitModalSpreadId);
+
+      // Cascade z-index: push existing images/videos up only where needed
+      if (spread) {
+        const tierItems = collectPictorialZItems(spread, splitModalImage.id);
+        const shifts = calculateZIndexShifts(origZ, layers.length, tierItems);
+        for (const shift of shifts) {
+          // Determine item type for correct store action
+          const isVideo = spread.videos?.some((v) => v.id === shift.id);
+          if (isVideo) {
+            actions.updateRetouchVideo(splitModalSpreadId, shift.id, { "z-index": shift.to });
+          } else {
+            actions.updateRetouchImage(splitModalSpreadId, shift.id, { "z-index": shift.to });
+          }
+          log.debug("handleSplitCreateImages", "shifted z-index", {
+            itemId: shift.id, from: shift.from, to: shift.to,
+          });
+        }
+      }
+
+      // Create new images
+      layers.forEach((layer, index) => {
+        const newImage: SpreadImage = {
+          id: crypto.randomUUID(),
+          title: layer.title,
+          geometry: isFullScreen
+            ? { ...orig }
+            : {
+                x: Math.min(orig.x + 5 * (index + 1), 100 - orig.w),
+                y: Math.min(orig.y + 5 * (index + 1), 100 - orig.h),
+                w: orig.w,
+                h: orig.h,
+              },
+          media_url: layer.media_url,
+          illustrations: [
+            {
+              media_url: layer.media_url,
+              created_time: new Date().toISOString(),
+              is_selected: true,
+            },
+          ],
+          type: splitModalImage.type,
+          player_visible: splitModalImage.player_visible,
+          editor_visible: splitModalImage.editor_visible,
+          "z-index": origZ + index + 1,
+        };
+        actions.addRetouchImage(splitModalSpreadId, newImage);
+      });
+
+      log.info("handleSplitCreateImages", "created images from split", {
+        count: layers.length,
+        spreadId: splitModalSpreadId,
+        origZ,
+        isFullScreen,
+      });
+    },
+    [splitModalImage, splitModalSpreadId, actions, retouchSpreads]
   );
 
   // Unified item action handler - dispatches to store per type
@@ -399,10 +486,11 @@ export function ObjectsMainView({
         context={{
           ...context,
           onGenerateImage: () => openGenerateModal(context.item),
+          onSplitImage: () => openSplitModal(context.item),
         }}
       />
     ),
-    [openGenerateModal],
+    [openGenerateModal, openSplitModal],
   );
 
   const renderRetouchQuiz = useCallback(
@@ -470,6 +558,15 @@ export function ObjectsMainView({
               prev ? { ...prev, ...updates } : null
             );
           }}
+        />
+      )}
+
+      {splitModalImage && (
+        <SplitImageModal
+          open={splitModalOpen}
+          onOpenChange={handleSplitModalClose}
+          image={splitModalImage}
+          onCreateImages={handleSplitCreateImages}
         />
       )}
     </>

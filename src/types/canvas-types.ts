@@ -318,6 +318,7 @@ export interface ImageToolbarContext<TSpread extends BaseSpread>
   extends ImageItemContext<TSpread>,
     BaseToolbarContext {
   onGenerateImage: () => void;
+  onSplitImage?: () => void;
   onReplaceImage: () => void;
   onClone?: () => void;
 }

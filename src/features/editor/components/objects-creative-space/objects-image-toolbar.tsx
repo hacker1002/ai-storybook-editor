@@ -113,6 +113,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     onUpdate,
     onDelete,
     onGenerateImage,
+    onSplitImage,
     onReplaceImage,
     selectedGeometry,
     canvasRef,
@@ -202,8 +203,12 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
   );
 
   const handleSplit = useCallback(() => {
-    toast.info("Split feature coming soon");
-  }, []);
+    if (onSplitImage) {
+      onSplitImage();
+    } else {
+      toast.info("Split feature not available");
+    }
+  }, [onSplitImage]);
 
   const handleCrop = useCallback(() => {
     toast.info("Crop feature coming soon");

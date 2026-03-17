@@ -94,7 +94,7 @@ export function ObjectListItem({
       className={cn(
         "group flex items-center h-12 px-2 gap-1.5 cursor-pointer transition-colors text-sm",
         isSelected
-          ? "bg-blue-50 dark:bg-blue-950 border-l-2 border-blue-500"
+          ? "bg-accent/80"
           : "hover:bg-muted/50",
         !entry.editorVisible && "opacity-50",
         dragIndex === index && "opacity-40"
