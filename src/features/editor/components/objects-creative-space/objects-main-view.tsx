@@ -1,8 +1,8 @@
 // objects-main-view.tsx - CanvasSpreadView wrapper with retouch render props
-'use client';
+"use client";
 
-import { useCallback } from 'react';
-import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
+import { useCallback } from "react";
+import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
   EditableImage,
   EditableTextbox,
@@ -10,15 +10,15 @@ import {
   EditableVideo,
   EditableAudio,
   EditableQuiz,
-} from '@/features/editor/components/shared-components';
+} from "@/features/editor/components/shared-components";
 import {
   useRetouchSpreads,
   useSnapshotActions,
-} from '@/stores/snapshot-store/selectors';
-import { getFirstTextboxKey } from '@/features/editor/utils/textbox-helpers';
-import { createLogger } from '@/utils/logger';
-import type { SelectedItem } from './objects-creative-space';
-import type { SpreadType } from '@/features/editor/components/canvas-spread-view';
+} from "@/stores/snapshot-store/selectors";
+import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
+import { createLogger } from "@/utils/logger";
+import type { SelectedItem } from "./objects-creative-space";
+import type { SpreadType } from "@/features/editor/components/canvas-spread-view";
 import type {
   BaseSpread,
   ImageItemContext,
@@ -35,10 +35,10 @@ import type {
   SpreadAudio,
   SpreadQuiz,
   PageData,
-} from '@/types/canvas-types';
-import type { SpreadTextboxContent } from '@/types/spread-types';
+} from "@/types/canvas-types";
+import type { SpreadTextboxContent } from "@/types/spread-types";
 
-const log = createLogger('Editor', 'ObjectsMainView');
+const log = createLogger("Editor", "ObjectsMainView");
 
 interface ObjectsMainViewProps {
   selectedSpreadId: string;
@@ -60,45 +60,94 @@ export function ObjectsMainView({
   const handleSpreadItemAction = useCallback(
     (params: SpreadItemActionUnion) => {
       const { spreadId, itemType, action, itemId, data } = params;
-      log.debug('handleSpreadItemAction', 'dispatch', { spreadId, itemType, action });
+      log.debug("handleSpreadItemAction", "dispatch", {
+        spreadId,
+        itemType,
+        action,
+      });
 
       switch (itemType) {
-        case 'image':
-          if (action === 'add') actions.addRetouchImage(spreadId, data as SpreadImage);
-          else if (action === 'update') actions.updateRetouchImage(spreadId, itemId as string, data as Partial<SpreadImage>);
-          else if (action === 'delete') actions.deleteRetouchImage(spreadId, itemId as string);
+        case "image":
+          if (action === "add")
+            actions.addRetouchImage(spreadId, data as SpreadImage);
+          else if (action === "update")
+            actions.updateRetouchImage(
+              spreadId,
+              itemId as string,
+              data as Partial<SpreadImage>
+            );
+          else if (action === "delete")
+            actions.deleteRetouchImage(spreadId, itemId as string);
           break;
-        case 'textbox':
-          if (action === 'add') actions.addRetouchTextbox(spreadId, data as SpreadTextbox);
-          else if (action === 'update') actions.updateRetouchTextbox(spreadId, itemId as string, data as Partial<SpreadTextbox>);
-          else if (action === 'delete') actions.deleteRetouchTextbox(spreadId, itemId as string);
+        case "textbox":
+          if (action === "add")
+            actions.addRetouchTextbox(spreadId, data as SpreadTextbox);
+          else if (action === "update")
+            actions.updateRetouchTextbox(
+              spreadId,
+              itemId as string,
+              data as Partial<SpreadTextbox>
+            );
+          else if (action === "delete")
+            actions.deleteRetouchTextbox(spreadId, itemId as string);
           break;
-        case 'shape':
-          if (action === 'add') actions.addRetouchShape(spreadId, data as SpreadShape);
-          else if (action === 'update') actions.updateRetouchShape(spreadId, itemId as string, data as Partial<SpreadShape>);
-          else if (action === 'delete') actions.deleteRetouchShape(spreadId, itemId as string);
+        case "shape":
+          if (action === "add")
+            actions.addRetouchShape(spreadId, data as SpreadShape);
+          else if (action === "update")
+            actions.updateRetouchShape(
+              spreadId,
+              itemId as string,
+              data as Partial<SpreadShape>
+            );
+          else if (action === "delete")
+            actions.deleteRetouchShape(spreadId, itemId as string);
           break;
-        case 'video':
-          if (action === 'add') actions.addRetouchVideo(spreadId, data as SpreadVideo);
-          else if (action === 'update') actions.updateRetouchVideo(spreadId, itemId as string, data as Partial<SpreadVideo>);
-          else if (action === 'delete') actions.deleteRetouchVideo(spreadId, itemId as string);
+        case "video":
+          if (action === "add")
+            actions.addRetouchVideo(spreadId, data as SpreadVideo);
+          else if (action === "update")
+            actions.updateRetouchVideo(
+              spreadId,
+              itemId as string,
+              data as Partial<SpreadVideo>
+            );
+          else if (action === "delete")
+            actions.deleteRetouchVideo(spreadId, itemId as string);
           break;
-        case 'audio':
-          if (action === 'add') actions.addRetouchAudio(spreadId, data as SpreadAudio);
-          else if (action === 'update') actions.updateRetouchAudio(spreadId, itemId as string, data as Partial<SpreadAudio>);
-          else if (action === 'delete') actions.deleteRetouchAudio(spreadId, itemId as string);
+        case "audio":
+          if (action === "add")
+            actions.addRetouchAudio(spreadId, data as SpreadAudio);
+          else if (action === "update")
+            actions.updateRetouchAudio(
+              spreadId,
+              itemId as string,
+              data as Partial<SpreadAudio>
+            );
+          else if (action === "delete")
+            actions.deleteRetouchAudio(spreadId, itemId as string);
           break;
-        case 'quiz':
-          if (action === 'add') actions.addRetouchQuiz(spreadId, data as SpreadQuiz);
-          else if (action === 'update') actions.updateRetouchQuiz(spreadId, itemId as string, data as Partial<SpreadQuiz>);
-          else if (action === 'delete') actions.deleteRetouchQuiz(spreadId, itemId as string);
+        case "quiz":
+          if (action === "add")
+            actions.addRetouchQuiz(spreadId, data as SpreadQuiz);
+          else if (action === "update")
+            actions.updateRetouchQuiz(
+              spreadId,
+              itemId as string,
+              data as Partial<SpreadQuiz>
+            );
+          else if (action === "delete")
+            actions.deleteRetouchQuiz(spreadId, itemId as string);
           break;
-        case 'page':
-          if (action === 'update' && typeof itemId === 'number') {
+        case "page":
+          if (action === "update" && typeof itemId === "number") {
             const spread = retouchSpreads.find((s) => s.id === spreadId);
             if (!spread) break;
             const newPages = [...spread.pages];
-            newPages[itemId] = { ...newPages[itemId], ...(data as Partial<PageData>) };
+            newPages[itemId] = {
+              ...newPages[itemId],
+              ...(data as Partial<PageData>),
+            };
             actions.updateRetouchSpread(spreadId, { pages: newPages });
           }
           break;
@@ -113,15 +162,16 @@ export function ObjectsMainView({
       const spreadIndex = retouchSpreads.length;
       const basePage: PageData = {
         number: spreadIndex * 2,
-        type: 'normal_page',
+        type: "normal_page",
         layout: null,
-        background: { color: '#ffffff', texture: null },
+        background: { color: "#ffffff", texture: null },
       };
       const newSpread: BaseSpread = {
         id: crypto.randomUUID(),
-        pages: type === 'double'
-          ? [basePage, { ...basePage, number: spreadIndex * 2 + 1 }]
-          : [basePage],
+        pages:
+          type === "double"
+            ? [basePage, { ...basePage, number: spreadIndex * 2 + 1 }]
+            : [basePage],
         images: [],
         textboxes: [],
       };
@@ -158,7 +208,7 @@ export function ObjectsMainView({
           isEditable={context.isSpreadSelected}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'image', id: context.item.id });
+            onItemSelect({ type: "image", id: context.item.id });
           }}
           onArtNoteChange={(artNote) => context.onUpdate({ art_note: artNote })}
           onEditingChange={context.onEditingChange}
@@ -186,7 +236,7 @@ export function ObjectsMainView({
           isEditable={context.isSpreadSelected}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'text', id: context.item.id });
+            onItemSelect({ type: "text", id: context.item.id });
           }}
           onTextChange={(newText) => {
             context.onUpdate({
@@ -212,7 +262,7 @@ export function ObjectsMainView({
           isEditable={context.isSpreadSelected}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'shape', id: context.item.id });
+            onItemSelect({ type: "shape", id: context.item.id });
           }}
         />
       );
@@ -233,7 +283,7 @@ export function ObjectsMainView({
           isThumbnail={context.isThumbnail}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'video', id: context.item.id });
+            onItemSelect({ type: "video", id: context.item.id });
           }}
         />
       );
@@ -253,7 +303,7 @@ export function ObjectsMainView({
           isEditable={context.isSpreadSelected}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'audio', id: context.item.id });
+            onItemSelect({ type: "audio", id: context.item.id });
           }}
         />
       );
@@ -273,7 +323,7 @@ export function ObjectsMainView({
           isEditable={context.isSpreadSelected}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'quiz', id: context.item.id });
+            onItemSelect({ type: "quiz", id: context.item.id });
           }}
         />
       );
@@ -285,7 +335,7 @@ export function ObjectsMainView({
     <CanvasSpreadView
       spreads={retouchSpreads}
       initialSelectedId={selectedSpreadId}
-      renderItems={['image', 'textbox', 'shape', 'video', 'audio', 'quiz']}
+      renderItems={["image", "textbox", "shape", "video", "audio", "quiz"]}
       renderImageItem={renderRetouchImage}
       renderTextItem={renderRetouchTextbox}
       renderShapeItem={renderRetouchShape}
@@ -298,9 +348,9 @@ export function ObjectsMainView({
       onDeleteSpread={handleDeleteSpread}
       onUpdateSpreadItem={handleSpreadItemAction}
       isEditable={true}
-      canAddSpread={true}
-      canReorderSpread={true}
-      canDeleteSpread={true}
+      canAddSpread={false}
+      canReorderSpread={false}
+      canDeleteSpread={false}
       canDeleteItem={true}
       canResizeItem={true}
       canDragItem={true}

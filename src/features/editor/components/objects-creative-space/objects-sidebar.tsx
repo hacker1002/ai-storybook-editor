@@ -96,22 +96,14 @@ const ASSET_TYPE_CONFIG: Record<
 
 /** Filter popover content */
 function FilterPopoverContent({
-  elementFilter,
   assetFilter,
-  allElements,
   allAssets,
-  onToggleElement,
   onToggleAsset,
-  onToggleAllElements,
   onToggleAllAssets,
 }: {
-  elementFilter: Set<ObjectElementType>;
   assetFilter: Set<SpreadItemMediaType>;
-  allElements: boolean;
   allAssets: boolean;
-  onToggleElement: (type: ObjectElementType) => void;
   onToggleAsset: (type: SpreadItemMediaType) => void;
-  onToggleAllElements: () => void;
   onToggleAllAssets: () => void;
 }) {
   return (
@@ -143,42 +135,6 @@ function FilterPopoverContent({
                 type="checkbox"
                 checked={allAssets || assetFilter.has(type)}
                 onChange={() => onToggleAsset(type)}
-                className="rounded w-4 h-4 accent-blue-500"
-              />
-              <config.icon className="w-4 h-4 text-muted-foreground" />
-              {config.label}
-            </label>
-          );
-        })}
-      </div>
-
-      <hr className="border-border" />
-
-      {/* BY ELEMENT TYPE */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">
-          By Element Type
-        </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={allElements}
-            onChange={onToggleAllElements}
-            className="rounded w-4 h-4 accent-blue-500"
-          />
-          All Elements
-        </label>
-        {ALL_ELEMENT_TYPES.map((type) => {
-          const config = ELEMENT_TYPE_CONFIG[type];
-          return (
-            <label
-              key={type}
-              className="flex items-center gap-2 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={allElements || elementFilter.has(type)}
-                onChange={() => onToggleElement(type)}
                 className="rounded w-4 h-4 accent-blue-500"
               />
               <config.icon className="w-4 h-4 text-muted-foreground" />
@@ -264,13 +220,9 @@ export function ObjectsSidebar({
   const [lockedItems, setLockedItems] = useState<Set<string>>(new Set());
 
   // Filter state (all checked by default)
-  const [elementFilter, setElementFilter] = useState<Set<ObjectElementType>>(
-    new Set(ALL_ELEMENT_TYPES)
-  );
   const [assetFilter, setAssetFilter] = useState<Set<SpreadItemMediaType>>(
     new Set(ALL_ASSET_TYPES)
   );
-  const [allElements, setAllElements] = useState(true);
   const [allAssets, setAllAssets] = useState(true);
 
   // Drag state: layerLabel tracks which layer the drag started in
@@ -287,12 +239,12 @@ export function ObjectsSidebar({
     () =>
       filterObjectList(
         allEntries,
-        elementFilter,
+        new Set(ALL_ELEMENT_TYPES),
         assetFilter,
-        allElements,
+        true,
         allAssets
       ),
-    [allEntries, elementFilter, assetFilter, allElements, allAssets]
+    [allEntries, assetFilter, allAssets]
   );
 
   // Group filtered entries by layer (top z-index layer first)
@@ -301,7 +253,7 @@ export function ObjectsSidebar({
     [filteredEntries]
   );
 
-  const isFilterActive = !allElements || !allAssets;
+  const isFilterActive = !allAssets;
 
   // === Handlers ===
 
@@ -444,7 +396,16 @@ export function ObjectsSidebar({
       case "audio":
         actions.updateRetouchAudio(selectedSpreadId, entry.id, titleUpdate);
         break;
-      // Shape and Quiz don't have title field — skip
+      case "shape":
+        actions.updateRetouchShape(
+          selectedSpreadId,
+          entry.id,
+          titleUpdate as Partial<SpreadShape>
+        );
+        break;
+      case "quiz":
+        actions.updateRetouchQuiz(selectedSpreadId, entry.id, titleUpdate);
+        break;
     }
     setEditingItemId(null);
   }, [editingItemId, editValue, allEntries, actions, selectedSpreadId]);
@@ -644,17 +605,6 @@ export function ObjectsSidebar({
   );
 
   // Filter toggles
-  const handleToggleElement = useCallback((type: ObjectElementType) => {
-    setAllElements(false);
-    setElementFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      if (next.size === ALL_ELEMENT_TYPES.length) setAllElements(true);
-      return next;
-    });
-  }, []);
-
   const handleToggleAsset = useCallback((type: SpreadItemMediaType) => {
     setAllAssets(false);
     setAssetFilter((prev) => {
@@ -663,14 +613,6 @@ export function ObjectsSidebar({
       else next.add(type);
       if (next.size === ALL_ASSET_TYPES.length) setAllAssets(true);
       return next;
-    });
-  }, []);
-
-  const handleToggleAllElements = useCallback(() => {
-    setAllElements((prev) => {
-      if (!prev) setElementFilter(new Set(ALL_ELEMENT_TYPES));
-      else setElementFilter(new Set());
-      return !prev;
     });
   }, []);
 
@@ -707,13 +649,9 @@ export function ObjectsSidebar({
           </PopoverTrigger>
           <PopoverContent align="start" sideOffset={8} className="w-64">
             <FilterPopoverContent
-              elementFilter={elementFilter}
               assetFilter={assetFilter}
-              allElements={allElements}
               allAssets={allAssets}
-              onToggleElement={handleToggleElement}
               onToggleAsset={handleToggleAsset}
-              onToggleAllElements={handleToggleAllElements}
               onToggleAllAssets={handleToggleAllAssets}
             />
           </PopoverContent>

@@ -123,6 +123,7 @@ export interface SpreadQuizContent {
 // === Spread Quiz ===
 export interface SpreadQuiz {
   id: string;
+  title?: string;
   geometry: Geometry;
   "z-index": number;
   player_visible: boolean;

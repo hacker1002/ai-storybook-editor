@@ -70,10 +70,11 @@ export function groupEntriesByLayer(entries: ObjectListEntry[]): LayerGroup[] {
 // === Title helpers ===
 
 function getTextboxTitle(textbox: SpreadTextbox): string {
+  if (textbox.title) return textbox.title;
   const langKey = getFirstTextboxKey(textbox);
-  if (!langKey) return textbox.title || 'Textbox';
+  if (!langKey) return 'Textbox';
   const content = textbox[langKey] as SpreadTextboxContent | undefined;
-  return content?.text?.slice(0, 30) || textbox.title || 'Textbox';
+  return content?.text?.slice(0, 30) || 'Textbox';
 }
 
 // === Build & filter ===
@@ -112,7 +113,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
     entries.push({
       id: shape.id,
       type: 'shape',
-      title: `Shape ${i + 1}`,
+      title: (shape as SpreadShape).title || `Shape ${i + 1}`,
       zIndex: resolveZIndex((shape as SpreadShape)['z-index'], i, objectsLayer),
       editorVisible: (shape as SpreadShape).editor_visible !== false,
       locked: lockedItems.has(shape.id),
@@ -147,7 +148,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
     entries.push({
       id: quiz.id,
       type: 'quiz',
-      title: `Quiz ${i + 1}`,
+      title: (quiz as SpreadQuiz).title || `Quiz ${i + 1}`,
       zIndex: resolveZIndex((quiz as SpreadQuiz)['z-index'], i, objectsLayer),
       editorVisible: (quiz as SpreadQuiz).editor_visible !== false,
       locked: lockedItems.has(quiz.id),

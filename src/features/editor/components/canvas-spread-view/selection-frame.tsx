@@ -18,6 +18,8 @@ interface SelectionFrameProps {
   // Feature flags
   canDrag?: boolean;
   canResize?: boolean;
+  // When true, only border edges capture drag (for textbox editing). Otherwise full area is draggable.
+  borderOnlyDrag?: boolean;
 
   // Drag callbacks
   onDragStart: () => void;
@@ -37,6 +39,7 @@ export function SelectionFrame({
   activeHandle,
   canDrag = true,
   canResize = true,
+  borderOnlyDrag = false,
   onDragStart,
   onDrag,
   onDragEnd,
@@ -93,8 +96,8 @@ export function SelectionFrame({
     return 'se';
   };
 
-  // Border width for drag zone (pixels)
-  const DRAG_BORDER_WIDTH = 20;
+  // Border width for drag zone in border-only mode (textbox)
+  const DRAG_BORDER_WIDTH = 30;
 
   // Compute className for active handle visual feedback (use prop directly)
   const moveableClassName = activeHandle
@@ -103,7 +106,7 @@ export function SelectionFrame({
 
   return (
     <>
-      {/* Frame container - only the border area captures drag events */}
+      {/* Frame container — drag zone depends on borderOnlyDrag mode */}
       <div
         ref={targetRef}
         className="absolute"
@@ -113,29 +116,31 @@ export function SelectionFrame({
           width: `${geometry.w}%`,
           height: `${geometry.h}%`,
           zIndex: Z_INDEX.SELECTION_FRAME,
-          pointerEvents: 'none',
+          pointerEvents: borderOnlyDrag ? 'none' : 'auto',
+          cursor: borderOnlyDrag ? undefined : 'move',
         }}
       >
-        {/* Top edge */}
-        <div
-          className="absolute left-0 right-0 top-0 cursor-move"
-          style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
-        />
-        {/* Bottom edge */}
-        <div
-          className="absolute left-0 right-0 bottom-0 cursor-move"
-          style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
-        />
-        {/* Left edge */}
-        <div
-          className="absolute left-0 top-0 bottom-0 cursor-move"
-          style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
-        />
-        {/* Right edge */}
-        <div
-          className="absolute right-0 top-0 bottom-0 cursor-move"
-          style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
-        />
+        {/* Border-only drag zones (textbox): edges capture drag, center passes through for editing */}
+        {borderOnlyDrag && (
+          <>
+            <div
+              className="absolute left-0 right-0 top-0 cursor-move"
+              style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+            />
+            <div
+              className="absolute left-0 right-0 bottom-0 cursor-move"
+              style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+            />
+            <div
+              className="absolute left-0 top-0 bottom-0 cursor-move"
+              style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+            />
+            <div
+              className="absolute right-0 top-0 bottom-0 cursor-move"
+              style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+            />
+          </>
+        )}
         {/* Visual border */}
         <div
           className="absolute inset-0 border-2 border-blue-500 pointer-events-none"

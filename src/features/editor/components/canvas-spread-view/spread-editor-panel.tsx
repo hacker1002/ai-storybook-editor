@@ -914,6 +914,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               activeHandle={state.activeHandle}
               canDrag={canDragItem}
               canResize={canResizeCurrentItem}
+              borderOnlyDrag={state.selectedElement?.type === "textbox"}
               onDragStart={handleDragStart}
               onDrag={handleDrag}
               onDragEnd={handleDragEnd}
