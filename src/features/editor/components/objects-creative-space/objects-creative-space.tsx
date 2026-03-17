@@ -65,6 +65,7 @@ export function ObjectsCreativeSpace() {
         {selectedSpreadId ? (
           <ObjectsMainView
             selectedSpreadId={selectedSpreadId}
+            selectedItemId={selectedItemId}
             onSpreadSelect={handleSpreadSelect}
             onItemSelect={handleItemSelect}
           />

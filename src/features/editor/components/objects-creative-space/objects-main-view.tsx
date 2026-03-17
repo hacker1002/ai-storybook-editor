@@ -42,12 +42,14 @@ const log = createLogger('Editor', 'ObjectsMainView');
 
 interface ObjectsMainViewProps {
   selectedSpreadId: string;
+  selectedItemId: SelectedItem | null;
   onSpreadSelect: (spreadId: string) => void;
   onItemSelect: (item: SelectedItem | null) => void;
 }
 
 export function ObjectsMainView({
   selectedSpreadId,
+  selectedItemId,
   onSpreadSelect,
   onItemSelect,
 }: ObjectsMainViewProps) {
@@ -302,6 +304,7 @@ export function ObjectsMainView({
       canDeleteItem={true}
       canResizeItem={true}
       canDragItem={true}
+      externalSelectedItemId={selectedItemId}
     />
   );
 }

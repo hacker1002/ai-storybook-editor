@@ -56,7 +56,7 @@ export function EditableAudio({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'absolute',
+        'absolute flex items-center justify-center',
         isEditable && 'cursor-pointer',
         !isSelected && isHovered && 'outline-dashed outline-1',
       )}

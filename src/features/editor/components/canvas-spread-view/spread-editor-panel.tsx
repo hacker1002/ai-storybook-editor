@@ -22,6 +22,7 @@ import {
 import {
   applyDragDelta,
   applyResizeDelta,
+  applyAspectLockedResize,
   applyNudge,
 } from "./utils/geometry-utils";
 import { getScaledDimensions } from "./utils/coordinate-utils";
@@ -58,6 +59,9 @@ import { getFirstTextboxKey } from "../../utils/textbox-helpers";
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'SpreadEditorPanel');
+
+// Fixed pixel size of audio/quiz icon elements (w-8 h-8 = 32px)
+const ICON_ELEMENT_PX = 32;
 
 // === Props Interface ===
 interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
@@ -100,6 +104,9 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
 
   // Layout config
   availableLayouts?: LayoutOption[];
+
+  // External selection sync (sidebar → canvas)
+  externalSelectedItemId?: { type: string; id: string } | null;
 }
 
 // === Local State Interface ===
@@ -137,8 +144,24 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   canResizeItem = true,
   canDragItem = true,
   availableLayouts = [],
+  externalSelectedItemId,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  // Ref for originalGeometry to avoid stale closures in drag/resize handlers.
+  // React batches setState from handleResizeStart, so handleResize may still
+  // capture old state where originalGeometry is null. The ref is mutated
+  // synchronously and always reflects the latest value.
+  const originalGeometryRef = useRef<Geometry | null>(null);
+
+  // Compute geometry for icon-based elements (audio/quiz) — converts fixed
+  // pixel size to percentage relative to the canvas container's actual dimensions.
+  const computeIconGeometry = useCallback((baseGeo: Geometry): Geometry => {
+    const canvas = canvasRef.current;
+    if (!canvas) return baseGeo;
+    const w = (ICON_ELEMENT_PX / canvas.clientWidth) * 100;
+    const h = (ICON_ELEMENT_PX / canvas.clientHeight) * 100;
+    return { x: baseGeo.x, y: baseGeo.y, w, h };
+  }, []);
 
   // Local state
   const [state, setState] = useState<EditorState>({
@@ -166,6 +189,65 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       originalGeometry: null,
     }));
   }, [spread.id]);
+
+  // Sync external selection (sidebar → canvas): resolve item id to array index
+  useEffect(() => {
+    if (!externalSelectedItemId) return;
+    const { type, id } = externalSelectedItemId;
+
+    let resolvedType: SelectedElement["type"] | null = null;
+    let index = -1;
+
+    if (type === "image") {
+      resolvedType = "image";
+      index = spread.images.findIndex((img) => img.id === id);
+    } else if (type === "text") {
+      resolvedType = "textbox";
+      index = spread.textboxes.findIndex((tb) => tb.id === id);
+    } else if (type === "shape") {
+      resolvedType = "shape";
+      index = (spread.shapes ?? []).findIndex((s) => s.id === id);
+    } else if (type === "video") {
+      resolvedType = "video";
+      index = (spread.videos ?? []).findIndex((v) => v.id === id);
+    } else if (type === "audio") {
+      resolvedType = "audio";
+      index = (spread.audios ?? []).findIndex((a) => a.id === id);
+    } else if (type === "quiz") {
+      resolvedType = "quiz";
+      index = (spread.quizzes ?? []).findIndex((q) => q.id === id);
+    }
+
+    if (resolvedType && index >= 0) {
+      const element: SelectedElement = { type: resolvedType, index };
+      setState((prev) => {
+        if (prev.selectedElement?.type === element.type && prev.selectedElement?.index === element.index) {
+          return prev; // No change, skip re-render
+        }
+        // Resolve geometry for the selection frame
+        let geometry: Geometry | null = null;
+        if (element.type === "image") geometry = spread.images[element.index]?.geometry ?? null;
+        else if (element.type === "textbox") {
+          const tb = spread.textboxes[element.index];
+          const langKey = getFirstTextboxKey(tb || {});
+          geometry = langKey ? (tb[langKey] as { geometry: Geometry })?.geometry ?? null : null;
+        }
+        else if (element.type === "shape") geometry = spread.shapes?.[element.index]?.geometry ?? null;
+        else if (element.type === "video") geometry = spread.videos?.[element.index]?.geometry ?? null;
+        else if (element.type === "audio") {
+          const audioGeo = spread.audios?.[element.index]?.geometry;
+          geometry = audioGeo ? computeIconGeometry(audioGeo) : null;
+        }
+        else if (element.type === "quiz") {
+          const quizGeo = spread.quizzes?.[element.index]?.geometry;
+          geometry = quizGeo ? computeIconGeometry(quizGeo) : null;
+        }
+
+        return { ...prev, selectedElement: element, selectedGeometry: geometry, isDragging: false, isResizing: false, activeHandle: null, originalGeometry: null };
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSelectedItemId?.type, externalSelectedItemId?.id, spread]);
 
   // Click outside to deselect
   useEffect(() => {
@@ -221,9 +303,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         } else if (element.type === "video") {
           geometry = spread.videos?.[element.index]?.geometry ?? null;
         } else if (element.type === "audio") {
-          geometry = spread.audios?.[element.index]?.geometry ?? null;
+          const audioGeo = spread.audios?.[element.index]?.geometry;
+          geometry = audioGeo ? computeIconGeometry(audioGeo) : null;
         } else if (element.type === "quiz") {
-          geometry = spread.quizzes?.[element.index]?.geometry ?? null;
+          const quizGeo = spread.quizzes?.[element.index]?.geometry;
+          geometry = quizGeo ? computeIconGeometry(quizGeo) : null;
         }
       }
 
@@ -237,7 +321,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         originalGeometry: null,
       }));
     },
-    [spread]
+    [spread, computeIconGeometry]
   );
 
   const handleCanvasClick = useCallback(
@@ -269,14 +353,18 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         return spread.shapes?.[selectedElement.index]?.geometry ?? null;
       case "video":
         return spread.videos?.[selectedElement.index]?.geometry ?? null;
-      case "audio":
-        return spread.audios?.[selectedElement.index]?.geometry ?? null;
-      case "quiz":
-        return spread.quizzes?.[selectedElement.index]?.geometry ?? null;
+      case "audio": {
+        const audioGeo = spread.audios?.[selectedElement.index]?.geometry;
+        return audioGeo ? computeIconGeometry(audioGeo) : null;
+      }
+      case "quiz": {
+        const quizGeo = spread.quizzes?.[selectedElement.index]?.geometry;
+        return quizGeo ? computeIconGeometry(quizGeo) : null;
+      }
       default:
         return null;
     }
-  }, [state, spread]);
+  }, [state, spread, computeIconGeometry]);
 
   // === Geometry Update ===
   const updateElementGeometry = useCallback(
@@ -377,6 +465,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const handleDragStart = useCallback(() => {
     log.debug('handleDragStart', 'drag started');
     const geometry = getSelectedGeometry();
+    originalGeometryRef.current = geometry;
     setState((prev) => ({
       ...prev,
       isDragging: true,
@@ -386,7 +475,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   const handleDrag = useCallback(
     (delta: Point) => {
-      const { selectedElement, originalGeometry } = state;
+      const { selectedElement } = state;
+      const originalGeometry = originalGeometryRef.current;
       if (!selectedElement || !originalGeometry) return;
 
       const newGeometry = applyDragDelta(originalGeometry, delta.x, delta.y);
@@ -399,6 +489,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   );
 
   const handleDragEnd = useCallback(() => {
+    originalGeometryRef.current = null;
     setState((prev) => ({
       ...prev,
       isDragging: false,
@@ -410,6 +501,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const handleResizeStart = useCallback(
     (handle: ResizeHandle) => {
       const geometry = getSelectedGeometry();
+      originalGeometryRef.current = geometry;
       setState((prev) => ({
         ...prev,
         isResizing: true,
@@ -422,54 +514,29 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   const handleResize = useCallback(
     (handle: ResizeHandle, delta: Point) => {
-      const { selectedElement, originalGeometry } = state;
+      const { selectedElement } = state;
+      const originalGeometry = originalGeometryRef.current;
       if (!selectedElement || !originalGeometry) return;
 
-      const newGeometry = applyResizeDelta(
-        originalGeometry,
-        handle,
-        delta.x,
-        delta.y
-      );
+      let newGeometry: Geometry;
 
-      // Helper: apply aspect ratio lock to geometry
-      const applyAspectLock = (geo: Geometry, aspect: number) => {
-        if (handle === "e" || handle === "w") {
-          geo.h = geo.w / aspect;
-        } else if (handle === "n" || handle === "s") {
-          geo.w = geo.h * aspect;
-        } else {
-          if (Math.abs(delta.x) > Math.abs(delta.y)) {
-            geo.h = geo.w / aspect;
-          } else {
-            geo.w = geo.h * aspect;
-          }
-        }
-
-        const minSize = CANVAS.MIN_ELEMENT_SIZE;
-        if (geo.w < minSize) {
-          geo.w = minSize;
-          geo.h = minSize / aspect;
-        }
-        if (geo.h < minSize) {
-          geo.h = minSize;
-          geo.w = minSize * aspect;
-        }
-
-        geo.w = Math.min(geo.w, 100 - geo.x);
-        geo.h = Math.min(geo.h, 100 - geo.y);
-      };
-
-      // Aspect ratio lock for Image items (always locked to original ratio)
-      if (selectedElement.type === "image") {
-        const originalAspect = originalGeometry.w / originalGeometry.h;
-        applyAspectLock(newGeometry, originalAspect);
-      }
-
-      // Aspect ratio lock for Video items (when aspect_ratio is set)
-      if (selectedElement.type === "video") {
-        const originalAspect = originalGeometry.w / originalGeometry.h;
-        applyAspectLock(newGeometry, originalAspect);
+      // Image/Video: aspect-ratio-locked resize with proper anchor handling
+      if (selectedElement.type === "image" || selectedElement.type === "video") {
+        const aspect = originalGeometry.w / originalGeometry.h;
+        newGeometry = applyAspectLockedResize(
+          originalGeometry,
+          handle,
+          delta.x,
+          delta.y,
+          aspect
+        );
+      } else {
+        newGeometry = applyResizeDelta(
+          originalGeometry,
+          handle,
+          delta.x,
+          delta.y
+        );
       }
 
       updateElementGeometry(selectedElement, newGeometry);
@@ -481,6 +548,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   );
 
   const handleResizeEnd = useCallback(() => {
+    originalGeometryRef.current = null;
     setState((prev) => ({
       ...prev,
       isResizing: false,
@@ -501,22 +569,23 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // === Keyboard Handlers ===
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      const { selectedElement, isDragging, isResizing, originalGeometry } =
-        state;
+      const { selectedElement, isDragging, isResizing } = state;
       if (!selectedElement || !isEditable) return;
 
       // Handle ESC first - works for all selection types including page
       if (e.key === "Escape") {
         e.preventDefault();
-        if ((isDragging || isResizing) && originalGeometry) {
-          updateElementGeometry(selectedElement, originalGeometry);
+        const origGeo = originalGeometryRef.current;
+        if ((isDragging || isResizing) && origGeo) {
+          updateElementGeometry(selectedElement, origGeo);
+          originalGeometryRef.current = null;
           setState((prev) => ({
             ...prev,
             isDragging: false,
             isResizing: false,
             activeHandle: null,
             originalGeometry: null,
-            selectedGeometry: originalGeometry,
+            selectedGeometry: origGeo,
           }));
         } else {
           handleElementSelect(null);
@@ -671,7 +740,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
-  const showHandles = canResizeItem && !state.isDragging;
+  // Audio/Quiz are fixed-size icons — disable resize, only allow drag
+  const isIconElement = state.selectedElement?.type === "audio" || state.selectedElement?.type === "quiz";
+  const canResizeCurrentItem = canResizeItem && !isIconElement;
+  const showHandles = canResizeCurrentItem && !state.isDragging;
 
   return (
     <div
@@ -841,7 +913,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               showHandles={showHandles}
               activeHandle={state.activeHandle}
               canDrag={canDragItem}
-              canResize={canResizeItem}
+              canResize={canResizeCurrentItem}
               onDragStart={handleDragStart}
               onDrag={handleDrag}
               onDragEnd={handleDragEnd}

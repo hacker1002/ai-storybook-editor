@@ -3,8 +3,24 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Plus, Filter, Eye, EyeOff } from "lucide-react";
+import {
+  Plus,
+  Filter,
+  Eye,
+  EyeOff,
+  Globe,
+  Smile,
+  Box,
+  Image as ImageIcon,
+  Square,
+  CircleDot,
+} from "lucide-react";
 import { cn } from "@/utils/utils";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import {
   useRetouchSpreadById,
   useSnapshotActions,
@@ -60,44 +76,26 @@ interface ObjectsSidebarProps {
   onItemSelect: (item: SelectedItem | null) => void;
 }
 
+// === Asset type icon mapping ===
+
+import type { LucideIcon } from "lucide-react";
+
+const ASSET_TYPE_CONFIG: Record<
+  SpreadItemMediaType,
+  { icon: LucideIcon; label: string }
+> = {
+  raw: { icon: Globe, label: "Raw" },
+  character: { icon: Smile, label: "Character" },
+  prop: { icon: Box, label: "Prop" },
+  background: { icon: ImageIcon, label: "Background" },
+  foreground: { icon: Square, label: "Foreground" },
+  other: { icon: CircleDot, label: "Other" },
+};
+
 // === Inline sub-components ===
 
-function SidebarHeader({
-  onFilterClick,
-  onAddClick,
-  isFilterActive,
-}: {
-  onFilterClick: () => void;
-  onAddClick: () => void;
-  isFilterActive: boolean;
-}) {
-  return (
-    <div className="flex items-center h-14 px-3 border-b gap-2">
-      <button
-        type="button"
-        onClick={onFilterClick}
-        className={cn(
-          "p-1 rounded hover:bg-muted transition-colors",
-          isFilterActive && "text-blue-500"
-        )}
-        aria-label="Toggle filter"
-      >
-        <Filter className="w-4 h-4" />
-      </button>
-      <span className="flex-1 font-semibold text-sm">Objects</span>
-      <button
-        type="button"
-        onClick={onAddClick}
-        className="p-1 rounded hover:bg-muted transition-colors"
-        aria-label="Add element"
-      >
-        <Plus className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}
-
-function FilterDropdown({
+/** Filter popover content */
+function FilterPopoverContent({
   elementFilter,
   assetFilter,
   allElements,
@@ -117,97 +115,100 @@ function FilterDropdown({
   onToggleAllAssets: () => void;
 }) {
   return (
-    <div className="border-b p-3 space-y-3 text-xs">
-      <div>
-        <p className="font-semibold mb-1 text-muted-foreground uppercase tracking-wider">
-          Element Type
+    <div className="space-y-4 text-sm">
+      <p className="font-semibold text-base">Filter</p>
+
+      {/* BY OBJECT TYPE (asset/media types) */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">
+          By Object Type
         </p>
-        <label className="flex items-center gap-1.5 mb-1 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={allElements}
-            onChange={onToggleAllElements}
-            className="rounded"
-          />
-          All
-        </label>
-        <div className="grid grid-cols-2 gap-1">
-          {ALL_ELEMENT_TYPES.map((type) => {
-            const config = ELEMENT_TYPE_CONFIG[type];
-            return (
-              <label
-                key={type}
-                className="flex items-center gap-1.5 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={allElements || elementFilter.has(type)}
-                  onChange={() => onToggleElement(type)}
-                  className="rounded"
-                />
-                <config.icon className="w-3 h-3" />
-                {config.label}
-              </label>
-            );
-          })}
-        </div>
-      </div>
-      <div>
-        <p className="font-semibold mb-1 text-muted-foreground uppercase tracking-wider">
-          Asset Type
-        </p>
-        <label className="flex items-center gap-1.5 mb-1 cursor-pointer">
+        <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
             checked={allAssets}
             onChange={onToggleAllAssets}
-            className="rounded"
+            className="rounded w-4 h-4 accent-blue-500"
           />
-          All
+          All Types
         </label>
-        <div className="grid grid-cols-2 gap-1">
-          {ALL_ASSET_TYPES.map((type) => (
+        {ALL_ASSET_TYPES.map((type) => {
+          const config = ASSET_TYPE_CONFIG[type];
+          return (
             <label
               key={type}
-              className="flex items-center gap-1.5 cursor-pointer capitalize"
+              className="flex items-center gap-2 cursor-pointer"
             >
               <input
                 type="checkbox"
                 checked={allAssets || assetFilter.has(type)}
                 onChange={() => onToggleAsset(type)}
-                className="rounded"
+                className="rounded w-4 h-4 accent-blue-500"
               />
-              {type}
+              <config.icon className="w-4 h-4 text-muted-foreground" />
+              {config.label}
             </label>
-          ))}
-        </div>
+          );
+        })}
+      </div>
+
+      <hr className="border-border" />
+
+      {/* BY ELEMENT TYPE */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">
+          By Element Type
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={allElements}
+            onChange={onToggleAllElements}
+            className="rounded w-4 h-4 accent-blue-500"
+          />
+          All Elements
+        </label>
+        {ALL_ELEMENT_TYPES.map((type) => {
+          const config = ELEMENT_TYPE_CONFIG[type];
+          return (
+            <label
+              key={type}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={allElements || elementFilter.has(type)}
+                onChange={() => onToggleElement(type)}
+                className="rounded w-4 h-4 accent-blue-500"
+              />
+              <config.icon className="w-4 h-4 text-muted-foreground" />
+              {config.label}
+            </label>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function AddElementDropdown({
+/** Add element popover content */
+function AddElementPopoverContent({
   onAdd,
-  onClose,
 }: {
   onAdd: (type: ObjectElementType) => void;
-  onClose: () => void;
 }) {
   return (
-    <div className="border-b py-1">
+    <div className="py-1">
       {ALL_ELEMENT_TYPES.map((type) => {
         const config = ELEMENT_TYPE_CONFIG[type];
         return (
           <button
             key={type}
             type="button"
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-            onClick={() => {
-              onAdd(type);
-              onClose();
-            }}
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted transition-colors rounded-sm"
+            onClick={() => onAdd(type)}
           >
-            <config.icon className="w-4 h-4" />
+            <config.icon className="w-4 h-4 text-muted-foreground" />
             {config.label}
           </button>
         );
@@ -236,7 +237,9 @@ function LayerDivider({
         type="button"
         onClick={onToggleVisibility}
         className="p-0.5 rounded hover:bg-muted-foreground/20 transition-colors"
-        aria-label={allVisible ? `Hide all in ${label}` : `Show all in ${label}`}
+        aria-label={
+          allVisible ? `Hide all in ${label}` : `Show all in ${label}`
+        }
       >
         <Icon className="w-3.5 h-3.5 text-muted-foreground" />
       </button>
@@ -255,7 +258,6 @@ export function ObjectsSidebar({
   const actions = useSnapshotActions();
 
   // Local UI state
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -688,37 +690,57 @@ export function ObjectsSidebar({
       role="listbox"
       aria-label="Objects list"
     >
-      <SidebarHeader
-        onFilterClick={() => {
-          setIsFilterOpen((p) => !p);
-          setIsAddOpen(false);
-        }}
-        onAddClick={() => {
-          setIsAddOpen((p) => !p);
-          setIsFilterOpen(false);
-        }}
-        isFilterActive={isFilterActive}
-      />
+      {/* Header with Popover-based Filter & Add */}
+      <div className="flex items-center h-14 px-3 border-b gap-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "p-1 rounded hover:bg-muted transition-colors",
+                isFilterActive && "text-blue-500"
+              )}
+              aria-label="Toggle filter"
+            >
+              <Filter className="w-4 h-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" sideOffset={8} className="w-64">
+            <FilterPopoverContent
+              elementFilter={elementFilter}
+              assetFilter={assetFilter}
+              allElements={allElements}
+              allAssets={allAssets}
+              onToggleElement={handleToggleElement}
+              onToggleAsset={handleToggleAsset}
+              onToggleAllElements={handleToggleAllElements}
+              onToggleAllAssets={handleToggleAllAssets}
+            />
+          </PopoverContent>
+        </Popover>
 
-      {isFilterOpen && (
-        <FilterDropdown
-          elementFilter={elementFilter}
-          assetFilter={assetFilter}
-          allElements={allElements}
-          allAssets={allAssets}
-          onToggleElement={handleToggleElement}
-          onToggleAsset={handleToggleAsset}
-          onToggleAllElements={handleToggleAllElements}
-          onToggleAllAssets={handleToggleAllAssets}
-        />
-      )}
+        <span className="flex-1 font-semibold text-sm">Objects</span>
 
-      {isAddOpen && (
-        <AddElementDropdown
-          onAdd={handleAddElement}
-          onClose={() => setIsAddOpen(false)}
-        />
-      )}
+        <Popover open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="p-1 rounded hover:bg-muted transition-colors"
+              aria-label="Add element"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={8} className="w-48 p-1">
+            <AddElementPopoverContent
+              onAdd={(type) => {
+                handleAddElement(type);
+                setIsAddOpen(false);
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {filteredEntries.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
@@ -730,41 +752,44 @@ export function ObjectsSidebar({
             const layerItems = allEntries.filter(
               (e) => getLayerForType(e.type)?.label === group.layer.label
             );
-            const layerAllVisible = layerItems.length > 0 && layerItems.some((e) => e.editorVisible);
+            const layerAllVisible =
+              layerItems.length > 0 && layerItems.some((e) => e.editorVisible);
             return (
-            <div key={group.layer.label}>
-              {/* Layer divider header */}
-              <LayerDivider
-                label={group.layer.label}
-                allVisible={layerAllVisible}
-                onToggleVisibility={() => handleLayerVisibilityToggle(group)}
-              />
-              {/* Items within this layer */}
-              {group.entries.map((entry, index) => (
-                <ObjectListItem
-                  key={entry.id}
-                  entry={entry}
-                  index={index}
-                  isSelected={selectedItemId?.id === entry.id}
-                  editingId={editingItemId}
-                  editValue={editValue}
-                  onEditValueChange={setEditValue}
-                  onSelect={() => handleItemClick(entry)}
-                  onVisibilityToggle={() => handleVisibilityToggle(entry)}
-                  onLockToggle={() => handleLockToggle(entry.id)}
-                  onEditStart={() => handleEditStart(entry)}
-                  onRenameConfirm={handleRenameConfirm}
-                  dragIndex={
-                    dragLayerLabel === group.layer.label ? dragIndex : null
-                  }
-                  onDragStart={(idx) => handleDragStart(idx, group.layer.label)}
-                  onDragOver={handleDragOver}
-                  onDrop={(idx) => handleLayerDrop(idx, group)}
-                  onDragEnd={handleDragEnd}
+              <div key={group.layer.label}>
+                {/* Layer divider header */}
+                <LayerDivider
+                  label={group.layer.label}
+                  allVisible={layerAllVisible}
+                  onToggleVisibility={() => handleLayerVisibilityToggle(group)}
                 />
-              ))}
-            </div>
-          );
+                {/* Items within this layer */}
+                {group.entries.map((entry, index) => (
+                  <ObjectListItem
+                    key={entry.id}
+                    entry={entry}
+                    index={index}
+                    isSelected={selectedItemId?.id === entry.id}
+                    editingId={editingItemId}
+                    editValue={editValue}
+                    onEditValueChange={setEditValue}
+                    onSelect={() => handleItemClick(entry)}
+                    onVisibilityToggle={() => handleVisibilityToggle(entry)}
+                    onLockToggle={() => handleLockToggle(entry.id)}
+                    onEditStart={() => handleEditStart(entry)}
+                    onRenameConfirm={handleRenameConfirm}
+                    dragIndex={
+                      dragLayerLabel === group.layer.label ? dragIndex : null
+                    }
+                    onDragStart={(idx) =>
+                      handleDragStart(idx, group.layer.label)
+                    }
+                    onDragOver={handleDragOver}
+                    onDrop={(idx) => handleLayerDrop(idx, group)}
+                    onDragEnd={handleDragEnd}
+                  />
+                ))}
+              </div>
+            );
           })}
         </div>
       )}

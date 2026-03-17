@@ -107,6 +107,9 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Initial state (optional)
   initialSelectedId?: string;
   initialViewMode?: ViewMode;
+
+  // External item selection (sidebar → canvas)
+  externalSelectedItemId?: { type: string; id: string } | null;
 }
 
 // === Main Component ===
@@ -140,6 +143,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   availableLayouts = [],
   initialSelectedId,
   initialViewMode = 'edit',
+  externalSelectedItemId,
 }: CanvasSpreadViewProps<TSpread>) {
   // === Local View State (with localStorage persistence) ===
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -354,6 +358,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 canResizeItem={canResizeItem}
                 canDragItem={canDragItem}
                 availableLayouts={availableLayouts}
+                externalSelectedItemId={externalSelectedItemId}
               />
             )}
 

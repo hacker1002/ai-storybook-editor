@@ -96,6 +96,84 @@ export function applyNudge(
 }
 
 /**
+ * Aspect-ratio-locked resize. Computes new geometry from original + delta + handle,
+ * keeping the opposite edge anchored and ratio maintained even at canvas bounds.
+ *
+ * Unlike applyResizeDelta + post-hoc ratio fix, this avoids position drift
+ * for w/n handles where x/y depends on the final w/h.
+ */
+export function applyAspectLockedResize(
+  original: Geometry,
+  handle: ResizeHandle,
+  deltaX: number,
+  deltaY: number,
+  aspect: number
+): Geometry {
+  const minSize = CANVAS.MIN_ELEMENT_SIZE;
+  const { x, y, w, h } = original;
+  const anchorRight = x + w;
+  const anchorBottom = y + h;
+
+  let newW: number, newH: number;
+
+  // Determine new size: edge handles use their axis, corners use dominant delta
+  if (handle === 'e' || handle === 'w') {
+    newW = w + deltaX;
+    newH = newW / aspect;
+  } else if (handle === 'n' || handle === 's') {
+    newH = h + deltaY;
+    newW = newH * aspect;
+  } else {
+    if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+      newW = w + deltaX;
+      newH = newW / aspect;
+    } else {
+      newH = h + deltaY;
+      newW = newH * aspect;
+    }
+  }
+
+  // Enforce minimum size while keeping ratio
+  if (newW < minSize) {
+    newW = minSize;
+    newH = minSize / aspect;
+  }
+  if (newH < minSize) {
+    newH = minSize;
+    newW = minSize * aspect;
+  }
+
+  // Position: anchor the opposite edge
+  let newX = handle.includes('w') ? anchorRight - newW : x;
+  let newY = handle.includes('n') ? anchorBottom - newH : y;
+
+  // Clamp within canvas [0, 100] — each clamp re-derives the linked dimension
+  if (newX < 0) {
+    newW = anchorRight;
+    newH = newW / aspect;
+    newX = 0;
+    if (handle.includes('n')) newY = anchorBottom - newH;
+  }
+  if (newY < 0) {
+    newH = anchorBottom;
+    newW = newH * aspect;
+    newY = 0;
+    if (handle.includes('w')) newX = anchorRight - newW;
+  }
+  if (newX + newW > 100) {
+    newW = 100 - newX;
+    newH = newW / aspect;
+  }
+  if (newY + newH > 100) {
+    newH = 100 - newY;
+    newW = newH * aspect;
+    if (handle.includes('w')) newX = anchorRight - newW;
+  }
+
+  return { x: newX, y: newY, w: newW, h: newH };
+}
+
+/**
  * Check if geometry is within bounds
  */
 export function isWithinBounds(geometry: Geometry): boolean {
