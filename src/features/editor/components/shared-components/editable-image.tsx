@@ -18,6 +18,7 @@ interface ArtNoteTypography {
 interface EditableImageProps {
   image: SpreadImage;
   index: number;
+  zIndex?: number;
   isSelected: boolean;
   isEditable: boolean;
   onSelect: (rect?: DOMRect) => void;
@@ -29,6 +30,7 @@ interface EditableImageProps {
 export function EditableImage({
   image,
   index,
+  zIndex,
   isSelected,
   isEditable,
   onSelect,
@@ -150,6 +152,7 @@ export function EditableImage({
         top: `${image.geometry.y}%`,
         width: `${image.geometry.w}%`,
         height: `${image.geometry.h}%`,
+        zIndex,
         outlineColor: COLORS.HOVER_OUTLINE,
       }}
     >

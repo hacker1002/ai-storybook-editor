@@ -60,6 +60,7 @@ export interface SpreadShape {
   fill: ShapeFill;
   outline: ShapeOutline;
   // Retouch only
+  "z-index"?: number;
   player_visible?: boolean;
   editor_visible?: boolean;
 }
@@ -183,8 +184,9 @@ export interface SpreadImage {
 export interface SpreadTextbox {
   id: string;
   title?: string;
-  [languageKey: string]: SpreadTextboxContent | string | boolean | undefined;
+  [languageKey: string]: SpreadTextboxContent | string | boolean | number | undefined;
   // Retouch only
+  "z-index"?: number;
   player_visible?: boolean;
   editor_visible?: boolean;
 }

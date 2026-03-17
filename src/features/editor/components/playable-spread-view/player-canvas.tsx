@@ -5,7 +5,6 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio, EditableQuiz } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
-import { Z_INDEX } from "@/constants/spread-constants";
 import type { SpreadTextboxContent } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
@@ -360,7 +359,7 @@ export function PlayerCanvas({
         {spread.pages.length > 1 && (
           <div
             className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: "50%", zIndex: Z_INDEX.IMAGE_BASE - 1 }}
+            style={{ left: "50%", zIndex: 0 }}
           />
         )}
 

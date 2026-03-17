@@ -10,6 +10,7 @@ import { COLORS } from '@/constants/spread-constants';
 interface EditableVideoProps {
   video: SpreadVideo;
   index: number;
+  zIndex?: number;
   isSelected: boolean;
   isEditable: boolean;
   isThumbnail?: boolean;
@@ -19,6 +20,7 @@ interface EditableVideoProps {
 export function EditableVideo({
   video,
   index,
+  zIndex,
   isSelected,
   isEditable,
   isThumbnail = false,
@@ -65,7 +67,7 @@ export function EditableVideo({
         top: `${video.geometry.y}%`,
         width: `${video.geometry.w}%`,
         height: `${video.geometry.h}%`,
-        zIndex: video['z-index'],
+        zIndex,
         outlineColor: COLORS.HOVER_OUTLINE,
       }}
     >

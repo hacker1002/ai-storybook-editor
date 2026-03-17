@@ -5,7 +5,6 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio, EditableQuiz } from '../shared-components';
 import { getScaledDimensions } from '../../utils/coordinate-utils';
 import { getFirstTextboxKey } from '../../utils/textbox-helpers';
-import { Z_INDEX } from '@/constants/spread-constants';
 import type { Geometry, SpreadTextboxContent, ItemType } from '@/types/spread-types';
 import { PageItem } from '../canvas-spread-view/page-item';
 import { SelectionOverlay } from './selection-overlay';
@@ -244,7 +243,7 @@ export function AnimationEditorCanvas({
         {spread.pages.length > 1 && (
           <div
             className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: '50%', zIndex: Z_INDEX.IMAGE_BASE - 1 }}
+            style={{ left: '50%', zIndex: 0 }}
           />
         )}
 

@@ -151,6 +151,7 @@ export function ObjectsMainView({
         <EditableImage
           image={context.item}
           index={context.itemIndex}
+          zIndex={context.zIndex}
           isSelected={context.isSelected}
           isEditable={context.isSpreadSelected}
           onSelect={() => {
@@ -177,6 +178,7 @@ export function ObjectsMainView({
         <EditableTextbox
           textboxContent={langData}
           index={context.itemIndex}
+          zIndex={context.zIndex}
           isSelected={context.isSelected}
           isSelectable={context.isSpreadSelected}
           isEditable={context.isSpreadSelected}
@@ -203,6 +205,7 @@ export function ObjectsMainView({
         <EditableShape
           shape={context.item}
           index={context.itemIndex}
+          zIndex={context.zIndex}
           isSelected={context.isSelected}
           isEditable={context.isSpreadSelected}
           onSelect={() => {
@@ -222,6 +225,7 @@ export function ObjectsMainView({
         <EditableVideo
           video={context.item}
           index={context.itemIndex}
+          zIndex={context.zIndex}
           isSelected={context.isSelected}
           isEditable={context.isSpreadSelected}
           isThumbnail={context.isThumbnail}
@@ -242,6 +246,7 @@ export function ObjectsMainView({
         <EditableAudio
           audio={context.item}
           index={context.itemIndex}
+          zIndex={context.zIndex}
           isSelected={context.isSelected}
           isEditable={context.isSpreadSelected}
           onSelect={() => {
@@ -261,6 +266,7 @@ export function ObjectsMainView({
         <EditableQuiz
           quiz={context.item}
           index={context.itemIndex}
+          zIndex={context.zIndex}
           isSelected={context.isSelected}
           isEditable={context.isSpreadSelected}
           onSelect={() => {

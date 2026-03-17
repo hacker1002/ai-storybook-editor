@@ -235,6 +235,8 @@ export interface BaseItemContext<TSpread extends BaseSpread> {
   spread: TSpread;
   isSelected: boolean;
   isSpreadSelected: boolean;
+  /** Resolved z-index for rendering order on the canvas */
+  zIndex?: number;
 }
 
 export interface ImageItemContext<TSpread extends BaseSpread>

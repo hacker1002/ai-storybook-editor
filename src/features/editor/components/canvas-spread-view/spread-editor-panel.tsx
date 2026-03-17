@@ -25,10 +25,14 @@ import {
   applyNudge,
 } from "./utils/geometry-utils";
 import { getScaledDimensions } from "./utils/coordinate-utils";
-import { CANVAS, Z_INDEX } from "@/constants/spread-constants";
+import { CANVAS, LAYER_CONFIG } from "@/constants/spread-constants";
 import type {
   BaseSpread,
   SpreadTextbox,
+  SpreadImage,
+  SpreadVideo,
+  SpreadAudio,
+  SpreadQuiz,
   ItemType,
   SelectedElement,
   ResizeHandle,
@@ -721,11 +725,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         {spread.pages.length > 1 && (
           <div
             className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: "50%", zIndex: Z_INDEX.IMAGE_BASE - 1 }}
+            style={{ left: "50%", zIndex: 0 }}
           />
         )}
 
-        {/* Images - skip if renderImageItem not provided */}
+        {/* Images: z-index passed through context to inner component */}
         {renderItems.includes("image") &&
           renderImageItem &&
           spread.images.map((image, index) => {
@@ -738,9 +742,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction,
               handleImageEditingChange
             );
-            return (
-              <div key={image.id || index}>{renderImageItem(context)}</div>
-            );
+            context.zIndex = (image as SpreadImage)['z-index'] ?? (LAYER_CONFIG.MEDIA.min + index);
+            return renderImageItem(context);
           })}
 
         {/* Videos */}
@@ -755,9 +758,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            return (
-              <div key={video.id || index}>{renderVideoItem(context)}</div>
-            );
+            context.zIndex = (video as SpreadVideo)['z-index'] ?? (LAYER_CONFIG.MEDIA.min + spread.images.length + index);
+            return renderVideoItem(context);
           })}
 
         {/* Shapes */}
@@ -772,12 +774,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            return (
-              <div key={shape.id || index}>{renderShapeItem(context)}</div>
-            );
+            context.zIndex = (shape as { 'z-index'?: number })['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + index);
+            return renderShapeItem(context);
           })}
 
-        {/* Textboxes - skip if renderTextItem not provided */}
+        {/* Textboxes */}
         {renderItems.includes("textbox") &&
           renderTextItem &&
           spread.textboxes.map((textbox, index) => {
@@ -790,9 +791,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction,
               handleTextboxEditingChange
             );
-            return (
-              <div key={textbox.id || index}>{renderTextItem(context)}</div>
-            );
+            context.zIndex = (textbox as { 'z-index'?: number })['z-index'] ?? (LAYER_CONFIG.TEXT.min + index);
+            return renderTextItem(context);
           })}
 
         {/* Audios */}
@@ -807,9 +807,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            return (
-              <div key={audio.id || index}>{renderAudioItem(context)}</div>
-            );
+            const shapesCount = spread.shapes?.length ?? 0;
+            context.zIndex = (audio as SpreadAudio)['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + shapesCount + index);
+            return renderAudioItem(context);
           })}
 
         {/* Quizzes */}
@@ -824,9 +824,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            return (
-              <div key={quiz.id || index}>{renderQuizItem(context)}</div>
-            );
+            const shapesCount = spread.shapes?.length ?? 0;
+            const audiosCount = spread.audios?.length ?? 0;
+            context.zIndex = (quiz as SpreadQuiz)['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + index);
+            return renderQuizItem(context);
           })}
 
         {/* Selection Frame - frame border allows drag, center passes through for editing */}

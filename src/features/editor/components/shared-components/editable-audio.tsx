@@ -10,6 +10,7 @@ import { COLORS } from '@/constants/spread-constants';
 interface EditableAudioProps {
   audio: SpreadAudio;
   index: number;
+  zIndex?: number;
   isSelected: boolean;
   isEditable: boolean;
   onSelect: () => void;
@@ -18,6 +19,7 @@ interface EditableAudioProps {
 export function EditableAudio({
   audio,
   index,
+  zIndex,
   isSelected,
   isEditable,
   onSelect,
@@ -61,7 +63,7 @@ export function EditableAudio({
       style={{
         left: `${audio.geometry.x}%`,
         top: `${audio.geometry.y}%`,
-        zIndex: audio['z-index'],
+        zIndex,
         outlineColor: COLORS.HOVER_OUTLINE,
       }}
     >

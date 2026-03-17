@@ -7,7 +7,6 @@ import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableA
 import { useToolbarPosition } from "../../hooks/use-toolbar-position";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getFirstTextboxKey } from "../../utils/textbox-helpers";
-import { Z_INDEX } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger('Editor', 'RemixEditorCanvas');
@@ -282,7 +281,7 @@ export function RemixEditorCanvas({
         {spread.pages.length > 1 && (
           <div
             className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: "50%", zIndex: Z_INDEX.IMAGE_BASE - 1 }}
+            style={{ left: "50%", zIndex: 0 }}
           />
         )}
 

@@ -10,6 +10,7 @@ import { COLORS } from '@/constants/spread-constants';
 interface EditableQuizProps {
   quiz: SpreadQuiz;
   index: number;
+  zIndex?: number;
   isSelected: boolean;
   isEditable: boolean;
   onSelect: () => void;
@@ -18,6 +19,7 @@ interface EditableQuizProps {
 export function EditableQuiz({
   quiz,
   index,
+  zIndex,
   isSelected,
   isEditable,
   onSelect,
@@ -48,7 +50,7 @@ export function EditableQuiz({
       style={{
         left: `${quiz.geometry.x}%`,
         top: `${quiz.geometry.y}%`,
-        zIndex: quiz['z-index'],
+        zIndex,
         outlineColor: COLORS.HOVER_OUTLINE,
       }}
     >

@@ -1,4 +1,5 @@
 // objects-sidebar.tsx - Left sidebar listing all objects in selected spread
+// Items are grouped by z-index layers with dividers; drag is restricted within same layer.
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
@@ -14,7 +15,13 @@ import {
   ELEMENT_TYPE_CONFIG,
   type ObjectListEntry,
 } from "./objects-sidebar-list-item";
-import { buildObjectList, filterObjectList } from "./utils";
+import {
+  buildObjectList,
+  filterObjectList,
+  groupEntriesByLayer,
+  getLayerForType,
+  type LayerGroup,
+} from "./utils";
 import type { SelectedItem, ObjectElementType } from "./objects-creative-space";
 import type {
   SpreadImage,
@@ -209,6 +216,20 @@ function AddElementDropdown({
   );
 }
 
+/** Visual divider between layer groups */
+function LayerDivider({ label, zRange }: { label: string; zRange: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/60 border-y border-border/50 select-none">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-[9px] text-muted-foreground/60 ml-auto">
+        z: {zRange}
+      </span>
+    </div>
+  );
+}
+
 // === Main Component ===
 
 export function ObjectsSidebar({
@@ -236,7 +257,8 @@ export function ObjectsSidebar({
   const [allElements, setAllElements] = useState(true);
   const [allAssets, setAllAssets] = useState(true);
 
-  // Drag state
+  // Drag state: layerLabel tracks which layer the drag started in
+  const [dragLayerLabel, setDragLayerLabel] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   // Build + filter object list
@@ -255,6 +277,12 @@ export function ObjectsSidebar({
         allAssets
       ),
     [allEntries, elementFilter, assetFilter, allElements, allAssets]
+  );
+
+  // Group filtered entries by layer (top z-index layer first)
+  const layerGroups = useMemo(
+    () => groupEntriesByLayer(filteredEntries),
+    [filteredEntries]
   );
 
   const isFilterActive = !allElements || !allAssets;
@@ -359,35 +387,49 @@ export function ObjectsSidebar({
     setEditingItemId(null);
   }, [editingItemId, editValue, allEntries, actions, selectedSpreadId]);
 
-  // DnD handlers
-  const handleDragStart = useCallback((index: number) => {
+  // === Layer-scoped DnD handlers ===
+
+  const handleDragStart = useCallback((index: number, layerLabel: string) => {
     setDragIndex(index);
+    setDragLayerLabel(layerLabel);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
   }, []);
 
-  const handleDrop = useCallback(
-    (targetIndex: number) => {
-      if (dragIndex === null || dragIndex === targetIndex) {
+  /**
+   * Handle drop within a specific layer group.
+   * Reassigns z-index values within that layer's range only.
+   */
+  const handleLayerDrop = useCallback(
+    (targetIndex: number, group: LayerGroup) => {
+      if (
+        dragIndex === null ||
+        dragIndex === targetIndex ||
+        dragLayerLabel !== group.layer.label
+      ) {
         setDragIndex(null);
+        setDragLayerLabel(null);
         return;
       }
-      log.info("handleDrop", "reordering", {
+
+      log.info("handleLayerDrop", "reordering within layer", {
+        layer: group.layer.label,
         from: dragIndex,
         to: targetIndex,
       });
 
-      // Reorder entries and reassign z-index values
-      const reordered = [...filteredEntries];
+      const reordered = [...group.entries];
       const [moved] = reordered.splice(dragIndex, 1);
       reordered.splice(targetIndex, 0, moved);
 
-      // Update z-index for each item (top of list = highest z-index)
+      const { min, max } = group.layer;
+      const count = reordered.length;
+
+      // Distribute z-index within layer range, highest first
       reordered.forEach((entry, idx) => {
-        const newZIndex = reordered.length - idx;
-        if (entry.zIndex === newZIndex) return;
+        const newZIndex = Math.min(max, min + (count - 1 - idx));
 
         switch (entry.type) {
           case "image":
@@ -410,27 +452,48 @@ export function ObjectsSidebar({
               "z-index": newZIndex,
             });
             break;
-          // shape/text: z-index is array position — drag disabled for these types
+          case "shape":
+            actions.updateRetouchShape(selectedSpreadId, entry.id, {
+              "z-index": newZIndex,
+            } as Partial<SpreadShape>);
+            break;
+          case "text":
+            actions.updateRetouchTextbox(selectedSpreadId, entry.id, {
+              "z-index": newZIndex,
+            } as Partial<SpreadTextbox>);
+            break;
         }
       });
 
       setDragIndex(null);
+      setDragLayerLabel(null);
     },
-    [dragIndex, filteredEntries, actions, selectedSpreadId]
+    [dragIndex, dragLayerLabel, actions, selectedSpreadId]
   );
 
   const handleDragEnd = useCallback(() => {
     setDragIndex(null);
+    setDragLayerLabel(null);
   }, []);
 
-  // Add element
+  // Add element with z-index within its layer range
   const handleAddElement = useCallback(
     (type: ObjectElementType) => {
       log.info("handleAddElement", "adding", { type });
-      const topZIndex =
-        allEntries.length > 0
-          ? Math.max(...allEntries.map((e) => e.zIndex)) + 1
-          : 1;
+
+      // Determine z-index: top of its layer
+      const layer = getLayerForType(type);
+      let newZIndex: number = layer ? layer.min : 1;
+      if (layer) {
+        const sameLayerEntries = allEntries.filter((e) => {
+          const eLayer = getLayerForType(e.type);
+          return eLayer === layer;
+        });
+        if (sameLayerEntries.length > 0) {
+          const maxInLayer = Math.max(...sameLayerEntries.map((e) => e.zIndex));
+          newZIndex = Math.min(maxInLayer + 1, layer.max);
+        }
+      }
 
       switch (type) {
         case "image":
@@ -439,7 +502,7 @@ export function ObjectsSidebar({
             title: "New Image",
             geometry: { x: 10, y: 10, w: 30, h: 30 },
             illustrations: [],
-            "z-index": topZIndex,
+            "z-index": newZIndex,
             editor_visible: true,
             player_visible: true,
           } as SpreadImage);
@@ -485,7 +548,7 @@ export function ObjectsSidebar({
             name: "New Video",
             title: "New Video",
             geometry: { x: 10, y: 10, w: 30, h: 20 },
-            "z-index": topZIndex,
+            "z-index": newZIndex,
             editor_visible: true,
             player_visible: true,
             type: "raw",
@@ -497,7 +560,7 @@ export function ObjectsSidebar({
             name: "New Audio",
             title: "New Audio",
             geometry: { x: 10, y: 10, w: 0, h: 0 },
-            "z-index": topZIndex,
+            "z-index": newZIndex,
             editor_visible: true,
             player_visible: true,
             type: "raw",
@@ -507,7 +570,7 @@ export function ObjectsSidebar({
           actions.addRetouchQuiz(selectedSpreadId, {
             id: crypto.randomUUID(),
             geometry: { x: 20, y: 20, w: 0, h: 0 },
-            "z-index": topZIndex,
+            "z-index": newZIndex,
             editor_visible: true,
             player_visible: true,
             options: [],
@@ -603,26 +666,38 @@ export function ObjectsSidebar({
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          {filteredEntries.map((entry, index) => (
-            <ObjectListItem
-              key={entry.id}
-              entry={entry}
-              index={index}
-              isSelected={selectedItemId?.id === entry.id}
-              editingId={editingItemId}
-              editValue={editValue}
-              onEditValueChange={setEditValue}
-              onSelect={() => handleItemClick(entry)}
-              onVisibilityToggle={() => handleVisibilityToggle(entry)}
-              onLockToggle={() => handleLockToggle(entry.id)}
-              onEditStart={() => handleEditStart(entry)}
-              onRenameConfirm={handleRenameConfirm}
-              dragIndex={dragIndex}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onDragEnd={handleDragEnd}
-            />
+          {layerGroups.map((group) => (
+            <div key={group.layer.label}>
+              {/* Layer divider header */}
+              <LayerDivider
+                label={group.layer.label}
+                zRange={`${group.layer.min}..${group.layer.max}`}
+              />
+              {/* Items within this layer */}
+              {group.entries.map((entry, index) => (
+                <ObjectListItem
+                  key={entry.id}
+                  entry={entry}
+                  index={index}
+                  isSelected={selectedItemId?.id === entry.id}
+                  editingId={editingItemId}
+                  editValue={editValue}
+                  onEditValueChange={setEditValue}
+                  onSelect={() => handleItemClick(entry)}
+                  onVisibilityToggle={() => handleVisibilityToggle(entry)}
+                  onLockToggle={() => handleLockToggle(entry.id)}
+                  onEditStart={() => handleEditStart(entry)}
+                  onRenameConfirm={handleRenameConfirm}
+                  dragIndex={
+                    dragLayerLabel === group.layer.label ? dragIndex : null
+                  }
+                  onDragStart={(idx) => handleDragStart(idx, group.layer.label)}
+                  onDragOver={handleDragOver}
+                  onDrop={(idx) => handleLayerDrop(idx, group)}
+                  onDragEnd={handleDragEnd}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}

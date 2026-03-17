@@ -21,11 +21,28 @@ export const CANVAS = {
 
 export const Z_INDEX = {
   PAGE_BACKGROUND: -999,
-  IMAGE_BASE: 0,
-  TEXTBOX_BASE: 1000,
-  OBJECT_BASE: 2000,
-  SELECTION_FRAME: 10000,
+  SELECTION_FRAME: 800,
 } as const;
+
+/**
+ * Layer z-index ranges for canvas items.
+ * Items within same layer can be reordered via drag; cross-layer drag is blocked.
+ *
+ * Layer 0: pages (z-index = 0, non-draggable background)
+ * Layer 1: image + video (z-index 1..500)
+ * Layer 2: shape + audio + quiz (z-index 501..600)
+ * Layer 3: textbox (z-index 601..700)
+ */
+export const LAYER_CONFIG = {
+  MEDIA: { min: 1, max: 500, label: 'Media', types: ['image', 'video'] as const },
+  OBJECTS: { min: 501, max: 600, label: 'Objects', types: ['shape', 'audio', 'quiz'] as const },
+  TEXT: { min: 601, max: 700, label: 'Text', types: ['text'] as const },
+} as const;
+
+/** Ordered from top (highest z-index) to bottom */
+export const LAYER_ORDER = [LAYER_CONFIG.TEXT, LAYER_CONFIG.OBJECTS, LAYER_CONFIG.MEDIA] as const;
+
+export type LayerKey = keyof typeof LAYER_CONFIG;
 
 export const ZOOM = {
   MIN: 25,

@@ -83,8 +83,8 @@ export function ObjectListItem({
   const isEditing = editingId === entry.id;
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
-  const canDrag =
-    !entry.locked && entry.type !== "shape" && entry.type !== "text";
+  // All types are now draggable within their layer (z-index layer restriction is in sidebar)
+  const canDrag = !entry.locked;
 
   return (
     <div

@@ -9,6 +9,7 @@ import { COLORS } from '@/constants/spread-constants';
 interface EditableShapeProps {
   shape: SpreadShape;
   index: number;
+  zIndex?: number;
   isSelected: boolean;
   isEditable: boolean;
   onSelect: () => void;
@@ -17,6 +18,7 @@ interface EditableShapeProps {
 export function EditableShape({
   shape,
   index,
+  zIndex,
   isSelected,
   isEditable,
   onSelect,
@@ -61,6 +63,7 @@ export function EditableShape({
         top: `${shape.geometry.y}%`,
         width: `${shape.geometry.w}%`,
         height: `${shape.geometry.h}%`,
+        zIndex,
         backgroundColor: fill.is_filled ? fill.color : 'transparent',
         opacity: fill.opacity,
         borderStyle: getOutlineStyle(outline),
