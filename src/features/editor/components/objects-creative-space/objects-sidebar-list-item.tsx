@@ -18,6 +18,11 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/utils/utils";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import type { ObjectElementType } from "./objects-creative-space";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -27,7 +32,7 @@ export interface ObjectListEntry {
   title: string;
   zIndex: number;
   editorVisible: boolean;
-  locked: boolean;
+  playerVisible: boolean;
   assetType?: SpreadItemMediaType;
 }
 
@@ -49,7 +54,7 @@ interface ObjectListItemProps {
   editingId: string | null;
   onSelect: () => void;
   onVisibilityToggle: () => void;
-  onLockToggle: () => void;
+  onPlayerVisibilityToggle: () => void;
   onEditStart: () => void;
   onRenameConfirm: () => void;
   editValue: string;
@@ -68,7 +73,7 @@ export function ObjectListItem({
   editingId,
   onSelect,
   onVisibilityToggle,
-  onLockToggle,
+  onPlayerVisibilityToggle,
   onEditStart,
   onRenameConfirm,
   editValue,
@@ -83,8 +88,6 @@ export function ObjectListItem({
   const isEditing = editingId === entry.id;
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
-  // All types are now draggable within their layer (z-index layer restriction is in sidebar)
-  const canDrag = !entry.locked;
 
   return (
     <div
@@ -97,9 +100,8 @@ export function ObjectListItem({
         dragIndex === index && "opacity-40"
       )}
       onClick={onSelect}
-      draggable={canDrag}
+      draggable
       onDragStart={(e) => {
-        if (!canDrag) return;
         e.dataTransfer.effectAllowed = "move";
         onDragStart(index);
       }}
@@ -112,13 +114,8 @@ export function ObjectListItem({
       role="option"
       aria-selected={isSelected}
     >
-      {/* Drag handle (visible on hover for draggable items) */}
-      <GripVertical
-        className={cn(
-          "w-3.5 h-3.5 text-muted-foreground flex-shrink-0",
-          canDrag ? "opacity-0 group-hover:opacity-100" : "opacity-0"
-        )}
-      />
+      {/* Drag handle */}
+      <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100" />
 
       {/* Type icon */}
       <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
@@ -153,49 +150,69 @@ export function ObjectListItem({
         <span className="flex-1 truncate min-w-0">{entry.title}</span>
       )}
 
-      {/* Hover actions */}
+      {/* Hover actions with tooltips */}
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onVisibilityToggle();
-          }}
-          className="p-0.5 rounded hover:bg-muted"
-          aria-label="Toggle visibility"
-        >
-          {entry.editorVisible ? (
-            <Eye className="w-3.5 h-3.5" />
-          ) : (
-            <EyeOff className="w-3.5 h-3.5" />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onLockToggle();
-          }}
-          className="p-0.5 rounded hover:bg-muted"
-          aria-label="Toggle lock"
-        >
-          {entry.locked ? (
-            <Lock className="w-3.5 h-3.5" />
-          ) : (
-            <Unlock className="w-3.5 h-3.5" />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditStart();
-          }}
-          className="p-0.5 rounded hover:bg-muted"
-          aria-label="Rename"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onVisibilityToggle();
+              }}
+              className="p-0.5 rounded hover:bg-muted"
+            >
+              {entry.editorVisible ? (
+                <Eye className="w-3.5 h-3.5" />
+              ) : (
+                <EyeOff className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            {entry.editorVisible ? "Hide in editor" : "Show in editor"}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlayerVisibilityToggle();
+              }}
+              className="p-0.5 rounded hover:bg-muted"
+            >
+              {entry.playerVisible ? (
+                <Unlock className="w-3.5 h-3.5" />
+              ) : (
+                <Lock className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            {entry.playerVisible ? "Hide in player" : "Show in player"}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditStart();
+              }}
+              className="p-0.5 rounded hover:bg-muted"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            Rename
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );

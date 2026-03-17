@@ -79,7 +79,7 @@ function getTextboxTitle(textbox: SpreadTextbox): string {
 
 // === Build & filter ===
 
-export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): ObjectListEntry[] {
+export function buildObjectList(spread: BaseSpread): ObjectListEntry[] {
   const entries: ObjectListEntry[] = [];
 
   const mediaLayer = LAYER_CONFIG.MEDIA;
@@ -93,7 +93,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
       title: (img as SpreadImage).title || (img as SpreadImage).name || `Image ${i + 1}`,
       zIndex: resolveZIndex((img as SpreadImage)['z-index'], i, mediaLayer),
       editorVisible: (img as SpreadImage).editor_visible !== false,
-      locked: lockedItems.has(img.id),
+      playerVisible: (img as SpreadImage).player_visible !== false,
       assetType: (img as SpreadImage).type,
     });
   });
@@ -105,7 +105,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
       title: getTextboxTitle(tb as SpreadTextbox),
       zIndex: resolveZIndex((tb as SpreadTextbox)['z-index'], i, textLayer),
       editorVisible: (tb as SpreadTextbox).editor_visible !== false,
-      locked: lockedItems.has(tb.id),
+      playerVisible: (tb as SpreadTextbox).player_visible !== false,
     });
   });
 
@@ -116,7 +116,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
       title: (shape as SpreadShape).title || `Shape ${i + 1}`,
       zIndex: resolveZIndex((shape as SpreadShape)['z-index'], i, objectsLayer),
       editorVisible: (shape as SpreadShape).editor_visible !== false,
-      locked: lockedItems.has(shape.id),
+      playerVisible: (shape as SpreadShape).player_visible !== false,
     });
   });
 
@@ -127,7 +127,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
       title: (video as SpreadVideo).title || (video as SpreadVideo).name || `Video ${i + 1}`,
       zIndex: resolveZIndex((video as SpreadVideo)['z-index'], i, mediaLayer),
       editorVisible: (video as SpreadVideo).editor_visible !== false,
-      locked: lockedItems.has(video.id),
+      playerVisible: (video as SpreadVideo).player_visible !== false,
       assetType: (video as SpreadVideo).type,
     });
   });
@@ -139,7 +139,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
       title: (audio as SpreadAudio).title || (audio as SpreadAudio).name || `Audio ${i + 1}`,
       zIndex: resolveZIndex((audio as SpreadAudio)['z-index'], i, objectsLayer),
       editorVisible: (audio as SpreadAudio).editor_visible !== false,
-      locked: lockedItems.has(audio.id),
+      playerVisible: (audio as SpreadAudio).player_visible !== false,
       assetType: (audio as SpreadAudio).type,
     });
   });
@@ -151,7 +151,7 @@ export function buildObjectList(spread: BaseSpread, lockedItems: Set<string>): O
       title: (quiz as SpreadQuiz).title || `Quiz ${i + 1}`,
       zIndex: resolveZIndex((quiz as SpreadQuiz)['z-index'], i, objectsLayer),
       editorVisible: (quiz as SpreadQuiz).editor_visible !== false,
-      locked: lockedItems.has(quiz.id),
+      playerVisible: (quiz as SpreadQuiz).player_visible !== false,
     });
   });
 

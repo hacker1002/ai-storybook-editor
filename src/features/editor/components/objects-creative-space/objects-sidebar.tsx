@@ -217,7 +217,6 @@ export function ObjectsSidebar({
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [lockedItems, setLockedItems] = useState<Set<string>>(new Set());
 
   // Filter state (all checked by default)
   const [assetFilter, setAssetFilter] = useState<Set<SpreadItemMediaType>>(
@@ -232,8 +231,8 @@ export function ObjectsSidebar({
   // Build + filter object list
   const allEntries = useMemo(() => {
     if (!spread) return [];
-    return buildObjectList(spread, lockedItems);
-  }, [spread, lockedItems]);
+    return buildObjectList(spread);
+  }, [spread]);
 
   const filteredEntries = useMemo(
     () =>
@@ -348,14 +347,43 @@ export function ObjectsSidebar({
     [allEntries, actions, selectedSpreadId]
   );
 
-  const handleLockToggle = useCallback((entryId: string) => {
-    setLockedItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(entryId)) next.delete(entryId);
-      else next.add(entryId);
-      return next;
-    });
-  }, []);
+  const handlePlayerVisibilityToggle = useCallback(
+    (entry: ObjectListEntry) => {
+      const newVisible = !entry.playerVisible;
+      log.debug("handlePlayerVisibilityToggle", "toggling player_visible", {
+        id: entry.id,
+        type: entry.type,
+        newVisible,
+      });
+
+      const updates = { player_visible: newVisible };
+      switch (entry.type) {
+        case "image":
+          actions.updateRetouchImage(selectedSpreadId, entry.id, updates);
+          break;
+        case "text":
+          actions.updateRetouchTextbox(
+            selectedSpreadId,
+            entry.id,
+            updates as Partial<SpreadTextbox>
+          );
+          break;
+        case "shape":
+          actions.updateRetouchShape(selectedSpreadId, entry.id, updates);
+          break;
+        case "video":
+          actions.updateRetouchVideo(selectedSpreadId, entry.id, updates);
+          break;
+        case "audio":
+          actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
+          break;
+        case "quiz":
+          actions.updateRetouchQuiz(selectedSpreadId, entry.id, updates);
+          break;
+      }
+    },
+    [actions, selectedSpreadId]
+  );
 
   const handleEditStart = useCallback((entry: ObjectListEntry) => {
     setEditingItemId(entry.id);
@@ -712,7 +740,7 @@ export function ObjectsSidebar({
                     onEditValueChange={setEditValue}
                     onSelect={() => handleItemClick(entry)}
                     onVisibilityToggle={() => handleVisibilityToggle(entry)}
-                    onLockToggle={() => handleLockToggle(entry.id)}
+                    onPlayerVisibilityToggle={() => handlePlayerVisibilityToggle(entry)}
                     onEditStart={() => handleEditStart(entry)}
                     onRenameConfirm={handleRenameConfirm}
                     dragIndex={

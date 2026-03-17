@@ -34,8 +34,8 @@ export const Z_INDEX = {
  * Layer 3: textbox (z-index 601..700)
  */
 export const LAYER_CONFIG = {
-  MEDIA: { min: 1, max: 500, label: 'Media', types: ['image', 'video'] as const },
-  OBJECTS: { min: 501, max: 600, label: 'Objects', types: ['shape', 'audio', 'quiz'] as const },
+  MEDIA: { min: 1, max: 500, label: 'Pictorial', types: ['image', 'video'] as const },
+  OBJECTS: { min: 501, max: 600, label: 'Mix', types: ['shape', 'audio', 'quiz'] as const },
   TEXT: { min: 601, max: 700, label: 'Text', types: ['text'] as const },
 } as const;
 

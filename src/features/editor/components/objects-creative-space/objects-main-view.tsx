@@ -1,7 +1,8 @@
 // objects-main-view.tsx - CanvasSpreadView wrapper with retouch render props
 "use client";
 
-import { useCallback } from "react";
+import { useState, useCallback } from "react";
+import { EyeOff } from "lucide-react";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
   EditableImage,
@@ -10,7 +11,10 @@ import {
   EditableVideo,
   EditableAudio,
   EditableQuiz,
+  GenerateImageModal,
 } from "@/features/editor/components/shared-components";
+import { ObjectsImageToolbar } from "./objects-image-toolbar";
+import type { Geometry } from "@/types/canvas-types";
 import {
   useRetouchSpreads,
   useSnapshotActions,
@@ -22,6 +26,7 @@ import type { SpreadType } from "@/features/editor/components/canvas-spread-view
 import type {
   BaseSpread,
   ImageItemContext,
+  ImageToolbarContext,
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
@@ -40,6 +45,28 @@ import type { SpreadTextboxContent } from "@/types/spread-types";
 
 const log = createLogger("Editor", "ObjectsMainView");
 
+/** Badge overlay shown on canvas items when player_visible = false.
+ *  For icon-type items (audio/quiz) with w=0,h=0, uses fixed 32px box matching the icon size. */
+function PlayerHiddenBadge({ geometry, zIndex, isIcon }: { geometry: Geometry; zIndex?: number; isIcon?: boolean }) {
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{
+        left: `${geometry.x}%`,
+        top: `${geometry.y}%`,
+        ...(isIcon
+          ? { width: 32, height: 32 }
+          : { width: `${geometry.w}%`, height: `${geometry.h}%` }),
+        zIndex: (zIndex ?? 0) + 1,
+      }}
+    >
+      <div className={`absolute rounded-sm bg-black/60 p-0.5 ${isIcon ? "-top-2.5 -right-2.5" : "top-0.5 right-0.5"}`}>
+        <EyeOff className="w-3 h-3 text-white" />
+      </div>
+    </div>
+  );
+}
+
 interface ObjectsMainViewProps {
   selectedSpreadId: string;
   selectedItemId: SelectedItem | null;
@@ -55,6 +82,31 @@ export function ObjectsMainView({
 }: ObjectsMainViewProps) {
   const retouchSpreads = useRetouchSpreads();
   const actions = useSnapshotActions();
+
+  // Generate image modal state — spreadId captured at open time to prevent
+  // wrong-spread updates if selection changes while modal is open
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generateModalImage, setGenerateModalImage] =
+    useState<SpreadImage | null>(null);
+  const [generateModalSpreadId, setGenerateModalSpreadId] = useState<string>("");
+
+  const openGenerateModal = useCallback((image: SpreadImage) => {
+    setGenerateModalImage(image);
+    setGenerateModalSpreadId(selectedSpreadId);
+    setGenerateModalOpen(true);
+  }, [selectedSpreadId]);
+
+  const handleGenerateModalClose = useCallback((open: boolean) => {
+    setGenerateModalOpen(open);
+    if (!open) setGenerateModalImage(null);
+  }, []);
+
+  const handleGenerateImageUpdate = useCallback(
+    (imageId: string, updates: Partial<SpreadImage>) => {
+      actions.updateRetouchImage(generateModalSpreadId, imageId, updates);
+    },
+    [generateModalSpreadId, actions]
+  );
 
   // Unified item action handler - dispatches to store per type
   const handleSpreadItemAction = useCallback(
@@ -198,21 +250,27 @@ export function ObjectsMainView({
 
   const renderRetouchImage = useCallback(
     (context: ImageItemContext<BaseSpread>) => {
-      if ((context.item as SpreadImage).editor_visible === false) return null;
+      const img = context.item as SpreadImage;
+      if (img.editor_visible === false) return null;
       return (
-        <EditableImage
-          image={context.item}
-          index={context.itemIndex}
-          zIndex={context.zIndex}
-          isSelected={context.isSelected}
-          isEditable={context.isSpreadSelected}
-          onSelect={() => {
-            context.onSelect();
-            onItemSelect({ type: "image", id: context.item.id });
-          }}
-          onArtNoteChange={(artNote) => context.onUpdate({ art_note: artNote })}
-          onEditingChange={context.onEditingChange}
-        />
+        <>
+          <EditableImage
+            image={context.item}
+            index={context.itemIndex}
+            zIndex={context.zIndex}
+            isSelected={context.isSelected}
+            isEditable={context.isSpreadSelected}
+            onSelect={() => {
+              context.onSelect();
+              onItemSelect({ type: "image", id: context.item.id });
+            }}
+            onArtNoteChange={(artNote) => context.onUpdate({ art_note: artNote })}
+            onEditingChange={context.onEditingChange}
+          />
+          {img.player_visible === false && (
+            <PlayerHiddenBadge geometry={img.geometry} zIndex={context.zIndex} />
+          )}
+        </>
       );
     },
     [onItemSelect]
@@ -220,31 +278,36 @@ export function ObjectsMainView({
 
   const renderRetouchTextbox = useCallback(
     (context: TextItemContext<BaseSpread>) => {
-      if ((context.item as SpreadTextbox).editor_visible === false) return null;
-      const textbox = context.item;
-      const langKey = getFirstTextboxKey(textbox);
+      const tb = context.item as SpreadTextbox;
+      if (tb.editor_visible === false) return null;
+      const langKey = getFirstTextboxKey(tb);
       if (!langKey) return null;
-      const langData = textbox[langKey] as SpreadTextboxContent;
+      const langData = tb[langKey] as SpreadTextboxContent;
 
       return (
-        <EditableTextbox
-          textboxContent={langData}
-          index={context.itemIndex}
-          zIndex={context.zIndex}
-          isSelected={context.isSelected}
-          isSelectable={context.isSpreadSelected}
-          isEditable={context.isSpreadSelected}
-          onSelect={() => {
-            context.onSelect();
-            onItemSelect({ type: "text", id: context.item.id });
-          }}
-          onTextChange={(newText) => {
-            context.onUpdate({
-              [langKey]: { ...langData, text: newText },
-            } as unknown as Partial<SpreadTextbox>);
-          }}
-          onEditingChange={context.onEditingChange ?? (() => {})}
-        />
+        <>
+          <EditableTextbox
+            textboxContent={langData}
+            index={context.itemIndex}
+            zIndex={context.zIndex}
+            isSelected={context.isSelected}
+            isSelectable={context.isSpreadSelected}
+            isEditable={context.isSpreadSelected}
+            onSelect={() => {
+              context.onSelect();
+              onItemSelect({ type: "text", id: context.item.id });
+            }}
+            onTextChange={(newText) => {
+              context.onUpdate({
+                [langKey]: { ...langData, text: newText },
+              } as unknown as Partial<SpreadTextbox>);
+            }}
+            onEditingChange={context.onEditingChange ?? (() => {})}
+          />
+          {tb.player_visible === false && (
+            <PlayerHiddenBadge geometry={langData.geometry} zIndex={context.zIndex} />
+          )}
+        </>
       );
     },
     [onItemSelect]
@@ -252,19 +315,25 @@ export function ObjectsMainView({
 
   const renderRetouchShape = useCallback(
     (context: ShapeItemContext<BaseSpread>) => {
-      if ((context.item as SpreadShape).editor_visible === false) return null;
+      const shape = context.item as SpreadShape;
+      if (shape.editor_visible === false) return null;
       return (
-        <EditableShape
-          shape={context.item}
-          index={context.itemIndex}
-          zIndex={context.zIndex}
-          isSelected={context.isSelected}
-          isEditable={context.isSpreadSelected}
-          onSelect={() => {
-            context.onSelect();
-            onItemSelect({ type: "shape", id: context.item.id });
-          }}
-        />
+        <>
+          <EditableShape
+            shape={context.item}
+            index={context.itemIndex}
+            zIndex={context.zIndex}
+            isSelected={context.isSelected}
+            isEditable={context.isSpreadSelected}
+            onSelect={() => {
+              context.onSelect();
+              onItemSelect({ type: "shape", id: context.item.id });
+            }}
+          />
+          {shape.player_visible === false && (
+            <PlayerHiddenBadge geometry={shape.geometry} zIndex={context.zIndex} />
+          )}
+        </>
       );
     },
     [onItemSelect]
@@ -272,20 +341,26 @@ export function ObjectsMainView({
 
   const renderRetouchVideo = useCallback(
     (context: VideoItemContext<BaseSpread>) => {
-      if ((context.item as SpreadVideo).editor_visible === false) return null;
+      const video = context.item as SpreadVideo;
+      if (video.editor_visible === false) return null;
       return (
-        <EditableVideo
-          video={context.item}
-          index={context.itemIndex}
-          zIndex={context.zIndex}
-          isSelected={context.isSelected}
-          isEditable={context.isSpreadSelected}
-          isThumbnail={context.isThumbnail}
-          onSelect={() => {
-            context.onSelect();
-            onItemSelect({ type: "video", id: context.item.id });
-          }}
-        />
+        <>
+          <EditableVideo
+            video={context.item}
+            index={context.itemIndex}
+            zIndex={context.zIndex}
+            isSelected={context.isSelected}
+            isEditable={context.isSpreadSelected}
+            isThumbnail={context.isThumbnail}
+            onSelect={() => {
+              context.onSelect();
+              onItemSelect({ type: "video", id: context.item.id });
+            }}
+          />
+          {video.player_visible === false && (
+            <PlayerHiddenBadge geometry={video.geometry} zIndex={context.zIndex} />
+          )}
+        </>
       );
     },
     [onItemSelect]
@@ -293,69 +368,111 @@ export function ObjectsMainView({
 
   const renderRetouchAudio = useCallback(
     (context: AudioItemContext<BaseSpread>) => {
-      if ((context.item as SpreadAudio).editor_visible === false) return null;
+      const audio = context.item as SpreadAudio;
+      if (audio.editor_visible === false) return null;
       return (
-        <EditableAudio
-          audio={context.item}
-          index={context.itemIndex}
-          zIndex={context.zIndex}
-          isSelected={context.isSelected}
-          isEditable={context.isSpreadSelected}
-          onSelect={() => {
-            context.onSelect();
-            onItemSelect({ type: "audio", id: context.item.id });
-          }}
-        />
+        <>
+          <EditableAudio
+            audio={context.item}
+            index={context.itemIndex}
+            zIndex={context.zIndex}
+            isSelected={context.isSelected}
+            isEditable={context.isSpreadSelected}
+            onSelect={() => {
+              context.onSelect();
+              onItemSelect({ type: "audio", id: context.item.id });
+            }}
+          />
+          {audio.player_visible === false && (
+            <PlayerHiddenBadge geometry={audio.geometry} zIndex={context.zIndex} isIcon />
+          )}
+        </>
       );
     },
     [onItemSelect]
   );
 
+  // === Image toolbar render prop ===
+  const renderRetouchImageToolbar = useCallback(
+    (context: ImageToolbarContext<BaseSpread>) => (
+      <ObjectsImageToolbar
+        context={{
+          ...context,
+          onGenerateImage: () => openGenerateModal(context.item),
+        }}
+      />
+    ),
+    [openGenerateModal],
+  );
+
   const renderRetouchQuiz = useCallback(
     (context: QuizItemContext<BaseSpread>) => {
-      if ((context.item as SpreadQuiz).editor_visible === false) return null;
+      const quiz = context.item as SpreadQuiz;
+      if (quiz.editor_visible === false) return null;
       return (
-        <EditableQuiz
-          quiz={context.item}
-          index={context.itemIndex}
-          zIndex={context.zIndex}
-          isSelected={context.isSelected}
-          isEditable={context.isSpreadSelected}
-          onSelect={() => {
-            context.onSelect();
-            onItemSelect({ type: "quiz", id: context.item.id });
-          }}
-        />
+        <>
+          <EditableQuiz
+            quiz={context.item}
+            index={context.itemIndex}
+            zIndex={context.zIndex}
+            isSelected={context.isSelected}
+            isEditable={context.isSpreadSelected}
+            onSelect={() => {
+              context.onSelect();
+              onItemSelect({ type: "quiz", id: context.item.id });
+            }}
+          />
+          {quiz.player_visible === false && (
+            <PlayerHiddenBadge geometry={quiz.geometry} zIndex={context.zIndex} isIcon />
+          )}
+        </>
       );
     },
     [onItemSelect]
   );
 
   return (
-    <CanvasSpreadView
-      spreads={retouchSpreads}
-      initialSelectedId={selectedSpreadId}
-      renderItems={["image", "textbox", "shape", "video", "audio", "quiz"]}
-      renderImageItem={renderRetouchImage}
-      renderTextItem={renderRetouchTextbox}
-      renderShapeItem={renderRetouchShape}
-      renderVideoItem={renderRetouchVideo}
-      renderAudioItem={renderRetouchAudio}
-      renderQuizItem={renderRetouchQuiz}
-      onSpreadSelect={onSpreadSelect}
-      onSpreadReorder={handleSpreadReorder}
-      onSpreadAdd={handleSpreadAdd}
-      onDeleteSpread={handleDeleteSpread}
-      onUpdateSpreadItem={handleSpreadItemAction}
-      isEditable={true}
-      canAddSpread={false}
-      canReorderSpread={false}
-      canDeleteSpread={false}
-      canDeleteItem={true}
-      canResizeItem={true}
-      canDragItem={true}
-      externalSelectedItemId={selectedItemId}
-    />
+    <>
+      <CanvasSpreadView
+        spreads={retouchSpreads}
+        initialSelectedId={selectedSpreadId}
+        renderItems={["image", "textbox", "shape", "video", "audio", "quiz"]}
+        renderImageItem={renderRetouchImage}
+        renderTextItem={renderRetouchTextbox}
+        renderShapeItem={renderRetouchShape}
+        renderVideoItem={renderRetouchVideo}
+        renderAudioItem={renderRetouchAudio}
+        renderQuizItem={renderRetouchQuiz}
+        renderImageToolbar={renderRetouchImageToolbar}
+        onSpreadSelect={onSpreadSelect}
+        onSpreadReorder={handleSpreadReorder}
+        onSpreadAdd={handleSpreadAdd}
+        onDeleteSpread={handleDeleteSpread}
+        onUpdateSpreadItem={handleSpreadItemAction}
+        isEditable={true}
+        canAddSpread={false}
+        canReorderSpread={false}
+        canDeleteSpread={false}
+        canDeleteItem={true}
+        canResizeItem={true}
+        canDragItem={true}
+        externalSelectedItemId={selectedItemId}
+      />
+
+      {generateModalImage && (
+        <GenerateImageModal
+          open={generateModalOpen}
+          onOpenChange={handleGenerateModalClose}
+          image={generateModalImage}
+          onUpdateImage={(updates) => {
+            handleGenerateImageUpdate(generateModalImage.id, updates);
+            setGenerateModalImage((prev) =>
+              prev ? { ...prev, ...updates } : null
+            );
+          }}
+        />
+      )}
+    </>
   );
 }
 
