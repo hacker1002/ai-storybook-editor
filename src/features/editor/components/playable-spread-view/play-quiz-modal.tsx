@@ -26,14 +26,14 @@ interface PlayQuizModalProps {
 // Resolve language key: try given key first, then fallback to first available key
 function resolveLanguageKey(quiz: SpreadQuiz, preferredKey: string): string {
   const quizContent = quiz[preferredKey] as SpreadQuizContent | undefined;
-  if (quizContent?.title) return preferredKey;
+  if (quizContent?.question) return preferredKey;
 
-  // Fallback: find first key that has a title
-  const reserved = new Set(['id', 'geometry', 'z-index', 'player_visible', 'editor_visible', 'options']);
+  // Fallback: find first key that has a question
+  const reserved = new Set(['id', 'title', 'geometry', 'z-index', 'player_visible', 'editor_visible', 'options']);
   for (const key of Object.keys(quiz)) {
     if (reserved.has(key)) continue;
     const content = quiz[key] as SpreadQuizContent | undefined;
-    if (content?.title) return key;
+    if (content?.question) return key;
   }
   return preferredKey;
 }
@@ -116,7 +116,7 @@ export function PlayQuizModal({ quiz, languageKey, onClose }: PlayQuizModalProps
           {/* Question with audio button inline */}
           <div className="flex items-center gap-2">
             <p className="text-lg font-medium leading-snug">
-              {quizContent?.title || 'Quiz'}
+              {quizContent?.question || 'Quiz'}
             </p>
             {quizContent?.audio_url && (
               <button

@@ -839,7 +839,7 @@ const SAMPLE_AUDIO_URL = "https://download.samplelib.com/mp3/sample-12s.mp3";
 const QUIZ_CONTENT = {
   en_US: {
     full: {
-      title: "Which animal can swim?",
+      question: "Which animal can swim?",
       options: [
         { text: "Cat", is_answer: false },
         { text: "Fish", is_answer: true },
@@ -847,7 +847,7 @@ const QUIZ_CONTENT = {
       ],
     },
     textAudio: {
-      title: "Who lives in the forest?",
+      question: "Who lives in the forest?",
       options: [
         { text: "Whale", is_answer: false },
         { text: "Bear", is_answer: true },
@@ -855,12 +855,12 @@ const QUIZ_CONTENT = {
       ],
     },
     imageOnly: {
-      title: "Find the animal with wings",
+      question: "Find the animal with wings",
     },
   },
   vi_VN: {
     full: {
-      title: "Con vật nào biết bơi?",
+      question: "Con vật nào biết bơi?",
       options: [
         { text: "Chú mèo", is_answer: false },
         { text: "Con cá", is_answer: true },
@@ -868,7 +868,7 @@ const QUIZ_CONTENT = {
       ],
     },
     textAudio: {
-      title: "Ai sống trong rừng?",
+      question: "Ai sống trong rừng?",
       options: [
         { text: "Cá voi", is_answer: false },
         { text: "Gấu", is_answer: true },
@@ -876,7 +876,7 @@ const QUIZ_CONTENT = {
       ],
     },
     imageOnly: {
-      title: "Tìm con vật có cánh",
+      question: "Tìm con vật có cánh",
     },
   },
 };
@@ -897,7 +897,7 @@ function createFullQuiz(language: string): SpreadQuiz {
       is_answer: opt.is_answer,
       [language]: { text: opt.text, audio_url: SAMPLE_AUDIO_URL },
     })),
-    [language]: { title: content.title, audio_url: SAMPLE_AUDIO_URL },
+    [language]: { question: content.question, audio_url: SAMPLE_AUDIO_URL },
   };
 }
 
@@ -916,7 +916,7 @@ function createTextAudioQuiz(language: string): SpreadQuiz {
       is_answer: opt.is_answer,
       [language]: { text: opt.text, audio_url: SAMPLE_AUDIO_URL },
     })),
-    [language]: { title: content.title, audio_url: SAMPLE_AUDIO_URL },
+    [language]: { question: content.question, audio_url: SAMPLE_AUDIO_URL },
   };
 }
 
@@ -937,7 +937,7 @@ function createImageOnlyQuiz(language: string): SpreadQuiz {
       { image_url: `https://picsum.photos/seed/quiz-img-bird/200/200`, is_answer: true },
       { image_url: `https://picsum.photos/seed/quiz-img-fish/200/200`, is_answer: false },
     ],
-    [language]: { title: content.title },
+    [language]: { question: content.question },
   };
 }
 

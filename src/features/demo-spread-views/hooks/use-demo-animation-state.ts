@@ -49,15 +49,17 @@ function buildItemsMap(spread: PlayableSpread | undefined): ItemsMap {
     map.set(aud.id, { title: aud.title ?? aud.id, type: 'audio' });
   }
   for (const quiz of spread.quizzes ?? []) {
-    // Resolve quiz title from first language key content
-    const reserved = new Set(['id', 'geometry', 'z-index', 'player_visible', 'editor_visible', 'options']);
-    let quizTitle = quiz.id;
-    for (const key of Object.keys(quiz)) {
-      if (reserved.has(key)) continue;
-      const content = quiz[key] as SpreadQuizContent | undefined;
-      if (content?.title) {
-        quizTitle = content.title.length > 20 ? content.title.slice(0, 20) + '…' : content.title;
-        break;
+    // Resolve quiz display name: prefer root title, fallback to first language question
+    const reserved = new Set(['id', 'title', 'geometry', 'z-index', 'player_visible', 'editor_visible', 'options']);
+    let quizTitle = quiz.title ?? quiz.id;
+    if (!quiz.title) {
+      for (const key of Object.keys(quiz)) {
+        if (reserved.has(key)) continue;
+        const content = quiz[key] as SpreadQuizContent | undefined;
+        if (content?.question) {
+          quizTitle = content.question.length > 20 ? content.question.slice(0, 20) + '…' : content.question;
+          break;
+        }
       }
     }
     map.set(quiz.id, { title: quizTitle, type: 'quiz' });

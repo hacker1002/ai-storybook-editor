@@ -116,7 +116,7 @@ export interface SpreadQuizOption {
 
 // === Spread Quiz Content (per language) ===
 export interface SpreadQuizContent {
-  title: string;
+  question: string;
   audio_url?: string;
 }
 
