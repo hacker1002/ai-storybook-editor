@@ -10,6 +10,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
+  SpreadQuiz,
   PageData,
   SpreadImage,
   SpreadTextbox,
@@ -25,6 +26,7 @@ export type SelectedElementType =
   | "shape"
   | "video"
   | "audio"
+  | "quiz"
   | "page";
 export type ResizeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 export type ThumbnailListLayout = "horizontal" | "grid";
@@ -44,7 +46,7 @@ export interface SelectedElement {
 }
 
 // === Spread Item Action Types ===
-export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'audio';
+export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz';
 export type SpreadItemActionType = 'add' | 'update' | 'delete';
 
 export interface SpreadItemActionParams<TData = unknown> {
@@ -155,6 +157,26 @@ export type AudioDeleteAction = SpreadItemActionParams<null> & {
   data: null;
 };
 
+// Quiz actions (itemId: string = UUID)
+export type QuizAddAction = SpreadItemActionParams<SpreadQuiz> & {
+  itemType: 'quiz';
+  action: 'add';
+  itemId: null;
+};
+
+export type QuizUpdateAction = SpreadItemActionParams<Partial<SpreadQuiz>> & {
+  itemType: 'quiz';
+  action: 'update';
+  itemId: string;
+};
+
+export type QuizDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'quiz';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
 // Page actions (itemId: number = page index 0|1)
 export type PageUpdateAction = SpreadItemActionParams<Partial<PageData>> & {
   itemType: 'page';
@@ -179,6 +201,9 @@ export type SpreadItemActionUnion =
   | AudioAddAction
   | AudioUpdateAction
   | AudioDeleteAction
+  | QuizAddAction
+  | QuizUpdateAction
+  | QuizDeleteAction
   | PageUpdateAction;
 
 // Handler type
@@ -194,6 +219,7 @@ export type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
+  SpreadQuiz,
   PageData,
   SpreadImage,
   SpreadTextbox,
@@ -257,6 +283,14 @@ export interface AudioItemContext<TSpread extends BaseSpread>
   onDelete: () => void;
 }
 
+export interface QuizItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
+  item: SpreadQuiz;
+  onSelect: () => void;
+  onUpdate: (updates: Partial<SpreadQuiz>) => void;
+  onDelete: () => void;
+}
+
 // === Toolbar Contexts ===
 export interface BaseToolbarContext {
   selectedGeometry: Geometry | null;
@@ -310,4 +344,10 @@ export interface AudioToolbarContext<TSpread extends BaseSpread>
   extends AudioItemContext<TSpread>,
     BaseToolbarContext {
   onReplaceAudio: () => void;
+}
+
+export interface QuizToolbarContext<TSpread extends BaseSpread>
+  extends QuizItemContext<TSpread>,
+    BaseToolbarContext {
+  onEditQuiz: () => void;
 }

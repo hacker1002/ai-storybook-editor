@@ -45,6 +45,7 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
+  QuizItemContext,
   ImageToolbarContext,
   TextToolbarContext,
   PageToolbarContext,
@@ -72,6 +73,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
+  renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
@@ -116,6 +118,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   renderShapeItem,
   renderVideoItem,
   renderAudioItem,
+  renderQuizItem,
   renderImageToolbar,
   renderTextToolbar,
   renderPageToolbar,
@@ -339,6 +342,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderShapeItem={renderShapeItem}
                 renderVideoItem={renderVideoItem}
                 renderAudioItem={renderAudioItem}
+                renderQuizItem={renderQuizItem}
                 renderImageToolbar={renderImageToolbar}
                 renderTextToolbar={renderTextToolbar}
                 renderPageToolbar={renderPageToolbar}
@@ -365,6 +369,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderShapeItem={renderShapeItem}
                 renderVideoItem={renderVideoItem}
                 renderAudioItem={renderAudioItem}
+                renderQuizItem={renderQuizItem}
                 canAdd={canAddSpread}
                 canReorder={canReorderSpread}
                 canDelete={canDeleteSpread}

@@ -17,6 +17,7 @@ import {
   buildShapeContext,
   buildVideoContext,
   buildAudioContext,
+  buildQuizContext,
 } from "./utils/context-builders";
 import {
   applyDragDelta,
@@ -38,6 +39,7 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
+  QuizItemContext,
   ImageToolbarContext,
   TextToolbarContext,
   PageToolbarContext,
@@ -72,6 +74,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
+  renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
@@ -118,6 +121,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderShapeItem,
   renderVideoItem,
   renderAudioItem,
+  renderQuizItem,
   renderImageToolbar,
   renderTextToolbar,
   renderPageToolbar,
@@ -214,6 +218,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           geometry = spread.videos?.[element.index]?.geometry ?? null;
         } else if (element.type === "audio") {
           geometry = spread.audios?.[element.index]?.geometry ?? null;
+        } else if (element.type === "quiz") {
+          geometry = spread.quizzes?.[element.index]?.geometry ?? null;
         }
       }
 
@@ -261,6 +267,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         return spread.videos?.[selectedElement.index]?.geometry ?? null;
       case "audio":
         return spread.audios?.[selectedElement.index]?.geometry ?? null;
+      case "quiz":
+        return spread.quizzes?.[selectedElement.index]?.geometry ?? null;
       default:
         return null;
     }
@@ -337,6 +345,17 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           });
           break;
         }
+        case "quiz": {
+          const quiz = spread.quizzes?.[element.index];
+          if (!quiz?.id) return;
+          onSpreadItemAction({
+            itemType: "quiz",
+            action: "update",
+            itemId: quiz.id,
+            data: { geometry },
+          });
+          break;
+        }
       }
     },
     [
@@ -345,6 +364,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       spread.shapes,
       spread.videos,
       spread.audios,
+      spread.quizzes,
       onSpreadItemAction,
     ]
   );
@@ -589,6 +609,17 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 });
               }
             }
+            if (selectedElement.type === "quiz") {
+              const quiz = spread.quizzes?.[selectedElement.index];
+              if (quiz?.id) {
+                onSpreadItemAction({
+                  itemType: "quiz",
+                  action: "delete",
+                  itemId: quiz.id,
+                  data: null,
+                });
+              }
+            }
             handleElementSelect(null);
           }
           break;
@@ -608,6 +639,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       spread.shapes,
       spread.videos,
       spread.audios,
+      spread.quizzes,
     ]
   );
 
@@ -777,6 +809,23 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
             return (
               <div key={audio.id || index}>{renderAudioItem(context)}</div>
+            );
+          })}
+
+        {/* Quizzes */}
+        {renderItems.includes("quiz") &&
+          renderQuizItem &&
+          spread.quizzes?.map((quiz, index) => {
+            const context = buildQuizContext(
+              quiz,
+              index,
+              spread,
+              state.selectedElement,
+              handleElementSelect,
+              handleSpreadItemAction
+            );
+            return (
+              <div key={quiz.id || index}>{renderQuizItem(context)}</div>
             );
           })}
 

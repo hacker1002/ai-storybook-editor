@@ -7,11 +7,13 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
+  SpreadQuiz,
   ImageItemContext,
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
+  QuizItemContext,
   TextToolbarContext,
   SelectedElement,
   Geometry,
@@ -396,6 +398,61 @@ export function buildViewOnlyAudioContext<TSpread extends BaseSpread>(
     isSelected: false,
     isSpreadSelected: false,
     isThumbnail: true,
+    onSelect: () => {},
+    onUpdate: () => {},
+    onDelete: () => {},
+  };
+}
+
+/**
+ * Build quiz item context for render props
+ */
+export function buildQuizContext<TSpread extends BaseSpread>(
+  quiz: SpreadQuiz,
+  index: number,
+  spread: TSpread,
+  selectedElement: SelectedElement | null,
+  onSelect: SelectFn,
+  onAction: SpreadItemActionHandler
+): QuizItemContext<TSpread> {
+  return {
+    item: quiz,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: selectedElement?.type === 'quiz' && selectedElement.index === index,
+    isSpreadSelected: true,
+    onSelect: () => onSelect({ type: 'quiz', index }),
+    onUpdate: (updates) => onAction({
+      itemType: 'quiz',
+      action: 'update',
+      itemId: quiz.id,
+      data: updates
+    }),
+    onDelete: () => onAction({
+      itemType: 'quiz',
+      action: 'delete',
+      itemId: quiz.id,
+      data: null
+    }),
+  };
+}
+
+/**
+ * Build view-only quiz context for thumbnails
+ */
+export function buildViewOnlyQuizContext<TSpread extends BaseSpread>(
+  quiz: SpreadQuiz,
+  index: number,
+  spread: TSpread
+): QuizItemContext<TSpread> {
+  return {
+    item: quiz,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: false,
+    isSpreadSelected: false,
     onSelect: () => {},
     onUpdate: () => {},
     onDelete: () => {},

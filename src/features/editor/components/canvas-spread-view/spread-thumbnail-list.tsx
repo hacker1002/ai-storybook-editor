@@ -24,6 +24,7 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
+  QuizItemContext,
 } from '@/types/canvas-types';
 import { COLUMNS } from '@/constants/spread-constants';
 
@@ -43,6 +44,7 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
+  renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
   // Feature flags
   canAdd: boolean;
@@ -69,6 +71,7 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
   renderShapeItem,
   renderVideoItem,
   renderAudioItem,
+  renderQuizItem,
   canAdd,
   canReorder,
   canDelete,
@@ -99,7 +102,8 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
       spread.textboxes.length > 0 ||
       (spread.shapes?.length ?? 0) > 0 ||
       (spread.videos?.length ?? 0) > 0 ||
-      (spread.audios?.length ?? 0) > 0
+      (spread.audios?.length ?? 0) > 0 ||
+      (spread.quizzes?.length ?? 0) > 0
     );
   }, []);
 
@@ -250,6 +254,7 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
               renderShapeItem={renderShapeItem}
               renderVideoItem={renderVideoItem}
               renderAudioItem={renderAudioItem}
+              renderQuizItem={renderQuizItem}
               isDragEnabled={canReorder}
               isDragging={spread.id === draggedId}
               isDropTarget={spread.id === dropTargetId}

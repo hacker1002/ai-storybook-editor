@@ -15,6 +15,7 @@ import {
   buildViewOnlyShapeContext,
   buildViewOnlyVideoContext,
   buildViewOnlyAudioContext,
+  buildViewOnlyQuizContext,
 } from "./utils/context-builders";
 import { CANVAS, THUMBNAIL } from "@/constants/spread-constants";
 import type {
@@ -25,6 +26,7 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
+  QuizItemContext,
 } from "@/types/canvas-types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
@@ -43,6 +45,7 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
+  renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
   // Drag state
   isDragEnabled?: boolean;
@@ -71,6 +74,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   renderShapeItem,
   renderVideoItem,
   renderAudioItem,
+  renderQuizItem,
   isDragEnabled = false,
   isDragging = false,
   isDropTarget = false,
@@ -161,6 +165,16 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
       context: buildViewOnlyAudioContext(audio, idx, spread),
     }));
   }, [spread.audios, spread.id, renderItems, renderAudioItem]);
+
+  // Memoize quiz contexts - skip if renderQuizItem not provided
+  const quizContexts = useMemo(() => {
+    if (!renderItems.includes("quiz") || !renderQuizItem || !spread.quizzes)
+      return [];
+    return spread.quizzes.map((quiz, idx) => ({
+      quiz,
+      context: buildViewOnlyQuizContext(quiz, idx, spread),
+    }));
+  }, [spread.quizzes, spread.id, renderItems, renderQuizItem]);
 
   // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
   const cursor = isDragging ? "grabbing" : isDragEnabled ? "grab" : "pointer";
@@ -299,6 +313,14 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
             audioContexts.map(({ audio, context }, index) => (
               <div key={audio.id || index} style={{ pointerEvents: "none" }}>
                 {renderAudioItem(context)}
+              </div>
+            ))}
+
+          {/* Quizzes (view-only, pointer-events: none) - skip if renderQuizItem not provided */}
+          {renderQuizItem &&
+            quizContexts.map(({ quiz, context }, index) => (
+              <div key={quiz.id || index} style={{ pointerEvents: "none" }}>
+                {renderQuizItem(context)}
               </div>
             ))}
         </div>
