@@ -11,7 +11,7 @@ import {
   EditableVideo,
   EditableAudio,
   EditableQuiz,
-  GenerateImageModal,
+  EditImageModal,
   SplitImageModal,
 } from "@/features/editor/components/shared-components";
 import type { SplitLayerResult } from "@/features/editor/components/shared-components";
@@ -548,7 +548,7 @@ export function ObjectsMainView({
       />
 
       {generateModalImage && (
-        <GenerateImageModal
+        <EditImageModal
           open={generateModalOpen}
           onOpenChange={handleGenerateModalClose}
           image={generateModalImage}

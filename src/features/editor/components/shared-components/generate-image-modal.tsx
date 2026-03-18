@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'GenerateImageModal');
+const log = createLogger("Editor", "GenerateImageModal");
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Paperclip, Edit2, Download, Check, X, Loader2 } from "lucide-react";
+import {
+  Sparkles,
+  Paperclip,
+  Edit2,
+  Download,
+  Check,
+  X,
+  Loader2,
+} from "lucide-react";
 import type { SpreadImage } from "@/types/spread-types";
 
 interface GenerateImageModalProps {
@@ -233,14 +241,16 @@ export function GenerateImageModal({
 
     const existingUrl = image.illustrations?.[0]?.media_url;
     if (existingUrl) {
-      const match = existingUrl.match(/picsum\.photos\/seed\/[^/]+\/(\d+)\/(\d+)/);
+      const match = existingUrl.match(
+        /picsum\.photos\/seed\/[^/]+\/(\d+)\/(\d+)/
+      );
       if (match) {
         width = parseInt(match[1], 10);
         height = parseInt(match[2], 10);
       }
     }
 
-    log.info('handleGenerate', 'generating image', {
+    log.info("handleGenerate", "generating image", {
       prompt,
       hasReferenceImage: !!referenceImage,
       stageSetting: selectedStageSetting,
@@ -266,7 +276,14 @@ export function GenerateImageModal({
     onUpdateImage({ illustrations: updatedIllustrations });
 
     setIsGenerating(false);
-  }, [prompt, referenceImage, selectedStageSetting, edgeTreatment, image.illustrations, onUpdateImage]);
+  }, [
+    prompt,
+    referenceImage,
+    selectedStageSetting,
+    edgeTreatment,
+    image.illustrations,
+    onUpdateImage,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -304,7 +321,7 @@ export function GenerateImageModal({
                     key={selectedIllustration.media_url}
                     src={selectedIllustration.media_url}
                     alt="Selected illustration"
-                    className="h-[360px] w-auto rounded-md"
+                    className="h-[360px] w-auto rounded-md object-contain"
                   />
                   {isGenerating && (
                     <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center">
@@ -367,7 +384,7 @@ export function GenerateImageModal({
                       <img
                         src={illustration.media_url}
                         alt={`Illustration ${index + 1}`}
-                        className="w-full h-full object-cover rounded-md"
+                        className="w-full h-full object-contain rounded-md"
                       />
                       {illustration.is_selected && (
                         <div className="absolute top-1.5 left-1.5">
