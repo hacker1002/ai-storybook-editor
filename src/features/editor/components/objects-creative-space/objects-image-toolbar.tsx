@@ -1,7 +1,7 @@
 // objects-image-toolbar.tsx - Floating toolbar for image items on canvas in Objects Creative Space
 "use client";
 
-import { useMemo, useRef, useCallback } from "react";
+import { useMemo, useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,14 +17,9 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import {
-  Scissors,
-  Crop,
-  Sparkles,
-  Upload,
-  Trash2,
-} from "lucide-react";
+import { Scissors, Crop, Sparkles, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { uploadImageToStorage } from "@/apis/storage-api";
 import {
   useToolbarPosition,
   CANVAS,
@@ -58,7 +53,17 @@ const COMMON_RATIOS = [
   { label: "Original", value: "original", numeric: 0 },
 ] as const;
 
-const DEFAULT_STATES = ["default", "happy", "sad", "angry", "running", "sleeping", "front", "back", "side"];
+const DEFAULT_STATES = [
+  "default",
+  "happy",
+  "sad",
+  "angry",
+  "running",
+  "sleeping",
+  "front",
+  "back",
+  "side",
+];
 
 // === Helpers ===
 
@@ -73,7 +78,7 @@ function clampGeometry(field: "x" | "y" | "w" | "h", value: number): number {
  */
 function calculateGeometryForRatio(
   geometry: { x: number; y: number; w: number; h: number },
-  ratioValue: string,
+  ratioValue: string
 ): { x: number; y: number; w: number; h: number } | null {
   if (ratioValue === "original") return null;
 
@@ -108,13 +113,14 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
   context,
 }: ObjectsImageToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const {
     item,
     onUpdate,
     onDelete,
     onGenerateImage,
     onSplitImage,
-    onReplaceImage,
     selectedGeometry,
     canvasRef,
   } = context;
@@ -137,7 +143,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     if (geometry.w <= 0 || geometry.h <= 0) return undefined;
     const ratio = (geometry.w / geometry.h) * CANVAS.ASPECT_RATIO;
     const match = COMMON_RATIOS.find(
-      (r) => r.numeric > 0 && Math.abs(r.numeric - ratio) < 0.05,
+      (r) => r.numeric > 0 && Math.abs(r.numeric - ratio) < 0.05
     );
     return match?.value;
   }, [item.aspect_ratio, geometry.w, geometry.h]);
@@ -146,11 +152,18 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
 
   const handleTypeChange = useCallback(
     (newType: string) => {
-      log.debug("ObjectsImageToolbar", "type change", { from: currentType, to: newType });
+      log.debug("ObjectsImageToolbar", "type change", {
+        from: currentType,
+        to: newType,
+      });
       // Reset name & state when type changes to prevent data inconsistency
-      onUpdate({ type: newType as SpreadItemMediaType, name: undefined, state: undefined });
+      onUpdate({
+        type: newType as SpreadItemMediaType,
+        name: undefined,
+        state: undefined,
+      });
     },
-    [currentType, onUpdate],
+    [currentType, onUpdate]
   );
 
   const handleNameChange = useCallback(
@@ -158,7 +171,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
       log.debug("ObjectsImageToolbar", "name change", { name: newName });
       onUpdate({ name: newName });
     },
-    [onUpdate],
+    [onUpdate]
   );
 
   const handleStateChange = useCallback(
@@ -166,7 +179,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
       log.debug("ObjectsImageToolbar", "state change", { state: newState });
       onUpdate({ state: newState });
     },
-    [onUpdate],
+    [onUpdate]
   );
 
   const handleRatioSelect = useCallback(
@@ -183,7 +196,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         onUpdate({ aspect_ratio: ratioValue });
       }
     },
-    [geometry, onUpdate],
+    [geometry, onUpdate]
   );
 
   const handleGeometryChange = useCallback(
@@ -196,10 +209,13 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
       if (field === "y") clamped = Math.min(clamped, 100 - geometry.h);
       if (field === "w") clamped = Math.min(clamped, 100 - geometry.x);
       if (field === "h") clamped = Math.min(clamped, 100 - geometry.y);
-      log.debug("ObjectsImageToolbar", "geometry change", { field, value: clamped });
+      log.debug("ObjectsImageToolbar", "geometry change", {
+        field,
+        value: clamped,
+      });
       onUpdate({ geometry: { ...geometry, [field]: clamped } });
     },
-    [geometry, onUpdate],
+    [geometry, onUpdate]
   );
 
   const handleSplit = useCallback(() => {
@@ -214,10 +230,66 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     toast.info("Crop feature coming soon");
   }, []);
 
+  const handleUploadClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Reset input so same file can be re-selected
+      e.target.value = "";
+
+      setIsUploading(true);
+      log.info("ObjectsImageToolbar", "upload started", {
+        name: file.name,
+        size: file.size,
+      });
+
+      try {
+        const { publicUrl } = await uploadImageToStorage(file, "objects");
+        // Update media_url + add to illustrations as selected so canvas renders it immediately
+        // (EditableImage priority: final_hires > illustrations[selected] > illustrations[0] > media_url)
+        const existingIllustrations = (item.illustrations ?? []).map((i) => ({
+          ...i,
+          is_selected: false,
+        }));
+        onUpdate({
+          media_url: publicUrl,
+          illustrations: [
+            ...existingIllustrations,
+            {
+              media_url: publicUrl,
+              created_time: new Date().toISOString(),
+              is_selected: true,
+            },
+          ],
+        });
+        toast.success("Image uploaded");
+        // Close toolbar by deselecting via canvas background click
+        canvasRef.current?.click();
+        log.info("ObjectsImageToolbar", "upload success", { url: publicUrl });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Upload failed";
+        toast.error(message);
+        log.error("ObjectsImageToolbar", "upload failed", { error: message });
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [onUpdate]
+  );
+
   // === Positioning ===
 
   const toolbarStyle: React.CSSProperties = position
-    ? { position: "fixed", top: `${position.top}px`, left: `${position.left}px` }
+    ? {
+        position: "fixed",
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+      }
     : { position: "fixed", opacity: 0, pointerEvents: "none" };
 
   // === Render ===
@@ -238,9 +310,14 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
 
         {/* Row 1: Image Type */}
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14 shrink-0">Type</Label>
+          <Label className="text-xs text-muted-foreground w-14 shrink-0">
+            Type
+          </Label>
           <Select value={currentType} onValueChange={handleTypeChange}>
-            <SelectTrigger className="h-7 text-sm flex-1" aria-label="Image type">
+            <SelectTrigger
+              className="h-7 text-sm flex-1"
+              aria-label="Image type"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -255,21 +332,28 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
 
         {/* Row 2: Name + State */}
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14 shrink-0">Name</Label>
+          <Label className="text-xs text-muted-foreground w-14 shrink-0">
+            Name
+          </Label>
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
             {/* TODO: Replace with entity dropdown (useCharacters/useProps) when store selectors are available */}
             <input
               type="text"
               value={currentName}
               onChange={(e) => handleNameChange(e.target.value)}
-              placeholder={isEntityType ? `${currentType} name...` : "Enter name..."}
+              placeholder={
+                isEntityType ? `${currentType} name...` : "Enter name..."
+              }
               aria-label="Image name"
               className="h-7 flex-1 min-w-0 rounded-md border border-input bg-transparent px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
             />
 
             {/* State dropdown */}
             <Select value={currentState} onValueChange={handleStateChange}>
-              <SelectTrigger className="h-7 text-sm w-24 shrink-0" aria-label="Image state">
+              <SelectTrigger
+                className="h-7 text-sm w-24 shrink-0"
+                aria-label="Image state"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -285,9 +369,14 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
 
         {/* Row 3: Aspect Ratio */}
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14 shrink-0">Ratio</Label>
+          <Label className="text-xs text-muted-foreground w-14 shrink-0">
+            Ratio
+          </Label>
           <Select value={detectedRatio ?? ""} onValueChange={handleRatioSelect}>
-            <SelectTrigger className="h-7 text-sm flex-1" aria-label="Aspect ratio">
+            <SelectTrigger
+              className="h-7 text-sm flex-1"
+              aria-label="Aspect ratio"
+            >
               <SelectValue placeholder="Select ratio..." />
             </SelectTrigger>
             <SelectContent>
@@ -302,19 +391,43 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
 
         {/* Row 4-5: Geometry */}
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground uppercase">Geometry</Label>
+          <Label className="text-xs text-muted-foreground uppercase">
+            Geometry
+          </Label>
           <div className="flex flex-col gap-2">
             {/* Position row */}
             <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground w-14">Position</Label>
-              <GeometryInput label="X" value={geometry.x} onChange={(v) => handleGeometryChange("x", v)} ariaLabel="Position X" />
-              <GeometryInput label="Y" value={geometry.y} onChange={(v) => handleGeometryChange("y", v)} ariaLabel="Position Y" />
+              <Label className="text-xs text-muted-foreground w-14">
+                Position
+              </Label>
+              <GeometryInput
+                label="X"
+                value={geometry.x}
+                onChange={(v) => handleGeometryChange("x", v)}
+                ariaLabel="Position X"
+              />
+              <GeometryInput
+                label="Y"
+                value={geometry.y}
+                onChange={(v) => handleGeometryChange("y", v)}
+                ariaLabel="Position Y"
+              />
             </div>
             {/* Size row */}
             <div className="flex items-center gap-2">
               <Label className="text-xs text-muted-foreground w-14">Size</Label>
-              <GeometryInput label="W" value={geometry.w} onChange={(v) => handleGeometryChange("w", v)} ariaLabel="Size W" />
-              <GeometryInput label="H" value={geometry.h} onChange={(v) => handleGeometryChange("h", v)} ariaLabel="Size H" />
+              <GeometryInput
+                label="W"
+                value={geometry.w}
+                onChange={(v) => handleGeometryChange("w", v)}
+                ariaLabel="Size W"
+              />
+              <GeometryInput
+                label="H"
+                value={geometry.h}
+                onChange={(v) => handleGeometryChange("h", v)}
+                ariaLabel="Size H"
+              />
             </div>
           </div>
         </div>
@@ -322,12 +435,37 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         {/* === FOOTER === */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <div className="flex items-center gap-1">
-            <ToolbarIconButton icon={Scissors} label="Split" onClick={handleSplit} />
+            <ToolbarIconButton
+              icon={Scissors}
+              label="Split"
+              onClick={handleSplit}
+            />
             <ToolbarIconButton icon={Crop} label="Crop" onClick={handleCrop} />
-            <ToolbarIconButton icon={Sparkles} label="Generate image" onClick={onGenerateImage} />
-            <ToolbarIconButton icon={Upload} label="Upload image" onClick={onReplaceImage} />
+            <ToolbarIconButton
+              icon={Sparkles}
+              label="Generate image"
+              onClick={onGenerateImage}
+            />
+            <ToolbarIconButton
+              icon={Upload}
+              label={isUploading ? "Uploading..." : "Upload image"}
+              onClick={handleUploadClick}
+              disabled={isUploading}
+            />
           </div>
-          <ToolbarIconButton icon={Trash2} label="Delete image" onClick={onDelete} variant="destructive" />
+          <ToolbarIconButton
+            icon={Trash2}
+            label="Delete image"
+            onClick={onDelete}
+            variant="destructive"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            className="hidden"
+            onChange={handleFileChange}
+          />
         </div>
       </div>
     </TooltipProvider>
@@ -374,11 +512,13 @@ function ToolbarIconButton({
   label,
   onClick,
   variant,
+  disabled,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   onClick: () => void;
   variant?: "destructive";
+  disabled?: boolean;
 }) {
   const isDestructive = variant === "destructive";
   return (
@@ -386,11 +526,12 @@ function ToolbarIconButton({
       <TooltipTrigger asChild>
         <button
           onClick={onClick}
+          disabled={disabled}
           aria-label={label}
           className={
             isDestructive
-              ? "p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
-              : "p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+              ? "p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              : "p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors disabled:opacity-50 disabled:pointer-events-none"
           }
         >
           <Icon className="w-4 h-4" />

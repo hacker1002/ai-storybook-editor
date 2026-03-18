@@ -15,6 +15,7 @@ import { Scissors, Loader2, Check, ImagePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
 import { callLayeringImage } from "@/apis/retouch-api";
+import { uploadImageToStorage } from "@/apis/storage-api";
 import type { SpreadImage } from "@/types/spread-types";
 
 const log = createLogger("Editor", "SplitImageModal");
@@ -63,6 +64,7 @@ export function SplitImageModal({
   const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(
     new Set()
   );
+  const [isCreating, setIsCreating] = useState(false);
 
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const generatedSectionRef = useRef<HTMLDivElement>(null);
@@ -72,6 +74,7 @@ export function SplitImageModal({
     setSeed(SEED_DEFAULT);
     setNumberOfLayers(LAYERS_DEFAULT);
     setIsSplitting(false);
+    setIsCreating(false);
     setGeneratedLayers(null);
     setSelectedLayerIds(new Set());
   }, []);
@@ -180,18 +183,43 @@ export function SplitImageModal({
     });
   }, []);
 
-  const handleCreateImages = useCallback(() => {
+  const handleCreateImages = useCallback(async () => {
     if (!generatedLayers || selectedLayerIds.size === 0) return;
-
-    log.info("handleCreateImages", "creating images", {
-      selectedCount: selectedLayerIds.size,
-    });
 
     const selectedLayers = generatedLayers.filter((l) =>
       selectedLayerIds.has(l.id)
     );
-    onCreateImages(selectedLayers);
-    handleOpenChange(false);
+
+    setIsCreating(true);
+    log.info("handleCreateImages", "uploading selected layers to storage", {
+      selectedCount: selectedLayers.length,
+    });
+
+    try {
+      // Fetch each layer URL → File → upload to Supabase storage
+      const uploadedLayers = await Promise.all(
+        selectedLayers.map(async (layer) => {
+          const response = await fetch(layer.media_url);
+          const blob = await response.blob();
+          const ext = blob.type.split("/")[1] || "png";
+          const file = new File([blob], `${layer.id}.${ext}`, { type: blob.type });
+          const { publicUrl } = await uploadImageToStorage(file, "split-layers");
+          return { ...layer, media_url: publicUrl };
+        })
+      );
+
+      log.info("handleCreateImages", "upload complete", {
+        uploadedCount: uploadedLayers.length,
+      });
+
+      onCreateImages(uploadedLayers);
+      handleOpenChange(false);
+    } catch (err) {
+      log.error("handleCreateImages", "upload failed", { error: String(err) });
+      toast.error(err instanceof Error ? err.message : "Failed to upload layers");
+    } finally {
+      setIsCreating(false);
+    }
   }, [generatedLayers, selectedLayerIds, onCreateImages, handleOpenChange]);
 
   const handleKeyDown = useCallback(
@@ -357,7 +385,7 @@ export function SplitImageModal({
                       <img
                         src={layer.media_url}
                         alt={layer.title}
-                        className="w-full aspect-square object-cover"
+                        className="w-full aspect-square object-contain bg-muted"
                       />
                       {/* Checkbox overlay */}
                       <div className="absolute top-2 right-2">
@@ -385,12 +413,21 @@ export function SplitImageModal({
               {/* Create New Images Button */}
               <Button
                 onClick={handleCreateImages}
-                disabled={selectedLayerIds.size === 0}
+                disabled={selectedLayerIds.size === 0 || isCreating}
                 className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700"
                 size="lg"
               >
-                <ImagePlus className="h-4 w-4 mr-2" />
-                Create New Images
+                {isCreating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="h-4 w-4 mr-2" />
+                    Create New Images
+                  </>
+                )}
               </Button>
             </div>
           )}
