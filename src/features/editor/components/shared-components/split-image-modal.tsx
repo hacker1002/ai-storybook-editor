@@ -14,6 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import { Scissors, Loader2, Check, ImagePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
+import { callLayeringImage } from "@/apis/retouch-api";
 import type { SpreadImage } from "@/types/spread-types";
 
 const log = createLogger("Editor", "SplitImageModal");
@@ -39,8 +40,8 @@ const SEED_MIN = 0;
 const SEED_MAX = 999999;
 const SEED_DEFAULT = 42;
 const LAYERS_MIN = 2;
-const LAYERS_MAX = 10;
-const LAYERS_DEFAULT = 3;
+const LAYERS_MAX = 8;
+const LAYERS_DEFAULT = 4;
 
 // === Component ===
 
@@ -50,8 +51,7 @@ export function SplitImageModal({
   image,
   onCreateImages,
 }: SplitImageModalProps) {
-  const [positivePrompt, setPositivePrompt] = useState("");
-  const [negativePrompt, setNegativePrompt] = useState("");
+  const [description, setDescription] = useState("");
   const [seed, setSeed] = useState(SEED_DEFAULT);
   const [numberOfLayers, setNumberOfLayers] = useState(LAYERS_DEFAULT);
 
@@ -64,12 +64,11 @@ export function SplitImageModal({
     new Set()
   );
 
-  const positivePromptRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const generatedSectionRef = useRef<HTMLDivElement>(null);
 
   const resetState = useCallback(() => {
-    setPositivePrompt("");
-    setNegativePrompt("");
+    setDescription("");
     setSeed(SEED_DEFAULT);
     setNumberOfLayers(LAYERS_DEFAULT);
     setIsSplitting(false);
@@ -85,10 +84,10 @@ export function SplitImageModal({
     [onOpenChange, resetState]
   );
 
-  // Focus positive prompt on open
+  // Focus description on open
   useEffect(() => {
     if (open) {
-      setTimeout(() => positivePromptRef.current?.focus(), 100);
+      setTimeout(() => descriptionRef.current?.focus(), 100);
     }
   }, [open]);
 
@@ -119,46 +118,55 @@ export function SplitImageModal({
   );
 
   const handleSplit = useCallback(async () => {
+    if (!image.media_url) {
+      toast.error("Image has no URL to split.");
+      return;
+    }
+
     setIsSplitting(true);
     log.info("handleSplit", "splitting image", {
       imageId: image.id,
-      promptLength: positivePrompt.length,
-      negativePromptLength: negativePrompt.length,
+      descriptionLength: description.length,
       seed,
       numberOfLayers,
     });
 
     try {
-      // Mock API call — replace with real edge function later
-      await new Promise((resolve) =>
-        setTimeout(resolve, 1000 + Math.random() * 1000)
-      );
+      const result = await callLayeringImage({
+        imageUrl: image.media_url,
+        description: description.trim() || undefined,
+        numberOfLayers,
+        seed,
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || "Split failed");
+      }
 
       const imageTitle = image.title || "Untitled";
-      const layers: SplitLayerResult[] = Array.from(
-        { length: numberOfLayers },
-        (_, i) => ({
-          id: crypto.randomUUID(),
-          title: `${imageTitle} - Part ${i + 1}`,
-          media_url: `https://picsum.photos/seed/${Date.now()}-${i}/400/400`,
-        })
-      );
+      const layers: SplitLayerResult[] = result.data.urls.map((url, i) => ({
+        id: crypto.randomUUID(),
+        title: `${imageTitle} - Part ${i + 1}`,
+        media_url: url,
+      }));
 
       setGeneratedLayers(layers);
       setSelectedLayerIds(new Set());
-      log.info("handleSplit", "split complete", { layerCount: layers.length });
+      log.info("handleSplit", "split complete", {
+        layerCount: layers.length,
+        processingTime: result.meta?.processingTime,
+      });
 
-      // Scroll to results after render
       setTimeout(() => {
         generatedSectionRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
     } catch (err) {
       log.error("handleSplit", "split failed", { error: String(err) });
-      toast.error("Split failed. Please try again.");
+      toast.error(err instanceof Error ? err.message : "Split failed. Please try again.");
     } finally {
       setIsSplitting(false);
     }
-  }, [image.id, image.title, positivePrompt, negativePrompt, seed, numberOfLayers]);
+  }, [image.id, image.media_url, image.title, description, seed, numberOfLayers]);
 
   const handleToggleLayer = useCallback((layerId: string) => {
     setSelectedLayerIds((prev) => {
@@ -214,34 +222,19 @@ export function SplitImageModal({
         </DialogHeader>
 
         <div className="space-y-5">
-          {/* Positive Prompt */}
+          {/* Description */}
           <div>
             <Label className="text-sm font-semibold mb-2 block">
-              Positive Prompt
+              Description
             </Label>
             <Textarea
-              ref={positivePromptRef}
-              value={positivePrompt}
-              onChange={(e) => setPositivePrompt(e.target.value)}
-              placeholder="Describe what you want to extract or emphasize..."
+              ref={descriptionRef}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the image content, or leave empty for auto-detection..."
               className="min-h-[80px]"
               disabled={isSplitting}
-              aria-label="Positive prompt"
-            />
-          </div>
-
-          {/* Negative Prompt */}
-          <div>
-            <Label className="text-sm font-semibold mb-2 block">
-              Negative Prompt
-            </Label>
-            <Textarea
-              value={negativePrompt}
-              onChange={(e) => setNegativePrompt(e.target.value)}
-              placeholder="Describe what you want to avoid or exclude..."
-              className="min-h-[80px]"
-              disabled={isSplitting}
-              aria-label="Negative prompt"
+              aria-label="Image description"
             />
           </div>
 
