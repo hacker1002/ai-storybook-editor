@@ -24,7 +24,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { SpreadImage } from "@/types/spread-types";
-import { callEditObjectImage } from "@/apis/retouch-api";
+import { callEditObjectImage, callImageRemoveBg } from "@/apis/retouch-api";
 
 interface EditImageModalProps {
   open: boolean;
@@ -222,47 +222,47 @@ export function EditImageModal({
 
     setIsRemovingBg(true);
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, 1000 + Math.random() * 1000)
-    );
-
-    let width = 800;
-    let height = 600;
-
-    const existingUrl = image.illustrations?.[0]?.media_url;
-    if (existingUrl) {
-      const match = existingUrl.match(
-        /picsum\.photos\/seed\/[^/]+\/(\d+)\/(\d+)/
-      );
-      if (match) {
-        width = parseInt(match[1], 10);
-        height = parseInt(match[2], 10);
-      }
-    }
-
     log.info("handleRemoveBackground", "removing background", {
       currentImageUrl: selectedIll.media_url,
-      width,
-      height,
     });
 
-    const newIllustration: Illustration = {
-      media_url: `https://picsum.photos/seed/rmbg-${Date.now()}/${width}/${height}`,
-      created_time: new Date().toISOString(),
-      is_selected: true,
-    };
+    try {
+      const result = await callImageRemoveBg({
+        imageUrl: selectedIll.media_url,
+      });
 
-    const updatedIllustrations = [
-      newIllustration,
-      ...(image.illustrations || []).map((ill) => ({
-        ...ill,
-        is_selected: false,
-      })),
-    ];
+      if (!result.success || !result.data) {
+        log.error("handleRemoveBackground", "API error", { error: result.error });
+        alert(result.error || "Failed to remove background");
+        return;
+      }
 
-    onUpdateImage({ illustrations: updatedIllustrations });
+      log.info("handleRemoveBackground", "success", {
+        processingTime: result.meta?.processingTime,
+        storagePath: result.data.storagePath,
+      });
 
-    setIsRemovingBg(false);
+      const newIllustration: Illustration = {
+        media_url: result.data.imageUrl,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      };
+
+      const updatedIllustrations = [
+        newIllustration,
+        ...(image.illustrations || []).map((ill) => ({
+          ...ill,
+          is_selected: false,
+        })),
+      ];
+
+      onUpdateImage({ illustrations: updatedIllustrations });
+    } catch (err) {
+      log.error("handleRemoveBackground", "unexpected error", { error: err });
+      alert("An unexpected error occurred");
+    } finally {
+      setIsRemovingBg(false);
+    }
   }, [image.illustrations, onUpdateImage]);
 
   const selectedIllustration = image.illustrations?.find(

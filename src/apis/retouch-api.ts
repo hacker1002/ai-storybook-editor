@@ -40,6 +40,18 @@ export interface EditObjectImageResult {
   meta?: { processingTime?: number; mimeType?: string };
 }
 
+export interface ImageRemoveBgParams {
+  imageUrl: string;
+  preserveAlpha?: boolean;
+}
+
+export interface ImageRemoveBgResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string };
+}
+
 // --- API ---
 
 export async function callEditObjectImage(
@@ -48,6 +60,16 @@ export async function callEditObjectImage(
   log.info('callEditObjectImage', 'start', { promptLength: params.prompt.length, hasReference: !!params.referenceImage });
   return callEdgeFunction<EditObjectImageResult>(
     'retouch-edit-object-image',
+    params
+  );
+}
+
+export async function callImageRemoveBg(
+  params: ImageRemoveBgParams
+): Promise<ImageRemoveBgResult> {
+  log.info('callImageRemoveBg', 'start', { imageUrl: params.imageUrl.slice(0, 80) });
+  return callEdgeFunction<ImageRemoveBgResult>(
+    'retouch-image-remove-bg',
     params
   );
 }
