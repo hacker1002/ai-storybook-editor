@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Scissors, Loader2, Check, ImagePlus, RefreshCw } from "lucide-react";
+import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
 import { callLayeringImage } from "@/apis/retouch-api";
@@ -370,42 +371,51 @@ export function SplitImageModal({
                 {generatedLayers.map((layer) => {
                   const isSelected = selectedLayerIds.has(layer.id);
                   return (
-                    <button
+                    <div
                       key={layer.id}
-                      onClick={() => handleToggleLayer(layer.id)}
                       className={`relative rounded-lg overflow-hidden border-2 transition-all hover:shadow-md ${
                         isSelected
                           ? "border-primary ring-1 ring-primary"
                           : "border-border hover:border-muted-foreground/30"
                       }`}
-                      role="checkbox"
-                      aria-checked={isSelected}
-                      aria-label={layer.title}
                     >
-                      <img
-                        src={layer.media_url}
-                        alt={layer.title}
-                        className="w-full aspect-square object-contain bg-muted"
-                      />
-                      {/* Checkbox overlay */}
-                      <div className="absolute top-2 right-2">
-                        <div
-                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                            isSelected
-                              ? "bg-primary border-primary"
-                              : "bg-white/80 border-muted-foreground/40"
-                          }`}
+                      <div className="relative">
+                        <img
+                          src={layer.media_url}
+                          alt={layer.title}
+                          className="w-full aspect-square object-contain bg-muted"
+                        />
+                        <ImageZoomPreview
+                          src={layer.media_url}
+                          alt={layer.title}
+                          className="absolute inset-0 w-full h-full"
+                        />
+                        {/* Select button */}
+                        <button
+                          onClick={() => handleToggleLayer(layer.id)}
+                          role="checkbox"
+                          aria-checked={isSelected}
+                          aria-label={`Select ${layer.title}`}
+                          className="absolute top-1.5 right-1.5 z-20 cursor-pointer"
                         >
-                          {isSelected && (
-                            <Check className="h-3 w-3 text-primary-foreground" />
-                          )}
-                        </div>
+                          <div
+                            className={`h-10 w-10 rounded-full border-2 flex items-center justify-center transition-colors shadow-md ${
+                              isSelected
+                                ? "bg-primary border-primary"
+                                : "bg-white/90 border-muted-foreground/40 hover:border-primary/60"
+                            }`}
+                          >
+                            {isSelected && (
+                              <Check className="h-5 w-5 text-primary-foreground" />
+                            )}
+                          </div>
+                        </button>
                       </div>
                       {/* Title */}
                       <div className="px-2 py-1.5 text-xs text-center truncate bg-background">
                         {layer.title}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

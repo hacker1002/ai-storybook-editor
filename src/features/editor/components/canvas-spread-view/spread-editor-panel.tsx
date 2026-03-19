@@ -6,6 +6,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  Fragment,
   type ReactNode,
 } from "react";
 import { SelectionFrame } from "./selection-frame";
@@ -815,7 +816,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleImageEditingChange
             );
             context.zIndex = (image as SpreadImage)['z-index'] ?? (LAYER_CONFIG.MEDIA.min + index);
-            return renderImageItem(context);
+            return <Fragment key={image.id ?? `img-${index}`}>{renderImageItem(context)}</Fragment>;
           })}
 
         {/* Videos */}
@@ -831,7 +832,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             context.zIndex = (video as SpreadVideo)['z-index'] ?? (LAYER_CONFIG.MEDIA.min + spread.images.length + index);
-            return renderVideoItem(context);
+            return <Fragment key={video.id ?? `vid-${index}`}>{renderVideoItem(context)}</Fragment>;
           })}
 
         {/* Shapes */}
@@ -847,7 +848,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             context.zIndex = (shape as { 'z-index'?: number })['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + index);
-            return renderShapeItem(context);
+            return <Fragment key={shape.id ?? `shp-${index}`}>{renderShapeItem(context)}</Fragment>;
           })}
 
         {/* Textboxes */}
@@ -864,7 +865,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleTextboxEditingChange
             );
             context.zIndex = (textbox as { 'z-index'?: number })['z-index'] ?? (LAYER_CONFIG.TEXT.min + index);
-            return renderTextItem(context);
+            return <Fragment key={textbox.id ?? `txt-${index}`}>{renderTextItem(context)}</Fragment>;
           })}
 
         {/* Audios */}
@@ -881,7 +882,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
             const shapesCount = spread.shapes?.length ?? 0;
             context.zIndex = (audio as SpreadAudio)['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + shapesCount + index);
-            return renderAudioItem(context);
+            return <Fragment key={audio.id ?? `aud-${index}`}>{renderAudioItem(context)}</Fragment>;
           })}
 
         {/* Quizzes */}
@@ -899,7 +900,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             const shapesCount = spread.shapes?.length ?? 0;
             const audiosCount = spread.audios?.length ?? 0;
             context.zIndex = (quiz as SpreadQuiz)['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + index);
-            return renderQuizItem(context);
+            return <Fragment key={quiz.id ?? `quiz-${index}`}>{renderQuizItem(context)}</Fragment>;
           })}
 
         {/* Selection Frame - frame border allows drag, center passes through for editing */}

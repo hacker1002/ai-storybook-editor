@@ -23,6 +23,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import type { SpreadImage } from "@/types/spread-types";
 import { callEditObjectImage, callImageRemoveBg } from "@/apis/retouch-api";
 
@@ -306,8 +307,14 @@ export function EditImageModal({
                     alt="Selected illustration"
                     className="h-[360px] w-auto rounded-md object-contain"
                   />
+                  <ImageZoomPreview
+                    src={selectedIllustration.media_url}
+                    alt="Selected illustration"
+                    className="absolute inset-0 h-full w-full rounded-md"
+                    disabled={isBusy}
+                  />
                   {isBusy && (
-                    <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center">
+                    <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center z-20">
                       <div className="text-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
                         <p className="text-sm text-muted-foreground">
@@ -316,7 +323,7 @@ export function EditImageModal({
                       </div>
                     </div>
                   )}
-                  <div className="absolute bottom-2 right-2 flex gap-2">
+                  <div className="absolute bottom-2 right-2 flex gap-2 z-20">
                     <Button
                       size="sm"
                       variant="secondary"

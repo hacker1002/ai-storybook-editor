@@ -75,6 +75,39 @@ function clampGeometry(field: "x" | "y" | "w" | "h", value: number): number {
   return Math.max(min, Math.min(100, value));
 }
 
+function getImageNaturalDimensions(
+  file: File
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to read image dimensions"));
+    };
+    img.src = url;
+  });
+}
+
+function findClosestRatio(width: number, height: number): string {
+  const ratio = width / height;
+  let closest: (typeof COMMON_RATIOS)[number] = COMMON_RATIOS[0];
+  let minDiff = Infinity;
+  for (const r of COMMON_RATIOS) {
+    if (r.value === "original" || r.numeric === 0) continue;
+    const diff = Math.abs(r.numeric - ratio);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = r;
+    }
+  }
+  return closest.value;
+}
+
 /**
  * Calculate new geometry when ratio changes, preserving approximate area.
  * Keeps center position, adjusts w/h to match target ratio.
@@ -257,15 +290,27 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
       });
 
       try {
-        const { publicUrl } = await uploadImageToStorage(file, "objects");
+        const [{ publicUrl }, dimensions] = await Promise.all([
+          uploadImageToStorage(file, "objects"),
+          getImageNaturalDimensions(file),
+        ]);
+
+        const closestRatio = findClosestRatio(dimensions.width, dimensions.height);
+        log.debug("ObjectsImageToolbar", "detected upload ratio", {
+          natural: `${dimensions.width}x${dimensions.height}`,
+          matched: closestRatio,
+        });
+
         // Update media_url + add to illustrations as selected so canvas renders it immediately
         // (EditableImage priority: final_hires > illustrations[selected] > illustrations[0] > media_url)
         const existingIllustrations = (item.illustrations ?? []).map((i) => ({
           ...i,
           is_selected: false,
         }));
-        onUpdate({
+
+        const updates: Parameters<typeof onUpdate>[0] = {
           media_url: publicUrl,
+          aspect_ratio: closestRatio,
           illustrations: [
             ...existingIllustrations,
             {
@@ -274,11 +319,19 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
               is_selected: true,
             },
           ],
-        });
+        };
+
+        // Adjust geometry to match the new ratio
+        const newGeometry = calculateGeometryForRatio(geometry, closestRatio);
+        if (newGeometry) {
+          updates.geometry = newGeometry;
+        }
+
+        onUpdate(updates);
         toast.success("Image uploaded");
         // Close toolbar by deselecting via canvas background click
         canvasRef.current?.click();
-        log.info("ObjectsImageToolbar", "upload success", { url: publicUrl });
+        log.info("ObjectsImageToolbar", "upload success", { url: publicUrl, ratio: closestRatio });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Upload failed";
         toast.error(message);
@@ -287,7 +340,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         setIsUploading(false);
       }
     },
-    [onUpdate]
+    [geometry, onUpdate]
   );
 
   // === Positioning ===

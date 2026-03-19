@@ -8,6 +8,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { X } from "lucide-react";
+import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 
 // === Shared Types & Constants ===
 
@@ -214,11 +215,18 @@ export function CropResultSection({
                 className="rounded-lg overflow-hidden"
                 style={{ border: `2px solid ${boxColors[obj.boxIndex] ?? "#999"}` }}
               >
-                <img
-                  src={obj.imageUrl}
-                  alt={`Cropped #${obj.boxIndex + 1}`}
-                  className="w-full aspect-square object-contain bg-muted"
-                />
+                <div className="relative">
+                  <img
+                    src={obj.imageUrl}
+                    alt={`Cropped #${obj.boxIndex + 1}`}
+                    className="w-full aspect-square object-contain bg-muted"
+                  />
+                  <ImageZoomPreview
+                    src={obj.imageUrl}
+                    alt={`Cropped #${obj.boxIndex + 1}`}
+                    className="absolute inset-0 w-full h-full"
+                  />
+                </div>
                 <div className="px-2 py-1 text-xs text-center truncate bg-background">
                   Cropped #{obj.boxIndex + 1} ({obj.aspectRatio})
                 </div>
@@ -233,11 +241,16 @@ export function CropResultSection({
           <p className="text-sm font-semibold mb-2">
             {results.inpainted ? "Inpainted Image" : "Background (raw)"}
           </p>
-          <div className="rounded-lg overflow-hidden border border-border">
+          <div className="relative rounded-lg overflow-hidden border border-border">
             <img
               src={bgSrc}
               alt={results.inpainted ? "Inpainted image" : "Cropped background"}
               className="w-full object-contain bg-muted"
+            />
+            <ImageZoomPreview
+              src={bgSrc}
+              alt={results.inpainted ? "Inpainted image" : "Cropped background"}
+              className="absolute inset-0 w-full h-full"
             />
           </div>
         </div>
