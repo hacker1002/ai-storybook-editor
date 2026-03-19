@@ -124,6 +124,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     onDelete,
     onGenerateImage,
     onSplitImage,
+    onCropImage,
     selectedGeometry,
     canvasRef,
   } = context;
@@ -230,8 +231,12 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
   }, [onSplitImage]);
 
   const handleCrop = useCallback(() => {
-    toast.info("Crop feature coming soon");
-  }, []);
+    if (onCropImage) {
+      onCropImage();
+    } else {
+      toast.info("Crop feature not available");
+    }
+  }, [onCropImage]);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();

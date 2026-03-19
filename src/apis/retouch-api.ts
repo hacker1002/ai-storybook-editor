@@ -40,6 +40,36 @@ export interface EditObjectImageResult {
   meta?: { processingTime?: number; mimeType?: string };
 }
 
+export interface CropBoundingBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  aspectRatio: string;
+}
+
+export interface CropObjectImageParams {
+  imageUrl: string;
+  boundingBoxes: CropBoundingBox[];
+}
+
+export interface CropObjectResult {
+  boxIndex: number;
+  imageUrl: string;
+  storagePath: string;
+  aspectRatio: string;
+}
+
+export interface CropObjectImageResult {
+  success: boolean;
+  data?: {
+    croppedObjects: CropObjectResult[];
+    croppedBackground: { imageUrl: string; storagePath: string };
+  };
+  error?: string;
+  meta?: { processingTime?: number };
+}
+
 export interface ImageRemoveBgParams {
   imageUrl: string;
   preserveAlpha?: boolean;
@@ -53,6 +83,16 @@ export interface ImageRemoveBgResult {
 }
 
 // --- API ---
+
+export async function callCropObjectImage(
+  params: CropObjectImageParams
+): Promise<CropObjectImageResult> {
+  log.info('callCropObjectImage', 'start', { boxCount: params.boundingBoxes.length });
+  return callEdgeFunction<CropObjectImageResult>(
+    'retouch-crop-object-image',
+    params
+  );
+}
 
 export async function callEditObjectImage(
   params: EditObjectImageParams

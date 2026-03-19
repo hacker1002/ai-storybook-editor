@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -72,6 +72,21 @@ export function EditImageModal({
     },
     [onOpenChange, resetState]
   );
+
+  // Seed illustrations from media_url if image has none
+  useEffect(() => {
+    if (!open) return;
+    if (image.illustrations && image.illustrations.length > 0) return;
+    if (!image.media_url) return;
+    log.debug("EditImageModal", "seeding illustrations from media_url", { imageId: image.id });
+    onUpdateImage({
+      illustrations: [{
+        media_url: image.media_url,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      }],
+    });
+  }, [open, image.id, image.media_url, image.illustrations, onUpdateImage]);
 
   const handleFileUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

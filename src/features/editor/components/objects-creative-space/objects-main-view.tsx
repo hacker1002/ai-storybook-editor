@@ -13,8 +13,9 @@ import {
   EditableQuiz,
   EditImageModal,
   SplitImageModal,
+  CropImageModal,
 } from "@/features/editor/components/shared-components";
-import type { SplitLayerResult } from "@/features/editor/components/shared-components";
+import type { SplitLayerResult, CropReplaceResult } from "@/features/editor/components/shared-components";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import type { Geometry } from "@/types/canvas-types";
 import {
@@ -130,6 +131,87 @@ export function ObjectsMainView({
     if (!open) setSplitModalImage(null);
   }, []);
 
+  // Crop image modal state
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropModalImage, setCropModalImage] = useState<SpreadImage | null>(null);
+  const [cropModalSpreadId, setCropModalSpreadId] = useState<string>("");
+
+  const openCropModal = useCallback((image: SpreadImage) => {
+    setCropModalImage(image);
+    setCropModalSpreadId(selectedSpreadId);
+    setCropModalOpen(true);
+  }, [selectedSpreadId]);
+
+  const handleCropModalClose = useCallback((open: boolean) => {
+    setCropModalOpen(open);
+    if (!open) setCropModalImage(null);
+  }, []);
+
+  const handleCropReplace = useCallback(
+    (result: CropReplaceResult) => {
+      if (!cropModalImage) return;
+      const orig = cropModalImage;
+      const origZ = orig["z-index"] ?? 0;
+
+      // Add cropped objects as new images
+      result.croppedObjects.forEach((obj, i) => {
+        const newImage: SpreadImage = {
+          id: crypto.randomUUID(),
+          title: `${orig.title || "Untitled"} - Cropped #${obj.boxIndex + 1}`,
+          geometry: {
+            x: Math.min(orig.geometry.x + (obj.geometry.x / 100) * orig.geometry.w, 99),
+            y: Math.min(orig.geometry.y + (obj.geometry.y / 100) * orig.geometry.h, 99),
+            w: Math.min((obj.geometry.w / 100) * orig.geometry.w, 100),
+            h: Math.min((obj.geometry.h / 100) * orig.geometry.h, 100),
+          },
+          media_url: obj.imageUrl,
+          illustrations: [{
+            media_url: obj.imageUrl,
+            created_time: new Date().toISOString(),
+            is_selected: true,
+          }],
+          type: "other",
+          aspect_ratio: obj.aspectRatio,
+          player_visible: orig.player_visible,
+          editor_visible: orig.editor_visible,
+          "z-index": origZ + i + 1,
+        };
+        actions.addRetouchImage(cropModalSpreadId, newImage);
+      });
+
+      // Add inpainted/background as new image
+      if (result.inpaintedImageUrl) {
+        const bgImage: SpreadImage = {
+          id: crypto.randomUUID(),
+          title: `${orig.title || "Untitled"} - Inpainted`,
+          geometry: { ...orig.geometry },
+          media_url: result.inpaintedImageUrl,
+          illustrations: [{
+            media_url: result.inpaintedImageUrl,
+            created_time: new Date().toISOString(),
+            is_selected: true,
+          }],
+          type: "background",
+          aspect_ratio: orig.aspect_ratio,
+          player_visible: orig.player_visible,
+          editor_visible: orig.editor_visible,
+          "z-index": origZ,
+        };
+        actions.addRetouchImage(cropModalSpreadId, bgImage);
+      }
+
+      // Delete original
+      actions.deleteRetouchImage(cropModalSpreadId, cropModalImage.id);
+
+      log.info("handleCropReplace", "replaced image with crop results", {
+        croppedCount: result.croppedObjects.length,
+        hasInpaint: !!result.inpaintedImageUrl,
+        spreadId: cropModalSpreadId,
+      });
+    },
+    [cropModalImage, cropModalSpreadId, actions]
+  );
+
   const handleSplitCreateImages = useCallback(
     (layers: SplitLayerResult[]) => {
       if (!splitModalImage) return;
@@ -178,6 +260,7 @@ export function ObjectsMainView({
             },
           ],
           type: splitModalImage.type,
+          aspect_ratio: splitModalImage.aspect_ratio,
           player_visible: splitModalImage.player_visible,
           editor_visible: splitModalImage.editor_visible,
           "z-index": origZ + index + 1,
@@ -487,10 +570,11 @@ export function ObjectsMainView({
           ...context,
           onGenerateImage: () => openGenerateModal(context.item),
           onSplitImage: () => openSplitModal(context.item),
+          onCropImage: () => openCropModal(context.item),
         }}
       />
     ),
-    [openGenerateModal, openSplitModal],
+    [openGenerateModal, openSplitModal, openCropModal],
   );
 
   const renderRetouchQuiz = useCallback(
@@ -567,6 +651,15 @@ export function ObjectsMainView({
           onOpenChange={handleSplitModalClose}
           image={splitModalImage}
           onCreateImages={handleSplitCreateImages}
+        />
+      )}
+
+      {cropModalImage && (
+        <CropImageModal
+          open={cropModalOpen}
+          onOpenChange={handleCropModalClose}
+          image={cropModalImage}
+          onReplace={handleCropReplace}
         />
       )}
     </>

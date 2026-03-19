@@ -11,4 +11,6 @@ export { GenerateImageModal } from './generate-image-modal';
 export { EditImageModal } from './edit-image-modal';
 export { SplitImageModal } from './split-image-modal';
 export type { SplitLayerResult } from './split-image-modal';
+export { CropImageModal } from './crop-image-modal';
+export type { CropReplaceResult } from './crop-image-modal-parts';
 export { PromptPanel } from './prompt-panel';
