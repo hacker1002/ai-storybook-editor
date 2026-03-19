@@ -24,6 +24,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { SpreadImage } from "@/types/spread-types";
+import { callEditObjectImage } from "@/apis/retouch-api";
 
 interface EditImageModalProps {
   open: boolean;
@@ -147,52 +148,70 @@ export function EditImageModal({
     const selectedIllustration = image.illustrations?.find(
       (ill) => ill.is_selected
     );
+    if (!selectedIllustration) return;
+
+    if (!prompt.trim()) {
+      alert("Please enter an editing prompt");
+      return;
+    }
 
     setIsGenerating(true);
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, 1000 + Math.random() * 1000)
-    );
-
-    let width = 800;
-    let height = 600;
-
-    const existingUrl = image.illustrations?.[0]?.media_url;
-    if (existingUrl) {
-      const match = existingUrl.match(
-        /picsum\.photos\/seed\/[^/]+\/(\d+)\/(\d+)/
-      );
-      if (match) {
-        width = parseInt(match[1], 10);
-        height = parseInt(match[2], 10);
-      }
-    }
-
     log.info("handleGenerate", "editing image", {
       prompt,
-      currentImageUrl: selectedIllustration?.media_url ?? null,
+      currentImageUrl: selectedIllustration.media_url,
       hasAttachedImage: !!attachedImage,
-      width,
-      height,
     });
 
-    const newIllustration: Illustration = {
-      media_url: `https://picsum.photos/seed/${Date.now()}/${width}/${height}`,
-      created_time: new Date().toISOString(),
-      is_selected: true,
-    };
+    try {
+      // Build referenceImage from attached file (strip data URI prefix)
+      let referenceImage: { base64Data: string; mimeType: string } | undefined;
+      if (attachedImage) {
+        const [header, base64Data] = attachedImage.base64.split(",");
+        const mimeMatch = header.match(/data:(image\/[^;]+);/);
+        const mimeType = mimeMatch?.[1] || "image/png";
+        referenceImage = { base64Data, mimeType };
+      }
 
-    const updatedIllustrations = [
-      newIllustration,
-      ...(image.illustrations || []).map((ill) => ({
-        ...ill,
-        is_selected: false,
-      })),
-    ];
+      const result = await callEditObjectImage({
+        prompt: prompt.trim(),
+        imageUrl: selectedIllustration.media_url,
+        referenceImage,
+        aspectRatio: image.aspect_ratio,
+      });
 
-    onUpdateImage({ illustrations: updatedIllustrations });
+      if (!result.success || !result.data) {
+        log.error("handleGenerate", "API error", { error: result.error });
+        alert(result.error || "Failed to edit image");
+        return;
+      }
 
-    setIsGenerating(false);
+      log.info("handleGenerate", "success", {
+        processingTime: result.meta?.processingTime,
+        storagePath: result.data.storagePath,
+      });
+
+      const newIllustration: Illustration = {
+        media_url: result.data.imageUrl,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      };
+
+      const updatedIllustrations = [
+        newIllustration,
+        ...(image.illustrations || []).map((ill) => ({
+          ...ill,
+          is_selected: false,
+        })),
+      ];
+
+      onUpdateImage({ illustrations: updatedIllustrations });
+    } catch (err) {
+      log.error("handleGenerate", "unexpected error", { error: err });
+      alert("An unexpected error occurred");
+    } finally {
+      setIsGenerating(false);
+    }
   }, [prompt, attachedImage, image.illustrations, onUpdateImage]);
 
   const isBusy = isGenerating || isRemovingBg;

@@ -22,7 +22,35 @@ export interface LayeringImageResult {
   meta?: { processingTime?: number; replicatePredictionId?: string };
 }
 
+export interface EditObjectImageParams {
+  prompt: string;
+  imageUrl: string;
+  referenceImage?: {
+    base64Data: string;
+    mimeType: string;
+  };
+  aspectRatio?: string;
+  imageSize?: string;
+}
+
+export interface EditObjectImageResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string };
+}
+
 // --- API ---
+
+export async function callEditObjectImage(
+  params: EditObjectImageParams
+): Promise<EditObjectImageResult> {
+  log.info('callEditObjectImage', 'start', { promptLength: params.prompt.length, hasReference: !!params.referenceImage });
+  return callEdgeFunction<EditObjectImageResult>(
+    'retouch-edit-object-image',
+    params
+  );
+}
 
 export async function callLayeringImage(
   params: LayeringImageParams
