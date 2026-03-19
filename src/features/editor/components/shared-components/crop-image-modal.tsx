@@ -28,6 +28,7 @@ import {
   INPAINT_PROMPT,
   getPercentRatio,
   clamp,
+  findClosestAspectRatio,
   BoundingBoxOverlay,
   CropResultSection,
 } from "./crop-image-modal-parts";
@@ -57,14 +58,25 @@ function getSelectedIllustrationUrl(image: SpreadImage): string | undefined {
 
 // === Main Component ===
 
-export function CropImageModal({ open, onOpenChange, image, onReplace }: CropImageModalProps) {
+export function CropImageModal({
+  open,
+  onOpenChange,
+  image,
+  onReplace,
+}: CropImageModalProps) {
   const [boundingBoxes, setBoundingBoxes] = useState<CropBoundingBox[]>([]);
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
   const [cropStep, setCropStep] = useState<CropStep>("idle");
   const [cropResults, setCropResults] = useState<CropResults | null>(null);
   const [isReplacing, setIsReplacing] = useState(false);
-  const [imageNatural, setImageNatural] = useState<{ w: number; h: number } | null>(null);
-  const [imageDisplay, setImageDisplay] = useState<{ w: number; h: number } | null>(null);
+  const [imageNatural, setImageNatural] = useState<{
+    w: number;
+    h: number;
+  } | null>(null);
+  const [imageDisplay, setImageDisplay] = useState<{
+    w: number;
+    h: number;
+  } | null>(null);
 
   const imageAreaRef = useRef<HTMLDivElement>(null);
   const resultSectionRef = useRef<HTMLDivElement>(null);
@@ -86,7 +98,9 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
 
   useEffect(() => {
     mountedRef.current = open;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, [open]);
 
   const isBusy = cropStep !== "idle" || isReplacing;
@@ -147,9 +161,14 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
     log.debug("handleBoxAdd", "added", { boxId: newBox.id });
   }, [boundingBoxes.length, imageNatural]);
 
-  const handleBoxUpdate = useCallback((boxId: string, updates: Partial<CropBoundingBox>) => {
-    setBoundingBoxes((prev) => prev.map((b) => (b.id === boxId ? { ...b, ...updates } : b)));
-  }, []);
+  const handleBoxUpdate = useCallback(
+    (boxId: string, updates: Partial<CropBoundingBox>) => {
+      setBoundingBoxes((prev) =>
+        prev.map((b) => (b.id === boxId ? { ...b, ...updates } : b))
+      );
+    },
+    []
+  );
 
   const handleBoxDelete = useCallback(
     (boxId: string) => {
@@ -196,7 +215,12 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
   // === Drag & Resize ===
 
   const handlePointerDown = useCallback(
-    (e: React.MouseEvent, boxId: string, type: "drag" | "resize", corner?: ResizeCorner) => {
+    (
+      e: React.MouseEvent,
+      boxId: string,
+      type: "drag" | "resize",
+      corner?: ResizeCorner
+    ) => {
       e.preventDefault();
       e.stopPropagation();
       const box = boundingBoxes.find((b) => b.id === boxId);
@@ -232,7 +256,11 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
           y: clamp(sb.y + dyPct, 0, 100 - sb.h),
         });
       } else if (st.type === "resize" && st.corner && imageNatural) {
-        const pr = getPercentRatio(sb.aspectRatio, imageNatural.w, imageNatural.h);
+        const pr = getPercentRatio(
+          sb.aspectRatio,
+          imageNatural.w,
+          imageNatural.h
+        );
         const signX = st.corner.includes("e") ? 1 : -1;
         let newW = Math.max(MIN_BOX_SIZE_PERCENT, sb.w + signX * dxPct);
         let newH = newW / pr;
@@ -330,6 +358,10 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
         const referenceImages = await Promise.all(
           cropRes.data.croppedObjects.map(async (o) => {
             const resp = await fetch(o.imageUrl);
+            if (!resp.ok)
+              throw new Error(
+                `Failed to fetch cropped image: HTTP ${resp.status}`
+              );
             const blob = await resp.blob();
             const base64Data = await new Promise<string>((resolve) => {
               const reader = new FileReader();
@@ -346,6 +378,9 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
           prompt: INPAINT_PROMPT,
           imageUrl: cropRes.data.croppedBackground.imageUrl,
           referenceImages,
+          aspectRatio: imageNatural
+            ? findClosestAspectRatio(imageNatural.w, imageNatural.h)
+            : undefined,
         });
         if (!mountedRef.current) return;
         if (inpaintRes.success && inpaintRes.data) {
@@ -364,11 +399,16 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
         croppedCount: results.cropped.length,
         hasInpaint: !!results.inpainted,
       });
-      setTimeout(() => resultSectionRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      setTimeout(
+        () => resultSectionRef.current?.scrollIntoView({ behavior: "smooth" }),
+        100
+      );
     } catch (err) {
       if (!mountedRef.current) return;
       log.error("handleCrop", "failed", { error: String(err) });
-      toast.error(err instanceof Error ? err.message : "Crop failed. Please try again.");
+      toast.error(
+        err instanceof Error ? err.message : "Crop failed. Please try again."
+      );
     } finally {
       if (mountedRef.current) setCropStep("idle");
     }
@@ -380,16 +420,27 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
     if (!cropResults) return;
     setIsReplacing(true);
     const snappedBoxes = croppedBoxesRef.current;
-    log.info("handleReplace", "start", { croppedCount: cropResults.cropped.length });
+    log.info("handleReplace", "start", {
+      croppedCount: cropResults.cropped.length,
+    });
 
     try {
       const uploadedCropped = await Promise.all(
         cropResults.cropped.map(async (obj) => {
           const resp = await fetch(obj.imageUrl);
+          if (!resp.ok)
+            throw new Error(
+              `Failed to fetch cropped image: HTTP ${resp.status}`
+            );
           const blob = await resp.blob();
           const ext = blob.type.split("/")[1] || "png";
-          const file = new File([blob], `crop-${obj.boxIndex}.${ext}`, { type: blob.type });
-          const { publicUrl } = await uploadImageToStorage(file, "crop-objects");
+          const file = new File([blob], `crop-${obj.boxIndex}.${ext}`, {
+            type: blob.type,
+          });
+          const { publicUrl } = await uploadImageToStorage(
+            file,
+            "crop-objects"
+          );
           const box = snappedBoxes[obj.boxIndex];
           return {
             imageUrl: publicUrl,
@@ -405,17 +456,28 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
       if (!mountedRef.current) return;
 
       let inpaintedUrl: string | undefined;
-      const bgSrc = cropResults.inpainted?.imageUrl ?? cropResults.croppedBackground?.imageUrl;
+      const bgSrc =
+        cropResults.inpainted?.imageUrl ??
+        cropResults.croppedBackground?.imageUrl;
       if (bgSrc) {
         const resp = await fetch(bgSrc);
+        if (!resp.ok)
+          throw new Error(
+            `Failed to fetch background image: HTTP ${resp.status}`
+          );
         const blob = await resp.blob();
         const ext = blob.type.split("/")[1] || "png";
-        const file = new File([blob], `crop-inpaint.${ext}`, { type: blob.type });
+        const file = new File([blob], `crop-inpaint.${ext}`, {
+          type: blob.type,
+        });
         const { publicUrl } = await uploadImageToStorage(file, "crop-inpaint");
         inpaintedUrl = publicUrl;
       }
 
-      onReplace({ croppedObjects: uploadedCropped, inpaintedImageUrl: inpaintedUrl });
+      onReplace({
+        croppedObjects: uploadedCropped,
+        inpaintedImageUrl: inpaintedUrl,
+      });
       handleOpenChange(false);
     } catch (err) {
       if (!mountedRef.current) return;
@@ -456,11 +518,21 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
         handleBoxUpdate(selectedBoxId, { x, y });
       }
     },
-    [isBusy, selectedBoxId, boundingBoxes, handleCrop, handleBoxDelete, handleBoxUpdate]
+    [
+      isBusy,
+      selectedBoxId,
+      boundingBoxes,
+      handleCrop,
+      handleBoxDelete,
+      handleBoxUpdate,
+    ]
   );
 
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === "IMG") {
+    if (
+      e.target === e.currentTarget ||
+      (e.target as HTMLElement).tagName === "IMG"
+    ) {
       setSelectedBoxId(null);
     }
   }, []);
@@ -574,7 +646,9 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
                   disabled={boundingBoxes.length >= MAX_BOXES || !imageNatural}
                   className="h-9 px-4 rounded-lg border border-dashed border-muted-foreground/40 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5"
                   title={
-                    boundingBoxes.length >= MAX_BOXES ? "Maximum 3 crop areas" : undefined
+                    boundingBoxes.length >= MAX_BOXES
+                      ? "Maximum 3 crop areas"
+                      : undefined
                   }
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -605,7 +679,9 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
               <>
                 <Crop className="h-4 w-4 mr-2" />
                 Crop Image
-                {boundingBoxes.length > 0 ? ` (${boundingBoxes.length} areas)` : ""}
+                {boundingBoxes.length > 0
+                  ? ` (${boundingBoxes.length} areas)`
+                  : ""}
               </>
             )}
           </Button>
@@ -643,4 +719,3 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
     </Dialog>
   );
 }
-
