@@ -324,12 +324,28 @@ export function CropImageModal({ open, onOpenChange, image, onReplace }: CropIma
         croppedBackground: cropRes.data.croppedBackground,
       };
 
-      // Step 2: Inpaint
+      // Step 2: Inpaint (pass cropped objects as base64 references for context)
       setCropStep("inpainting");
       try {
+        const referenceImages = await Promise.all(
+          cropRes.data.croppedObjects.map(async (o) => {
+            const resp = await fetch(o.imageUrl);
+            const blob = await resp.blob();
+            const base64Data = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const result = reader.result as string;
+                resolve(result.split(",")[1]);
+              };
+              reader.readAsDataURL(blob);
+            });
+            return { base64Data, mimeType: blob.type || "image/png" };
+          })
+        );
         const inpaintRes = await callEditObjectImage({
           prompt: INPAINT_PROMPT,
           imageUrl: cropRes.data.croppedBackground.imageUrl,
+          referenceImages,
         });
         if (!mountedRef.current) return;
         if (inpaintRes.success && inpaintRes.data) {

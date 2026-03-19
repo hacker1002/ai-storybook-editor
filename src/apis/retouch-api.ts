@@ -25,10 +25,7 @@ export interface LayeringImageResult {
 export interface EditObjectImageParams {
   prompt: string;
   imageUrl: string;
-  referenceImage?: {
-    base64Data: string;
-    mimeType: string;
-  };
+  referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
 }
@@ -97,7 +94,7 @@ export async function callCropObjectImage(
 export async function callEditObjectImage(
   params: EditObjectImageParams
 ): Promise<EditObjectImageResult> {
-  log.info('callEditObjectImage', 'start', { promptLength: params.prompt.length, hasReference: !!params.referenceImage });
+  log.info('callEditObjectImage', 'start', { promptLength: params.prompt.length, refCount: params.referenceImages?.length ?? 0 });
   return callEdgeFunction<EditObjectImageResult>(
     'retouch-edit-object-image',
     params

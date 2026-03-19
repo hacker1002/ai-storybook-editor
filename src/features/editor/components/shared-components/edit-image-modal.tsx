@@ -180,19 +180,19 @@ export function EditImageModal({
     });
 
     try {
-      // Build referenceImage from attached file (strip data URI prefix)
-      let referenceImage: { base64Data: string; mimeType: string } | undefined;
+      // Extract base64 from attached file data URI
+      let referenceImages: Array<{ base64Data: string; mimeType: string }> | undefined;
       if (attachedImage) {
         const [header, base64Data] = attachedImage.base64.split(",");
         const mimeMatch = header.match(/data:(image\/[^;]+);/);
         const mimeType = mimeMatch?.[1] || "image/png";
-        referenceImage = { base64Data, mimeType };
+        referenceImages = [{ base64Data, mimeType }];
       }
 
       const result = await callEditObjectImage({
         prompt: prompt.trim(),
         imageUrl: selectedIllustration.media_url,
-        referenceImage,
+        referenceImages,
         aspectRatio: image.aspect_ratio,
       });
 
