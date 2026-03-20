@@ -1,8 +1,10 @@
 import { useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sparkles, Upload, Copy, Trash2, ChevronDown } from "lucide-react";
 import { useToolbarPosition, CANVAS, type BaseSpread, type ImageToolbarContext } from "@/features/editor/components/canvas-spread-view";
+import { GeometrySection, ToolbarIconButton } from "@/features/editor/components/shared-components";
 
 const COMMON_RATIOS = [
   { label: '1:1', value: 1 },
@@ -30,7 +32,6 @@ function formatAspectRatio(w: number, h: number): string {
 interface DemoImageToolbarProps<TSpread extends BaseSpread> {
   context: ImageToolbarContext<TSpread>;
 }
-
 
 export function DemoImageToolbar<TSpread extends BaseSpread>({
   context,
@@ -69,104 +70,38 @@ export function DemoImageToolbar<TSpread extends BaseSpread>({
   };
 
   const toolbarContent = (
-    <div
-      ref={toolbarRef}
-      data-toolbar="image"
-      className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
-      style={toolbarStyle}
-    >
-      {/* Aspect Ratio Section - Fixed, not editable */}
-      <div className="flex items-center gap-2">
-        <Label className="text-xs text-muted-foreground">Aspect Ratio</Label>
-        <div className="flex items-center h-7 px-3 border border-border rounded-lg bg-muted/50 text-muted-foreground cursor-not-allowed">
-          <span className="text-sm">{aspectRatioLabel}</span>
-          <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
-        </div>
-      </div>
-
-      {/* Geometry Section */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase">Geometry</Label>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-14">Position</Label>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">X</span>
-              <input
-                type="text"
-                value={Math.round(geometry.x)}
-                onChange={(e) => handleGeometryChange('x', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
-            </div>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">Y</span>
-              <input
-                type="text"
-                value={Math.round(geometry.y)}
-                onChange={(e) => handleGeometryChange('y', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-14">Size</Label>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">W</span>
-              <input
-                type="text"
-                value={Math.round(geometry.w)}
-                onChange={(e) => handleGeometryChange('w', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
-            </div>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">H</span>
-              <input
-                type="text"
-                value={Math.round(geometry.h)}
-                onChange={(e) => handleGeometryChange('h', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
-            </div>
+    <TooltipProvider delayDuration={300}>
+      <div
+        ref={toolbarRef}
+        data-toolbar="image"
+        className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
+        style={toolbarStyle}
+      >
+        {/* Aspect Ratio Section - Fixed, not editable */}
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground">Aspect Ratio</Label>
+          <div className="flex items-center h-7 px-3 border border-border rounded-lg bg-muted/50 text-muted-foreground cursor-not-allowed">
+            <span className="text-sm">{aspectRatioLabel}</span>
+            <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => onGenerateImage?.()}
-            className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-          >
-            <Sparkles className="w-4 h-4" />
-          </button>
-          <button disabled className="p-1 text-muted-foreground/50 rounded cursor-not-allowed">
-            <Upload className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onClone}
-            className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
+        {/* Geometry Section */}
+        <GeometrySection geometry={geometry} onGeometryChange={handleGeometryChange} />
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
+          <div className="flex items-center gap-1">
+            <ToolbarIconButton icon={Sparkles} label="Generate" onClick={() => onGenerateImage?.()} />
+            <ToolbarIconButton icon={Upload} label="Upload" onClick={() => {}} disabled />
+            <ToolbarIconButton icon={Copy} label="Clone" onClick={onClone} />
+          </div>
+          <ToolbarIconButton icon={Trash2} label="Delete" onClick={onDelete} variant="destructive" />
         </div>
-        <button
-          onClick={onDelete}
-          className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
       </div>
-    </div>
+    </TooltipProvider>
   );
 
-  // Render toolbar to document.body via portal to avoid z-index stacking issues
   if (typeof document === 'undefined') return null;
   return createPortal(toolbarContent, document.body);
 }

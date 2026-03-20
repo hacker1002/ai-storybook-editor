@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   Strikethrough,
   AlignLeft,
@@ -27,6 +28,7 @@ import {
   type Typography,
   type Geometry,
 } from "@/features/editor/components/canvas-spread-view";
+import { GeometrySection, ToolbarIconButton } from "@/features/editor/components/shared-components";
 
 interface DemoTextToolbarProps<TSpread extends BaseSpread> {
   context: TextToolbarContext<TSpread>;
@@ -158,211 +160,152 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
   };
 
   const toolbarContent = (
-    <div
-      ref={toolbarRef}
-      data-toolbar="text"
-      className="min-w-[320px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
-      style={toolbarStyle}
-    >
-      {/* Typography Controls */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <Select
-            onValueChange={handleFontChange}
-            defaultValue={typography.family || "Nunito"}
-          >
-            <SelectTrigger className="h-7 flex-1 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {FONT_FAMILIES.map((font) => (
-                <SelectItem key={font} value={font}>
-                  {font}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-            <button
-              onClick={() => handleSizeChange(-1)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="w-8 text-center text-sm font-medium">{fontSize}</span>
-            <button
-              onClick={() => handleSizeChange(1)}
-              className="px-2 hover:bg-muted transition-colors h-full"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="flex items-center px-2 border border-border rounded-lg bg-secondary h-7">
-            <Input
-              type="color"
-              value={typography.color || "#000000"}
-              onChange={(e) => handleColorChange(e.target.value)}
-              className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent p-0"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-1">
-          <button
-            onClick={handleWeightToggle}
-            className={`flex-1 py-2 rounded-lg font-bold transition-colors text-sm ${typography.weight === 700 ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
-          >
-            B
-          </button>
-          <button
-            onClick={handleStyleToggle}
-            className={`flex-1 py-2 rounded-lg italic transition-colors text-sm ${typography.style === 'italic' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
-          >
-            I
-          </button>
-          <button
-            onClick={() => handleDecorationToggle('underline')}
-            className={`flex-1 py-2 rounded-lg underline transition-colors text-sm ${typography.decoration === 'underline' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
-          >
-            U
-          </button>
-          <button
-            onClick={() => handleDecorationToggle('line-through')}
-            className={`flex-1 py-2 rounded-lg transition-colors ${typography.decoration === 'line-through' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
-          >
-            <Strikethrough className="w-4 h-4 mx-auto" />
-          </button>
-        </div>
-
-        <div className="flex gap-1">
-          <button
-            onClick={() => handleTextAlignChange('left')}
-            className={`flex-1 py-2 rounded-lg transition-colors ${(!typography.textAlign || typography.textAlign === 'left') ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
-          >
-            <AlignLeft className="w-4 h-4 mx-auto" />
-          </button>
-          <button
-            onClick={() => handleTextAlignChange('center')}
-            className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'center' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
-          >
-            <AlignCenter className="w-4 h-4 mx-auto" />
-          </button>
-          <button
-            onClick={() => handleTextAlignChange('right')}
-            className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'right' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
-          >
-            <AlignRight className="w-4 h-4 mx-auto" />
-          </button>
-          <button
-            onClick={() => onFormatText?.({ textAlign: undefined })}
-            className="flex-1 py-2 rounded-lg transition-colors bg-secondary hover:bg-muted"
-            title="Justify (reset)"
-          >
-            <AlignJustify className="w-4 h-4 mx-auto" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-20">Line Height</Label>
-          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-            <input
-              type="number"
-              step="0.1"
-              min="0.5"
-              max="3"
-              value={typography.lineHeight || 1.5}
-              onChange={(e) => handleLineHeightChange(e.target.value)}
-              className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-            />
-          </div>
-          <Label className="text-xs text-muted-foreground ml-2">Spacing</Label>
-          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-            <input
-              type="number"
-              step="0.5"
-              min="-5"
-              max="20"
-              value={typography.letterSpacing || 0}
-              onChange={(e) => handleLetterSpacingChange(e.target.value)}
-              className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-            />
-            <span className="px-1.5 text-sm text-muted-foreground border-l border-border">px</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Geometry Section */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase">Geometry</Label>
+    <TooltipProvider delayDuration={300}>
+      <div
+        ref={toolbarRef}
+        data-toolbar="text"
+        className="min-w-[320px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
+        style={toolbarStyle}
+      >
+        {/* Typography Controls */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-14">Position</Label>
+            <Select
+              onValueChange={handleFontChange}
+              defaultValue={typography.family || "Nunito"}
+            >
+              <SelectTrigger className="h-7 flex-1 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FONT_FAMILIES.map((font) => (
+                  <SelectItem key={font} value={font}>
+                    {font}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">X</span>
-              <input
-                type="text"
-                value={Math.round(geometry.x)}
-                onChange={(e) => handleGeometryChange("x", e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
+              <button
+                onClick={() => handleSizeChange(-1)}
+                className="px-2 hover:bg-muted transition-colors h-full"
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <span className="w-8 text-center text-sm font-medium">{fontSize}</span>
+              <button
+                onClick={() => handleSizeChange(1)}
+                className="px-2 hover:bg-muted transition-colors h-full"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
             </div>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">Y</span>
-              <input
-                type="text"
-                value={Math.round(geometry.y)}
-                onChange={(e) => handleGeometryChange("y", e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
+            <div className="flex items-center px-2 border border-border rounded-lg bg-secondary h-7">
+              <Input
+                type="color"
+                value={typography.color || "#000000"}
+                onChange={(e) => handleColorChange(e.target.value)}
+                className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent p-0"
               />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
             </div>
           </div>
+
+          <div className="flex gap-1">
+            <button
+              onClick={handleWeightToggle}
+              className={`flex-1 py-2 rounded-lg font-bold transition-colors text-sm ${typography.weight === 700 ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+            >
+              B
+            </button>
+            <button
+              onClick={handleStyleToggle}
+              className={`flex-1 py-2 rounded-lg italic transition-colors text-sm ${typography.style === 'italic' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+            >
+              I
+            </button>
+            <button
+              onClick={() => handleDecorationToggle('underline')}
+              className={`flex-1 py-2 rounded-lg underline transition-colors text-sm ${typography.decoration === 'underline' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+            >
+              U
+            </button>
+            <button
+              onClick={() => handleDecorationToggle('line-through')}
+              className={`flex-1 py-2 rounded-lg transition-colors ${typography.decoration === 'line-through' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+            >
+              <Strikethrough className="w-4 h-4 mx-auto" />
+            </button>
+          </div>
+
+          <div className="flex gap-1">
+            <button
+              onClick={() => handleTextAlignChange('left')}
+              className={`flex-1 py-2 rounded-lg transition-colors ${(!typography.textAlign || typography.textAlign === 'left') ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+            >
+              <AlignLeft className="w-4 h-4 mx-auto" />
+            </button>
+            <button
+              onClick={() => handleTextAlignChange('center')}
+              className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'center' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+            >
+              <AlignCenter className="w-4 h-4 mx-auto" />
+            </button>
+            <button
+              onClick={() => handleTextAlignChange('right')}
+              className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'right' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+            >
+              <AlignRight className="w-4 h-4 mx-auto" />
+            </button>
+            <button
+              onClick={() => onFormatText?.({ textAlign: undefined })}
+              className="flex-1 py-2 rounded-lg transition-colors bg-secondary hover:bg-muted"
+              title="Justify (reset)"
+            >
+              <AlignJustify className="w-4 h-4 mx-auto" />
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-14">Size</Label>
+            <Label className="text-xs text-muted-foreground w-20">Line Height</Label>
             <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">W</span>
               <input
-                type="text"
-                value={Math.round(geometry.w)}
-                onChange={(e) => handleGeometryChange("w", e.target.value)}
+                type="number"
+                step="0.1"
+                min="0.5"
+                max="3"
+                value={typography.lineHeight || 1.5}
+                onChange={(e) => handleLineHeightChange(e.target.value)}
                 className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
               />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
             </div>
+            <Label className="text-xs text-muted-foreground ml-2">Spacing</Label>
             <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">H</span>
               <input
-                type="text"
-                value={Math.round(geometry.h)}
-                onChange={(e) => handleGeometryChange("h", e.target.value)}
+                type="number"
+                step="0.5"
+                min="-5"
+                max="20"
+                value={typography.letterSpacing || 0}
+                onChange={(e) => handleLetterSpacingChange(e.target.value)}
                 className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
               />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
+              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">px</span>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
-        <button
-          onClick={onClone}
-          className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-        >
-          <Copy className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        {/* Geometry Section */}
+        <GeometrySection geometry={geometry} onGeometryChange={handleGeometryChange} />
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
+          <ToolbarIconButton icon={Copy} label="Clone" onClick={onClone} />
+          <ToolbarIconButton icon={Trash2} label="Delete" onClick={onDelete} variant="destructive" />
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 
-  // Render toolbar to document.body via portal to avoid z-index stacking issues
   if (typeof document === 'undefined') return null;
   return createPortal(toolbarContent, document.body);
 }

@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Label } from '@/components/ui/label';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { Copy, Trash2, Minus, Plus } from 'lucide-react';
 import {
   useToolbarPosition,
@@ -8,6 +9,7 @@ import {
   type ImageToolbarContext,
   type TextToolbarContext,
 } from '@/features/editor/components/canvas-spread-view';
+import { GeometrySection, ToolbarIconButton } from '@/features/editor/components/shared-components';
 import type { DummyImage, DummyTextbox, DummyTextboxContent } from '@/types/dummy';
 import { FONT_SIZE_CONFIG, GEOMETRY_CONFIG, DEFAULT_COLOR, getFirstTextboxKey } from '@/types/dummy';
 import type { Geometry } from '@/types/spread-types';
@@ -62,7 +64,6 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
       );
 
       if (data.type === 'image') {
-        // DummyImage has its own typography shape — cast for compatibility
         onUpdate?.({ typography: { size: newSize, color: typography.color } } as never);
       } else if (langData && langKey) {
         onUpdate?.({
@@ -112,113 +113,55 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
     : { position: 'fixed', opacity: 0, pointerEvents: 'none' };
 
   const toolbarContent = (
-    <div
-      ref={toolbarRef}
-      data-toolbar={data.type}
-      className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
-      style={toolbarStyle}
-    >
-      {/* Typography Section */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase">Typography</Label>
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14">Size</Label>
-          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-            <button
-              onClick={() => handleFontSizeChange(-FONT_SIZE_CONFIG.step)}
-              disabled={typography.size <= FONT_SIZE_CONFIG.min}
-              className="px-2 hover:bg-muted transition-colors h-full disabled:opacity-50"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="w-8 text-center text-sm font-medium">{typography.size}</span>
-            <button
-              onClick={() => handleFontSizeChange(FONT_SIZE_CONFIG.step)}
-              disabled={typography.size >= FONT_SIZE_CONFIG.max}
-              className="px-2 hover:bg-muted transition-colors h-full disabled:opacity-50"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-          <Label className="text-xs text-muted-foreground ml-2">Color</Label>
-          <input
-            type="color"
-            value={typography.color}
-            onChange={(e) => handleColorChange(e.target.value)}
-            className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent p-1"
-          />
-        </div>
-      </div>
-
-      {/* Geometry Section */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground uppercase">Geometry</Label>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-14">Position</Label>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">X</span>
-              <input
-                type="text"
-                value={Math.round(geometry.x)}
-                onChange={(e) => handleGeometryChange('x', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
-            </div>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">Y</span>
-              <input
-                type="text"
-                value={Math.round(geometry.y)}
-                onChange={(e) => handleGeometryChange('y', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
-            </div>
-          </div>
+    <TooltipProvider delayDuration={300}>
+      <div
+        ref={toolbarRef}
+        data-toolbar={data.type}
+        className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
+        style={toolbarStyle}
+      >
+        {/* Typography Section */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground uppercase">Typography</Label>
           <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground w-14">Size</Label>
             <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">W</span>
-              <input
-                type="text"
-                value={Math.round(geometry.w)}
-                onChange={(e) => handleGeometryChange('w', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
+              <button
+                onClick={() => handleFontSizeChange(-FONT_SIZE_CONFIG.step)}
+                disabled={typography.size <= FONT_SIZE_CONFIG.min}
+                className="px-2 hover:bg-muted transition-colors h-full disabled:opacity-50"
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <span className="w-8 text-center text-sm font-medium">{typography.size}</span>
+              <button
+                onClick={() => handleFontSizeChange(FONT_SIZE_CONFIG.step)}
+                disabled={typography.size >= FONT_SIZE_CONFIG.max}
+                className="px-2 hover:bg-muted transition-colors h-full disabled:opacity-50"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
             </div>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <span className="px-2 text-sm text-muted-foreground border-r border-border">H</span>
-              <input
-                type="text"
-                value={Math.round(geometry.h)}
-                onChange={(e) => handleGeometryChange('h', e.target.value)}
-                className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
-              />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
-            </div>
+            <Label className="text-xs text-muted-foreground ml-2">Color</Label>
+            <input
+              type="color"
+              value={typography.color}
+              onChange={(e) => handleColorChange(e.target.value)}
+              className="w-7 h-7 rounded border border-border cursor-pointer bg-transparent p-1"
+            />
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
-        <button
-          onClick={onClone}
-          className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-        >
-          <Copy className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        {/* Geometry Section */}
+        <GeometrySection geometry={geometry} onGeometryChange={handleGeometryChange} />
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
+          <ToolbarIconButton icon={Copy} label="Clone" onClick={onClone} />
+          <ToolbarIconButton icon={Trash2} label="Delete" onClick={onDelete} variant="destructive" />
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 
   if (typeof document === 'undefined') return null;

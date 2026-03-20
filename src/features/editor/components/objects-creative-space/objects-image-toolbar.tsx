@@ -29,7 +29,7 @@ import {
   clampGeometry,
   GeometrySection,
   ToolbarIconButton,
-} from "./shared-toolbar-components";
+} from "@/features/editor/components/shared-components";
 
 const log = createLogger("Editor", "ObjectsImageToolbar");
 

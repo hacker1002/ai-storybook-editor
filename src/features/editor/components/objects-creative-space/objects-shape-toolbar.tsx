@@ -26,7 +26,7 @@ import {
   clampGeometry,
   GeometrySection,
   ToolbarIconButton,
-} from "./shared-toolbar-components";
+} from "@/features/editor/components/shared-components";
 import type { Geometry } from "@/types/canvas-types";
 
 const log = createLogger("Editor", "ObjectsShapeToolbar");
