@@ -17,6 +17,8 @@ import {
 } from "@/features/editor/components/shared-components";
 import type { SplitLayerResult, CropCreateResult } from "@/features/editor/components/shared-components";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
+import { ObjectsVideoToolbar } from "./objects-video-toolbar";
+import { ObjectsAudioToolbar } from "./objects-audio-toolbar";
 import { ObjectsShapeToolbar } from "./objects-shape-toolbar";
 import type { Geometry } from "@/types/canvas-types";
 import {
@@ -36,6 +38,8 @@ import type {
   ImageItemContext,
   ImageToolbarContext,
   ShapeToolbarContext,
+  VideoToolbarContext,
+  AudioToolbarContext,
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
@@ -581,6 +585,22 @@ export function ObjectsMainView({
     [],
   );
 
+  // === Video toolbar render prop ===
+  const renderRetouchVideoToolbar = useCallback(
+    (context: VideoToolbarContext<BaseSpread>) => (
+      <ObjectsVideoToolbar context={context} />
+    ),
+    [],
+  );
+
+  // === Audio toolbar render prop ===
+  const renderRetouchAudioToolbar = useCallback(
+    (context: AudioToolbarContext<BaseSpread>) => (
+      <ObjectsAudioToolbar context={context} />
+    ),
+    [],
+  );
+
   const renderRetouchQuiz = useCallback(
     (context: QuizItemContext<BaseSpread>) => {
       const quiz = context.item as SpreadQuiz;
@@ -621,6 +641,8 @@ export function ObjectsMainView({
         renderQuizItem={renderRetouchQuiz}
         renderImageToolbar={renderRetouchImageToolbar}
         renderShapeToolbar={renderRetouchShapeToolbar}
+        renderVideoToolbar={renderRetouchVideoToolbar}
+        renderAudioToolbar={renderRetouchAudioToolbar}
         onSpreadSelect={onSpreadSelect}
         onSpreadReorder={handleSpreadReorder}
         onSpreadAdd={handleSpreadAdd}

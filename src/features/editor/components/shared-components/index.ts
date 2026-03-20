@@ -14,4 +14,4 @@ export type { SplitLayerResult } from './split-image-modal';
 export { CropImageModal } from './crop-image-modal';
 export type { CropCreateResult } from './crop-image-modal-parts';
 export { PromptPanel } from './prompt-panel';
-export { clampGeometry, GeometryInput, GeometrySection, ToolbarIconButton } from './shared-toolbar-components';
+export { clampGeometry, GeometryInput, GeometrySection, MediaIdentitySection, MEDIA_TYPE_OPTIONS, DEFAULT_STATES, ToolbarIconButton } from './shared-toolbar-components';

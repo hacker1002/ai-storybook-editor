@@ -28,21 +28,13 @@ import type { SpreadItemMediaType } from "@/types/spread-types";
 import {
   clampGeometry,
   GeometrySection,
+  MediaIdentitySection,
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
 
 const log = createLogger("Editor", "ObjectsImageToolbar");
 
 // === Constants ===
-
-const IMAGE_TYPE_OPTIONS: { label: string; value: SpreadItemMediaType }[] = [
-  { label: "Character", value: "character" },
-  { label: "Prop", value: "prop" },
-  { label: "Background", value: "background" },
-  { label: "Foreground", value: "foreground" },
-  { label: "Raw", value: "raw" },
-  { label: "Other", value: "other" },
-];
 
 const COMMON_RATIOS = [
   { label: "1:1", value: "1:1", numeric: 1 },
@@ -57,18 +49,6 @@ const COMMON_RATIOS = [
   { label: "21:9", value: "21:9", numeric: 21 / 9 },
   { label: "Original", value: "original", numeric: 0 },
 ] as const;
-
-const DEFAULT_STATES = [
-  "default",
-  "happy",
-  "sad",
-  "angry",
-  "running",
-  "sleeping",
-  "front",
-  "back",
-  "side",
-];
 
 // === Helpers ===
 
@@ -169,7 +149,6 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
   const currentType = (item.type ?? "raw") as SpreadItemMediaType;
   const currentName = item.name ?? "";
   const currentState = item.state ?? "default";
-  const isEntityType = currentType === "character" || currentType === "prop";
 
   // Detect current aspect ratio from geometry
   const detectedRatio = useMemo(() => {
@@ -366,64 +345,16 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
       >
         {/* === BODY === */}
 
-        {/* Row 1: Image Type */}
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14 shrink-0">
-            Type
-          </Label>
-          <Select value={currentType} onValueChange={handleTypeChange}>
-            <SelectTrigger
-              className="h-7 text-sm flex-1"
-              aria-label="Image type"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {IMAGE_TYPE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Row 2: Name + State */}
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14 shrink-0">
-            Name
-          </Label>
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            {/* TODO: Replace with entity dropdown (useCharacters/useProps) when store selectors are available */}
-            <input
-              type="text"
-              value={currentName}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder={
-                isEntityType ? `${currentType} name...` : "Enter name..."
-              }
-              aria-label="Image name"
-              className="h-7 flex-1 min-w-0 rounded-md border border-input bg-transparent px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-
-            {/* State dropdown */}
-            <Select value={currentState} onValueChange={handleStateChange}>
-              <SelectTrigger
-                className="h-7 text-sm w-24 shrink-0"
-                aria-label="Image state"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DEFAULT_STATES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        {/* Row 1-2: Type, Name, State */}
+        <MediaIdentitySection
+          type={currentType}
+          name={currentName}
+          state={currentState}
+          onTypeChange={handleTypeChange}
+          onNameChange={handleNameChange}
+          onStateChange={handleStateChange}
+          mediaLabel="Image"
+        />
 
         {/* Row 3: Aspect Ratio */}
         <div className="flex items-center gap-2">
