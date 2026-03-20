@@ -8,32 +8,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Crop, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Crop, Loader2, Plus, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
-import { callCropObjectImage, callEditObjectImage } from "@/apis/retouch-api";
+import { callCropObjectImage } from "@/apis/retouch-api";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import type { SpreadImage } from "@/types/spread-types";
 import {
   type AspectRatio,
-  type CropStep,
   type ResizeCorner,
   type CropBoundingBox,
   type CropResults,
-  type CropReplaceResult,
+  type CropCreateResult,
   BOX_COLORS,
   MAX_BOXES,
   DEFAULT_BOX_SIZE_PERCENT,
   MIN_BOX_SIZE_PERCENT,
-  INPAINT_PROMPT,
   getPercentRatio,
   clamp,
-  findClosestAspectRatio,
+  base64ToFile,
   BoundingBoxOverlay,
   CropResultSection,
 } from "./crop-image-modal-parts";
 
-export type { CropReplaceResult } from "./crop-image-modal-parts";
+export type { CropCreateResult } from "./crop-image-modal-parts";
 
 const log = createLogger("Editor", "CropImageModal");
 
@@ -43,7 +41,7 @@ interface CropImageModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   image: SpreadImage;
-  onReplace: (result: CropReplaceResult) => void;
+  onCreateImages: (result: CropCreateResult) => void;
 }
 
 // === Helpers ===
@@ -62,13 +60,16 @@ export function CropImageModal({
   open,
   onOpenChange,
   image,
-  onReplace,
+  onCreateImages,
 }: CropImageModalProps) {
   const [boundingBoxes, setBoundingBoxes] = useState<CropBoundingBox[]>([]);
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
-  const [cropStep, setCropStep] = useState<CropStep>("idle");
+  const [isCropping, setIsCropping] = useState(false);
   const [cropResults, setCropResults] = useState<CropResults | null>(null);
-  const [isReplacing, setIsReplacing] = useState(false);
+  const [selectedCropIndices, setSelectedCropIndices] = useState<Set<number>>(
+    new Set()
+  );
+  const [isCreating, setIsCreating] = useState(false);
   const [imageNatural, setImageNatural] = useState<{
     w: number;
     h: number;
@@ -91,9 +92,9 @@ export function CropImageModal({
     startMouseY: number;
   } | null>(null);
 
-  // C2 fix: snapshot boxes at crop time so replace uses the correct geometry
+  // Snapshot boxes at crop time so create uses the correct geometry
   const croppedBoxesRef = useRef<CropBoundingBox[]>([]);
-  // H3 fix: guard against state updates after modal close
+  // Guard against state updates after modal close
   const mountedRef = useRef(false);
 
   useEffect(() => {
@@ -103,15 +104,16 @@ export function CropImageModal({
     };
   }, [open]);
 
-  const isBusy = cropStep !== "idle" || isReplacing;
+  const isBusy = isCropping || isCreating;
   const imageUrl = getSelectedIllustrationUrl(image);
 
   const resetState = useCallback(() => {
     setBoundingBoxes([]);
     setSelectedBoxId(null);
-    setCropStep("idle");
+    setIsCropping(false);
     setCropResults(null);
-    setIsReplacing(false);
+    setSelectedCropIndices(new Set());
+    setIsCreating(false);
     setImageNatural(null);
     setImageDisplay(null);
   }, []);
@@ -226,7 +228,7 @@ export function CropImageModal({
       const box = boundingBoxes.find((b) => b.id === boxId);
       if (!box || isBusy) return;
       setSelectedBoxId(boxId);
-      setCropResults(null); // clear stale results when user starts interacting
+      setCropResults(null);
       dragStateRef.current = {
         type,
         boxId,
@@ -277,7 +279,6 @@ export function CropImageModal({
         let newX = st.corner.includes("w") ? sb.x + sb.w - newW : sb.x;
         let newY = st.corner.includes("n") ? sb.y + sb.h - newH : sb.y;
 
-        // Clamp to bounds, re-derive dimensions from ratio
         if (newX < 0) {
           newW += newX;
           newX = 0;
@@ -297,7 +298,6 @@ export function CropImageModal({
           newW = newH * pr;
         }
 
-        // Guard: don't shrink below minimum after bounds clamping
         if (newW < MIN_BOX_SIZE_PERCENT || newH < MIN_BOX_SIZE_PERCENT) return;
 
         handleBoxUpdate(st.boxId, { x: newX, y: newY, w: newW, h: newH });
@@ -316,15 +316,14 @@ export function CropImageModal({
     };
   }, [open, handleBoxUpdate, imageNatural]);
 
-  // === Crop Flow (2-step) ===
+  // === Crop ===
 
   const handleCrop = useCallback(async () => {
     if (boundingBoxes.length === 0 || !imageUrl) return;
     log.info("handleCrop", "start", { boxCount: boundingBoxes.length });
 
-    // Snapshot boxes so handleReplace uses the geometry that was actually cropped
     croppedBoxesRef.current = boundingBoxes.map((b) => ({ ...b }));
-    setCropStep("cropping");
+    setIsCropping(true);
 
     try {
       const cropRes = await callCropObjectImage({
@@ -346,61 +345,20 @@ export function CropImageModal({
       const results: CropResults = {
         cropped: cropRes.data.croppedObjects.map((o) => ({
           boxIndex: o.boxIndex,
-          imageUrl: o.imageUrl,
+          base64: o.base64,
+          mimeType: o.mimeType,
           aspectRatio: o.aspectRatio,
         })),
-        croppedBackground: cropRes.data.croppedBackground,
       };
 
-      // Step 2: Inpaint (pass cropped objects as base64 references for context)
-      setCropStep("inpainting");
-      try {
-        const referenceImages = await Promise.all(
-          cropRes.data.croppedObjects.map(async (o) => {
-            const resp = await fetch(o.imageUrl);
-            if (!resp.ok)
-              throw new Error(
-                `Failed to fetch cropped image: HTTP ${resp.status}`
-              );
-            const blob = await resp.blob();
-            const base64Data = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                const result = reader.result as string;
-                resolve(result.split(",")[1]);
-              };
-              reader.readAsDataURL(blob);
-            });
-            return { base64Data, mimeType: blob.type || "image/png" };
-          })
-        );
-        const inpaintRes = await callEditObjectImage({
-          prompt: INPAINT_PROMPT,
-          imageUrl: cropRes.data.croppedBackground.imageUrl,
-          referenceImages,
-          aspectRatio: imageNatural
-            ? findClosestAspectRatio(imageNatural.w, imageNatural.h)
-            : undefined,
-        });
-        if (!mountedRef.current) return;
-        if (inpaintRes.success && inpaintRes.data) {
-          results.inpainted = { imageUrl: inpaintRes.data.imageUrl };
-        } else {
-          toast.warning("Inpaint failed — showing raw background");
-        }
-      } catch {
-        if (!mountedRef.current) return;
-        toast.warning("Inpaint failed — showing raw background");
-        log.warn("handleCrop", "inpaint failed, using raw background");
-      }
-
       setCropResults(results);
+      setSelectedCropIndices(new Set());
       log.info("handleCrop", "complete", {
         croppedCount: results.cropped.length,
-        hasInpaint: !!results.inpainted,
       });
       setTimeout(
-        () => resultSectionRef.current?.scrollIntoView({ behavior: "smooth" }),
+        () =>
+          resultSectionRef.current?.scrollIntoView({ behavior: "smooth" }),
         100
       );
     } catch (err) {
@@ -410,33 +368,31 @@ export function CropImageModal({
         err instanceof Error ? err.message : "Crop failed. Please try again."
       );
     } finally {
-      if (mountedRef.current) setCropStep("idle");
+      if (mountedRef.current) setIsCropping(false);
     }
   }, [boundingBoxes, imageUrl]);
 
-  // === Replace Flow ===
+  // === Create New Images (base64 → upload → callback) ===
 
-  const handleReplace = useCallback(async () => {
-    if (!cropResults) return;
-    setIsReplacing(true);
+  const handleCreateNewImages = useCallback(async () => {
+    if (!cropResults || selectedCropIndices.size === 0) return;
+    setIsCreating(true);
     const snappedBoxes = croppedBoxesRef.current;
-    log.info("handleReplace", "start", {
-      croppedCount: cropResults.cropped.length,
+    const selectedCrops = cropResults.cropped.filter((o) =>
+      selectedCropIndices.has(o.boxIndex)
+    );
+    log.info("handleCreateNewImages", "start", {
+      selectedCount: selectedCrops.length,
     });
 
     try {
       const uploadedCropped = await Promise.all(
-        cropResults.cropped.map(async (obj) => {
-          const resp = await fetch(obj.imageUrl);
-          if (!resp.ok)
-            throw new Error(
-              `Failed to fetch cropped image: HTTP ${resp.status}`
-            );
-          const blob = await resp.blob();
-          const ext = blob.type.split("/")[1] || "png";
-          const file = new File([blob], `crop-${obj.boxIndex}.${ext}`, {
-            type: blob.type,
-          });
+        selectedCrops.map(async (obj) => {
+          const timestamp = Date.now();
+          const file = base64ToFile(
+            obj.base64,
+            `${timestamp}-crop-${obj.boxIndex}.png`
+          );
           const { publicUrl } = await uploadImageToStorage(
             file,
             "crop-objects"
@@ -455,38 +411,32 @@ export function CropImageModal({
 
       if (!mountedRef.current) return;
 
-      let inpaintedUrl: string | undefined;
-      const bgSrc =
-        cropResults.inpainted?.imageUrl ??
-        cropResults.croppedBackground?.imageUrl;
-      if (bgSrc) {
-        const resp = await fetch(bgSrc);
-        if (!resp.ok)
-          throw new Error(
-            `Failed to fetch background image: HTTP ${resp.status}`
-          );
-        const blob = await resp.blob();
-        const ext = blob.type.split("/")[1] || "png";
-        const file = new File([blob], `crop-inpaint.${ext}`, {
-          type: blob.type,
-        });
-        const { publicUrl } = await uploadImageToStorage(file, "crop-inpaint");
-        inpaintedUrl = publicUrl;
-      }
-
-      onReplace({
-        croppedObjects: uploadedCropped,
-        inpaintedImageUrl: inpaintedUrl,
-      });
+      onCreateImages({ croppedObjects: uploadedCropped });
       handleOpenChange(false);
     } catch (err) {
       if (!mountedRef.current) return;
-      log.error("handleReplace", "failed", { error: String(err) });
-      toast.error(err instanceof Error ? err.message : "Replace failed");
+      log.error("handleCreateNewImages", "failed", { error: String(err) });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create images"
+      );
     } finally {
-      if (mountedRef.current) setIsReplacing(false);
+      if (mountedRef.current) setIsCreating(false);
     }
-  }, [cropResults, onReplace, handleOpenChange]);
+  }, [cropResults, selectedCropIndices, onCreateImages, handleOpenChange]);
+
+  // === Selection toggle ===
+
+  const handleToggleSelect = useCallback((boxIndex: number) => {
+    setSelectedCropIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(boxIndex)) {
+        next.delete(boxIndex);
+      } else {
+        next.add(boxIndex);
+      }
+      return next;
+    });
+  }, []);
 
   // === Keyboard ===
 
@@ -604,14 +554,12 @@ export function CropImageModal({
                   )}
 
                   {/* Loading overlay */}
-                  {cropStep !== "idle" && (
+                  {isCropping && (
                     <div className="absolute inset-0 bg-white/60 flex items-center justify-center pointer-events-none z-30">
                       <div className="flex flex-col items-center gap-2">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         <span className="text-sm text-muted-foreground">
-                          {cropStep === "cropping"
-                            ? `Step 1/2: Cropping ${boundingBoxes.length} areas...`
-                            : "Step 2/2: Inpainting background..."}
+                          Cropping {boundingBoxes.length} areas...
                         </span>
                       </div>
                     </div>
@@ -665,15 +613,10 @@ export function CropImageModal({
             className="w-full"
             size="lg"
           >
-            {cropStep === "cropping" ? (
+            {isCropping ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Cropping {boundingBoxes.length} areas...
-              </>
-            ) : cropStep === "inpainting" ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Inpainting...
               </>
             ) : (
               <>
@@ -689,22 +632,26 @@ export function CropImageModal({
           {/* Result Section */}
           {cropResults && (
             <div ref={resultSectionRef}>
-              <CropResultSection results={cropResults} boxColors={BOX_COLORS} />
+              <CropResultSection
+                results={cropResults}
+                selectedIndices={selectedCropIndices}
+                onToggleSelect={handleToggleSelect}
+              />
               <Button
-                onClick={handleReplace}
-                disabled={isReplacing}
+                onClick={handleCreateNewImages}
+                disabled={selectedCropIndices.size === 0 || isCreating}
                 className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700"
                 size="lg"
               >
-                {isReplacing ? (
+                {isCreating ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Replacing...
+                    Creating...
                   </>
                 ) : (
                   <>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Replace Old Image
+                    <ImagePlus className="h-4 w-4 mr-2" />
+                    Create New Images
                   </>
                 )}
               </Button>

@@ -15,7 +15,7 @@ import {
   SplitImageModal,
   CropImageModal,
 } from "@/features/editor/components/shared-components";
-import type { SplitLayerResult, CropReplaceResult } from "@/features/editor/components/shared-components";
+import type { SplitLayerResult, CropCreateResult } from "@/features/editor/components/shared-components";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import type { Geometry } from "@/types/canvas-types";
 import {
@@ -147,17 +147,36 @@ export function ObjectsMainView({
     if (!open) setCropModalImage(null);
   }, []);
 
-  const handleCropReplace = useCallback(
-    (result: CropReplaceResult) => {
+  const handleCropCreateImages = useCallback(
+    (result: CropCreateResult) => {
       if (!cropModalImage) return;
       const orig = cropModalImage;
       const origZ = orig["z-index"] ?? 0;
+      const insertCount = result.croppedObjects.length;
 
-      // Add cropped objects as new images
+      // Cascade z-index: push existing items up to make room for new crops
+      const spread = retouchSpreads.find((s) => s.id === cropModalSpreadId);
+      if (spread) {
+        const tierItems = collectPictorialZItems(spread, cropModalImage.id);
+        const shifts = calculateZIndexShifts(origZ, insertCount, tierItems);
+        for (const shift of shifts) {
+          const isVideo = spread.videos?.some((v) => v.id === shift.id);
+          if (isVideo) {
+            actions.updateRetouchVideo(cropModalSpreadId, shift.id, { "z-index": shift.to });
+          } else {
+            actions.updateRetouchImage(cropModalSpreadId, shift.id, { "z-index": shift.to });
+          }
+          log.debug("handleCropCreateImages", "shifted z-index", {
+            itemId: shift.id, from: shift.from, to: shift.to,
+          });
+        }
+      }
+
+      // Add cropped objects as new images (original image kept as-is)
       result.croppedObjects.forEach((obj, i) => {
         const newImage: SpreadImage = {
           id: crypto.randomUUID(),
-          title: `${orig.title || "Untitled"} - Cropped #${obj.boxIndex + 1}`,
+          title: `${orig.title || "Untitled"} - Crop #${obj.boxIndex + 1}`,
           geometry: {
             x: Math.min(orig.geometry.x + (obj.geometry.x / 100) * orig.geometry.w, 99),
             y: Math.min(orig.geometry.y + (obj.geometry.y / 100) * orig.geometry.h, 99),
@@ -179,37 +198,12 @@ export function ObjectsMainView({
         actions.addRetouchImage(cropModalSpreadId, newImage);
       });
 
-      // Add inpainted/background as new image
-      if (result.inpaintedImageUrl) {
-        const bgImage: SpreadImage = {
-          id: crypto.randomUUID(),
-          title: `${orig.title || "Untitled"} - Inpainted`,
-          geometry: { ...orig.geometry },
-          media_url: result.inpaintedImageUrl,
-          illustrations: [{
-            media_url: result.inpaintedImageUrl,
-            created_time: new Date().toISOString(),
-            is_selected: true,
-          }],
-          type: "background",
-          aspect_ratio: orig.aspect_ratio,
-          player_visible: orig.player_visible,
-          editor_visible: orig.editor_visible,
-          "z-index": origZ,
-        };
-        actions.addRetouchImage(cropModalSpreadId, bgImage);
-      }
-
-      // Delete original
-      actions.deleteRetouchImage(cropModalSpreadId, cropModalImage.id);
-
-      log.info("handleCropReplace", "replaced image with crop results", {
+      log.info("handleCropCreateImages", "created new images from crops", {
         croppedCount: result.croppedObjects.length,
-        hasInpaint: !!result.inpaintedImageUrl,
         spreadId: cropModalSpreadId,
       });
     },
-    [cropModalImage, cropModalSpreadId, actions]
+    [cropModalImage, cropModalSpreadId, actions, retouchSpreads]
   );
 
   const handleSplitCreateImages = useCallback(
@@ -659,7 +653,7 @@ export function ObjectsMainView({
           open={cropModalOpen}
           onOpenChange={handleCropModalClose}
           image={cropModalImage}
-          onReplace={handleCropReplace}
+          onCreateImages={handleCropCreateImages}
         />
       )}
     </>

@@ -52,8 +52,8 @@ export interface CropObjectImageParams {
 
 export interface CropObjectResult {
   boxIndex: number;
-  imageUrl: string;
-  storagePath: string;
+  base64: string;
+  mimeType: 'image/png';
   aspectRatio: string;
 }
 
@@ -61,10 +61,9 @@ export interface CropObjectImageResult {
   success: boolean;
   data?: {
     croppedObjects: CropObjectResult[];
-    croppedBackground: { imageUrl: string; storagePath: string };
   };
   error?: string;
-  meta?: { processingTime?: number };
+  meta?: { processingTime?: number; sourceWidth?: number; sourceHeight?: number };
 }
 
 export interface ImageRemoveBgParams {

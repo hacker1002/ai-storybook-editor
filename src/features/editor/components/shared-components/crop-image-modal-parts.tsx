@@ -7,7 +7,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { X } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 
 // === Shared Types & Constants ===
@@ -23,7 +23,6 @@ export type AspectRatio =
   | "9:16"
   | "16:9"
   | "21:9";
-export type CropStep = "idle" | "cropping" | "inpainting";
 export type ResizeCorner = "nw" | "ne" | "sw" | "se";
 
 export interface CropBoundingBox {
@@ -36,19 +35,21 @@ export interface CropBoundingBox {
 }
 
 export interface CropResults {
-  cropped: Array<{ boxIndex: number; imageUrl: string; aspectRatio: string }>;
-  croppedBackground?: { imageUrl: string };
-  inpainted?: { imageUrl: string };
+  cropped: Array<{
+    boxIndex: number;
+    base64: string;
+    mimeType: "image/png";
+    aspectRatio: string;
+  }>;
 }
 
-export interface CropReplaceResult {
+export interface CropCreateResult {
   croppedObjects: Array<{
     imageUrl: string;
     boxIndex: number;
     aspectRatio: string;
     geometry: { x: number; y: number; w: number; h: number };
   }>;
-  inpaintedImageUrl?: string;
 }
 
 export const BOX_COLORS = ["#2196F3", "#4CAF50", "#FF9800"] as const;
@@ -73,23 +74,6 @@ export const ASPECT_RATIOS: {
   { label: "21:9", value: "21:9", numeric: 21 / 9 },
 ];
 
-export const INPAINT_PROMPT = `Vẽ lại ảnh nền (chỉ background) trên ảnh gốc đã bị crop các đối tượng chính dưới đây.
-  Tham khảo ảnh các vùng bị crop (xem các ảnh tham khảo). Lưu ý chỉ fill background, không vẽ lại đối tượng chính của vùng bị crop`;
-
-export function findClosestAspectRatio(width: number, height: number): AspectRatio {
-  const actual = width / height;
-  let closest = ASPECT_RATIOS[0];
-  let minDiff = Math.abs(actual - closest.numeric);
-  for (const r of ASPECT_RATIOS) {
-    const diff = Math.abs(actual - r.numeric);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = r;
-    }
-  }
-  return closest.value;
-}
-
 // === Helpers ===
 
 export function parseRatioNumeric(ratio: AspectRatio): number {
@@ -106,6 +90,16 @@ export function getPercentRatio(
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+/** Convert base64 string to a File object for upload */
+export function base64ToFile(base64: string, filename: string): File {
+  const binaryStr = atob(base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return new File([bytes], filename, { type: "image/png" });
 }
 
 // === Sub-Components ===
@@ -237,65 +231,79 @@ export function BoundingBoxOverlay({
 
 export function CropResultSection({
   results,
-  boxColors,
+  selectedIndices,
+  onToggleSelect,
 }: {
   results: CropResults;
-  boxColors: readonly string[];
+  selectedIndices: Set<number>;
+  onToggleSelect: (boxIndex: number) => void;
 }) {
-  const bgSrc =
-    results.inpainted?.imageUrl ?? results.croppedBackground?.imageUrl;
+  const selectedCount = selectedIndices.size;
 
   return (
     <div className="space-y-3">
       {results.cropped.length > 0 && (
         <div>
-          <p className="text-sm font-semibold mb-2">Cropped Objects</p>
-          <div className="grid grid-cols-3 gap-3">
-            {results.cropped.map((obj) => (
-              <div
-                key={obj.boxIndex}
-                className="rounded-lg overflow-hidden"
-                style={{
-                  border: `2px solid ${boxColors[obj.boxIndex] ?? "#999"}`,
-                }}
-              >
-                <div className="relative">
-                  <img
-                    src={obj.imageUrl}
-                    alt={`Cropped #${obj.boxIndex + 1}`}
-                    className="w-full aspect-square object-contain bg-muted"
-                  />
-                  <ImageZoomPreview
-                    src={obj.imageUrl}
-                    alt={`Cropped #${obj.boxIndex + 1}`}
-                    className="absolute inset-0 w-full h-full"
-                  />
-                </div>
-                <div className="px-2 py-1 text-xs text-center truncate bg-background">
-                  Cropped #{obj.boxIndex + 1} ({obj.aspectRatio})
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold">Cropped Objects</p>
+            <span className="text-xs text-muted-foreground">
+              {selectedCount} selected
+            </span>
           </div>
-        </div>
-      )}
-
-      {bgSrc && (
-        <div>
-          <p className="text-sm font-semibold mb-2">
-            {results.inpainted ? "Inpainted Image" : "Background (raw)"}
-          </p>
-          <div className="relative rounded-lg overflow-hidden border border-border">
-            <img
-              src={bgSrc}
-              alt={results.inpainted ? "Inpainted image" : "Cropped background"}
-              className="w-full object-contain bg-muted"
-            />
-            <ImageZoomPreview
-              src={bgSrc}
-              alt={results.inpainted ? "Inpainted image" : "Cropped background"}
-              className="absolute inset-0 w-full h-full"
-            />
+          <div
+            className="grid grid-cols-3 gap-3"
+            role="group"
+            aria-label="Cropped objects"
+          >
+            {results.cropped.map((obj) => {
+              const isSelected = selectedIndices.has(obj.boxIndex);
+              const dataUrl = `data:image/png;base64,${obj.base64}`;
+              return (
+                <div
+                  key={obj.boxIndex}
+                  className={`relative rounded-lg overflow-hidden border-2 transition-all hover:shadow-md ${
+                    isSelected
+                      ? "border-primary ring-1 ring-primary"
+                      : "border-border hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <div className="relative">
+                    <img
+                      src={dataUrl}
+                      alt={`Cropped #${obj.boxIndex + 1}`}
+                      className="w-full aspect-square object-contain bg-muted"
+                    />
+                    <ImageZoomPreview
+                      src={dataUrl}
+                      alt={`Cropped #${obj.boxIndex + 1}`}
+                      className="absolute inset-0 w-full h-full"
+                    />
+                    <button
+                      onClick={() => onToggleSelect(obj.boxIndex)}
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={`Select cropped #${obj.boxIndex + 1}`}
+                      className="absolute top-1.5 right-1.5 z-20 cursor-pointer"
+                    >
+                      <div
+                        className={`h-10 w-10 rounded-full border-2 flex items-center justify-center transition-colors shadow-md ${
+                          isSelected
+                            ? "bg-primary border-primary"
+                            : "bg-white/90 border-muted-foreground/40 hover:border-primary/60"
+                        }`}
+                      >
+                        {isSelected && (
+                          <Check className="h-5 w-5 text-primary-foreground" />
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                  <div className="px-2 py-1.5 text-xs text-center truncate bg-background">
+                    Cropped #{obj.boxIndex + 1} ({obj.aspectRatio})
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
