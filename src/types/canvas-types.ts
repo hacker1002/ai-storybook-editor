@@ -329,6 +329,7 @@ export interface TextToolbarContext<TSpread extends BaseSpread>
     BaseToolbarContext {
   onFormatText: (format: Partial<Typography>) => void;
   onClone?: () => void;
+  onSplitTextbox?: () => void;
 }
 
 export interface ShapeToolbarContext<TSpread extends BaseSpread>

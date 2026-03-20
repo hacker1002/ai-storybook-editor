@@ -3,6 +3,7 @@
 
 import { useState, useCallback } from "react";
 import { EyeOff } from "lucide-react";
+import { toast } from "sonner";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
   EditableImage,
@@ -20,6 +21,7 @@ import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import { ObjectsVideoToolbar } from "./objects-video-toolbar";
 import { ObjectsAudioToolbar } from "./objects-audio-toolbar";
 import { ObjectsShapeToolbar } from "./objects-shape-toolbar";
+import { ObjectsTextToolbar } from "./objects-text-toolbar";
 import type { Geometry } from "@/types/canvas-types";
 import {
   useRetouchSpreads,
@@ -37,6 +39,7 @@ import type {
   BaseSpread,
   ImageItemContext,
   ImageToolbarContext,
+  TextToolbarContext,
   ShapeToolbarContext,
   VideoToolbarContext,
   AudioToolbarContext,
@@ -577,6 +580,72 @@ export function ObjectsMainView({
     [openGenerateModal, openSplitModal, openCropModal],
   );
 
+  // === Text toolbar render prop ===
+  const handleSplitTextbox = useCallback(
+    (spreadId: string, textbox: SpreadTextbox) => {
+      const langKey = getFirstTextboxKey(textbox as unknown as Record<string, unknown>);
+      if (!langKey) {
+        toast.info("No language content to split");
+        return;
+      }
+      const content = textbox[langKey] as SpreadTextboxContent;
+      if (!content?.text) {
+        toast.info("No text to split");
+        return;
+      }
+      const segments = content.text
+        .split(".")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (segments.length <= 1) {
+        toast.info("No sentences to split");
+        return;
+      }
+      log.info("handleSplitTextbox", "splitting textbox", {
+        itemId: textbox.id,
+        segments: segments.length,
+      });
+      const baseGeometry = content.geometry;
+      for (let i = 0; i < segments.length; i++) {
+        const newTextbox: SpreadTextbox = {
+          id: crypto.randomUUID(),
+          [langKey]: {
+            text: segments[i] + ".",
+            geometry: {
+              x: baseGeometry.x,
+              y: Math.min(
+                baseGeometry.y + baseGeometry.h * i,
+                100 - baseGeometry.h
+              ),
+              w: baseGeometry.w,
+              h: baseGeometry.h,
+            },
+            typography: { ...content.typography },
+          },
+          player_visible: textbox.player_visible,
+          editor_visible: textbox.editor_visible,
+        };
+        actions.addRetouchTextbox(spreadId, newTextbox);
+      }
+      actions.deleteRetouchTextbox(spreadId, textbox.id);
+      onItemSelect(null);
+    },
+    [actions, onItemSelect]
+  );
+
+  const renderRetouchTextToolbar = useCallback(
+    (context: TextToolbarContext<BaseSpread>) => (
+      <ObjectsTextToolbar
+        context={{
+          ...context,
+          onSplitTextbox: () =>
+            handleSplitTextbox(selectedSpreadId, context.item),
+        }}
+      />
+    ),
+    [selectedSpreadId, handleSplitTextbox]
+  );
+
   // === Shape toolbar render prop ===
   const renderRetouchShapeToolbar = useCallback(
     (context: ShapeToolbarContext<BaseSpread>) => (
@@ -640,6 +709,7 @@ export function ObjectsMainView({
         renderAudioItem={renderRetouchAudio}
         renderQuizItem={renderRetouchQuiz}
         renderImageToolbar={renderRetouchImageToolbar}
+        renderTextToolbar={renderRetouchTextToolbar}
         renderShapeToolbar={renderRetouchShapeToolbar}
         renderVideoToolbar={renderRetouchVideoToolbar}
         renderAudioToolbar={renderRetouchAudioToolbar}

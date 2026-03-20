@@ -193,12 +193,16 @@ export interface SpreadTextbox {
 }
 
 // === Textbox Audio (retouch phase TTS) ===
+export interface TextboxAudioMedia {
+  voice_id: string;
+  url: string;
+}
+
 export interface TextboxAudio {
   script: string;
-  media_url: string;
   speed: number;
   emotion: string;
-  voice: string;
+  media: TextboxAudioMedia[];
 }
 
 export interface SpreadTextboxContent {
