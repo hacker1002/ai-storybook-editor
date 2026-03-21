@@ -51,18 +51,13 @@ export function resolveAnimations(
 export function buildDefaultEffect(effectType: number): SpreadAnimation['effect'] {
   const options = EFFECT_OPTIONS_MAP[effectType] ?? [];
 
-  // Duration stored in milliseconds (matching ANIMATION_PRESETS convention)
-  // Appear/Disappear have 0 duration; others default to 500ms
-  const isInstant = effectType === 2 || effectType === 12;
-  const defaultDuration = isInstant ? 0 : 500;
-
   const effect: SpreadAnimation['effect'] = {
     type: effectType,
     delay: 0,
   };
 
   if (options.includes('duration')) {
-    effect.duration = defaultDuration;
+    effect.duration = 1000; // 1 second in ms
   }
   if (options.includes('direction')) {
     effect.direction = 'left';
@@ -71,10 +66,10 @@ export function buildDefaultEffect(effectType: number): SpreadAnimation['effect'
     effect.amount = 1;
   }
   if (options.includes('loop')) {
-    effect.loop = 0;
+    effect.loop = 1; // play once (no repeat)
   }
   if (options.includes('geometry')) {
-    effect.geometry = { x: 50, y: 50, w: 100, h: 100 };
+    effect.geometry = { x: 0, y: 0, w: 100, h: 100 };
   }
 
   return effect;

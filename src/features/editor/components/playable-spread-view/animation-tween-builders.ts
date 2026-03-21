@@ -198,7 +198,8 @@ export function addTweenToTimeline(
       const dur = (effect.duration ?? DEFAULT_EMPHASIS_DURATION * 1000) / 1000;
       let rotationDeg = 360 * (effect.amount || 1);
       if (effect.direction === "right") rotationDeg = -rotationDeg;
-      const repeat = effect.loop === -1 ? -1 : effect.loop || 0;
+      // effect.loop = total play count (1 = play once). GSAP repeat = additional plays after first.
+      const repeat = effect.loop === -1 ? -1 : Math.max(0, (effect.loop ?? 1) - 1);
       timeline.to(
         element,
         {
@@ -241,11 +242,12 @@ export function addTweenToTimeline(
     // ── Teeter (9) ───────────────────────────────────────────────
     case EFFECT_TYPE.TEETER: {
       const dur = (effect.duration ?? DEFAULT_EMPHASIS_DURATION * 1000) / 1000;
+      // effect.loop = total play count. GSAP repeat = additional plays after first. Default 4 for teeter.
       const repeatCount =
         effect.loop === -1
           ? -1
           : effect.loop && effect.loop > 0
-          ? effect.loop
+          ? effect.loop - 1
           : 4;
       timeline.to(
         element,
