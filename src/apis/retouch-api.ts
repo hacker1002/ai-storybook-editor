@@ -91,7 +91,6 @@ export interface GenerateNarrationResult {
     audioUrl: string;
     storagePath: string;
     voiceId: string;
-    durationMs?: number;
   };
   error?: string;
   meta?: {

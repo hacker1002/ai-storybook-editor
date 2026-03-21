@@ -19,6 +19,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
+import { callGenerateNarration } from "@/apis/retouch-api";
 import type { TextboxAudio, TextboxAudioMedia } from "@/types/spread-types";
 
 const log = createLogger("Editor", "GenerateNarrationModal");
@@ -201,9 +202,9 @@ export function GenerateNarrationModal({
     [mediaList],
   );
 
-  // -- Generate handler (mock API) -----------------------------------------
+  // -- Generate handler -----------------------------------------------------
   const handleGenerate = useCallback(async () => {
-    if (!editableScript.trim() || !selectedVoice) return;
+    if (!editableScript.trim() || !selectedVoice || isGenerating) return;
     setIsGenerating(true);
     log.info("handleGenerate", "generate started", {
       voice: selectedVoice,
@@ -212,13 +213,24 @@ export function GenerateNarrationModal({
     });
 
     try {
-      // TODO: Replace with real edge function: POST narration-generate-narration
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const mockUrl = `https://storage.example.com/narration/${selectedVoice}-${Date.now()}.mp3`;
+      const response = await callGenerateNarration({
+        script: editableScript,
+        voiceId: selectedVoice,
+        speed: selectedSpeed,
+        emotion: selectedEmotion,
+      });
+
+      if (!response.success || !response.data) {
+        toast.error(response.error ?? "Failed to generate narration");
+        log.error("handleGenerate", "API returned error", {
+          error: response.error,
+        });
+        return;
+      }
 
       const newEntry: TextboxAudioMedia = {
-        voice_id: selectedVoice,
-        url: mockUrl,
+        voice_id: response.data.voiceId,
+        url: response.data.audioUrl,
       };
       const existingIdx = mediaList.findIndex(
         (m) => m.voice_id === selectedVoice,
@@ -235,7 +247,7 @@ export function GenerateNarrationModal({
       setPlayingIndex(newIndex);
       setIsPlaying(true);
       if (audioRef.current) {
-        audioRef.current.src = mockUrl;
+        audioRef.current.src = response.data.audioUrl;
         audioRef.current.play().catch(() => {
           setIsPlaying(false);
         });
@@ -251,6 +263,7 @@ export function GenerateNarrationModal({
       toast.success("Narration generated");
       log.info("handleGenerate", "generate success", {
         voice: selectedVoice,
+        audioUrl: response.data.audioUrl,
       });
     } catch (err) {
       toast.error("Failed to generate narration");
