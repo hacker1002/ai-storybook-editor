@@ -78,6 +78,30 @@ export interface ImageRemoveBgResult {
   meta?: { processingTime?: number; mimeType?: string };
 }
 
+export interface GenerateNarrationParams {
+  script: string;
+  voiceId: string;
+  speed?: number;
+  emotion?: string;
+}
+
+export interface GenerateNarrationResult {
+  success: boolean;
+  data?: {
+    audioUrl: string;
+    storagePath: string;
+    voiceId: string;
+    durationMs?: number;
+  };
+  error?: string;
+  meta?: {
+    processingTime?: number;
+    audioEncoding?: string;
+    sampleRateHertz?: number;
+    characterCount?: number;
+  };
+}
+
 // --- API ---
 
 export async function callCropObjectImage(
@@ -106,6 +130,16 @@ export async function callImageRemoveBg(
   log.info('callImageRemoveBg', 'start', { imageUrl: params.imageUrl.slice(0, 80) });
   return callEdgeFunction<ImageRemoveBgResult>(
     'retouch-image-remove-bg',
+    params
+  );
+}
+
+export async function callGenerateNarration(
+  params: GenerateNarrationParams
+): Promise<GenerateNarrationResult> {
+  log.info('callGenerateNarration', 'start', { scriptLength: params.script.length, voiceId: params.voiceId });
+  return callEdgeFunction<GenerateNarrationResult>(
+    'retouch-generate-narration',
     params
   );
 }
