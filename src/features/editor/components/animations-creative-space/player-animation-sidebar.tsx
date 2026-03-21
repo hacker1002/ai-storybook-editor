@@ -10,7 +10,10 @@ import {
   useMaxActivatedOrder,
   useReplayableItems,
 } from "@/stores/animation-playback-store";
-import type { ResolvedAnimation, SpreadAnimation } from "@/types/animation-types";
+import type {
+  ResolvedAnimation,
+  SpreadAnimation,
+} from "@/types/animation-types";
 import { AnimationListItem } from "./animation-list-item";
 import { computeStepNumbers } from "./utils";
 
@@ -42,7 +45,7 @@ export function PlayerAnimationSidebar({
     // Only show pending indicator when awaiting user input, not during active playback.
     // During 'playing', gaps between sequential tweens momentarily empty activeAnimationOrders
     // which would incorrectly flash the pending indicator.
-    if (phase !== 'awaiting_next' && phase !== 'awaiting_click') {
+    if (phase !== "awaiting_next" && phase !== "awaiting_click") {
       setPendingNextOrder(null);
       return;
     }
@@ -56,7 +59,10 @@ export function PlayerAnimationSidebar({
     }
   }, [animations, phase, maxActivatedOrder]);
 
-  const stepNumbers = useMemo(() => computeStepNumbers(animations), [animations]);
+  const stepNumbers = useMemo(
+    () => computeStepNumbers(animations),
+    [animations]
+  );
 
   // Build remaining cLoop map from store's replayableItems
   // Key: animation order, Value: remaining replays
@@ -95,6 +101,7 @@ export function PlayerAnimationSidebar({
     >
       {/* Header */}
       <div className="flex items-center justify-center border-b px-3 py-3">
+        <div className="h-6"></div>
         <span className="text-sm font-semibold">Animations</span>
       </div>
 

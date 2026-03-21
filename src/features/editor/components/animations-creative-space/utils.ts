@@ -9,6 +9,7 @@ import type {
   TargetItemIcon,
   ItemType,
 } from '@/types/animation-types';
+import type { BaseSpread } from '@/types/spread-types';
 import {
   EFFECT_CATEGORY_MAP,
   TARGET_ICON_MAP,
@@ -154,4 +155,58 @@ export function computeStepNumbers(animations: ResolvedAnimation[]): (number | n
     }
     return null;
   });
+}
+
+/**
+ * Build items lookup map from spread data for animation title resolution.
+ * Textbox titles resolved via language key when provided.
+ */
+export function buildItemsMap(
+  spread: BaseSpread | undefined,
+  language?: string,
+): ItemsMap {
+  const map: ItemsMap = new Map();
+  if (!spread) return map;
+
+  for (const img of spread.images ?? []) {
+    map.set(img.id, { title: img.title ?? img.id, type: 'image' });
+  }
+  for (const tb of spread.textboxes ?? []) {
+    // Resolve textbox title: prefer language-specific content, fallback to title/id
+    let title = tb.title ?? tb.id;
+    if (language) {
+      const langContent = tb[language];
+      if (langContent && typeof langContent === 'object' && 'text' in langContent) {
+        const text = (langContent as { text: string }).text;
+        if (text) title = text.length > 20 ? text.slice(0, 20) + '…' : text;
+      }
+    }
+    map.set(tb.id, { title, type: 'textbox' });
+  }
+  for (const sh of spread.shapes ?? []) {
+    map.set(sh.id, { title: (sh as { title?: string }).title ?? sh.id, type: 'shape' });
+  }
+  for (const vid of spread.videos ?? []) {
+    map.set(vid.id, { title: (vid as { title?: string }).title ?? vid.id, type: 'video' });
+  }
+  for (const aud of spread.audios ?? []) {
+    map.set(aud.id, { title: (aud as { title?: string }).title ?? aud.id, type: 'audio' });
+  }
+  for (const quiz of spread.quizzes ?? []) {
+    let quizTitle = quiz.title ?? quiz.id;
+    if (!quiz.title) {
+      const reserved = new Set(['id', 'title', 'geometry', 'z-index', 'player_visible', 'editor_visible', 'options']);
+      for (const key of Object.keys(quiz)) {
+        if (reserved.has(key)) continue;
+        const content = quiz[key] as { question?: string } | undefined;
+        if (content?.question) {
+          quizTitle = content.question.length > 20 ? content.question.slice(0, 20) + '…' : content.question;
+          break;
+        }
+      }
+    }
+    map.set(quiz.id, { title: quizTitle, type: 'quiz' });
+  }
+
+  return map;
 }

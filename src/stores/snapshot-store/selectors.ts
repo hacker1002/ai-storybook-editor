@@ -14,6 +14,11 @@ import type {
   SpreadAnimation,
 } from '@/types/spread-types';
 
+// Stable empty array refs to avoid new [] on every selector evaluation (prevents re-render loops)
+const EMPTY_SPREADS: DummySpread[] = [];
+const EMPTY_QUIZZES: SpreadQuiz[] = [];
+const EMPTY_ANIMATIONS: SpreadAnimation[] = [];
+
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
 export const useIsDirty = () => useSnapshotStore((s) => s.sync.isDirty);
@@ -37,7 +42,7 @@ export const useDummyIds = (): string[] =>
 export const useDummyById = (dummyId: string): ManuscriptDummy | undefined =>
   useSnapshotStore((s) => s.dummies.find((d) => d.id === dummyId));
 export const useDummySpreads = (dummyId: string): DummySpread[] =>
-  useSnapshotStore((s) => s.dummies.find((d) => d.id === dummyId)?.spreads ?? []);
+  useSnapshotStore((s) => s.dummies.find((d) => d.id === dummyId)?.spreads ?? EMPTY_SPREADS);
 export const useDummySpreadIds = (dummyId: string): string[] =>
   useSnapshotStore(
     useShallow((s) => s.dummies.find((d) => d.id === dummyId)?.spreads.map((sp) => sp.id) ?? [])
@@ -65,9 +70,9 @@ export const useRetouchAudioById = (spreadId: string, audioId: string): SpreadAu
 export const useRetouchQuizById = (spreadId: string, quizId: string): SpreadQuiz | undefined =>
   useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId));
 export const useRetouchQuizzes = (spreadId: string): SpreadQuiz[] =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.quizzes ?? []);
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.quizzes ?? EMPTY_QUIZZES);
 export const useRetouchAnimations = (spreadId: string): SpreadAnimation[] =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.animations ?? []);
+  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.animations ?? EMPTY_ANIMATIONS);
 
 // Computed: find all images/videos derived from a specific original illustration image
 export const useRetouchObjectsByImageId = (

@@ -1,4 +1,5 @@
 // playable-header.tsx - Header with play/stop button and zoom slider for PlayableSpreadView
+import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Play, Square, Minus, Plus } from "lucide-react";
@@ -14,7 +15,7 @@ interface PlayableHeaderProps {
   onStop: () => void;
 }
 
-export function PlayableHeader({
+export const PlayableHeader = memo(function PlayableHeader({
   activeCanvas,
   playMode,
   zoomLevel,
@@ -106,4 +107,4 @@ export function PlayableHeader({
       </div>
     </div>
   );
-}
+});
