@@ -304,6 +304,22 @@ export const createRetouchSlice: StateCreator<
       }
     }),
 
+  deleteRetouchAnimationsByTargetId: (spreadId, targetId) =>
+    set((state) => {
+      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      if (spread?.animations) {
+        const before = spread.animations.length;
+        spread.animations = spread.animations.filter((a) => a.target.id !== targetId);
+        const removed = before - spread.animations.length;
+        if (removed > 0) {
+          // Re-assign .order to match new array positions
+          spread.animations.forEach((anim, i) => { anim.order = i; });
+          state.sync.isDirty = true;
+          log.debug('deleteRetouchAnimationsByTargetId', 'removed', { spreadId, targetId, removed });
+        }
+      }
+    }),
+
   reorderRetouchAnimations: (spreadId, fromIndex, toIndex) =>
     set((state) => {
       const spread = state.retouch.spreads.find((s) => s.id === spreadId);

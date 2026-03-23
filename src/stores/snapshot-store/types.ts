@@ -90,6 +90,7 @@ export interface RetouchSlice {
   addRetouchAnimation: (spreadId: string, animation: SpreadAnimation) => void;
   updateRetouchAnimation: (spreadId: string, animationIndex: number, updates: Partial<SpreadAnimation>) => void;
   deleteRetouchAnimation: (spreadId: string, animationIndex: number) => void;
+  deleteRetouchAnimationsByTargetId: (spreadId: string, targetId: string) => void;
   reorderRetouchAnimations: (spreadId: string, fromIndex: number, toIndex: number) => void;
 
   clearRetouch: () => void;

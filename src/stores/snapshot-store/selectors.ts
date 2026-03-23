@@ -136,6 +136,7 @@ export const useSnapshotActions = () =>
       addRetouchAnimation: s.addRetouchAnimation,
       updateRetouchAnimation: s.updateRetouchAnimation,
       deleteRetouchAnimation: s.deleteRetouchAnimation,
+      deleteRetouchAnimationsByTargetId: s.deleteRetouchAnimationsByTargetId,
       reorderRetouchAnimations: s.reorderRetouchAnimations,
       clearRetouch: s.clearRetouch,
       // Meta

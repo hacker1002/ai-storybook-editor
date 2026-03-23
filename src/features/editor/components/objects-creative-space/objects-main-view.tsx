@@ -348,8 +348,10 @@ export function ObjectsMainView({
               itemId as string,
               data as Partial<SpreadImage>
             );
-          else if (action === "delete")
+          else if (action === "delete") {
+            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
             actions.deleteRetouchImage(spreadId, itemId as string);
+          }
           break;
         case "textbox":
           if (action === "add")
@@ -360,8 +362,10 @@ export function ObjectsMainView({
               itemId as string,
               data as Partial<SpreadTextbox>
             );
-          else if (action === "delete")
+          else if (action === "delete") {
+            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
             actions.deleteRetouchTextbox(spreadId, itemId as string);
+          }
           break;
         case "shape":
           if (action === "add")
@@ -372,8 +376,10 @@ export function ObjectsMainView({
               itemId as string,
               data as Partial<SpreadShape>
             );
-          else if (action === "delete")
+          else if (action === "delete") {
+            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
             actions.deleteRetouchShape(spreadId, itemId as string);
+          }
           break;
         case "video":
           if (action === "add")
@@ -384,8 +390,10 @@ export function ObjectsMainView({
               itemId as string,
               data as Partial<SpreadVideo>
             );
-          else if (action === "delete")
+          else if (action === "delete") {
+            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
             actions.deleteRetouchVideo(spreadId, itemId as string);
+          }
           break;
         case "audio":
           if (action === "add")
@@ -396,8 +404,10 @@ export function ObjectsMainView({
               itemId as string,
               data as Partial<SpreadAudio>
             );
-          else if (action === "delete")
+          else if (action === "delete") {
+            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
             actions.deleteRetouchAudio(spreadId, itemId as string);
+          }
           break;
         case "page":
           if (action === "update" && typeof itemId === "number") {
@@ -680,6 +690,7 @@ export function ObjectsMainView({
         };
         actions.addRetouchTextbox(spreadId, newTextbox);
       }
+      actions.deleteRetouchAnimationsByTargetId(spreadId, textbox.id);
       actions.deleteRetouchTextbox(spreadId, textbox.id);
       onItemSelect(null);
     },
