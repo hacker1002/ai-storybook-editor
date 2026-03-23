@@ -88,22 +88,14 @@ export function AnimationsCreativeSpace() {
     [selectedItem],
   );
 
-  // Build PlayableSpread[] from retouch spreads (pre-filter textboxes by language)
+  // Build PlayableSpread[] from retouch spreads
+  // Language resolution is handled by child components via getTextboxContentForLanguage
   const playableSpreads = useMemo((): PlayableSpread[] => {
-    return retouchSpreads.map((spread) => {
-      // Pre-filter textboxes: only include those with content in currentLanguage
-      const filteredTextboxes = spread.textboxes.filter((tb) => {
-        if (!currentLanguage.code) return true;
-        const langContent = tb[currentLanguage.code];
-        return langContent && typeof langContent === "object";
-      });
-      return {
-        ...spread,
-        textboxes: filteredTextboxes,
-        animations: spread.animations ?? [],
-      } as PlayableSpread;
-    });
-  }, [retouchSpreads, currentLanguage]);
+    return retouchSpreads.map((spread) => ({
+      ...spread,
+      animations: spread.animations ?? [],
+    } as PlayableSpread));
+  }, [retouchSpreads]);
 
   // --- Handlers ---
   const handleItemSelect = useCallback(

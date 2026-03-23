@@ -16,7 +16,10 @@ import {
   SplitImageModal,
   CropImageModal,
 } from "@/features/editor/components/shared-components";
-import type { SplitLayerResult, CropCreateResult } from "@/features/editor/components/shared-components";
+import type {
+  SplitLayerResult,
+  CropCreateResult,
+} from "@/features/editor/components/shared-components";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import { ObjectsVideoToolbar } from "./objects-video-toolbar";
 import { ObjectsAudioToolbar } from "./objects-audio-toolbar";
@@ -27,7 +30,8 @@ import {
   useRetouchSpreads,
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
-import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
+import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
+import { useLanguageCode } from "@/stores/editor-settings-store";
 import {
   calculateZIndexShifts,
   collectPictorialZItems,
@@ -57,13 +61,20 @@ import type {
   SpreadQuiz,
   PageData,
 } from "@/types/canvas-types";
-import type { SpreadTextboxContent } from "@/types/spread-types";
 
 const log = createLogger("Editor", "ObjectsMainView");
 
 /** Badge overlay shown on canvas items when player_visible = false.
  *  For icon-type items (audio/quiz) with w=0,h=0, uses fixed 32px box matching the icon size. */
-function PlayerHiddenBadge({ geometry, zIndex, isIcon }: { geometry: Geometry; zIndex?: number; isIcon?: boolean }) {
+function PlayerHiddenBadge({
+  geometry,
+  zIndex,
+  isIcon,
+}: {
+  geometry: Geometry;
+  zIndex?: number;
+  isIcon?: boolean;
+}) {
   return (
     <div
       className="absolute pointer-events-none"
@@ -76,7 +87,11 @@ function PlayerHiddenBadge({ geometry, zIndex, isIcon }: { geometry: Geometry; z
         zIndex: (zIndex ?? 0) + 1,
       }}
     >
-      <div className={`absolute rounded-sm bg-black/60 p-0.5 ${isIcon ? "-top-2.5 -right-2.5" : "top-0.5 right-0.5"}`}>
+      <div
+        className={`absolute rounded-sm bg-black/60 p-0.5 ${
+          isIcon ? "-top-2.5 -right-2.5" : "top-0.5 right-0.5"
+        }`}
+      >
         <EyeOff className="w-3 h-3 text-white" />
       </div>
     </div>
@@ -98,19 +113,24 @@ export function ObjectsMainView({
 }: ObjectsMainViewProps) {
   const retouchSpreads = useRetouchSpreads();
   const actions = useSnapshotActions();
+  const langCode = useLanguageCode();
 
   // Generate image modal state — spreadId captured at open time to prevent
   // wrong-spread updates if selection changes while modal is open
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [generateModalImage, setGenerateModalImage] =
     useState<SpreadImage | null>(null);
-  const [generateModalSpreadId, setGenerateModalSpreadId] = useState<string>("");
+  const [generateModalSpreadId, setGenerateModalSpreadId] =
+    useState<string>("");
 
-  const openGenerateModal = useCallback((image: SpreadImage) => {
-    setGenerateModalImage(image);
-    setGenerateModalSpreadId(selectedSpreadId);
-    setGenerateModalOpen(true);
-  }, [selectedSpreadId]);
+  const openGenerateModal = useCallback(
+    (image: SpreadImage) => {
+      setGenerateModalImage(image);
+      setGenerateModalSpreadId(selectedSpreadId);
+      setGenerateModalOpen(true);
+    },
+    [selectedSpreadId]
+  );
 
   const handleGenerateModalClose = useCallback((open: boolean) => {
     setGenerateModalOpen(open);
@@ -126,14 +146,19 @@ export function ObjectsMainView({
 
   // Split image modal state
   const [splitModalOpen, setSplitModalOpen] = useState(false);
-  const [splitModalImage, setSplitModalImage] = useState<SpreadImage | null>(null);
+  const [splitModalImage, setSplitModalImage] = useState<SpreadImage | null>(
+    null
+  );
   const [splitModalSpreadId, setSplitModalSpreadId] = useState<string>("");
 
-  const openSplitModal = useCallback((image: SpreadImage) => {
-    setSplitModalImage(image);
-    setSplitModalSpreadId(selectedSpreadId);
-    setSplitModalOpen(true);
-  }, [selectedSpreadId]);
+  const openSplitModal = useCallback(
+    (image: SpreadImage) => {
+      setSplitModalImage(image);
+      setSplitModalSpreadId(selectedSpreadId);
+      setSplitModalOpen(true);
+    },
+    [selectedSpreadId]
+  );
 
   const handleSplitModalClose = useCallback((open: boolean) => {
     setSplitModalOpen(open);
@@ -142,14 +167,19 @@ export function ObjectsMainView({
 
   // Crop image modal state
   const [cropModalOpen, setCropModalOpen] = useState(false);
-  const [cropModalImage, setCropModalImage] = useState<SpreadImage | null>(null);
+  const [cropModalImage, setCropModalImage] = useState<SpreadImage | null>(
+    null
+  );
   const [cropModalSpreadId, setCropModalSpreadId] = useState<string>("");
 
-  const openCropModal = useCallback((image: SpreadImage) => {
-    setCropModalImage(image);
-    setCropModalSpreadId(selectedSpreadId);
-    setCropModalOpen(true);
-  }, [selectedSpreadId]);
+  const openCropModal = useCallback(
+    (image: SpreadImage) => {
+      setCropModalImage(image);
+      setCropModalSpreadId(selectedSpreadId);
+      setCropModalOpen(true);
+    },
+    [selectedSpreadId]
+  );
 
   const handleCropModalClose = useCallback((open: boolean) => {
     setCropModalOpen(open);
@@ -171,12 +201,18 @@ export function ObjectsMainView({
         for (const shift of shifts) {
           const isVideo = spread.videos?.some((v) => v.id === shift.id);
           if (isVideo) {
-            actions.updateRetouchVideo(cropModalSpreadId, shift.id, { "z-index": shift.to });
+            actions.updateRetouchVideo(cropModalSpreadId, shift.id, {
+              "z-index": shift.to,
+            });
           } else {
-            actions.updateRetouchImage(cropModalSpreadId, shift.id, { "z-index": shift.to });
+            actions.updateRetouchImage(cropModalSpreadId, shift.id, {
+              "z-index": shift.to,
+            });
           }
           log.debug("handleCropCreateImages", "shifted z-index", {
-            itemId: shift.id, from: shift.from, to: shift.to,
+            itemId: shift.id,
+            from: shift.from,
+            to: shift.to,
           });
         }
       }
@@ -187,17 +223,25 @@ export function ObjectsMainView({
           id: crypto.randomUUID(),
           title: `${orig.title || "Untitled"} - Crop #${obj.boxIndex + 1}`,
           geometry: {
-            x: Math.min(orig.geometry.x + (obj.geometry.x / 100) * orig.geometry.w, 99),
-            y: Math.min(orig.geometry.y + (obj.geometry.y / 100) * orig.geometry.h, 99),
+            x: Math.min(
+              orig.geometry.x + (obj.geometry.x / 100) * orig.geometry.w,
+              99
+            ),
+            y: Math.min(
+              orig.geometry.y + (obj.geometry.y / 100) * orig.geometry.h,
+              99
+            ),
             w: Math.min((obj.geometry.w / 100) * orig.geometry.w, 100),
             h: Math.min((obj.geometry.h / 100) * orig.geometry.h, 100),
           },
           media_url: obj.imageUrl,
-          illustrations: [{
-            media_url: obj.imageUrl,
-            created_time: new Date().toISOString(),
-            is_selected: true,
-          }],
+          illustrations: [
+            {
+              media_url: obj.imageUrl,
+              created_time: new Date().toISOString(),
+              is_selected: true,
+            },
+          ],
           type: "other",
           aspect_ratio: obj.aspectRatio,
           player_visible: orig.player_visible,
@@ -231,12 +275,18 @@ export function ObjectsMainView({
           // Determine item type for correct store action
           const isVideo = spread.videos?.some((v) => v.id === shift.id);
           if (isVideo) {
-            actions.updateRetouchVideo(splitModalSpreadId, shift.id, { "z-index": shift.to });
+            actions.updateRetouchVideo(splitModalSpreadId, shift.id, {
+              "z-index": shift.to,
+            });
           } else {
-            actions.updateRetouchImage(splitModalSpreadId, shift.id, { "z-index": shift.to });
+            actions.updateRetouchImage(splitModalSpreadId, shift.id, {
+              "z-index": shift.to,
+            });
           }
           log.debug("handleSplitCreateImages", "shifted z-index", {
-            itemId: shift.id, from: shift.from, to: shift.to,
+            itemId: shift.id,
+            from: shift.from,
+            to: shift.to,
           });
         }
       }
@@ -437,11 +487,16 @@ export function ObjectsMainView({
               context.onSelect();
               onItemSelect({ type: "image", id: context.item.id });
             }}
-            onArtNoteChange={(artNote) => context.onUpdate({ art_note: artNote })}
+            onArtNoteChange={(artNote) =>
+              context.onUpdate({ art_note: artNote })
+            }
             onEditingChange={context.onEditingChange}
           />
           {img.player_visible === false && (
-            <PlayerHiddenBadge geometry={img.geometry} zIndex={context.zIndex} />
+            <PlayerHiddenBadge
+              geometry={img.geometry}
+              zIndex={context.zIndex}
+            />
           )}
         </>
       );
@@ -453,14 +508,14 @@ export function ObjectsMainView({
     (context: TextItemContext<BaseSpread>) => {
       const tb = context.item as SpreadTextbox;
       if (tb.editor_visible === false) return null;
-      const langKey = getFirstTextboxKey(tb);
-      if (!langKey) return null;
-      const langData = tb[langKey] as SpreadTextboxContent;
+      const result = getTextboxContentForLanguage(tb, langCode);
+      if (!result) return null;
+      const { langKey, content } = result;
 
       return (
         <>
           <EditableTextbox
-            textboxContent={langData}
+            textboxContent={content}
             index={context.itemIndex}
             zIndex={context.zIndex}
             isSelected={context.isSelected}
@@ -472,18 +527,21 @@ export function ObjectsMainView({
             }}
             onTextChange={(newText) => {
               context.onUpdate({
-                [langKey]: { ...langData, text: newText },
+                [langKey]: { ...content, text: newText },
               } as unknown as Partial<SpreadTextbox>);
             }}
             onEditingChange={context.onEditingChange ?? (() => {})}
           />
           {tb.player_visible === false && (
-            <PlayerHiddenBadge geometry={langData.geometry} zIndex={context.zIndex} />
+            <PlayerHiddenBadge
+              geometry={content.geometry}
+              zIndex={context.zIndex}
+            />
           )}
         </>
       );
     },
-    [onItemSelect]
+    [onItemSelect, langCode]
   );
 
   const renderRetouchShape = useCallback(
@@ -504,7 +562,10 @@ export function ObjectsMainView({
             }}
           />
           {shape.player_visible === false && (
-            <PlayerHiddenBadge geometry={shape.geometry} zIndex={context.zIndex} />
+            <PlayerHiddenBadge
+              geometry={shape.geometry}
+              zIndex={context.zIndex}
+            />
           )}
         </>
       );
@@ -531,7 +592,10 @@ export function ObjectsMainView({
             }}
           />
           {video.player_visible === false && (
-            <PlayerHiddenBadge geometry={video.geometry} zIndex={context.zIndex} />
+            <PlayerHiddenBadge
+              geometry={video.geometry}
+              zIndex={context.zIndex}
+            />
           )}
         </>
       );
@@ -557,7 +621,11 @@ export function ObjectsMainView({
             }}
           />
           {audio.player_visible === false && (
-            <PlayerHiddenBadge geometry={audio.geometry} zIndex={context.zIndex} isIcon />
+            <PlayerHiddenBadge
+              geometry={audio.geometry}
+              zIndex={context.zIndex}
+              isIcon
+            />
           )}
         </>
       );
@@ -577,19 +645,19 @@ export function ObjectsMainView({
         }}
       />
     ),
-    [openGenerateModal, openSplitModal, openCropModal],
+    [openGenerateModal, openSplitModal, openCropModal]
   );
 
   // === Text toolbar render prop ===
   const handleSplitTextbox = useCallback(
     (spreadId: string, textbox: SpreadTextbox) => {
-      const langKey = getFirstTextboxKey(textbox as unknown as Record<string, unknown>);
-      if (!langKey) {
-        toast.info("No language content to split");
-        return;
-      }
-      const content = textbox[langKey] as SpreadTextboxContent;
-      if (!content?.text) {
+      const result = getTextboxContentForLanguage(
+        textbox as unknown as Record<string, unknown>,
+        langCode
+      );
+      if (!result) return;
+      const { langKey, content } = result;
+      if (!content.text) {
         toast.info("No text to split");
         return;
       }
@@ -630,7 +698,7 @@ export function ObjectsMainView({
       actions.deleteRetouchTextbox(spreadId, textbox.id);
       onItemSelect(null);
     },
-    [actions, onItemSelect]
+    [actions, onItemSelect, langCode]
   );
 
   const renderRetouchTextToolbar = useCallback(
@@ -651,7 +719,7 @@ export function ObjectsMainView({
     (context: ShapeToolbarContext<BaseSpread>) => (
       <ObjectsShapeToolbar context={context} />
     ),
-    [],
+    []
   );
 
   // === Video toolbar render prop ===
@@ -659,7 +727,7 @@ export function ObjectsMainView({
     (context: VideoToolbarContext<BaseSpread>) => (
       <ObjectsVideoToolbar context={context} />
     ),
-    [],
+    []
   );
 
   // === Audio toolbar render prop ===
@@ -667,7 +735,7 @@ export function ObjectsMainView({
     (context: AudioToolbarContext<BaseSpread>) => (
       <ObjectsAudioToolbar context={context} />
     ),
-    [],
+    []
   );
 
   const renderRetouchQuiz = useCallback(
@@ -688,7 +756,11 @@ export function ObjectsMainView({
             }}
           />
           {quiz.player_visible === false && (
-            <PlayerHiddenBadge geometry={quiz.geometry} zIndex={context.zIndex} isIcon />
+            <PlayerHiddenBadge
+              geometry={quiz.geometry}
+              zIndex={context.zIndex}
+              isIcon
+            />
           )}
         </>
       );

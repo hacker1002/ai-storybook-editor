@@ -45,7 +45,6 @@ const KEYBOARD_SHORTCUTS = {
   LAST_SPREAD: 'End',
 } as const;
 
-// Spread data textbox NEED pre-filtered with language by consumer
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   mode,
   spreads,

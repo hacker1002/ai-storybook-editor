@@ -53,10 +53,10 @@ import type {
   VideoToolbarContext,
   AudioToolbarContext,
   LayoutOption,
-  Typography,
   SpreadItemActionUnion,
 } from "@/types/canvas-types";
-import { getFirstTextboxKey } from "../../utils/textbox-helpers";
+import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
+import { useLanguageCode } from "@/stores/editor-settings-store";
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'SpreadEditorPanel');
@@ -148,6 +148,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   externalSelectedItemId,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const editorLangCode = useLanguageCode();
   // Ref for originalGeometry to avoid stale closures in drag/resize handlers.
   // React batches setState from handleResizeStart, so handleResize may still
   // capture old state where originalGeometry is null. The ref is mutated
@@ -230,8 +231,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         if (element.type === "image") geometry = spread.images[element.index]?.geometry ?? null;
         else if (element.type === "textbox") {
           const tb = spread.textboxes[element.index];
-          const langKey = getFirstTextboxKey(tb || {});
-          geometry = langKey ? (tb[langKey] as { geometry: Geometry })?.geometry ?? null : null;
+          const tbResult = getTextboxContentForLanguage(tb || {}, editorLangCode);
+          geometry = tbResult?.content?.geometry ?? null;
         }
         else if (element.type === "shape") geometry = spread.shapes?.[element.index]?.geometry ?? null;
         else if (element.type === "video") geometry = spread.videos?.[element.index]?.geometry ?? null;
@@ -295,10 +296,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           geometry = spread.images[element.index]?.geometry ?? null;
         } else if (element.type === "textbox") {
           const item = spread.textboxes[element.index];
-          const langKey = getFirstTextboxKey(item || {});
-          geometry = langKey
-            ? (item[langKey] as { geometry: Geometry })?.geometry ?? null
-            : null;
+          const tbResult = getTextboxContentForLanguage(item || {}, editorLangCode);
+          geometry = tbResult?.content?.geometry ?? null;
         } else if (element.type === "shape") {
           geometry = spread.shapes?.[element.index]?.geometry ?? null;
         } else if (element.type === "video") {
@@ -345,10 +344,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case "textbox": {
         const tb = spread.textboxes[selectedElement.index];
         if (!tb) return null;
-        const langKey = getFirstTextboxKey(tb);
-        return langKey
-          ? (tb[langKey] as { geometry: Geometry })?.geometry ?? null
-          : null;
+        const tbResult = getTextboxContentForLanguage(tb, editorLangCode);
+        return tbResult?.content?.geometry ?? null;
       }
       case "shape":
         return spread.shapes?.[selectedElement.index]?.geometry ?? null;
@@ -387,19 +384,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         case "textbox": {
           const tb = spread.textboxes[element.index];
           if (!tb?.id) return;
-          const langKey = getFirstTextboxKey(tb);
-          if (langKey) {
-            const langContent = tb[langKey] as {
-              text: string;
-              geometry: Geometry;
-              typography: Typography;
-            };
+          const tbResult = getTextboxContentForLanguage(tb, editorLangCode);
+          if (tbResult) {
             onSpreadItemAction({
               itemType: "textbox",
               action: "update",
               itemId: tb.id,
               data: {
-                [langKey]: { ...langContent, geometry },
+                [tbResult.langKey]: { ...tbResult.content, geometry },
               } as Partial<SpreadTextbox>,
             });
           }
@@ -862,7 +854,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               state.selectedElement,
               handleElementSelect,
               handleSpreadItemAction,
-              handleTextboxEditingChange
+              handleTextboxEditingChange,
+              editorLangCode
             );
             context.zIndex = (textbox as { 'z-index'?: number })['z-index'] ?? (LAYER_CONFIG.TEXT.min + index);
             return <Fragment key={textbox.id ?? `txt-${index}`}>{renderTextItem(context)}</Fragment>;
@@ -963,7 +956,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 handleElementSelect,
                 handleSpreadItemAction,
                 canvasRef,
-                state.selectedGeometry
+                state.selectedGeometry,
+                undefined,
+                editorLangCode
               );
 
               return renderTextToolbar(context);

@@ -19,12 +19,13 @@ import type {
   Geometry,
   Typography,
   SpreadItemActionUnion,
-} from '@/types/canvas-types';
-import { getFirstTextboxKey } from '../../../utils/textbox-helpers';
-import type { SpreadTextboxContent } from '@/types/spread-types';
-import type { RefObject } from 'react';
+} from "@/types/canvas-types";
+import { getTextboxContentForLanguage } from "../../../utils/textbox-helpers";
+import type { RefObject } from "react";
 
-type SpreadItemActionHandler = (params: Omit<SpreadItemActionUnion, 'spreadId'>) => void;
+type SpreadItemActionHandler = (
+  params: Omit<SpreadItemActionUnion, "spreadId">
+) => void;
 type SelectFn = (element: SelectedElement, rect?: DOMRect) => void;
 
 /**
@@ -44,27 +45,31 @@ export function buildImageContext<TSpread extends BaseSpread>(
     itemIndex: index,
     spreadId: spread.id,
     spread,
-    isSelected: selectedElement?.type === 'image' && selectedElement.index === index,
+    isSelected:
+      selectedElement?.type === "image" && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: (rect?: DOMRect) => onSelect({ type: 'image', index }, rect),
-    onUpdate: (updates) => onAction({
-      itemType: 'image',
-      action: 'update',
-      itemId: image.id,
-      data: updates
-    }),
-    onDelete: () => onAction({
-      itemType: 'image',
-      action: 'delete',
-      itemId: image.id,
-      data: null
-    }),
-    onArtNoteChange: (artNote) => onAction({
-      itemType: 'image',
-      action: 'update',
-      itemId: image.id,
-      data: { art_note: artNote }
-    }),
+    onSelect: (rect?: DOMRect) => onSelect({ type: "image", index }, rect),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "image",
+        action: "update",
+        itemId: image.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "image",
+        action: "delete",
+        itemId: image.id,
+        data: null,
+      }),
+    onArtNoteChange: (artNote) =>
+      onAction({
+        itemType: "image",
+        action: "update",
+        itemId: image.id,
+        data: { art_note: artNote },
+      }),
     onEditingChange,
   };
 }
@@ -79,42 +84,47 @@ export function buildTextContext<TSpread extends BaseSpread>(
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
   onAction: SpreadItemActionHandler,
-  onEditingChange?: (isEditing: boolean) => void
+  onEditingChange?: (isEditing: boolean) => void,
+  langCode?: string
 ): TextItemContext<TSpread> {
-  const langKey = getFirstTextboxKey(textbox);
-  const langContent = langKey
-    ? (textbox[langKey] as SpreadTextboxContent)
-    : undefined;
+  const result = langCode
+    ? getTextboxContentForLanguage(textbox, langCode)
+    : null;
+  const langKey = result?.langKey;
+  const langContent = result?.content;
 
   return {
     item: textbox,
     itemIndex: index,
     spreadId: spread.id,
     spread,
-    isSelected: selectedElement?.type === 'textbox' && selectedElement.index === index,
+    isSelected:
+      selectedElement?.type === "textbox" && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: (rect?: DOMRect) => onSelect({ type: 'textbox', index }, rect),
+    onSelect: (rect?: DOMRect) => onSelect({ type: "textbox", index }, rect),
     onTextChange: (text) => {
       if (!langKey) return;
       onAction({
-        itemType: 'textbox',
-        action: 'update',
+        itemType: "textbox",
+        action: "update",
         itemId: textbox.id,
-        data: { [langKey]: { ...langContent, text } } as Partial<SpreadTextbox>
+        data: { [langKey]: { ...langContent, text } } as Partial<SpreadTextbox>,
       });
     },
-    onUpdate: (updates) => onAction({
-      itemType: 'textbox',
-      action: 'update',
-      itemId: textbox.id,
-      data: updates
-    }),
-    onDelete: () => onAction({
-      itemType: 'textbox',
-      action: 'delete',
-      itemId: textbox.id,
-      data: null
-    }),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "textbox",
+        action: "update",
+        itemId: textbox.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "textbox",
+        action: "delete",
+        itemId: textbox.id,
+        data: null,
+      }),
     onEditingChange,
   };
 }
@@ -131,12 +141,14 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
   onAction: SpreadItemActionHandler,
   canvasRef: RefObject<HTMLDivElement | null>,
   selectedGeometry: Geometry | null,
-  onEditingChange?: (isEditing: boolean) => void
+  onEditingChange?: (isEditing: boolean) => void,
+  langCode?: string
 ): TextToolbarContext<TSpread> {
-  const langKey = getFirstTextboxKey(textbox);
-  const langContent = langKey
-    ? (textbox[langKey] as SpreadTextboxContent)
-    : undefined;
+  const result = langCode
+    ? getTextboxContentForLanguage(textbox, langCode)
+    : null;
+  const langKey = result?.langKey;
+  const langContent = result?.content;
 
   const baseContext = buildTextContext(
     textbox,
@@ -145,7 +157,8 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
     selectedElement,
     onSelect,
     onAction,
-    onEditingChange
+    onEditingChange,
+    langCode
   );
 
   return {
@@ -155,8 +168,8 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
     onFormatText: (format: Partial<Typography>) => {
       if (!langKey) return;
       onAction({
-        itemType: 'textbox',
-        action: 'update',
+        itemType: "textbox",
+        action: "update",
         itemId: textbox.id,
         data: {
           [langKey]: {
@@ -170,18 +183,23 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
       const clonedItem: SpreadTextbox = structuredClone(textbox);
       clonedItem.id = crypto.randomUUID();
 
-      const cloneLangKey = getFirstTextboxKey(clonedItem);
-      if (cloneLangKey) {
-        const cloneLangData = clonedItem[cloneLangKey] as SpreadTextboxContent;
-        const maxX = Math.max(0, 100 - cloneLangData.geometry.w);
-        const maxY = Math.max(0, 100 - cloneLangData.geometry.h);
-        cloneLangData.geometry.x = Math.min(maxX, cloneLangData.geometry.x + 5);
-        cloneLangData.geometry.y = Math.min(maxY, cloneLangData.geometry.y + 5);
+      // Offset geometry for current language in the clone
+      if (langCode) {
+        const cloneResult = getTextboxContentForLanguage(clonedItem, langCode);
+        if (cloneResult) {
+          const cloneContent = cloneResult.content;
+          const maxX = Math.max(0, 100 - cloneContent.geometry.w);
+          const maxY = Math.max(0, 100 - cloneContent.geometry.h);
+          cloneContent.geometry.x = Math.min(maxX, cloneContent.geometry.x + 5);
+          cloneContent.geometry.y = Math.min(maxY, cloneContent.geometry.y + 5);
+          (clonedItem as Record<string, unknown>)[cloneResult.langKey] =
+            cloneContent;
+        }
       }
 
       onAction({
-        itemType: 'textbox',
-        action: 'add',
+        itemType: "textbox",
+        action: "add",
         itemId: null,
         data: clonedItem,
       });
@@ -205,21 +223,24 @@ export function buildShapeContext<TSpread extends BaseSpread>(
     itemIndex: index,
     spreadId: spread.id,
     spread,
-    isSelected: selectedElement?.type === 'shape' && selectedElement.index === index,
+    isSelected:
+      selectedElement?.type === "shape" && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: () => onSelect({ type: 'shape', index }),
-    onUpdate: (updates) => onAction({
-      itemType: 'shape',
-      action: 'update',
-      itemId: shape.id,
-      data: updates
-    }),
-    onDelete: () => onAction({
-      itemType: 'shape',
-      action: 'delete',
-      itemId: shape.id,
-      data: null
-    }),
+    onSelect: () => onSelect({ type: "shape", index }),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "shape",
+        action: "update",
+        itemId: shape.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "shape",
+        action: "delete",
+        itemId: shape.id,
+        data: null,
+      }),
   };
 }
 
@@ -240,22 +261,25 @@ export function buildVideoContext<TSpread extends BaseSpread>(
     itemIndex: index,
     spreadId: spread.id,
     spread,
-    isSelected: selectedElement?.type === 'video' && selectedElement.index === index,
+    isSelected:
+      selectedElement?.type === "video" && selectedElement.index === index,
     isSpreadSelected: true,
     isThumbnail,
-    onSelect: () => onSelect({ type: 'video', index }),
-    onUpdate: (updates) => onAction({
-      itemType: 'video',
-      action: 'update',
-      itemId: video.id,
-      data: updates
-    }),
-    onDelete: () => onAction({
-      itemType: 'video',
-      action: 'delete',
-      itemId: video.id,
-      data: null
-    }),
+    onSelect: () => onSelect({ type: "video", index }),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "video",
+        action: "update",
+        itemId: video.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "video",
+        action: "delete",
+        itemId: video.id,
+        data: null,
+      }),
   };
 }
 
@@ -276,22 +300,25 @@ export function buildAudioContext<TSpread extends BaseSpread>(
     itemIndex: index,
     spreadId: spread.id,
     spread,
-    isSelected: selectedElement?.type === 'audio' && selectedElement.index === index,
+    isSelected:
+      selectedElement?.type === "audio" && selectedElement.index === index,
     isSpreadSelected: true,
     isThumbnail,
-    onSelect: () => onSelect({ type: 'audio', index }),
-    onUpdate: (updates) => onAction({
-      itemType: 'audio',
-      action: 'update',
-      itemId: audio.id,
-      data: updates
-    }),
-    onDelete: () => onAction({
-      itemType: 'audio',
-      action: 'delete',
-      itemId: audio.id,
-      data: null
-    }),
+    onSelect: () => onSelect({ type: "audio", index }),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "audio",
+        action: "update",
+        itemId: audio.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "audio",
+        action: "delete",
+        itemId: audio.id,
+        data: null,
+      }),
   };
 }
 
@@ -420,21 +447,24 @@ export function buildQuizContext<TSpread extends BaseSpread>(
     itemIndex: index,
     spreadId: spread.id,
     spread,
-    isSelected: selectedElement?.type === 'quiz' && selectedElement.index === index,
+    isSelected:
+      selectedElement?.type === "quiz" && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: () => onSelect({ type: 'quiz', index }),
-    onUpdate: (updates) => onAction({
-      itemType: 'quiz',
-      action: 'update',
-      itemId: quiz.id,
-      data: updates
-    }),
-    onDelete: () => onAction({
-      itemType: 'quiz',
-      action: 'delete',
-      itemId: quiz.id,
-      data: null
-    }),
+    onSelect: () => onSelect({ type: "quiz", index }),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "quiz",
+        action: "update",
+        itemId: quiz.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "quiz",
+        action: "delete",
+        itemId: quiz.id,
+        data: null,
+      }),
   };
 }
 

@@ -26,6 +26,7 @@ import {
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { createLogger } from "@/utils/logger";
+import { useLanguageCode } from "@/stores/editor-settings-store";
 import {
   ObjectListItem,
   ELEMENT_TYPE_CONFIG,
@@ -212,6 +213,7 @@ export function ObjectsSidebar({
 }: ObjectsSidebarProps) {
   const spread = useRetouchSpreadById(selectedSpreadId);
   const actions = useSnapshotActions();
+  const editorLangCode = useLanguageCode();
 
   // Local UI state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -231,8 +233,8 @@ export function ObjectsSidebar({
   // Build + filter object list
   const allEntries = useMemo(() => {
     if (!spread) return [];
-    return buildObjectList(spread);
-  }, [spread]);
+    return buildObjectList(spread, editorLangCode);
+  }, [spread, editorLangCode]);
 
   const filteredEntries = useMemo(
     () =>

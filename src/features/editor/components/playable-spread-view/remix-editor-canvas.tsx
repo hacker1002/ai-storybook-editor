@@ -3,19 +3,30 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio } from "../shared-components";
+import {
+  EditableTextbox,
+  EditableImage,
+  EditableShape,
+  EditableVideo,
+  EditableAudio,
+} from "../shared-components";
 import { useToolbarPosition } from "../../hooks/use-toolbar-position";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
-import { getFirstTextboxKey } from "../../utils/textbox-helpers";
+import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
+import { useLanguageCode } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'RemixEditorCanvas');
-import type { Geometry, SpreadTextboxContent } from "@/types/spread-types";
+const log = createLogger("Editor", "RemixEditorCanvas");
+import type { Geometry } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
-import type { PlayableSpread, RemixAsset, AssetSwapParams } from "@/types/playable-types";
+import type {
+  PlayableSpread,
+  RemixAsset,
+  AssetSwapParams,
+} from "@/types/playable-types";
 
 // === Props Interface ===
 export interface RemixEditorCanvasProps {
@@ -33,12 +44,18 @@ export function RemixEditorCanvas({
   onAssetSwap,
   onTextChange,
 }: RemixEditorCanvasProps) {
+  const editorLangCode = useLanguageCode();
   // Selection state - swappable objects (shows toolbar)
-  const [selectedSwappableId, setSelectedSwappableId] = useState<string | null>(null);
-  const [selectedSwappableGeometry, setSelectedSwappableGeometry] = useState<Geometry | null>(null);
+  const [selectedSwappableId, setSelectedSwappableId] = useState<string | null>(
+    null
+  );
+  const [selectedSwappableGeometry, setSelectedSwappableGeometry] =
+    useState<Geometry | null>(null);
 
   // Selection state - textboxes (no toolbar, just visual selection)
-  const [selectedTextboxId, setSelectedTextboxId] = useState<string | null>(null);
+  const [selectedTextboxId, setSelectedTextboxId] = useState<string | null>(
+    null
+  );
 
   // Toolbar state
   const [prompt, setPrompt] = useState("");
@@ -171,17 +188,14 @@ export function RemixEditorCanvas({
   );
 
   // Textbox selection handler - deselects swappable, no toolbar
-  const handleTextboxSelect = useCallback(
-    (textboxId: string) => {
-      setSelectedTextboxId(textboxId);
-      // Deselect swappable when selecting textbox
-      setSelectedSwappableId(null);
-      setSelectedSwappableGeometry(null);
-      setPrompt("");
-      setReferenceImage(null);
-    },
-    []
-  );
+  const handleTextboxSelect = useCallback((textboxId: string) => {
+    setSelectedTextboxId(textboxId);
+    // Deselect swappable when selecting textbox
+    setSelectedSwappableId(null);
+    setSelectedSwappableGeometry(null);
+    setPrompt("");
+    setReferenceImage(null);
+  }, []);
 
   // Textbox text change handler
   const handleTextChange = useCallback(
@@ -216,7 +230,11 @@ export function RemixEditorCanvas({
       setPrompt("");
       setReferenceImage(null);
     } catch (error) {
-      log.error('handleSubmit', 'asset swap failed', { error, targetId: selectedSwappableId, spreadId: spread.id });
+      log.error("handleSubmit", "asset swap failed", {
+        error,
+        targetId: selectedSwappableId,
+        spreadId: spread.id,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -232,14 +250,12 @@ export function RemixEditorCanvas({
     if (!spread.textboxes) return [];
     return spread.textboxes
       .map((textbox) => {
-        const langKey = getFirstTextboxKey(textbox);
-        if (!langKey) return null;
-        const data = textbox[langKey] as SpreadTextboxContent;
-        if (!data?.geometry) return null;
-        return { textbox, langKey, data };
+        const result = getTextboxContentForLanguage(textbox, editorLangCode);
+        if (!result?.content?.geometry) return null;
+        return { textbox, langKey: result.langKey, data: result.content };
       })
       .filter(Boolean);
-  }, [spread.textboxes]);
+  }, [spread.textboxes, editorLangCode]);
 
   return (
     <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">
@@ -357,7 +373,9 @@ export function RemixEditorCanvas({
         })}
 
         {/* Selection overlay for swappable objects */}
-        {selectedSwappableGeometry && <SelectionOverlay geometry={selectedSwappableGeometry} />}
+        {selectedSwappableGeometry && (
+          <SelectionOverlay geometry={selectedSwappableGeometry} />
+        )}
       </div>
 
       {/* Toolbar (portal to document.body) - only for swappable objects */}

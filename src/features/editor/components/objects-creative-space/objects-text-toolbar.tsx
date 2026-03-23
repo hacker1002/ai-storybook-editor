@@ -5,7 +5,14 @@ import { useRef, useCallback, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
-import { Scissors, AudioLines, Upload, Trash2, Play, Pause } from "lucide-react";
+import {
+  Scissors,
+  AudioLines,
+  Upload,
+  Trash2,
+  Play,
+  Pause,
+} from "lucide-react";
 import { toast } from "sonner";
 import { uploadAudioToStorage } from "@/apis/storage-api";
 import {
@@ -20,7 +27,7 @@ import {
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
 import { useLanguageCode } from "@/stores/editor-settings-store";
-import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
+import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { GenerateNarrationModal } from "@/features/editor/components/shared-components";
 import type { SpreadTextboxContent, TextboxAudio } from "@/types/spread-types";
 
@@ -59,7 +66,14 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
   const [duration, setDuration] = useState(0);
 
   // --- Context destructuring ---
-  const { item, onUpdate, onDelete, onSplitTextbox, selectedGeometry, canvasRef } = context;
+  const {
+    item,
+    onUpdate,
+    onDelete,
+    onSplitTextbox,
+    selectedGeometry,
+    canvasRef,
+  } = context;
 
   // --- Hooks ---
   const position = useToolbarPosition({
@@ -69,16 +83,17 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
   });
 
   const editorLangCode = useLanguageCode();
-  // Fallback to first available language key if current language has no content
-  const langCode =
-    (item[editorLangCode] as SpreadTextboxContent | undefined)
-      ? editorLangCode
-      : getFirstTextboxKey(item as unknown as Record<string, unknown>) ?? editorLangCode;
+  const langResult = getTextboxContentForLanguage(
+    item as unknown as Record<string, unknown>,
+    editorLangCode
+  );
+  const langCode = langResult?.langKey ?? editorLangCode;
+  const content = langResult?.content;
 
   // --- Derived data ---
-  const textboxContent = item[langCode] as SpreadTextboxContent | undefined;
-  const geometry = textboxContent?.geometry;
-  const audio = textboxContent?.audio;
+  const geometry = content?.geometry;
+  const audio = content?.audio;
+  const hasText = !!content?.text;
   // TODO: use activeVoiceId when available instead of picking first media entry
   const audioUrl = audio?.media[0]?.url ?? null;
 
@@ -93,7 +108,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
   // CRITICAL: geometry lives inside the language content, NOT on the item root
   const handleGeometryChange = useCallback(
     (field: "x" | "y" | "w" | "h", value: string) => {
-      if (!geometry || !textboxContent) {
+      if (!geometry || !content) {
         log.warn("handleGeometryChange", "no geometry for current language", {
           langCode,
         });
@@ -115,12 +130,12 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
 
       onUpdate({
         [langCode]: {
-          ...textboxContent,
+          ...content,
           geometry: { ...geometry, [field]: clamped },
         },
       });
     },
-    [geometry, textboxContent, langCode, onUpdate]
+    [geometry, content, langCode, onUpdate]
   );
 
   // --- Audio playback handlers ---
@@ -161,16 +176,13 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     log.debug("handleEnded", "narration playback ended");
   }, []);
 
-  const handleSeek = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const el = audioRef.current;
-      if (!el) return;
-      const time = parseFloat(e.target.value);
-      el.currentTime = time;
-      setCurrentTime(time);
-    },
-    []
-  );
+  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = audioRef.current;
+    if (!el) return;
+    const time = parseFloat(e.target.value);
+    el.currentTime = time;
+    setCurrentTime(time);
+  }, []);
 
   // Cleanup: stop audio on unmount
   useEffect(() => {
@@ -217,15 +229,18 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
             : [...existingMedia, { voice_id: "", url: publicUrl }];
 
         const updatedAudio: TextboxAudio = {
-          script: textboxContent?.text ?? "",
+          script: content?.text ?? "",
           speed: audio?.speed ?? 1,
           emotion: audio?.emotion ?? "neutral",
           media: updatedMedia,
         };
 
-        if (!textboxContent) return;
+        if (!content) return;
         onUpdate({
-          [langCode]: { ...textboxContent, audio: updatedAudio } as SpreadTextboxContent,
+          [langCode]: {
+            ...content,
+            audio: updatedAudio,
+          } as SpreadTextboxContent,
         });
         toast.success("Narration uploaded");
         canvasRef.current?.click();
@@ -242,7 +257,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
         setIsUploading(false);
       }
     },
-    [audio, textboxContent, langCode, onUpdate, canvasRef]
+    [audio, content, langCode, onUpdate, canvasRef]
   );
 
   // --- Footer action handlers ---
@@ -270,14 +285,17 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
   // Single combined update to avoid race condition between separate text/audio updates
   const handleScriptChange = useCallback(
     (newScript: string) => {
-      if (!textboxContent) return;
-      const updatedContent = { ...textboxContent, text: newScript };
+      if (!content) return;
+      const updatedContent = { ...content, text: newScript };
       // Mark all audio media as stale when script changes
       if (updatedContent.audio?.media?.length) {
         updatedContent.audio = {
           ...updatedContent.audio,
           script: newScript,
-          media: updatedContent.audio.media.map((m) => ({ ...m, script_synced: false })),
+          media: updatedContent.audio.media.map((m) => ({
+            ...m,
+            script_synced: false,
+          })),
         };
       }
       onUpdate({ [langCode]: updatedContent });
@@ -287,20 +305,20 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
         staleMediaCount: updatedContent.audio?.media?.length ?? 0,
       });
     },
-    [textboxContent, langCode, onUpdate, item.id]
+    [content, langCode, onUpdate, item.id]
   );
 
   const handleNarrationGenerated = useCallback(
     (narrationAudio: TextboxAudio) => {
-      if (!textboxContent) return;
-      onUpdate({ [langCode]: { ...textboxContent, audio: narrationAudio } });
+      if (!content) return;
+      onUpdate({ [langCode]: { ...content, audio: narrationAudio } });
       // Don't close modal here — let user close explicitly to avoid state-update race
       log.info("handleNarrationGenerated", "narration audio updated", {
         itemId: item.id,
         mediaCount: narrationAudio.media.length,
       });
     },
-    [textboxContent, langCode, onUpdate, item.id]
+    [content, langCode, onUpdate, item.id]
   );
 
   // --- Positioning style ---
@@ -364,7 +382,14 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
               {formatTime(currentTime)}
             </span>
           </div>
-          <audio ref={audioRef} src={audioUrl ?? undefined} onTimeUpdate={handleTimeUpdate} onLoadedMetadata={handleLoadedMetadata} onEnded={handleEnded} className="hidden" />
+          <audio
+            ref={audioRef}
+            src={audioUrl ?? undefined}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onEnded={handleEnded}
+            className="hidden"
+          />
         </div>
 
         {/* Footer Actions */}
@@ -377,14 +402,23 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
             />
             <ToolbarIconButton
               icon={AudioLines}
-              label="Generate narration"
+              label={
+                hasText ? "Generate narration" : "No text for current language"
+              }
               onClick={handleGenerateNarration}
+              disabled={!hasText}
             />
             <ToolbarIconButton
               icon={Upload}
-              label={isUploading ? "Uploading..." : "Upload narration"}
+              label={
+                !hasText
+                  ? "No text for current language"
+                  : isUploading
+                  ? "Uploading..."
+                  : "Upload narration"
+              }
               onClick={handleUploadClick}
-              disabled={isUploading}
+              disabled={isUploading || !hasText}
             />
           </div>
           <ToolbarIconButton
@@ -406,7 +440,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
           <GenerateNarrationModal
             isOpen={isGenerateModalOpen}
             onClose={() => setIsGenerateModalOpen(false)}
-            script={textboxContent?.text ?? ""}
+            script={content?.text ?? ""}
             existingAudio={audio}
             onGenerated={handleNarrationGenerated}
             onScriptChange={handleScriptChange}

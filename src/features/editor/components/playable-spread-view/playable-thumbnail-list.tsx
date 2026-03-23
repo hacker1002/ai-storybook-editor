@@ -3,9 +3,15 @@
 
 import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/utils/utils";
-import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio } from "../shared-components";
-import { getFirstTextboxKey } from "../../utils/textbox-helpers";
-import type { SpreadTextboxContent } from "@/types/spread-types";
+import {
+  EditableTextbox,
+  EditableImage,
+  EditableShape,
+  EditableVideo,
+  EditableAudio,
+} from "../shared-components";
+import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
+import { useLanguageCode } from "@/stores/editor-settings-store";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 
@@ -25,9 +31,9 @@ const LAYOUT = {
 
 // === Thumbnail Styles ===
 const THUMBNAIL_STYLES = {
-  SELECTED_BORDER: '2px solid #2196F3',
-  UNSELECTED_BORDER: '1px solid #E0E0E0',
-  HOVER_BG: '#E3F2FD',
+  SELECTED_BORDER: "2px solid #2196F3",
+  UNSELECTED_BORDER: "1px solid #E0E0E0",
+  HOVER_BG: "#E3F2FD",
   BORDER_RADIUS: 4,
 } as const;
 
@@ -52,6 +58,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
   isSelected,
   onClick,
 }: PlayableThumbnailProps) {
+  const editorLangCode = useLanguageCode();
   // Scale factor: thumbnail width / canvas base width
   const scale = LAYOUT.THUMBNAIL_WIDTH / CANVAS.BASE_WIDTH;
 
@@ -63,17 +70,16 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
-  // Memoized textboxes with resolved language (data is pre-filtered)
   const textboxesWithLang = useMemo(() => {
     if (!spread.textboxes) return [];
-    return spread.textboxes.map((textbox) => {
-      const langKey = getFirstTextboxKey(textbox);
-      if (!langKey) return null;
-      const data = textbox[langKey] as SpreadTextboxContent;
-      if (!data?.geometry) return null;
-      return { textbox, langKey, data };
-    }).filter(Boolean);
-  }, [spread.textboxes]);
+    return spread.textboxes
+      .map((textbox) => {
+        const result = getTextboxContentForLanguage(textbox, editorLangCode);
+        if (!result?.content?.geometry) return null;
+        return { textbox, langKey: result.langKey, data: result.content };
+      })
+      .filter(Boolean);
+  }, [spread.textboxes, editorLangCode]);
 
   return (
     <button
@@ -291,4 +297,3 @@ export function PlayableThumbnailList({
     </div>
   );
 }
-

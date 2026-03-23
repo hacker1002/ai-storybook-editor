@@ -2,13 +2,24 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { EditableTextbox, EditableImage, EditableShape, EditableVideo, EditableAudio, EditableQuiz } from "../shared-components";
+import {
+  EditableTextbox,
+  EditableImage,
+  EditableShape,
+  EditableVideo,
+  EditableAudio,
+  EditableQuiz,
+} from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
-import { getFirstTextboxKey } from "../../utils/textbox-helpers";
-import type { SpreadTextboxContent } from "@/types/spread-types";
+import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
+import { useLanguageCode } from "@/stores/editor-settings-store";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
-import type { PlayableSpread, PlayMode, AnimationStep } from "@/types/playable-types";
+import type {
+  PlayableSpread,
+  PlayMode,
+  AnimationStep,
+} from "@/types/playable-types";
 import {
   isReplayableClick,
   buildAnimationSteps,
@@ -27,7 +38,7 @@ export interface PlayerCanvasProps {
   hasNext: boolean;
   hasPrevious: boolean;
   onSpreadComplete: (spreadId: string) => void;
-  onSkipSpread: (direction: 'next' | 'prev') => void;
+  onSkipSpread: (direction: "next" | "prev") => void;
   onPlayModeChange: (mode: PlayMode) => void;
 }
 import {
@@ -40,9 +51,9 @@ import {
 } from "@/stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
 import { PlayQuizModal } from "./play-quiz-modal";
-import { createLogger } from '@/utils/logger';
+import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'PlayerCanvas');
+const log = createLogger("Editor", "PlayerCanvas");
 
 // === CSS for click-hint-pulse ===
 // IMPORTANT: Apply to the CHILD element (> :first-child), not the wrapper div.
@@ -74,12 +85,13 @@ export function PlayerCanvas({
   const pendingClickTargetId = usePendingClickTargetId();
   const replayableItems = useReplayableItems();
   const steps = usePlaybackStore((s) => s.steps);
+  const editorLangCode = useLanguageCode();
 
   // === Quiz modal state ===
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
 
   const handleQuizPlay = useCallback((quizId: string) => {
-    log.info('handleQuizPlay', 'quiz modal opened', { quizId });
+    log.info("handleQuizPlay", "quiz modal opened", { quizId });
     setActiveQuizId(quizId);
   }, []);
 
@@ -100,12 +112,15 @@ export function PlayerCanvas({
   });
 
   // Quiz modal close: dismiss modal then complete quiz step
-  const handleQuizModalClose = useCallback((_completed: boolean) => {
-    setActiveQuizId(null);
-    // Next tick so modal unmounts first; handleQuizComplete resumes timeline
-    // (mixed step / auto) or calls stepComplete (quiz-only step).
-    setTimeout(() => handleQuizComplete(), 0);
-  }, [handleQuizComplete]);
+  const handleQuizModalClose = useCallback(
+    (_completed: boolean) => {
+      setActiveQuizId(null);
+      // Next tick so modal unmounts first; handleQuizComplete resumes timeline
+      // (mixed step / auto) or calls stepComplete (quiz-only step).
+      setTimeout(() => handleQuizComplete(), 0);
+    },
+    [handleQuizComplete]
+  );
 
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(zoomLevel);
@@ -236,7 +251,11 @@ export function PlayerCanvas({
   const handleItemClick = useCallback(
     (itemId: string) => {
       if (playMode !== "semi-auto") return;
-      log.info('handleItemClick', 'item clicked', { itemId, phase, pendingClickTargetId });
+      log.info("handleItemClick", "item clicked", {
+        itemId,
+        phase,
+        pendingClickTargetId,
+      });
       if (pendingClickTargetId === itemId) {
         playbackActions.userClick(itemId);
         return;
@@ -310,14 +329,12 @@ export function PlayerCanvas({
     if (!spread.textboxes) return [];
     return spread.textboxes
       .map((textbox) => {
-        const langKey = getFirstTextboxKey(textbox);
-        if (!langKey) return null;
-        const data = textbox[langKey] as SpreadTextboxContent;
-        if (!data?.geometry) return null;
-        return { textbox, langKey, data };
+        const result = getTextboxContentForLanguage(textbox, editorLangCode);
+        if (!result?.content?.geometry) return null;
+        return { textbox, langKey: result.langKey, data: result.content };
       })
       .filter(Boolean);
-  }, [spread.textboxes]);
+  }, [spread.textboxes, editorLangCode]);
 
   // === Render ===
   return (
@@ -517,19 +534,18 @@ export function PlayerCanvas({
       />
 
       {/* Quiz modal */}
-      {activeQuizId && (() => {
-        const activeQuiz = spread.quizzes?.find((q) => q.id === activeQuizId);
-        if (!activeQuiz) return null;
-        // Derive language key from first textbox (same language as displayed content)
-        const langKey = spread.textboxes?.[0] ? getFirstTextboxKey(spread.textboxes[0]) : null;
-        return (
-          <PlayQuizModal
-            quiz={activeQuiz}
-            languageKey={langKey || 'en_US'}
-            onClose={handleQuizModalClose}
-          />
-        );
-      })()}
+      {activeQuizId &&
+        (() => {
+          const activeQuiz = spread.quizzes?.find((q) => q.id === activeQuizId);
+          if (!activeQuiz) return null;
+          return (
+            <PlayQuizModal
+              quiz={activeQuiz}
+              languageKey={editorLangCode}
+              onClose={handleQuizModalClose}
+            />
+          );
+        })()}
     </div>
   );
 }
