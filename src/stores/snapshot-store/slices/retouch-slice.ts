@@ -298,6 +298,8 @@ export const createRetouchSlice: StateCreator<
       if (spread?.animations && animationIndex >= 0 && animationIndex < spread.animations.length) {
         log.debug('deleteRetouchAnimation', 'delete', { spreadId, animationIndex });
         spread.animations.splice(animationIndex, 1);
+        // Re-assign .order to match new array position
+        spread.animations.forEach((anim, i) => { anim.order = i; });
         state.sync.isDirty = true;
       }
     }),
@@ -315,6 +317,8 @@ export const createRetouchSlice: StateCreator<
         log.debug('reorderRetouchAnimations', 'reorder', { spreadId, fromIndex, toIndex });
         const [removed] = spread.animations.splice(fromIndex, 1);
         spread.animations.splice(toIndex, 0, removed);
+        // Re-assign .order to match new array position
+        spread.animations.forEach((anim, i) => { anim.order = i; });
         state.sync.isDirty = true;
       }
     }),

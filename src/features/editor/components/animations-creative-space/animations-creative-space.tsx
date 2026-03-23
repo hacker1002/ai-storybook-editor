@@ -33,6 +33,8 @@ import {
   buildItemsMap,
 } from "./utils";
 import { createLogger } from "@/utils/logger";
+import { EFFECT_TYPE } from "@/constants/animation-constants";
+import { fetchMediaDurationMs, findMediaUrlFromSpread } from "@/utils/media-duration-utils";
 
 const log = createLogger("Editor", "AnimationsCreativeSpace");
 
@@ -118,7 +120,7 @@ export function AnimationsCreativeSpace() {
   }, []);
 
   const handleAddAnimation = useCallback(
-    (effectType: number) => {
+    async (effectType: number) => {
       if (!selectedItem || !effectiveSpreadId) return;
       log.info("handleAddAnimation", "adding animation", {
         effectType,
@@ -126,21 +128,36 @@ export function AnimationsCreativeSpace() {
         targetType: selectedItem.type,
       });
 
+      const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
+      const effect = buildDefaultEffect(effectType);
+
+      // Auto-set duration for Play effect on video/audio targets
+      if (effectType === EFFECT_TYPE.PLAY && (selectedItem.type === 'video' || selectedItem.type === 'audio')) {
+        const mediaUrl = findMediaUrlFromSpread(currentSpread, selectedItem.id, selectedItem.type);
+        if (mediaUrl) {
+          const durationMs = await fetchMediaDurationMs(mediaUrl);
+          if (durationMs) {
+            effect.duration = durationMs;
+            log.debug("handleAddAnimation", "auto-set play duration from media", { durationMs });
+          }
+        }
+      }
+
       const newAnimation: SpreadAnimation = {
-        order: animations.length,
+        order: maxOrder + 1,
         type: 0,
         target: {
           id: selectedItem.id,
           type: selectedItem.type as SpreadAnimation["target"]["type"],
         },
-        trigger_type: "after_previous",
-        effect: buildDefaultEffect(effectType),
+        trigger_type: "on_next",
+        effect,
       };
 
       actions.addRetouchAnimation(effectiveSpreadId, newAnimation);
       setExpandedAnimIndex(animations.length);
     },
-    [selectedItem, effectiveSpreadId, animations.length, actions],
+    [selectedItem, effectiveSpreadId, animations.length, actions, currentSpread],
   );
 
   const handleUpdateAnimation = useCallback(
