@@ -46,7 +46,6 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
-  SpreadQuiz,
 } from "@/types/canvas-types";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -58,7 +57,6 @@ const ALL_ELEMENT_TYPES: ObjectElementType[] = [
   "shape",
   "video",
   "audio",
-  "quiz",
 ];
 const ALL_ASSET_TYPES: SpreadItemMediaType[] = [
   "raw",
@@ -295,9 +293,6 @@ export function ObjectsSidebar({
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
           break;
-        case "quiz":
-          actions.updateRetouchQuiz(selectedSpreadId, entry.id, updates);
-          break;
       }
     },
     [actions, selectedSpreadId]
@@ -340,9 +335,6 @@ export function ObjectsSidebar({
           case "audio":
             actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
             break;
-          case "quiz":
-            actions.updateRetouchQuiz(selectedSpreadId, entry.id, updates);
-            break;
         }
       }
     },
@@ -378,9 +370,6 @@ export function ObjectsSidebar({
           break;
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
-          break;
-        case "quiz":
-          actions.updateRetouchQuiz(selectedSpreadId, entry.id, updates);
           break;
       }
     },
@@ -426,9 +415,6 @@ export function ObjectsSidebar({
           entry.id,
           titleUpdate as Partial<SpreadShape>
         );
-        break;
-      case "quiz":
-        actions.updateRetouchQuiz(selectedSpreadId, entry.id, titleUpdate);
         break;
     }
     setEditingItemId(null);
@@ -491,11 +477,6 @@ export function ObjectsSidebar({
             break;
           case "audio":
             actions.updateRetouchAudio(selectedSpreadId, entry.id, {
-              "z-index": newZIndex,
-            });
-            break;
-          case "quiz":
-            actions.updateRetouchQuiz(selectedSpreadId, entry.id, {
               "z-index": newZIndex,
             });
             break;
@@ -612,16 +593,6 @@ export function ObjectsSidebar({
             player_visible: true,
             type: "raw",
           } as SpreadAudio);
-          break;
-        case "quiz":
-          actions.addRetouchQuiz(selectedSpreadId, {
-            id: crypto.randomUUID(),
-            geometry: { x: 20, y: 20, w: 0, h: 0 },
-            "z-index": newZIndex,
-            editor_visible: true,
-            player_visible: true,
-            options: [],
-          } as SpreadQuiz);
           break;
       }
     },

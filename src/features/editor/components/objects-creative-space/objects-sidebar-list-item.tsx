@@ -14,7 +14,6 @@ import {
   Hexagon,
   Video,
   Volume2,
-  CircleHelp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/utils/utils";
@@ -45,7 +44,6 @@ export const ELEMENT_TYPE_CONFIG: Record<
   shape: { icon: Hexagon, label: "Shape" },
   video: { icon: Video, label: "Video" },
   audio: { icon: Volume2, label: "Audio" },
-  quiz: { icon: CircleHelp, label: "Quiz" },
 };
 
 interface ObjectListItemProps {

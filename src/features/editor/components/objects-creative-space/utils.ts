@@ -11,7 +11,6 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
-  SpreadQuiz,
 } from "@/types/canvas-types";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -164,17 +163,6 @@ export function buildObjectList(
       editorVisible: (audio as SpreadAudio).editor_visible !== false,
       playerVisible: (audio as SpreadAudio).player_visible !== false,
       assetType: (audio as SpreadAudio).type,
-    });
-  });
-
-  spread.quizzes?.forEach((quiz, i) => {
-    entries.push({
-      id: quiz.id,
-      type: "quiz",
-      title: (quiz as SpreadQuiz).title || `Quiz ${i + 1}`,
-      zIndex: resolveZIndex((quiz as SpreadQuiz)["z-index"], i, objectsLayer),
-      editorVisible: (quiz as SpreadQuiz).editor_visible !== false,
-      playerVisible: (quiz as SpreadQuiz).player_visible !== false,
     });
   });
 

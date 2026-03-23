@@ -11,7 +11,6 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
-  EditableQuiz,
   EditImageModal,
   SplitImageModal,
   CropImageModal,
@@ -51,14 +50,12 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
-  QuizItemContext,
   SpreadItemActionUnion,
   SpreadImage,
   SpreadTextbox,
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
-  SpreadQuiz,
   PageData,
 } from "@/types/canvas-types";
 
@@ -402,18 +399,6 @@ export function ObjectsMainView({
           else if (action === "delete")
             actions.deleteRetouchAudio(spreadId, itemId as string);
           break;
-        case "quiz":
-          if (action === "add")
-            actions.addRetouchQuiz(spreadId, data as SpreadQuiz);
-          else if (action === "update")
-            actions.updateRetouchQuiz(
-              spreadId,
-              itemId as string,
-              data as Partial<SpreadQuiz>
-            );
-          else if (action === "delete")
-            actions.deleteRetouchQuiz(spreadId, itemId as string);
-          break;
         case "page":
           if (action === "update" && typeof itemId === "number") {
             const spread = retouchSpreads.find((s) => s.id === spreadId);
@@ -738,48 +723,17 @@ export function ObjectsMainView({
     []
   );
 
-  const renderRetouchQuiz = useCallback(
-    (context: QuizItemContext<BaseSpread>) => {
-      const quiz = context.item as SpreadQuiz;
-      if (quiz.editor_visible === false) return null;
-      return (
-        <>
-          <EditableQuiz
-            quiz={context.item}
-            index={context.itemIndex}
-            zIndex={context.zIndex}
-            isSelected={context.isSelected}
-            isEditable={context.isSpreadSelected}
-            onSelect={() => {
-              context.onSelect();
-              onItemSelect({ type: "quiz", id: context.item.id });
-            }}
-          />
-          {quiz.player_visible === false && (
-            <PlayerHiddenBadge
-              geometry={quiz.geometry}
-              zIndex={context.zIndex}
-              isIcon
-            />
-          )}
-        </>
-      );
-    },
-    [onItemSelect]
-  );
-
   return (
     <>
       <CanvasSpreadView
         spreads={retouchSpreads}
         initialSelectedId={selectedSpreadId}
-        renderItems={["image", "textbox", "shape", "video", "audio", "quiz"]}
+        renderItems={["image", "textbox", "shape", "video", "audio"]}
         renderImageItem={renderRetouchImage}
         renderTextItem={renderRetouchTextbox}
         renderShapeItem={renderRetouchShape}
         renderVideoItem={renderRetouchVideo}
         renderAudioItem={renderRetouchAudio}
-        renderQuizItem={renderRetouchQuiz}
         renderImageToolbar={renderRetouchImageToolbar}
         renderTextToolbar={renderRetouchTextToolbar}
         renderShapeToolbar={renderRetouchShapeToolbar}

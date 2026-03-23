@@ -15,7 +15,6 @@ export type ObjectElementType =
   | "shape"
   | "video"
   | "audio"
-  | "quiz"
   | "text";
 
 export interface SelectedItem {
