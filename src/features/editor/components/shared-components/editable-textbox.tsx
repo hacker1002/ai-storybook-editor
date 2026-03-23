@@ -99,6 +99,10 @@ export function EditableTextbox({
         e.preventDefault();
         exitEditMode(true);
       }
+      // Prevent Delete/Backspace from bubbling to canvas (which would delete the item)
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.stopPropagation();
+      }
     }
   }, [isSelected, isEditing, enterEditMode, exitEditMode]);
 

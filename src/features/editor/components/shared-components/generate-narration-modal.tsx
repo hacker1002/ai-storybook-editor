@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Play, Pause, Sparkles, Trash2 } from "lucide-react";
+import { Play, Pause, Sparkles, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -79,6 +79,7 @@ interface GenerateNarrationModalProps {
   script: string;
   existingAudio?: TextboxAudio;
   onGenerated: (audio: TextboxAudio) => void;
+  onScriptChange: (script: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,7 @@ export function GenerateNarrationModal({
   script,
   existingAudio,
   onGenerated,
+  onScriptChange,
 }: GenerateNarrationModalProps) {
   // -- Local state ----------------------------------------------------------
   const [selectedVoice, setSelectedVoice] = useState("");
@@ -155,6 +157,31 @@ export function GenerateNarrationModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // -- Script change handler ------------------------------------------------
+  // On each keystroke: update local state + mark all media as stale immediately
+  const handleScriptInputChange = useCallback(
+    (newScript: string) => {
+      setEditableScript(newScript);
+      // Mark media stale only when script actually differs from original
+      if (newScript !== scriptRef.current) {
+        setMediaList((prev) => {
+          if (prev.every((m) => m.script_synced === false)) return prev;
+          return prev.map((m) => ({ ...m, script_synced: false }));
+        });
+      }
+    },
+    [],
+  );
+
+  // On blur: persist script → textbox text (+ audio stale flags handled by toolbar in single update)
+  const handleScriptBlur = useCallback(() => {
+    if (editableScript !== scriptRef.current) {
+      onScriptChange(editableScript);
+      scriptRef.current = editableScript;
+      log.info("handleScriptBlur", "script synced to textbox");
+    }
+  }, [editableScript, onScriptChange]);
 
   // -- Voice dropdown change handler ----------------------------------------
   // When user picks a voice and the selected media has empty voice_id,
@@ -231,6 +258,7 @@ export function GenerateNarrationModal({
       const newEntry: TextboxAudioMedia = {
         voice_id: response.data.voiceId,
         url: response.data.audioUrl,
+        script_synced: true,
       };
       const existingIdx = mediaList.findIndex(
         (m) => m.voice_id === selectedVoice,
@@ -348,8 +376,16 @@ export function GenerateNarrationModal({
 
   // -- Render ---------------------------------------------------------------
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[600px]">
+    <Dialog open={isOpen} onOpenChange={(open) => {
+        if (!open) {
+          // Sync unsaved script changes before closing (safety net for Escape / overlay click)
+          if (editableScript !== scriptRef.current) {
+            onScriptChange(editableScript);
+          }
+          onClose();
+        }
+      }}>
+      <DialogContent className="max-w-[600px]" onKeyDown={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Generate Narration</DialogTitle>
         </DialogHeader>
@@ -366,6 +402,7 @@ export function GenerateNarrationModal({
                 const voiceLabel = getVoiceLabel(media.voice_id);
                 const isHighlighted = index === selectedMediaIndex;
                 const isThisPlaying = playingIndex === index && isPlaying;
+                const isStale = media.script_synced === false;
 
                 return (
                   <div
@@ -400,6 +437,14 @@ export function GenerateNarrationModal({
                     >
                       {voiceLabel}
                     </span>
+                    {isStale && (
+                      <span
+                        title="Script has changed — regenerate to sync audio"
+                        className="flex h-5 w-5 shrink-0 items-center justify-center text-amber-500"
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                      </span>
+                    )}
                     <span className="tabular-nums text-xs text-muted-foreground">
                       {formatDuration(durations[media.url])}
                     </span>
@@ -515,7 +560,8 @@ export function GenerateNarrationModal({
             </Label>
             <textarea
               value={editableScript}
-              onChange={(e) => setEditableScript(e.target.value)}
+              onChange={(e) => handleScriptInputChange(e.target.value)}
+              onBlur={handleScriptBlur}
               placeholder="Enter narration script..."
               rows={4}
               className="w-full min-h-[100px] resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"

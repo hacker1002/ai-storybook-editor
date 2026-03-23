@@ -266,6 +266,30 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     });
   }, [item.id]);
 
+  // --- Script change handler (syncs modal script → textbox text + marks audio stale) ---
+  // Single combined update to avoid race condition between separate text/audio updates
+  const handleScriptChange = useCallback(
+    (newScript: string) => {
+      if (!textboxContent) return;
+      const updatedContent = { ...textboxContent, text: newScript };
+      // Mark all audio media as stale when script changes
+      if (updatedContent.audio?.media?.length) {
+        updatedContent.audio = {
+          ...updatedContent.audio,
+          script: newScript,
+          media: updatedContent.audio.media.map((m) => ({ ...m, script_synced: false })),
+        };
+      }
+      onUpdate({ [langCode]: updatedContent });
+      log.info("handleScriptChange", "textbox text + audio stale synced", {
+        itemId: item.id,
+        langCode,
+        staleMediaCount: updatedContent.audio?.media?.length ?? 0,
+      });
+    },
+    [textboxContent, langCode, onUpdate, item.id]
+  );
+
   const handleNarrationGenerated = useCallback(
     (narrationAudio: TextboxAudio) => {
       if (!textboxContent) return;
@@ -385,6 +409,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
             script={textboxContent?.text ?? ""}
             existingAudio={audio}
             onGenerated={handleNarrationGenerated}
+            onScriptChange={handleScriptChange}
           />
         )}
       </div>

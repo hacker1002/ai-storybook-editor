@@ -196,6 +196,7 @@ export interface SpreadTextbox {
 export interface TextboxAudioMedia {
   voice_id: string;
   url: string;
+  script_synced?: boolean; // true when audio matches current script, false when script was edited after generation
 }
 
 export interface TextboxAudio {
