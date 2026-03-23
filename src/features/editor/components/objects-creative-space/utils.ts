@@ -82,9 +82,10 @@ export function groupEntriesByLayer(entries: ObjectListEntry[]): LayerGroup[] {
 // === Title helpers ===
 
 function getTextboxTitle(textbox: SpreadTextbox, langCode: string): string {
-  if (textbox.title) return textbox.title;
   const result = getTextboxContentForLanguage(textbox, langCode);
-  return result?.content?.text?.slice(0, 30) || "Textbox";
+  const text = result?.content?.text;
+  if (!text) return "Empty Textbox";
+  return text.length > 20 ? text.slice(0, 20) + "…" : text;
 }
 
 // === Build & filter ===

@@ -86,6 +86,7 @@ export function ObjectListItem({
   onDragEnd,
 }: ObjectListItemProps) {
   const isEditing = editingId === entry.id;
+  const isRenameable = entry.type !== "text";
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
 
@@ -120,8 +121,8 @@ export function ObjectListItem({
       {/* Type icon */}
       <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
 
-      {/* Name / Edit */}
-      {isEditing ? (
+      {/* Name / Edit (rename disabled for textbox) */}
+      {isEditing && isRenameable ? (
         <div className="flex-1 flex items-center gap-1 min-w-0">
           <input
             type="text"
@@ -196,23 +197,25 @@ export function ObjectListItem({
           </TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEditStart();
-              }}
-              className="p-0.5 rounded hover:bg-muted"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Rename
-          </TooltipContent>
-        </Tooltip>
+        {isRenameable && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditStart();
+                }}
+                className="p-0.5 rounded hover:bg-muted"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Rename
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   );

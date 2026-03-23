@@ -388,6 +388,7 @@ export function ObjectsSidebar({
   );
 
   const handleEditStart = useCallback((entry: ObjectListEntry) => {
+    if (entry.type === "text") return; // textbox title is auto-derived
     setEditingItemId(entry.id);
     setEditValue(entry.title);
   }, []);
@@ -412,13 +413,6 @@ export function ObjectsSidebar({
     switch (entry.type) {
       case "image":
         actions.updateRetouchImage(selectedSpreadId, entry.id, titleUpdate);
-        break;
-      case "text":
-        actions.updateRetouchTextbox(
-          selectedSpreadId,
-          entry.id,
-          titleUpdate as Partial<SpreadTextbox>
-        );
         break;
       case "video":
         actions.updateRetouchVideo(selectedSpreadId, entry.id, titleUpdate);
