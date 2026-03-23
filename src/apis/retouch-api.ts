@@ -1,5 +1,6 @@
 import { callEdgeFunction } from './edge-function-client';
 import { createLogger } from '@/utils/logger';
+import type { WordTiming } from '@/types/spread-types';
 
 const log = createLogger('API', 'RetouchApi');
 
@@ -91,6 +92,7 @@ export interface GenerateNarrationResult {
     audioUrl: string;
     storagePath: string;
     voiceId: string;
+    wordTimings?: WordTiming[];
   };
   error?: string;
   meta?: {

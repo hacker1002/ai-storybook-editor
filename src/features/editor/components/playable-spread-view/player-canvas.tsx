@@ -66,6 +66,15 @@ const CLICK_HINT_STYLE = `
 .click-hint-pulse > :first-child {
   animation: click-hint-pulse 1.2s ease-in-out infinite;
 }
+.read-along-word {
+  transition: background-color 0.15s ease, color 0.15s ease;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.read-along-active-word {
+  background-color: rgba(59, 130, 246, 0.25);
+  color: #1d4ed8;
+}
 `;
 
 export function PlayerCanvas({
@@ -107,6 +116,7 @@ export function PlayerCanvas({
   } = usePlayerGsapEngine({
     spread,
     zoomLevel,
+    editorLangCode,
     onSpreadComplete,
     onQuizPlay: handleQuizPlay,
   });
@@ -499,6 +509,8 @@ export function PlayerCanvas({
         {textboxesWithLang.map((item, index) => {
           if (!item) return null;
           const { textbox, data } = item;
+          const audioMedia = data.audio?.media;
+          const syncedMedia = audioMedia?.find((m) => m.script_synced) ?? audioMedia?.[0];
           return (
             <div
               key={textbox.id}
@@ -518,6 +530,7 @@ export function PlayerCanvas({
                 onSelect={() => {}}
                 onTextChange={() => {}}
                 onEditingChange={() => {}}
+                wordTimings={syncedMedia?.word_timings}
               />
             </div>
           );

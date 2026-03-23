@@ -35,6 +35,7 @@ import {
 import { createLogger } from "@/utils/logger";
 import { EFFECT_TYPE } from "@/constants/animation-constants";
 import { fetchMediaDurationMs, findMediaUrlFromSpread } from "@/utils/media-duration-utils";
+import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 
 const log = createLogger("Editor", "AnimationsCreativeSpace");
 
@@ -143,6 +144,23 @@ export function AnimationsCreativeSpace() {
         }
       }
 
+      // Auto-set duration for Read-Along effect on textbox targets
+      if (effectType === EFFECT_TYPE.READ_ALONG && selectedItem.type === 'textbox') {
+        const textbox = currentSpread?.textboxes?.find((tb) => tb.id === selectedItem.id);
+        if (textbox) {
+          const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
+          const media = result?.content?.audio?.media;
+          const syncedMedia = media?.find((m) => m.script_synced) ?? media?.[0];
+          if (syncedMedia?.url) {
+            const durationMs = await fetchMediaDurationMs(syncedMedia.url);
+            if (durationMs) {
+              effect.duration = durationMs;
+              log.debug("handleAddAnimation", "auto-set read-along duration from narration audio", { durationMs });
+            }
+          }
+        }
+      }
+
       const newAnimation: SpreadAnimation = {
         order: maxOrder + 1,
         type: 0,
@@ -157,7 +175,7 @@ export function AnimationsCreativeSpace() {
       actions.addRetouchAnimation(effectiveSpreadId, newAnimation);
       setExpandedAnimIndex(animations.length);
     },
-    [selectedItem, effectiveSpreadId, animations.length, actions, currentSpread],
+    [selectedItem, effectiveSpreadId, animations.length, actions, currentSpread, languageCode],
   );
 
   const handleUpdateAnimation = useCallback(

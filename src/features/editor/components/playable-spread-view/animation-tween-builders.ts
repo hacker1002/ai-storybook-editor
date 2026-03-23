@@ -1,6 +1,6 @@
 // animation-tween-builders.ts - GSAP tween builders for 17 animation effect types
 
-import type { SpreadAnimation } from "@/types/spread-types";
+import type { SpreadAnimation, WordTiming } from "@/types/spread-types";
 import { CANVAS } from "@/constants/spread-constants";
 import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from "@/constants/playable-constants";
 import {
@@ -29,6 +29,10 @@ interface TweenOptions {
   onTweenStart?: () => void;
   /** Called when any tween in this animation completes — used to remove from active list */
   onTweenComplete?: () => void;
+  /** Word-level timing data for Read-Along effect */
+  wordTimings?: WordTiming[];
+  /** Audio URL for Read-Along narration playback */
+  audioUrl?: string;
 }
 
 /**
@@ -285,10 +289,82 @@ export function addTweenToTimeline(
       break;
     }
 
-    // ── Read-along (11) — DEFERRED ───────────────────────────────
-    case EFFECT_TYPE.READ_ALONG:
-      log.warn('addTweenToTimeline', 'read-along not yet implemented', { targetId });
+    // ── Read-along (11) ──────────────────────────────────────────
+    case EFFECT_TYPE.READ_ALONG: {
+      const audioUrl = options?.audioUrl;
+      if (!audioUrl) {
+        log.warn('addTweenToTimeline', 'read-along: no audioUrl provided', { targetId });
+        break;
+      }
+
+      const volume = options?.volume ?? 1;
+      const wordTimings = options?.wordTimings;
+      const durationSec = (effect.duration ?? 0) / 1000;
+
+      // Create audio element and attach to DOM so pauseAllMedia() can find it on killTimeline
+      const audio = document.createElement('audio');
+      audio.src = audioUrl;
+      audio.style.display = 'none';
+      element.appendChild(audio);
+
+      // Use a unique label for absolute positioning of word timings
+      const readAlongLabel = `ra_${targetId}_${Date.now()}`;
+      timeline.addLabel(readAlongLabel, position as number | string);
+
+      // Start: play audio
+      timeline.call(
+        () => {
+          options?.onTweenStart?.();
+          audio.volume = volume;
+          audio.currentTime = 0;
+          audio.play().catch(() => {
+            log.warn('addTweenToTimeline', 'read-along autoplay blocked', { targetId });
+          });
+        },
+        undefined,
+        readAlongLabel
+      );
+
+      // Schedule word highlights using label-relative positions
+      if (wordTimings && wordTimings.length > 0) {
+        const wordSpans = element.querySelectorAll<HTMLElement>('span[data-word-index]');
+
+        wordTimings.forEach((wt, i) => {
+          const offsetSec = wt.startMs / 1000;
+          timeline.call(
+            () => {
+              // Remove highlight from previous word
+              if (i > 0) {
+                const prevSpan = wordSpans[i - 1];
+                prevSpan?.classList.remove('read-along-active-word');
+              }
+              // Add highlight to current word
+              const span = wordSpans[i];
+              span?.classList.add('read-along-active-word');
+            },
+            undefined,
+            `${readAlongLabel}+=${offsetSec}`
+          );
+        });
+      }
+
+      // End: pause audio + cleanup highlights + remove audio element
+      const cleanup = () => {
+        audio.pause();
+        element.querySelectorAll('.read-along-active-word').forEach((el) => {
+          el.classList.remove('read-along-active-word');
+        });
+        audio.remove();
+        options?.onTweenComplete?.();
+      };
+
+      if (durationSec > 0) {
+        timeline.call(cleanup, undefined, `${readAlongLabel}+=${durationSec}`);
+      } else {
+        timeline.call(cleanup);
+      }
       break;
+    }
 
     // ── Disappear (12) ───────────────────────────────────────────
     case EFFECT_TYPE.DISAPPEAR:
@@ -415,9 +491,9 @@ export function addTweenToTimeline(
       break;
   }
 
-  // PLAY effects fire onTweenStart/onTweenComplete inline (DelayedCall doesn't support eventCallback).
+  // PLAY and READ_ALONG effects fire onTweenStart/onTweenComplete inline (DelayedCall doesn't support eventCallback).
   // Skip the generic callback attachment below to avoid duplicate calls.
-  if (effectType === EFFECT_TYPE.PLAY) return;
+  if (effectType === EFFECT_TYPE.PLAY || effectType === EFFECT_TYPE.READ_ALONG) return;
 
   // Attach start/end callbacks to all tweens added by this call.
   // GSAP quirk: timeline.set() (zero-duration tweens) may skip onStart via eventCallback().

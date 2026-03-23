@@ -193,10 +193,16 @@ export interface SpreadTextbox {
 }
 
 // === Textbox Audio (retouch phase TTS) ===
+export interface WordTiming {
+  word: string;
+  startMs: number;
+}
+
 export interface TextboxAudioMedia {
   voice_id: string;
   url: string;
   script_synced?: boolean; // true when audio matches current script, false when script was edited after generation
+  word_timings?: WordTiming[];
 }
 
 export interface TextboxAudio {

@@ -3,7 +3,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { cn } from '@/utils/utils';
-import type { SpreadTextboxContent } from '@/types/spread-types';
+import type { SpreadTextboxContent, WordTiming } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
 
@@ -19,6 +19,8 @@ interface EditableTextboxProps {
   onSelect: (rect?: DOMRect) => void;
   onTextChange: (text: string) => void;
   onEditingChange: (isEditing: boolean) => void;
+  /** Word-level timing data — when present, renders words in <span> elements for Read-Along */
+  wordTimings?: WordTiming[];
 }
 
 export function EditableTextbox({
@@ -31,6 +33,7 @@ export function EditableTextbox({
   onSelect,
   onTextChange,
   onEditingChange,
+  wordTimings,
 }: EditableTextboxProps) {
   const { text, geometry, typography } = textboxContent;
   const [isEditing, setIsEditing] = useState(false);
@@ -144,6 +147,24 @@ export function EditableTextbox({
 
   const isEmpty = !text;
 
+  /** Render text with per-word <span> elements for Read-Along highlighting */
+  const renderTextWithWordSpans = (textContent: string): React.ReactNode => {
+    const tokens = textContent.split(/(\s+)/);
+    let wordIndex = 0;
+    return tokens.map((token, i) => {
+      if (/^\s+$/.test(token)) {
+        // Whitespace — render as-is (preserves line breaks with whitespace-pre-wrap)
+        return <span key={`ws-${i}`}>{token}</span>;
+      }
+      const idx = wordIndex++;
+      return (
+        <span key={`w-${idx}`} data-word-index={idx} className="read-along-word">
+          {token}
+        </span>
+      );
+    });
+  };
+
   return (
     <div
       {...(isSelectable && {
@@ -192,7 +213,7 @@ export function EditableTextbox({
         </div>
       ) : (
         <div className="w-full h-full p-1 whitespace-pre-wrap">
-          {text}
+          {wordTimings && wordTimings.length > 0 ? renderTextWithWordSpans(text) : text}
         </div>
       )}
     </div>

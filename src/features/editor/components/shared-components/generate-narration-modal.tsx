@@ -259,6 +259,7 @@ export function GenerateNarrationModal({
         voice_id: response.data.voiceId,
         url: response.data.audioUrl,
         script_synced: true,
+        ...(response.data.wordTimings && { word_timings: response.data.wordTimings }),
       };
       const existingIdx = mediaList.findIndex(
         (m) => m.voice_id === selectedVoice,

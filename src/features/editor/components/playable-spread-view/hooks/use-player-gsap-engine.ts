@@ -15,6 +15,7 @@ import {
   usePlaybackActions,
 } from '@/stores/animation-playback-store';
 import { addTweenToTimeline } from '../animation-tween-builders';
+import { getTextboxContentForLanguage } from '../../../utils/textbox-helpers';
 import {
   applyInitialStates,
   resetElementStyles,
@@ -25,6 +26,24 @@ import { getScaledDimensions } from '../../../utils/coordinate-utils';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'usePlayerGsapEngine');
+
+// === Helpers ===
+
+/** Resolve textbox audio data (wordTimings + audioUrl) for READ_ALONG animations */
+function resolveReadAlongAudioData(
+  anim: { effect: { type: number }; target: { id: string; type: string } },
+  textboxes: Record<string, unknown>[] | undefined,
+  editorLangCode: string,
+): { wordTimings?: import('@/types/spread-types').WordTiming[]; audioUrl?: string } {
+  if (anim.effect.type !== EFFECT_TYPE.READ_ALONG || anim.target.type !== 'textbox') return {};
+  const textbox = textboxes?.find((tb) => (tb as { id: string }).id === anim.target.id);
+  if (!textbox) return {};
+  const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, editorLangCode);
+  const media = result?.content?.audio?.media;
+  const syncedMedia = media?.find((m) => m.script_synced) ?? media?.[0];
+  if (!syncedMedia) return {};
+  return { wordTimings: syncedMedia.word_timings, audioUrl: syncedMedia.url };
+}
 
 // === Constants ===
 const TRIGGER_DELAY = {
@@ -39,6 +58,7 @@ const TRIGGER_DELAY = {
 export interface UsePlayerGsapEngineParams {
   spread: PlayableSpread;
   zoomLevel: number;
+  editorLangCode: string;
   onSpreadComplete: (spreadId: string) => void;
   onQuizPlay?: (quizId: string) => void;
 }
@@ -64,6 +84,7 @@ export interface UsePlayerGsapEngineReturn {
 export function usePlayerGsapEngine({
   spread,
   zoomLevel,
+  editorLangCode,
   onSpreadComplete,
   onQuizPlay,
 }: UsePlayerGsapEngineParams): UsePlayerGsapEngineReturn {
@@ -231,6 +252,7 @@ export function usePlayerGsapEngine({
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           ...dims,
+          ...resolveReadAlongAudioData(anim, spread.textboxes, editorLangCode),
           onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
           onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
         });
@@ -239,7 +261,7 @@ export function usePlayerGsapEngine({
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, volume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay]
+    [killTimeline, volume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -291,11 +313,26 @@ export function usePlayerGsapEngine({
         position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
       }
 
+      // Read-Along: resolve textbox audio data for word-level highlighting
+      let readAlongExtras: { wordTimings?: import('@/types/spread-types').WordTiming[]; audioUrl?: string } = {};
+      if (anim.effect.type === EFFECT_TYPE.READ_ALONG && anim.target.type === 'textbox') {
+        const textbox = spread.textboxes?.find((tb) => tb.id === anim.target.id);
+        if (textbox) {
+          const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, editorLangCode);
+          const media = result?.content?.audio?.media;
+          const syncedMedia = media?.find((m) => m.script_synced) ?? media?.[0];
+          if (syncedMedia) {
+            readAlongExtras = { wordTimings: syncedMedia.word_timings, audioUrl: syncedMedia.url };
+          }
+        }
+      }
+
       addTweenToTimeline(tl, anim, el, position, {
         volume: volume / 100,
         spreadContainer: spreadContainerRef.current,
         itemGeometry: findItemGeometry(anim.target.id),
         ...dims,
+        ...readAlongExtras,
         onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
         onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
       });
@@ -303,7 +340,7 @@ export function usePlayerGsapEngine({
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, volume, spread.animations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay]);
+  }, [killTimeline, volume, spread.animations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -358,6 +395,7 @@ export function usePlayerGsapEngine({
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           ...dims,
+          ...resolveReadAlongAudioData(anim, spread.textboxes, editorLangCode),
           onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
           onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
         });
@@ -366,7 +404,7 @@ export function usePlayerGsapEngine({
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, volume, getContainerDims, findItemGeometry, onQuizPlay]
+    [killReplayTimeline, volume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]
   );
 
   // === Returned utility functions ===
