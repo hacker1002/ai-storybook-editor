@@ -1,30 +1,34 @@
-// playable-header.tsx - Header with play/stop button and zoom slider for PlayableSpreadView
+// playable-header.tsx - Header with play/stop button, version toggle and zoom slider for PlayableSpreadView
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Play, Square, Minus, Plus } from "lucide-react";
-import type { ActiveCanvas, PlayMode } from "@/types/playable-types";
+import type { ActiveCanvas, PlayVersion } from "@/types/playable-types";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 
 interface PlayableHeaderProps {
   activeCanvas: ActiveCanvas;
-  playMode: PlayMode;
+  playVersion: PlayVersion;
   zoomLevel: number;
   onZoomChange: (level: number) => void;
   onPlay: () => void;
   onStop: () => void;
+  onVersionChange: (version: PlayVersion) => void;
 }
 
 export const PlayableHeader = memo(function PlayableHeader({
   activeCanvas,
-  playMode,
+  playVersion,
   zoomLevel,
   onZoomChange,
   onPlay,
   onStop,
+  onVersionChange,
 }: PlayableHeaderProps) {
   const isPlayerActive = activeCanvas === "player";
   const isZoomDisabled = isPlayerActive;
+  const isInteractive = playVersion === "interactive";
 
   return (
     <div className="flex items-center justify-between px-3 py-2 border-b bg-background z-10">
@@ -46,12 +50,26 @@ export const PlayableHeader = memo(function PlayableHeader({
             size="icon"
             className="h-8 w-8 hover:bg-secondary"
             onClick={onPlay}
-            disabled={playMode === "off"}
             aria-label="Play"
           >
             <Play className="h-4 w-4" />
           </Button>
         )}
+      </div>
+
+      {/* Center: Version toggle (Classic / Interactive) */}
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-medium ${!isInteractive ? "text-foreground" : "text-muted-foreground"}`}>
+          Classic
+        </span>
+        <Switch
+          checked={isInteractive}
+          onCheckedChange={(checked) => onVersionChange(checked ? "interactive" : "classic")}
+          aria-label="Toggle interactive mode"
+        />
+        <span className={`text-xs font-medium ${isInteractive ? "text-foreground" : "text-muted-foreground"}`}>
+          Interactive
+        </span>
       </div>
 
       {/* Right: Zoom slider */}

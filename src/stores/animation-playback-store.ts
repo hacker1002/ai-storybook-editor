@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type { AnimationStep, PlayerPhase, PlayMode, ReplayableItem } from '@/types/playable-types';
+import type { AnimationStep, PlayerPhase, PlayMode, PlayVersion, ReplayableItem } from '@/types/playable-types';
 import {
   findNextOnNextStep,
   findPrevOnNextStep,
@@ -17,6 +17,7 @@ const log = createLogger('Store', 'AnimationPlaybackStore');
 
 interface PlaybackState {
   playMode: PlayMode;
+  playVersion: PlayVersion;
   isPlaying: boolean;
   volume: number;        // 0..100
   isMuted: boolean;
@@ -33,6 +34,7 @@ interface PlaybackActions {
   play: () => void;
   pause: () => void;
   setPlayMode: (mode: PlayMode) => void;
+  setPlayVersion: (version: PlayVersion) => void;
   setVolume: (volume: number) => void;
   toggleMute: () => void;
   reset: (steps: AnimationStep[]) => void;
@@ -52,6 +54,7 @@ interface PlaybackActions {
 
 const INITIAL_STATE: PlaybackState = {
   playMode: 'off',
+  playVersion: 'classic',
   isPlaying: true,      // auto-start when mount
   volume: 100,
   isMuted: false,
@@ -87,6 +90,12 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         const prev = get().playMode;
         log.info('setPlayMode', 'transition', { prev, next: mode });
         set({ playMode: mode });
+      },
+
+      setPlayVersion: (version) => {
+        const prev = get().playVersion;
+        log.info('setPlayVersion', 'transition', { prev, next: version });
+        set({ playVersion: version });
       },
 
       setVolume: (v) => {
@@ -374,6 +383,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 // === Selectors (fine-grained for optimized re-renders) ===
 
 export const usePlayMode = () => usePlaybackStore((s) => s.playMode);
+export const usePlayVersion = () => usePlaybackStore((s) => s.playVersion);
 export const useIsPlaying = () => usePlaybackStore((s) => s.isPlaying);
 export const useVolume = () => usePlaybackStore((s) => s.volume);
 export const useIsMuted = () => usePlaybackStore((s) => s.isMuted);
@@ -396,6 +406,7 @@ export const usePlaybackActions = () =>
       play: s.play,
       pause: s.pause,
       setPlayMode: s.setPlayMode,
+      setPlayVersion: s.setPlayVersion,
       setVolume: s.setVolume,
       toggleMute: s.toggleMute,
       reset: s.reset,

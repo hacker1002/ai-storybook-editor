@@ -7,7 +7,7 @@ import type { ItemType } from '@/types/spread-types';
 export type { SpreadAnimation, Geometry };
 export type { ItemType };
 
-export type EffectCategory = 'play' | 'entrance' | 'emphasis' | 'exit' | 'motion-paths';
+export type EffectCategory = 'play' | 'read-along' | 'entrance' | 'emphasis' | 'exit' | 'motion-paths';
 
 export type TargetItemIcon = 'image' | 'audio' | 'video' | 'textbox' | 'shape' | 'quiz';
 

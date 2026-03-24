@@ -1,7 +1,7 @@
 // use-player-gsap-engine.ts - GSAP animation engine hook extracted from PlayerCanvas
 // Manages timelines, refs, and all GSAP side effects for playback
 
-import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import gsap from 'gsap';
 import type { AnimationStep, PlayableSpread } from '@/types/playable-types';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
@@ -10,6 +10,7 @@ import {
   usePlayerPhase,
   useCurrentStepIndex,
   usePlayMode,
+  usePlayVersion,
   useIsPlaying,
   useVolume,
   usePlaybackActions,
@@ -92,11 +93,20 @@ export function usePlayerGsapEngine({
   const phase = usePlayerPhase();
   const currentStepIndex = useCurrentStepIndex();
   const playMode = usePlayMode();
+  const playVersion = usePlayVersion();
   const isPlaying = useIsPlaying();
   const volume = useVolume();
   const playbackActions = usePlaybackActions();
   // Access steps directly from store for effects that need them
   const steps = usePlaybackStore((s) => s.steps);
+
+  // Filter animations by version: classic = only read-along, interactive = all
+  const versionFilteredAnimations = useMemo(() => {
+    if (playVersion === 'classic') {
+      return spread.animations.filter(a => a.effect.type === EFFECT_TYPE.READ_ALONG);
+    }
+    return spread.animations;
+  }, [spread.animations, playVersion]);
 
   // === Refs ===
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
@@ -275,7 +285,7 @@ export function usePlayerGsapEngine({
     });
 
     const dims = getContainerDims();
-    const animations = [...spread.animations].sort((a, b) => a.order - b.order);
+    const animations = [...versionFilteredAnimations].sort((a, b) => a.order - b.order);
 
     animations.forEach((anim, i) => {
       // Quiz PLAY: pause timeline and invoke callback (auto mode too)
@@ -340,7 +350,7 @@ export function usePlayerGsapEngine({
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, volume, spread.animations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]);
+  }, [killTimeline, volume, versionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -448,7 +458,7 @@ export function usePlayerGsapEngine({
 
       // Re-apply initial states for affected targets
       applyInitialStates(
-        spread.animations.filter((a) => affectedTargets.has(a.target.id)),
+        versionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
         spreadContainerRef.current
       );
@@ -467,7 +477,7 @@ export function usePlayerGsapEngine({
         });
       }
     },
-    [steps, spread.animations, findItemGeometry]
+    [steps, versionFilteredAnimations, findItemGeometry]
   );
 
   // === Lifecycle: Cleanup on unmount ===
@@ -486,7 +496,7 @@ export function usePlayerGsapEngine({
     killTimeline();
     killReplayTimeline();
     resetElementStyles(elementRefsMap.current);
-    applyInitialStates(spread.animations, elementRefsMap.current, spreadContainerRef.current);
+    applyInitialStates(versionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
 
     prevStepIndexRef.current = -1;
 
@@ -504,9 +514,9 @@ export function usePlayerGsapEngine({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spread.id]);
 
-  // === Lifecycle: Phase change → build step timeline (semi-auto mode) ===
+  // === Lifecycle: Phase change → build step timeline (manual/off mode) ===
   useEffect(() => {
-    if (playMode !== 'semi-auto') return;
+    if (playMode !== 'off') return;
     if (phase !== 'playing' || currentStepIndex < 0) return;
 
     const currentIdx = currentStepIndex;
@@ -526,7 +536,7 @@ export function usePlayerGsapEngine({
 
       // Re-apply initial states for affected targets
       applyInitialStates(
-        spread.animations.filter((a) => affectedTargets.has(a.target.id)),
+        versionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
         spreadContainerRef.current
       );
@@ -562,7 +572,7 @@ export function usePlayerGsapEngine({
         pendingRafRef.current = requestAnimationFrame(() => {
           pendingRafRef.current = null;
           resetElementStyles(elementRefsMap.current);
-          applyInitialStates(spread.animations, elementRefsMap.current, spreadContainerRef.current);
+          applyInitialStates(versionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
           buildAndPlayFullTimeline();
         });
       } else {
@@ -578,9 +588,9 @@ export function usePlayerGsapEngine({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, playMode]);
 
-  // === Lifecycle: Semi-auto pause/resume ===
+  // === Lifecycle: Manual (off) mode pause/resume ===
   useEffect(() => {
-    if (playMode !== 'semi-auto') return;
+    if (playMode !== 'off') return;
     if (isPlaying) {
       timelineRef.current?.resume();
     } else {
@@ -618,7 +628,7 @@ export function usePlayerGsapEngine({
       // then timeline.onComplete fires stepComplete.
       timelineRef.current.resume();
     } else {
-      // Quiz-only step (semi-auto): no timeline, clear orders and complete step directly.
+      // Quiz-only step (manual/off mode): no timeline, clear orders and complete step directly.
       usePlaybackStore.getState().setActiveAnimationOrders([]);
       playbackActions.stepComplete();
     }

@@ -24,6 +24,7 @@ interface AnimationSettingsPanelProps {
   onClickLoopChange: (value: number) => void;
   onEffectOptionChange: (field: string, value: number | string) => void;
   onMustCompleteChange: (value: boolean) => void;
+  targetHasAudio?: boolean;
 }
 
 // ---- EffectOptionsForm ----
@@ -261,6 +262,7 @@ export function AnimationSettingsPanel({
   onClickLoopChange,
   onEffectOptionChange,
   onMustCompleteChange,
+  targetHasAudio,
 }: AnimationSettingsPanelProps) {
   log.debug('AnimationSettingsPanel', 'render', { effectType: animation.animation.effect.type, triggerType: animation.animation.trigger_type });
   return (
@@ -268,6 +270,7 @@ export function AnimationSettingsPanel({
       <EffectTypeGrid
         animation={animation}
         onEffectTypeChange={onEffectTypeChange}
+        targetHasAudio={targetHasAudio}
       />
       <EffectOptionsForm
         animation={animation}

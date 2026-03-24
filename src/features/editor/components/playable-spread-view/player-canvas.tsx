@@ -14,10 +14,11 @@ import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { PageItem } from "../canvas-spread-view/page-item";
-import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
+import { TEXTBOX_Z_INDEX_BASE, EFFECT_TYPE } from "@/constants/playable-constants";
 import type {
   PlayableSpread,
   PlayMode,
+  PlayVersion,
   AnimationStep,
 } from "@/types/playable-types";
 import {
@@ -35,6 +36,7 @@ export interface PlayerCanvasProps {
   spread: PlayableSpread;
   zoomLevel: number;
   playMode: PlayMode;
+  playVersion: PlayVersion;
   hasNext: boolean;
   hasPrevious: boolean;
   onSpreadComplete: (spreadId: string) => void;
@@ -81,6 +83,7 @@ export function PlayerCanvas({
   spread,
   zoomLevel,
   playMode,
+  playVersion,
   hasNext,
   hasPrevious,
   onSpreadComplete,
@@ -135,6 +138,16 @@ export function PlayerCanvas({
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(zoomLevel);
 
+  // === Version-filtered animations ===
+  // Classic mode: only READ_ALONG animations (effect type 11)
+  // Interactive mode: all animations
+  const filteredAnimations = useMemo(() => {
+    if (playVersion === 'classic') {
+      return spread.animations.filter((a) => a.effect.type === EFFECT_TYPE.READ_ALONG);
+    }
+    return spread.animations;
+  }, [spread.animations, playVersion]);
+
   // === Store sync effects ===
 
   // 1. Sync playMode from props into store
@@ -142,13 +155,18 @@ export function PlayerCanvas({
     playbackActions.setPlayMode(playMode);
   }, [playMode, playbackActions]);
 
-  // 2. Reset steps on spread change & ensure playback starts
+  // 1b. Sync playVersion from props into store
+  useEffect(() => {
+    playbackActions.setPlayVersion(playVersion);
+  }, [playVersion, playbackActions]);
+
+  // 2. Reset steps on spread change or version change & ensure playback starts
   useEffect(() => {
     setActiveQuizId(null); // Clear any open quiz modal from previous spread
-    const newSteps = buildAnimationSteps(spread.animations);
+    const newSteps = buildAnimationSteps(filteredAnimations);
     playbackActions.reset(newSteps);
     playbackActions.play();
-  }, [spread.id]); // eslint-disable-line
+  }, [spread.id, filteredAnimations]); // eslint-disable-line
 
   // 3. Cleanup on unmount
   useEffect(() => {
@@ -190,7 +208,7 @@ export function PlayerCanvas({
   const lastBackTimeRef = useRef<number>(0);
 
   const handleNext = useCallback(() => {
-    if (playMode !== "semi-auto") return;
+    if (playMode !== "off") return;
     // Dismiss quiz modal if open before skipping
     if (activeQuizId) setActiveQuizId(null);
     if (phase === "playing") {
@@ -225,7 +243,7 @@ export function PlayerCanvas({
   ]);
 
   const handleBack = useCallback(() => {
-    if (playMode !== "semi-auto") return;
+    if (playMode !== "off") return;
     // Dismiss quiz modal if open before going back
     if (activeQuizId) setActiveQuizId(null);
     // No previous on_next step exists → skip to previous spread
@@ -260,7 +278,7 @@ export function PlayerCanvas({
 
   const handleItemClick = useCallback(
     (itemId: string) => {
-      if (playMode !== "semi-auto") return;
+      if (playMode !== "off") return;
       log.info("handleItemClick", "item clicked", {
         itemId,
         phase,
@@ -292,7 +310,7 @@ export function PlayerCanvas({
 
   const getPointerClasses = useCallback(
     (itemId: string): string => {
-      if (playMode === "semi-auto") {
+      if (playMode === "off") {
         if (pendingClickTargetId === itemId)
           return "pointer-events-auto cursor-pointer";
         if (isReplayableClick(replayableItems, itemId))
@@ -313,7 +331,7 @@ export function PlayerCanvas({
   // === Computed navigation state ===
 
   const canGoBack = useMemo(() => {
-    if (playMode !== "semi-auto") return false;
+    if (playMode !== "off") return false;
     // No previous on_next step → can go back only if previous spread exists
     const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
     if (currentStepIndex <= 0 || prevOnNextIdx < 0) return hasPrevious;
@@ -325,7 +343,7 @@ export function PlayerCanvas({
   }, [playMode, currentStepIndex, hasPrevious, phase, steps]);
 
   const canGoNext = useMemo(() => {
-    if (playMode !== "semi-auto") return false;
+    if (playMode !== "off") return false;
     if (phase === "playing") {
       const step = steps[currentStepIndex];
       return !step?.mustComplete;

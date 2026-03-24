@@ -9,13 +9,15 @@ export { EFFECT_TYPE, EFFECT_TYPE_NAMES };
 export const EFFECT_CATEGORY_MAP: Record<number, EffectCategory> = {
   1: 'play',
   2: 'entrance', 3: 'entrance', 4: 'entrance', 5: 'entrance', 6: 'entrance',
-  7: 'emphasis', 8: 'emphasis', 9: 'emphasis', 10: 'emphasis', 11: 'emphasis',
+  7: 'emphasis', 8: 'emphasis', 9: 'emphasis', 10: 'emphasis',
+  11: 'read-along',
   12: 'exit', 13: 'exit', 14: 'exit', 15: 'exit',
   16: 'motion-paths', 17: 'motion-paths',
 };
 
 export const STAR_COLOR_MAP: Record<EffectCategory, string> = {
   'play': '#3B82F6',
+  'read-along': '#A855F7',
   'entrance': '#22C55E',
   'emphasis': '#EAB308',
   'exit': '#EF4444',
@@ -60,6 +62,7 @@ export const TRIGGER_TYPE_LABELS: Record<string, string> = {
 
 export const EFFECT_CATEGORY_LABELS: Record<EffectCategory, string> = {
   play: 'Play',
+  'read-along': 'Read-along',
   entrance: 'Entrance',
   emphasis: 'Emphasis',
   exit: 'Exit',

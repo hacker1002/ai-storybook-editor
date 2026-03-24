@@ -86,9 +86,22 @@ export function AnimationsCreativeSpace() {
     [resolvedAnimations, itemsMap],
   );
 
+  // Determine if the expanded animation's target textbox has audio media
+  // Used to conditionally show the read-along effect option
+  const targetHasAudio = useMemo(() => {
+    if (expandedAnimIndex === null) return false;
+    const expandedAnimation = filteredAnimations[expandedAnimIndex];
+    if (!expandedAnimation) return false;
+    const target = expandedAnimation.animation.target;
+    if (target.type !== 'textbox') return false;
+    const textbox = currentSpread?.textboxes?.find((t) => t.id === target.id);
+    const content = textbox?.[languageCode] as { audio?: { media?: unknown[] } } | undefined;
+    return Boolean(content?.audio?.media?.length);
+  }, [expandedAnimIndex, filteredAnimations, currentSpread, languageCode]);
+
   const availableEffects = useMemo(
-    () => (selectedItem ? getAvailableEffects(selectedItem.type) : []),
-    [selectedItem],
+    () => (selectedItem ? getAvailableEffects(selectedItem.type, targetHasAudio) : []),
+    [selectedItem, targetHasAudio],
   );
 
   // Build PlayableSpread[] from retouch spreads
@@ -259,6 +272,7 @@ export function AnimationsCreativeSpace() {
           onDeleteAnimation={handleDeleteAnimation}
           onReorderAnimation={handleReorderAnimation}
           onItemSelect={handleItemSelect}
+          targetHasAudio={targetHasAudio}
         />
       )}
       <div className="flex-1 overflow-hidden">

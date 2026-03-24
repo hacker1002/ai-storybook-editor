@@ -75,13 +75,22 @@ export function buildDefaultEffect(effectType: number): SpreadAnimation['effect'
   return effect;
 }
 
-export function getAvailableEffects(targetType: ItemType | string): AvailableEffect[] {
+export function getAvailableEffects(
+  targetType: ItemType | string,
+  targetHasAudio?: boolean,
+): AvailableEffect[] {
   const allowedIds = ALLOWED_EFFECTS_BY_TARGET[targetType] ?? [];
-  return allowedIds.map((id) => ({
-    id,
-    name: EFFECT_TYPE_NAMES[id] ?? `Effect ${id}`,
-    category: EFFECT_CATEGORY_MAP[id] ?? 'entrance',
-  }));
+  return allowedIds
+    .filter((id) => {
+      // Hide read-along effect (11) when textbox has no audio
+      if (id === 11 && targetType === 'textbox' && !targetHasAudio) return false;
+      return true;
+    })
+    .map((id) => ({
+      id,
+      name: EFFECT_TYPE_NAMES[id] ?? `Effect ${id}`,
+      category: EFFECT_CATEGORY_MAP[id] ?? 'entrance',
+    }));
 }
 
 export function buildObjectFilterOptions(

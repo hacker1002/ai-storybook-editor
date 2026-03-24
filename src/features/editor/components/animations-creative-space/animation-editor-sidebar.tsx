@@ -46,6 +46,9 @@ interface AnimationEditorSidebarProps {
 
   // Canvas selection — clicking sidebar item selects its target on canvas
   onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
+
+  // Read-along conditional visibility — true when target textbox has audio
+  targetHasAudio?: boolean;
 }
 
 export function AnimationEditorSidebar({
@@ -62,6 +65,7 @@ export function AnimationEditorSidebar({
   onDeleteAnimation,
   onReorderAnimation,
   onItemSelect,
+  targetHasAudio,
 }: AnimationEditorSidebarProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
@@ -287,6 +291,7 @@ export function AnimationEditorSidebar({
               onClickLoopChange={makeClickLoopChange(resolvedAnim.originalIndex)}
               onEffectOptionChange={makeEffectOptionChange(resolvedAnim.originalIndex, resolvedAnim)}
               onMustCompleteChange={makeMustCompleteChange(resolvedAnim.originalIndex)}
+              targetHasAudio={targetHasAudio}
             />
           ))
         )}

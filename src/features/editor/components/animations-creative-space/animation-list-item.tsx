@@ -48,6 +48,8 @@ interface AnimationListItemProps {
   disabled?: boolean;
   /** Override cLoop display value (player uses remaining replays instead of DB value) */
   displayClickLoop?: number;
+  /** Read-along conditional visibility — true when target textbox has audio */
+  targetHasAudio?: boolean;
 }
 
 function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
@@ -118,6 +120,7 @@ export function AnimationListItem({
   isPendingNext = false,
   disabled = false,
   displayClickLoop,
+  targetHasAudio,
 }: AnimationListItemProps) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -289,6 +292,7 @@ export function AnimationListItem({
             onClickLoopChange={onClickLoopChange}
             onEffectOptionChange={onEffectOptionChange}
             onMustCompleteChange={onMustCompleteChange}
+            targetHasAudio={targetHasAudio}
           />
         </CollapsibleContent>
       </Collapsible>

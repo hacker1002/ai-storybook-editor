@@ -12,6 +12,7 @@ import { getAvailableEffects } from './utils';
 interface EffectTypeGridProps {
   animation: ResolvedAnimation;
   onEffectTypeChange: (newEffectType: number) => void;
+  targetHasAudio?: boolean;
 }
 
 interface CategoryGroup {
@@ -19,7 +20,7 @@ interface CategoryGroup {
   effects: AvailableEffect[];
 }
 
-const CATEGORY_ORDER: EffectCategory[] = ['play', 'entrance', 'emphasis', 'exit', 'motion-paths'];
+const CATEGORY_ORDER: EffectCategory[] = ['play', 'read-along', 'entrance', 'emphasis', 'exit', 'motion-paths'];
 const EXTENDED_CATEGORIES: EffectCategory[] = ['exit', 'motion-paths'];
 
 function groupEffectsByCategory(effects: AvailableEffect[]): CategoryGroup[] {
@@ -98,10 +99,10 @@ function CategorySection({
   );
 }
 
-export function EffectTypeGrid({ animation, onEffectTypeChange }: EffectTypeGridProps) {
+export function EffectTypeGrid({ animation, onEffectTypeChange, targetHasAudio }: EffectTypeGridProps) {
   const [showMore, setShowMore] = useState(false);
 
-  const availableEffects = getAvailableEffects(animation.animation.target.type);
+  const availableEffects = getAvailableEffects(animation.animation.target.type, targetHasAudio);
   const allGroups = groupEffectsByCategory(availableEffects);
   const selectedEffectType = animation.animation.effect.type;
 
