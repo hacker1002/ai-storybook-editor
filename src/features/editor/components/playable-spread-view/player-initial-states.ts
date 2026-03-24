@@ -171,10 +171,14 @@ export function resolveAnimationEndState(
 
 // === Reset & Apply ===
 
-/** Remove all GSAP inline styles from elements in the refs map */
+/** Remove all GSAP inline styles and read-along highlights from elements in the refs map */
 export function resetElementStyles(elementRefsMap: Map<string, HTMLElement>): void {
   elementRefsMap.forEach((element) => {
     gsap.set(element, { clearProps: 'opacity,visibility,transform,transformOrigin' });
+    // Clear read-along word highlights (CSS class on child spans)
+    element.querySelectorAll('.read-along-active-word').forEach((el) => {
+      el.classList.remove('read-along-active-word');
+    });
   });
 }
 
@@ -218,5 +222,16 @@ export function applyInitialStates(
         mediaEl.currentTime = 0;
       }
     }
+
+    // Always clear read-along highlighted word classes (not just for READ_ALONG first-anim targets,
+    // because a textbox may have READ_ALONG as a later animation, and highlights must be reset)
+    element.querySelectorAll('.read-along-active-word').forEach((el) => {
+      el.classList.remove('read-along-active-word');
+    });
+    // Remove orphaned dynamically-created read-along audio elements (display:none, direct child)
+    element.querySelectorAll(':scope > audio[style*="display: none"]').forEach((el) => {
+      (el as HTMLAudioElement).pause();
+      el.remove();
+    });
   });
 }

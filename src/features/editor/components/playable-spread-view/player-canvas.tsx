@@ -24,9 +24,19 @@ import type {
 import {
   isReplayableClick,
   buildAnimationSteps,
-  findPrevOnNextStep,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
+import {
+  usePlaybackStore,
+  usePlaybackActions,
+  usePlayerPhase,
+  useCurrentStepIndex,
+  usePendingClickTargetId,
+  useReplayableItems,
+} from "@/stores/animation-playback-store";
+import { PlayerControlSidebar } from "./player-control-sidebar";
+import { PlayQuizModal } from "./play-quiz-modal";
+import { createLogger } from "@/utils/logger";
 
 // === Constants ===
 const RAPID_NEXT_THRESHOLD = 150; // ms
@@ -43,17 +53,6 @@ export interface PlayerCanvasProps {
   onSkipSpread: (direction: "next" | "prev") => void;
   onPlayModeChange: (mode: PlayMode) => void;
 }
-import {
-  usePlaybackStore,
-  usePlaybackActions,
-  usePlayerPhase,
-  useCurrentStepIndex,
-  usePendingClickTargetId,
-  useReplayableItems,
-} from "@/stores/animation-playback-store";
-import { PlayerControlSidebar } from "./player-control-sidebar";
-import { PlayQuizModal } from "./play-quiz-modal";
-import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "PlayerCanvas");
 
@@ -107,6 +106,16 @@ export function PlayerCanvas({
     setActiveQuizId(quizId);
   }, []);
 
+  // === Version-filtered animations ===
+  // Classic mode: only READ_ALONG animations (effect type 11)
+  // Interactive mode: all animations
+  const filteredAnimations = useMemo(() => {
+    if (playVersion === 'classic') {
+      return spread.animations.filter((a) => a.effect.type === EFFECT_TYPE.READ_ALONG);
+    }
+    return spread.animations;
+  }, [spread.animations, playVersion]);
+
   // === GSAP engine hook ===
   const {
     spreadContainerRef,
@@ -118,6 +127,7 @@ export function PlayerCanvas({
     handleQuizComplete,
   } = usePlayerGsapEngine({
     spread,
+    filteredAnimations,
     zoomLevel,
     editorLangCode,
     onSpreadComplete,
@@ -138,22 +148,24 @@ export function PlayerCanvas({
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(zoomLevel);
 
-  // === Version-filtered animations ===
-  // Classic mode: only READ_ALONG animations (effect type 11)
-  // Interactive mode: all animations
-  const filteredAnimations = useMemo(() => {
-    if (playVersion === 'classic') {
-      return spread.animations.filter((a) => a.effect.type === EFFECT_TYPE.READ_ALONG);
-    }
-    return spread.animations;
-  }, [spread.animations, playVersion]);
-
   // === Store sync effects ===
 
   // 1. Sync playMode from props into store
+  const prevPlayModeRef = useRef<PlayMode>(playMode);
   useEffect(() => {
+    const prevMode = prevPlayModeRef.current;
+    prevPlayModeRef.current = playMode;
     playbackActions.setPlayMode(playMode);
-  }, [playMode, playbackActions]);
+
+    // Mode transition (off↔auto): reset store to clean state
+    // - off→auto: clears stale pendingClickTargetId, phase, replayableItems
+    // - auto→off: restarts step-based playback from beginning
+    if (prevMode !== playMode) {
+      const newSteps = buildAnimationSteps(filteredAnimations);
+      playbackActions.reset(newSteps);
+      playbackActions.play();
+    }
+  }, [playMode, playbackActions, filteredAnimations]);
 
   // 1b. Sync playVersion from props into store
   useEffect(() => {
@@ -244,24 +256,30 @@ export function PlayerCanvas({
 
   const handleBack = useCallback(() => {
     if (playMode !== "off") return;
-    // Dismiss quiz modal if open before going back
     if (activeQuizId) setActiveQuizId(null);
-    // No previous on_next step exists → skip to previous spread
-    // Handles: step 0, before start, or first interactive step preceded only by 'auto' steps
-    const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
-    if (currentStepIndex <= 0 || prevOnNextIdx < 0) {
+
+    // Before any step played → navigate to previous spread
+    if (currentStepIndex < 0) {
       if (hasPrevious) onSkipSpread("prev");
       return;
     }
+
+    // Rate limit rapid presses
+    const now = Date.now();
+    if (now - lastBackTimeRef.current < RAPID_NEXT_THRESHOLD) return;
+    lastBackTimeRef.current = now;
+
+    // Block back during mustComplete step
     if (phase === "playing") {
       const currentStep = steps[currentStepIndex];
       if (currentStep?.mustComplete) return;
-      const now = Date.now();
-      if (now - lastBackTimeRef.current < RAPID_NEXT_THRESHOLD) return;
-      lastBackTimeRef.current = now;
-      killTimeline();
-      reApplyInitialStates(currentStepIndex);
     }
+
+    // Kill active timeline (safe no-op if none running) + pause media
+    killTimeline();
+    // Revert visual state of current step (works for both playing and completed steps)
+    reApplyInitialStates(currentStepIndex);
+    // Decrement currentStepIndex, set phase=awaiting_next (no auto-play)
     playbackActions.userBack();
   }, [
     playMode,
@@ -332,9 +350,9 @@ export function PlayerCanvas({
 
   const canGoBack = useMemo(() => {
     if (playMode !== "off") return false;
-    // No previous on_next step → can go back only if previous spread exists
-    const prevOnNextIdx = findPrevOnNextStep(steps, currentStepIndex);
-    if (currentStepIndex <= 0 || prevOnNextIdx < 0) return hasPrevious;
+    // Before any step → can go back only if previous spread exists
+    if (currentStepIndex < 0) return hasPrevious;
+    // During mustComplete step → can't go back
     if (phase === "playing") {
       const step = steps[currentStepIndex];
       return !step?.mustComplete;

@@ -6,7 +6,6 @@ import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { AnimationStep, PlayerPhase, PlayMode, PlayVersion, ReplayableItem } from '@/types/playable-types';
 import {
   findNextOnNextStep,
-  findPrevOnNextStep,
   findOnClickStepForTarget,
 } from '@/features/editor/components/playable-spread-view/player-utils';
 import { createLogger } from '@/utils/logger';
@@ -195,18 +194,28 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         set({ phase: 'complete', pendingClickTargetId: null });
       },
 
-      // ── USER_BACK — mirrors playerReducer case 'USER_BACK' ───────────────
+      // ── USER_BACK — revert current step, don't auto-play ─────────────────
+      // Decrements currentStepIndex so the next userNext() replays the reverted step.
+      // Visual revert is handled by the component (reApplyInitialStates) before calling this.
 
       userBack: () => {
         const { currentStepIndex, steps } = get();
         log.info('userBack', 'action', { currentStepIndex });
-        if (currentStepIndex <= 0) return;
+        if (currentStepIndex < 0) return;
 
-        const prevIdx = findPrevOnNextStep(steps, currentStepIndex);
-        if (prevIdx >= 0) {
-          set({ phase: 'playing', currentStepIndex: prevIdx, pendingClickTargetId: null, maxActivatedOrder: -1 });
-        }
-        // No previous on_next step found — stay
+        const newIdx = currentStepIndex - 1;
+        // The step that will replay is newIdx + 1 (the one we just reverted).
+        // If that step is 'auto' (after_previous/with_previous), it must auto-play
+        // because it can't be triggered by user input.
+        const replayStep = steps[newIdx + 1];
+        const shouldAutoPlay = replayStep?.triggerType === 'auto';
+
+        set({
+          phase: shouldAutoPlay ? 'playing' : 'awaiting_next',
+          currentStepIndex: newIdx,
+          pendingClickTargetId: null,
+          maxActivatedOrder: -1,
+        });
       },
 
       // ── USER_CLICK — mirrors playerReducer case 'USER_CLICK' ─────────────

@@ -5,15 +5,19 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import {
+  usePlaybackStore,
   useActiveAnimationOrders,
   usePlayerPhase,
   useMaxActivatedOrder,
+  useCurrentStepIndex,
   useReplayableItems,
+  usePlayVersion,
 } from "@/stores/animation-playback-store";
 import type {
   ResolvedAnimation,
   SpreadAnimation,
 } from "@/types/animation-types";
+import { EFFECT_TYPE } from "@/constants/playable-constants";
 import { AnimationListItem } from "./animation-list-item";
 import { computeStepNumbers } from "./utils";
 
@@ -36,32 +40,49 @@ export function PlayerAnimationSidebar({
   const activeAnimationOrders = useActiveAnimationOrders();
   const phase = usePlayerPhase();
   const maxActivatedOrder = useMaxActivatedOrder();
+  const currentStepIndex = useCurrentStepIndex();
+  const steps = usePlaybackStore((s) => s.steps);
   const replayableItems = useReplayableItems();
+  const playVersion = usePlayVersion();
+
+  // Classic mode: only show READ_ALONG animations; interactive: show all
+  const displayAnimations = useMemo(() => {
+    if (playVersion === "classic") {
+      return animations.filter(
+        (a) => a.animation.effect.type === EFFECT_TYPE.READ_ALONG
+      );
+    }
+    return animations;
+  }, [animations, playVersion]);
 
   // Pending next animation order (blink indicator) — only when awaiting user input
   const [pendingNextOrder, setPendingNextOrder] = useState<number | null>(null);
 
   useEffect(() => {
     // Only show pending indicator when awaiting user input, not during active playback.
-    // During 'playing', gaps between sequential tweens momentarily empty activeAnimationOrders
-    // which would incorrectly flash the pending indicator.
     if (phase !== "awaiting_next" && phase !== "awaiting_click") {
       setPendingNextOrder(null);
       return;
     }
     if (maxActivatedOrder >= 0) {
-      const sortedOrders = animations
+      // Normal: find next animation order after the last one that played
+      const sortedOrders = displayAnimations
         .map((a) => a.animation.order)
         .sort((a, b) => a - b);
       setPendingNextOrder(
         sortedOrders.find((o) => o > maxActivatedOrder) ?? null
       );
+    } else {
+      // After userBack (maxActivatedOrder reset to -1): pending = first animation of next step
+      const nextStep = steps[currentStepIndex + 1];
+      setPendingNextOrder(nextStep?.animations[0]?.order ?? null);
     }
-  }, [animations, phase, maxActivatedOrder]);
+  }, [displayAnimations, phase, maxActivatedOrder, currentStepIndex, steps]);
 
+  // Recompute step numbers on the filtered list so numbering is sequential
   const stepNumbers = useMemo(
-    () => computeStepNumbers(animations),
-    [animations]
+    () => computeStepNumbers(displayAnimations),
+    [displayAnimations]
   );
 
   // Build remaining cLoop map from store's replayableItems
@@ -69,8 +90,7 @@ export function PlayerAnimationSidebar({
   const remainingClickLoopMap = useMemo(() => {
     const map = new Map<number, number>();
     for (const [, item] of replayableItems) {
-      // Find animations matching this replayable item's target
-      for (const anim of animations) {
+      for (const anim of displayAnimations) {
         if (
           anim.animation.target.id === item.itemId &&
           anim.animation.trigger_type === "on_click"
@@ -80,7 +100,7 @@ export function PlayerAnimationSidebar({
       }
     }
     return map;
-  }, [replayableItems, animations]);
+  }, [replayableItems, displayAnimations]);
 
   // Resolve displayClickLoop for a given animation
   const getDisplayClickLoop = useCallback(
@@ -105,16 +125,16 @@ export function PlayerAnimationSidebar({
         <span className="text-sm font-semibold">Animations</span>
       </div>
 
-      {/* Animation list (read-only) */}
+      {/* Animation list (read-only, filtered by playVersion) */}
       <div className="flex-1 overflow-auto p-2 space-y-1">
-        {animations.length === 0 ? (
+        {displayAnimations.length === 0 ? (
           <div className="flex items-center justify-center py-8">
             <p className="text-sm text-muted-foreground text-center">
               No animations on this spread
             </p>
           </div>
         ) : (
-          animations.map((resolvedAnim, index) => (
+          displayAnimations.map((resolvedAnim, index) => (
             <AnimationListItem
               key={`player-${resolvedAnim.originalIndex}-${resolvedAnim.animation.effect.type}`}
               animation={resolvedAnim}

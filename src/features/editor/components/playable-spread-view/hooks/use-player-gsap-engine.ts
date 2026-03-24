@@ -1,7 +1,7 @@
 // use-player-gsap-engine.ts - GSAP animation engine hook extracted from PlayerCanvas
 // Manages timelines, refs, and all GSAP side effects for playback
 
-import { useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import gsap from 'gsap';
 import type { AnimationStep, PlayableSpread } from '@/types/playable-types';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
@@ -10,7 +10,6 @@ import {
   usePlayerPhase,
   useCurrentStepIndex,
   usePlayMode,
-  usePlayVersion,
   useIsPlaying,
   useVolume,
   usePlaybackActions,
@@ -58,6 +57,8 @@ const TRIGGER_DELAY = {
 
 export interface UsePlayerGsapEngineParams {
   spread: PlayableSpread;
+  /** Pre-filtered animations by playVersion (from PlayerCanvas prop, not store) */
+  filteredAnimations: PlayableSpread['animations'];
   zoomLevel: number;
   editorLangCode: string;
   onSpreadComplete: (spreadId: string) => void;
@@ -84,6 +85,7 @@ export interface UsePlayerGsapEngineReturn {
  */
 export function usePlayerGsapEngine({
   spread,
+  filteredAnimations: versionFilteredAnimations,
   zoomLevel,
   editorLangCode,
   onSpreadComplete,
@@ -93,20 +95,11 @@ export function usePlayerGsapEngine({
   const phase = usePlayerPhase();
   const currentStepIndex = useCurrentStepIndex();
   const playMode = usePlayMode();
-  const playVersion = usePlayVersion();
   const isPlaying = useIsPlaying();
   const volume = useVolume();
   const playbackActions = usePlaybackActions();
   // Access steps directly from store for effects that need them
   const steps = usePlaybackStore((s) => s.steps);
-
-  // Filter animations by version: classic = only read-along, interactive = all
-  const versionFilteredAnimations = useMemo(() => {
-    if (playVersion === 'classic') {
-      return spread.animations.filter(a => a.effect.type === EFFECT_TYPE.READ_ALONG);
-    }
-    return spread.animations;
-  }, [spread.animations, playVersion]);
 
   // === Refs ===
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
@@ -115,6 +108,9 @@ export function usePlayerGsapEngine({
   const spreadContainerRef = useRef<HTMLDivElement>(null);
   const prevStepIndexRef = useRef<number>(-1);
   const pendingRafRef = useRef<number | null>(null);
+  const prevPlayModeRef = useRef(playMode);
+  /** Tracks media elements that were playing when user paused, so we can resume them */
+  const pausedMediaRef = useRef<Set<HTMLMediaElement>>(new Set());
 
   const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(zoomLevel);
 
@@ -123,11 +119,21 @@ export function usePlayerGsapEngine({
   const pauseAllMedia = useCallback(() => {
     const container = spreadContainerRef.current;
     if (!container) return;
+    pausedMediaRef.current.clear();
     container.querySelectorAll<HTMLMediaElement>('audio, video').forEach((el) => {
       if (!el.paused) {
+        pausedMediaRef.current.add(el);
         el.pause();
       }
     });
+  }, []);
+
+  /** Resume media elements that were playing before the last pauseAllMedia() call */
+  const resumePausedMedia = useCallback(() => {
+    pausedMediaRef.current.forEach((el) => {
+      if (el.isConnected) el.play().catch(() => {});
+    });
+    pausedMediaRef.current.clear();
   }, []);
 
   const killTimeline = useCallback(() => {
@@ -450,10 +456,14 @@ export function usePlayerGsapEngine({
         steps[i]?.animations.forEach((a) => affectedTargets.add(a.target.id));
       }
 
-      // Clear GSAP props for affected elements
+      // Clear GSAP props + read-along highlights for affected elements
       affectedTargets.forEach((tid) => {
         const el = elementRefsMap.current.get(tid);
-        if (el) gsap.set(el, { clearProps: 'opacity,visibility,transform,transformOrigin' });
+        if (!el) return;
+        gsap.set(el, { clearProps: 'opacity,visibility,transform,transformOrigin' });
+        el.querySelectorAll('.read-along-active-word').forEach((w) => {
+          w.classList.remove('read-along-active-word');
+        });
       });
 
       // Re-apply initial states for affected targets
@@ -517,7 +527,12 @@ export function usePlayerGsapEngine({
   // === Lifecycle: Phase change → build step timeline (manual/off mode) ===
   useEffect(() => {
     if (playMode !== 'off') return;
-    if (phase !== 'playing' || currentStepIndex < 0) return;
+    if (phase !== 'playing' || currentStepIndex < 0) {
+      // Keep ref in sync even when skipped — prevents spurious USER_BACK detection
+      // when userBack sets phase=awaiting_next (effect skips) and later userNext plays
+      prevStepIndexRef.current = currentStepIndex;
+      return;
+    }
 
     const currentIdx = currentStepIndex;
     const prevIdx = prevStepIndexRef.current;
@@ -531,7 +546,12 @@ export function usePlayerGsapEngine({
       }
       affectedTargets.forEach((tid) => {
         const el = elementRefsMap.current.get(tid);
-        if (el) gsap.set(el, { clearProps: 'opacity,visibility,transform,transformOrigin' });
+        if (!el) return;
+        gsap.set(el, { clearProps: 'opacity,visibility,transform,transformOrigin' });
+        // Clear read-along highlights left by killed timeline
+        el.querySelectorAll('.read-along-active-word').forEach((w) => {
+          w.classList.remove('read-along-active-word');
+        });
       });
 
       // Re-apply initial states for affected targets
@@ -562,12 +582,27 @@ export function usePlayerGsapEngine({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, currentStepIndex, playMode]);
 
-  // === Lifecycle: Auto mode — play toggle or spread change ===
+  // === Lifecycle: Auto mode — play toggle or mode transition ===
   useEffect(() => {
+    const justSwitchedToAuto = prevPlayModeRef.current !== 'auto' && playMode === 'auto';
+    const justLeftAuto = prevPlayModeRef.current === 'auto' && playMode !== 'auto';
+    prevPlayModeRef.current = playMode;
+
+    // auto→off: kill auto timeline, reset elements to initial state
+    if (justLeftAuto) {
+      cancelPendingRaf();
+      killTimeline();
+      resetElementStyles(elementRefsMap.current);
+      applyInitialStates(versionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
+      return;
+    }
+
     if (playMode !== 'auto') return;
 
     if (isPlaying) {
-      if (!timelineRef.current || phase === 'complete') {
+      // Rebuild full timeline when: just switched to auto mode (off→auto),
+      // no timeline exists, or phase already complete
+      if (justSwitchedToAuto || !timelineRef.current || phase === 'complete') {
         cancelPendingRaf();
         pendingRafRef.current = requestAnimationFrame(() => {
           pendingRafRef.current = null;
@@ -577,9 +612,11 @@ export function usePlayerGsapEngine({
         });
       } else {
         timelineRef.current.resume();
+        resumePausedMedia();
       }
     } else {
       timelineRef.current?.pause();
+      pauseAllMedia();
     }
 
     return () => {
@@ -593,10 +630,12 @@ export function usePlayerGsapEngine({
     if (playMode !== 'off') return;
     if (isPlaying) {
       timelineRef.current?.resume();
+      resumePausedMedia();
     } else {
       timelineRef.current?.pause();
+      pauseAllMedia();
     }
-  }, [isPlaying, playMode]);
+  }, [isPlaying, playMode, pauseAllMedia, resumePausedMedia]);
 
   // === Lifecycle: Volume sync ===
   useEffect(() => {

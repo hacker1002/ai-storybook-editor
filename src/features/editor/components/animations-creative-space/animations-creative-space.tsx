@@ -86,22 +86,32 @@ export function AnimationsCreativeSpace() {
     [resolvedAnimations, itemsMap],
   );
 
-  // Determine if the expanded animation's target textbox has audio media
-  // Used to conditionally show the read-along effect option
+  // Check if the selected item (for "+" add dropdown) is a textbox with audio
+  const selectedItemHasAudio = useMemo(() => {
+    if (!selectedItem || selectedItem.type !== 'textbox') return false;
+    const textbox = currentSpread?.textboxes?.find((t) => t.id === selectedItem.id);
+    if (!textbox) { log.debug('selectedItemHasAudio', 'textbox not found', { id: selectedItem.id, spreadHasTextboxes: !!currentSpread?.textboxes, textboxCount: currentSpread?.textboxes?.length }); return false; }
+    const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
+    log.debug('selectedItemHasAudio', 'check', { id: selectedItem.id, hasAudio: !!result?.content?.audio, mediaLen: result?.content?.audio?.media?.length });
+    return Boolean(result?.content?.audio?.media?.length);
+  }, [selectedItem, currentSpread, languageCode]);
+
+  // Check if the expanded animation's target textbox has audio (for effect-type grid)
   const targetHasAudio = useMemo(() => {
-    if (expandedAnimIndex === null) return false;
+    if (expandedAnimIndex === null) return selectedItemHasAudio;
     const expandedAnimation = filteredAnimations[expandedAnimIndex];
     if (!expandedAnimation) return false;
     const target = expandedAnimation.animation.target;
     if (target.type !== 'textbox') return false;
     const textbox = currentSpread?.textboxes?.find((t) => t.id === target.id);
-    const content = textbox?.[languageCode] as { audio?: { media?: unknown[] } } | undefined;
-    return Boolean(content?.audio?.media?.length);
-  }, [expandedAnimIndex, filteredAnimations, currentSpread, languageCode]);
+    if (!textbox) return false;
+    const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
+    return Boolean(result?.content?.audio?.media?.length);
+  }, [expandedAnimIndex, filteredAnimations, currentSpread, languageCode, selectedItemHasAudio]);
 
   const availableEffects = useMemo(
-    () => (selectedItem ? getAvailableEffects(selectedItem.type, targetHasAudio) : []),
-    [selectedItem, targetHasAudio],
+    () => (selectedItem ? getAvailableEffects(selectedItem.type, selectedItemHasAudio) : []),
+    [selectedItem, selectedItemHasAudio],
   );
 
   // Build PlayableSpread[] from retouch spreads

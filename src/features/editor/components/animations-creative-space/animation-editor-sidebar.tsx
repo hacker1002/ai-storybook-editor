@@ -88,7 +88,7 @@ export function AnimationEditorSidebar({
     return grouped;
   }, [availableEffects]);
 
-  const categoryOrder: EffectCategory[] = ['play', 'entrance', 'emphasis', 'exit', 'motion-paths'];
+  const categoryOrder: EffectCategory[] = ['play', 'read-along', 'entrance', 'emphasis', 'exit', 'motion-paths'];
 
   const stepNumbers = useMemo(() => computeStepNumbers(animations), [animations]);
 

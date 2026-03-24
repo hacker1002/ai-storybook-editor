@@ -3,6 +3,7 @@
 // player-control-sidebar.tsx - Vertical sidebar with auto mode toggle, player controls, and volume controls
 
 import { SkipBack, SkipForward, Play, Pause } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import type { PlayMode } from '@/types/playable-types';
 import {
   usePlayMode,
@@ -50,23 +51,15 @@ export function PlayerControlSidebar({
       className="absolute right-0 top-0 bottom-0 w-14 flex flex-col items-center justify-between py-4 bg-white border-l border-border z-10"
     >
       {/* Top section — Auto Mode Toggle */}
-      <div className="flex flex-col items-center">
-        <button
-          type="button"
-          onClick={handleAutoToggle}
+      <div className="flex flex-col items-center gap-1">
+        <span className={`text-xs font-medium ${isAutoMode ? 'text-foreground' : 'text-muted-foreground'}`}>
+          Auto
+        </span>
+        <Switch
+          checked={isAutoMode}
+          onCheckedChange={handleAutoToggle}
           aria-label={`Auto play: ${isAutoMode ? 'on' : 'off'}`}
-          title={`Auto play: ${isAutoMode ? 'On' : 'Off'}`}
-          className={`
-            flex items-center justify-center w-8 h-8 rounded-md transition-colors
-            text-xs font-semibold
-            ${isAutoMode
-              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : 'text-muted-foreground hover:bg-accent'
-            }
-          `}
-        >
-          AUTO
-        </button>
+        />
       </div>
 
       {/* Middle section — Player Controls (Back, Play/Pause, Forward) */}
