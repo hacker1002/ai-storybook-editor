@@ -20,6 +20,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
   ChevronDown,
   ChevronRight,
   Pencil,
@@ -32,10 +37,15 @@ import {
   Sparkles,
   Image as ImageIcon,
   Loader2,
+  Send,
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { Label } from "@/components/ui/label";
-import { useSnapshotActions } from "@/stores/snapshot-store";
+import { useSnapshotActions, usePropByKey } from "@/stores/snapshot-store";
+import { useAssetCategories } from "@/stores/asset-category-store";
+import { callGenerateFromDescription } from "@/apis/image-api";
+import { callEditObjectImage } from "@/apis/retouch-api";
+import { fileToBase64 } from "@/utils/file-utils";
 import type { PropState } from "@/types/prop-types";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import { createLogger } from "@/utils/logger";
@@ -58,7 +68,10 @@ export function StateItem({
   onToggle,
 }: StateItemProps) {
   const { deletePropState, updatePropState } = useSnapshotActions();
+  const prop = usePropByKey(propKey);
+  const categories = useAssetCategories();
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const referenceInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   // Determine initial selected index: prefer is_selected=true, else 0
@@ -72,11 +85,20 @@ export function StateItem({
   const [promptText, setPromptText] = useState<string>(
     stateData.visual_description ?? ""
   );
-  const [attachedImage, setAttachedImage] = useState<{
-    label: string;
-    url: string;
-  } | null>(null);
+  const [attachedImages, setAttachedImages] = useState<
+    Array<{ label: string; base64Data: string; mimeType: string }>
+  >([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false);
+  const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
+  const [editPromptText, setEditPromptText] = useState("");
+  const [editAttachedImages, setEditAttachedImages] = useState<
+    Array<{ label: string; base64Data: string; mimeType: string }>
+  >([]);
+  const editReferenceInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_REFERENCE_IMAGES = 5;
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   // type 0 = default state, cannot be deleted or have images uploaded
   const isDefault = stateData.type === 0;
@@ -89,15 +111,14 @@ export function StateItem({
   const selectedIllustration =
     stateData.illustrations[selectedIllustrationIndex];
 
-  const handleAttachCurrentImage = () => {
-    if (!selectedIllustration) return;
-    log.debug("handleAttachCurrentImage", "attach current", {
-      url: selectedIllustration.media_url,
+  const handleBlurSave = () => {
+    const trimmed = promptText.trim();
+    if (trimmed === (stateData.visual_description ?? "")) return;
+    log.debug("handleBlurSave", "save visual_description", {
+      propKey,
+      stateKey: stateData.key,
     });
-    setAttachedImage({
-      label: "Current image",
-      url: selectedIllustration.media_url,
-    });
+    updatePropState(propKey, stateData.key, { visual_description: trimmed });
   };
 
   const handleDownload = () => {
@@ -108,15 +129,263 @@ export function StateItem({
     window.open(selectedIllustration.media_url, "_blank");
   };
 
-  const handleAttachFile = () => {
-    log.warn("handleAttachFile", "File upload not implemented yet");
+  const handleEditImage = async () => {
+    const trimmed = editPromptText.trim();
+    if (!trimmed || !selectedIllustration || isGenerating) return;
+
+    log.info("handleEditImage", "start", {
+      propKey,
+      stateKey: stateData.key,
+      prompt: trimmed,
+      refCount: editAttachedImages.length,
+    });
+    setIsEditPopoverOpen(false);
+    setIsGenerating(true);
+
+    try {
+      const referenceImages =
+        editAttachedImages.length > 0
+          ? editAttachedImages.map(({ base64Data, mimeType }) => ({
+              base64Data,
+              mimeType,
+            }))
+          : undefined;
+
+      const result = await callEditObjectImage({
+        prompt: trimmed,
+        imageUrl: selectedIllustration.media_url,
+        referenceImages,
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? "Edit failed");
+      }
+
+      log.info("handleEditImage", "success", {
+        imageUrl: result.data.imageUrl,
+      });
+
+      // Deselect all existing, prepend edited illustration as selected
+      const updatedIllustrations = stateData.illustrations.map((ill) => ({
+        ...ill,
+        is_selected: false,
+      }));
+      updatedIllustrations.unshift({
+        media_url: result.data.imageUrl,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      });
+
+      updatePropState(propKey, stateData.key, {
+        illustrations: updatedIllustrations,
+      });
+      setSelectedIllustrationIndex(0);
+      setEditPromptText("");
+      setEditAttachedImages([]);
+      toast.success("Image edited successfully");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Edit failed";
+      log.error("handleEditImage", "failed", { error: msg });
+      toast.error(msg);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleGenerate = () => {
-    log.warn("handleGenerate", "Generate API not implemented yet");
+  const handleEditAttachFile = () => {
+    editReferenceInputRef.current?.click();
+  };
+
+  const handleEditReferenceFilesSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    e.target.value = "";
+
+    const remaining = MAX_REFERENCE_IMAGES - editAttachedImages.length;
+    if (remaining <= 0) {
+      toast.warning(`Maximum ${MAX_REFERENCE_IMAGES} reference images allowed`);
+      return;
+    }
+
+    const validFiles: File[] = [];
+    for (const file of fileArray) {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+        toast.warning(`${file.name}: only PNG, JPEG, WebP accepted`);
+        continue;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        toast.warning(`${file.name}: exceeds 10MB limit`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    const toProcess = validFiles.slice(0, remaining);
+    if (validFiles.length > remaining) {
+      toast.warning(
+        `Only ${remaining} more reference image(s) can be added (max ${MAX_REFERENCE_IMAGES})`
+      );
+    }
+
+    try {
+      const newImages = await Promise.all(
+        toProcess.map(async (file) => ({
+          label: file.name,
+          base64Data: await fileToBase64(file),
+          mimeType: file.type,
+        }))
+      );
+      setEditAttachedImages((prev) => [...prev, ...newImages]);
+    } catch (err) {
+      log.error("handleEditReferenceFiles", "conversion failed", {
+        error: err,
+      });
+      toast.error("Failed to process reference image(s)");
+    }
+  };
+
+  const handleAttachFile = () => {
+    referenceInputRef.current?.click();
+  };
+
+  const handleReferenceFilesSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    // Snapshot to array BEFORE resetting input — FileList is a live reference
+    const fileArray = Array.from(files);
+    e.target.value = "";
+
+    const remaining = MAX_REFERENCE_IMAGES - attachedImages.length;
+    if (remaining <= 0) {
+      toast.warning(`Maximum ${MAX_REFERENCE_IMAGES} reference images allowed`);
+      return;
+    }
+
+    const validFiles: File[] = [];
+    for (const file of fileArray) {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+        log.warn("handleReferenceFiles", "invalid mime type", {
+          name: file.name,
+          type: file.type,
+        });
+        toast.warning(`${file.name}: only PNG, JPEG, WebP accepted`);
+        continue;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        log.warn("handleReferenceFiles", "file too large", {
+          name: file.name,
+          size: file.size,
+        });
+        toast.warning(`${file.name}: exceeds 10MB limit`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    const toProcess = validFiles.slice(0, remaining);
+    if (validFiles.length > remaining) {
+      toast.warning(
+        `Only ${remaining} more reference image(s) can be added (max ${MAX_REFERENCE_IMAGES})`
+      );
+    }
+
+    log.debug("handleReferenceFiles", "converting files", {
+      count: toProcess.length,
+    });
+    try {
+      const newImages = await Promise.all(
+        toProcess.map(async (file) => ({
+          label: file.name,
+          base64Data: await fileToBase64(file),
+          mimeType: file.type,
+        }))
+      );
+      setAttachedImages((prev) => [...prev, ...newImages]);
+    } catch (err) {
+      log.error("handleReferenceFiles", "conversion failed", { error: err });
+      toast.error("Failed to process reference image(s)");
+    }
+  };
+
+  const buildDescription = (visualDescription: string): string => {
+    const categoryName = prop?.category_id
+      ? categories.find((c) => c.id === prop.category_id)?.name
+      : undefined;
+    if (categoryName) {
+      return `Đối tượng thuộc nhóm ${categoryName}.\nMô tả: ${visualDescription}`;
+    }
+    return visualDescription;
+  };
+
+  const handleGenerate = async () => {
+    const trimmedPrompt = promptText.trim();
+    if (!trimmedPrompt || isGeneratingRef.current) return;
+
+    isGeneratingRef.current = true;
+    log.info("handleGenerate", "start", { propKey, stateKey: stateData.key });
     setIsGenerating(true);
-    // Placeholder — in production this calls an API
-    setTimeout(() => setIsGenerating(false), 1500);
+
+    try {
+      // Save visual_description to store first (covers blur-skip edge case)
+      updatePropState(propKey, stateData.key, {
+        visual_description: trimmedPrompt,
+      });
+
+      const description = buildDescription(trimmedPrompt);
+      const referenceImages =
+        attachedImages.length > 0
+          ? attachedImages.map(({ base64Data, mimeType }) => ({
+              base64Data,
+              mimeType,
+            }))
+          : undefined;
+
+      log.debug("handleGenerate", "calling API", {
+        descriptionLength: description.length,
+        refCount: referenceImages?.length ?? 0,
+      });
+
+      const result = await callGenerateFromDescription({
+        description,
+        referenceImages,
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? "Generation failed");
+      }
+
+      log.info("handleGenerate", "success", { imageUrl: result.data.imageUrl });
+
+      // Deselect all existing, prepend new illustration as selected
+      const updatedIllustrations = stateData.illustrations.map((ill) => ({
+        ...ill,
+        is_selected: false,
+      }));
+      updatedIllustrations.unshift({
+        media_url: result.data.imageUrl,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      });
+
+      updatePropState(propKey, stateData.key, {
+        illustrations: updatedIllustrations,
+      });
+      setSelectedIllustrationIndex(0);
+      setAttachedImages([]);
+      toast.success("Image generated successfully");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Generation failed";
+      log.error("handleGenerate", "failed", { error: msg });
+      toast.error(msg);
+    } finally {
+      setIsGenerating(false);
+      isGeneratingRef.current = false;
+    }
   };
 
   const handleUploadClick = () => {
@@ -230,6 +499,15 @@ export function StateItem({
             onChange={handleFileSelected}
             className="hidden"
           />
+          {/* Hidden file input for edit popover references */}
+          <input
+            ref={editReferenceInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            onChange={handleEditReferenceFilesSelected}
+            className="hidden"
+          />
           {/* Upload button — available for all states */}
           <Button
             variant="outline"
@@ -316,15 +594,85 @@ export function StateItem({
                   )}
                   {/* Floating action buttons — bottom-right on image */}
                   <div className="absolute bottom-2 right-2 flex gap-2 z-20">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={handleAttachCurrentImage}
-                      disabled={isGenerating}
-                      aria-label="Edit / attach to prompt"
+                    <Popover
+                      open={isEditPopoverOpen}
+                      onOpenChange={setIsEditPopoverOpen}
                     >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={isGenerating}
+                          aria-label="Edit image"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="end"
+                        className="w-80 p-3"
+                      >
+                        {editAttachedImages.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {editAttachedImages.map((img, idx) => (
+                              <div
+                                key={`edit-${img.label}-${idx}`}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
+                              >
+                                <span className="truncate max-w-[120px]">
+                                  {img.label}
+                                </span>
+                                <button
+                                  onClick={() =>
+                                    setEditAttachedImages((prev) =>
+                                      prev.filter((_, i) => i !== idx)
+                                    )
+                                  }
+                                  className="hover:bg-blue-100 rounded"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Textarea
+                            value={editPromptText}
+                            onChange={(e) => setEditPromptText(e.target.value)}
+                            placeholder="Describe changes..."
+                            className="min-h-[60px] flex-1 resize-none text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                handleEditImage();
+                              }
+                            }}
+                          />
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={handleEditAttachFile}
+                              aria-label="Attach reference image"
+                            >
+                              <Paperclip className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={!editPromptText.trim()}
+                              onClick={handleEditImage}
+                              aria-label="Submit edit"
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -395,26 +743,21 @@ export function StateItem({
             </div>
           </div>
 
-          {/* Prompt Section — matching edit-image modal style */}
+          {/* Visual Description Section */}
           <div>
+            {/* Hidden file input for reference images */}
+            <input
+              ref={referenceInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              onChange={handleReferenceFilesSelected}
+              className="hidden"
+            />
             <div className="flex items-center gap-2 mb-2">
-              <Label className="text-xs text-muted-foreground">PROMPT</Label>
-              {attachedImage && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs">
-                  <span className="truncate max-w-[150px]">
-                    {attachedImage.label}
-                  </span>
-                  <button
-                    onClick={() => {
-                      log.debug("removeAttachedImage", "remove attached");
-                      setAttachedImage(null);
-                    }}
-                    className="hover:bg-blue-100 rounded"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )}
+              <Label className="text-xs text-muted-foreground">
+                VISUAL DESCRIPTION
+              </Label>
               <Button
                 size="sm"
                 variant="ghost"
@@ -425,10 +768,43 @@ export function StateItem({
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
+              {attachedImages.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {attachedImages.length}/{MAX_REFERENCE_IMAGES}
+                </span>
+              )}
             </div>
+            {/* Attached reference images list */}
+            {attachedImages.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {attachedImages.map((img, idx) => (
+                  <div
+                    key={`${img.label}-${idx}`}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
+                  >
+                    <span className="truncate max-w-[120px]">{img.label}</span>
+                    <button
+                      onClick={() => {
+                        log.debug("removeAttachedImage", "remove reference", {
+                          idx,
+                          label: img.label,
+                        });
+                        setAttachedImages((prev) =>
+                          prev.filter((_, i) => i !== idx)
+                        );
+                      }}
+                      className="hover:bg-blue-100 rounded"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <Textarea
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
+              onBlur={handleBlurSave}
               placeholder="Describe the visual appearance..."
               className="min-h-[80px]"
               disabled={isGenerating}
