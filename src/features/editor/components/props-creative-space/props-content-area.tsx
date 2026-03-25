@@ -16,7 +16,7 @@ import { usePropByKey, useSnapshotActions } from '@/stores/snapshot-store';
 import type { ContentTab } from '@/types/prop-types';
 import { CONTENT_TABS } from '@/constants/prop-constants';
 import { StatesTabPanel } from './states-tab-panel';
-import { SoundsTabPanelMock } from './sounds-tab-panel-mock';
+import { SoundsTabPanel } from './sounds-tab-panel';
 import { CropsTabPanelMock } from './crops-tab-panel-mock';
 import { createLogger } from '@/utils/logger';
 import { cn, generateUniqueKey } from '@/utils/utils';
@@ -46,8 +46,12 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
   const handleAddClick = () => {
     log.debug('handleAddClick', 'add click', { activeTab });
     if (activeTab === 'states') {
+      setNewStateName('');
+      setNewStateKey('');
       setIsCreateStateModalOpen(true);
     } else if (activeTab === 'sounds') {
+      setNewSoundName('');
+      setNewSoundKey('');
       setIsCreateSoundModalOpen(true);
     }
   };
@@ -131,7 +135,14 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
             Prop not found.
           </div>
         )}
-        {activeTab === 'sounds' && <SoundsTabPanelMock />}
+        {activeTab === 'sounds' && prop && (
+          <SoundsTabPanel key={selectedPropKey} propKey={selectedPropKey} sounds={prop.sounds} />
+        )}
+        {activeTab === 'sounds' && !prop && (
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+            Prop not found.
+          </div>
+        )}
         {activeTab === 'crops' && <CropsTabPanelMock />}
       </div>
 
@@ -152,6 +163,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
                   setNewStateName(name);
                   setNewStateKey(name.trim() ? generateUniqueKey(name.trim()) : '');
                 }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateState(); }}
                 placeholder="e.g. Glowing"
               />
             </div>
@@ -166,7 +178,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateStateModalOpen(false)}>
+            <Button variant="outline" onClick={() => { setNewStateName(''); setNewStateKey(''); setIsCreateStateModalOpen(false); }}>
               Cancel
             </Button>
             <Button
@@ -191,7 +203,12 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
               <label className="text-sm font-medium mb-1 block">Name</label>
               <Input
                 value={newSoundName}
-                onChange={(e) => setNewSoundName(e.target.value)}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setNewSoundName(name);
+                  setNewSoundKey(name.trim() ? generateUniqueKey(name.trim()) : '');
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateSound(); }}
                 placeholder="e.g. Swing Sound"
               />
             </div>
@@ -199,18 +216,19 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
               <label className="text-sm font-medium mb-1 block">Key</label>
               <Input
                 value={newSoundKey}
-                onChange={(e) => setNewSoundKey(e.target.value)}
-                placeholder="e.g. swing_sound"
+                readOnly
+                className="bg-muted text-muted-foreground"
+                placeholder="Auto-generated from name"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateSoundModalOpen(false)}>
+            <Button variant="outline" onClick={() => { setNewSoundName(''); setNewSoundKey(''); setIsCreateSoundModalOpen(false); }}>
               Cancel
             </Button>
             <Button
               onClick={handleCreateSound}
-              disabled={!newSoundName.trim() || !newSoundKey.trim()}
+              disabled={!newSoundName.trim()}
             >
               Create
             </Button>
