@@ -7,6 +7,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
@@ -73,6 +74,8 @@ export function StateItem({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const referenceInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(stateData.name);
 
   // Determine initial selected index: prefer is_selected=true, else 0
   const initSelectedIdx = () => {
@@ -465,26 +468,75 @@ export function StateItem({
               <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
             )}
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-medium text-sm truncate">
-                  {stateData.name}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    log.warn("handleRename", "Rename not implemented yet");
-                  }}
-                  title="Rename state"
-                >
-                  <Pencil className="h-3 w-3 text-muted-foreground" />
-                </Button>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                /{stateData.key}
-              </span>
+              {isRenaming ? (
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <Input
+                    className="h-7 text-sm flex-1"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (renameValue.trim() && renameValue.trim() !== stateData.name) {
+                          log.info('handleRename', 'renamed', { stateKey: stateData.key, newName: renameValue.trim() });
+                          updatePropState(propKey, stateData.key, { name: renameValue.trim() });
+                        }
+                        setIsRenaming(false);
+                      }
+                      if (e.key === 'Escape') setIsRenaming(false);
+                    }}
+                    autoFocus
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => {
+                      if (renameValue.trim() && renameValue.trim() !== stateData.name) {
+                        log.info('handleRename', 'renamed', { stateKey: stateData.key, newName: renameValue.trim() });
+                        updatePropState(propKey, stateData.key, { name: renameValue.trim() });
+                      }
+                      setIsRenaming(false);
+                    }}
+                    aria-label="Accept rename"
+                  >
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => setIsRenaming(false)}
+                    aria-label="Cancel rename"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-sm truncate">
+                      {stateData.name}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenameValue(stateData.name);
+                        setIsRenaming(true);
+                        log.debug('handleStartRename', 'start', { stateKey: stateData.key });
+                      }}
+                      title="Rename state"
+                    >
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    /{stateData.key}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </CollapsibleTrigger>
