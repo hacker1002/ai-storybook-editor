@@ -8,6 +8,7 @@ import { SpreadThumbnailList } from './spread-thumbnail-list';
 import { ZOOM, COLUMNS } from '@/constants/spread-constants';
 import type { SpreadType } from './new-spread-button';
 import type { ViewMode } from '@/types/canvas-types';
+import { useSetZoomLevel } from '@/stores/editor-settings-store';
 
 const STORAGE_KEY = 'spread-view-prefs';
 
@@ -166,6 +167,12 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   useEffect(() => {
     saveViewPreferences({ viewMode, zoomLevel, columnsPerRow });
   }, [viewMode, zoomLevel, columnsPerRow]);
+
+  // Sync zoom level to global store for shared components
+  const setStoreZoomLevel = useSetZoomLevel();
+  useEffect(() => {
+    setStoreZoomLevel(zoomLevel);
+  }, [zoomLevel, setStoreZoomLevel]);
 
   // Auto-select spread when spreads change
   // - Complete replacement (generation): select first spread

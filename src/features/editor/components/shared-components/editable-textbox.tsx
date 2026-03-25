@@ -5,6 +5,7 @@ import { useState, useRef, useCallback } from 'react';
 import { cn } from '@/utils/utils';
 import type { SpreadTextboxContent, WordTiming } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
+import { useZoomLevel } from '@/stores/editor-settings-store';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'EditableTextbox');
@@ -36,6 +37,7 @@ export function EditableTextbox({
   wordTimings,
 }: EditableTextboxProps) {
   const { text, geometry, typography } = textboxContent;
+  const zoomLevel = useZoomLevel();
   const [isEditing, setIsEditing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const editableRef = useRef<HTMLDivElement>(null);
@@ -131,15 +133,16 @@ export function EditableTextbox({
     selection.addRange(range);
   }, []);
 
-  // Map typography to CSS
+  // Map typography to CSS — scale pixel-based values by zoom factor
+  const zoomFactor = zoomLevel / 100;
   const typographyStyle: React.CSSProperties = {
     fontFamily: typography?.family || 'inherit',
-    fontSize: typography?.size ? `${typography.size}px` : 'inherit',
+    fontSize: typography?.size ? `${typography.size * zoomFactor}px` : 'inherit',
     fontWeight: typography?.weight || 'normal',
     fontStyle: typography?.style || 'normal',
     textAlign: typography?.textAlign || 'left',
     lineHeight: typography?.lineHeight || 1.5,
-    letterSpacing: typography?.letterSpacing ? `${typography.letterSpacing}px` : 'inherit',
+    letterSpacing: typography?.letterSpacing ? `${typography.letterSpacing * zoomFactor}px` : 'inherit',
     color: typography?.color || 'inherit',
     textDecoration: typography?.decoration || 'none',
     textTransform: typography?.textTransform || 'none',

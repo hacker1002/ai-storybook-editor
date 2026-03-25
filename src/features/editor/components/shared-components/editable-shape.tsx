@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { cn } from '@/utils/utils';
 import type { SpreadShape, ShapeFill, ShapeOutline } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
+import { useZoomLevel } from '@/stores/editor-settings-store';
 
 interface EditableShapeProps {
   shape: SpreadShape;
@@ -23,6 +24,7 @@ export function EditableShape({
   isEditable,
   onSelect,
 }: EditableShapeProps) {
+  const zoomLevel = useZoomLevel();
   const [isHovered, setIsHovered] = useState(false);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -43,6 +45,7 @@ export function EditableShape({
 
   const fill: ShapeFill = shape.fill;
   const outline: ShapeOutline = shape.outline;
+  const zoomFactor = zoomLevel / 100;
 
   return (
     <div
@@ -67,9 +70,9 @@ export function EditableShape({
         backgroundColor: fill.is_filled ? fill.color : 'transparent',
         opacity: fill.opacity,
         borderStyle: getOutlineStyle(outline),
-        borderWidth: `${outline.width}px`,
+        borderWidth: `${outline.width * zoomFactor}px`,
         borderColor: outline.color,
-        borderRadius: `${outline.radius}px`,
+        borderRadius: `${outline.radius * zoomFactor}px`,
         outlineColor: COLORS.HOVER_OUTLINE,
       }}
     />

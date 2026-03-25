@@ -5,7 +5,7 @@ import { useRef, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
 import { createLogger } from '@/utils/logger';
-import { Z_INDEX } from '@/constants/spread-constants';
+import { Z_INDEX, CANVAS } from '@/constants/spread-constants';
 
 const log = createLogger('Editor', 'SelectionFrame');
 
@@ -96,8 +96,15 @@ export function SelectionFrame({
     return 'se';
   };
 
-  // Border width for drag zone in border-only mode (textbox)
-  const DRAG_BORDER_WIDTH = 30;
+  // Adaptive border width for drag zones in border-only mode (textbox).
+  // Scales with element pixel height so small textboxes leave center clickable for editing.
+  const MAX_DRAG_BORDER = 12;
+  const MIN_DRAG_BORDER = 4;
+  const elementPixelHeight = (geometry.h / 100) * CANVAS.BASE_HEIGHT * (zoomLevel / 100);
+  // Max 20% of element height so top+bottom never exceed 40%
+  const adaptiveBorderWidth = borderOnlyDrag
+    ? Math.max(MIN_DRAG_BORDER, Math.min(MAX_DRAG_BORDER, elementPixelHeight * 0.2))
+    : MAX_DRAG_BORDER;
 
   // Compute className for active handle visual feedback (use prop directly)
   const moveableClassName = activeHandle
@@ -125,19 +132,19 @@ export function SelectionFrame({
           <>
             <div
               className="absolute left-0 right-0 top-0 cursor-move"
-              style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+              style={{ height: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
             <div
               className="absolute left-0 right-0 bottom-0 cursor-move"
-              style={{ height: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+              style={{ height: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
             <div
               className="absolute left-0 top-0 bottom-0 cursor-move"
-              style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+              style={{ width: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
             <div
               className="absolute right-0 top-0 bottom-0 cursor-move"
-              style={{ width: DRAG_BORDER_WIDTH, pointerEvents: 'auto' }}
+              style={{ width: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
           </>
         )}

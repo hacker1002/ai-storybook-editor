@@ -10,8 +10,11 @@ const log = createLogger('Store', 'EditorSettingsStore');
 interface EditorSettingsStore {
   currentLanguage: Language;
   currentStep: PipelineStep;
+  /** Active zoom level (percentage). Set by whichever view is currently active. */
+  zoomLevel: number;
   setCurrentLanguage: (language: Language) => void;
   setCurrentStep: (step: PipelineStep) => void;
+  setZoomLevel: (level: number) => void;
   resetSettings: (language: Language, step: PipelineStep) => void;
 }
 
@@ -20,6 +23,7 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
     (set, get) => ({
       currentLanguage: DEFAULT_LANGUAGE,
       currentStep: 'manuscript',
+      zoomLevel: 100,
 
       setCurrentLanguage: (language) => {
         const prev = get().currentLanguage.code;
@@ -31,6 +35,10 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
         const prev = get().currentStep;
         log.info('setCurrentStep', 'transition', { prev, next: step });
         set({ currentStep: step });
+      },
+
+      setZoomLevel: (level) => {
+        set({ zoomLevel: level });
       },
 
       resetSettings: (language, step) => {
@@ -52,11 +60,18 @@ export const useCurrentStep = () =>
 export const useLanguageCode = () =>
   useEditorSettingsStore((s) => s.currentLanguage.code);
 
+export const useZoomLevel = () =>
+  useEditorSettingsStore((s) => s.zoomLevel);
+
+export const useSetZoomLevel = () =>
+  useEditorSettingsStore((s) => s.setZoomLevel);
+
 export const useEditorSettingsActions = () =>
   useEditorSettingsStore(
     useShallow((s) => ({
       setCurrentLanguage: s.setCurrentLanguage,
       setCurrentStep: s.setCurrentStep,
+      setZoomLevel: s.setZoomLevel,
       resetSettings: s.resetSettings,
     }))
   );

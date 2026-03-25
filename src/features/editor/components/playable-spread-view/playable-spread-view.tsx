@@ -14,6 +14,7 @@ import type {
 } from "@/types/playable-types";
 import type { ItemType } from "@/types/spread-types";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
+import { useSetZoomLevel } from '@/stores/editor-settings-store';
 import { PlayableHeader } from "./playable-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
@@ -73,6 +74,12 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
+
+  // Sync zoom level to global store for shared components
+  const setStoreZoomLevel = useSetZoomLevel();
+  useEffect(() => {
+    setStoreZoomLevel(zoomLevel);
+  }, [zoomLevel, setStoreZoomLevel]);
 
   // === Derived State ===
   const selectedSpread = spreads.find((s) => s.id === selectedSpreadId);
