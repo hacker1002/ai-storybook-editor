@@ -1,20 +1,36 @@
 // props-sidebar.tsx - Left sidebar listing all props with filter, add, drag-reorder, and rename.
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Filter, Plus, CirclePlus, Library } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PropsSidebarItem } from './props-sidebar-item';
-import { useProps, useSnapshotActions } from '@/stores/snapshot-store/selectors';
-import { useCurrentBook } from '@/stores/book-store';
-import { useAssetCategories, useAssetCategoryActions } from '@/stores/asset-category-store';
-import { CATEGORY_FILTER_OPTIONS } from '@/constants/prop-constants';
-import type { Prop } from '@/types/prop-types';
-import { cn } from '@/utils/utils';
-import { createLogger } from '@/utils/logger';
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { Filter, Plus, CirclePlus, Library } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PropsSidebarItem } from "./props-sidebar-item";
+import {
+  useProps,
+  useSnapshotActions,
+} from "@/stores/snapshot-store/selectors";
+import { useCurrentBook } from "@/stores/book-store";
+import {
+  useAssetCategories,
+  useAssetCategoryActions,
+} from "@/stores/asset-category-store";
+import { CATEGORY_FILTER_OPTIONS } from "@/constants/prop-constants";
+import type { Prop } from "@/types/prop-types";
+import { cn } from "@/utils/utils";
+import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'PropsSidebar');
+const log = createLogger("Editor", "PropsSidebar");
 
 interface PropsSidebarProps {
   propKeys: string[];
@@ -24,7 +40,9 @@ interface PropsSidebarProps {
 
 /** Generate a URL-safe unique key from a display name */
 function generatePropKey(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now().toString(36);
+  return (
+    name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now().toString(36)
+  );
 }
 
 /** Build a blank Prop record ready for addProp */
@@ -33,26 +51,44 @@ function buildNewProp(name: string, order: number): Prop {
     order,
     name,
     key: generatePropKey(name),
-    category_id: '',
-    type: 'narrative',
-    states: [],
+    category_id: "",
+    type: "narrative",
+    states: [
+      {
+        name: "Default",
+        key: "default",
+        type: 0,
+        visual_description: "",
+        illustrations: [],
+        image_references: [],
+      },
+    ],
     sounds: [],
     crop_sheets: [],
   };
 }
 
-export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsSidebarProps) {
+export function PropsSidebar({
+  propKeys,
+  selectedPropKey,
+  onPropSelect,
+}: PropsSidebarProps) {
   const allProps = useProps();
-  const { addProp, updateProp, deleteProp, reorderProps } = useSnapshotActions();
+  const { addProp, updateProp, deleteProp, reorderProps } =
+    useSnapshotActions();
   const currentBook = useCurrentBook();
   const assetCategories = useAssetCategories();
   const { fetchCategories } = useAssetCategoryActions();
 
   // Fetch asset categories on mount
-  useEffect(() => { fetchCategories(); }, [fetchCategories]);
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   // UI state
-  const [expandedPropKey, setExpandedPropKey] = useState<string | null>(selectedPropKey);
+  const [expandedPropKey, setExpandedPropKey] = useState<string | null>(
+    selectedPropKey
+  );
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
@@ -92,88 +128,131 @@ export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsS
   }, []);
 
   const handleCreateFromScratch = useCallback(() => {
-    log.info('handleCreateFromScratch', 'creating new prop');
+    log.info("handleCreateFromScratch", "creating new prop");
     setIsAddPopoverOpen(false);
-    const name = 'New Prop';
-    const newProp = buildNewProp(name, propKeys.length);
+    const name = "New Prop";
+    const maxOrder = allProps.reduce((max, p) => Math.max(max, p.order), -1);
+    const newProp = buildNewProp(name, maxOrder + 1);
     addProp(newProp);
     onPropSelect(newProp.key);
     setExpandedPropKey(newProp.key);
     setEditingNameKey(newProp.key);
-  }, [addProp, onPropSelect, propKeys.length]);
+  }, [addProp, onPropSelect, allProps]);
 
-  const handleDeleteProp = useCallback((key: string) => {
-    log.info('handleDeleteProp', 'deleting prop', { key });
-    deleteProp(key);
-    if (expandedPropKey === key) setExpandedPropKey(null);
-    if (editingNameKey === key) setEditingNameKey(null);
-  }, [deleteProp, expandedPropKey, editingNameKey]);
+  const handleDeleteProp = useCallback(
+    (key: string) => {
+      log.info("handleDeleteProp", "deleting prop", { key });
+      deleteProp(key);
+      if (expandedPropKey === key) setExpandedPropKey(null);
+      if (editingNameKey === key) setEditingNameKey(null);
+    },
+    [deleteProp, expandedPropKey, editingNameKey]
+  );
 
-  const handleRenameProp = useCallback((key: string, newName: string) => {
-    const trimmed = newName.trim();
-    if (trimmed) {
-      log.debug('handleRenameProp', 'renaming', { key, newName: trimmed });
-      updateProp(key, { name: trimmed });
-    }
-    setEditingNameKey(null);
-  }, [updateProp]);
-
-  const handleUpdateCategory = useCallback((key: string, categoryId: string) => {
-    log.debug('handleUpdateCategory', 'updating category', { key, categoryId });
-    updateProp(key, { category_id: categoryId });
-  }, [updateProp]);
-
-  const handleUpdateType = useCallback((key: string, type: string) => {
-    log.debug('handleUpdateType', 'updating type', { key, type });
-    updateProp(key, { type: type as Prop['type'] });
-  }, [updateProp]);
-
-  const handleDrop = useCallback((toIndex: number) => {
-    if (dragFromIndex !== null && dragFromIndex !== toIndex) {
-      log.info('handleDrop', 'reordering props', { from: dragFromIndex, to: toIndex });
-      reorderProps(dragFromIndex, toIndex);
-    }
-    setDragFromIndex(null);
-  }, [dragFromIndex, reorderProps]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (filteredPropKeys.length === 0) return;
-    const currentIndex = selectedPropKey ? filteredPropKeys.indexOf(selectedPropKey) : -1;
-
-    switch (e.key) {
-      case 'ArrowUp': {
-        e.preventDefault();
-        const prevIndex = currentIndex > 0 ? currentIndex - 1 : filteredPropKeys.length - 1;
-        onPropSelect(filteredPropKeys[prevIndex]);
-        break;
-      }
-      case 'ArrowDown': {
-        e.preventDefault();
-        const nextIndex = currentIndex < filteredPropKeys.length - 1 ? currentIndex + 1 : 0;
-        onPropSelect(filteredPropKeys[nextIndex]);
-        break;
-      }
-      case 'Enter': {
-        e.preventDefault();
-        if (selectedPropKey) {
-          handleToggle(selectedPropKey);
+  const handleRenameProp = useCallback(
+    (key: string, newName: string) => {
+      const trimmed = newName.trim();
+      if (trimmed) {
+        // On first rename (key still matches "new_prop_*"), also update the key
+        const isFirstRename = key.startsWith("new_prop_");
+        if (isFirstRename) {
+          const newKey = generatePropKey(trimmed);
+          log.debug("handleRenameProp", "first rename with key update", {
+            oldKey: key,
+            newKey,
+            newName: trimmed,
+          });
+          updateProp(key, { name: trimmed, key: newKey });
+          onPropSelect(newKey);
+          setExpandedPropKey(newKey);
+        } else {
+          log.debug("handleRenameProp", "renaming", { key, newName: trimmed });
+          updateProp(key, { name: trimmed });
         }
-        break;
       }
-      case 'Escape': {
-        e.preventDefault();
-        setExpandedPropKey(null);
-        break;
+      setEditingNameKey(null);
+    },
+    [updateProp, onPropSelect]
+  );
+
+  const handleUpdateCategory = useCallback(
+    (key: string, categoryId: string) => {
+      log.debug("handleUpdateCategory", "updating category", {
+        key,
+        categoryId,
+      });
+      updateProp(key, { category_id: categoryId });
+    },
+    [updateProp]
+  );
+
+  const handleUpdateType = useCallback(
+    (key: string, type: string) => {
+      log.debug("handleUpdateType", "updating type", { key, type });
+      updateProp(key, { type: type as Prop["type"] });
+    },
+    [updateProp]
+  );
+
+  const handleDrop = useCallback(
+    (toIndex: number) => {
+      if (dragFromIndex !== null && dragFromIndex !== toIndex) {
+        log.info("handleDrop", "reordering props", {
+          from: dragFromIndex,
+          to: toIndex,
+        });
+        reorderProps(dragFromIndex, toIndex);
       }
-      case 'F2': {
-        e.preventDefault();
-        if (selectedPropKey) {
-          setEditingNameKey(selectedPropKey);
+      setDragFromIndex(null);
+    },
+    [dragFromIndex, reorderProps]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (filteredPropKeys.length === 0) return;
+      const currentIndex = selectedPropKey
+        ? filteredPropKeys.indexOf(selectedPropKey)
+        : -1;
+
+      switch (e.key) {
+        case "ArrowUp": {
+          e.preventDefault();
+          const prevIndex =
+            currentIndex > 0 ? currentIndex - 1 : filteredPropKeys.length - 1;
+          onPropSelect(filteredPropKeys[prevIndex]);
+          break;
         }
-        break;
+        case "ArrowDown": {
+          e.preventDefault();
+          const nextIndex =
+            currentIndex < filteredPropKeys.length - 1 ? currentIndex + 1 : 0;
+          onPropSelect(filteredPropKeys[nextIndex]);
+          break;
+        }
+        case "Enter": {
+          e.preventDefault();
+          if (selectedPropKey) {
+            handleToggle(selectedPropKey);
+          }
+          break;
+        }
+        case "Escape": {
+          e.preventDefault();
+          setExpandedPropKey(null);
+          break;
+        }
+        case "F2": {
+          e.preventDefault();
+          if (selectedPropKey) {
+            setEditingNameKey(selectedPropKey);
+          }
+          break;
+        }
       }
-    }
-  }, [filteredPropKeys, selectedPropKey, onPropSelect, handleToggle]);
+    },
+    [filteredPropKeys, selectedPropKey, onPropSelect, handleToggle]
+  );
 
   return (
     <aside
@@ -185,7 +264,10 @@ export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsS
       <div className="flex items-center justify-between h-11 px-3 border-b shrink-0">
         <div className="flex items-center gap-2">
           {/* Filter popover */}
-          <Popover open={isFilterPopoverOpen} onOpenChange={setIsFilterPopoverOpen}>
+          <Popover
+            open={isFilterPopoverOpen}
+            onOpenChange={setIsFilterPopoverOpen}
+          >
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
@@ -201,12 +283,18 @@ export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsS
                 <p className="text-sm font-medium">Filter</p>
 
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Category</label>
+                  <label className="text-xs text-muted-foreground">
+                    Category
+                  </label>
                   <Select
-                    value={filterCategory !== null ? String(filterCategory) : '__all__'}
+                    value={
+                      filterCategory !== null
+                        ? String(filterCategory)
+                        : "__all__"
+                    }
                     onValueChange={(v) => {
-                      setFilterCategory(v === '__all__' ? null : Number(v));
-                      log.debug('filterCategory changed', 'filter', { v });
+                      setFilterCategory(v === "__all__" ? null : Number(v));
+                      log.debug("filterCategory changed", "filter", { v });
                     }}
                   >
                     <SelectTrigger>
@@ -215,8 +303,12 @@ export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsS
                     <SelectContent>
                       {CATEGORY_FILTER_OPTIONS.map((opt) => (
                         <SelectItem
-                          key={opt.value !== null ? String(opt.value) : '__all__'}
-                          value={opt.value !== null ? String(opt.value) : '__all__'}
+                          key={
+                            opt.value !== null ? String(opt.value) : "__all__"
+                          }
+                          value={
+                            opt.value !== null ? String(opt.value) : "__all__"
+                          }
                         >
                           {opt.label}
                         </SelectItem>
@@ -226,12 +318,14 @@ export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsS
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Appeared in Story</label>
+                  <label className="text-xs text-muted-foreground">
+                    Appeared in Story
+                  </label>
                   <Select
-                    value={filterStory ?? '__all__'}
+                    value={filterStory ?? "__all__"}
                     onValueChange={(v) => {
-                      setFilterStory(v === '__all__' ? null : v);
-                      log.debug('filterStory changed', 'filter', { v });
+                      setFilterStory(v === "__all__" ? null : v);
+                      log.debug("filterStory changed", "filter", { v });
                     }}
                   >
                     <SelectTrigger>
@@ -266,22 +360,22 @@ export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsS
               <Plus className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-48">
+          <PopoverContent align="end" className="w-52">
             <div className="space-y-1">
               <Button
                 variant="ghost"
-                className="w-full justify-start text-sm"
+                className="w-full justify-start text-sm gap-2 px-2"
                 onClick={handleCreateFromScratch}
               >
-                <CirclePlus className="h-4 w-4 mr-2" />
+                <CirclePlus className="h-4 w-4 shrink-0" />
                 Create from Scratch
               </Button>
               <Button
                 variant="ghost"
-                className="w-full justify-start text-sm"
+                className="w-full justify-start text-sm gap-2 px-2"
                 disabled
               >
-                <Library className="h-4 w-4 mr-2" />
+                <Library className="h-4 w-4 shrink-0" />
                 Import from Library
               </Button>
             </div>
@@ -300,7 +394,11 @@ export function PropsSidebar({ propKeys, selectedPropKey, onPropSelect }: PropsS
         {filteredPropKeys.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-center">
             <p className="text-sm text-muted-foreground mb-2">No props yet</p>
-            <Button variant="outline" size="sm" onClick={handleCreateFromScratch}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCreateFromScratch}
+            >
               <Plus className="h-3 w-3 mr-1" /> Add Prop
             </Button>
           </div>
