@@ -3,6 +3,7 @@ import { useSnapshotStore } from './index';
 import type { DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { RetouchData } from '@/types/retouch-types';
+import type { Prop } from '@/types/prop-types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -18,6 +19,7 @@ import type {
 const EMPTY_SPREADS: DummySpread[] = [];
 const EMPTY_QUIZZES: SpreadQuiz[] = [];
 const EMPTY_ANIMATIONS: SpreadAnimation[] = [];
+const EMPTY_PROPS: Prop[] = [];
 
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
@@ -89,6 +91,13 @@ export const useRetouchObjectsByImageId = (
     }),
   );
 
+// Props selectors
+export const useProps = (): Prop[] => useSnapshotStore((s) => s.props ?? EMPTY_PROPS);
+export const usePropByKey = (key: string): Prop | undefined =>
+  useSnapshotStore((s) => s.props.find((p) => p.key === key));
+export const usePropKeys = (): string[] =>
+  useSnapshotStore(useShallow((s) => s.props.map((p) => p.key)));
+
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>
   useSnapshotStore(
@@ -139,6 +148,21 @@ export const useSnapshotActions = () =>
       deleteRetouchAnimationsByTargetId: s.deleteRetouchAnimationsByTargetId,
       reorderRetouchAnimations: s.reorderRetouchAnimations,
       clearRetouch: s.clearRetouch,
+      // Props
+      setProps: s.setProps,
+      addProp: s.addProp,
+      updateProp: s.updateProp,
+      deleteProp: s.deleteProp,
+      reorderProps: s.reorderProps,
+      addPropState: s.addPropState,
+      updatePropState: s.updatePropState,
+      deletePropState: s.deletePropState,
+      addPropSound: s.addPropSound,
+      updatePropSound: s.updatePropSound,
+      deletePropSound: s.deletePropSound,
+      addPropCropSheet: s.addPropCropSheet,
+      updatePropCropSheet: s.updatePropCropSheet,
+      deletePropCropSheet: s.deletePropCropSheet,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,

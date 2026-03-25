@@ -1,6 +1,7 @@
 import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { RetouchData } from '@/types/retouch-types';
+import type { Prop, PropState, PropSound, CropSheet } from '@/types/prop-types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -96,7 +97,25 @@ export interface RetouchSlice {
   clearRetouch: () => void;
 }
 
-export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & RetouchSlice & {
-  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; retouch?: RetouchData; meta?: Partial<SnapshotMeta> }) => void;
+export interface PropsSlice {
+  props: Prop[];
+  setProps: (props: Prop[]) => void;
+  addProp: (prop: Prop) => void;
+  updateProp: (key: string, updates: Partial<Prop>) => void;
+  deleteProp: (key: string) => void;
+  reorderProps: (fromIndex: number, toIndex: number) => void;
+  addPropState: (propKey: string, state: PropState) => void;
+  updatePropState: (propKey: string, stateKey: string, updates: Partial<PropState>) => void;
+  deletePropState: (propKey: string, stateKey: string) => void;
+  addPropSound: (propKey: string, sound: PropSound) => void;
+  updatePropSound: (propKey: string, soundKey: string, updates: Partial<PropSound>) => void;
+  deletePropSound: (propKey: string, soundKey: string) => void;
+  addPropCropSheet: (propKey: string, cropSheet: CropSheet) => void;
+  updatePropCropSheet: (propKey: string, cropSheetIndex: number, updates: Partial<CropSheet>) => void;
+  deletePropCropSheet: (propKey: string, cropSheetIndex: number) => void;
+}
+
+export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & RetouchSlice & PropsSlice & {
+  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; retouch?: RetouchData; props?: Prop[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };
