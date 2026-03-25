@@ -1,11 +1,11 @@
 // states-tab-panel.tsx - Lists all prop states as collapsible accordion items
 
-import { useState } from 'react';
-import type { PropState } from '@/types/prop-types';
-import { StateItem } from './state-item';
-import { createLogger } from '@/utils/logger';
+import { useState } from "react";
+import type { PropState } from "@/types/prop-types";
+import { StateItem } from "./state-item";
+import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'StatesTabPanel');
+const log = createLogger("Editor", "StatesTabPanel");
 
 interface StatesTabPanelProps {
   propKey: string;
@@ -16,13 +16,15 @@ interface StatesTabPanelProps {
 // resetting expandedStateKey to the first state automatically.
 export function StatesTabPanel({ propKey, states }: StatesTabPanelProps) {
   const firstKey = states.length > 0 ? states[0].key : null;
-  log.debug('mount/render', 'init', { propKey, firstKey });
-  const [expandedStateKey, setExpandedStateKey] = useState<string | null>(firstKey);
+  log.debug("mount/render", "init", { propKey, firstKey });
+  const [expandedStateKey, setExpandedStateKey] = useState<string | null>(
+    firstKey
+  );
 
   const handleToggle = (stateKey: string) => {
     setExpandedStateKey((prev) => {
       const next = prev === stateKey ? null : stateKey;
-      log.debug('handleToggle', 'toggle state', { stateKey, next });
+      log.debug("handleToggle", "toggle state", { stateKey, next });
       return next;
     });
   };
@@ -36,7 +38,7 @@ export function StatesTabPanel({ propKey, states }: StatesTabPanelProps) {
   }
 
   return (
-    <div className="p-3 space-y-2">
+    <div className="p-3 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)]">
       {states.map((st) => (
         <StateItem
           key={st.key}

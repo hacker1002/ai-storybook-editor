@@ -19,7 +19,7 @@ import { StatesTabPanel } from './states-tab-panel';
 import { SoundsTabPanelMock } from './sounds-tab-panel-mock';
 import { CropsTabPanelMock } from './crops-tab-panel-mock';
 import { createLogger } from '@/utils/logger';
-import { cn } from '@/utils/utils';
+import { cn, generateUniqueKey } from '@/utils/utils';
 
 const log = createLogger('Editor', 'PropsContentArea');
 
@@ -53,11 +53,11 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
   };
 
   const handleCreateState = () => {
-    if (!newStateName.trim() || !newStateKey.trim()) return;
+    if (!newStateName.trim() || !newStateKey) return;
     log.info('handleCreateState', 'create state', { propKey: selectedPropKey, name: newStateName, key: newStateKey });
     addPropState(selectedPropKey, {
       name: newStateName.trim(),
-      key: newStateKey.trim(),
+      key: newStateKey,
       type: 1,
       visual_description: '',
       illustrations: [],
@@ -122,7 +122,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
       </div>
 
       {/* Tab Panel */}
-      <div className="flex-1 overflow-auto" role="tabpanel">
+      <div className="flex-1 min-h-0 overflow-auto" role="tabpanel">
         {activeTab === 'states' && prop && (
           <StatesTabPanel key={selectedPropKey} propKey={selectedPropKey} states={prop.states} />
         )}
@@ -147,7 +147,11 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
               <label className="text-sm font-medium mb-1 block">Name</label>
               <Input
                 value={newStateName}
-                onChange={(e) => setNewStateName(e.target.value)}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setNewStateName(name);
+                  setNewStateKey(name.trim() ? generateUniqueKey(name.trim()) : '');
+                }}
                 placeholder="e.g. Glowing"
               />
             </div>
@@ -155,8 +159,9 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
               <label className="text-sm font-medium mb-1 block">Key</label>
               <Input
                 value={newStateKey}
-                onChange={(e) => setNewStateKey(e.target.value)}
-                placeholder="e.g. glowing"
+                readOnly
+                className="bg-muted text-muted-foreground"
+                placeholder="Auto-generated from name"
               />
             </div>
           </div>
@@ -166,7 +171,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
             </Button>
             <Button
               onClick={handleCreateState}
-              disabled={!newStateName.trim() || !newStateKey.trim()}
+              disabled={!newStateName.trim()}
             >
               Create
             </Button>

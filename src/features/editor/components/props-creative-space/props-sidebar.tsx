@@ -27,7 +27,7 @@ import {
 } from "@/stores/asset-category-store";
 import { CATEGORY_FILTER_OPTIONS } from "@/constants/prop-constants";
 import type { Prop } from "@/types/prop-types";
-import { cn } from "@/utils/utils";
+import { cn, generateUniqueKey } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "PropsSidebar");
@@ -38,19 +38,12 @@ interface PropsSidebarProps {
   onPropSelect: (key: string) => void;
 }
 
-/** Generate a URL-safe unique key from a display name */
-function generatePropKey(name: string): string {
-  return (
-    name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now().toString(36)
-  );
-}
-
 /** Build a blank Prop record ready for addProp */
 function buildNewProp(name: string, order: number): Prop {
   return {
     order,
     name,
-    key: generatePropKey(name),
+    key: generateUniqueKey(name),
     category_id: "",
     type: "narrative",
     states: [
@@ -156,7 +149,7 @@ export function PropsSidebar({
         // On first rename (key still matches "new_prop_*"), also update the key
         const isFirstRename = key.startsWith("new_prop_");
         if (isFirstRename) {
-          const newKey = generatePropKey(trimmed);
+          const newKey = generateUniqueKey(trimmed);
           log.debug("handleRenameProp", "first rename with key update", {
             oldKey: key,
             newKey,
