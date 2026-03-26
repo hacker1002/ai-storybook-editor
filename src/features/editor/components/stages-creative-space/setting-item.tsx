@@ -1,0 +1,493 @@
+// setting-item.tsx - Accordion item for a single stage setting with image gallery + attribute sections + generate/edit
+
+import { useMemo, useRef, useState } from 'react';
+import { useEras } from '@/stores/era-store';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Trash2,
+  Upload,
+  Paperclip,
+  X,
+  Check,
+  Sparkles,
+  Loader2,
+} from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { useSnapshotActions, useStageByKey, useImageTasksForChild } from '@/stores/snapshot-store/selectors';
+import { useLocations } from '@/stores/location-store';
+import { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
+import type { StageSetting } from '@/types/stage-types';
+import { uploadImageToStorage } from '@/apis/storage-api';
+import { createLogger } from '@/utils/logger';
+import { cn } from '@/utils/utils';
+import { toast } from 'sonner';
+import { SettingAttributeSections } from './setting-attribute-sections';
+import { SettingItemImageArea } from './setting-item-image-area';
+
+const log = createLogger('Editor', 'SettingItem');
+
+interface SettingItemProps {
+  stageKey: string;
+  settingData: StageSetting;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: SettingItemProps) {
+  const { deleteStageSetting, updateStageSetting, startGenerateTask, startEditTask } = useSnapshotActions();
+  const stage = useStageByKey(stageKey);
+  const locations = useLocations();
+  const eras = useEras();
+  const eraByName = useMemo(() => new Map(eras.map((e) => [e.name, e])), [eras]);
+  const { isProcessing } = useImageTasksForChild(stageKey, settingData.key);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(settingData.name);
+
+  // Determine initial selected index: prefer is_selected=true, else 0
+  const initSelectedIdx = () => {
+    const idx = settingData.illustrations.findIndex((ill) => ill.is_selected);
+    return idx >= 0 ? idx : 0;
+  };
+
+  const [selectedIllustrationIndex, setSelectedIllustrationIndex] = useState<number>(initSelectedIdx);
+  const [promptText, setPromptText] = useState<string>(settingData.visual_description ?? '');
+  const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
+  const [editPromptText, setEditPromptText] = useState('');
+
+  const generateRefs = useReferenceImagePicker();
+  const editRefs = useReferenceImagePicker();
+
+  // type 0 = default setting, cannot be deleted
+  const isDefault = settingData.type === 0;
+
+  const sortedIllustrations = [...settingData.illustrations].sort(
+    (a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
+  );
+
+  const selectedIllustration = settingData.illustrations[selectedIllustrationIndex];
+
+  const handleBlurSave = () => {
+    const trimmed = promptText.trim();
+    if (trimmed === (settingData.visual_description ?? '')) return;
+    log.debug('handleBlurSave', 'save visual_description', { stageKey, settingKey: settingData.key });
+    updateStageSetting(stageKey, settingData.key, { visual_description: trimmed });
+  };
+
+  const buildDescription = (visualDescription: string): string => {
+    const parts: string[] = [];
+    const location = locations.find((l) => l.id === stage?.location_id);
+    if (location) {
+      parts.push(location.description ? `Location description: ${location.description}` : `Location: ${location.name}`);
+    }
+    parts.push(`Visual description: ${visualDescription}`);
+
+    // Temporal — each field with its own keyword; era includes DB description
+    const { era, season, weather, time_of_day } = settingData.temporal;
+    if (era) {
+      const eraDesc = eraByName.get(era)?.description;
+      parts.push(eraDesc ? `Era description: ${eraDesc}` : `Era: ${era}`);
+    }
+    if (season) parts.push(`Season: ${season}`);
+    if (weather) parts.push(`Weather: ${weather}`);
+    if (time_of_day) parts.push(`Time of day: ${time_of_day}`);
+
+    // Sensory
+    const { atmosphere, soundscape, lighting, color_palette } = settingData.sensory;
+    if (atmosphere) parts.push(`Atmosphere: ${atmosphere}`);
+    if (soundscape) parts.push(`Soundscape: ${soundscape}`);
+    if (lighting) parts.push(`Lighting: ${lighting}`);
+    if (color_palette) parts.push(`Color palette: ${color_palette}`);
+
+    // Emotional
+    if (settingData.emotional.mood) parts.push(`Mood: ${settingData.emotional.mood}`);
+
+    return parts.join('\n');
+  };
+
+  const handleGenerate = () => {
+    const trimmedPrompt = promptText.trim();
+    if (!trimmedPrompt || isProcessing) return;
+
+    log.info('handleGenerate', 'start', { stageKey, settingKey: settingData.key });
+    updateStageSetting(stageKey, settingData.key, { visual_description: trimmedPrompt });
+
+    const description = buildDescription(trimmedPrompt);
+    const referenceImages =
+      generateRefs.images.length > 0
+        ? generateRefs.images.map(({ base64Data, mimeType }) => ({ base64Data, mimeType }))
+        : undefined;
+
+    log.debug('handleGenerate', 'dispatching to store', {
+      descriptionLength: description.length,
+      refCount: referenceImages?.length ?? 0,
+    });
+
+    startGenerateTask({
+      entityType: 'stage',
+      entityKey: stageKey,
+      entityName: stage?.name ?? stageKey,
+      childKey: settingData.key,
+      childName: settingData.name,
+      description,
+      referenceImages,
+    });
+
+    generateRefs.clearImages();
+  };
+
+  const handleEditImage = () => {
+    const trimmed = editPromptText.trim();
+    if (!trimmed || !selectedIllustration || isProcessing) return;
+
+    log.info('handleEditImage', 'start', {
+      stageKey,
+      settingKey: settingData.key,
+      prompt: trimmed,
+      refCount: editRefs.images.length,
+    });
+    setIsEditPopoverOpen(false);
+
+    const referenceImages =
+      editRefs.images.length > 0
+        ? editRefs.images.map(({ base64Data, mimeType }) => ({ base64Data, mimeType }))
+        : undefined;
+
+    startEditTask({
+      entityType: 'stage',
+      entityKey: stageKey,
+      entityName: stage?.name ?? stageKey,
+      childKey: settingData.key,
+      childName: settingData.name,
+      prompt: trimmed,
+      imageUrl: selectedIllustration.media_url,
+      referenceImages,
+    });
+
+    setEditPromptText('');
+    editRefs.clearImages();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    log.info('handleUpload', 'start upload', {
+      stageKey,
+      settingKey: settingData.key,
+      fileName: file.name,
+      size: file.size,
+    });
+    setIsUploading(true);
+    try {
+      const result = await uploadImageToStorage(file, `stages/${stageKey}/${settingData.key}`);
+      log.info('handleUpload', 'upload complete', { publicUrl: result.publicUrl });
+
+      const updatedIllustrations = settingData.illustrations.map((ill) => ({
+        ...ill,
+        is_selected: false,
+      }));
+      updatedIllustrations.unshift({
+        media_url: result.publicUrl,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      });
+
+      updateStageSetting(stageKey, settingData.key, { illustrations: updatedIllustrations });
+      setSelectedIllustrationIndex(0);
+      toast.success('Image uploaded successfully');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      log.error('handleUpload', 'upload failed', { error: msg });
+      toast.error(msg);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteSetting = () => {
+    log.info('handleDeleteSetting', 'delete setting', { stageKey, settingKey: settingData.key });
+    deleteStageSetting(stageKey, settingData.key);
+  };
+
+  return (
+    <Collapsible open={isExpanded} onOpenChange={onToggle}>
+      {/* Setting header row */}
+      <div
+        className={cn(
+          'flex items-center gap-2 px-2 py-2 border-b border-border/50',
+          isExpanded && 'bg-muted/30'
+        )}
+      >
+        {/* Expand/collapse chevron + name + key */}
+        <CollapsibleTrigger asChild>
+          <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer group">
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+            <div className="min-w-0">
+              {isRenaming ? (
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <Input
+                    className="h-7 text-sm flex-1"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (renameValue.trim() && renameValue.trim() !== settingData.name) {
+                          log.info('handleRename', 'renamed', { settingKey: settingData.key, newName: renameValue.trim() });
+                          updateStageSetting(stageKey, settingData.key, { name: renameValue.trim() });
+                        }
+                        setIsRenaming(false);
+                      }
+                      if (e.key === 'Escape') setIsRenaming(false);
+                    }}
+                    autoFocus
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => {
+                      if (renameValue.trim() && renameValue.trim() !== settingData.name) {
+                        log.info('handleRename', 'renamed', { settingKey: settingData.key, newName: renameValue.trim() });
+                        updateStageSetting(stageKey, settingData.key, { name: renameValue.trim() });
+                      }
+                      setIsRenaming(false);
+                    }}
+                    aria-label="Accept rename"
+                  >
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => setIsRenaming(false)}
+                    aria-label="Cancel rename"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-sm truncate">{settingData.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenameValue(settingData.name);
+                        setIsRenaming(true);
+                        log.debug('handleStartRename', 'start', { settingKey: settingData.key });
+                      }}
+                      title="Rename setting"
+                    >
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <span className="text-xs text-muted-foreground">/{settingData.key}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </CollapsibleTrigger>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            onChange={handleFileSelected}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            disabled={isUploading}
+            onClick={(e) => {
+              e.stopPropagation();
+              uploadInputRef.current?.click();
+            }}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {isUploading ? 'Uploading...' : 'Upload'}
+          </Button>
+
+          {!isDefault && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Delete setting"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Setting</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete the setting &ldquo;{settingData.name}&rdquo;? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleDeleteSetting}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      </div>
+
+      <CollapsibleContent>
+        <div className="space-y-4 px-3 pt-3 pb-3">
+          {/* Image preview + thumbnail gallery */}
+          <SettingItemImageArea
+            settingName={settingData.name}
+            illustrations={settingData.illustrations}
+            sortedIllustrations={sortedIllustrations}
+            selectedIllustrationIndex={selectedIllustrationIndex}
+            selectedIllustration={selectedIllustration}
+            isProcessing={isProcessing}
+            isEditPopoverOpen={isEditPopoverOpen}
+            editPromptText={editPromptText}
+            editRefImages={editRefs.images}
+            onSelectIllustration={setSelectedIllustrationIndex}
+            onDownload={() => {
+              if (!selectedIllustration) return;
+              log.debug('handleDownload', 'open in new tab', { url: selectedIllustration.media_url });
+              window.open(selectedIllustration.media_url, '_blank');
+            }}
+            onEditPopoverOpenChange={setIsEditPopoverOpen}
+            onEditPromptChange={setEditPromptText}
+            onEditSubmit={handleEditImage}
+            onEditRefPickerOpen={editRefs.openPicker}
+            onEditRefRemove={editRefs.removeImage}
+            editRefInputRef={editRefs.inputRef}
+            editRefHandleFilesSelected={editRefs.handleFilesSelected}
+          />
+
+          {/* Visual Description Section */}
+          <div>
+            <input
+              ref={generateRefs.inputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              onChange={generateRefs.handleFilesSelected}
+              className="hidden"
+            />
+            <div className="flex items-center gap-2 mb-2">
+              <Label className="text-xs text-muted-foreground">VISUAL DESCRIPTION</Label>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={generateRefs.openPicker}
+                disabled={isProcessing}
+                aria-label="Attach reference image"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+              {generateRefs.images.length > 0 && (
+                <span className="text-xs text-muted-foreground">{generateRefs.images.length}/5</span>
+              )}
+            </div>
+            {generateRefs.images.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {generateRefs.images.map((img, idx) => (
+                  <div
+                    key={`${img.label}-${idx}`}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
+                  >
+                    <span className="truncate max-w-[120px]">{img.label}</span>
+                    <button onClick={() => generateRefs.removeImage(idx)} className="hover:bg-blue-100 rounded">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Textarea
+              value={promptText}
+              onChange={(e) => setPromptText(e.target.value)}
+              onBlur={handleBlurSave}
+              placeholder="Describe the visual appearance..."
+              className="min-h-[80px]"
+              disabled={isProcessing}
+            />
+          </div>
+
+          {/* Generate button */}
+          <div className="flex justify-center gap-2">
+            <Button
+              onClick={handleGenerate}
+              disabled={isProcessing || !promptText.trim()}
+              className="w-40"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* Attribute Sections — Temporal / Sensory / Emotional */}
+          <SettingAttributeSections
+            stageKey={stageKey}
+            settingKey={settingData.key}
+            temporal={settingData.temporal}
+            sensory={settingData.sensory}
+            emotional={settingData.emotional}
+          />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
