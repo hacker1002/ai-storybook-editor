@@ -249,7 +249,7 @@ export function PropsSidebar({
 
   return (
     <aside
-      className="flex flex-col h-full border-r min-w-[240px] w-1/4"
+      className="flex flex-col h-full border-r min-w-[240px] max-w-[300px] w-1/4"
       role="navigation"
       aria-label="Props sidebar"
     >
