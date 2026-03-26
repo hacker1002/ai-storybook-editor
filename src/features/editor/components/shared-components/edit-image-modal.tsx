@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,45 +24,48 @@ import {
   Loader2,
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
-import type { SpreadImage } from "@/types/spread-types";
-import { callEditObjectImage, callImageRemoveBg } from "@/apis/retouch-api";
+import { callImageRemoveBg } from "@/apis/retouch-api";
+import {
+  useRetouchImageById,
+  useSnapshotActions,
+  useImageTasksForChild,
+} from "@/stores/snapshot-store";
+import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
 
 interface EditImageModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  image: SpreadImage;
-  onUpdateImage: (updates: Partial<SpreadImage>) => void;
-}
-
-interface Illustration {
-  media_url: string;
-  created_time: string;
-  is_selected: boolean;
+  spreadId: string;
+  imageId: string;
 }
 
 export function EditImageModal({
   open,
   onOpenChange,
-  image,
-  onUpdateImage,
+  spreadId,
+  imageId,
 }: EditImageModalProps) {
+  const image = useRetouchImageById(spreadId, imageId);
+  const { startEditTask, updateRetouchImage } = useSnapshotActions();
+  const { isEditing } = useImageTasksForChild(spreadId, imageId);
+
   const [prompt, setPrompt] = useState("");
-  const [attachedImage, setAttachedImage] = useState<{
-    base64: string;
-    filename: string;
-  } | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const {
+    images: referenceImages,
+    inputRef: fileInputRef,
+    openPicker,
+    handleFilesSelected,
+    removeImage,
+    clearImages,
+  } = useReferenceImagePicker();
 
   const resetState = useCallback(() => {
     setPrompt("");
-    setAttachedImage(null);
-    setIsGenerating(false);
+    clearImages();
     setIsRemovingBg(false);
-  }, []);
+  }, [clearImages]);
 
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
@@ -75,54 +78,25 @@ export function EditImageModal({
   );
 
   // Seed illustrations from media_url if image has none
+  const illustrationsCount = image?.illustrations?.length ?? 0;
+  const imageMediaUrl = image?.media_url;
   useEffect(() => {
-    if (!open) return;
-    if (image.illustrations && image.illustrations.length > 0) return;
-    if (!image.media_url) return;
-    log.debug("EditImageModal", "seeding illustrations from media_url", { imageId: image.id });
-    onUpdateImage({
+    if (!open || !image) return;
+    if (illustrationsCount > 0) return;
+    if (!imageMediaUrl) return;
+    log.debug("EditImageModal", "seeding illustrations from media_url", { imageId });
+    updateRetouchImage(spreadId, imageId, {
       illustrations: [{
-        media_url: image.media_url,
+        media_url: imageMediaUrl,
         created_time: new Date().toISOString(),
         is_selected: true,
       }],
     });
-  }, [open, image.id, image.media_url, image.illustrations, onUpdateImage]);
-
-  const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      if (!file.type.startsWith("image/")) {
-        alert("Please select an image file");
-        return;
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        alert("File size must be less than 10MB");
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setAttachedImage({
-          base64,
-          filename: file.name,
-        });
-      };
-      reader.onerror = () => {
-        alert("Failed to read file.");
-      };
-      reader.readAsDataURL(file);
-
-      e.target.value = "";
-    },
-    []
-  );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, illustrationsCount, imageMediaUrl, spreadId, imageId, updateRetouchImage]);
 
   const handleDownload = useCallback(async () => {
+    if (!image) return;
     const selectedIllustration = image.illustrations?.find(
       (ill) => ill.is_selected
     );
@@ -144,23 +118,24 @@ export function EditImageModal({
     } catch {
       alert("Failed to download image");
     }
-  }, [image.illustrations, image.title]);
+  }, [image]);
 
   const handleGallerySelect = useCallback(
     (index: number) => {
-      if (!image.illustrations) return;
+      if (!image?.illustrations) return;
 
       const updatedIllustrations = image.illustrations.map((ill, i) => ({
         ...ill,
         is_selected: i === index,
       }));
 
-      onUpdateImage({ illustrations: updatedIllustrations });
+      updateRetouchImage(spreadId, imageId, { illustrations: updatedIllustrations });
     },
-    [image.illustrations, onUpdateImage]
+    [image?.illustrations, spreadId, imageId, updateRetouchImage]
   );
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(() => {
+    if (!image) return;
     const selectedIllustration = image.illustrations?.find(
       (ill) => ill.is_selected
     );
@@ -171,68 +146,31 @@ export function EditImageModal({
       return;
     }
 
-    setIsGenerating(true);
-
-    log.info("handleGenerate", "editing image", {
+    log.info("handleGenerate", "dispatching edit task", {
       prompt,
       currentImageUrl: selectedIllustration.media_url,
-      hasAttachedImage: !!attachedImage,
+      refCount: referenceImages.length,
     });
 
-    try {
-      // Extract base64 from attached file data URI
-      let referenceImages: Array<{ base64Data: string; mimeType: string }> | undefined;
-      if (attachedImage) {
-        const [header, base64Data] = attachedImage.base64.split(",");
-        const mimeMatch = header.match(/data:(image\/[^;]+);/);
-        const mimeType = mimeMatch?.[1] || "image/png";
-        referenceImages = [{ base64Data, mimeType }];
-      }
+    startEditTask({
+      entityType: "spread_image",
+      entityKey: spreadId,
+      entityName: image.title || "Image",
+      childKey: imageId,
+      childName: image.title || "Illustration",
+      prompt: prompt.trim(),
+      imageUrl: selectedIllustration.media_url,
+      referenceImages: referenceImages.length > 0
+        ? referenceImages.map(({ base64Data, mimeType }) => ({ base64Data, mimeType }))
+        : undefined,
+      aspectRatio: image.aspect_ratio,
+    });
+  }, [prompt, referenceImages, image, spreadId, imageId, startEditTask]);
 
-      const result = await callEditObjectImage({
-        prompt: prompt.trim(),
-        imageUrl: selectedIllustration.media_url,
-        referenceImages,
-        aspectRatio: image.aspect_ratio,
-      });
-
-      if (!result.success || !result.data) {
-        log.error("handleGenerate", "API error", { error: result.error });
-        alert(result.error || "Failed to edit image");
-        return;
-      }
-
-      log.info("handleGenerate", "success", {
-        processingTime: result.meta?.processingTime,
-        storagePath: result.data.storagePath,
-      });
-
-      const newIllustration: Illustration = {
-        media_url: result.data.imageUrl,
-        created_time: new Date().toISOString(),
-        is_selected: true,
-      };
-
-      const updatedIllustrations = [
-        newIllustration,
-        ...(image.illustrations || []).map((ill) => ({
-          ...ill,
-          is_selected: false,
-        })),
-      ];
-
-      onUpdateImage({ illustrations: updatedIllustrations });
-    } catch (err) {
-      log.error("handleGenerate", "unexpected error", { error: err });
-      alert("An unexpected error occurred");
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [prompt, attachedImage, image.illustrations, onUpdateImage]);
-
-  const isBusy = isGenerating || isRemovingBg;
+  const isBusy = isEditing || isRemovingBg;
 
   const handleRemoveBackground = useCallback(async () => {
+    if (!image) return;
     const selectedIll = image.illustrations?.find((ill) => ill.is_selected);
     if (!selectedIll) return;
 
@@ -258,28 +196,29 @@ export function EditImageModal({
         storagePath: result.data.storagePath,
       });
 
-      const newIllustration: Illustration = {
-        media_url: result.data.imageUrl,
-        created_time: new Date().toISOString(),
-        is_selected: true,
-      };
-
       const updatedIllustrations = [
-        newIllustration,
+        {
+          media_url: result.data.imageUrl,
+          created_time: new Date().toISOString(),
+          is_selected: true,
+        },
         ...(image.illustrations || []).map((ill) => ({
           ...ill,
           is_selected: false,
         })),
       ];
 
-      onUpdateImage({ illustrations: updatedIllustrations });
+      updateRetouchImage(spreadId, imageId, { illustrations: updatedIllustrations });
     } catch (err) {
       log.error("handleRemoveBackground", "unexpected error", { error: err });
       alert("An unexpected error occurred");
     } finally {
       setIsRemovingBg(false);
     }
-  }, [image.illustrations, onUpdateImage]);
+  }, [image, spreadId, imageId, updateRetouchImage]);
+
+  // Guard: image deleted while modal open
+  if (!image) return null;
 
   const selectedIllustration = image.illustrations?.find(
     (ill) => ill.is_selected
@@ -394,24 +333,24 @@ export function EditImageModal({
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Label className="text-xs text-muted-foreground">PROMPT</Label>
-              {attachedImage && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs">
+              {referenceImages.length > 0 && referenceImages.map((img, idx) => (
+                <div key={idx} className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs">
                   <span className="truncate max-w-[150px]">
-                    {attachedImage.filename}
+                    {img.label}
                   </span>
                   <button
-                    onClick={() => setAttachedImage(null)}
+                    onClick={() => removeImage(idx)}
                     className="hover:bg-blue-100 rounded"
                   >
                     <X className="h-3 w-3" />
                   </button>
                 </div>
-              )}
+              ))}
               <Button
                 size="sm"
                 variant="ghost"
                 className="ml-2 h-6 w-6 p-0"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={openPicker}
                 disabled={isBusy}
                 aria-label="Attach reference image"
               >
@@ -420,13 +359,13 @@ export function EditImageModal({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleFilesSelected}
+                multiple
                 className="hidden"
               />
             </div>
             <Textarea
-              ref={textareaRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Describe the object you want to generate..."
@@ -442,7 +381,7 @@ export function EditImageModal({
             disabled={isBusy}
             className="w-40"
           >
-            {isGenerating ? (
+            {isEditing ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Generating

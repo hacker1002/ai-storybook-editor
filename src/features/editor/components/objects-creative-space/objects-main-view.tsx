@@ -115,14 +115,14 @@ export function ObjectsMainView({
   // Generate image modal state — spreadId captured at open time to prevent
   // wrong-spread updates if selection changes while modal is open
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [generateModalImage, setGenerateModalImage] =
-    useState<SpreadImage | null>(null);
+  const [generateModalImageId, setGenerateModalImageId] =
+    useState<string | null>(null);
   const [generateModalSpreadId, setGenerateModalSpreadId] =
     useState<string>("");
 
   const openGenerateModal = useCallback(
     (image: SpreadImage) => {
-      setGenerateModalImage(image);
+      setGenerateModalImageId(image.id);
       setGenerateModalSpreadId(selectedSpreadId);
       setGenerateModalOpen(true);
     },
@@ -131,15 +131,8 @@ export function ObjectsMainView({
 
   const handleGenerateModalClose = useCallback((open: boolean) => {
     setGenerateModalOpen(open);
-    if (!open) setGenerateModalImage(null);
+    if (!open) setGenerateModalImageId(null);
   }, []);
-
-  const handleGenerateImageUpdate = useCallback(
-    (imageId: string, updates: Partial<SpreadImage>) => {
-      actions.updateRetouchImage(generateModalSpreadId, imageId, updates);
-    },
-    [generateModalSpreadId, actions]
-  );
 
   // Split image modal state
   const [splitModalOpen, setSplitModalOpen] = useState(false);
@@ -765,17 +758,12 @@ export function ObjectsMainView({
         externalSelectedItemId={selectedItemId}
       />
 
-      {generateModalImage && (
+      {generateModalImageId && (
         <EditImageModal
           open={generateModalOpen}
           onOpenChange={handleGenerateModalClose}
-          image={generateModalImage}
-          onUpdateImage={(updates) => {
-            handleGenerateImageUpdate(generateModalImage.id, updates);
-            setGenerateModalImage((prev) =>
-              prev ? { ...prev, ...updates } : null
-            );
-          }}
+          spreadId={generateModalSpreadId}
+          imageId={generateModalImageId}
         />
       )}
 

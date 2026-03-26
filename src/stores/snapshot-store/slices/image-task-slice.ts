@@ -34,6 +34,10 @@ function findIllustrations(
       const stage = state.stages.find((s) => s.key === entityKey);
       return stage?.settings.find((st) => st.key === childKey)?.illustrations;
     }
+    case 'spread_image': {
+      const spread = state.retouch.spreads.find((s) => s.id === entityKey);
+      return spread?.images.find((img) => img.id === childKey)?.illustrations;
+    }
     default:
       log.warn('findIllustrations', `unsupported entity type: ${entityType}`);
       return undefined;
@@ -144,7 +148,7 @@ export const createImageTaskSlice: StateCreator<
   },
 
   startEditTask: (params) => {
-    const { entityType, entityKey, entityName, childKey, childName, prompt, imageUrl, referenceImages } = params;
+    const { entityType, entityKey, entityName, childKey, childName, prompt, imageUrl, referenceImages, aspectRatio } = params;
 
     // Block concurrent: 1 task per entity+child at a time
     const existing = get().imageTasks.find(
@@ -172,7 +176,7 @@ export const createImageTaskSlice: StateCreator<
       });
     });
 
-    callEditObjectImage({ prompt, imageUrl, referenceImages })
+    callEditObjectImage({ prompt, imageUrl, referenceImages, aspectRatio })
       .then((result) => {
         const taskStillExists = get().imageTasks.some((t) => t.id === taskId);
         if (!taskStillExists) {

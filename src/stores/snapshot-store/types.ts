@@ -153,7 +153,7 @@ export interface StagesSlice {
 // --- Image Task Types (ephemeral, not persisted to DB) ---
 
 /** Entity types that support background image generation/editing */
-export type ImageTaskEntityType = 'prop' | 'character' | 'stage';
+export type ImageTaskEntityType = 'prop' | 'character' | 'stage' | 'spread_image';
 
 /** Identifies the target entity + child for an image task */
 export interface ImageTaskTarget {
@@ -185,6 +185,7 @@ export interface StartEditTaskParams extends ImageTaskTarget {
   prompt: string;
   imageUrl: string;
   referenceImages?: ReferenceImages;
+  aspectRatio?: string;
 }
 
 export interface ImageTaskSlice {
