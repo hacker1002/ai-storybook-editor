@@ -9,6 +9,9 @@ import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
 import { createRetouchSlice } from './slices/retouch-slice';
 import { createPropsSlice } from './slices/props-slice';
+import { createCharactersSlice } from './slices/characters-slice';
+import { createStagesSlice } from './slices/stages-slice';
+import { createImageTaskSlice } from './slices/image-task-slice';
 
 const log = createLogger('Store', 'SnapshotStore');
 
@@ -21,6 +24,9 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createDummiesSlice(...args),
         ...createRetouchSlice(...args),
         ...createPropsSlice(...args),
+        ...createCharactersSlice(...args),
+        ...createStagesSlice(...args),
+        ...createImageTaskSlice(...args),
 
         // Fetch state
         fetchLoading: false,
@@ -62,12 +68,16 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.dummies = data.dummies ?? [];
               state.retouch = data.retouch ?? { spreads: [] };
               state.props = data.props ?? [];
+              state.characters = data.characters ?? [];
+              state.stages = data.stages ?? [];
             } else {
               state.meta.bookId = bookId;
               state.docs = DEFAULT_DOCS;
               state.dummies = [];
               state.retouch = { spreads: [] };
               state.props = [];
+              state.characters = [];
+              state.stages = [];
             }
             state.fetchLoading = false;
             state.sync.isDirty = false;
@@ -76,11 +86,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, dummies, retouch, props, sync } = get();
+          const { meta, docs, dummies, retouch, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
 
-          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, retouchSpreadCount: retouch.spreads.length, propCount: props.length });
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, retouchSpreadCount: retouch.spreads.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -95,6 +105,8 @@ export const useSnapshotStore = create<SnapshotStore>()(
             dummies,
             retouch,
             props,
+            characters,
+            stages,
             version,
             save_type: 1, // manual save
           };
@@ -103,7 +115,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           if (meta.id) {
             result = await supabase
               .from('snapshots')
-              .update({ docs, dummies, retouch, props, version })
+              .update({ docs, dummies, retouch, props, characters, stages, version })
               .eq('id', meta.id)
               .select()
               .single();
@@ -142,6 +154,8 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.dummies = data.dummies ?? [];
             state.retouch = data.retouch ?? { spreads: [] };
             state.props = data.props ?? [];
+            state.characters = data.characters ?? [];
+            state.stages = data.stages ?? [];
             if (data.meta) {
               Object.assign(state.meta, data.meta);
             }
@@ -157,6 +171,9 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.dummies = [];
             state.retouch = { spreads: [] };
             state.props = [];
+            state.characters = [];
+            state.stages = [];
+            state.imageTasks = [];
             state.meta = { id: null, bookId: null, version: null, tag: null };
             state.sync = { isDirty: false, lastSavedAt: null, isSaving: false, error: null };
             state.fetchLoading = false;

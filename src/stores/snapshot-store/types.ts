@@ -2,6 +2,8 @@ import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/ed
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { RetouchData } from '@/types/retouch-types';
 import type { Prop, PropState, PropSound, CropSheet } from '@/types/prop-types';
+import type { Character, CharacterVariant, CharacterVoice } from '@/types/character-types';
+import type { Stage, StageSetting, StageSound } from '@/types/stage-types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -115,7 +117,85 @@ export interface PropsSlice {
   deletePropCropSheet: (propKey: string, cropSheetIndex: number) => void;
 }
 
-export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & RetouchSlice & PropsSlice & {
-  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; retouch?: RetouchData; props?: Prop[]; meta?: Partial<SnapshotMeta> }) => void;
+export interface CharactersSlice {
+  characters: Character[];
+  setCharacters: (characters: Character[]) => void;
+  addCharacter: (character: Character) => void;
+  updateCharacter: (key: string, updates: Partial<Character>) => void;
+  deleteCharacter: (key: string) => void;
+  reorderCharacters: (fromIndex: number, toIndex: number) => void;
+  addCharacterVariant: (key: string, variant: CharacterVariant) => void;
+  updateCharacterVariant: (key: string, variantKey: string, updates: Partial<CharacterVariant>) => void;
+  deleteCharacterVariant: (key: string, variantKey: string) => void;
+  addCharacterVoice: (key: string, voice: CharacterVoice) => void;
+  updateCharacterVoice: (key: string, voiceKey: string, updates: Partial<CharacterVoice>) => void;
+  deleteCharacterVoice: (key: string, voiceKey: string) => void;
+  addCharacterCropSheet: (key: string, cropSheet: CropSheet) => void;
+  updateCharacterCropSheet: (key: string, cropSheetIndex: number, updates: Partial<CropSheet>) => void;
+  deleteCharacterCropSheet: (key: string, cropSheetIndex: number) => void;
+}
+
+export interface StagesSlice {
+  stages: Stage[];
+  setStages: (stages: Stage[]) => void;
+  addStage: (stage: Stage) => void;
+  updateStage: (key: string, updates: Partial<Stage>) => void;
+  deleteStage: (key: string) => void;
+  reorderStages: (fromIndex: number, toIndex: number) => void;
+  addStageSetting: (key: string, setting: StageSetting) => void;
+  updateStageSetting: (key: string, settingKey: string, updates: Partial<StageSetting>) => void;
+  deleteStageSetting: (key: string, settingKey: string) => void;
+  addStageSound: (key: string, sound: StageSound) => void;
+  updateStageSound: (key: string, soundKey: string, updates: Partial<StageSound>) => void;
+  deleteStageSound: (key: string, soundKey: string) => void;
+}
+
+// --- Image Task Types (ephemeral, not persisted to DB) ---
+
+/** Entity types that support background image generation/editing */
+export type ImageTaskEntityType = 'prop' | 'character' | 'stage';
+
+/** Identifies the target entity + child for an image task */
+export interface ImageTaskTarget {
+  entityType: ImageTaskEntityType;
+  entityKey: string;    // prop key | character key | stage key
+  entityName: string;   // prop name | character name | stage name
+  childKey: string;     // state key | variant key | setting key
+  childName: string;    // state name | variant name | setting name
+}
+
+export interface ImageTask extends ImageTaskTarget {
+  id: string;
+  taskType: 'generate' | 'edit';
+  status: 'pending' | 'completed' | 'error';
+  error?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+/** Shared reference images param */
+type ReferenceImages = Array<{ base64Data: string; mimeType: string }>;
+
+export interface StartGenerateTaskParams extends ImageTaskTarget {
+  description: string;
+  referenceImages?: ReferenceImages;
+}
+
+export interface StartEditTaskParams extends ImageTaskTarget {
+  prompt: string;
+  imageUrl: string;
+  referenceImages?: ReferenceImages;
+}
+
+export interface ImageTaskSlice {
+  imageTasks: ImageTask[];
+  startGenerateTask: (params: StartGenerateTaskParams) => void;
+  startEditTask: (params: StartEditTaskParams) => void;
+  dismissTask: (taskId: string) => void;
+  clearAllTasks: () => void;
+}
+
+export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & RetouchSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
+  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; retouch?: RetouchData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

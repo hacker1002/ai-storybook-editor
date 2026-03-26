@@ -42,10 +42,8 @@ import {
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { Label } from "@/components/ui/label";
-import { useSnapshotActions, usePropByKey } from "@/stores/snapshot-store";
+import { useSnapshotActions, usePropByKey, useImageTasksForChild } from "@/stores/snapshot-store";
 import { useAssetCategories } from "@/stores/asset-category-store";
-import { callGenerateFromDescription } from "@/apis/image-api";
-import { callEditObjectImage } from "@/apis/retouch-api";
 import { fileToBase64 } from "@/utils/file-utils";
 import type { PropState } from "@/types/prop-types";
 import { uploadImageToStorage } from "@/apis/storage-api";
@@ -68,9 +66,10 @@ export function StateItem({
   isExpanded,
   onToggle,
 }: StateItemProps) {
-  const { deletePropState, updatePropState } = useSnapshotActions();
+  const { deletePropState, updatePropState, startGenerateTask, startEditTask } = useSnapshotActions();
   const prop = usePropByKey(propKey);
   const categories = useAssetCategories();
+  const { isProcessing } = useImageTasksForChild(propKey, stateData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const referenceInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -91,8 +90,6 @@ export function StateItem({
   const [attachedImages, setAttachedImages] = useState<
     Array<{ label: string; base64Data: string; mimeType: string }>
   >([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const isGeneratingRef = useRef(false);
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState("");
   const [editAttachedImages, setEditAttachedImages] = useState<
@@ -132,9 +129,9 @@ export function StateItem({
     window.open(selectedIllustration.media_url, "_blank");
   };
 
-  const handleEditImage = async () => {
+  const handleEditImage = () => {
     const trimmed = editPromptText.trim();
-    if (!trimmed || !selectedIllustration || isGenerating) return;
+    if (!trimmed || !selectedIllustration || isProcessing) return;
 
     log.info("handleEditImage", "start", {
       propKey,
@@ -143,56 +140,28 @@ export function StateItem({
       refCount: editAttachedImages.length,
     });
     setIsEditPopoverOpen(false);
-    setIsGenerating(true);
 
-    try {
-      const referenceImages =
-        editAttachedImages.length > 0
-          ? editAttachedImages.map(({ base64Data, mimeType }) => ({
-              base64Data,
-              mimeType,
-            }))
-          : undefined;
+    const referenceImages =
+      editAttachedImages.length > 0
+        ? editAttachedImages.map(({ base64Data, mimeType }) => ({
+            base64Data,
+            mimeType,
+          }))
+        : undefined;
 
-      const result = await callEditObjectImage({
-        prompt: trimmed,
-        imageUrl: selectedIllustration.media_url,
-        referenceImages,
-      });
+    startEditTask({
+      entityType: 'prop',
+      entityKey: propKey,
+      entityName: prop?.name ?? propKey,
+      childKey: stateData.key,
+      childName: stateData.name,
+      prompt: trimmed,
+      imageUrl: selectedIllustration.media_url,
+      referenceImages,
+    });
 
-      if (!result.success || !result.data) {
-        throw new Error(result.error ?? "Edit failed");
-      }
-
-      log.info("handleEditImage", "success", {
-        imageUrl: result.data.imageUrl,
-      });
-
-      // Deselect all existing, prepend edited illustration as selected
-      const updatedIllustrations = stateData.illustrations.map((ill) => ({
-        ...ill,
-        is_selected: false,
-      }));
-      updatedIllustrations.unshift({
-        media_url: result.data.imageUrl,
-        created_time: new Date().toISOString(),
-        is_selected: true,
-      });
-
-      updatePropState(propKey, stateData.key, {
-        illustrations: updatedIllustrations,
-      });
-      setSelectedIllustrationIndex(0);
-      setEditPromptText("");
-      setEditAttachedImages([]);
-      toast.success("Image edited successfully");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Edit failed";
-      log.error("handleEditImage", "failed", { error: msg });
-      toast.error(msg);
-    } finally {
-      setIsGenerating(false);
-    }
+    setEditPromptText("");
+    setEditAttachedImages([]);
   };
 
   const handleEditAttachFile = () => {
@@ -325,70 +294,42 @@ export function StateItem({
     return visualDescription;
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
-    if (!trimmedPrompt || isGeneratingRef.current) return;
+    if (!trimmedPrompt || isProcessing) return;
 
-    isGeneratingRef.current = true;
     log.info("handleGenerate", "start", { propKey, stateKey: stateData.key });
-    setIsGenerating(true);
 
-    try {
-      // Save visual_description to store first (covers blur-skip edge case)
-      updatePropState(propKey, stateData.key, {
-        visual_description: trimmedPrompt,
-      });
+    // Save visual_description to store first (covers blur-skip edge case)
+    updatePropState(propKey, stateData.key, {
+      visual_description: trimmedPrompt,
+    });
 
-      const description = buildDescription(trimmedPrompt);
-      const referenceImages =
-        attachedImages.length > 0
-          ? attachedImages.map(({ base64Data, mimeType }) => ({
-              base64Data,
-              mimeType,
-            }))
-          : undefined;
+    const description = buildDescription(trimmedPrompt);
+    const referenceImages =
+      attachedImages.length > 0
+        ? attachedImages.map(({ base64Data, mimeType }) => ({
+            base64Data,
+            mimeType,
+          }))
+        : undefined;
 
-      log.debug("handleGenerate", "calling API", {
-        descriptionLength: description.length,
-        refCount: referenceImages?.length ?? 0,
-      });
+    log.debug("handleGenerate", "dispatching to store", {
+      descriptionLength: description.length,
+      refCount: referenceImages?.length ?? 0,
+    });
 
-      const result = await callGenerateFromDescription({
-        description,
-        referenceImages,
-      });
+    startGenerateTask({
+      entityType: 'prop',
+      entityKey: propKey,
+      entityName: prop?.name ?? propKey,
+      childKey: stateData.key,
+      childName: stateData.name,
+      description,
+      referenceImages,
+    });
 
-      if (!result.success || !result.data) {
-        throw new Error(result.error ?? "Generation failed");
-      }
-
-      log.info("handleGenerate", "success", { imageUrl: result.data.imageUrl });
-
-      // Deselect all existing, prepend new illustration as selected
-      const updatedIllustrations = stateData.illustrations.map((ill) => ({
-        ...ill,
-        is_selected: false,
-      }));
-      updatedIllustrations.unshift({
-        media_url: result.data.imageUrl,
-        created_time: new Date().toISOString(),
-        is_selected: true,
-      });
-
-      updatePropState(propKey, stateData.key, {
-        illustrations: updatedIllustrations,
-      });
-      setSelectedIllustrationIndex(0);
-      setAttachedImages([]);
-      toast.success("Image generated successfully");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Generation failed";
-      log.error("handleGenerate", "failed", { error: msg });
-      toast.error(msg);
-    } finally {
-      setIsGenerating(false);
-      isGeneratingRef.current = false;
-    }
+    setAttachedImages([]);
   };
 
   const handleUploadClick = () => {
@@ -631,10 +572,10 @@ export function StateItem({
                     src={selectedIllustration.media_url}
                     alt={stateData.name}
                     className="absolute inset-0 h-full w-full rounded-md"
-                    disabled={isGenerating}
+                    disabled={isProcessing}
                   />
                   {/* Generating overlay */}
-                  {isGenerating && (
+                  {isProcessing && (
                     <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center z-20">
                       <div className="text-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
@@ -654,7 +595,7 @@ export function StateItem({
                         <Button
                           size="sm"
                           variant="secondary"
-                          disabled={isGenerating}
+                          disabled={isProcessing}
                           aria-label="Edit image"
                         >
                           <Pencil className="h-4 w-4" />
@@ -729,7 +670,7 @@ export function StateItem({
                       size="sm"
                       variant="secondary"
                       onClick={handleDownload}
-                      disabled={isGenerating}
+                      disabled={isProcessing}
                       aria-label="Download image"
                     >
                       <Download className="h-4 w-4" />
@@ -815,7 +756,7 @@ export function StateItem({
                 variant="ghost"
                 className="h-6 w-6 p-0"
                 onClick={handleAttachFile}
-                disabled={isGenerating}
+                disabled={isProcessing}
                 aria-label="Attach reference image"
               >
                 <Paperclip className="h-4 w-4" />
@@ -859,7 +800,7 @@ export function StateItem({
               onBlur={handleBlurSave}
               placeholder="Describe the visual appearance..."
               className="min-h-[80px]"
-              disabled={isGenerating}
+              disabled={isProcessing}
             />
           </div>
 
@@ -867,10 +808,10 @@ export function StateItem({
           <div className="flex justify-center gap-2">
             <Button
               onClick={handleGenerate}
-              disabled={isGenerating || !promptText.trim()}
+              disabled={isProcessing || !promptText.trim()}
               className="w-40"
             >
-              {isGenerating ? (
+              {isProcessing ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Generating

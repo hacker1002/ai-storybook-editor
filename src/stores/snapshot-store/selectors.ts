@@ -4,6 +4,9 @@ import type { DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { RetouchData } from '@/types/retouch-types';
 import type { Prop } from '@/types/prop-types';
+import type { Character } from '@/types/character-types';
+import type { Stage } from '@/types/stage-types';
+import type { ImageTask } from './types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -20,6 +23,9 @@ const EMPTY_SPREADS: DummySpread[] = [];
 const EMPTY_QUIZZES: SpreadQuiz[] = [];
 const EMPTY_ANIMATIONS: SpreadAnimation[] = [];
 const EMPTY_PROPS: Prop[] = [];
+const EMPTY_CHARACTERS: Character[] = [];
+const EMPTY_STAGES: Stage[] = [];
+const EMPTY_IMAGE_TASKS: ImageTask[] = [];
 
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
@@ -98,6 +104,45 @@ export const usePropByKey = (key: string): Prop | undefined =>
 export const usePropKeys = (): string[] =>
   useSnapshotStore(useShallow((s) => s.props.map((p) => p.key)));
 
+// Characters selectors
+export const useCharacters = (): Character[] => useSnapshotStore((s) => s.characters ?? EMPTY_CHARACTERS);
+export const useCharacterByKey = (key: string): Character | undefined =>
+  useSnapshotStore((s) => s.characters.find((c) => c.key === key));
+export const useCharacterKeys = (): string[] =>
+  useSnapshotStore(useShallow((s) => s.characters.map((c) => c.key)));
+
+// Stages selectors
+export const useStages = (): Stage[] => useSnapshotStore((s) => s.stages ?? EMPTY_STAGES);
+export const useStageByKey = (key: string): Stage | undefined =>
+  useSnapshotStore((s) => s.stages.find((s) => s.key === key));
+export const useStageKeys = (): string[] =>
+  useSnapshotStore(useShallow((s) => s.stages.map((s) => s.key)));
+
+// Image task selectors (ephemeral, not persisted)
+export const useImageTasksForChild = (entityKey: string, childKey: string) =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const tasks = s.imageTasks ?? EMPTY_IMAGE_TASKS;
+      const pending = tasks.find(
+        (t) => t.entityKey === entityKey && t.childKey === childKey && t.status === 'pending'
+      );
+      return {
+        isGenerating: pending?.taskType === 'generate',
+        isEditing: pending?.taskType === 'edit',
+        isProcessing: !!pending,
+        pendingTask: pending,
+      };
+    })
+  );
+
+export const useHasPendingImageTasks = (): boolean =>
+  useSnapshotStore((s) => (s.imageTasks ?? EMPTY_IMAGE_TASKS).some((t) => t.status === 'pending'));
+
+export const useCompletedImageTasks = (): ImageTask[] =>
+  useSnapshotStore(
+    useShallow((s) => (s.imageTasks ?? EMPTY_IMAGE_TASKS).filter((t) => t.status === 'completed' || t.status === 'error'))
+  );
+
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>
   useSnapshotStore(
@@ -163,12 +208,44 @@ export const useSnapshotActions = () =>
       addPropCropSheet: s.addPropCropSheet,
       updatePropCropSheet: s.updatePropCropSheet,
       deletePropCropSheet: s.deletePropCropSheet,
+      // Characters
+      setCharacters: s.setCharacters,
+      addCharacter: s.addCharacter,
+      updateCharacter: s.updateCharacter,
+      deleteCharacter: s.deleteCharacter,
+      reorderCharacters: s.reorderCharacters,
+      addCharacterVariant: s.addCharacterVariant,
+      updateCharacterVariant: s.updateCharacterVariant,
+      deleteCharacterVariant: s.deleteCharacterVariant,
+      addCharacterVoice: s.addCharacterVoice,
+      updateCharacterVoice: s.updateCharacterVoice,
+      deleteCharacterVoice: s.deleteCharacterVoice,
+      addCharacterCropSheet: s.addCharacterCropSheet,
+      updateCharacterCropSheet: s.updateCharacterCropSheet,
+      deleteCharacterCropSheet: s.deleteCharacterCropSheet,
+      // Stages
+      setStages: s.setStages,
+      addStage: s.addStage,
+      updateStage: s.updateStage,
+      deleteStage: s.deleteStage,
+      reorderStages: s.reorderStages,
+      addStageSetting: s.addStageSetting,
+      updateStageSetting: s.updateStageSetting,
+      deleteStageSetting: s.deleteStageSetting,
+      addStageSound: s.addStageSound,
+      updateStageSound: s.updateStageSound,
+      deleteStageSound: s.deleteStageSound,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,
       markClean: s.markClean,
       setSaving: s.setSaving,
       setSaveError: s.setSaveError,
+      // Image Tasks
+      startGenerateTask: s.startGenerateTask,
+      startEditTask: s.startEditTask,
+      dismissTask: s.dismissTask,
+      clearAllTasks: s.clearAllTasks,
       // Top-level
       initSnapshot: s.initSnapshot,
       resetSnapshot: s.resetSnapshot,

@@ -41,6 +41,8 @@ export const createPropsSlice: StateCreator<
     set((state) => {
       log.debug('deleteProp', 'delete', { key });
       state.props = state.props.filter((p) => p.key !== key);
+      // Clean up any pending image tasks for this prop
+      state.imageTasks = state.imageTasks.filter((t) => !(t.entityType === 'prop' && t.entityKey === key));
       state.sync.isDirty = true;
     }),
 
@@ -85,6 +87,10 @@ export const createPropsSlice: StateCreator<
       if (prop) {
         log.debug('deletePropState', 'delete', { propKey, stateKey });
         prop.states = prop.states.filter((s) => s.key !== stateKey);
+        // Clean up any pending image tasks for this state
+        state.imageTasks = state.imageTasks.filter(
+          (t) => !(t.entityType === 'prop' && t.entityKey === propKey && t.childKey === stateKey)
+        );
         state.sync.isDirty = true;
       }
     }),

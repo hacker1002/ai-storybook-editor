@@ -2,6 +2,8 @@ import { ArrowLeft, Settings } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { useHasPendingImageTasks } from '@/stores/snapshot-store/selectors';
+import { toast } from 'sonner';
 import type { UserPoints, EditorMode } from '@/types/editor';
 
 interface MenuPopoverProps {
@@ -22,8 +24,13 @@ export function MenuPopover({
   children,
 }: MenuPopoverProps) {
   const progressPercent = (userPoints.current / userPoints.total) * 100;
+  const hasPendingTasks = useHasPendingImageTasks();
 
   const handleHomeClick = () => {
+    if (hasPendingTasks) {
+      toast.warning('Please wait — images are still being generated');
+      return;
+    }
     onNavigateHome();
     onOpenChange(false);
   };

@@ -22,6 +22,7 @@ import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creat
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
+import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
 
 const log = createLogger('Editor', 'EditorPage');
 
@@ -46,6 +47,9 @@ export function EditorPage() {
 
   // Editor settings
   const { setCurrentStep, resetSettings } = useEditorSettingsActions();
+
+  // Global toast notifications for background image tasks
+  useImageTaskNotifications();
 
   // Local UI state
   const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('doc');
