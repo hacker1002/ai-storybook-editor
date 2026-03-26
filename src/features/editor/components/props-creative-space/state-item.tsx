@@ -44,7 +44,7 @@ import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { Label } from "@/components/ui/label";
 import { useSnapshotActions, usePropByKey, useImageTasksForChild } from "@/stores/snapshot-store";
 import { useAssetCategories } from "@/stores/asset-category-store";
-import { fileToBase64 } from "@/utils/file-utils";
+import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
 import type { PropState } from "@/types/prop-types";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import { createLogger } from "@/utils/logger";
@@ -71,7 +71,6 @@ export function StateItem({
   const categories = useAssetCategories();
   const { isProcessing } = useImageTasksForChild(propKey, stateData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
-  const referenceInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(stateData.name);
@@ -87,18 +86,12 @@ export function StateItem({
   const [promptText, setPromptText] = useState<string>(
     stateData.visual_description ?? ""
   );
-  const [attachedImages, setAttachedImages] = useState<
-    Array<{ label: string; base64Data: string; mimeType: string }>
-  >([]);
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState("");
-  const [editAttachedImages, setEditAttachedImages] = useState<
-    Array<{ label: string; base64Data: string; mimeType: string }>
-  >([]);
-  const editReferenceInputRef = useRef<HTMLInputElement>(null);
 
-  const MAX_REFERENCE_IMAGES = 5;
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  // Reference image pickers for generate and edit flows
+  const generateRefs = useReferenceImagePicker();
+  const editRefs = useReferenceImagePicker();
 
   // type 0 = default state, cannot be deleted or have images uploaded
   const isDefault = stateData.type === 0;
@@ -137,13 +130,13 @@ export function StateItem({
       propKey,
       stateKey: stateData.key,
       prompt: trimmed,
-      refCount: editAttachedImages.length,
+      refCount: editRefs.images.length,
     });
     setIsEditPopoverOpen(false);
 
     const referenceImages =
-      editAttachedImages.length > 0
-        ? editAttachedImages.map(({ base64Data, mimeType }) => ({
+      editRefs.images.length > 0
+        ? editRefs.images.map(({ base64Data, mimeType }) => ({
             base64Data,
             mimeType,
           }))
@@ -161,127 +154,7 @@ export function StateItem({
     });
 
     setEditPromptText("");
-    setEditAttachedImages([]);
-  };
-
-  const handleEditAttachFile = () => {
-    editReferenceInputRef.current?.click();
-  };
-
-  const handleEditReferenceFilesSelected = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const fileArray = Array.from(files);
-    e.target.value = "";
-
-    const remaining = MAX_REFERENCE_IMAGES - editAttachedImages.length;
-    if (remaining <= 0) {
-      toast.warning(`Maximum ${MAX_REFERENCE_IMAGES} reference images allowed`);
-      return;
-    }
-
-    const validFiles: File[] = [];
-    for (const file of fileArray) {
-      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-        toast.warning(`${file.name}: only PNG, JPEG, WebP accepted`);
-        continue;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        toast.warning(`${file.name}: exceeds 10MB limit`);
-        continue;
-      }
-      validFiles.push(file);
-    }
-
-    const toProcess = validFiles.slice(0, remaining);
-    if (validFiles.length > remaining) {
-      toast.warning(
-        `Only ${remaining} more reference image(s) can be added (max ${MAX_REFERENCE_IMAGES})`
-      );
-    }
-
-    try {
-      const newImages = await Promise.all(
-        toProcess.map(async (file) => ({
-          label: file.name,
-          base64Data: await fileToBase64(file),
-          mimeType: file.type,
-        }))
-      );
-      setEditAttachedImages((prev) => [...prev, ...newImages]);
-    } catch (err) {
-      log.error("handleEditReferenceFiles", "conversion failed", {
-        error: err,
-      });
-      toast.error("Failed to process reference image(s)");
-    }
-  };
-
-  const handleAttachFile = () => {
-    referenceInputRef.current?.click();
-  };
-
-  const handleReferenceFilesSelected = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    // Snapshot to array BEFORE resetting input — FileList is a live reference
-    const fileArray = Array.from(files);
-    e.target.value = "";
-
-    const remaining = MAX_REFERENCE_IMAGES - attachedImages.length;
-    if (remaining <= 0) {
-      toast.warning(`Maximum ${MAX_REFERENCE_IMAGES} reference images allowed`);
-      return;
-    }
-
-    const validFiles: File[] = [];
-    for (const file of fileArray) {
-      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-        log.warn("handleReferenceFiles", "invalid mime type", {
-          name: file.name,
-          type: file.type,
-        });
-        toast.warning(`${file.name}: only PNG, JPEG, WebP accepted`);
-        continue;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        log.warn("handleReferenceFiles", "file too large", {
-          name: file.name,
-          size: file.size,
-        });
-        toast.warning(`${file.name}: exceeds 10MB limit`);
-        continue;
-      }
-      validFiles.push(file);
-    }
-
-    const toProcess = validFiles.slice(0, remaining);
-    if (validFiles.length > remaining) {
-      toast.warning(
-        `Only ${remaining} more reference image(s) can be added (max ${MAX_REFERENCE_IMAGES})`
-      );
-    }
-
-    log.debug("handleReferenceFiles", "converting files", {
-      count: toProcess.length,
-    });
-    try {
-      const newImages = await Promise.all(
-        toProcess.map(async (file) => ({
-          label: file.name,
-          base64Data: await fileToBase64(file),
-          mimeType: file.type,
-        }))
-      );
-      setAttachedImages((prev) => [...prev, ...newImages]);
-    } catch (err) {
-      log.error("handleReferenceFiles", "conversion failed", { error: err });
-      toast.error("Failed to process reference image(s)");
-    }
+    editRefs.clearImages();
   };
 
   const buildDescription = (visualDescription: string): string => {
@@ -307,8 +180,8 @@ export function StateItem({
 
     const description = buildDescription(trimmedPrompt);
     const referenceImages =
-      attachedImages.length > 0
-        ? attachedImages.map(({ base64Data, mimeType }) => ({
+      generateRefs.images.length > 0
+        ? generateRefs.images.map(({ base64Data, mimeType }) => ({
             base64Data,
             mimeType,
           }))
@@ -329,7 +202,7 @@ export function StateItem({
       referenceImages,
     });
 
-    setAttachedImages([]);
+    generateRefs.clearImages();
   };
 
   const handleUploadClick = () => {
@@ -494,11 +367,11 @@ export function StateItem({
           />
           {/* Hidden file input for edit popover references */}
           <input
-            ref={editReferenceInputRef}
+            ref={editRefs.inputRef}
             type="file"
             accept="image/png,image/jpeg,image/webp"
             multiple
-            onChange={handleEditReferenceFilesSelected}
+            onChange={editRefs.handleFilesSelected}
             className="hidden"
           />
           {/* Upload button — available for all states */}
@@ -606,9 +479,9 @@ export function StateItem({
                         align="end"
                         className="w-80 p-3"
                       >
-                        {editAttachedImages.length > 0 && (
+                        {editRefs.images.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mb-2">
-                            {editAttachedImages.map((img, idx) => (
+                            {editRefs.images.map((img, idx) => (
                               <div
                                 key={`edit-${img.label}-${idx}`}
                                 className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
@@ -617,11 +490,7 @@ export function StateItem({
                                   {img.label}
                                 </span>
                                 <button
-                                  onClick={() =>
-                                    setEditAttachedImages((prev) =>
-                                      prev.filter((_, i) => i !== idx)
-                                    )
-                                  }
+                                  onClick={() => editRefs.removeImage(idx)}
                                   className="hover:bg-blue-100 rounded"
                                 >
                                   <X className="h-3 w-3" />
@@ -648,7 +517,7 @@ export function StateItem({
                               size="icon"
                               variant="ghost"
                               className="h-8 w-8"
-                              onClick={handleEditAttachFile}
+                              onClick={editRefs.openPicker}
                               aria-label="Attach reference image"
                             >
                               <Paperclip className="h-4 w-4" />
@@ -740,11 +609,11 @@ export function StateItem({
           <div>
             {/* Hidden file input for reference images */}
             <input
-              ref={referenceInputRef}
+              ref={generateRefs.inputRef}
               type="file"
               accept="image/png,image/jpeg,image/webp"
               multiple
-              onChange={handleReferenceFilesSelected}
+              onChange={generateRefs.handleFilesSelected}
               className="hidden"
             />
             <div className="flex items-center gap-2 mb-2">
@@ -755,37 +624,29 @@ export function StateItem({
                 size="sm"
                 variant="ghost"
                 className="h-6 w-6 p-0"
-                onClick={handleAttachFile}
+                onClick={generateRefs.openPicker}
                 disabled={isProcessing}
                 aria-label="Attach reference image"
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
-              {attachedImages.length > 0 && (
+              {generateRefs.images.length > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  {attachedImages.length}/{MAX_REFERENCE_IMAGES}
+                  {generateRefs.images.length}/5
                 </span>
               )}
             </div>
             {/* Attached reference images list */}
-            {attachedImages.length > 0 && (
+            {generateRefs.images.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
-                {attachedImages.map((img, idx) => (
+                {generateRefs.images.map((img, idx) => (
                   <div
                     key={`${img.label}-${idx}`}
                     className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
                   >
                     <span className="truncate max-w-[120px]">{img.label}</span>
                     <button
-                      onClick={() => {
-                        log.debug("removeAttachedImage", "remove reference", {
-                          idx,
-                          label: img.label,
-                        });
-                        setAttachedImages((prev) =>
-                          prev.filter((_, i) => i !== idx)
-                        );
-                      }}
+                      onClick={() => generateRefs.removeImage(idx)}
                       className="hover:bg-blue-100 rounded"
                     >
                       <X className="h-3 w-3" />
