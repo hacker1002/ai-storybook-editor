@@ -19,6 +19,7 @@ import { ObjectsCreativeSpace } from '../components/objects-creative-space';
 import { AnimationsCreativeSpace } from '../components/animations-creative-space';
 import { PropsCreativeSpace } from '../components/props-creative-space';
 import { StagesCreativeSpace } from '../components/stages-creative-space';
+import { CharactersCreativeSpace } from '../components/characters-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
@@ -165,8 +166,9 @@ export function EditorPage() {
         return <PropsCreativeSpace />;
       case 'stage':
         return <StagesCreativeSpace />;
-      case 'sketch':
       case 'character':
+        return <CharactersCreativeSpace />;
+      case 'sketch':
       case 'spread':
       case 'remix':
       case 'history':

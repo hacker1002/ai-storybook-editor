@@ -48,7 +48,12 @@ function buildNewStage(name: string, order: number): Stage {
         type: 0,
         visual_description: "",
         temporal: { era: "", season: "", weather: "", time_of_day: "" },
-        sensory: { atmosphere: "", soundscape: "", lighting: "", color_palette: "" },
+        sensory: {
+          atmosphere: "",
+          soundscape: "",
+          lighting: "",
+          color_palette: "",
+        },
         emotional: { mood: "" },
         illustrations: [],
         image_references: [],
@@ -160,7 +165,10 @@ export function StagesSidebar({
       const fromFull = stageKeys.indexOf(fromKey);
       const toFull = stageKeys.indexOf(toKey);
       if (fromFull !== -1 && toFull !== -1) {
-        log.info("handleDrop", "reordering stages", { from: fromFull, to: toFull });
+        log.info("handleDrop", "reordering stages", {
+          from: fromFull,
+          to: toFull,
+        });
         reorderStages(fromFull, toFull);
       }
       setDragFromIndex(null);
@@ -216,7 +224,7 @@ export function StagesSidebar({
 
   return (
     <aside
-      className="flex flex-col h-full border-r min-w-[240px] max-w-[300px] w-1/4"
+      className="flex flex-col h-full border-r min-w-[280px] max-w-[320px] w-1/4"
       role="navigation"
       aria-label="Stages sidebar"
     >

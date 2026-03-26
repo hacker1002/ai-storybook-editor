@@ -1,4 +1,4 @@
-// props-sidebar.tsx - Left sidebar listing all props with filter, add, drag-reorder, and rename.
+// characters-sidebar.tsx - Left sidebar listing all characters with filter, add, drag-reorder, and rename.
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Filter, Plus, CirclePlus, Library } from "lucide-react";
@@ -15,9 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PropsSidebarItem } from "./props-sidebar-item";
+import { CharactersSidebarItem } from "./characters-sidebar-item";
 import {
-  useProps,
+  useCharacters,
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { useCurrentBook } from "@/stores/book-store";
@@ -26,48 +26,70 @@ import {
   useAssetCategoryActions,
 } from "@/stores/asset-category-store";
 import { CATEGORY_FILTER_OPTIONS } from "@/constants/prop-constants";
-import type { Prop } from "@/types/prop-types";
+import type { Character } from "@/types/character-types";
 import { cn, generateUniqueKey } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
 
-const log = createLogger("Editor", "PropsSidebar");
+const log = createLogger("Editor", "CharactersSidebar");
 
-interface PropsSidebarProps {
-  propKeys: string[];
-  selectedPropKey: string | null;
-  onPropSelect: (key: string) => void;
+interface CharactersSidebarProps {
+  characterKeys: string[];
+  selectedCharacterKey: string | null;
+  onCharacterSelect: (key: string) => void;
 }
 
-/** Build a blank Prop record ready for addProp */
-function buildNewProp(name: string, order: number): Prop {
+/** Build a blank Character record ready for addCharacter */
+function buildNewCharacter(name: string, order: number): Character {
   return {
     order,
     name,
     key: generateUniqueKey(name),
-    category_id: "",
-    type: "narrative",
-    states: [
+    basic_info: {
+      description: "",
+      gender: "",
+      age: "",
+      category_id: "",
+      role: "",
+    },
+    personality: {
+      core_essence: "",
+      flaws: "",
+      emotions: "",
+      reactions: "",
+      desires: "",
+      likes: "",
+      fears: "",
+      contradictions: "",
+    },
+    variants: [
       {
         name: "Default",
         key: "default",
         type: 0,
+        appearance: {
+          height: 0,
+          hair: "",
+          eyes: "",
+          face: "",
+          build: "",
+        },
         visual_description: "",
         illustrations: [],
         image_references: [],
       },
     ],
-    sounds: [],
+    voices: [],
     crop_sheets: [],
   };
 }
 
-export function PropsSidebar({
-  propKeys,
-  selectedPropKey,
-  onPropSelect,
-}: PropsSidebarProps) {
-  const allProps = useProps();
-  const { addProp, updateProp, deleteProp, reorderProps } =
+export function CharactersSidebar({
+  characterKeys,
+  selectedCharacterKey,
+  onCharacterSelect,
+}: CharactersSidebarProps) {
+  const allCharacters = useCharacters();
+  const { addCharacter, updateCharacter, deleteCharacter, reorderCharacters } =
     useSnapshotActions();
   const currentBook = useCurrentBook();
   const assetCategories = useAssetCategories();
@@ -79,9 +101,9 @@ export function PropsSidebar({
   }, [fetchCategories]);
 
   // UI state
-  const [expandedPropKey, setExpandedPropKey] = useState<string | null>(
-    selectedPropKey
-  );
+  const [expandedCharacterKey, setExpandedCharacterKey] = useState<
+    string | null
+  >(selectedCharacterKey);
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
@@ -103,155 +125,159 @@ export function PropsSidebar({
     return map;
   }, [assetCategories]);
 
-  // Filtered prop keys: resolve category_id (UUID) → type (1-4) for comparison
-  const filteredPropKeys = useMemo(() => {
-    if (filterCategory === null) return propKeys;
-    return propKeys.filter((key) => {
-      const prop = allProps.find((p) => p.key === key);
-      if (!prop || !prop.category_id) return false;
-      const catType = categoryTypeMap.get(prop.category_id);
+  // Filtered character keys: resolve basic_info.category_id (UUID) → type (1-4) for comparison
+  const filteredCharacterKeys = useMemo(() => {
+    if (filterCategory === null) return characterKeys;
+    return characterKeys.filter((key) => {
+      const character = allCharacters.find((c) => c.key === key);
+      if (!character || !character.basic_info.category_id) return false;
+      const catType = categoryTypeMap.get(character.basic_info.category_id);
       return catType === filterCategory;
     });
-  }, [propKeys, allProps, filterCategory, categoryTypeMap]);
+  }, [characterKeys, allCharacters, filterCategory, categoryTypeMap]);
 
   // === Handlers ===
 
-  const handleToggle = useCallback((key: string) => {
-    setExpandedPropKey((prev) => (prev === key ? null : key));
-  }, []);
-
-  const handleCreateFromScratch = useCallback(() => {
-    log.info("handleCreateFromScratch", "creating new prop");
-    setIsAddPopoverOpen(false);
-    const name = "New Prop";
-    const maxOrder = allProps.reduce((max, p) => Math.max(max, p.order), -1);
-    const newProp = buildNewProp(name, maxOrder + 1);
-    addProp(newProp);
-    onPropSelect(newProp.key);
-    setExpandedPropKey(newProp.key);
-    setEditingNameKey(newProp.key);
-  }, [addProp, onPropSelect, allProps]);
-
-  const handleDeleteProp = useCallback(
+  const handleToggle = useCallback(
     (key: string) => {
-      log.info("handleDeleteProp", "deleting prop", { key });
-      deleteProp(key);
-      if (expandedPropKey === key) setExpandedPropKey(null);
-      if (editingNameKey === key) setEditingNameKey(null);
+      setExpandedCharacterKey((prev) => (prev === key ? null : key));
+      onCharacterSelect(key);
     },
-    [deleteProp, expandedPropKey, editingNameKey]
+    [onCharacterSelect]
   );
 
-  const handleRenameProp = useCallback(
+  const handleCreateFromScratch = useCallback(() => {
+    log.info("handleCreateFromScratch", "creating new character");
+    setIsAddPopoverOpen(false);
+    const name = "New Character";
+    const maxOrder = allCharacters.reduce(
+      (max, c) => Math.max(max, c.order),
+      -1
+    );
+    const newCharacter = buildNewCharacter(name, maxOrder + 1);
+    addCharacter(newCharacter);
+    onCharacterSelect(newCharacter.key);
+    setExpandedCharacterKey(newCharacter.key);
+    setEditingNameKey(newCharacter.key);
+  }, [addCharacter, onCharacterSelect, allCharacters]);
+
+  const handleDeleteCharacter = useCallback(
+    (key: string) => {
+      log.info("handleDeleteCharacter", "deleting character", { key });
+      deleteCharacter(key);
+      if (expandedCharacterKey === key) setExpandedCharacterKey(null);
+      if (editingNameKey === key) setEditingNameKey(null);
+    },
+    [deleteCharacter, expandedCharacterKey, editingNameKey]
+  );
+
+  const handleRenameCharacter = useCallback(
     (key: string, newName: string) => {
       const trimmed = newName.trim();
       if (trimmed) {
-        // On first rename (key still matches "new_prop_*"), also update the key
-        const isFirstRename = key.startsWith("new_prop_");
+        // On first rename (key still matches "new_character_*"), also update the key
+        const isFirstRename = key.startsWith("new_character_");
         if (isFirstRename) {
           const newKey = generateUniqueKey(trimmed);
-          log.debug("handleRenameProp", "first rename with key update", {
+          log.debug("handleRenameCharacter", "first rename with key update", {
             oldKey: key,
             newKey,
             newName: trimmed,
           });
-          updateProp(key, { name: trimmed, key: newKey });
-          onPropSelect(newKey);
-          setExpandedPropKey(newKey);
+          updateCharacter(key, { name: trimmed, key: newKey });
+          onCharacterSelect(newKey);
+          setExpandedCharacterKey(newKey);
         } else {
-          log.debug("handleRenameProp", "renaming", { key, newName: trimmed });
-          updateProp(key, { name: trimmed });
+          log.debug("handleRenameCharacter", "renaming", {
+            key,
+            newName: trimmed,
+          });
+          updateCharacter(key, { name: trimmed });
         }
       }
       setEditingNameKey(null);
     },
-    [updateProp, onPropSelect]
-  );
-
-  const handleUpdateCategory = useCallback(
-    (key: string, categoryId: string) => {
-      log.debug("handleUpdateCategory", "updating category", {
-        key,
-        categoryId,
-      });
-      updateProp(key, { category_id: categoryId });
-    },
-    [updateProp]
-  );
-
-  const handleUpdateType = useCallback(
-    (key: string, type: string) => {
-      log.debug("handleUpdateType", "updating type", { key, type });
-      updateProp(key, { type: type as Prop["type"] });
-    },
-    [updateProp]
+    [updateCharacter, onCharacterSelect]
   );
 
   const handleDrop = useCallback(
-    (toIndex: number) => {
-      if (dragFromIndex !== null && dragFromIndex !== toIndex) {
-        log.info("handleDrop", "reordering props", {
-          from: dragFromIndex,
-          to: toIndex,
+    (toFilteredIndex: number) => {
+      if (dragFromIndex === null || dragFromIndex === toFilteredIndex) {
+        setDragFromIndex(null);
+        return;
+      }
+      // Map filtered indices to full-array indices for correct reorder
+      const fromKey = filteredCharacterKeys[dragFromIndex];
+      const toKey = filteredCharacterKeys[toFilteredIndex];
+      const fromFull = characterKeys.indexOf(fromKey);
+      const toFull = characterKeys.indexOf(toKey);
+      if (fromFull !== -1 && toFull !== -1) {
+        log.info("handleDrop", "reordering characters", {
+          from: fromFull,
+          to: toFull,
         });
-        reorderProps(dragFromIndex, toIndex);
+        reorderCharacters(fromFull, toFull);
       }
       setDragFromIndex(null);
     },
-    [dragFromIndex, reorderProps]
+    [dragFromIndex, filteredCharacterKeys, characterKeys, reorderCharacters]
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (filteredPropKeys.length === 0) return;
-      const currentIndex = selectedPropKey
-        ? filteredPropKeys.indexOf(selectedPropKey)
+      if (filteredCharacterKeys.length === 0) return;
+      const currentIndex = selectedCharacterKey
+        ? filteredCharacterKeys.indexOf(selectedCharacterKey)
         : -1;
 
       switch (e.key) {
         case "ArrowUp": {
           e.preventDefault();
           const prevIndex =
-            currentIndex > 0 ? currentIndex - 1 : filteredPropKeys.length - 1;
-          onPropSelect(filteredPropKeys[prevIndex]);
+            currentIndex > 0
+              ? currentIndex - 1
+              : filteredCharacterKeys.length - 1;
+          onCharacterSelect(filteredCharacterKeys[prevIndex]);
           break;
         }
         case "ArrowDown": {
           e.preventDefault();
           const nextIndex =
-            currentIndex < filteredPropKeys.length - 1 ? currentIndex + 1 : 0;
-          onPropSelect(filteredPropKeys[nextIndex]);
+            currentIndex < filteredCharacterKeys.length - 1
+              ? currentIndex + 1
+              : 0;
+          onCharacterSelect(filteredCharacterKeys[nextIndex]);
           break;
         }
         case "Enter": {
           e.preventDefault();
-          if (selectedPropKey) {
-            handleToggle(selectedPropKey);
+          if (selectedCharacterKey) {
+            handleToggle(selectedCharacterKey);
           }
           break;
         }
         case "Escape": {
           e.preventDefault();
-          setExpandedPropKey(null);
+          setExpandedCharacterKey(null);
           break;
         }
         case "F2": {
           e.preventDefault();
-          if (selectedPropKey) {
-            setEditingNameKey(selectedPropKey);
+          if (selectedCharacterKey) {
+            setEditingNameKey(selectedCharacterKey);
           }
           break;
         }
       }
     },
-    [filteredPropKeys, selectedPropKey, onPropSelect, handleToggle]
+    [filteredCharacterKeys, selectedCharacterKey, onCharacterSelect, handleToggle]
   );
 
   return (
     <aside
       className="flex flex-col h-full border-r min-w-[280px] max-w-[320px] w-1/4"
       role="navigation"
-      aria-label="Props sidebar"
+      aria-label="Characters sidebar"
     >
       {/* Header */}
       <div className="flex items-center justify-between h-11 px-3 border-b shrink-0">
@@ -266,7 +292,7 @@ export function PropsSidebar({
                 variant="ghost"
                 size="icon"
                 className={cn("h-7 w-7", isFilterActive && "text-blue-500")}
-                aria-label="Filter props"
+                aria-label="Filter characters"
               >
                 <Filter className="h-4 w-4" />
               </Button>
@@ -338,7 +364,7 @@ export function PropsSidebar({
             </PopoverContent>
           </Popover>
 
-          <span className="text-sm font-semibold">Props</span>
+          <span className="text-sm font-semibold">Characters</span>
         </div>
 
         {/* Add popover */}
@@ -348,7 +374,7 @@ export function PropsSidebar({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              aria-label="Add prop"
+              aria-label="Add character"
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -376,41 +402,41 @@ export function PropsSidebar({
         </Popover>
       </div>
 
-      {/* Prop list */}
+      {/* Character list */}
       <div
         className="flex-1 overflow-y-auto p-2 space-y-1"
         role="list"
-        aria-label="Props list"
+        aria-label="Characters list"
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
-        {filteredPropKeys.length === 0 ? (
+        {filteredCharacterKeys.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-center">
-            <p className="text-sm text-muted-foreground mb-2">No props yet</p>
+            <p className="text-sm text-muted-foreground mb-2">
+              No characters yet
+            </p>
             <Button
               variant="outline"
               size="sm"
               onClick={handleCreateFromScratch}
             >
-              <Plus className="h-3 w-3 mr-1" /> Add Prop
+              <Plus className="h-3 w-3 mr-1" /> Add Character
             </Button>
           </div>
         ) : (
-          filteredPropKeys.map((key, index) => (
-            <PropsSidebarItem
+          filteredCharacterKeys.map((key, index) => (
+            <CharactersSidebarItem
               key={key}
-              propKey={key}
+              characterKey={key}
               index={index}
-              isSelected={key === selectedPropKey}
-              isExpanded={key === expandedPropKey}
+              isSelected={key === selectedCharacterKey}
+              isExpanded={key === expandedCharacterKey}
               isEditingName={key === editingNameKey}
               onToggle={() => handleToggle(key)}
-              onSelect={() => onPropSelect(key)}
+              onSelect={() => onCharacterSelect(key)}
               onStartRename={() => setEditingNameKey(key)}
-              onFinishRename={(name) => handleRenameProp(key, name)}
-              onDelete={() => handleDeleteProp(key)}
-              onUpdateCategory={(catId) => handleUpdateCategory(key, catId)}
-              onUpdateType={(type) => handleUpdateType(key, type)}
+              onFinishRename={(name) => handleRenameCharacter(key, name)}
+              onDelete={() => handleDeleteCharacter(key)}
               onDragStart={() => setDragFromIndex(index)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(index)}
