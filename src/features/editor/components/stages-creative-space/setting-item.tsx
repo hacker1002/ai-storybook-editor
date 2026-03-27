@@ -80,8 +80,8 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
   const generateRefs = useReferenceImagePicker();
   const editRefs = useReferenceImagePicker();
 
-  // type 0 = default setting, cannot be deleted
-  const isDefault = settingData.type === 0;
+  // type 0 = base setting, cannot be deleted
+  const isBase = settingData.type === 0;
 
   const sortedIllustrations = [...settingData.illustrations].sort(
     (a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
@@ -343,7 +343,7 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
             {isUploading ? 'Uploading...' : 'Upload'}
           </Button>
 
-          {!isDefault && (
+          {!isBase && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button

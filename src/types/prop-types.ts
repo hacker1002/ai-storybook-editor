@@ -4,7 +4,7 @@ export type ContentTab = 'states' | 'sounds' | 'crops';
 
 export type PropType = 'narrative' | 'anchor';
 
-/** 0 = default state, 1 = user-created state */
+/** 0 = base state, 1 = user-created state */
 export type PropStateType = 0 | 1;
 
 export interface Illustration {

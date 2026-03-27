@@ -63,8 +63,8 @@ function buildNewCharacter(name: string, order: number): Character {
     },
     variants: [
       {
-        name: "Default",
-        key: "default",
+        name: "Base",
+        key: "base",
         type: 0,
         appearance: {
           height: 0,

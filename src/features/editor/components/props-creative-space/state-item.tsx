@@ -93,8 +93,8 @@ export function StateItem({
   const generateRefs = useReferenceImagePicker();
   const editRefs = useReferenceImagePicker();
 
-  // type 0 = default state, cannot be deleted or have images uploaded
-  const isDefault = stateData.type === 0;
+  // type 0 = base state, cannot be deleted or have images uploaded
+  const isBase = stateData.type === 0;
 
   const sortedIllustrations = [...stateData.illustrations].sort(
     (a, b) =>
@@ -389,8 +389,8 @@ export function StateItem({
             {isUploading ? "Uploading..." : "Upload"}
           </Button>
 
-          {/* Delete button — only for non-default states */}
-          {!isDefault && (
+          {/* Delete button — only for non-base states */}
+          {!isBase && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button

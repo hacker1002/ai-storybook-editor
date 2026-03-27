@@ -48,8 +48,8 @@ function buildNewProp(name: string, order: number): Prop {
     type: "narrative",
     states: [
       {
-        name: "Default",
-        key: "default",
+        name: "Base",
+        key: "base",
         type: 0,
         visual_description: "",
         illustrations: [],

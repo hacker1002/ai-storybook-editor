@@ -2,7 +2,7 @@
 
 import type { Illustration, ImageReference } from './prop-types';
 
-/** 0 = default setting, 1 = user-created setting */
+/** 0 = base setting, 1 = user-created setting */
 export type StageSettingType = 0 | 1;
 
 export interface StageTemporal {

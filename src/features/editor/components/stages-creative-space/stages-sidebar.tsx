@@ -43,8 +43,8 @@ function buildNewStage(name: string, order: number): Stage {
     location_id: "",
     settings: [
       {
-        name: "Default",
-        key: "default",
+        name: "Base",
+        key: "base",
         type: 0,
         visual_description: "",
         temporal: { era: "", season: "", weather: "", time_of_day: "" },

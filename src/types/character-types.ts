@@ -2,7 +2,7 @@
 
 import type { Illustration, ImageReference, CropSheet } from './prop-types';
 
-/** 0 = default variant, 1 = user-created variant */
+/** 0 = base variant, 1 = user-created variant */
 export type CharacterVariantType = 0 | 1;
 
 export interface CharacterBasicInfo {

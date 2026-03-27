@@ -159,8 +159,8 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
   const generateRefs = useReferenceImagePicker();
   const editRefs = useReferenceImagePicker();
 
-  // type 0 = default variant, cannot be deleted
-  const isDefault = variantData.type === 0;
+  // type 0 = base variant, cannot be deleted
+  const isBase = variantData.type === 0;
 
   // Ensure asset categories loaded for generate prompt
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
@@ -348,8 +348,8 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
             {isUploading ? 'Uploading...' : 'Upload'}
           </Button>
 
-          {/* Delete — only for non-default variants */}
-          {!isDefault && (
+          {/* Delete — only for non-base variants */}
+          {!isBase && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={(e) => e.stopPropagation()} title="Delete variant">
