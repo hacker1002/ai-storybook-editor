@@ -665,6 +665,7 @@ export function DemoCanvasSpreadView() {
         <GenerateImageModal
           open={generateModalOpen}
           onOpenChange={setGenerateModalOpen}
+          spreadId={selectedSpreadId ?? ""}
           image={generateModalImage}
           onUpdateImage={(updates) => {
             if (generateModalImage) {

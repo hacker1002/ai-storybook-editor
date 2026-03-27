@@ -1,12 +1,13 @@
 // spreads-main-view.tsx - CanvasSpreadView wrapper for illustration phase (image, textbox, shape only)
 
-import { useCallback } from 'react';
-import { toast } from 'sonner';
+import { useCallback, useState } from 'react';
+
 import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
 import {
   EditableImage,
   EditableTextbox,
   EditableShape,
+  GenerateImageModal,
   clampGeometry,
 } from '@/features/editor/components/shared-components';
 import {
@@ -168,15 +169,29 @@ export function SpreadsMainView({
     [actions, illustrationSpreads]
   );
 
-  // === Toolbar handlers ===
+  // === Generate image modal state ===
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generateModalImage, setGenerateModalImage] = useState<SpreadImage | null>(null);
 
-  const handleGenerateImage = useCallback(
-    (item: SpreadImage) => {
-      log.info('handleGenerateImage', 'generate image requested', { itemId: item.id });
-      toast.info('Generate image coming soon');
+  const openGenerateModal = useCallback((image: SpreadImage) => {
+    setGenerateModalImage(image);
+    setGenerateModalOpen(true);
+  }, []);
+
+  const handleGenerateImageUpdate = useCallback(
+    (imageId: string, updates: Partial<SpreadImage>) => {
+      handleSpreadItemAction({
+        spreadId: selectedSpreadId,
+        itemType: 'image',
+        action: 'update',
+        itemId: imageId,
+        data: updates,
+      });
     },
-    []
+    [selectedSpreadId, handleSpreadItemAction]
   );
+
+  // === Toolbar handlers ===
 
 
   const handleCloneShape = useCallback(
@@ -203,11 +218,11 @@ export function SpreadsMainView({
       <SpreadsImageToolbar
         context={{
           ...context,
-          onGenerateImage: () => handleGenerateImage(context.item),
+          onGenerateImage: () => openGenerateModal(context.item),
         }}
       />
     ),
-    [handleGenerateImage]
+    [openGenerateModal]
   );
 
   const renderIllustrationTextToolbar = useCallback(
@@ -311,32 +326,46 @@ export function SpreadsMainView({
   );
 
   return (
-    <CanvasSpreadView
-      spreads={illustrationSpreads}
-      initialSelectedId={selectedSpreadId}
-      renderItems={['image', 'textbox', 'shape']}
-      renderImageItem={renderIllustrationImage}
-      renderTextItem={renderIllustrationTextbox}
-      renderShapeItem={renderIllustrationShape}
-      renderImageToolbar={renderIllustrationImageToolbar}
-      renderTextToolbar={renderIllustrationTextToolbar}
-      renderShapeToolbar={renderIllustrationShapeToolbar}
-      renderPageToolbar={renderIllustrationPageToolbar}
-      availableLayouts={AVAILABLE_LAYOUTS}
-      onSpreadSelect={onSpreadSelect}
-      onSpreadReorder={handleSpreadReorder}
-      onSpreadAdd={handleSpreadAdd}
-      onDeleteSpread={handleDeleteSpread}
-      onUpdateSpreadItem={handleSpreadItemAction}
-      isEditable={true}
-      canAddSpread={true}
-      canDeleteSpread={true}
-      canReorderSpread={true}
-      canDeleteItem={true}
-      canResizeItem={true}
-      canDragItem={true}
-      externalSelectedItemId={selectedItemId}
-    />
+    <>
+      <CanvasSpreadView
+        spreads={illustrationSpreads}
+        initialSelectedId={selectedSpreadId}
+        renderItems={['image', 'textbox', 'shape']}
+        renderImageItem={renderIllustrationImage}
+        renderTextItem={renderIllustrationTextbox}
+        renderShapeItem={renderIllustrationShape}
+        renderImageToolbar={renderIllustrationImageToolbar}
+        renderTextToolbar={renderIllustrationTextToolbar}
+        renderShapeToolbar={renderIllustrationShapeToolbar}
+        renderPageToolbar={renderIllustrationPageToolbar}
+        availableLayouts={AVAILABLE_LAYOUTS}
+        onSpreadSelect={onSpreadSelect}
+        onSpreadReorder={handleSpreadReorder}
+        onSpreadAdd={handleSpreadAdd}
+        onDeleteSpread={handleDeleteSpread}
+        onUpdateSpreadItem={handleSpreadItemAction}
+        isEditable={true}
+        canAddSpread={true}
+        canDeleteSpread={true}
+        canReorderSpread={true}
+        canDeleteItem={true}
+        canResizeItem={true}
+        canDragItem={true}
+        externalSelectedItemId={selectedItemId}
+      />
+      {generateModalImage && (
+        <GenerateImageModal
+          open={generateModalOpen}
+          onOpenChange={setGenerateModalOpen}
+          spreadId={selectedSpreadId}
+          image={generateModalImage}
+          onUpdateImage={(updates) => {
+            handleGenerateImageUpdate(generateModalImage.id, updates);
+            setGenerateModalImage((prev) => (prev ? { ...prev, ...updates } : null));
+          }}
+        />
+      )}
+    </>
   );
 }
 

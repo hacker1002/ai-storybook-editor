@@ -153,7 +153,7 @@ export function EditImageModal({
     });
 
     startEditTask({
-      entityType: "spread_image",
+      entityType: "retouch_image",
       entityKey: spreadId,
       entityName: image.title || "Image",
       childKey: imageId,

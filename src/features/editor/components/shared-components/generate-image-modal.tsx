@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,9 +8,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { createLogger } from "@/utils/logger";
-
-const log = createLogger("Editor", "GenerateImageModal");
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -24,55 +26,37 @@ import {
 import {
   Sparkles,
   Paperclip,
-  Edit2,
+  Pencil,
   Download,
   Check,
   X,
-  Loader2,
+  Send,
 } from "lucide-react";
+import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
+import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
+import {
+  useSnapshotActions,
+  useStages,
+  useImageTasksForChild,
+} from "@/stores/snapshot-store";
+import { createLogger } from "@/utils/logger";
 import type { SpreadImage } from "@/types/spread-types";
+
+const log = createLogger("Editor", "GenerateImageModal");
 
 interface GenerateImageModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  spreadId: string;
   image: SpreadImage;
   onUpdateImage: (updates: Partial<SpreadImage>) => void;
 }
 
-interface StageSettingOption {
+interface FlatStageSetting {
   ref: string | null;
   label: string;
   thumbnail_url: string | null;
 }
-
-interface Illustration {
-  media_url: string;
-  created_time: string;
-  is_selected: boolean;
-}
-
-const MOCK_STAGE_SETTINGS: StageSettingOption[] = [
-  {
-    ref: null,
-    label: "None",
-    thumbnail_url: null,
-  },
-  {
-    ref: "@forest_1/day",
-    label: "Forest Day",
-    thumbnail_url: "https://picsum.photos/seed/forest-day/100/100",
-  },
-  {
-    ref: "@forest_1/night",
-    label: "Forest Night",
-    thumbnail_url: "https://picsum.photos/seed/forest-night/100/100",
-  },
-  {
-    ref: "@castle_1/default",
-    label: "Castle",
-    thumbnail_url: "https://picsum.photos/seed/castle/100/100",
-  },
-];
 
 const EDGE_TREATMENT_OPTIONS = [
   { value: "none", label: "None" },
@@ -85,32 +69,61 @@ const EDGE_TREATMENT_OPTIONS = [
 export function GenerateImageModal({
   open,
   onOpenChange,
+  spreadId,
   image,
   onUpdateImage,
 }: GenerateImageModalProps) {
-  const [prompt, setPrompt] = useState("");
-  const [referenceImage, setReferenceImage] = useState<{
-    base64: string;
-    filename: string;
-  } | null>(null);
+  const [prompt, setPrompt] = useState(image.visual_description ?? "");
   const [selectedStageSetting, setSelectedStageSetting] = useState<
     string | null
   >(image.setting || null);
   const [edgeTreatment, setEdgeTreatment] = useState("none");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isLoadingReference, setIsLoadingReference] = useState(false);
+  const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
+  const [editPromptText, setEditPromptText] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Store hooks
+  const { startGenerateTask, startEditTask } = useSnapshotActions();
+  const stages = useStages();
+  const { isProcessing } = useImageTasksForChild(spreadId, image.id);
+
+  // Reference image pickers for generate and edit flows
+  const generateRefs = useReferenceImagePicker();
+  const editRefs = useReferenceImagePicker();
+
+  // Flatten stages → settings for the stage setting selector
+  const stageSettingOptions = useMemo<FlatStageSetting[]>(() => {
+    const options: FlatStageSetting[] = [
+      { ref: null, label: "None", thumbnail_url: null },
+    ];
+    for (const stage of stages) {
+      for (const setting of stage.settings) {
+        const selectedIll = setting.illustrations.find(
+          (ill) => ill.is_selected
+        );
+        options.push({
+          ref: `@${stage.key}/${setting.key}`,
+          label: `${stage.name} - ${setting.name}`,
+          thumbnail_url:
+            selectedIll?.media_url ??
+            setting.illustrations[0]?.media_url ??
+            null,
+        });
+      }
+    }
+    return options;
+  }, [stages]);
+
   const resetState = useCallback(() => {
-    setPrompt("");
-    setReferenceImage(null);
+    setPrompt(image.visual_description ?? "");
     setSelectedStageSetting(image.setting || null);
     setEdgeTreatment("none");
-    setIsGenerating(false);
-    setIsLoadingReference(false);
-  }, [image.setting]);
+    setIsEditPopoverOpen(false);
+    setEditPromptText("");
+    generateRefs.clearImages();
+    editRefs.clearImages();
+  }, [image.setting, image.visual_description, generateRefs, editRefs]);
 
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
@@ -122,100 +135,24 @@ export function GenerateImageModal({
     [onOpenChange, resetState]
   );
 
-  const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      if (!file.type.startsWith("image/")) {
-        alert("Please select an image file");
-        return;
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        alert("File size must be less than 10MB");
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setReferenceImage({
-          base64,
-          filename: file.name,
-        });
-      };
-      reader.onerror = () => {
-        alert("Failed to read file.");
-      };
-      reader.readAsDataURL(file);
-
-      e.target.value = "";
-    },
-    []
-  );
-
-  const handleUseAsReference = useCallback(() => {
+  const handleDownload = useCallback(() => {
     const selectedIllustration = image.illustrations?.find(
       (ill) => ill.is_selected
     );
     if (!selectedIllustration) return;
-
-    setIsLoadingReference(true);
-    fetch(selectedIllustration.media_url)
-      .then((res) => res.blob())
-      .then((blob) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const base64 = e.target?.result as string;
-          setReferenceImage({
-            base64,
-            filename: "current_image.jpg",
-          });
-          setIsLoadingReference(false);
-          textareaRef.current?.focus();
-        };
-        reader.readAsDataURL(blob);
-      })
-      .catch(() => {
-        setIsLoadingReference(false);
-        alert("Failed to load reference image");
-      });
+    log.debug("handleDownload", "open in new tab", {
+      url: selectedIllustration.media_url,
+    });
+    window.open(selectedIllustration.media_url, "_blank");
   }, [image.illustrations]);
-
-  const handleDownload = useCallback(async () => {
-    const selectedIllustration = image.illustrations?.find(
-      (ill) => ill.is_selected
-    );
-    if (!selectedIllustration) return;
-
-    try {
-      const response = await fetch(selectedIllustration.media_url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `${image.title || "image"}_${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      alert("Failed to download image");
-    }
-  }, [image.illustrations, image.title]);
 
   const handleGallerySelect = useCallback(
     (index: number) => {
       if (!image.illustrations) return;
-
       const updatedIllustrations = image.illustrations.map((ill, i) => ({
         ...ill,
         is_selected: i === index,
       }));
-
       onUpdateImage({ illustrations: updatedIllustrations });
     },
     [image.illustrations, onUpdateImage]
@@ -229,72 +166,110 @@ export function GenerateImageModal({
     [onUpdateImage]
   );
 
-  const handleGenerate = useCallback(async () => {
-    setIsGenerating(true);
+  const handleGenerate = useCallback(() => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt || isProcessing) return;
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, 1000 + Math.random() * 1000)
-    );
+    // Save visual_description to store
+    onUpdateImage({ visual_description: trimmedPrompt });
 
-    let width = 800;
-    let height = 600;
-
-    const existingUrl = image.illustrations?.[0]?.media_url;
-    if (existingUrl) {
-      const match = existingUrl.match(
-        /picsum\.photos\/seed\/[^/]+\/(\d+)\/(\d+)/
-      );
-      if (match) {
-        width = parseInt(match[1], 10);
-        height = parseInt(match[2], 10);
-      }
-    }
-
-    log.info("handleGenerate", "generating image", {
-      prompt,
-      hasReferenceImage: !!referenceImage,
+    log.info("handleGenerate", "start", {
+      spreadId,
+      imageId: image.id,
+      promptLength: trimmedPrompt.length,
+      refCount: generateRefs.images.length,
       stageSetting: selectedStageSetting,
-      edgeTreatment,
-      width,
-      height,
     });
 
-    const newIllustration: Illustration = {
-      media_url: `https://picsum.photos/seed/${Date.now()}/${width}/${height}`,
-      created_time: new Date().toISOString(),
-      is_selected: true,
-    };
+    const referenceImages =
+      generateRefs.images.length > 0
+        ? generateRefs.images.map(({ base64Data, mimeType }) => ({
+            base64Data,
+            mimeType,
+          }))
+        : undefined;
 
-    const updatedIllustrations = [
-      newIllustration,
-      ...(image.illustrations || []).map((ill) => ({
-        ...ill,
-        is_selected: false,
-      })),
-    ];
+    startGenerateTask({
+      entityType: "illustration_image",
+      entityKey: spreadId,
+      entityName: image.title || "Spread",
+      childKey: image.id,
+      childName: image.title || "Image",
+      description: trimmedPrompt,
+      referenceImages,
+    });
 
-    onUpdateImage({ illustrations: updatedIllustrations });
-
-    setIsGenerating(false);
+    generateRefs.clearImages();
   }, [
     prompt,
-    referenceImage,
+    isProcessing,
+    spreadId,
+    image.id,
+    image.title,
+    generateRefs,
     selectedStageSetting,
-    edgeTreatment,
-    image.illustrations,
+    startGenerateTask,
     onUpdateImage,
+  ]);
+
+  const handleEditImage = useCallback(() => {
+    const trimmed = editPromptText.trim();
+    const selectedIllustration = image.illustrations?.find(
+      (ill) => ill.is_selected
+    );
+    if (!trimmed || !selectedIllustration || isProcessing) return;
+
+    log.info("handleEditImage", "start", {
+      spreadId,
+      imageId: image.id,
+      prompt: trimmed,
+      refCount: editRefs.images.length,
+    });
+
+    setIsEditPopoverOpen(false);
+
+    const referenceImages =
+      editRefs.images.length > 0
+        ? editRefs.images.map(({ base64Data, mimeType }) => ({
+            base64Data,
+            mimeType,
+          }))
+        : undefined;
+
+    startEditTask({
+      entityType: "illustration_image",
+      entityKey: spreadId,
+      entityName: image.title || "Spread",
+      childKey: image.id,
+      childName: image.title || "Image",
+      prompt: trimmed,
+      imageUrl: selectedIllustration.media_url,
+      referenceImages,
+    });
+
+    setEditPromptText("");
+    editRefs.clearImages();
+  }, [
+    editPromptText,
+    image.illustrations,
+    image.id,
+    image.title,
+    isProcessing,
+    spreadId,
+    editRefs,
+    startEditTask,
   ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        if (!isGenerating) {
+        if (!isProcessing) {
           handleGenerate();
         }
       }
     },
-    [isGenerating, handleGenerate]
+    [isProcessing, handleGenerate]
   );
 
   const selectedIllustration = image.illustrations?.find(
@@ -311,7 +286,7 @@ export function GenerateImageModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Image Preview Section */}
+          {/* Image Preview + Gallery */}
           <div className="flex gap-4">
             {/* Main Preview (60%) */}
             <div className="flex-[6] flex items-center justify-center">
@@ -323,35 +298,115 @@ export function GenerateImageModal({
                     alt="Selected illustration"
                     className="h-[360px] w-auto rounded-md object-contain"
                   />
-                  {isGenerating && (
-                    <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center">
+                  {/* Zoom overlay */}
+                  <ImageZoomPreview
+                    src={selectedIllustration.media_url}
+                    alt={image.title || "Preview"}
+                    className="absolute inset-0 h-full w-full rounded-md"
+                    disabled={isProcessing}
+                  />
+                  {/* Processing overlay */}
+                  {isProcessing && (
+                    <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center z-20">
                       <div className="text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
                         <p className="text-sm text-muted-foreground">
-                          Generating image...
+                          Generating...
                         </p>
                       </div>
                     </div>
                   )}
-                  <div className="absolute bottom-2 right-2 flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={handleUseAsReference}
-                      disabled={isGenerating || isLoadingReference}
-                      aria-label="Use as reference"
+                  {/* Floating action buttons */}
+                  <div className="absolute bottom-2 right-2 flex gap-2 z-20">
+                    <Popover
+                      open={isEditPopoverOpen}
+                      onOpenChange={setIsEditPopoverOpen}
                     >
-                      {isLoadingReference ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Edit2 className="h-4 w-4" />
-                      )}
-                    </Button>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={isProcessing}
+                          aria-label="Edit image"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="end"
+                        className="w-80 p-3"
+                      >
+                        {editRefs.images.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {editRefs.images.map((img, idx) => (
+                              <div
+                                key={`edit-${img.label}-${idx}`}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
+                              >
+                                <span className="truncate max-w-[120px]">
+                                  {img.label}
+                                </span>
+                                <button
+                                  onClick={() => editRefs.removeImage(idx)}
+                                  className="hover:bg-blue-100 rounded"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Textarea
+                            value={editPromptText}
+                            onChange={(e) => setEditPromptText(e.target.value)}
+                            placeholder="Describe changes..."
+                            className="min-h-[60px] flex-1 resize-none text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                handleEditImage();
+                              }
+                            }}
+                          />
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={editRefs.openPicker}
+                              aria-label="Attach reference image"
+                            >
+                              <Paperclip className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={!editPromptText.trim()}
+                              onClick={handleEditImage}
+                              aria-label="Submit edit"
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        {/* Hidden file input for edit reference images */}
+                        <input
+                          ref={editRefs.inputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          multiple
+                          onChange={editRefs.handleFilesSelected}
+                          className="hidden"
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={handleDownload}
-                      disabled={isGenerating}
+                      disabled={isProcessing}
                       aria-label="Download image"
                     >
                       <Download className="h-4 w-4" />
@@ -379,7 +434,7 @@ export function GenerateImageModal({
                           : "ring-1 ring-border hover:scale-105"
                       }`}
                       onClick={() => handleGallerySelect(index)}
-                      disabled={isGenerating}
+                      disabled={isProcessing}
                     >
                       <img
                         src={illustration.media_url}
@@ -404,13 +459,13 @@ export function GenerateImageModal({
             </div>
           </div>
 
-          {/* Stage Setting Section */}
+          {/* Stage Setting Section — from store */}
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">
               STAGE SETTING
             </Label>
             <div className="flex gap-2 overflow-x-auto pb-2">
-              {MOCK_STAGE_SETTINGS.map((setting) => (
+              {stageSettingOptions.map((setting) => (
                 <button
                   key={setting.ref || "none"}
                   className={`relative flex-shrink-0 w-20 h-20 rounded-md overflow-hidden border-2 hover:border-primary transition-colors ${
@@ -419,7 +474,7 @@ export function GenerateImageModal({
                       : "border-border"
                   }`}
                   onClick={() => handleStageSettingSelect(setting.ref)}
-                  disabled={isGenerating}
+                  disabled={isProcessing}
                 >
                   {setting.thumbnail_url ? (
                     <img
@@ -428,7 +483,7 @@ export function GenerateImageModal({
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-purple-400 to-purple-600"></div>
+                    <div className="w-full h-full bg-gradient-to-br from-purple-400 to-purple-600" />
                   )}
                   {selectedStageSetting === setting.ref && (
                     <div className="absolute top-1 right-1 rounded-full bg-purple-600 p-0.5">
@@ -443,38 +498,46 @@ export function GenerateImageModal({
             </div>
           </div>
 
-          {/* Prompt Section */}
+          {/* Prompt Section — with useReferenceImagePicker */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Label className="text-xs text-muted-foreground">PROMPT</Label>
-              {referenceImage && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs">
-                  <span className="truncate max-w-[150px]">
-                    {referenceImage.filename}
-                  </span>
-                  <button
-                    onClick={() => setReferenceImage(null)}
-                    className="hover:bg-blue-100 rounded"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+              <Label className="text-xs text-muted-foreground">VISUAL DESCRIPTION</Label>
+              {generateRefs.images.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {generateRefs.images.map((img, idx) => (
+                    <div
+                      key={`gen-${img.label}-${idx}`}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
+                    >
+                      <span className="truncate max-w-[150px]">
+                        {img.label}
+                      </span>
+                      <button
+                        onClick={() => generateRefs.removeImage(idx)}
+                        className="hover:bg-blue-100 rounded"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
               <Button
                 size="sm"
                 variant="ghost"
                 className="ml-2 h-6 w-6 p-0"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isGenerating}
+                onClick={generateRefs.openPicker}
+                disabled={isProcessing}
                 aria-label="Upload reference image"
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
               <input
-                ref={fileInputRef}
+                ref={generateRefs.inputRef}
                 type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                onChange={generateRefs.handleFilesSelected}
                 className="hidden"
               />
             </div>
@@ -485,7 +548,7 @@ export function GenerateImageModal({
               onKeyDown={handleKeyDown}
               placeholder="Describe the scene..."
               className="min-h-[80px]"
-              disabled={isGenerating}
+              disabled={isProcessing}
             />
             <p className="text-xs text-muted-foreground mt-1">
               Press Ctrl/Cmd + Enter to generate
@@ -500,7 +563,7 @@ export function GenerateImageModal({
             <Select
               value={edgeTreatment}
               onValueChange={setEdgeTreatment}
-              disabled={isGenerating}
+              disabled={isProcessing}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -519,13 +582,13 @@ export function GenerateImageModal({
         <DialogFooter className="sm:justify-center">
           <Button
             onClick={handleGenerate}
-            disabled={isGenerating}
+            disabled={isProcessing || !prompt.trim()}
             className="w-40"
           >
-            {isGenerating ? (
+            {isProcessing ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Generating
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                Processing
               </>
             ) : (
               <>

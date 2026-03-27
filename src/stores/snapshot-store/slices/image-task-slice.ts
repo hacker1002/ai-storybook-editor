@@ -34,8 +34,12 @@ function findIllustrations(
       const stage = state.stages.find((s) => s.key === entityKey);
       return stage?.settings.find((st) => st.key === childKey)?.illustrations;
     }
-    case 'spread_image': {
+    case 'retouch_image': {
       const spread = state.retouch.spreads.find((s) => s.id === entityKey);
+      return spread?.images.find((img) => img.id === childKey)?.illustrations;
+    }
+    case 'illustration_image': {
+      const spread = state.illustration?.spreads?.find((s) => s.id === entityKey);
       return spread?.images.find((img) => img.id === childKey)?.illustrations;
     }
     default:
