@@ -1,14 +1,19 @@
 // utils.ts - Types, constants, and helpers for spreads creative space sidebar
 
-import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
-import { LAYER_CONFIG, LAYER_ORDER } from '@/constants/spread-constants';
-import type { LucideIcon } from 'lucide-react';
-import { Image, Type, Hexagon } from 'lucide-react';
-import type { BaseSpread, SpreadImage, SpreadShape, SpreadTextbox } from '@/types/canvas-types';
+import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
+import { LAYER_CONFIG, LAYER_ORDER } from "@/constants/spread-constants";
+import type { LucideIcon } from "lucide-react";
+import { Image, Type, Hexagon } from "lucide-react";
+import type {
+  BaseSpread,
+  SpreadImage,
+  SpreadShape,
+  SpreadTextbox,
+} from "@/types/canvas-types";
 
 // === Types ===
 
-export type SpreadElementType = 'image' | 'textbox' | 'shape';
+export type SpreadElementType = "image" | "textbox" | "shape";
 
 export interface ElementListEntry {
   id: string;
@@ -31,7 +36,11 @@ export interface LayerGroup {
 
 // === Constants ===
 
-export const ALL_ELEMENT_TYPES: SpreadElementType[] = ['image', 'textbox', 'shape'];
+export const ALL_ELEMENT_TYPES: SpreadElementType[] = [
+  "image",
+  "textbox",
+  "shape",
+];
 
 /** Map illustration element types to layer config (different from objects: 'textbox' not 'text') */
 export const ILLUSTRATION_LAYER_MAP: Record<SpreadElementType, LayerRange> = {
@@ -40,29 +49,33 @@ export const ILLUSTRATION_LAYER_MAP: Record<SpreadElementType, LayerRange> = {
   textbox: LAYER_CONFIG.TEXT,
 };
 
-export const ELEMENT_TYPE_CONFIG: Record<SpreadElementType, { icon: LucideIcon; label: string }> = {
-  image: { icon: Image, label: 'Image' },
-  textbox: { icon: Type, label: 'Textbox' },
-  shape: { icon: Hexagon, label: 'Shape' },
+export const ELEMENT_TYPE_CONFIG: Record<
+  SpreadElementType,
+  { icon: LucideIcon; label: string }
+> = {
+  image: { icon: Image, label: "Image" },
+  textbox: { icon: Type, label: "Textbox" },
+  shape: { icon: Hexagon, label: "Shape" },
 };
 
 export const NEW_ELEMENT_DEFAULTS = {
   image: {
-    title: 'Untitled Image',
-    geometry: { x: 25, y: 25, w: 50, h: 50 },
-    setting: null,
-    art_note: '',
-    visual_description: '',
+    title: "Untitled Image",
+    geometry: { x: 35, y: 20, w: 30, h: 40 },
+    aspect_ratio: "1:1",
+    setting: undefined,
+    art_note: "",
+    visual_description: "",
     image_references: [],
-    final_hires_media_url: null,
+    final_hires_media_url: undefined,
     illustrations: [],
   },
   shape: {
-    title: 'New Shape',
+    title: "New Shape",
     geometry: { x: 30, y: 30, w: 40, h: 30 },
-    type: 'rectangle' as const,
-    fill: { is_filled: true, color: '#E0E0E0', opacity: 1 },
-    outline: { color: '#999999', width: 1, radius: 0, type: 0 },
+    type: "rectangle" as const,
+    fill: { is_filled: true, color: "#E0E0E0", opacity: 1 },
+    outline: { color: "#999999", width: 1, radius: 0, type: 0 },
   },
 };
 
@@ -71,16 +84,16 @@ export function createDefaultTextbox(langCode: string): SpreadTextbox {
   return {
     id: crypto.randomUUID(),
     [langCode]: {
-      text: '',
+      text: "",
       geometry: { x: 20, y: 20, w: 60, h: 15 },
       typography: {
-        fontFamily: 'Nunito',
-        fontSize: 16,
-        fontWeight: 400,
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        textAlign: 'left',
-        color: '#000000',
+        family: "Nunito",
+        size: 16,
+        weight: 400,
+        style: "normal",
+        decoration: "none",
+        textAlign: "left",
+        color: "#000000",
       },
     },
   };
@@ -94,25 +107,35 @@ function resolveZIndex(positionInArray: number, layer: LayerRange): number {
 }
 
 /** Build flat list of all elements from a spread, sorted descending by z-index */
-export function buildElementList(spread: BaseSpread, langCode: string): ElementListEntry[] {
+export function buildElementList(
+  spread: BaseSpread,
+  langCode: string
+): ElementListEntry[] {
   const entries: ElementListEntry[] = [];
 
   spread.images.forEach((img, i) => {
     entries.push({
       id: img.id,
-      type: 'image',
+      type: "image",
       title: (img as SpreadImage).title || `Image ${i + 1}`,
       zIndex: resolveZIndex(i, LAYER_CONFIG.MEDIA),
     });
   });
 
   spread.textboxes.forEach((tb, i) => {
-    const result = getTextboxContentForLanguage(tb as unknown as Record<string, unknown>, langCode);
+    const result = getTextboxContentForLanguage(
+      tb as unknown as Record<string, unknown>,
+      langCode
+    );
     const text = result?.content?.text;
-    const title = text ? (text.length > 20 ? text.slice(0, 20) + '\u2026' : text) : 'Empty Textbox';
+    const title = text
+      ? text.length > 20
+        ? text.slice(0, 20) + "\u2026"
+        : text
+      : "Empty Textbox";
     entries.push({
       id: tb.id,
-      type: 'textbox',
+      type: "textbox",
       title,
       zIndex: resolveZIndex(i, LAYER_CONFIG.TEXT),
     });
@@ -121,7 +144,7 @@ export function buildElementList(spread: BaseSpread, langCode: string): ElementL
   spread.shapes?.forEach((shape, i) => {
     entries.push({
       id: shape.id,
-      type: 'shape',
+      type: "shape",
       title: (shape as SpreadShape).title || `Shape ${i + 1}`,
       zIndex: resolveZIndex(i, LAYER_CONFIG.OBJECTS),
     });

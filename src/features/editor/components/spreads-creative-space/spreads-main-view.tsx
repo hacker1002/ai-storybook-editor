@@ -1,11 +1,13 @@
 // spreads-main-view.tsx - CanvasSpreadView wrapper for illustration phase (image, textbox, shape only)
 
 import { useCallback } from 'react';
+import { toast } from 'sonner';
 import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
 import {
   EditableImage,
   EditableTextbox,
   EditableShape,
+  clampGeometry,
 } from '@/features/editor/components/shared-components';
 import {
   useSnapshotActions,
@@ -14,18 +16,28 @@ import { useSnapshotStore } from '@/stores/snapshot-store';
 import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
 import { useLanguageCode } from '@/stores/editor-settings-store';
 import { createLogger } from '@/utils/logger';
-import type { SpreadType } from '@/features/editor/components/canvas-spread-view';
+import { SpreadsImageToolbar } from './spreads-image-toolbar';
+import { SpreadsTextToolbar } from './spreads-text-toolbar';
+import { SpreadsShapeToolbar } from './spreads-shape-toolbar';
+import { SpreadsPageToolbar } from './spreads-page-toolbar';
+import type { SelectedItem } from './utils';
 import type {
+  SpreadType,
   BaseSpread,
   ImageItemContext,
   TextItemContext,
   ShapeItemContext,
+  ImageToolbarContext,
+  TextToolbarContext,
+  ShapeToolbarContext,
+  PageToolbarContext,
+  LayoutOption,
   SpreadItemActionUnion,
   SpreadImage,
   SpreadTextbox,
   SpreadShape,
   PageData,
-} from '@/types/canvas-types';
+} from '@/features/editor/components/canvas-spread-view';
 
 const EMPTY_SPREADS: BaseSpread[] = [];
 const log = createLogger('Editor', 'SpreadsMainView');
@@ -40,11 +52,18 @@ function resolveIllustrationImageUrl(image: SpreadImage): string | null {
   return null;
 }
 
+// Hardcoded layout constants for page toolbar (textures are hardcoded in page-item.tsx)
+const AVAILABLE_LAYOUTS: LayoutOption[] = [
+  { id: 'default', title: 'Default', thumbnail_url: '', type: 1 },
+  { id: 'full-bleed', title: 'Full Bleed', thumbnail_url: '', type: 1 },
+  { id: 'centered', title: 'Centered', thumbnail_url: '', type: 1 },
+];
+
 interface SpreadsMainViewProps {
   selectedSpreadId: string;
-  selectedItemId: { type: string; id: string } | null;
+  selectedItemId: SelectedItem | null;
   onSpreadSelect: (spreadId: string) => void;
-  onItemSelect: (item: { type: string; id: string } | null) => void;
+  onItemSelect: (item: SelectedItem | null) => void;
 }
 
 export function SpreadsMainView({
@@ -149,6 +168,74 @@ export function SpreadsMainView({
     [actions, illustrationSpreads]
   );
 
+  // === Toolbar handlers ===
+
+  const handleGenerateImage = useCallback(
+    (item: SpreadImage) => {
+      log.info('handleGenerateImage', 'generate image requested', { itemId: item.id });
+      toast.info('Generate image coming soon');
+    },
+    []
+  );
+
+
+  const handleCloneShape = useCallback(
+    (spreadId: string, shape: SpreadShape) => {
+      const newShape: SpreadShape = {
+        ...structuredClone(shape),
+        id: crypto.randomUUID(),
+        geometry: {
+          ...shape.geometry,
+          x: clampGeometry('x', shape.geometry.x + 2),
+          y: clampGeometry('y', shape.geometry.y + 2),
+        },
+      };
+      log.info('handleCloneShape', 'cloning shape', { spreadId, originalId: shape.id, newId: newShape.id });
+      actions.addIllustrationShape(spreadId, newShape);
+    },
+    [actions]
+  );
+
+  // === Toolbar render props ===
+
+  const renderIllustrationImageToolbar = useCallback(
+    (context: ImageToolbarContext<BaseSpread>) => (
+      <SpreadsImageToolbar
+        context={{
+          ...context,
+          onGenerateImage: () => handleGenerateImage(context.item),
+        }}
+      />
+    ),
+    [handleGenerateImage]
+  );
+
+  const renderIllustrationTextToolbar = useCallback(
+    (context: TextToolbarContext<BaseSpread>) => (
+      <SpreadsTextToolbar context={context} />
+    ),
+    []
+  );
+
+  const renderIllustrationShapeToolbar = useCallback(
+    (context: ShapeToolbarContext<BaseSpread>) => (
+      <SpreadsShapeToolbar
+        context={{
+          ...context,
+          onClone: () => handleCloneShape(selectedSpreadId, context.item),
+        }}
+      />
+    ),
+    [selectedSpreadId, handleCloneShape]
+  );
+
+  const renderIllustrationPageToolbar = useCallback(
+    (context: PageToolbarContext<BaseSpread>) => (
+      <SpreadsPageToolbar context={context} />
+    ),
+    []
+  );
+
   // === Render props ===
 
   const renderIllustrationImage = useCallback(
@@ -231,6 +318,11 @@ export function SpreadsMainView({
       renderImageItem={renderIllustrationImage}
       renderTextItem={renderIllustrationTextbox}
       renderShapeItem={renderIllustrationShape}
+      renderImageToolbar={renderIllustrationImageToolbar}
+      renderTextToolbar={renderIllustrationTextToolbar}
+      renderShapeToolbar={renderIllustrationShapeToolbar}
+      renderPageToolbar={renderIllustrationPageToolbar}
+      availableLayouts={AVAILABLE_LAYOUTS}
       onSpreadSelect={onSpreadSelect}
       onSpreadReorder={handleSpreadReorder}
       onSpreadAdd={handleSpreadAdd}

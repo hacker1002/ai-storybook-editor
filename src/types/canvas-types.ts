@@ -337,6 +337,7 @@ export interface ShapeToolbarContext<TSpread extends BaseSpread>
     BaseToolbarContext {
   onUpdateFill: (fill: Partial<ShapeFill>) => void;
   onUpdateOutline: (outline: Partial<ShapeOutline>) => void;
+  onClone?: () => void;
 }
 
 export interface VideoToolbarContext<TSpread extends BaseSpread>

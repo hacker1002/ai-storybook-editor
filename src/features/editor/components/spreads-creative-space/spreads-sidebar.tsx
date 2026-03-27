@@ -29,6 +29,7 @@ import {
   type SpreadElementType,
   type ElementListEntry,
   type LayerGroup,
+  type SelectedItem,
 } from "./utils";
 import type { SpreadImage, SpreadShape } from "@/types/canvas-types";
 
@@ -38,8 +39,8 @@ const log = createLogger("Editor", "SpreadsSidebar");
 
 interface SpreadsSidebarProps {
   selectedSpreadId: string;
-  selectedItemId: { type: string; id: string } | null;
-  onItemSelect: (item: { type: string; id: string } | null) => void;
+  selectedItemId: SelectedItem | null;
+  onItemSelect: (item: SelectedItem | null) => void;
 }
 
 // === Inline sub-components ===
