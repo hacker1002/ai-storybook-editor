@@ -2,6 +2,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
+import type { IllustrationData } from '@/types/illustration-types';
 import type { RetouchData } from '@/types/retouch-types';
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
@@ -55,6 +56,22 @@ export const useDummySpreadIds = (dummyId: string): string[] =>
   useSnapshotStore(
     useShallow((s) => s.dummies.find((d) => d.id === dummyId)?.spreads.map((sp) => sp.id) ?? [])
   );
+
+// Illustration selectors
+export const useIllustration = (): IllustrationData => useSnapshotStore((s) => s.illustration);
+export const useIllustrationSpreads = (): BaseSpread[] => useSnapshotStore((s) => s.illustration.spreads);
+export const useIllustrationSpreadIds = (): string[] =>
+  useSnapshotStore(useShallow((s) => s.illustration.spreads.map((sp) => sp.id)));
+export const useIllustrationSpreadById = (spreadId: string): BaseSpread | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId));
+export const useIllustrationSpreadCount = (): number => useSnapshotStore((s) => s.illustration.spreads.length);
+
+export const useIllustrationImageById = (spreadId: string, imageId: string): SpreadImage | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.images.find((i) => i.id === imageId));
+export const useIllustrationTextboxById = (spreadId: string, textboxId: string): SpreadTextbox | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.textboxes.find((t) => t.id === textboxId));
+export const useIllustrationShapeById = (spreadId: string, shapeId: string): SpreadShape | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.shapes?.find((sh) => sh.id === shapeId));
 
 // Retouch selectors
 export const useRetouch = (): RetouchData => useSnapshotStore((s) => s.retouch);
@@ -163,6 +180,22 @@ export const useSnapshotActions = () =>
       deleteDummySpread: s.deleteDummySpread,
       reorderDummySpreads: s.reorderDummySpreads,
       updateDummySpreads: s.updateDummySpreads,
+      // Illustration
+      setIllustration: s.setIllustration,
+      addIllustrationSpread: s.addIllustrationSpread,
+      updateIllustrationSpread: s.updateIllustrationSpread,
+      deleteIllustrationSpread: s.deleteIllustrationSpread,
+      reorderIllustrationSpreads: s.reorderIllustrationSpreads,
+      addIllustrationImage: s.addIllustrationImage,
+      updateIllustrationImage: s.updateIllustrationImage,
+      deleteIllustrationImage: s.deleteIllustrationImage,
+      addIllustrationTextbox: s.addIllustrationTextbox,
+      updateIllustrationTextbox: s.updateIllustrationTextbox,
+      deleteIllustrationTextbox: s.deleteIllustrationTextbox,
+      addIllustrationShape: s.addIllustrationShape,
+      updateIllustrationShape: s.updateIllustrationShape,
+      deleteIllustrationShape: s.deleteIllustrationShape,
+      clearIllustration: s.clearIllustration,
       // Retouch
       setRetouch: s.setRetouch,
       addRetouchSpread: s.addRetouchSpread,

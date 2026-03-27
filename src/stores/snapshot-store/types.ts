@@ -1,5 +1,6 @@
 import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
+import type { IllustrationData } from '@/types/illustration-types';
 import type { RetouchData } from '@/types/retouch-types';
 import type { Prop, PropState, PropSound, CropSheet } from '@/types/prop-types';
 import type { Character, CharacterVariant, CharacterVoice } from '@/types/character-types';
@@ -54,6 +55,31 @@ export interface DummiesSlice {
   deleteDummySpread: (dummyId: string, spreadId: string) => void;
   reorderDummySpreads: (dummyId: string, fromIndex: number, toIndex: number) => void;
   updateDummySpreads: (dummyId: string, spreads: DummySpread[]) => void;
+}
+
+export interface IllustrationSlice {
+  illustration: IllustrationData;
+
+  setIllustration: (data: IllustrationData) => void;
+
+  addIllustrationSpread: (spread: BaseSpread) => void;
+  updateIllustrationSpread: (spreadId: string, updates: Partial<BaseSpread>) => void;
+  deleteIllustrationSpread: (spreadId: string) => void;
+  reorderIllustrationSpreads: (fromIndex: number, toIndex: number) => void;
+
+  addIllustrationImage: (spreadId: string, image: SpreadImage) => void;
+  updateIllustrationImage: (spreadId: string, imageId: string, updates: Partial<SpreadImage>) => void;
+  deleteIllustrationImage: (spreadId: string, imageId: string) => void;
+
+  addIllustrationTextbox: (spreadId: string, textbox: SpreadTextbox) => void;
+  updateIllustrationTextbox: (spreadId: string, textboxId: string, updates: Partial<SpreadTextbox>) => void;
+  deleteIllustrationTextbox: (spreadId: string, textboxId: string) => void;
+
+  addIllustrationShape: (spreadId: string, shape: SpreadShape) => void;
+  updateIllustrationShape: (spreadId: string, shapeId: string, updates: Partial<SpreadShape>) => void;
+  deleteIllustrationShape: (spreadId: string, shapeId: string) => void;
+
+  clearIllustration: () => void;
 }
 
 export interface RetouchSlice {
@@ -196,7 +222,7 @@ export interface ImageTaskSlice {
   clearAllTasks: () => void;
 }
 
-export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & RetouchSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
-  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; retouch?: RetouchData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
+export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
+  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; retouch?: RetouchData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

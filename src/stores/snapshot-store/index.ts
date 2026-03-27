@@ -7,6 +7,7 @@ import type { SnapshotStore } from './types';
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';
 import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
+import { createIllustrationSlice } from './slices/illustration-slice';
 import { createRetouchSlice } from './slices/retouch-slice';
 import { createPropsSlice } from './slices/props-slice';
 import { createCharactersSlice } from './slices/characters-slice';
@@ -22,6 +23,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createDocsSlice(...args),
         ...createMetaSlice(...args),
         ...createDummiesSlice(...args),
+        ...createIllustrationSlice(...args),
         ...createRetouchSlice(...args),
         ...createPropsSlice(...args),
         ...createCharactersSlice(...args),
@@ -66,6 +68,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.tag = data.tag;
               state.docs = data.docs?.length ? data.docs : DEFAULT_DOCS;
               state.dummies = data.dummies ?? [];
+              state.illustration = data.illustration ?? { spreads: [] };
               state.retouch = data.retouch ?? { spreads: [] };
               state.props = data.props ?? [];
               state.characters = data.characters ?? [];
@@ -74,6 +77,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.bookId = bookId;
               state.docs = DEFAULT_DOCS;
               state.dummies = [];
+              state.illustration = { spreads: [] };
               state.retouch = { spreads: [] };
               state.props = [];
               state.characters = [];
@@ -86,11 +90,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, dummies, retouch, props, characters, stages, sync } = get();
+          const { meta, docs, dummies, illustration, retouch, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
 
-          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, retouchSpreadCount: retouch.spreads.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, retouchSpreadCount: retouch.spreads.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -103,6 +107,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             book_id: meta.bookId,
             docs,
             dummies,
+            illustration,
             retouch,
             props,
             characters,
@@ -115,7 +120,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           if (meta.id) {
             result = await supabase
               .from('snapshots')
-              .update({ docs, dummies, retouch, props, characters, stages, version })
+              .update({ docs, dummies, illustration, retouch, props, characters, stages, version })
               .eq('id', meta.id)
               .select()
               .single();
@@ -152,6 +157,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
             state.dummies = data.dummies ?? [];
+            state.illustration = data.illustration ?? { spreads: [] };
             state.retouch = data.retouch ?? { spreads: [] };
             state.props = data.props ?? [];
             state.characters = data.characters ?? [];
@@ -169,6 +175,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           set((state) => {
             state.docs = DEFAULT_DOCS;
             state.dummies = [];
+            state.illustration = { spreads: [] };
             state.retouch = { spreads: [] };
             state.props = [];
             state.characters = [];
