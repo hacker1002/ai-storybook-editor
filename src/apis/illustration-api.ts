@@ -200,6 +200,45 @@ export async function callGenerateStageBase(
   );
 }
 
+// --- Stage Setting Types ---
+
+export interface GenerateStageSettingParams {
+  stageKey: string;
+  settingKey: string;
+  settingVisualDescription: string;
+  settingTemporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
+  settingSensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
+  settingEmotional?: { mood?: string };
+  baseStageImageUrl: string;
+  artStyleDescription: string;
+  additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  aspectRatio?: string;
+  imageSize?: string;
+}
+
+export interface GenerateStageSettingResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+}
+
+// --- Stage Setting API ---
+
+export async function callGenerateStageSetting(
+  params: GenerateStageSettingParams
+): Promise<GenerateStageSettingResult> {
+  log.info('callGenerateStageSetting', 'start', {
+    stageKey: params.stageKey,
+    settingKey: params.settingKey,
+    refCount: params.additionalReferenceImages?.length ?? 0,
+  });
+  return callEdgeFunction<GenerateStageSettingResult>(
+    'illustration-generate-stage-setting',
+    params
+  );
+}
+
 export async function callGenerateCharacterVariant(
   params: GenerateCharacterVariantParams
 ): Promise<GenerateCharacterVariantResult> {
