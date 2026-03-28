@@ -3,9 +3,17 @@
 // Supports multiple entity types: props→states, characters→variants, stages→settings.
 
 import type { StateCreator } from 'zustand';
-import type { SnapshotStore, ImageTaskSlice, ImageTaskEntityType } from '../types';
+import type { SnapshotStore, ImageTaskSlice, ImageTaskEntityType, StartGenerateTaskParams } from '../types';
 import type { Illustration } from '@/types/prop-types';
-import { callGenerateFromDescription } from '@/apis/image-api';
+import {
+  callGenerateCharacterBase,
+  callGenerateCharacterVariant,
+  callGeneratePropBase,
+  callGeneratePropState,
+  callGenerateStageBase,
+  callGenerateStageSetting,
+  callGenerateScene,
+} from '@/apis/illustration-api';
 import { callEditObjectImage } from '@/apis/retouch-api';
 import { createLogger } from '@/utils/logger';
 
@@ -62,6 +70,88 @@ function prependIllustration(illustrations: Illustration[], imageUrl: string): v
   });
 }
 
+/** Routes a generate call to the correct illustration API based on discriminated union params */
+function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: boolean; data?: { imageUrl: string; storagePath: string }; error?: string }> {
+  switch (params.entityType) {
+    case 'character':
+      if (params.isBase) {
+        return callGenerateCharacterBase({
+          characterKey: params.entityKey,
+          basicInfo: params.basicInfo,
+          personality: params.personality,
+          baseVariant: params.baseVariant,
+          artStyleDescription: params.artStyleDescription,
+          referenceImages: params.referenceImages,
+        });
+      }
+      return callGenerateCharacterVariant({
+        characterKey: params.entityKey,
+        variantKey: params.variantKey,
+        variantAppearance: params.variantAppearance,
+        variantVisualDescription: params.variantVisualDescription,
+        baseVariantImageUrl: params.baseVariantImageUrl,
+        artStyleDescription: params.artStyleDescription,
+        additionalReferenceImages: params.additionalReferenceImages,
+      });
+
+    case 'prop':
+      if (params.isBase) {
+        return callGeneratePropBase({
+          propKey: params.propKey,
+          propName: params.propName,
+          propType: params.propType,
+          categoryName: params.categoryName,
+          categoryType: params.categoryType,
+          baseStateVisualDescription: params.baseStateVisualDescription,
+          artStyleDescription: params.artStyleDescription,
+          referenceImages: params.referenceImages,
+        });
+      }
+      return callGeneratePropState({
+        propKey: params.entityKey,
+        stateKey: params.stateKey,
+        stateVisualDescription: params.stateVisualDescription,
+        basePropImageUrl: params.basePropImageUrl,
+        artStyleDescription: params.artStyleDescription,
+        additionalReferenceImages: params.additionalReferenceImages,
+      });
+
+    case 'stage':
+      if (params.isBase) {
+        return callGenerateStageBase({
+          stageKey: params.stageKey,
+          stageName: params.stageName,
+          locationDescription: params.locationDescription,
+          baseSetting: params.baseSetting,
+          artStyleDescription: params.artStyleDescription,
+          referenceImages: params.referenceImages,
+        });
+      }
+      return callGenerateStageSetting({
+        stageKey: params.entityKey,
+        settingKey: params.settingKey,
+        settingVisualDescription: params.settingVisualDescription,
+        settingTemporal: params.settingTemporal,
+        settingSensory: params.settingSensory,
+        settingEmotional: params.settingEmotional,
+        baseStageImageUrl: params.baseStageImageUrl,
+        artStyleDescription: params.artStyleDescription,
+        additionalReferenceImages: params.additionalReferenceImages,
+      });
+
+    case 'illustration_image':
+      return callGenerateScene({
+        visualDescription: params.visualDescription,
+        artStyleDescription: params.artStyleDescription,
+        stageSettingImageUrl: params.stageSettingImageUrl,
+        referenceImages: params.referenceImages,
+      });
+
+    default:
+      return Promise.reject(new Error(`Unsupported entityType for generation: ${(params as StartGenerateTaskParams).entityType}`));
+  }
+}
+
 export const createImageTaskSlice: StateCreator<
   SnapshotStore,
   [['zustand/immer', never]],
@@ -71,7 +161,7 @@ export const createImageTaskSlice: StateCreator<
   imageTasks: [],
 
   startGenerateTask: (params) => {
-    const { entityType, entityKey, entityName, childKey, childName, description, referenceImages } = params;
+    const { entityType, entityKey, entityName, childKey, childName } = params;
 
     // Block concurrent: 1 task per entity+child at a time
     const existing = get().imageTasks.find(
@@ -100,10 +190,11 @@ export const createImageTaskSlice: StateCreator<
       });
     });
 
-    // Fire API call (fire-and-forget from action perspective)
-    callGenerateFromDescription({ description, referenceImages })
+    // Route to the correct illustration API based on entityType + isBase
+    const apiCall = routeGenerateCall(params);
+
+    apiCall
       .then((result) => {
-        // Guard: check task still exists (may have been cleared by resetSnapshot)
         const taskStillExists = get().imageTasks.some((t) => t.id === taskId);
         if (!taskStillExists) {
           log.warn('startGenerateTask', 'task cancelled — no longer in store', { taskId });
@@ -118,14 +209,12 @@ export const createImageTaskSlice: StateCreator<
         log.info('startGenerateTask', 'success', { taskId, imageUrl });
 
         set((state) => {
-          // Find target illustrations — entity/child may have been deleted while task was running
           const illustrations = findIllustrations(state, entityType, entityKey, childKey);
           if (illustrations) {
             prependIllustration(illustrations, imageUrl);
             state.sync.isDirty = true;
           }
 
-          // Mark task completed
           const task = state.imageTasks.find((t) => t.id === taskId);
           if (task) {
             task.status = 'completed';

@@ -9,6 +9,7 @@ import {
   useSnapshotFetchError,
 } from '@/stores/snapshot-store';
 import { useBookStore, useCurrentBook, useBooksLoading, useBooksError } from '@/stores/book-store';
+import { useArtStyleStore } from '@/stores/art-style-store';
 import { getDefaultCreativeSpace, AVAILABLE_LANGUAGES } from '@/constants/editor-constants';
 import { PIPELINE_STEP_MAP } from '@/constants/book-enums';
 import { EditorHeader } from '../components/editor-header';
@@ -80,6 +81,11 @@ export function EditorPage() {
 
         // Fetch snapshot for this book
         await fetchSnapshot(bookId);
+
+        // Fetch art style description for illustration APIs
+        if (fetchedBook.artstyle_id) {
+          useArtStyleStore.getState().fetchArtStyle(fetchedBook.artstyle_id);
+        }
       }
     };
 
@@ -88,6 +94,7 @@ export function EditorPage() {
     // Cleanup on unmount
     return () => {
       resetSnapshot();
+      useArtStyleStore.getState().reset();
     };
   }, [bookId, fetchBook, fetchSnapshot, resetSnapshot, resetSettings, navigate]);
 

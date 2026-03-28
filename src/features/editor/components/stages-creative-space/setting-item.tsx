@@ -37,6 +37,7 @@ import { Label } from '@/components/ui/label';
 import { useSnapshotActions, useStageByKey, useImageTasksForChild } from '@/stores/snapshot-store/selectors';
 import { useLocations } from '@/stores/location-store';
 import { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
+import { useArtStyleDescription } from '@/stores/art-style-store';
 import type { StageSetting } from '@/types/stage-types';
 import { uploadImageToStorage } from '@/apis/storage-api';
 import { createLogger } from '@/utils/logger';
@@ -60,6 +61,7 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
   const locations = useLocations();
   const eras = useEras();
   const eraByName = useMemo(() => new Map(eras.map((e) => [e.name, e])), [eras]);
+  const artStyleDescription = useArtStyleDescription();
   const { isProcessing } = useImageTasksForChild(stageKey, settingData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -96,64 +98,74 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
     updateStageSetting(stageKey, settingData.key, { visual_description: trimmed });
   };
 
-  const buildDescription = (visualDescription: string): string => {
-    const parts: string[] = [];
-    const location = locations.find((l) => l.id === stage?.location_id);
-    if (location) {
-      parts.push(location.description ? `Location description: ${location.description}` : `Location: ${location.name}`);
-    }
-    parts.push(`Visual description: ${visualDescription}`);
+  // Resolve base setting image URL for non-base settings
+  const baseStageImageUrl = !isBase
+    ? stage?.settings.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
+    : undefined;
 
-    // Temporal — each field with its own keyword; era includes DB description
-    const { era, season, weather, time_of_day } = settingData.temporal;
-    if (era) {
-      const eraDesc = eraByName.get(era)?.description;
-      parts.push(eraDesc ? `Era description: ${eraDesc}` : `Era: ${era}`);
-    }
-    if (season) parts.push(`Season: ${season}`);
-    if (weather) parts.push(`Weather: ${weather}`);
-    if (time_of_day) parts.push(`Time of day: ${time_of_day}`);
+  // Non-base settings cannot generate without base illustration
+  const isGenerateDisabled = isProcessing || !promptText.trim() || (!isBase && !baseStageImageUrl);
 
-    // Sensory
-    const { atmosphere, soundscape, lighting, color_palette } = settingData.sensory;
-    if (atmosphere) parts.push(`Atmosphere: ${atmosphere}`);
-    if (soundscape) parts.push(`Soundscape: ${soundscape}`);
-    if (lighting) parts.push(`Lighting: ${lighting}`);
-    if (color_palette) parts.push(`Color palette: ${color_palette}`);
-
-    // Emotional
-    if (settingData.emotional.mood) parts.push(`Mood: ${settingData.emotional.mood}`);
-
-    return parts.join('\n');
-  };
+  // Resolve era description from era store
+  const resolvedEraDescription = settingData.temporal.era
+    ? eraByName.get(settingData.temporal.era)?.description ?? undefined
+    : undefined;
 
   const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
 
-    log.info('handleGenerate', 'start', { stageKey, settingKey: settingData.key });
+    log.info('handleGenerate', 'start', { stageKey, settingKey: settingData.key, isBase });
     updateStageSetting(stageKey, settingData.key, { visual_description: trimmedPrompt });
 
-    const description = buildDescription(trimmedPrompt);
     const referenceImages =
       generateRefs.images.length > 0
         ? generateRefs.images.map(({ base64Data, mimeType }) => ({ base64Data, mimeType }))
         : undefined;
 
-    log.debug('handleGenerate', 'dispatching to store', {
-      descriptionLength: description.length,
-      refCount: referenceImages?.length ?? 0,
-    });
+    const location = locations.find((l) => l.id === stage?.location_id);
 
-    startGenerateTask({
-      entityType: 'stage',
-      entityKey: stageKey,
-      entityName: stage?.name ?? stageKey,
-      childKey: settingData.key,
-      childName: settingData.name,
-      description,
-      referenceImages,
-    });
+    if (isBase) {
+      startGenerateTask({
+        entityType: 'stage',
+        isBase: true,
+        entityKey: stageKey,
+        entityName: stage?.name ?? stageKey,
+        childKey: settingData.key,
+        childName: settingData.name,
+        stageKey,
+        stageName: stage?.name ?? stageKey,
+        locationDescription: location?.description ?? location?.name ?? '',
+        eraDescription: resolvedEraDescription,
+        baseSetting: {
+          visual_description: trimmedPrompt,
+          temporal: settingData.temporal,
+          sensory: settingData.sensory,
+          emotional: settingData.emotional,
+        },
+        artStyleDescription: artStyleDescription ?? '',
+        referenceImages,
+      });
+    } else {
+      if (!baseStageImageUrl) return;
+      startGenerateTask({
+        entityType: 'stage',
+        isBase: false,
+        entityKey: stageKey,
+        entityName: stage?.name ?? stageKey,
+        childKey: settingData.key,
+        childName: settingData.name,
+        settingKey: settingData.key,
+        settingVisualDescription: trimmedPrompt,
+        settingTemporal: settingData.temporal,
+        settingSensory: settingData.sensory,
+        settingEmotional: settingData.emotional,
+        eraDescription: resolvedEraDescription,
+        baseStageImageUrl,
+        artStyleDescription: artStyleDescription ?? '',
+        additionalReferenceImages: referenceImages,
+      });
+    }
 
     generateRefs.clearImages();
   };
@@ -458,10 +470,10 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
           </div>
 
           {/* Generate button */}
-          <div className="flex justify-center gap-2">
+          <div className="flex flex-col items-center gap-1">
             <Button
               onClick={handleGenerate}
-              disabled={isProcessing || !promptText.trim()}
+              disabled={isGenerateDisabled}
               className="w-40"
             >
               {isProcessing ? (
@@ -476,6 +488,9 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
                 </>
               )}
             </Button>
+            {!isBase && !baseStageImageUrl && (
+              <span className="text-xs text-muted-foreground">Generate base setting first</span>
+            )}
           </div>
 
           {/* Attribute Sections — Temporal / Sensory / Emotional */}

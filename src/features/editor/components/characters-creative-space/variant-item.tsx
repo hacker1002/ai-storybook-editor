@@ -1,6 +1,6 @@
 // variant-item.tsx - Accordion item for a single character variant with image gallery + appearance section + generate/edit
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Collapsible,
   CollapsibleContent,
@@ -38,9 +38,9 @@ import {
   useCharacterByKey,
   useImageTasksForChild,
 } from '@/stores/snapshot-store/selectors';
-import { useAssetCategories, useAssetCategoryActions } from '@/stores/asset-category-store';
 import { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
 import type { CharacterAppearance, CharacterVariant } from '@/types/character-types';
+import { useArtStyleDescription } from '@/stores/art-style-store';
 import { uploadImageToStorage } from '@/apis/storage-api';
 import { createLogger } from '@/utils/logger';
 import { cn } from '@/utils/utils';
@@ -139,8 +139,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
   const { deleteCharacterVariant, updateCharacterVariant, startGenerateTask, startEditTask } =
     useSnapshotActions();
   const character = useCharacterByKey(characterKey);
-  const assetCategories = useAssetCategories();
-  const { fetchCategories } = useAssetCategoryActions();
+  const artStyleDescription = useArtStyleDescription();
   const { isProcessing } = useImageTasksForChild(characterKey, variantData.key);
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -162,9 +161,6 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
   // type 0 = base variant, cannot be deleted
   const isBase = variantData.type === 0;
 
-  // Ensure asset categories loaded for generate prompt
-  useEffect(() => { fetchCategories(); }, [fetchCategories]);
-
   const sortedIllustrations = [...variantData.illustrations].sort(
     (a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
   );
@@ -177,45 +173,59 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
     updateCharacterVariant(characterKey, variantData.key, { visual_description: trimmed });
   };
 
-  const buildGenerateDescription = (visualDescription: string): string => {
-    const parts: string[] = [];
-    if (character?.basic_info.category_id) {
-      const cat = assetCategories.find((c) => c.id === character.basic_info.category_id);
-      if (cat) parts.push(`Character category: ${cat.name}`);
-    }
-    const { gender, age, role } = character?.basic_info ?? {};
-    if (gender) parts.push(`Gender: ${gender}`);
-    if (age) parts.push(`Age: ${age}`);
-    if (role) parts.push(`Role: ${role}`);
-    parts.push(`Visual description: ${visualDescription}`);
-    const { height, build, hair, eyes, face } = variantData.appearance;
-    if (height) parts.push(`Height: ${height}`);
-    if (build) parts.push(`Build: ${build}`);
-    if (hair) parts.push(`Hair: ${hair}`);
-    if (eyes) parts.push(`Eyes: ${eyes}`);
-    if (face) parts.push(`Face: ${face}`);
-    return parts.join('\n');
-  };
+  // Resolve base variant image URL for non-base variants
+  const baseVariantImageUrl = !isBase
+    ? character?.variants.find((v) => v.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
+    : undefined;
+
+  // Non-base variants cannot generate without base illustration
+  const isGenerateDisabled = isProcessing || !promptText.trim() || (!isBase && !baseVariantImageUrl);
 
   const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
-    log.info('handleGenerate', 'start', { characterKey, variantKey: variantData.key });
+    log.info('handleGenerate', 'start', { characterKey, variantKey: variantData.key, isBase });
     updateCharacterVariant(characterKey, variantData.key, { visual_description: trimmedPrompt });
-    const description = buildGenerateDescription(trimmedPrompt);
+
     const referenceImages = generateRefs.images.length > 0
       ? generateRefs.images.map(({ base64Data, mimeType }) => ({ base64Data, mimeType }))
       : undefined;
-    log.debug('handleGenerate', 'dispatching', { descriptionLength: description.length, refCount: referenceImages?.length ?? 0 });
-    startGenerateTask({
-      entityType: 'character',
-      entityKey: characterKey,
-      entityName: character?.name ?? characterKey,
-      childKey: variantData.key,
-      childName: variantData.name,
-      description,
-      referenceImages,
-    });
+
+    if (isBase) {
+      startGenerateTask({
+        entityType: 'character',
+        isBase: true,
+        entityKey: characterKey,
+        entityName: character?.name ?? characterKey,
+        childKey: variantData.key,
+        childName: variantData.name,
+        basicInfo: character?.basic_info ?? { description: '', gender: '', age: '', category_id: '', role: '' },
+        personality: character?.personality ?? { core_essence: '' },
+        baseVariant: {
+          appearance: variantData.appearance,
+          visual_description: trimmedPrompt,
+        },
+        artStyleDescription: artStyleDescription ?? '',
+        referenceImages,
+      });
+    } else {
+      if (!baseVariantImageUrl) return;
+      startGenerateTask({
+        entityType: 'character',
+        isBase: false,
+        entityKey: characterKey,
+        entityName: character?.name ?? characterKey,
+        childKey: variantData.key,
+        childName: variantData.name,
+        variantKey: variantData.key,
+        variantAppearance: variantData.appearance,
+        variantVisualDescription: trimmedPrompt,
+        baseVariantImageUrl,
+        artStyleDescription: artStyleDescription ?? '',
+        additionalReferenceImages: referenceImages,
+      });
+    }
+
     generateRefs.clearImages();
   };
 
@@ -437,14 +447,17 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
           </div>
 
           {/* Generate button */}
-          <div className="flex justify-center">
-            <Button onClick={handleGenerate} disabled={isProcessing || !promptText.trim()} className="w-40" aria-disabled={isProcessing || !promptText.trim()}>
+          <div className="flex flex-col items-center gap-1">
+            <Button onClick={handleGenerate} disabled={isGenerateDisabled} className="w-40" aria-disabled={isGenerateDisabled}>
               {isProcessing ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating</>
               ) : (
                 <><Sparkles className="h-4 w-4 mr-2" />Generate</>
               )}
             </Button>
+            {!isBase && !baseVariantImageUrl && (
+              <span className="text-xs text-muted-foreground">Generate base variant first</span>
+            )}
           </div>
 
           {/* Appearance Section — collapsible, default collapsed */}

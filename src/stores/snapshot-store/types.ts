@@ -202,10 +202,130 @@ export interface ImageTask extends ImageTaskTarget {
 /** Shared reference images param */
 type ReferenceImages = Array<{ base64Data: string; mimeType: string }>;
 
-export interface StartGenerateTaskParams extends ImageTaskTarget {
-  description: string;
+// --- Discriminated union for startGenerateTask ---
+// Each variant carries the structured data its illustration API needs.
+
+interface CharacterBaseGenerateParams extends ImageTaskTarget {
+  entityType: 'character';
+  isBase: true;
+  basicInfo: {
+    description: string;
+    gender: string;
+    age: string;
+    category_id: string;
+    role: string;
+  };
+  personality: {
+    core_essence: string;
+    flaws?: string;
+    emotions?: string;
+    reactions?: string;
+    desires?: string;
+    likes?: string;
+    fears?: string;
+    contradictions?: string;
+  };
+  baseVariant: {
+    appearance: {
+      height?: number;
+      hair?: string;
+      eyes?: string;
+      face?: string;
+      build?: string;
+    };
+    visual_description: string;
+  };
+  artStyleDescription: string;
   referenceImages?: ReferenceImages;
 }
+
+interface CharacterVariantGenerateParams extends ImageTaskTarget {
+  entityType: 'character';
+  isBase: false;
+  variantKey: string;
+  variantAppearance?: {
+    height?: number;
+    hair?: string;
+    eyes?: string;
+    face?: string;
+    build?: string;
+  };
+  variantVisualDescription: string;
+  baseVariantImageUrl: string;
+  artStyleDescription: string;
+  additionalReferenceImages?: ReferenceImages;
+}
+
+interface PropBaseGenerateParams extends ImageTaskTarget {
+  entityType: 'prop';
+  isBase: true;
+  propKey: string;
+  propName: string;
+  propType: 'narrative' | 'anchor';
+  categoryName: string;
+  categoryType: number;
+  baseStateVisualDescription: string;
+  artStyleDescription: string;
+  referenceImages?: ReferenceImages;
+}
+
+interface PropStateGenerateParams extends ImageTaskTarget {
+  entityType: 'prop';
+  isBase: false;
+  stateKey: string;
+  stateVisualDescription: string;
+  basePropImageUrl: string;
+  artStyleDescription: string;
+  additionalReferenceImages?: ReferenceImages;
+}
+
+interface StageBaseGenerateParams extends ImageTaskTarget {
+  entityType: 'stage';
+  isBase: true;
+  stageKey: string;
+  stageName: string;
+  locationDescription: string;
+  eraDescription?: string;
+  baseSetting: {
+    visual_description: string;
+    temporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
+    sensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
+    emotional?: { mood?: string };
+  };
+  artStyleDescription: string;
+  referenceImages?: ReferenceImages;
+}
+
+interface StageSettingGenerateParams extends ImageTaskTarget {
+  entityType: 'stage';
+  isBase: false;
+  settingKey: string;
+  settingVisualDescription: string;
+  settingTemporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
+  settingSensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
+  settingEmotional?: { mood?: string };
+  eraDescription?: string;
+  baseStageImageUrl: string;
+  artStyleDescription: string;
+  additionalReferenceImages?: ReferenceImages;
+}
+
+interface SceneGenerateParams extends ImageTaskTarget {
+  entityType: 'illustration_image';
+  visualDescription: string;
+  artStyleDescription: string;
+  stageSettingImageUrl?: string;
+  referenceImages?: ReferenceImages;
+}
+
+export type StartGenerateTaskParams =
+  | CharacterBaseGenerateParams
+  | CharacterVariantGenerateParams
+  | PropBaseGenerateParams
+  | PropStateGenerateParams
+  | StageBaseGenerateParams
+  | StageSettingGenerateParams
+  | SceneGenerateParams;
 
 export interface StartEditTaskParams extends ImageTaskTarget {
   prompt: string;

@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
+import { useArtStyleDescription } from '@/stores/art-style-store';
 import {
   useSnapshotActions,
   useStages,
@@ -86,6 +87,7 @@ export function GenerateImageModal({
   // Store hooks
   const { startGenerateTask, startEditTask } = useSnapshotActions();
   const stages = useStages();
+  const artStyleDescription = useArtStyleDescription();
   const { isProcessing } = useImageTasksForChild(spreadId, image.id);
 
   // Reference image pickers for generate and edit flows
@@ -166,11 +168,23 @@ export function GenerateImageModal({
     [onUpdateImage]
   );
 
+  // Resolve stage setting image URL from selected stage setting ref
+  const resolveStageSettingImageUrl = useCallback((): string | undefined => {
+    if (!selectedStageSetting) return undefined;
+    // Parse ref format: @stage_key/setting_key
+    const match = selectedStageSetting.match(/^@([^/]+)\/(.+)$/);
+    if (!match) return undefined;
+    const [, stageKey, settingKey] = match;
+    const stage = stages.find((s) => s.key === stageKey);
+    const setting = stage?.settings.find((s) => s.key === settingKey);
+    return setting?.illustrations.find((ill) => ill.is_selected)?.media_url
+      ?? setting?.illustrations[0]?.media_url;
+  }, [selectedStageSetting, stages]);
+
   const handleGenerate = useCallback(() => {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt || isProcessing) return;
 
-    // Save visual_description to store
     onUpdateImage({ visual_description: trimmedPrompt });
 
     log.info("handleGenerate", "start", {
@@ -195,7 +209,9 @@ export function GenerateImageModal({
       entityName: image.title || "Spread",
       childKey: image.id,
       childName: image.title || "Image",
-      description: trimmedPrompt,
+      visualDescription: trimmedPrompt,
+      artStyleDescription: artStyleDescription ?? '',
+      stageSettingImageUrl: resolveStageSettingImageUrl(),
       referenceImages,
     });
 
@@ -208,6 +224,8 @@ export function GenerateImageModal({
     image.title,
     generateRefs,
     selectedStageSetting,
+    artStyleDescription,
+    resolveStageSettingImageUrl,
     startGenerateTask,
     onUpdateImage,
   ]);

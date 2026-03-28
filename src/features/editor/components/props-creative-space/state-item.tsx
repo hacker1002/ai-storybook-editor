@@ -45,6 +45,7 @@ import { Label } from "@/components/ui/label";
 import { useSnapshotActions, usePropByKey, useImageTasksForChild } from "@/stores/snapshot-store";
 import { useAssetCategories } from "@/stores/asset-category-store";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
+import { useArtStyleDescription } from '@/stores/art-style-store';
 import type { PropState } from "@/types/prop-types";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import { createLogger } from "@/utils/logger";
@@ -69,6 +70,7 @@ export function StateItem({
   const { deletePropState, updatePropState, startGenerateTask, startEditTask } = useSnapshotActions();
   const prop = usePropByKey(propKey);
   const categories = useAssetCategories();
+  const artStyleDescription = useArtStyleDescription();
   const { isProcessing } = useImageTasksForChild(propKey, stateData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -157,28 +159,24 @@ export function StateItem({
     editRefs.clearImages();
   };
 
-  const buildDescription = (visualDescription: string): string => {
-    const categoryName = prop?.category_id
-      ? categories.find((c) => c.id === prop.category_id)?.name
-      : undefined;
-    if (categoryName) {
-      return `Đối tượng thuộc nhóm ${categoryName}.\nMô tả: ${visualDescription}`;
-    }
-    return visualDescription;
-  };
+  // Resolve base state image URL for non-base states
+  const basePropImageUrl = !isBase
+    ? prop?.states.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
+    : undefined;
+
+  // Non-base states cannot generate without base illustration
+  const isGenerateDisabled = isProcessing || !promptText.trim() || (!isBase && !basePropImageUrl);
 
   const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
 
-    log.info("handleGenerate", "start", { propKey, stateKey: stateData.key });
+    log.info("handleGenerate", "start", { propKey, stateKey: stateData.key, isBase });
 
-    // Save visual_description to store first (covers blur-skip edge case)
     updatePropState(propKey, stateData.key, {
       visual_description: trimmedPrompt,
     });
 
-    const description = buildDescription(trimmedPrompt);
     const referenceImages =
       generateRefs.images.length > 0
         ? generateRefs.images.map(({ base64Data, mimeType }) => ({
@@ -187,20 +185,42 @@ export function StateItem({
           }))
         : undefined;
 
-    log.debug("handleGenerate", "dispatching to store", {
-      descriptionLength: description.length,
-      refCount: referenceImages?.length ?? 0,
-    });
-
-    startGenerateTask({
-      entityType: 'prop',
-      entityKey: propKey,
-      entityName: prop?.name ?? propKey,
-      childKey: stateData.key,
-      childName: stateData.name,
-      description,
-      referenceImages,
-    });
+    if (isBase) {
+      const category = prop?.category_id
+        ? categories.find((c) => c.id === prop.category_id)
+        : undefined;
+      startGenerateTask({
+        entityType: 'prop',
+        isBase: true,
+        entityKey: propKey,
+        entityName: prop?.name ?? propKey,
+        childKey: stateData.key,
+        childName: stateData.name,
+        propKey,
+        propName: prop?.name ?? propKey,
+        propType: (prop?.type as 'narrative' | 'anchor') ?? 'narrative',
+        categoryName: category?.name ?? '',
+        categoryType: category?.type ?? 0,
+        baseStateVisualDescription: trimmedPrompt,
+        artStyleDescription: artStyleDescription ?? '',
+        referenceImages,
+      });
+    } else {
+      if (!basePropImageUrl) return;
+      startGenerateTask({
+        entityType: 'prop',
+        isBase: false,
+        entityKey: propKey,
+        entityName: prop?.name ?? propKey,
+        childKey: stateData.key,
+        childName: stateData.name,
+        stateKey: stateData.key,
+        stateVisualDescription: trimmedPrompt,
+        basePropImageUrl,
+        artStyleDescription: artStyleDescription ?? '',
+        additionalReferenceImages: referenceImages,
+      });
+    }
 
     generateRefs.clearImages();
   };
@@ -666,10 +686,10 @@ export function StateItem({
           </div>
 
           {/* Action buttons row — centered like edit-image modal */}
-          <div className="flex justify-center gap-2">
+          <div className="flex flex-col items-center gap-1">
             <Button
               onClick={handleGenerate}
-              disabled={isProcessing || !promptText.trim()}
+              disabled={isGenerateDisabled}
               className="w-40"
             >
               {isProcessing ? (
@@ -684,6 +704,9 @@ export function StateItem({
                 </>
               )}
             </Button>
+            {!isBase && !basePropImageUrl && (
+              <span className="text-xs text-muted-foreground">Generate base state first</span>
+            )}
           </div>
         </div>
       </CollapsibleContent>
