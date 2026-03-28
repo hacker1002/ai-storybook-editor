@@ -47,6 +47,31 @@ export interface GenerateCharacterBaseResult {
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
 
+export interface GenerateCharacterVariantParams {
+  characterKey: string;
+  variantKey: string;
+  variantAppearance?: {
+    height?: number;
+    hair?: string;
+    eyes?: string;
+    face?: string;
+    build?: string;
+  };
+  variantVisualDescription: string;
+  baseVariantImageUrl: string;
+  artStyleDescription: string;
+  additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  aspectRatio?: string;
+  imageSize?: string;
+}
+
+export interface GenerateCharacterVariantResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+}
+
 // --- API ---
 
 export async function callGenerateCharacterBase(
@@ -58,6 +83,20 @@ export async function callGenerateCharacterBase(
   });
   return callEdgeFunction<GenerateCharacterBaseResult>(
     'illustration-generate-character-base',
+    params
+  );
+}
+
+export async function callGenerateCharacterVariant(
+  params: GenerateCharacterVariantParams
+): Promise<GenerateCharacterVariantResult> {
+  log.info('callGenerateCharacterVariant', 'start', {
+    characterKey: params.characterKey,
+    variantKey: params.variantKey,
+    refCount: params.additionalReferenceImages?.length ?? 0,
+  });
+  return callEdgeFunction<GenerateCharacterVariantResult>(
+    'illustration-generate-character-variant',
     params
   );
 }
