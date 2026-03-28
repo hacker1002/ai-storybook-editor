@@ -87,6 +87,43 @@ export async function callGenerateCharacterBase(
   );
 }
 
+// --- Prop Base Types ---
+
+export interface GeneratePropBaseParams {
+  propKey: string;
+  propName: string;
+  propType: "narrative" | "anchor";
+  categoryName: string;
+  categoryType: number;
+  baseStateVisualDescription: string;
+  artStyleDescription: string;
+  referenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  aspectRatio?: string;
+  imageSize?: string;
+}
+
+export interface GeneratePropBaseResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+}
+
+// --- Prop Base API ---
+
+export async function callGeneratePropBase(
+  params: GeneratePropBaseParams
+): Promise<GeneratePropBaseResult> {
+  log.info('callGeneratePropBase', 'start', {
+    propKey: params.propKey,
+    refCount: params.referenceImages?.length ?? 0,
+  });
+  return callEdgeFunction<GeneratePropBaseResult>(
+    'illustration-generate-prop-base',
+    params
+  );
+}
+
 export async function callGenerateCharacterVariant(
   params: GenerateCharacterVariantParams
 ): Promise<GenerateCharacterVariantResult> {
