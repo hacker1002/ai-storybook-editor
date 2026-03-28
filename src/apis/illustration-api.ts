@@ -124,6 +124,42 @@ export async function callGeneratePropBase(
   );
 }
 
+// --- Prop State Types ---
+
+export interface GeneratePropStateParams {
+  propKey: string;
+  stateKey: string;
+  stateVisualDescription: string;
+  basePropImageUrl: string;
+  artStyleDescription: string;
+  additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  aspectRatio?: string;
+  imageSize?: string;
+}
+
+export interface GeneratePropStateResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+}
+
+// --- Prop State API ---
+
+export async function callGeneratePropState(
+  params: GeneratePropStateParams
+): Promise<GeneratePropStateResult> {
+  log.info('callGeneratePropState', 'start', {
+    propKey: params.propKey,
+    stateKey: params.stateKey,
+    refCount: params.additionalReferenceImages?.length ?? 0,
+  });
+  return callEdgeFunction<GeneratePropStateResult>(
+    'illustration-generate-prop-state',
+    params
+  );
+}
+
 export async function callGenerateCharacterVariant(
   params: GenerateCharacterVariantParams
 ): Promise<GenerateCharacterVariantResult> {
