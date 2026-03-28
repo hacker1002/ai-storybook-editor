@@ -239,6 +239,39 @@ export async function callGenerateStageSetting(
   );
 }
 
+// --- Scene Types ---
+
+export interface GenerateSceneParams {
+  visualDescription: string;
+  artStyleDescription: string;
+  stageSettingImageUrl?: string;
+  referenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  aspectRatio?: string;
+  imageSize?: string;
+}
+
+export interface GenerateSceneResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+}
+
+// --- Scene API ---
+
+export async function callGenerateScene(
+  params: GenerateSceneParams
+): Promise<GenerateSceneResult> {
+  log.info('callGenerateScene', 'start', {
+    hasStageSettingImage: !!params.stageSettingImageUrl,
+    refCount: params.referenceImages?.length ?? 0,
+  });
+  return callEdgeFunction<GenerateSceneResult>(
+    'illustration-generate-scene',
+    params
+  );
+}
+
 export async function callGenerateCharacterVariant(
   params: GenerateCharacterVariantParams
 ): Promise<GenerateCharacterVariantResult> {
