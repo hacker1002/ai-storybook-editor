@@ -160,6 +160,46 @@ export async function callGeneratePropState(
   );
 }
 
+// --- Stage Base Types ---
+
+export interface GenerateStageBaseParams {
+  stageKey: string;
+  stageName: string;
+  locationDescription: string;
+  baseSetting: {
+    visual_description: string;
+    temporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
+    sensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
+    emotional?: { mood?: string };
+  };
+  artStyleDescription: string;
+  referenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  aspectRatio?: string;
+  imageSize?: string;
+}
+
+export interface GenerateStageBaseResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+}
+
+// --- Stage Base API ---
+
+export async function callGenerateStageBase(
+  params: GenerateStageBaseParams
+): Promise<GenerateStageBaseResult> {
+  log.info('callGenerateStageBase', 'start', {
+    stageKey: params.stageKey,
+    refCount: params.referenceImages?.length ?? 0,
+  });
+  return callEdgeFunction<GenerateStageBaseResult>(
+    'illustration-generate-stage-base',
+    params
+  );
+}
+
 export async function callGenerateCharacterVariant(
   params: GenerateCharacterVariantParams
 ): Promise<GenerateCharacterVariantResult> {
