@@ -389,7 +389,6 @@ export function RemixEditorCanvas({
               position: "fixed",
               top: toolbarPosition?.top ?? -9999,
               left: toolbarPosition?.left ?? -9999,
-              zIndex: 9999,
               visibility: toolbarPosition ? "visible" : "hidden",
             }}
           >

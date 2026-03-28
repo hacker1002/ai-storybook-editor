@@ -1,8 +1,8 @@
 // selection-overlay.tsx - Blue border overlay for selected items in animation editor
-'use client';
+"use client";
 
-import { COLORS } from '@/constants/spread-constants';
-import type { Geometry } from '@/types/spread-types';
+import { COLORS } from "@/constants/spread-constants";
+import type { Geometry } from "@/types/spread-types";
 
 interface SelectionOverlayProps {
   geometry: Geometry;
@@ -18,7 +18,7 @@ export function SelectionOverlay({ geometry }: SelectionOverlayProps) {
         width: `${geometry.w}%`,
         height: `${geometry.h}%`,
         borderColor: COLORS.SELECTION,
-        zIndex: 9999,
+        zIndex: 900,
       }}
     />
   );
