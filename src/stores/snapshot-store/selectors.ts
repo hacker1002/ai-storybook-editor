@@ -7,7 +7,8 @@ import type { RetouchData } from '@/types/retouch-types';
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask } from './types';
+import type { ImageTask, SpreadSettingSlice } from './types';
+import type { SpreadSetting, Section, SpreadNavigation, Branch, BranchSetting } from '@/types/spread-setting-types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -27,6 +28,9 @@ const EMPTY_PROPS: Prop[] = [];
 const EMPTY_CHARACTERS: Character[] = [];
 const EMPTY_STAGES: Stage[] = [];
 const EMPTY_IMAGE_TASKS: ImageTask[] = [];
+const EMPTY_SECTIONS: Section[] = [];
+const EMPTY_BRANCHES: Branch[] = [];
+const EMPTY_NAV_SPREADS: SpreadNavigation[] = [];
 
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
@@ -160,6 +164,27 @@ export const useCompletedImageTasks = (): ImageTask[] =>
     useShallow((s) => (s.imageTasks ?? EMPTY_IMAGE_TASKS).filter((t) => t.status === 'completed' || t.status === 'error'))
   );
 
+// Spread setting selectors
+export const useSections = (): Section[] =>
+  useSnapshotStore((s) => s.spreadSetting.sections ?? EMPTY_SECTIONS);
+export const useSectionIds = (): string[] =>
+  useSnapshotStore(useShallow((s) => (s.spreadSetting.sections ?? EMPTY_SECTIONS).map((sec) => sec.id)));
+export const useSectionById = (sectionId: string): Section | undefined =>
+  useSnapshotStore((s) => s.spreadSetting.sections.find((sec) => sec.id === sectionId));
+export const useSpreadNavigation = (spreadId: string): SpreadNavigation | undefined =>
+  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId));
+export const useSpreadHasBranching = (spreadId: string): boolean =>
+  useSnapshotStore((s) => {
+    const nav = s.spreadSetting.spreads.find((sp) => sp.id === spreadId);
+    return !!nav?.branch_setting && nav.branch_setting.branches.length > 0;
+  });
+export const useSpreadNextId = (spreadId: string): string | null | undefined =>
+  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId)?.next_spread_id);
+export const useBranchSetting = (spreadId: string): BranchSetting | undefined =>
+  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId)?.branch_setting);
+export const useBranches = (spreadId: string): Branch[] =>
+  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId)?.branch_setting?.branches ?? EMPTY_BRANCHES);
+
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>
   useSnapshotStore(
@@ -268,6 +293,26 @@ export const useSnapshotActions = () =>
       addStageSound: s.addStageSound,
       updateStageSound: s.updateStageSound,
       deleteStageSound: s.deleteStageSound,
+      // Spread Setting
+      setSpreadSetting: s.setSpreadSetting,
+      resetSpreadSetting: s.resetSpreadSetting,
+      addSection: s.addSection,
+      updateSection: s.updateSection,
+      deleteSection: s.deleteSection,
+      setSpreadNavigation: s.setSpreadNavigation,
+      removeSpreadNavigation: s.removeSpreadNavigation,
+      setNextSpreadId: s.setNextSpreadId,
+      clearNextSpreadId: s.clearNextSpreadId,
+      setBranchSetting: s.setBranchSetting,
+      clearBranchSetting: s.clearBranchSetting,
+      addBranch: s.addBranch,
+      updateBranch: s.updateBranch,
+      deleteBranch: s.deleteBranch,
+      reorderBranches: s.reorderBranches,
+      updateBranchSettingLocale: s.updateBranchSettingLocale,
+      deleteBranchSettingLocale: s.deleteBranchSettingLocale,
+      updateBranchLocale: s.updateBranchLocale,
+      deleteBranchLocale: s.deleteBranchLocale,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,
