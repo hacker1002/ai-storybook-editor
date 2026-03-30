@@ -2,9 +2,9 @@ import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/ed
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData } from '@/types/illustration-types';
 import type { RetouchData } from '@/types/retouch-types';
-import type { Prop, PropState, PropSound, CropSheet } from '@/types/prop-types';
+import type { Prop, PropVariant, PropSound, CropSheet } from '@/types/prop-types';
 import type { Character, CharacterVariant, CharacterVoice } from '@/types/character-types';
-import type { Stage, StageSetting, StageSound } from '@/types/stage-types';
+import type { Stage, StageVariant, StageSound } from '@/types/stage-types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -132,9 +132,9 @@ export interface PropsSlice {
   updateProp: (key: string, updates: Partial<Prop>) => void;
   deleteProp: (key: string) => void;
   reorderProps: (fromIndex: number, toIndex: number) => void;
-  addPropState: (propKey: string, state: PropState) => void;
-  updatePropState: (propKey: string, stateKey: string, updates: Partial<PropState>) => void;
-  deletePropState: (propKey: string, stateKey: string) => void;
+  addPropVariant: (propKey: string, variant: PropVariant) => void;
+  updatePropVariant: (propKey: string, variantKey: string, updates: Partial<PropVariant>) => void;
+  deletePropVariant: (propKey: string, variantKey: string) => void;
   addPropSound: (propKey: string, sound: PropSound) => void;
   updatePropSound: (propKey: string, soundKey: string, updates: Partial<PropSound>) => void;
   deletePropSound: (propKey: string, soundKey: string) => void;
@@ -168,9 +168,9 @@ export interface StagesSlice {
   updateStage: (key: string, updates: Partial<Stage>) => void;
   deleteStage: (key: string) => void;
   reorderStages: (fromIndex: number, toIndex: number) => void;
-  addStageSetting: (key: string, setting: StageSetting) => void;
-  updateStageSetting: (key: string, settingKey: string, updates: Partial<StageSetting>) => void;
-  deleteStageSetting: (key: string, settingKey: string) => void;
+  addStageVariant: (key: string, variant: StageVariant) => void;
+  updateStageVariant: (key: string, variantKey: string, updates: Partial<StageVariant>) => void;
+  deleteStageVariant: (key: string, variantKey: string) => void;
   addStageSound: (key: string, sound: StageSound) => void;
   updateStageSound: (key: string, soundKey: string, updates: Partial<StageSound>) => void;
   deleteStageSound: (key: string, soundKey: string) => void;
@@ -186,8 +186,8 @@ export interface ImageTaskTarget {
   entityType: ImageTaskEntityType;
   entityKey: string;    // prop key | character key | stage key
   entityName: string;   // prop name | character name | stage name
-  childKey: string;     // state key | variant key | setting key
-  childName: string;    // state name | variant name | setting name
+  childKey: string;     // variant key
+  childName: string;    // variant name
 }
 
 export interface ImageTask extends ImageTaskTarget {
@@ -269,11 +269,11 @@ interface PropBaseGenerateParams extends ImageTaskTarget {
   referenceImages?: ReferenceImages;
 }
 
-interface PropStateGenerateParams extends ImageTaskTarget {
+interface PropVariantGenerateParams extends ImageTaskTarget {
   entityType: 'prop';
   isBase: false;
-  stateKey: string;
-  stateVisualDescription: string;
+  variantKey: string;
+  variantVisualDescription: string;
   basePropImageUrl: string;
   artStyleDescription: string;
   additionalReferenceImages?: ReferenceImages;
@@ -296,14 +296,14 @@ interface StageBaseGenerateParams extends ImageTaskTarget {
   referenceImages?: ReferenceImages;
 }
 
-interface StageSettingGenerateParams extends ImageTaskTarget {
+interface StageVariantGenerateParams extends ImageTaskTarget {
   entityType: 'stage';
   isBase: false;
-  settingKey: string;
-  settingVisualDescription: string;
-  settingTemporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
-  settingSensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
-  settingEmotional?: { mood?: string };
+  variantKey: string;
+  variantVisualDescription: string;
+  variantTemporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
+  variantSensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
+  variantEmotional?: { mood?: string };
   eraDescription?: string;
   baseStageImageUrl: string;
   artStyleDescription: string;
@@ -314,7 +314,7 @@ interface SceneGenerateParams extends ImageTaskTarget {
   entityType: 'illustration_image';
   visualDescription: string;
   artStyleDescription: string;
-  stageSettingImageUrl?: string;
+  stageVariantImageUrl?: string;
   referenceImages?: ReferenceImages;
 }
 
@@ -322,9 +322,9 @@ export type StartGenerateTaskParams =
   | CharacterBaseGenerateParams
   | CharacterVariantGenerateParams
   | PropBaseGenerateParams
-  | PropStateGenerateParams
+  | PropVariantGenerateParams
   | StageBaseGenerateParams
-  | StageSettingGenerateParams
+  | StageVariantGenerateParams
   | SceneGenerateParams;
 
 export interface StartEditTaskParams extends ImageTaskTarget {

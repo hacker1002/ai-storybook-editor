@@ -2,8 +2,8 @@
 
 import type { Illustration, ImageReference } from './prop-types';
 
-/** 0 = base setting, 1 = user-created setting */
-export type StageSettingType = 0 | 1;
+/** 0 = base variant, 1 = user-created variant */
+export type StageVariantType = 0 | 1;
 
 export interface StageTemporal {
   era: string;
@@ -23,10 +23,10 @@ export interface StageEmotional {
   mood: string;
 }
 
-export interface StageSetting {
+export interface StageVariant {
   name: string;
   key: string;
-  type: StageSettingType;
+  type: StageVariantType;
   visual_description: string;
   temporal: StageTemporal;
   sensory: StageSensory;
@@ -47,6 +47,6 @@ export interface Stage {
   name: string;
   key: string;
   location_id: string;
-  settings: StageSetting[];
+  variants: StageVariant[];
   sounds: StageSound[];
 }

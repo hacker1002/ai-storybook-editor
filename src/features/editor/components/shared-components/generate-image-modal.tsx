@@ -53,7 +53,7 @@ interface GenerateImageModalProps {
   onUpdateImage: (updates: Partial<SpreadImage>) => void;
 }
 
-interface FlatStageSetting {
+interface FlatStageVariant {
   ref: string | null;
   label: string;
   thumbnail_url: string | null;
@@ -75,9 +75,9 @@ export function GenerateImageModal({
   onUpdateImage,
 }: GenerateImageModalProps) {
   const [prompt, setPrompt] = useState(image.visual_description ?? "");
-  const [selectedStageSetting, setSelectedStageSetting] = useState<
+  const [selectedStageVariant, setSelectedStageVariant] = useState<
     string | null
-  >(image.setting || null);
+  >(image.stage_variant || null);
   const [edgeTreatment, setEdgeTreatment] = useState("none");
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState("");
@@ -94,22 +94,22 @@ export function GenerateImageModal({
   const generateRefs = useReferenceImagePicker();
   const editRefs = useReferenceImagePicker();
 
-  // Flatten stages → settings for the stage setting selector
-  const stageSettingOptions = useMemo<FlatStageSetting[]>(() => {
-    const options: FlatStageSetting[] = [
+  // Flatten stages → variants for the stage variant selector
+  const stageVariantOptions = useMemo<FlatStageVariant[]>(() => {
+    const options: FlatStageVariant[] = [
       { ref: null, label: "None", thumbnail_url: null },
     ];
     for (const stage of stages) {
-      for (const setting of stage.settings) {
-        const selectedIll = setting.illustrations.find(
+      for (const variant of stage.variants) {
+        const selectedIll = variant.illustrations.find(
           (ill) => ill.is_selected
         );
         options.push({
-          ref: `@${stage.key}/${setting.key}`,
-          label: `${stage.name} - ${setting.name}`,
+          ref: `@${stage.key}/${variant.key}`,
+          label: `${stage.name} - ${variant.name}`,
           thumbnail_url:
             selectedIll?.media_url ??
-            setting.illustrations[0]?.media_url ??
+            variant.illustrations[0]?.media_url ??
             null,
         });
       }
@@ -119,13 +119,13 @@ export function GenerateImageModal({
 
   const resetState = useCallback(() => {
     setPrompt(image.visual_description ?? "");
-    setSelectedStageSetting(image.setting || null);
+    setSelectedStageVariant(image.stage_variant || null);
     setEdgeTreatment("none");
     setIsEditPopoverOpen(false);
     setEditPromptText("");
     generateRefs.clearImages();
     editRefs.clearImages();
-  }, [image.setting, image.visual_description, generateRefs, editRefs]);
+  }, [image.stage_variant, image.visual_description, generateRefs, editRefs]);
 
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
@@ -160,26 +160,26 @@ export function GenerateImageModal({
     [image.illustrations, onUpdateImage]
   );
 
-  const handleStageSettingSelect = useCallback(
+  const handleStageVariantSelect = useCallback(
     (ref: string | null) => {
-      setSelectedStageSetting(ref);
-      onUpdateImage({ setting: ref || undefined });
+      setSelectedStageVariant(ref);
+      onUpdateImage({ stage_variant: ref || undefined });
     },
     [onUpdateImage]
   );
 
-  // Resolve stage setting image URL from selected stage setting ref
-  const resolveStageSettingImageUrl = useCallback((): string | undefined => {
-    if (!selectedStageSetting) return undefined;
-    // Parse ref format: @stage_key/setting_key
-    const match = selectedStageSetting.match(/^@([^/]+)\/(.+)$/);
+  // Resolve stage variant image URL from selected stage variant ref
+  const resolveStageVariantImageUrl = useCallback((): string | undefined => {
+    if (!selectedStageVariant) return undefined;
+    // Parse ref format: @stage_key/variant_key
+    const match = selectedStageVariant.match(/^@([^/]+)\/(.+)$/);
     if (!match) return undefined;
-    const [, stageKey, settingKey] = match;
+    const [, stageKey, variantKey] = match;
     const stage = stages.find((s) => s.key === stageKey);
-    const setting = stage?.settings.find((s) => s.key === settingKey);
-    return setting?.illustrations.find((ill) => ill.is_selected)?.media_url
-      ?? setting?.illustrations[0]?.media_url;
-  }, [selectedStageSetting, stages]);
+    const variant = stage?.variants.find((s) => s.key === variantKey);
+    return variant?.illustrations.find((ill) => ill.is_selected)?.media_url
+      ?? variant?.illustrations[0]?.media_url;
+  }, [selectedStageVariant, stages]);
 
   const handleGenerate = useCallback(() => {
     const trimmedPrompt = prompt.trim();
@@ -192,7 +192,7 @@ export function GenerateImageModal({
       imageId: image.id,
       promptLength: trimmedPrompt.length,
       refCount: generateRefs.images.length,
-      stageSetting: selectedStageSetting,
+      stageVariant: selectedStageVariant,
     });
 
     const referenceImages =
@@ -211,7 +211,7 @@ export function GenerateImageModal({
       childName: image.title || "Image",
       visualDescription: trimmedPrompt,
       artStyleDescription: artStyleDescription ?? '',
-      stageSettingImageUrl: resolveStageSettingImageUrl(),
+      stageVariantImageUrl: resolveStageVariantImageUrl(),
       referenceImages,
     });
 
@@ -223,9 +223,9 @@ export function GenerateImageModal({
     image.id,
     image.title,
     generateRefs,
-    selectedStageSetting,
+    selectedStageVariant,
     artStyleDescription,
-    resolveStageSettingImageUrl,
+    resolveStageVariantImageUrl,
     startGenerateTask,
     onUpdateImage,
   ]);
@@ -477,39 +477,39 @@ export function GenerateImageModal({
             </div>
           </div>
 
-          {/* Stage Setting Section — from store */}
+          {/* Stage Variant Section — from store */}
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">
-              STAGE SETTING
+              STAGE VARIANT
             </Label>
             <div className="flex gap-2 overflow-x-auto pb-2">
-              {stageSettingOptions.map((setting) => (
+              {stageVariantOptions.map((variant) => (
                 <button
-                  key={setting.ref || "none"}
+                  key={variant.ref || "none"}
                   className={`relative flex-shrink-0 w-20 h-20 rounded-md overflow-hidden border-2 hover:border-primary transition-colors ${
-                    selectedStageSetting === setting.ref
+                    selectedStageVariant === variant.ref
                       ? "border-primary"
                       : "border-border"
                   }`}
-                  onClick={() => handleStageSettingSelect(setting.ref)}
+                  onClick={() => handleStageVariantSelect(variant.ref)}
                   disabled={isProcessing}
                 >
-                  {setting.thumbnail_url ? (
+                  {variant.thumbnail_url ? (
                     <img
-                      src={setting.thumbnail_url}
-                      alt={setting.label}
+                      src={variant.thumbnail_url}
+                      alt={variant.label}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-purple-400 to-purple-600" />
                   )}
-                  {selectedStageSetting === setting.ref && (
+                  {selectedStageVariant === variant.ref && (
                     <div className="absolute top-1 right-1 rounded-full bg-purple-600 p-0.5">
                       <Check className="h-3 w-3 text-white" />
                     </div>
                   )}
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-xs py-1 px-1 truncate">
-                    {setting.label}
+                    {variant.label}
                   </div>
                 </button>
               ))}

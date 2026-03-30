@@ -55,39 +55,39 @@ export const createStagesSlice: StateCreator<
       }
     }),
 
-  // --- Nested: Settings ---
+  // --- Nested: Variants ---
 
-  addStageSetting: (key, setting) =>
+  addStageVariant: (key, variant) =>
     set((state) => {
       const stage = state.stages.find((s) => s.key === key);
       if (stage) {
-        log.debug('addStageSetting', 'add', { key, settingKey: setting.key });
-        stage.settings.push(setting);
+        log.debug('addStageVariant', 'add', { key, variantKey: variant.key });
+        stage.variants.push(variant);
         state.sync.isDirty = true;
       }
     }),
 
-  updateStageSetting: (key, settingKey, updates) =>
+  updateStageVariant: (key, variantKey, updates) =>
     set((state) => {
       const stage = state.stages.find((s) => s.key === key);
       if (stage) {
-        const idx = stage.settings.findIndex((st) => st.key === settingKey);
+        const idx = stage.variants.findIndex((st) => st.key === variantKey);
         if (idx !== -1) {
-          log.debug('updateStageSetting', 'update', { key, settingKey, fields: Object.keys(updates) });
-          Object.assign(stage.settings[idx], updates);
+          log.debug('updateStageVariant', 'update', { key, variantKey, fields: Object.keys(updates) });
+          Object.assign(stage.variants[idx], updates);
           state.sync.isDirty = true;
         }
       }
     }),
 
-  deleteStageSetting: (key, settingKey) =>
+  deleteStageVariant: (key, variantKey) =>
     set((state) => {
       const stage = state.stages.find((s) => s.key === key);
       if (stage) {
-        log.debug('deleteStageSetting', 'delete', { key, settingKey });
-        stage.settings = stage.settings.filter((st) => st.key !== settingKey);
+        log.debug('deleteStageVariant', 'delete', { key, variantKey });
+        stage.variants = stage.variants.filter((st) => st.key !== variantKey);
         state.imageTasks = state.imageTasks.filter(
-          (t) => !(t.entityType === 'stage' && t.entityKey === key && t.childKey === settingKey)
+          (t) => !(t.entityType === 'stage' && t.entityKey === key && t.childKey === variantKey)
         );
         state.sync.isDirty = true;
       }

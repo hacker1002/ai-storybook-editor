@@ -1,11 +1,11 @@
 // prop-types.ts - TypeScript interfaces for Prop entities (matches DB schema)
 
-export type ContentTab = 'states' | 'sounds' | 'crops';
+export type ContentTab = 'variants' | 'sounds' | 'crops';
 
 export type PropType = 'narrative' | 'anchor';
 
-/** 0 = base state, 1 = user-created state */
-export type PropStateType = 0 | 1;
+/** 0 = base variant, 1 = user-created variant */
+export type PropVariantType = 0 | 1;
 
 export interface Illustration {
   media_url: string;
@@ -18,10 +18,10 @@ export interface ImageReference {
   media_url: string;
 }
 
-export interface PropState {
+export interface PropVariant {
   name: string;
   key: string;
-  type: PropStateType;
+  type: PropVariantType;
   visual_description: string;
   illustrations: Illustration[];
   image_references: ImageReference[];
@@ -38,7 +38,7 @@ export interface Crop {
   spread_number: number;
   aspect_ratio: string;
   name: string;
-  state: string;
+  variant: string;
   media_url: string;
   geometry: { x: number; y: number; w: number; h: number };
   'z-index': number;
@@ -64,7 +64,7 @@ export interface Prop {
   key: string;
   category_id: string;
   type: PropType;
-  states: PropState[];
+  variants: PropVariant[];
   sounds: PropSound[];
   crop_sheets: CropSheet[];
 }

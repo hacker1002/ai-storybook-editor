@@ -64,7 +64,7 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
 
   const currentType = (item.type ?? "raw") as SpreadItemMediaType;
   const currentName = item.name ?? "";
-  const currentState = item.state ?? "default";
+  const currentState = item.variant ?? "default";
 
   const handleTypeChange = useCallback(
     (newType: string) => {
@@ -75,7 +75,7 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
       onUpdate({
         type: newType as SpreadItemMediaType,
         name: undefined,
-        state: undefined,
+        variant: undefined,
       });
     },
     [currentType, onUpdate]
@@ -91,8 +91,8 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
 
   const handleStateChange = useCallback(
     (newState: string) => {
-      log.debug("ObjectsVideoToolbar", "state change", { state: newState });
-      onUpdate({ state: newState });
+      log.debug("ObjectsVideoToolbar", "state change", { variant: newState });
+      onUpdate({ variant: newState });
     },
     [onUpdate]
   );

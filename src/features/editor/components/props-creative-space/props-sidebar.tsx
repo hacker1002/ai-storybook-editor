@@ -46,7 +46,7 @@ function buildNewProp(name: string, order: number): Prop {
     key: generateUniqueKey(name),
     category_id: "",
     type: "narrative",
-    states: [
+    variants: [
       {
         name: "Base",
         key: "base",

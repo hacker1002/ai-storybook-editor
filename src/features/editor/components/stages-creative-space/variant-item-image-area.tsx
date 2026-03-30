@@ -1,4 +1,4 @@
-// setting-item-image-area.tsx - Image preview + thumbnail gallery + edit popover for a stage setting item
+// variant-item-image-area.tsx - Image preview + thumbnail gallery + edit popover for a stage variant item
 
 import {
   Popover,
@@ -21,10 +21,10 @@ import { ImageZoomPreview } from '@/components/ui/image-zoom-preview';
 import type { Illustration } from '@/types/prop-types';
 import { cn } from '@/utils/utils';
 
-// Logger omitted: pure presentational component; parent SettingItem handles logging
+// Logger omitted: pure presentational component; parent VariantItem handles logging
 
-interface SettingItemImageAreaProps {
-  settingName: string;
+interface VariantItemImageAreaProps {
+  variantName: string;
   illustrations: Illustration[];
   sortedIllustrations: Illustration[];
   selectedIllustrationIndex: number;
@@ -44,8 +44,8 @@ interface SettingItemImageAreaProps {
   editRefHandleFilesSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-export function SettingItemImageArea({
-  settingName,
+export function VariantItemImageArea({
+  variantName,
   illustrations,
   sortedIllustrations,
   selectedIllustrationIndex,
@@ -63,7 +63,7 @@ export function SettingItemImageArea({
   onEditRefRemove,
   editRefInputRef,
   editRefHandleFilesSelected,
-}: SettingItemImageAreaProps) {
+}: VariantItemImageAreaProps) {
   return (
     <div className="flex items-start gap-3">
       {/* Main Preview — fixed 480px wide */}
@@ -73,13 +73,13 @@ export function SettingItemImageArea({
             <img
               key={selectedIllustration.media_url}
               src={selectedIllustration.media_url}
-              alt={settingName}
+              alt={variantName}
               className="w-full h-full rounded-md object-contain"
             />
             {/* Zoom overlay */}
             <ImageZoomPreview
               src={selectedIllustration.media_url}
-              alt={settingName}
+              alt={variantName}
               className="absolute inset-0 h-full w-full rounded-md"
               disabled={isProcessing}
             />

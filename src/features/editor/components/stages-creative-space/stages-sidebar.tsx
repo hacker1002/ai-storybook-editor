@@ -41,7 +41,7 @@ function buildNewStage(name: string, order: number): Stage {
     name,
     key: generateUniqueKey(name),
     location_id: "",
-    settings: [
+    variants: [
       {
         name: "Base",
         key: "base",

@@ -1,4 +1,4 @@
-// stages-content-area.tsx - Tab bar (Settings / Sounds) + panel router + create dialogs
+// stages-content-area.tsx - Tab bar (Variants / Sounds) + panel router + create dialogs
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -13,18 +13,18 @@ import {
 } from '@/components/ui/dialog';
 import { Plus } from 'lucide-react';
 import { useStageByKey, useSnapshotActions } from '@/stores/snapshot-store/selectors';
-import type { StageSetting } from '@/types/stage-types';
-import { SettingsTabPanel } from './settings-tab-panel';
+import type { StageVariant } from '@/types/stage-types';
+import { VariantsTabPanel } from './variants-tab-panel';
 import { StageSoundsTabPanel } from './sounds-tab-panel';
 import { createLogger } from '@/utils/logger';
 import { cn, generateUniqueKey } from '@/utils/utils';
 
 const log = createLogger('Editor', 'StagesContentArea');
 
-export type StageContentTab = 'settings' | 'sounds';
+export type StageContentTab = 'variants' | 'sounds';
 
 const STAGE_CONTENT_TABS: { value: StageContentTab; label: string }[] = [
-  { value: 'settings', label: 'Settings' },
+  { value: 'variants', label: 'Variants' },
   { value: 'sounds', label: 'Sounds' },
 ];
 
@@ -36,12 +36,12 @@ interface StagesContentAreaProps {
 
 export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: StagesContentAreaProps) {
   const stage = useStageByKey(selectedStageKey);
-  const { addStageSetting, addStageSound } = useSnapshotActions();
+  const { addStageVariant, addStageSound } = useSnapshotActions();
 
-  // Create Setting modal
-  const [isCreateSettingModalOpen, setIsCreateSettingModalOpen] = useState(false);
-  const [newSettingName, setNewSettingName] = useState('');
-  const [newSettingKey, setNewSettingKey] = useState('');
+  // Create Variant modal
+  const [isCreateVariantModalOpen, setIsCreateVariantModalOpen] = useState(false);
+  const [newVariantName, setNewVariantName] = useState('');
+  const [newVariantKey, setNewVariantKey] = useState('');
 
   // Create Sound modal
   const [isCreateSoundModalOpen, setIsCreateSoundModalOpen] = useState(false);
@@ -50,10 +50,10 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
 
   const handleAddClick = () => {
     log.debug('handleAddClick', 'add click', { activeTab });
-    if (activeTab === 'settings') {
-      setNewSettingName('');
-      setNewSettingKey('');
-      setIsCreateSettingModalOpen(true);
+    if (activeTab === 'variants') {
+      setNewVariantName('');
+      setNewVariantKey('');
+      setIsCreateVariantModalOpen(true);
     } else if (activeTab === 'sounds') {
       setNewSoundName('');
       setNewSoundKey('');
@@ -61,14 +61,14 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
     }
   };
 
-  const handleCreateSetting = () => {
-    const trimmedName = newSettingName.trim();
-    if (!trimmedName || !newSettingKey) return;
-    log.info('handleCreateSetting', 'create setting', { stageKey: selectedStageKey, name: trimmedName, key: newSettingKey });
+  const handleCreateVariant = () => {
+    const trimmedName = newVariantName.trim();
+    if (!trimmedName || !newVariantKey) return;
+    log.info('handleCreateVariant', 'create variant', { stageKey: selectedStageKey, name: trimmedName, key: newVariantKey });
 
-    const newSetting: StageSetting = {
+    const newVariant: StageVariant = {
       name: trimmedName,
-      key: newSettingKey,
+      key: newVariantKey,
       type: 1,
       visual_description: '',
       temporal: { era: '', season: '', weather: '', time_of_day: '' },
@@ -77,10 +77,10 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
       illustrations: [],
       image_references: [],
     };
-    addStageSetting(selectedStageKey, newSetting);
-    setIsCreateSettingModalOpen(false);
-    setNewSettingName('');
-    setNewSettingKey('');
+    addStageVariant(selectedStageKey, newVariant);
+    setIsCreateVariantModalOpen(false);
+    setNewVariantName('');
+    setNewVariantKey('');
   };
 
   const handleCreateSound = () => {
@@ -130,7 +130,7 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
           size="icon"
           className="h-7 w-7"
           onClick={handleAddClick}
-          title={`Add ${activeTab === 'settings' ? 'setting' : 'sound'}`}
+          title={`Add ${activeTab === 'variants' ? 'variant' : 'sound'}`}
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -138,10 +138,10 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
 
       {/* Tab Panel */}
       <div className="flex-1 min-h-0 overflow-auto" role="tabpanel">
-        {activeTab === 'settings' && stage && (
-          <SettingsTabPanel key={selectedStageKey} stageKey={selectedStageKey} settings={stage.settings} />
+        {activeTab === 'variants' && stage && (
+          <VariantsTabPanel key={selectedStageKey} stageKey={selectedStageKey} variants={stage.variants} />
         )}
-        {activeTab === 'settings' && !stage && (
+        {activeTab === 'variants' && !stage && (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             Stage not found.
           </div>
@@ -156,31 +156,31 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
         )}
       </div>
 
-      {/* Create Setting Dialog */}
-      <Dialog open={isCreateSettingModalOpen} onOpenChange={setIsCreateSettingModalOpen}>
+      {/* Create Variant Dialog */}
+      <Dialog open={isCreateVariantModalOpen} onOpenChange={setIsCreateVariantModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New Setting</DialogTitle>
-            <DialogDescription>Add a new visual setting to this stage.</DialogDescription>
+            <DialogTitle>Create New Variant</DialogTitle>
+            <DialogDescription>Add a new visual variant to this stage.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium mb-1 block">Name</label>
               <Input
-                value={newSettingName}
+                value={newVariantName}
                 onChange={(e) => {
                   const name = e.target.value;
-                  setNewSettingName(name);
-                  setNewSettingKey(name.trim() ? generateUniqueKey(name.trim()) : '');
+                  setNewVariantName(name);
+                  setNewVariantKey(name.trim() ? generateUniqueKey(name.trim()) : '');
                 }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateSetting(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateVariant(); }}
                 placeholder="e.g. Rainy Night"
               />
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Key</label>
               <Input
-                value={newSettingKey}
+                value={newVariantKey}
                 readOnly
                 className="bg-muted text-muted-foreground"
                 placeholder="Auto-generated from name"
@@ -188,12 +188,12 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewSettingName(''); setNewSettingKey(''); setIsCreateSettingModalOpen(false); }}>
+            <Button variant="outline" onClick={() => { setNewVariantName(''); setNewVariantKey(''); setIsCreateVariantModalOpen(false); }}>
               Cancel
             </Button>
             <Button
-              onClick={handleCreateSetting}
-              disabled={!newSettingName.trim()}
+              onClick={handleCreateVariant}
+              disabled={!newVariantName.trim()}
             >
               Create
             </Button>

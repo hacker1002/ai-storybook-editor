@@ -124,12 +124,12 @@ export async function callGeneratePropBase(
   );
 }
 
-// --- Prop State Types ---
+// --- Prop Variant Types ---
 
-export interface GeneratePropStateParams {
+export interface GeneratePropVariantParams {
   propKey: string;
-  stateKey: string;
-  stateVisualDescription: string;
+  variantKey: string;
+  variantVisualDescription: string;
   basePropImageUrl: string;
   artStyleDescription: string;
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
@@ -137,25 +137,25 @@ export interface GeneratePropStateParams {
   imageSize?: string;
 }
 
-export interface GeneratePropStateResult {
+export interface GeneratePropVariantResult {
   success: boolean;
   data?: { imageUrl: string; storagePath: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
 
-// --- Prop State API ---
+// --- Prop Variant API ---
 
-export async function callGeneratePropState(
-  params: GeneratePropStateParams
-): Promise<GeneratePropStateResult> {
-  log.info('callGeneratePropState', 'start', {
+export async function callGeneratePropVariant(
+  params: GeneratePropVariantParams
+): Promise<GeneratePropVariantResult> {
+  log.info('callGeneratePropVariant', 'start', {
     propKey: params.propKey,
-    stateKey: params.stateKey,
+    variantKey: params.variantKey,
     refCount: params.additionalReferenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GeneratePropStateResult>(
-    'illustration-generate-prop-state',
+  return callEdgeFunction<GeneratePropVariantResult>(
+    'illustration-generate-prop-variant',
     params
   );
 }
@@ -200,15 +200,15 @@ export async function callGenerateStageBase(
   );
 }
 
-// --- Stage Setting Types ---
+// --- Stage Variant Types ---
 
-export interface GenerateStageSettingParams {
+export interface GenerateStageVariantParams {
   stageKey: string;
-  settingKey: string;
-  settingVisualDescription: string;
-  settingTemporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
-  settingSensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
-  settingEmotional?: { mood?: string };
+  variantKey: string;
+  variantVisualDescription: string;
+  variantTemporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
+  variantSensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
+  variantEmotional?: { mood?: string };
   baseStageImageUrl: string;
   artStyleDescription: string;
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
@@ -216,25 +216,25 @@ export interface GenerateStageSettingParams {
   imageSize?: string;
 }
 
-export interface GenerateStageSettingResult {
+export interface GenerateStageVariantResult {
   success: boolean;
   data?: { imageUrl: string; storagePath: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
 
-// --- Stage Setting API ---
+// --- Stage Variant API ---
 
-export async function callGenerateStageSetting(
-  params: GenerateStageSettingParams
-): Promise<GenerateStageSettingResult> {
-  log.info('callGenerateStageSetting', 'start', {
+export async function callGenerateStageVariant(
+  params: GenerateStageVariantParams
+): Promise<GenerateStageVariantResult> {
+  log.info('callGenerateStageVariant', 'start', {
     stageKey: params.stageKey,
-    settingKey: params.settingKey,
+    variantKey: params.variantKey,
     refCount: params.additionalReferenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GenerateStageSettingResult>(
-    'illustration-generate-stage-setting',
+  return callEdgeFunction<GenerateStageVariantResult>(
+    'illustration-generate-stage-variant',
     params
   );
 }
@@ -244,7 +244,7 @@ export async function callGenerateStageSetting(
 export interface GenerateSceneParams {
   visualDescription: string;
   artStyleDescription: string;
-  stageSettingImageUrl?: string;
+  stageVariantImageUrl?: string;
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
@@ -263,7 +263,7 @@ export async function callGenerateScene(
   params: GenerateSceneParams
 ): Promise<GenerateSceneResult> {
   log.info('callGenerateScene', 'start', {
-    hasStageSettingImage: !!params.stageSettingImageUrl,
+    hasStageVariantImage: !!params.stageVariantImageUrl,
     refCount: params.referenceImages?.length ?? 0,
   });
   return callEdgeFunction<GenerateSceneResult>(

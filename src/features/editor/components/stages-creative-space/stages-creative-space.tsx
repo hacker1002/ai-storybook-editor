@@ -15,7 +15,7 @@ export function StagesCreativeSpace() {
   const stageKeys = useStageKeys();
   const { fetchLocations } = useLocationActions();
   const [userSelectedStageKey, setUserSelectedStageKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<StageContentTab>('settings');
+  const [activeTab, setActiveTab] = useState<StageContentTab>('variants');
 
   // Fetch locations on mount
   useEffect(() => {

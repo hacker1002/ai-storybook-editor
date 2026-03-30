@@ -56,40 +56,40 @@ export const createPropsSlice: StateCreator<
       }
     }),
 
-  // --- Nested: States ---
+  // --- Nested: Variants ---
 
-  addPropState: (propKey, propState) =>
+  addPropVariant: (propKey, propVariant) =>
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
-        log.debug('addPropState', 'add', { propKey, stateKey: propState.key });
-        prop.states.push(propState);
+        log.debug('addPropVariant', 'add', { propKey, variantKey: propVariant.key });
+        prop.variants.push(propVariant);
         state.sync.isDirty = true;
       }
     }),
 
-  updatePropState: (propKey, stateKey, updates) =>
+  updatePropVariant: (propKey, variantKey, updates) =>
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
-        const idx = prop.states.findIndex((s) => s.key === stateKey);
+        const idx = prop.variants.findIndex((s) => s.key === variantKey);
         if (idx !== -1) {
-          log.debug('updatePropState', 'update', { propKey, stateKey, fields: Object.keys(updates) });
-          Object.assign(prop.states[idx], updates);
+          log.debug('updatePropVariant', 'update', { propKey, variantKey, fields: Object.keys(updates) });
+          Object.assign(prop.variants[idx], updates);
           state.sync.isDirty = true;
         }
       }
     }),
 
-  deletePropState: (propKey, stateKey) =>
+  deletePropVariant: (propKey, variantKey) =>
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
-        log.debug('deletePropState', 'delete', { propKey, stateKey });
-        prop.states = prop.states.filter((s) => s.key !== stateKey);
-        // Clean up any pending image tasks for this state
+        log.debug('deletePropVariant', 'delete', { propKey, variantKey });
+        prop.variants = prop.variants.filter((s) => s.key !== variantKey);
+        // Clean up any pending image tasks for this variant
         state.imageTasks = state.imageTasks.filter(
-          (t) => !(t.entityType === 'prop' && t.entityKey === propKey && t.childKey === stateKey)
+          (t) => !(t.entityType === 'prop' && t.entityKey === propKey && t.childKey === variantKey)
         );
         state.sync.isDirty = true;
       }

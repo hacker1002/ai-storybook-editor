@@ -1,6 +1,6 @@
 // image-task-slice.ts - Manages ephemeral background image generation/editing tasks
 // Tasks live in store memory only (not persisted to DB), decoupled from component lifecycle.
-// Supports multiple entity types: props→states, characters→variants, stages→settings.
+// Supports multiple entity types: props→variants, characters→variants, stages→variants.
 
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, ImageTaskSlice, ImageTaskEntityType, StartGenerateTaskParams } from '../types';
@@ -9,9 +9,9 @@ import {
   callGenerateCharacterBase,
   callGenerateCharacterVariant,
   callGeneratePropBase,
-  callGeneratePropState,
+  callGeneratePropVariant,
   callGenerateStageBase,
-  callGenerateStageSetting,
+  callGenerateStageVariant,
   callGenerateScene,
 } from '@/apis/illustration-api';
 import { callEditObjectImage } from '@/apis/retouch-api';
@@ -32,7 +32,7 @@ function findIllustrations(
   switch (entityType) {
     case 'prop': {
       const prop = state.props.find((p) => p.key === entityKey);
-      return prop?.states.find((s) => s.key === childKey)?.illustrations;
+      return prop?.variants.find((s) => s.key === childKey)?.illustrations;
     }
     case 'character': {
       const character = state.characters.find((c) => c.key === entityKey);
@@ -40,7 +40,7 @@ function findIllustrations(
     }
     case 'stage': {
       const stage = state.stages.find((s) => s.key === entityKey);
-      return stage?.settings.find((st) => st.key === childKey)?.illustrations;
+      return stage?.variants.find((st) => st.key === childKey)?.illustrations;
     }
     case 'retouch_image': {
       const spread = state.retouch.spreads.find((s) => s.id === entityKey);
@@ -107,10 +107,10 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
           referenceImages: params.referenceImages,
         });
       }
-      return callGeneratePropState({
+      return callGeneratePropVariant({
         propKey: params.entityKey,
-        stateKey: params.stateKey,
-        stateVisualDescription: params.stateVisualDescription,
+        variantKey: params.variantKey,
+        variantVisualDescription: params.variantVisualDescription,
         basePropImageUrl: params.basePropImageUrl,
         artStyleDescription: params.artStyleDescription,
         additionalReferenceImages: params.additionalReferenceImages,
@@ -127,13 +127,13 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
           referenceImages: params.referenceImages,
         });
       }
-      return callGenerateStageSetting({
+      return callGenerateStageVariant({
         stageKey: params.entityKey,
-        settingKey: params.settingKey,
-        settingVisualDescription: params.settingVisualDescription,
-        settingTemporal: params.settingTemporal,
-        settingSensory: params.settingSensory,
-        settingEmotional: params.settingEmotional,
+        variantKey: params.variantKey,
+        variantVisualDescription: params.variantVisualDescription,
+        variantTemporal: params.variantTemporal,
+        variantSensory: params.variantSensory,
+        variantEmotional: params.variantEmotional,
         baseStageImageUrl: params.baseStageImageUrl,
         artStyleDescription: params.artStyleDescription,
         additionalReferenceImages: params.additionalReferenceImages,
@@ -143,7 +143,7 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
       return callGenerateScene({
         visualDescription: params.visualDescription,
         artStyleDescription: params.artStyleDescription,
-        stageSettingImageUrl: params.stageSettingImageUrl,
+        stageVariantImageUrl: params.stageVariantImageUrl,
         referenceImages: params.referenceImages,
       });
 

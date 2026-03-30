@@ -8,7 +8,7 @@ export const PROP_TYPE_OPTIONS = [
 ] as const;
 
 export const CONTENT_TABS = [
-  { value: 'states' as ContentTab, label: 'States' },
+  { value: 'variants' as ContentTab, label: 'Variants' },
   { value: 'sounds' as ContentTab, label: 'Sounds' },
   { value: 'crops' as ContentTab, label: 'Crops' },
 ] as const;
@@ -21,4 +21,4 @@ export const CATEGORY_FILTER_OPTIONS = [
   { value: 4, label: 'Item' },
 ] as const;
 
-export const DEFAULT_CONTENT_TAB: ContentTab = 'states';
+export const DEFAULT_CONTENT_TAB: ContentTab = 'variants';

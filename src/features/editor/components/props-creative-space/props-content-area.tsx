@@ -1,4 +1,4 @@
-// props-content-area.tsx - Tab bar (States / Sounds / Crops) + panel router + create dialogs
+// props-content-area.tsx - Tab bar (Variants / Sounds / Crops) + panel router + create dialogs
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import { Plus } from 'lucide-react';
 import { usePropByKey, useSnapshotActions } from '@/stores/snapshot-store';
 import type { ContentTab } from '@/types/prop-types';
 import { CONTENT_TABS } from '@/constants/prop-constants';
-import { StatesTabPanel } from './states-tab-panel';
+import { VariantsTabPanel } from './variants-tab-panel';
 import { SoundsTabPanel } from './sounds-tab-panel';
 import { CropsTabPanelMock } from './crops-tab-panel-mock';
 import { createLogger } from '@/utils/logger';
@@ -31,12 +31,12 @@ interface PropsContentAreaProps {
 
 export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: PropsContentAreaProps) {
   const prop = usePropByKey(selectedPropKey);
-  const { addPropState, addPropSound } = useSnapshotActions();
+  const { addPropVariant, addPropSound } = useSnapshotActions();
 
-  // Create State modal
-  const [isCreateStateModalOpen, setIsCreateStateModalOpen] = useState(false);
-  const [newStateName, setNewStateName] = useState('');
-  const [newStateKey, setNewStateKey] = useState('');
+  // Create Variant modal
+  const [isCreateVariantModalOpen, setIsCreateVariantModalOpen] = useState(false);
+  const [newVariantName, setNewVariantName] = useState('');
+  const [newVariantKey, setNewVariantKey] = useState('');
 
   // Create Sound modal
   const [isCreateSoundModalOpen, setIsCreateSoundModalOpen] = useState(false);
@@ -45,10 +45,10 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
 
   const handleAddClick = () => {
     log.debug('handleAddClick', 'add click', { activeTab });
-    if (activeTab === 'states') {
-      setNewStateName('');
-      setNewStateKey('');
-      setIsCreateStateModalOpen(true);
+    if (activeTab === 'variants') {
+      setNewVariantName('');
+      setNewVariantKey('');
+      setIsCreateVariantModalOpen(true);
     } else if (activeTab === 'sounds') {
       setNewSoundName('');
       setNewSoundKey('');
@@ -56,20 +56,20 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
     }
   };
 
-  const handleCreateState = () => {
-    if (!newStateName.trim() || !newStateKey) return;
-    log.info('handleCreateState', 'create state', { propKey: selectedPropKey, name: newStateName, key: newStateKey });
-    addPropState(selectedPropKey, {
-      name: newStateName.trim(),
-      key: newStateKey,
+  const handleCreateVariant = () => {
+    if (!newVariantName.trim() || !newVariantKey) return;
+    log.info('handleCreateVariant', 'create variant', { propKey: selectedPropKey, name: newVariantName, key: newVariantKey });
+    addPropVariant(selectedPropKey, {
+      name: newVariantName.trim(),
+      key: newVariantKey,
       type: 1,
       visual_description: '',
       illustrations: [],
       image_references: [],
     });
-    setIsCreateStateModalOpen(false);
-    setNewStateName('');
-    setNewStateKey('');
+    setIsCreateVariantModalOpen(false);
+    setNewVariantName('');
+    setNewVariantKey('');
   };
 
   const handleCreateSound = () => {
@@ -119,7 +119,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
           size="icon"
           className="h-7 w-7"
           onClick={handleAddClick}
-          title={`Add ${activeTab === 'states' ? 'state' : activeTab === 'sounds' ? 'sound' : 'item'}`}
+          title={`Add ${activeTab === 'variants' ? 'variant' : activeTab === 'sounds' ? 'sound' : 'item'}`}
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -127,10 +127,10 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
 
       {/* Tab Panel */}
       <div className="flex-1 min-h-0 overflow-auto" role="tabpanel">
-        {activeTab === 'states' && prop && (
-          <StatesTabPanel key={selectedPropKey} propKey={selectedPropKey} states={prop.states} />
+        {activeTab === 'variants' && prop && (
+          <VariantsTabPanel key={selectedPropKey} propKey={selectedPropKey} variants={prop.variants} />
         )}
-        {activeTab === 'states' && !prop && (
+        {activeTab === 'variants' && !prop && (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             Prop not found.
           </div>
@@ -146,31 +146,31 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
         {activeTab === 'crops' && <CropsTabPanelMock />}
       </div>
 
-      {/* Create State Dialog */}
-      <Dialog open={isCreateStateModalOpen} onOpenChange={setIsCreateStateModalOpen}>
+      {/* Create Variant Dialog */}
+      <Dialog open={isCreateVariantModalOpen} onOpenChange={setIsCreateVariantModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New State</DialogTitle>
-            <DialogDescription>Add a new visual state to this prop.</DialogDescription>
+            <DialogTitle>Create New Variant</DialogTitle>
+            <DialogDescription>Add a new visual variant to this prop.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium mb-1 block">Name</label>
               <Input
-                value={newStateName}
+                value={newVariantName}
                 onChange={(e) => {
                   const name = e.target.value;
-                  setNewStateName(name);
-                  setNewStateKey(name.trim() ? generateUniqueKey(name.trim()) : '');
+                  setNewVariantName(name);
+                  setNewVariantKey(name.trim() ? generateUniqueKey(name.trim()) : '');
                 }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateState(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateVariant(); }}
                 placeholder="e.g. Glowing"
               />
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Key</label>
               <Input
-                value={newStateKey}
+                value={newVariantKey}
                 readOnly
                 className="bg-muted text-muted-foreground"
                 placeholder="Auto-generated from name"
@@ -178,12 +178,12 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewStateName(''); setNewStateKey(''); setIsCreateStateModalOpen(false); }}>
+            <Button variant="outline" onClick={() => { setNewVariantName(''); setNewVariantKey(''); setIsCreateVariantModalOpen(false); }}>
               Cancel
             </Button>
             <Button
-              onClick={handleCreateState}
-              disabled={!newStateName.trim()}
+              onClick={handleCreateVariant}
+              disabled={!newVariantName.trim()}
             >
               Create
             </Button>

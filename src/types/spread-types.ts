@@ -83,7 +83,7 @@ export interface SpreadVideo {
   editor_visible: boolean;
   original_image_id?: string;
   name: string;
-  state?: string;
+  variant?: string;
   type: SpreadItemMediaType;
   media_url?: string;
 }
@@ -97,7 +97,7 @@ export interface SpreadAudio {
   player_visible: boolean;
   editor_visible: boolean;
   name: string;
-  state?: string;
+  variant?: string;
   type: SpreadItemMediaType;
   media_url?: string;
 }
@@ -155,7 +155,7 @@ export interface SpreadImage {
   id: string;
   title?: string;
   geometry: Geometry;
-  setting?: string;
+  stage_variant?: string;
   art_note?: string;
   visual_description?: string;
   image_references?: Array<{ title: string; media_url: string }>;

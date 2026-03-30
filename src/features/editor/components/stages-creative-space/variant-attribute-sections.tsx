@@ -1,4 +1,4 @@
-// setting-attribute-sections.tsx - Collapsible temporal/sensory/emotional attribute sections for a stage setting
+// variant-attribute-sections.tsx - Collapsible temporal/sensory/emotional attribute sections for a stage variant
 
 import { useEffect, useState } from 'react';
 import {
@@ -14,13 +14,13 @@ import { useEras, useEraActions } from '@/stores/era-store';
 import type { StageTemporal, StageSensory, StageEmotional } from '@/types/stage-types';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Editor', 'SettingAttributeSections');
+const log = createLogger('Editor', 'VariantAttributeSections');
 
 type SectionName = 'temporal' | 'sensory' | 'emotional';
 
-interface SettingAttributeSectionsProps {
+interface VariantAttributeSectionsProps {
   stageKey: string;
-  settingKey: string;
+  variantKey: string;
   temporal: StageTemporal;
   sensory: StageSensory;
   emotional: StageEmotional;
@@ -34,14 +34,14 @@ const LIGHTING_OPTIONS = ['Natural', 'Dim', 'Bright', 'Candlelight', 'Moonlight'
 const COLOR_PALETTE_OPTIONS = ['Warm earth tones', 'Cool blues', 'Vibrant', 'Pastel', 'Monochrome', 'Muted', 'Neon'];
 const MOOD_OPTIONS = ['Happy', 'Sad', 'Excited', 'Calm', 'Anxious', 'Romantic'];
 
-export function SettingAttributeSections({
+export function VariantAttributeSections({
   stageKey,
-  settingKey,
+  variantKey,
   temporal,
   sensory,
   emotional,
-}: SettingAttributeSectionsProps) {
-  const { updateStageSetting } = useSnapshotActions();
+}: VariantAttributeSectionsProps) {
+  const { updateStageVariant } = useSnapshotActions();
   const eras = useEras();
   const { fetchEras } = useEraActions();
   const [expandedSections, setExpandedSections] = useState<Set<SectionName>>(new Set());
@@ -60,28 +60,28 @@ export function SettingAttributeSections({
   const handleTemporalSelectChange = (field: keyof StageTemporal, value: string) => {
     // Empty option sentinel value
     const finalValue = value === '__empty__' ? '' : value;
-    log.debug('handleTemporalSelectChange', 'update', { stageKey, settingKey, field, value: finalValue });
-    updateStageSetting(stageKey, settingKey, { temporal: { ...temporal, [field]: finalValue } });
+    log.debug('handleTemporalSelectChange', 'update', { stageKey, variantKey, field, value: finalValue });
+    updateStageVariant(stageKey, variantKey, { temporal: { ...temporal, [field]: finalValue } });
   };
 
   // Update sensory field
   const handleSensoryBlur = (field: keyof StageSensory, value: string) => {
     if (value === sensory[field]) return;
-    log.debug('handleSensoryBlur', 'update', { stageKey, settingKey, field, value });
-    updateStageSetting(stageKey, settingKey, { sensory: { ...sensory, [field]: value } });
+    log.debug('handleSensoryBlur', 'update', { stageKey, variantKey, field, value });
+    updateStageVariant(stageKey, variantKey, { sensory: { ...sensory, [field]: value } });
   };
 
   const handleSensorySelectChange = (field: keyof StageSensory, value: string) => {
     const finalValue = value === '__empty__' ? '' : value;
-    log.debug('handleSensorySelectChange', 'update', { stageKey, settingKey, field, value: finalValue });
-    updateStageSetting(stageKey, settingKey, { sensory: { ...sensory, [field]: finalValue } });
+    log.debug('handleSensorySelectChange', 'update', { stageKey, variantKey, field, value: finalValue });
+    updateStageVariant(stageKey, variantKey, { sensory: { ...sensory, [field]: finalValue } });
   };
 
   // Update emotional field
   const handleEmotionalSelectChange = (field: keyof StageEmotional, value: string) => {
     const finalValue = value === '__empty__' ? '' : value;
-    log.debug('handleEmotionalSelectChange', 'update', { stageKey, settingKey, field, value: finalValue });
-    updateStageSetting(stageKey, settingKey, { emotional: { ...emotional, [field]: finalValue } });
+    log.debug('handleEmotionalSelectChange', 'update', { stageKey, variantKey, field, value: finalValue });
+    updateStageVariant(stageKey, variantKey, { emotional: { ...emotional, [field]: finalValue } });
   };
 
   return (

@@ -1,4 +1,4 @@
-// state-item.tsx - Accordion item for a single prop state with image gallery + prompt section
+// variant-item.tsx - Accordion item for a single prop variant with image gallery + prompt section
 
 import { useRef, useState } from "react";
 import {
@@ -46,47 +46,47 @@ import { useSnapshotActions, usePropByKey, useImageTasksForChild } from "@/store
 import { useAssetCategories } from "@/stores/asset-category-store";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
 import { useArtStyleDescription } from '@/stores/art-style-store';
-import type { PropState } from "@/types/prop-types";
+import type { PropVariant } from "@/types/prop-types";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import { createLogger } from "@/utils/logger";
 import { cn } from "@/utils/utils";
 import { toast } from "sonner";
 
-const log = createLogger("Editor", "StateItem");
+const log = createLogger("Editor", "VariantItem");
 
-interface StateItemProps {
+interface VariantItemProps {
   propKey: string;
-  stateData: PropState;
+  variantData: PropVariant;
   isExpanded: boolean;
   onToggle: () => void;
 }
 
-export function StateItem({
+export function VariantItem({
   propKey,
-  stateData,
+  variantData,
   isExpanded,
   onToggle,
-}: StateItemProps) {
-  const { deletePropState, updatePropState, startGenerateTask, startEditTask } = useSnapshotActions();
+}: VariantItemProps) {
+  const { deletePropVariant, updatePropVariant, startGenerateTask, startEditTask } = useSnapshotActions();
   const prop = usePropByKey(propKey);
   const categories = useAssetCategories();
   const artStyleDescription = useArtStyleDescription();
-  const { isProcessing } = useImageTasksForChild(propKey, stateData.key);
+  const { isProcessing } = useImageTasksForChild(propKey, variantData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState(stateData.name);
+  const [renameValue, setRenameValue] = useState(variantData.name);
 
   // Determine initial selected index: prefer is_selected=true, else 0
   const initSelectedIdx = () => {
-    const idx = stateData.illustrations.findIndex((ill) => ill.is_selected);
+    const idx = variantData.illustrations.findIndex((ill) => ill.is_selected);
     return idx >= 0 ? idx : 0;
   };
 
   const [selectedIllustrationIndex, setSelectedIllustrationIndex] =
     useState<number>(initSelectedIdx);
   const [promptText, setPromptText] = useState<string>(
-    stateData.visual_description ?? ""
+    variantData.visual_description ?? ""
   );
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState("");
@@ -95,25 +95,25 @@ export function StateItem({
   const generateRefs = useReferenceImagePicker();
   const editRefs = useReferenceImagePicker();
 
-  // type 0 = base state, cannot be deleted or have images uploaded
-  const isBase = stateData.type === 0;
+  // type 0 = base variant, cannot be deleted or have images uploaded
+  const isBase = variantData.type === 0;
 
-  const sortedIllustrations = [...stateData.illustrations].sort(
+  const sortedIllustrations = [...variantData.illustrations].sort(
     (a, b) =>
       new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
   );
 
   const selectedIllustration =
-    stateData.illustrations[selectedIllustrationIndex];
+    variantData.illustrations[selectedIllustrationIndex];
 
   const handleBlurSave = () => {
     const trimmed = promptText.trim();
-    if (trimmed === (stateData.visual_description ?? "")) return;
+    if (trimmed === (variantData.visual_description ?? "")) return;
     log.debug("handleBlurSave", "save visual_description", {
       propKey,
-      stateKey: stateData.key,
+      variantKey: variantData.key,
     });
-    updatePropState(propKey, stateData.key, { visual_description: trimmed });
+    updatePropVariant(propKey, variantData.key, { visual_description: trimmed });
   };
 
   const handleDownload = () => {
@@ -130,7 +130,7 @@ export function StateItem({
 
     log.info("handleEditImage", "start", {
       propKey,
-      stateKey: stateData.key,
+      variantKey: variantData.key,
       prompt: trimmed,
       refCount: editRefs.images.length,
     });
@@ -148,8 +148,8 @@ export function StateItem({
       entityType: 'prop',
       entityKey: propKey,
       entityName: prop?.name ?? propKey,
-      childKey: stateData.key,
-      childName: stateData.name,
+      childKey: variantData.key,
+      childName: variantData.name,
       prompt: trimmed,
       imageUrl: selectedIllustration.media_url,
       referenceImages,
@@ -161,7 +161,7 @@ export function StateItem({
 
   // Resolve base state image URL for non-base states
   const basePropImageUrl = !isBase
-    ? prop?.states.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
+    ? prop?.variants.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
     : undefined;
 
   // Non-base states cannot generate without base illustration
@@ -171,9 +171,9 @@ export function StateItem({
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
 
-    log.info("handleGenerate", "start", { propKey, stateKey: stateData.key, isBase });
+    log.info("handleGenerate", "start", { propKey, variantKey: variantData.key, isBase });
 
-    updatePropState(propKey, stateData.key, {
+    updatePropVariant(propKey, variantData.key, {
       visual_description: trimmedPrompt,
     });
 
@@ -194,8 +194,8 @@ export function StateItem({
         isBase: true,
         entityKey: propKey,
         entityName: prop?.name ?? propKey,
-        childKey: stateData.key,
-        childName: stateData.name,
+        childKey: variantData.key,
+        childName: variantData.name,
         propKey,
         propName: prop?.name ?? propKey,
         propType: (prop?.type as 'narrative' | 'anchor') ?? 'narrative',
@@ -212,10 +212,10 @@ export function StateItem({
         isBase: false,
         entityKey: propKey,
         entityName: prop?.name ?? propKey,
-        childKey: stateData.key,
-        childName: stateData.name,
-        stateKey: stateData.key,
-        stateVisualDescription: trimmedPrompt,
+        childKey: variantData.key,
+        childName: variantData.name,
+        variantKey: variantData.key,
+        variantVisualDescription: trimmedPrompt,
         basePropImageUrl,
         artStyleDescription: artStyleDescription ?? '',
         additionalReferenceImages: referenceImages,
@@ -237,7 +237,7 @@ export function StateItem({
 
     log.info("handleUpload", "start upload", {
       propKey,
-      stateKey: stateData.key,
+      variantKey: variantData.key,
       fileName: file.name,
       size: file.size,
     });
@@ -245,14 +245,14 @@ export function StateItem({
     try {
       const result = await uploadImageToStorage(
         file,
-        `props/${propKey}/${stateData.key}`
+        `props/${propKey}/${variantData.key}`
       );
       log.info("handleUpload", "upload complete", {
         publicUrl: result.publicUrl,
       });
 
       // Deselect all existing illustrations, prepend new one as selected
-      const updatedIllustrations = stateData.illustrations.map((ill) => ({
+      const updatedIllustrations = variantData.illustrations.map((ill) => ({
         ...ill,
         is_selected: false,
       }));
@@ -262,7 +262,7 @@ export function StateItem({
         is_selected: true,
       });
 
-      updatePropState(propKey, stateData.key, {
+      updatePropVariant(propKey, variantData.key, {
         illustrations: updatedIllustrations,
       });
       setSelectedIllustrationIndex(0);
@@ -276,12 +276,12 @@ export function StateItem({
     }
   };
 
-  const handleDeleteState = () => {
-    log.info("handleDeleteState", "delete state", {
+  const handleDeleteVariant = () => {
+    log.info("handleDeleteVariant", "delete state", {
       propKey,
-      stateKey: stateData.key,
+      variantKey: variantData.key,
     });
-    deletePropState(propKey, stateData.key);
+    deletePropVariant(propKey, variantData.key);
   };
 
   return (
@@ -310,9 +310,9 @@ export function StateItem({
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        if (renameValue.trim() && renameValue.trim() !== stateData.name) {
-                          log.info('handleRename', 'renamed', { stateKey: stateData.key, newName: renameValue.trim() });
-                          updatePropState(propKey, stateData.key, { name: renameValue.trim() });
+                        if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                          log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
+                          updatePropVariant(propKey, variantData.key, { name: renameValue.trim() });
                         }
                         setIsRenaming(false);
                       }
@@ -325,9 +325,9 @@ export function StateItem({
                     size="icon"
                     className="h-6 w-6 shrink-0"
                     onClick={() => {
-                      if (renameValue.trim() && renameValue.trim() !== stateData.name) {
-                        log.info('handleRename', 'renamed', { stateKey: stateData.key, newName: renameValue.trim() });
-                        updatePropState(propKey, stateData.key, { name: renameValue.trim() });
+                      if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                        log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
+                        updatePropVariant(propKey, variantData.key, { name: renameValue.trim() });
                       }
                       setIsRenaming(false);
                     }}
@@ -349,7 +349,7 @@ export function StateItem({
                 <>
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium text-sm truncate">
-                      {stateData.name}
+                      {variantData.name}
                     </span>
                     <Button
                       variant="ghost"
@@ -357,17 +357,17 @@ export function StateItem({
                       className="h-5 w-5 shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setRenameValue(stateData.name);
+                        setRenameValue(variantData.name);
                         setIsRenaming(true);
-                        log.debug('handleStartRename', 'start', { stateKey: stateData.key });
+                        log.debug('handleStartRename', 'start', { variantKey: variantData.key });
                       }}
-                      title="Rename state"
+                      title="Rename variant"
                     >
                       <Pencil className="h-3 w-3 text-muted-foreground" />
                     </Button>
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    /{stateData.key}
+                    /{variantData.key}
                   </span>
                 </>
               )}
@@ -418,24 +418,24 @@ export function StateItem({
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
                   onClick={(e) => e.stopPropagation()}
-                  title="Delete state"
+                  title="Delete variant"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete State</AlertDialogTitle>
+                  <AlertDialogTitle>Delete Variant</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete the state &ldquo;
-                    {stateData.name}&rdquo;? This action cannot be undone.
+                    Are you sure you want to delete the variant &ldquo;
+                    {variantData.name}&rdquo;? This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={handleDeleteState}
+                    onClick={handleDeleteVariant}
                   >
                     Delete
                   </AlertDialogAction>
@@ -457,13 +457,13 @@ export function StateItem({
                   <img
                     key={selectedIllustration.media_url}
                     src={selectedIllustration.media_url}
-                    alt={stateData.name}
+                    alt={variantData.name}
                     className="w-full h-full rounded-md object-contain"
                   />
                   {/* Zoom overlay — click to open fullscreen zoom dialog */}
                   <ImageZoomPreview
                     src={selectedIllustration.media_url}
-                    alt={stateData.name}
+                    alt={variantData.name}
                     className="absolute inset-0 h-full w-full rounded-md"
                     disabled={isProcessing}
                   />
@@ -584,7 +584,7 @@ export function StateItem({
               <div className="grid grid-cols-2 xl:grid-cols-3 gap-2 max-h-[360px] overflow-y-auto p-0.5">
                 {sortedIllustrations.length > 0 ? (
                   sortedIllustrations.map((ill) => {
-                    const originalIdx = stateData.illustrations.indexOf(ill);
+                    const originalIdx = variantData.illustrations.indexOf(ill);
                     return (
                       <button
                         key={ill.media_url}
@@ -705,7 +705,7 @@ export function StateItem({
               )}
             </Button>
             {!isBase && !basePropImageUrl && (
-              <span className="text-xs text-muted-foreground">Generate base state first</span>
+              <span className="text-xs text-muted-foreground">Generate base variant first</span>
             )}
           </div>
         </div>

@@ -1,4 +1,4 @@
-// setting-item.tsx - Accordion item for a single stage setting with image gallery + attribute sections + generate/edit
+// variant-item.tsx - Accordion item for a single stage variant with image gallery + attribute sections + generate/edit
 
 import { useMemo, useRef, useState } from 'react';
 import { useEras } from '@/stores/era-store';
@@ -38,85 +38,85 @@ import { useSnapshotActions, useStageByKey, useImageTasksForChild } from '@/stor
 import { useLocations } from '@/stores/location-store';
 import { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
 import { useArtStyleDescription } from '@/stores/art-style-store';
-import type { StageSetting } from '@/types/stage-types';
+import type { StageVariant } from '@/types/stage-types';
 import { uploadImageToStorage } from '@/apis/storage-api';
 import { createLogger } from '@/utils/logger';
 import { cn } from '@/utils/utils';
 import { toast } from 'sonner';
-import { SettingAttributeSections } from './setting-attribute-sections';
-import { SettingItemImageArea } from './setting-item-image-area';
+import { VariantAttributeSections } from './variant-attribute-sections';
+import { VariantItemImageArea } from './variant-item-image-area';
 
-const log = createLogger('Editor', 'SettingItem');
+const log = createLogger('Editor', 'VariantItem');
 
-interface SettingItemProps {
+interface VariantItemProps {
   stageKey: string;
-  settingData: StageSetting;
+  variantData: StageVariant;
   isExpanded: boolean;
   onToggle: () => void;
 }
 
-export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: SettingItemProps) {
-  const { deleteStageSetting, updateStageSetting, startGenerateTask, startEditTask } = useSnapshotActions();
+export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: VariantItemProps) {
+  const { deleteStageVariant, updateStageVariant, startGenerateTask, startEditTask } = useSnapshotActions();
   const stage = useStageByKey(stageKey);
   const locations = useLocations();
   const eras = useEras();
   const eraByName = useMemo(() => new Map(eras.map((e) => [e.name, e])), [eras]);
   const artStyleDescription = useArtStyleDescription();
-  const { isProcessing } = useImageTasksForChild(stageKey, settingData.key);
+  const { isProcessing } = useImageTasksForChild(stageKey, variantData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState(settingData.name);
+  const [renameValue, setRenameValue] = useState(variantData.name);
 
   // Determine initial selected index: prefer is_selected=true, else 0
   const initSelectedIdx = () => {
-    const idx = settingData.illustrations.findIndex((ill) => ill.is_selected);
+    const idx = variantData.illustrations.findIndex((ill) => ill.is_selected);
     return idx >= 0 ? idx : 0;
   };
 
   const [selectedIllustrationIndex, setSelectedIllustrationIndex] = useState<number>(initSelectedIdx);
-  const [promptText, setPromptText] = useState<string>(settingData.visual_description ?? '');
+  const [promptText, setPromptText] = useState<string>(variantData.visual_description ?? '');
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState('');
 
   const generateRefs = useReferenceImagePicker();
   const editRefs = useReferenceImagePicker();
 
-  // type 0 = base setting, cannot be deleted
-  const isBase = settingData.type === 0;
+  // type 0 = base variant, cannot be deleted
+  const isBase = variantData.type === 0;
 
-  const sortedIllustrations = [...settingData.illustrations].sort(
+  const sortedIllustrations = [...variantData.illustrations].sort(
     (a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime()
   );
 
-  const selectedIllustration = settingData.illustrations[selectedIllustrationIndex];
+  const selectedIllustration = variantData.illustrations[selectedIllustrationIndex];
 
   const handleBlurSave = () => {
     const trimmed = promptText.trim();
-    if (trimmed === (settingData.visual_description ?? '')) return;
-    log.debug('handleBlurSave', 'save visual_description', { stageKey, settingKey: settingData.key });
-    updateStageSetting(stageKey, settingData.key, { visual_description: trimmed });
+    if (trimmed === (variantData.visual_description ?? '')) return;
+    log.debug('handleBlurSave', 'save visual_description', { stageKey, variantKey: variantData.key });
+    updateStageVariant(stageKey, variantData.key, { visual_description: trimmed });
   };
 
-  // Resolve base setting image URL for non-base settings
+  // Resolve base variant image URL for non-base variants
   const baseStageImageUrl = !isBase
-    ? stage?.settings.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
+    ? stage?.variants.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
     : undefined;
 
-  // Non-base settings cannot generate without base illustration
+  // Non-base variants cannot generate without base illustration
   const isGenerateDisabled = isProcessing || !promptText.trim() || (!isBase && !baseStageImageUrl);
 
   // Resolve era description from era store
-  const resolvedEraDescription = settingData.temporal.era
-    ? eraByName.get(settingData.temporal.era)?.description ?? undefined
+  const resolvedEraDescription = variantData.temporal.era
+    ? eraByName.get(variantData.temporal.era)?.description ?? undefined
     : undefined;
 
   const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
 
-    log.info('handleGenerate', 'start', { stageKey, settingKey: settingData.key, isBase });
-    updateStageSetting(stageKey, settingData.key, { visual_description: trimmedPrompt });
+    log.info('handleGenerate', 'start', { stageKey, variantKey: variantData.key, isBase });
+    updateStageVariant(stageKey, variantData.key, { visual_description: trimmedPrompt });
 
     const referenceImages =
       generateRefs.images.length > 0
@@ -131,17 +131,17 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
         isBase: true,
         entityKey: stageKey,
         entityName: stage?.name ?? stageKey,
-        childKey: settingData.key,
-        childName: settingData.name,
+        childKey: variantData.key,
+        childName: variantData.name,
         stageKey,
         stageName: stage?.name ?? stageKey,
         locationDescription: location?.description ?? location?.name ?? '',
         eraDescription: resolvedEraDescription,
         baseSetting: {
           visual_description: trimmedPrompt,
-          temporal: settingData.temporal,
-          sensory: settingData.sensory,
-          emotional: settingData.emotional,
+          temporal: variantData.temporal,
+          sensory: variantData.sensory,
+          emotional: variantData.emotional,
         },
         artStyleDescription: artStyleDescription ?? '',
         referenceImages,
@@ -153,13 +153,13 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
         isBase: false,
         entityKey: stageKey,
         entityName: stage?.name ?? stageKey,
-        childKey: settingData.key,
-        childName: settingData.name,
-        settingKey: settingData.key,
-        settingVisualDescription: trimmedPrompt,
-        settingTemporal: settingData.temporal,
-        settingSensory: settingData.sensory,
-        settingEmotional: settingData.emotional,
+        childKey: variantData.key,
+        childName: variantData.name,
+        variantKey: variantData.key,
+        variantVisualDescription: trimmedPrompt,
+        variantTemporal: variantData.temporal,
+        variantSensory: variantData.sensory,
+        variantEmotional: variantData.emotional,
         eraDescription: resolvedEraDescription,
         baseStageImageUrl,
         artStyleDescription: artStyleDescription ?? '',
@@ -176,7 +176,7 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
 
     log.info('handleEditImage', 'start', {
       stageKey,
-      settingKey: settingData.key,
+      variantKey: variantData.key,
       prompt: trimmed,
       refCount: editRefs.images.length,
     });
@@ -191,8 +191,8 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
       entityType: 'stage',
       entityKey: stageKey,
       entityName: stage?.name ?? stageKey,
-      childKey: settingData.key,
-      childName: settingData.name,
+      childKey: variantData.key,
+      childName: variantData.name,
       prompt: trimmed,
       imageUrl: selectedIllustration.media_url,
       referenceImages,
@@ -209,16 +209,16 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
 
     log.info('handleUpload', 'start upload', {
       stageKey,
-      settingKey: settingData.key,
+      variantKey: variantData.key,
       fileName: file.name,
       size: file.size,
     });
     setIsUploading(true);
     try {
-      const result = await uploadImageToStorage(file, `stages/${stageKey}/${settingData.key}`);
+      const result = await uploadImageToStorage(file, `stages/${stageKey}/${variantData.key}`);
       log.info('handleUpload', 'upload complete', { publicUrl: result.publicUrl });
 
-      const updatedIllustrations = settingData.illustrations.map((ill) => ({
+      const updatedIllustrations = variantData.illustrations.map((ill) => ({
         ...ill,
         is_selected: false,
       }));
@@ -228,7 +228,7 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
         is_selected: true,
       });
 
-      updateStageSetting(stageKey, settingData.key, { illustrations: updatedIllustrations });
+      updateStageVariant(stageKey, variantData.key, { illustrations: updatedIllustrations });
       setSelectedIllustrationIndex(0);
       toast.success('Image uploaded successfully');
     } catch (err) {
@@ -240,14 +240,14 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
     }
   };
 
-  const handleDeleteSetting = () => {
-    log.info('handleDeleteSetting', 'delete setting', { stageKey, settingKey: settingData.key });
-    deleteStageSetting(stageKey, settingData.key);
+  const handleDeleteVariant = () => {
+    log.info('handleDeleteVariant', 'delete variant', { stageKey, variantKey: variantData.key });
+    deleteStageVariant(stageKey, variantData.key);
   };
 
   return (
     <Collapsible open={isExpanded} onOpenChange={onToggle}>
-      {/* Setting header row */}
+      {/* Variant header row */}
       <div
         className={cn(
           'flex items-center gap-2 px-2 py-2 border-b border-border/50',
@@ -271,9 +271,9 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        if (renameValue.trim() && renameValue.trim() !== settingData.name) {
-                          log.info('handleRename', 'renamed', { settingKey: settingData.key, newName: renameValue.trim() });
-                          updateStageSetting(stageKey, settingData.key, { name: renameValue.trim() });
+                        if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                          log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
+                          updateStageVariant(stageKey, variantData.key, { name: renameValue.trim() });
                         }
                         setIsRenaming(false);
                       }
@@ -286,9 +286,9 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
                     size="icon"
                     className="h-6 w-6 shrink-0"
                     onClick={() => {
-                      if (renameValue.trim() && renameValue.trim() !== settingData.name) {
-                        log.info('handleRename', 'renamed', { settingKey: settingData.key, newName: renameValue.trim() });
-                        updateStageSetting(stageKey, settingData.key, { name: renameValue.trim() });
+                      if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                        log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
+                        updateStageVariant(stageKey, variantData.key, { name: renameValue.trim() });
                       }
                       setIsRenaming(false);
                     }}
@@ -309,23 +309,23 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
               ) : (
                 <>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-sm truncate">{settingData.name}</span>
+                    <span className="font-medium text-sm truncate">{variantData.name}</span>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-5 w-5 shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setRenameValue(settingData.name);
+                        setRenameValue(variantData.name);
                         setIsRenaming(true);
-                        log.debug('handleStartRename', 'start', { settingKey: settingData.key });
+                        log.debug('handleStartRename', 'start', { variantKey: variantData.key });
                       }}
-                      title="Rename setting"
+                      title="Rename variant"
                     >
                       <Pencil className="h-3 w-3 text-muted-foreground" />
                     </Button>
                   </div>
-                  <span className="text-xs text-muted-foreground">/{settingData.key}</span>
+                  <span className="text-xs text-muted-foreground">/{variantData.key}</span>
                 </>
               )}
             </div>
@@ -363,23 +363,23 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
                   onClick={(e) => e.stopPropagation()}
-                  title="Delete setting"
+                  title="Delete variant"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Setting</AlertDialogTitle>
+                  <AlertDialogTitle>Delete Variant</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete the setting &ldquo;{settingData.name}&rdquo;? This action cannot be undone.
+                    Are you sure you want to delete the variant &ldquo;{variantData.name}&rdquo;? This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={handleDeleteSetting}
+                    onClick={handleDeleteVariant}
                   >
                     Delete
                   </AlertDialogAction>
@@ -393,9 +393,9 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
       <CollapsibleContent>
         <div className="space-y-4 px-3 pt-3 pb-3">
           {/* Image preview + thumbnail gallery */}
-          <SettingItemImageArea
-            settingName={settingData.name}
-            illustrations={settingData.illustrations}
+          <VariantItemImageArea
+            variantName={variantData.name}
+            illustrations={variantData.illustrations}
             sortedIllustrations={sortedIllustrations}
             selectedIllustrationIndex={selectedIllustrationIndex}
             selectedIllustration={selectedIllustration}
@@ -489,17 +489,17 @@ export function SettingItem({ stageKey, settingData, isExpanded, onToggle }: Set
               )}
             </Button>
             {!isBase && !baseStageImageUrl && (
-              <span className="text-xs text-muted-foreground">Generate base setting first</span>
+              <span className="text-xs text-muted-foreground">Generate base variant first</span>
             )}
           </div>
 
           {/* Attribute Sections — Temporal / Sensory / Emotional */}
-          <SettingAttributeSections
+          <VariantAttributeSections
             stageKey={stageKey}
-            settingKey={settingData.key}
-            temporal={settingData.temporal}
-            sensory={settingData.sensory}
-            emotional={settingData.emotional}
+            variantKey={variantData.key}
+            temporal={variantData.temporal}
+            sensory={variantData.sensory}
+            emotional={variantData.emotional}
           />
         </div>
       </CollapsibleContent>
