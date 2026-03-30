@@ -9,7 +9,7 @@ export type PipelineStep = 'manuscript' | 'illustration' | 'retouch';
 
 // Creative space types per pipeline step
 export type ManuscriptSpace = 'doc' | 'dummy' | 'sketch';
-export type IllustrationSpace = 'character' | 'prop' | 'stage' | 'spread';
+export type IllustrationSpace = 'character' | 'prop' | 'stage' | 'spread' | 'branch';
 export type RetouchSpace = 'object' | 'animation' | 'remix';
 export type DefaultSpace = 'history' | 'flag' | 'share' | 'collaborator' | 'setting';
 export type CreativeSpaceType = ManuscriptSpace | IllustrationSpace | RetouchSpace | DefaultSpace;

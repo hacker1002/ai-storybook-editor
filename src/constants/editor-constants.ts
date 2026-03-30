@@ -31,6 +31,7 @@ export const ILLUSTRATION_ICONS: IconRailItemConfig[] = [
   { id: 'prop', icon: 'Box', label: 'Props' },
   { id: 'stage', icon: 'Mountain', label: 'Stages' },
   { id: 'spread', icon: 'BookOpen', label: 'Spreads' },
+  { id: 'branch', icon: 'FolderOpen', label: 'Branches' },
 ];
 
 // Retouch step icons

@@ -178,6 +178,7 @@ export function EditorPage() {
         return <CharactersCreativeSpace />;
       case 'spread':
         return <SpreadsCreativeSpace />;
+      case 'branch':
       case 'sketch':
       case 'remix':
       case 'history':

@@ -7,8 +7,8 @@ import type { RetouchData } from '@/types/retouch-types';
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask, SpreadSettingSlice } from './types';
-import type { SpreadSetting, Section, SpreadNavigation, Branch, BranchSetting } from '@/types/spread-setting-types';
+import type { ImageTask } from './types';
+import type { Section, SpreadNavigation, Branch, BranchSetting } from '@/types/spread-setting-types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -30,7 +30,7 @@ const EMPTY_STAGES: Stage[] = [];
 const EMPTY_IMAGE_TASKS: ImageTask[] = [];
 const EMPTY_SECTIONS: Section[] = [];
 const EMPTY_BRANCHES: Branch[] = [];
-const EMPTY_NAV_SPREADS: SpreadNavigation[] = [];
+
 
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
