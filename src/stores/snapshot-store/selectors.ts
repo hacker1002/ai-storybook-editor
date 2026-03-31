@@ -170,20 +170,20 @@ export const useSections = (): Section[] =>
 export const useSectionIds = (): string[] =>
   useSnapshotStore(useShallow((s) => (s.spreadSetting.sections ?? EMPTY_SECTIONS).map((sec) => sec.id)));
 export const useSectionById = (sectionId: string): Section | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.sections.find((sec) => sec.id === sectionId));
+  useSnapshotStore((s) => s.spreadSetting.sections?.find((sec) => sec.id === sectionId));
 export const useSpreadNavigation = (spreadId: string): SpreadNavigation | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId));
+  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId));
 export const useSpreadHasBranching = (spreadId: string): boolean =>
   useSnapshotStore((s) => {
-    const nav = s.spreadSetting.spreads.find((sp) => sp.id === spreadId);
+    const nav = s.spreadSetting.spreads?.find((sp) => sp.id === spreadId);
     return !!nav?.branch_setting && nav.branch_setting.branches.length > 0;
   });
 export const useSpreadNextId = (spreadId: string): string | null | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId)?.next_spread_id);
+  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId)?.next_spread_id);
 export const useBranchSetting = (spreadId: string): BranchSetting | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId)?.branch_setting);
+  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId)?.branch_setting);
 export const useBranches = (spreadId: string): Branch[] =>
-  useSnapshotStore((s) => s.spreadSetting.spreads.find((sp) => sp.id === spreadId)?.branch_setting?.branches ?? EMPTY_BRANCHES);
+  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId)?.branch_setting?.branches ?? EMPTY_BRANCHES);
 
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>

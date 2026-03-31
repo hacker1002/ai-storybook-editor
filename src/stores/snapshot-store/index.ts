@@ -75,7 +75,8 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.props = data.props ?? [];
               state.characters = data.characters ?? [];
               state.stages = data.stages ?? [];
-              state.spreadSetting = data.spread_setting ?? { spreads: [], sections: [] };
+              const ss = data.spread_setting;
+              state.spreadSetting = { spreads: ss?.spreads ?? [], sections: ss?.sections ?? [] };
             } else {
               state.meta.bookId = bookId;
               state.docs = DEFAULT_DOCS;
@@ -167,7 +168,8 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.props = data.props ?? [];
             state.characters = data.characters ?? [];
             state.stages = data.stages ?? [];
-            state.spreadSetting = data.spreadSetting ?? { spreads: [], sections: [] };
+            const ss = data.spreadSetting;
+            state.spreadSetting = { spreads: ss?.spreads ?? [], sections: ss?.sections ?? [] };
             if (data.meta) {
               Object.assign(state.meta, data.meta);
             }
