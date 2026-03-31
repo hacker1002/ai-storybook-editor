@@ -12,6 +12,42 @@ export function findIllustrationSpread(state: SnapshotStore, spreadId: string) {
   return state.illustration.spreads.find((s) => s.id === spreadId);
 }
 
+// --- Shared cascade helpers ---
+
+/** Remove branches pointing to given section IDs from all spreads. Auto-promote is_default if needed. */
+export function removeBranchesForSections(state: SnapshotStore, sectionIds: string[]) {
+  if (sectionIds.length === 0) return;
+  const idSet = new Set(sectionIds);
+  for (const spread of state.illustration.spreads) {
+    if (!spread.branch_setting) continue;
+    const removedDefault = spread.branch_setting.branches.some(
+      (b) => idSet.has(b.section_id) && b.is_default
+    );
+    spread.branch_setting.branches = spread.branch_setting.branches.filter(
+      (b) => !idSet.has(b.section_id)
+    );
+    // Auto-promote first branch to default if the default was removed
+    if (removedDefault && spread.branch_setting.branches.length > 0 && !spread.branch_setting.branches.some((b) => b.is_default)) {
+      spread.branch_setting.branches[0].is_default = true;
+    }
+  }
+}
+
+/** Validate section ranges: swap start/end if start index > end index after reorder */
+export function validateSectionRanges(state: SnapshotStore) {
+  const spreads = state.illustration.spreads;
+  for (const section of state.illustration.sections) {
+    const startIdx = spreads.findIndex((s) => s.id === section.start_spread_id);
+    const endIdx = spreads.findIndex((s) => s.id === section.end_spread_id);
+    if (startIdx !== -1 && endIdx !== -1 && startIdx > endIdx) {
+      log.debug('validateSectionRanges', 'swap inverted range', { sectionId: section.id });
+      const tmp = section.start_spread_id;
+      section.start_spread_id = section.end_spread_id;
+      section.end_spread_id = tmp;
+    }
+  }
+}
+
 // --- Section CRUD ---
 
 export function addSectionAction(state: SnapshotStore, section: Section) {
@@ -33,18 +69,8 @@ export function deleteSectionAction(state: SnapshotStore, sectionId: string) {
   log.debug('deleteSection', 'delete', { sectionId });
   state.illustration.sections = state.illustration.sections.filter((s) => s.id !== sectionId);
 
-  // Cascade: remove branches referencing this section from all spreads
-  for (const spread of state.illustration.spreads) {
-    if (spread.branch_setting) {
-      spread.branch_setting.branches = spread.branch_setting.branches.filter(
-        (b) => b.section_id !== sectionId
-      );
-      // Cleanup: delete branch_setting if no branches remain
-      if (spread.branch_setting.branches.length === 0) {
-        delete spread.branch_setting;
-      }
-    }
-  }
+  // Cascade: remove branches referencing this section, keep branch_setting intact (user deletes manually)
+  removeBranchesForSections(state, [sectionId]);
 
   state.sync.isDirty = true;
 }
@@ -120,10 +146,11 @@ export function deleteBranchAction(state: SnapshotStore, spreadId: string, branc
   if (spread) {
     const bs = spread.branch_setting;
     if (bs && branchIndex >= 0 && branchIndex < bs.branches.length) {
+      const wasDefault = bs.branches[branchIndex].is_default;
       log.debug('deleteBranch', 'delete', { spreadId, branchIndex });
       bs.branches.splice(branchIndex, 1);
-      if (bs.branches.length === 0) {
-        delete spread.branch_setting;
+      if (wasDefault && bs.branches.length > 0 && !bs.branches.some((b) => b.is_default)) {
+        bs.branches[0].is_default = true;
       }
       state.sync.isDirty = true;
     }

@@ -5,6 +5,8 @@ import {
   addSectionAction,
   updateSectionAction,
   deleteSectionAction,
+  removeBranchesForSections,
+  validateSectionRanges,
   setNextSpreadIdAction,
   clearNextSpreadIdAction,
   setBranchSettingAction,
@@ -56,13 +58,58 @@ export const createIllustrationSlice: StateCreator<
 
   deleteIllustrationSpread: (spreadId) =>
     set((state) => {
-      log.debug('deleteIllustrationSpread', 'delete', { spreadId });
-      state.illustration.spreads = state.illustration.spreads.filter((s) => s.id !== spreadId);
+      const deletedIndex = state.illustration.spreads.findIndex((s) => s.id === spreadId);
+      if (deletedIndex === -1) return;
 
-      // Cascade: remove sections referencing this spread
-      state.illustration.sections = state.illustration.sections.filter(
-        (sec) => sec.start_spread_id !== spreadId && sec.end_spread_id !== spreadId
-      );
+      log.debug('deleteIllustrationSpread', 'delete', { spreadId });
+      state.illustration.spreads.splice(deletedIndex, 1);
+
+      const spreads = state.illustration.spreads;
+      const deletedSectionIds: string[] = [];
+
+      // Adjust section boundaries or delete sections that can't be salvaged
+      state.illustration.sections = state.illustration.sections.filter((sec) => {
+        const isStart = sec.start_spread_id === spreadId;
+        const isEnd = sec.end_spread_id === spreadId;
+
+        if (isStart && isEnd) {
+          // Single-spread section — must delete
+          log.debug('deleteIllustrationSpread', 'cascade delete single-spread section', { sectionId: sec.id });
+          deletedSectionIds.push(sec.id);
+          return false;
+        }
+
+        if (isStart) {
+          // Adjust start to next adjacent spread (now at deletedIndex after splice)
+          const nextSpread = spreads[deletedIndex];
+          if (nextSpread) {
+            log.debug('deleteIllustrationSpread', 'adjust section start', { sectionId: sec.id, newStart: nextSpread.id });
+            sec.start_spread_id = nextSpread.id;
+            return true;
+          }
+          log.debug('deleteIllustrationSpread', 'cascade delete section (no adjacent)', { sectionId: sec.id });
+          deletedSectionIds.push(sec.id);
+          return false;
+        }
+
+        if (isEnd) {
+          // Adjust end to previous adjacent spread
+          const prevSpread = spreads[deletedIndex - 1];
+          if (prevSpread) {
+            log.debug('deleteIllustrationSpread', 'adjust section end', { sectionId: sec.id, newEnd: prevSpread.id });
+            sec.end_spread_id = prevSpread.id;
+            return true;
+          }
+          log.debug('deleteIllustrationSpread', 'cascade delete section (no adjacent)', { sectionId: sec.id });
+          deletedSectionIds.push(sec.id);
+          return false;
+        }
+
+        return true;
+      });
+
+      // Cascade: remove branches pointing to deleted sections
+      removeBranchesForSections(state, deletedSectionIds);
 
       // Cascade: clear next_spread_id refs pointing to deleted spread
       for (const spread of state.illustration.spreads) {
@@ -81,6 +128,10 @@ export const createIllustrationSlice: StateCreator<
         log.debug('reorderIllustrationSpreads', 'reorder', { fromIndex, toIndex });
         const [removed] = spreads.splice(fromIndex, 1);
         spreads.splice(toIndex, 0, removed);
+
+        // Validate section ranges — swap start/end if reorder inverted them
+        validateSectionRanges(state);
+
         state.sync.isDirty = true;
       }
     }),
