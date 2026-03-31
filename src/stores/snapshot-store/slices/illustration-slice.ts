@@ -1,6 +1,23 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, IllustrationSlice } from '../types';
 import { createLogger } from '@/utils/logger';
+import {
+  addSectionAction,
+  updateSectionAction,
+  deleteSectionAction,
+  setNextSpreadIdAction,
+  clearNextSpreadIdAction,
+  setBranchSettingAction,
+  clearBranchSettingAction,
+  addBranchAction,
+  updateBranchAction,
+  deleteBranchAction,
+  reorderBranchesAction,
+  updateBranchSettingLocaleAction,
+  deleteBranchSettingLocaleAction,
+  updateBranchLocaleAction,
+  deleteBranchLocaleAction,
+} from './illustration-branching-helpers';
 
 const log = createLogger('Store', 'IllustrationSlice');
 
@@ -10,11 +27,11 @@ export const createIllustrationSlice: StateCreator<
   [],
   IllustrationSlice
 > = (set) => ({
-  illustration: { spreads: [] },
+  illustration: { spreads: [], sections: [] },
 
   setIllustration: (data) =>
     set((state) => {
-      log.debug('setIllustration', 'replace all', { spreadCount: data.spreads.length });
+      log.debug('setIllustration', 'replace all', { spreadCount: data.spreads.length, sectionCount: data.sections.length });
       state.illustration = data;
     }),
 
@@ -41,6 +58,19 @@ export const createIllustrationSlice: StateCreator<
     set((state) => {
       log.debug('deleteIllustrationSpread', 'delete', { spreadId });
       state.illustration.spreads = state.illustration.spreads.filter((s) => s.id !== spreadId);
+
+      // Cascade: remove sections referencing this spread
+      state.illustration.sections = state.illustration.sections.filter(
+        (sec) => sec.start_spread_id !== spreadId && sec.end_spread_id !== spreadId
+      );
+
+      // Cascade: clear next_spread_id refs pointing to deleted spread
+      for (const spread of state.illustration.spreads) {
+        if (spread.next_spread_id === spreadId) {
+          delete spread.next_spread_id;
+        }
+      }
+
       state.sync.isDirty = true;
     }),
 
@@ -166,7 +196,37 @@ export const createIllustrationSlice: StateCreator<
   clearIllustration: () =>
     set((state) => {
       log.debug('clearIllustration', 'clear');
-      state.illustration = { spreads: [] };
+      state.illustration = { spreads: [], sections: [] };
       state.sync.isDirty = true;
     }),
+
+  // --- Section CRUD (delegated to branching helpers) ---
+
+  addSection: (section) => set((state) => addSectionAction(state, section)),
+  updateSection: (sectionId, updates) => set((state) => updateSectionAction(state, sectionId, updates)),
+  deleteSection: (sectionId) => set((state) => deleteSectionAction(state, sectionId)),
+
+  // --- Navigation ---
+
+  setNextSpreadId: (spreadId, nextSpreadId) => set((state) => setNextSpreadIdAction(state, spreadId, nextSpreadId)),
+  clearNextSpreadId: (spreadId) => set((state) => clearNextSpreadIdAction(state, spreadId)),
+
+  // --- Branch Setting ---
+
+  setBranchSetting: (spreadId, setting) => set((state) => setBranchSettingAction(state, spreadId, setting)),
+  clearBranchSetting: (spreadId) => set((state) => clearBranchSettingAction(state, spreadId)),
+
+  // --- Branch CRUD ---
+
+  addBranch: (spreadId, branch) => set((state) => addBranchAction(state, spreadId, branch)),
+  updateBranch: (spreadId, branchIndex, updates) => set((state) => updateBranchAction(state, spreadId, branchIndex, updates)),
+  deleteBranch: (spreadId, branchIndex) => set((state) => deleteBranchAction(state, spreadId, branchIndex)),
+  reorderBranches: (spreadId, fromIndex, toIndex) => set((state) => reorderBranchesAction(state, spreadId, fromIndex, toIndex)),
+
+  // --- Localization ---
+
+  updateBranchSettingLocale: (spreadId, languageKey, content) => set((state) => updateBranchSettingLocaleAction(state, spreadId, languageKey, content)),
+  deleteBranchSettingLocale: (spreadId, languageKey) => set((state) => deleteBranchSettingLocaleAction(state, spreadId, languageKey)),
+  updateBranchLocale: (spreadId, branchIndex, languageKey, content) => set((state) => updateBranchLocaleAction(state, spreadId, branchIndex, languageKey, content)),
+  deleteBranchLocale: (spreadId, branchIndex, languageKey) => set((state) => deleteBranchLocaleAction(state, spreadId, branchIndex, languageKey)),
 });

@@ -1,9 +1,9 @@
 // branch-types.ts - Shared types for BranchCreativeSpace feature
 
-import type { Section, SpreadNavigation, BranchSetting, Branch, BranchLocalizedContent } from '@/types/spread-setting-types';
+import type { Section, BranchSetting, Branch, BranchLocalizedContent } from '@/types/illustration-types';
 import type { BaseSpread } from '@/types/spread-types';
 
-export type { Section, SpreadNavigation, BranchSetting, Branch, BranchLocalizedContent, BaseSpread };
+export type { Section, BranchSetting, Branch, BranchLocalizedContent, BaseSpread };
 
 // Add section flow state
 export interface AddSectionState {
@@ -17,6 +17,7 @@ export interface DraftBranch {
   sectionId: string;
   imageUrl?: string;
   title: string;
+  isDefault: boolean;
 }
 
 // Sidebar list item — interleaved spreads and section headers

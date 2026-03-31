@@ -2,13 +2,12 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
-import type { IllustrationData } from '@/types/illustration-types';
+import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/illustration-types';
 import type { RetouchData } from '@/types/retouch-types';
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
 import type { ImageTask } from './types';
-import type { Section, SpreadNavigation, Branch, BranchSetting } from '@/types/spread-setting-types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -164,26 +163,26 @@ export const useCompletedImageTasks = (): ImageTask[] =>
     useShallow((s) => (s.imageTasks ?? EMPTY_IMAGE_TASKS).filter((t) => t.status === 'completed' || t.status === 'error'))
   );
 
-// Spread setting selectors
+// Spread setting selectors (now query from illustration)
 export const useSections = (): Section[] =>
-  useSnapshotStore((s) => s.spreadSetting.sections ?? EMPTY_SECTIONS);
+  useSnapshotStore((s) => s.illustration.sections ?? EMPTY_SECTIONS);
 export const useSectionIds = (): string[] =>
-  useSnapshotStore(useShallow((s) => (s.spreadSetting.sections ?? EMPTY_SECTIONS).map((sec) => sec.id)));
+  useSnapshotStore(useShallow((s) => (s.illustration.sections ?? EMPTY_SECTIONS).map((sec) => sec.id)));
 export const useSectionById = (sectionId: string): Section | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.sections?.find((sec) => sec.id === sectionId));
-export const useSpreadNavigation = (spreadId: string): SpreadNavigation | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId));
+  useSnapshotStore((s) => s.illustration.sections?.find((sec) => sec.id === sectionId));
+export const useSpreadNavigation = (spreadId: string): BaseSpread | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads?.find((sp) => sp.id === spreadId));
 export const useSpreadHasBranching = (spreadId: string): boolean =>
   useSnapshotStore((s) => {
-    const nav = s.spreadSetting.spreads?.find((sp) => sp.id === spreadId);
-    return !!nav?.branch_setting && nav.branch_setting.branches.length > 0;
+    const spread = s.illustration.spreads?.find((sp) => sp.id === spreadId);
+    return !!spread?.branch_setting && spread.branch_setting.branches.length > 0;
   });
 export const useSpreadNextId = (spreadId: string): string | null | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId)?.next_spread_id);
+  useSnapshotStore((s) => s.illustration.spreads?.find((sp) => sp.id === spreadId)?.next_spread_id);
 export const useBranchSetting = (spreadId: string): BranchSetting | undefined =>
-  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId)?.branch_setting);
+  useSnapshotStore((s) => s.illustration.spreads?.find((sp) => sp.id === spreadId)?.branch_setting);
 export const useBranches = (spreadId: string): Branch[] =>
-  useSnapshotStore((s) => s.spreadSetting.spreads?.find((sp) => sp.id === spreadId)?.branch_setting?.branches ?? EMPTY_BRANCHES);
+  useSnapshotStore((s) => s.illustration.spreads?.find((sp) => sp.id === spreadId)?.branch_setting?.branches ?? EMPTY_BRANCHES);
 
 // Actions-only hook (no re-render on state changes)
 export const useSnapshotActions = () =>
@@ -221,6 +220,22 @@ export const useSnapshotActions = () =>
       updateIllustrationShape: s.updateIllustrationShape,
       deleteIllustrationShape: s.deleteIllustrationShape,
       clearIllustration: s.clearIllustration,
+      // Section / Branch / Navigation (absorbed from SpreadSettingSlice)
+      addSection: s.addSection,
+      updateSection: s.updateSection,
+      deleteSection: s.deleteSection,
+      setNextSpreadId: s.setNextSpreadId,
+      clearNextSpreadId: s.clearNextSpreadId,
+      setBranchSetting: s.setBranchSetting,
+      clearBranchSetting: s.clearBranchSetting,
+      addBranch: s.addBranch,
+      updateBranch: s.updateBranch,
+      deleteBranch: s.deleteBranch,
+      reorderBranches: s.reorderBranches,
+      updateBranchSettingLocale: s.updateBranchSettingLocale,
+      deleteBranchSettingLocale: s.deleteBranchSettingLocale,
+      updateBranchLocale: s.updateBranchLocale,
+      deleteBranchLocale: s.deleteBranchLocale,
       // Retouch
       setRetouch: s.setRetouch,
       addRetouchSpread: s.addRetouchSpread,
@@ -293,26 +308,6 @@ export const useSnapshotActions = () =>
       addStageSound: s.addStageSound,
       updateStageSound: s.updateStageSound,
       deleteStageSound: s.deleteStageSound,
-      // Spread Setting
-      setSpreadSetting: s.setSpreadSetting,
-      resetSpreadSetting: s.resetSpreadSetting,
-      addSection: s.addSection,
-      updateSection: s.updateSection,
-      deleteSection: s.deleteSection,
-      setSpreadNavigation: s.setSpreadNavigation,
-      removeSpreadNavigation: s.removeSpreadNavigation,
-      setNextSpreadId: s.setNextSpreadId,
-      clearNextSpreadId: s.clearNextSpreadId,
-      setBranchSetting: s.setBranchSetting,
-      clearBranchSetting: s.clearBranchSetting,
-      addBranch: s.addBranch,
-      updateBranch: s.updateBranch,
-      deleteBranch: s.deleteBranch,
-      reorderBranches: s.reorderBranches,
-      updateBranchSettingLocale: s.updateBranchSettingLocale,
-      deleteBranchSettingLocale: s.deleteBranchSettingLocale,
-      updateBranchLocale: s.updateBranchLocale,
-      deleteBranchLocale: s.deleteBranchLocale,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,

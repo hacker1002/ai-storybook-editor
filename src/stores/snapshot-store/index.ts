@@ -13,7 +13,6 @@ import { createPropsSlice } from './slices/props-slice';
 import { createCharactersSlice } from './slices/characters-slice';
 import { createStagesSlice } from './slices/stages-slice';
 import { createImageTaskSlice } from './slices/image-task-slice';
-import { createSpreadSettingSlice } from './slices/spread-setting-slice';
 
 const log = createLogger('Store', 'SnapshotStore');
 
@@ -30,7 +29,6 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createCharactersSlice(...args),
         ...createStagesSlice(...args),
         ...createImageTaskSlice(...args),
-        ...createSpreadSettingSlice(...args),
 
         // Fetch state
         fetchLoading: false,
@@ -70,23 +68,24 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.tag = data.tag;
               state.docs = data.docs?.length ? data.docs : DEFAULT_DOCS;
               state.dummies = data.dummies ?? [];
-              state.illustration = data.illustration ?? { spreads: [] };
+              const ill = data.illustration;
+              state.illustration = {
+                spreads: ill?.spreads ?? [],
+                sections: ill?.sections ?? [],
+              };
               state.retouch = data.retouch ?? { spreads: [] };
               state.props = data.props ?? [];
               state.characters = data.characters ?? [];
               state.stages = data.stages ?? [];
-              const ss = data.spread_setting;
-              state.spreadSetting = { spreads: ss?.spreads ?? [], sections: ss?.sections ?? [] };
             } else {
               state.meta.bookId = bookId;
               state.docs = DEFAULT_DOCS;
               state.dummies = [];
-              state.illustration = { spreads: [] };
+              state.illustration = { spreads: [], sections: [] };
               state.retouch = { spreads: [] };
               state.props = [];
               state.characters = [];
               state.stages = [];
-              state.spreadSetting = { spreads: [], sections: [] };
             }
             state.fetchLoading = false;
             state.sync.isDirty = false;
@@ -95,11 +94,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, dummies, illustration, retouch, props, characters, stages, spreadSetting, sync } = get();
+          const { meta, docs, dummies, illustration, retouch, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
 
-          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, retouchSpreadCount: retouch.spreads.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length, sectionCount: spreadSetting.sections.length });
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, sectionCount: illustration.sections.length, retouchSpreadCount: retouch.spreads.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -117,7 +116,6 @@ export const useSnapshotStore = create<SnapshotStore>()(
             props,
             characters,
             stages,
-            spread_setting: spreadSetting,
             version,
             save_type: 1, // manual save
           };
@@ -126,7 +124,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           if (meta.id) {
             result = await supabase
               .from('snapshots')
-              .update({ docs, dummies, illustration, retouch, props, characters, stages, spread_setting: spreadSetting, version })
+              .update({ docs, dummies, illustration, retouch, props, characters, stages, version })
               .eq('id', meta.id)
               .select()
               .single();
@@ -163,13 +161,15 @@ export const useSnapshotStore = create<SnapshotStore>()(
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
             state.dummies = data.dummies ?? [];
-            state.illustration = data.illustration ?? { spreads: [] };
+            const ill = data.illustration;
+            state.illustration = {
+              spreads: ill?.spreads ?? [],
+              sections: ill?.sections ?? [],
+            };
             state.retouch = data.retouch ?? { spreads: [] };
             state.props = data.props ?? [];
             state.characters = data.characters ?? [];
             state.stages = data.stages ?? [];
-            const ss = data.spreadSetting;
-            state.spreadSetting = { spreads: ss?.spreads ?? [], sections: ss?.sections ?? [] };
             if (data.meta) {
               Object.assign(state.meta, data.meta);
             }
@@ -183,12 +183,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
           set((state) => {
             state.docs = DEFAULT_DOCS;
             state.dummies = [];
-            state.illustration = { spreads: [] };
+            state.illustration = { spreads: [], sections: [] };
             state.retouch = { spreads: [] };
             state.props = [];
             state.characters = [];
             state.stages = [];
-            state.spreadSetting = { spreads: [], sections: [] };
             state.imageTasks = [];
             state.meta = { id: null, bookId: null, version: null, tag: null };
             state.sync = { isDirty: false, lastSavedAt: null, isSaving: false, error: null };

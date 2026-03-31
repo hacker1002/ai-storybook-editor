@@ -1,6 +1,8 @@
 // spread-types.ts - Shared domain types used across canvas and playable spread views
 // Centralized from components/shared/types.ts
 
+import type { BranchSetting } from './illustration-types';
+
 // === Unified Item Type (canvas + playable merged) ===
 export type ItemType =
   | "image"
@@ -254,4 +256,6 @@ export interface BaseSpread {
   animations?: SpreadAnimation[];
   manuscript?: string;
   tiny_sketch_media_url?: string;
+  branch_setting?: BranchSetting;
+  next_spread_id?: string | null;
 }

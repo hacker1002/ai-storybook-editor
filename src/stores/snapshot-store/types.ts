@@ -1,6 +1,6 @@
 import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
-import type { IllustrationData } from '@/types/illustration-types';
+import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
 import type { RetouchData } from '@/types/retouch-types';
 import type { Prop, PropVariant, PropSound, CropSheet } from '@/types/prop-types';
 import type { Character, CharacterVariant, CharacterVoice } from '@/types/character-types';
@@ -15,14 +15,6 @@ import type {
   SpreadQuiz,
   SpreadAnimation,
 } from '@/types/spread-types';
-import type {
-  SpreadSetting,
-  Section,
-  Branch,
-  BranchSetting,
-  BranchLocalizedContent,
-  SpreadNavigation,
-} from '@/types/spread-setting-types';
 
 export interface DocsSlice {
   docs: ManuscriptDoc[];
@@ -88,6 +80,31 @@ export interface IllustrationSlice {
   deleteIllustrationShape: (spreadId: string, shapeId: string) => void;
 
   clearIllustration: () => void;
+
+  // Section CRUD (absorbed from SpreadSettingSlice)
+  addSection: (section: Section) => void;
+  updateSection: (sectionId: string, updates: Partial<Omit<Section, 'id'>>) => void;
+  deleteSection: (sectionId: string) => void;
+
+  // Navigation
+  setNextSpreadId: (spreadId: string, nextSpreadId: string | null) => void;
+  clearNextSpreadId: (spreadId: string) => void;
+
+  // Branch Setting
+  setBranchSetting: (spreadId: string, setting: BranchSetting) => void;
+  clearBranchSetting: (spreadId: string) => void;
+
+  // Branch CRUD
+  addBranch: (spreadId: string, branch: Branch) => void;
+  updateBranch: (spreadId: string, branchIndex: number, updates: Partial<Branch>) => void;
+  deleteBranch: (spreadId: string, branchIndex: number) => void;
+  reorderBranches: (spreadId: string, fromIndex: number, toIndex: number) => void;
+
+  // Localization
+  updateBranchSettingLocale: (spreadId: string, languageKey: string, content: BranchLocalizedContent) => void;
+  deleteBranchSettingLocale: (spreadId: string, languageKey: string) => void;
+  updateBranchLocale: (spreadId: string, branchIndex: number, languageKey: string, content: BranchLocalizedContent) => void;
+  deleteBranchLocale: (spreadId: string, branchIndex: number, languageKey: string) => void;
 }
 
 export interface RetouchSlice {
@@ -182,36 +199,6 @@ export interface StagesSlice {
   addStageSound: (key: string, sound: StageSound) => void;
   updateStageSound: (key: string, soundKey: string, updates: Partial<StageSound>) => void;
   deleteStageSound: (key: string, soundKey: string) => void;
-}
-
-export interface SpreadSettingSlice {
-  spreadSetting: SpreadSetting;
-
-  setSpreadSetting: (setting: SpreadSetting) => void;
-  resetSpreadSetting: () => void;
-
-  addSection: (section: Section) => void;
-  updateSection: (sectionId: string, updates: Partial<Omit<Section, 'id'>>) => void;
-  deleteSection: (sectionId: string) => void;
-
-  setSpreadNavigation: (spreadId: string, nav: Omit<SpreadNavigation, 'id'>) => void;
-  removeSpreadNavigation: (spreadId: string) => void;
-
-  setNextSpreadId: (spreadId: string, nextSpreadId: string | null) => void;
-  clearNextSpreadId: (spreadId: string) => void;
-
-  setBranchSetting: (spreadId: string, setting: BranchSetting) => void;
-  clearBranchSetting: (spreadId: string) => void;
-
-  addBranch: (spreadId: string, branch: Branch) => void;
-  updateBranch: (spreadId: string, branchIndex: number, updates: Partial<Branch>) => void;
-  deleteBranch: (spreadId: string, branchIndex: number) => void;
-  reorderBranches: (spreadId: string, fromIndex: number, toIndex: number) => void;
-
-  updateBranchSettingLocale: (spreadId: string, languageKey: string, content: BranchLocalizedContent) => void;
-  deleteBranchSettingLocale: (spreadId: string, languageKey: string) => void;
-  updateBranchLocale: (spreadId: string, branchIndex: number, languageKey: string, content: BranchLocalizedContent) => void;
-  deleteBranchLocale: (spreadId: string, branchIndex: number, languageKey: string) => void;
 }
 
 // --- Image Task Types (ephemeral, not persisted to DB) ---
@@ -380,7 +367,7 @@ export interface ImageTaskSlice {
   clearAllTasks: () => void;
 }
 
-export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & PropsSlice & CharactersSlice & StagesSlice & SpreadSettingSlice & ImageTaskSlice & {
-  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; retouch?: RetouchData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; spreadSetting?: SpreadSetting; meta?: Partial<SnapshotMeta> }) => void;
+export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
+  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; retouch?: RetouchData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };
