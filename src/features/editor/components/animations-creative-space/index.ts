@@ -11,6 +11,7 @@ export {
   filterAnimations,
   createDefaultFilterState,
   computeStepNumbers,
+  buildItemsMap,
 } from './utils';
 
 // Components

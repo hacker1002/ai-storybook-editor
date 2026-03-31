@@ -11,7 +11,7 @@ export type PipelineStep = 'manuscript' | 'illustration' | 'retouch';
 export type ManuscriptSpace = 'doc' | 'dummy' | 'sketch';
 export type IllustrationSpace = 'character' | 'prop' | 'stage' | 'spread' | 'branch';
 export type RetouchSpace = 'object' | 'animation' | 'remix';
-export type DefaultSpace = 'history' | 'flag' | 'share' | 'collaborator' | 'setting';
+export type DefaultSpace = 'preview' | 'history' | 'flag' | 'share' | 'collaborator' | 'setting';
 export type CreativeSpaceType = ManuscriptSpace | IllustrationSpace | RetouchSpace | DefaultSpace;
 
 // Save status indicator

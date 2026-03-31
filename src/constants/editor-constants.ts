@@ -49,6 +49,13 @@ export const DEFAULT_ICONS: IconRailItemConfig[] = [
   { id: 'collaborator', icon: 'Users', label: 'Collaborators' },
 ];
 
+// Preview icon (conditionally shown in illustration/retouch steps)
+export const PREVIEW_ICON: IconRailItemConfig = {
+  id: 'preview',
+  icon: 'Play',
+  label: 'Preview',
+};
+
 // Settings icon (isolated at bottom)
 export const SETTING_ICON: IconRailItemConfig = {
   id: 'setting',

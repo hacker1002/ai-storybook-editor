@@ -18,6 +18,7 @@ import { DocCreativeSpace } from '../components/doc-creative-space';
 import { DummyCreativeSpace } from '../components/dummy-creative-space';
 import { ObjectsCreativeSpace } from '../components/objects-creative-space';
 import { AnimationsCreativeSpace } from '../components/animations-creative-space';
+import { PreviewCreativeSpace } from '../components/preview-creative-space';
 import { PropsCreativeSpace } from '../components/props-creative-space';
 import { StagesCreativeSpace } from '../components/stages-creative-space';
 import { CharactersCreativeSpace } from '../components/characters-creative-space';
@@ -170,7 +171,7 @@ export function EditorPage() {
       case 'object':
         return <ObjectsCreativeSpace />;
       case 'animation':
-        return <AnimationsCreativeSpace />;
+        return <AnimationsCreativeSpace onNavigateToPreview={() => setActiveCreativeSpace('preview')} />;
       case 'prop':
         return <PropsCreativeSpace />;
       case 'stage':
@@ -181,6 +182,8 @@ export function EditorPage() {
         return <SpreadsCreativeSpace />;
       case 'branch':
         return <BranchCreativeSpace />;
+      case 'preview':
+        return <PreviewCreativeSpace />;
       case 'sketch':
       case 'remix':
       case 'history':

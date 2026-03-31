@@ -4,7 +4,6 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { AnimationEditorSidebar } from "./animation-editor-sidebar";
-import { PlayerAnimationSidebar } from "./player-animation-sidebar";
 import {
   PlayableSpreadView,
   type PlayableSpread,
@@ -39,7 +38,11 @@ import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 
 const log = createLogger("Editor", "AnimationsCreativeSpace");
 
-export function AnimationsCreativeSpace() {
+interface AnimationsCreativeSpaceProps {
+  onNavigateToPreview?: () => void;
+}
+
+export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreativeSpaceProps) {
   // --- Store selectors ---
   const retouchSpreadIds = useRetouchSpreadIds();
   const retouchSpreads = useRetouchSpreads();
@@ -51,7 +54,6 @@ export function AnimationsCreativeSpace() {
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
   const [expandedAnimIndex, setExpandedAnimIndex] = useState<number | null>(null);
   const [filterState, setFilterState] = useState<AnimationFilterState>(createDefaultFilterState);
-  const [isPreviewing, setIsPreviewing] = useState(false);
 
   // Derived: effective spread ID (user choice if valid, else first)
   const effectiveSpreadId = useMemo(() => {
@@ -248,9 +250,6 @@ export function AnimationsCreativeSpace() {
     setFilterState((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  const handlePreview = useCallback(() => setIsPreviewing(true), []);
-  const handleStopPreview = useCallback(() => setIsPreviewing(false), []);
-
   // --- Render ---
   log.debug("render", "AnimationsCreativeSpace", { spreadCount: retouchSpreadIds.length });
 
@@ -264,27 +263,23 @@ export function AnimationsCreativeSpace() {
 
   return (
     <div className="flex h-full">
-      {isPreviewing ? (
-        <PlayerAnimationSidebar animations={resolvedAnimations} />
-      ) : (
-        <AnimationEditorSidebar
-          animations={filteredAnimations}
-          allAnimations={resolvedAnimations}
-          selectedItem={selectedItem}
-          expandedAnimationIndex={expandedAnimIndex}
-          availableEffects={availableEffects}
-          filterState={filterState}
-          objectFilterOptions={objectFilterOptions}
-          onFilterChange={handleFilterChange}
-          onExpandChange={setExpandedAnimIndex}
-          onAddAnimation={handleAddAnimation}
-          onUpdateAnimation={handleUpdateAnimation}
-          onDeleteAnimation={handleDeleteAnimation}
-          onReorderAnimation={handleReorderAnimation}
-          onItemSelect={handleItemSelect}
-          targetHasAudio={targetHasAudio}
-        />
-      )}
+      <AnimationEditorSidebar
+        animations={filteredAnimations}
+        allAnimations={resolvedAnimations}
+        selectedItem={selectedItem}
+        expandedAnimationIndex={expandedAnimIndex}
+        availableEffects={availableEffects}
+        filterState={filterState}
+        objectFilterOptions={objectFilterOptions}
+        onFilterChange={handleFilterChange}
+        onExpandChange={setExpandedAnimIndex}
+        onAddAnimation={handleAddAnimation}
+        onUpdateAnimation={handleUpdateAnimation}
+        onDeleteAnimation={handleDeleteAnimation}
+        onReorderAnimation={handleReorderAnimation}
+        onItemSelect={handleItemSelect}
+        targetHasAudio={targetHasAudio}
+      />
       <div className="flex-1 overflow-hidden">
         <PlayableSpreadView
           mode="animation-editor"
@@ -293,8 +288,7 @@ export function AnimationsCreativeSpace() {
           selectedItemType={selectedItem?.type ?? null}
           onItemSelect={handleItemSelect}
           onSpreadSelect={handleSpreadSelect}
-          onPreview={handlePreview}
-          onStopPreview={handleStopPreview}
+          onPreview={onNavigateToPreview}
         />
       </div>
     </div>
