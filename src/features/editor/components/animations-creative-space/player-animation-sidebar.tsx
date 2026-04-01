@@ -130,7 +130,7 @@ export function PlayerAnimationSidebar({
       className="flex h-full w-[280px] flex-col border-r bg-muted/30"
     >
       {/* Header */}
-      <div className="flex items-center justify-center border-b px-3 py-3">
+      <div className="flex items-center justify-center border-b px-3 h-14 shrink-0">
         <div className="h-6"></div>
         <span className="text-sm font-semibold">Animations</span>
       </div>

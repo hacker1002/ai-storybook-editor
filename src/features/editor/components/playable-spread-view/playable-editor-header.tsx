@@ -1,56 +1,21 @@
-// playable-editor-header.tsx - Header with play/stop button and zoom slider for animation-editor/remix-editor modes
+// playable-editor-header.tsx - Header with zoom slider for animation-editor/remix-editor modes
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Play, Square, Minus, Plus } from "lucide-react";
-import type { ActiveCanvas } from "@/types/playable-types";
+import { Minus, Plus } from "lucide-react";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 
 interface PlayableEditorHeaderProps {
-  activeCanvas: ActiveCanvas;
   zoomLevel: number;
   onZoomChange: (level: number) => void;
-  onPlay: () => void;
-  onStop: () => void;
 }
 
 export const PlayableEditorHeader = memo(function PlayableEditorHeader({
-  activeCanvas,
   zoomLevel,
   onZoomChange,
-  onPlay,
-  onStop,
 }: PlayableEditorHeaderProps) {
-  const isPlaying = activeCanvas === "player";
-
   return (
-    <div className="flex items-center justify-between px-3 py-2 border-b bg-background z-10">
-      {/* Left: Play/Stop button */}
-      <div className="flex items-center">
-        {isPlaying ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 hover:bg-secondary"
-            onClick={onStop}
-            aria-label="Stop playback"
-          >
-            <Square className="h-4 w-4" />
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 hover:bg-secondary"
-            onClick={onPlay}
-            aria-label="Play"
-          >
-            <Play className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-
-      {/* Right: Zoom slider */}
+    <div className="flex items-center justify-end px-3 h-14 shrink-0 border-b bg-background z-10">
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"

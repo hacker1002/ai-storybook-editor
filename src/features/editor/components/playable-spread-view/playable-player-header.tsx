@@ -53,7 +53,7 @@ export const PlayablePlayerHeader = memo(function PlayablePlayerHeader({
   };
 
   return (
-    <div className="flex items-center justify-center px-3 py-3 border-b bg-background z-10 relative">
+    <div className="flex items-center justify-center px-3 h-14 shrink-0 border-b bg-background z-10 relative">
       <Select
         value={playEdition}
         onValueChange={(v) => onEditionChange(v as PlayEdition)}

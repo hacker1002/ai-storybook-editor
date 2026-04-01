@@ -232,11 +232,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         />
       ) : (
         <PlayableEditorHeader
-          activeCanvas={activeCanvas}
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
-          onPlay={handlePlay}
-          onStop={handleStop}
         />
       )}
 
