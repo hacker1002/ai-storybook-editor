@@ -7,7 +7,6 @@ import { Image, Type, Hexagon } from "lucide-react";
 import type {
   BaseSpread,
   SpreadImage,
-  SpreadShape,
   SpreadTextbox,
 } from "@/types/canvas-types";
 
@@ -113,7 +112,7 @@ export function buildElementList(
 ): ElementListEntry[] {
   const entries: ElementListEntry[] = [];
 
-  spread.images.forEach((img, i) => {
+  (spread.raw_images ?? []).forEach((img, i) => {
     entries.push({
       id: img.id,
       type: "image",
@@ -122,7 +121,7 @@ export function buildElementList(
     });
   });
 
-  spread.textboxes.forEach((tb, i) => {
+  (spread.raw_textboxes ?? []).forEach((tb, i) => {
     const result = getTextboxContentForLanguage(
       tb as unknown as Record<string, unknown>,
       langCode
@@ -138,15 +137,6 @@ export function buildElementList(
       type: "textbox",
       title,
       zIndex: resolveZIndex(i, LAYER_CONFIG.TEXT),
-    });
-  });
-
-  spread.shapes?.forEach((shape, i) => {
-    entries.push({
-      id: shape.id,
-      type: "shape",
-      title: (shape as SpreadShape).title || `Shape ${i + 1}`,
-      zIndex: resolveZIndex(i, LAYER_CONFIG.OBJECTS),
     });
   });
 

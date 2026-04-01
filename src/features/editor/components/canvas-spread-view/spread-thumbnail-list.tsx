@@ -95,9 +95,12 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
     selected?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [selectedId]);
 
-  // Helper: Check if spread has content
+  // Helper: Check if spread has content.
+  // Checks both raw layers (illustration phase) and playable layers (retouch phase).
   const hasDefaultContent = useCallback((spread: TSpread) => {
     return (
+      (spread.raw_images?.length ?? 0) > 0 ||
+      (spread.raw_textboxes?.length ?? 0) > 0 ||
       spread.images.length > 0 ||
       spread.textboxes.length > 0 ||
       (spread.shapes?.length ?? 0) > 0 ||

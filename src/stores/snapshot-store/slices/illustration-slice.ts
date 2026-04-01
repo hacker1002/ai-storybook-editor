@@ -136,108 +136,74 @@ export const createIllustrationSlice: StateCreator<
       }
     }),
 
-  // --- Images ---
+  // --- Raw Images (illustration phase, player_visible always false) ---
 
-  addIllustrationImage: (spreadId, image) =>
+  addRawImage: (spreadId, image) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
-        log.debug('addIllustrationImage', 'add', { spreadId, imageId: image.id });
-        spread.images.push(image);
+        log.debug('addRawImage', 'add', { spreadId, imageId: image.id });
+        if (!spread.raw_images) spread.raw_images = [];
+        spread.raw_images.push(image);
         state.sync.isDirty = true;
       }
     }),
 
-  updateIllustrationImage: (spreadId, imageId, updates) =>
+  updateRawImage: (spreadId, imageId, updates) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread) {
-        const idx = spread.images.findIndex((i) => i.id === imageId);
+      if (spread?.raw_images) {
+        const idx = spread.raw_images.findIndex((i) => i.id === imageId);
         if (idx !== -1) {
-          log.debug('updateIllustrationImage', 'update', { spreadId, imageId, keys: Object.keys(updates) });
-          Object.assign(spread.images[idx], updates);
+          log.debug('updateRawImage', 'update', { spreadId, imageId, keys: Object.keys(updates) });
+          Object.assign(spread.raw_images[idx], updates);
           state.sync.isDirty = true;
         }
       }
     }),
 
-  deleteIllustrationImage: (spreadId, imageId) =>
+  deleteRawImage: (spreadId, imageId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread) {
-        log.debug('deleteIllustrationImage', 'delete', { spreadId, imageId });
-        spread.images = spread.images.filter((i) => i.id !== imageId);
+      if (spread?.raw_images) {
+        log.debug('deleteRawImage', 'delete', { spreadId, imageId });
+        spread.raw_images = spread.raw_images.filter((i) => i.id !== imageId);
         state.sync.isDirty = true;
       }
     }),
 
-  // --- Textboxes ---
+  // --- Raw Textboxes (illustration phase, player_visible always false) ---
 
-  addIllustrationTextbox: (spreadId, textbox) =>
+  addRawTextbox: (spreadId, textbox) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
-        log.debug('addIllustrationTextbox', 'add', { spreadId, textboxId: textbox.id });
-        spread.textboxes.push(textbox);
+        log.debug('addRawTextbox', 'add', { spreadId, textboxId: textbox.id });
+        if (!spread.raw_textboxes) spread.raw_textboxes = [];
+        spread.raw_textboxes.push(textbox);
         state.sync.isDirty = true;
       }
     }),
 
-  updateIllustrationTextbox: (spreadId, textboxId, updates) =>
+  updateRawTextbox: (spreadId, textboxId, updates) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread) {
-        const idx = spread.textboxes.findIndex((t) => t.id === textboxId);
+      if (spread?.raw_textboxes) {
+        const idx = spread.raw_textboxes.findIndex((t) => t.id === textboxId);
         if (idx !== -1) {
-          log.debug('updateIllustrationTextbox', 'update', { spreadId, textboxId, keys: Object.keys(updates) });
-          Object.assign(spread.textboxes[idx], updates);
+          log.debug('updateRawTextbox', 'update', { spreadId, textboxId, keys: Object.keys(updates) });
+          Object.assign(spread.raw_textboxes[idx], updates);
           state.sync.isDirty = true;
         }
       }
     }),
 
-  deleteIllustrationTextbox: (spreadId, textboxId) =>
+  deleteRawTextbox: (spreadId, textboxId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread) {
-        log.debug('deleteIllustrationTextbox', 'delete', { spreadId, textboxId });
-        spread.textboxes = spread.textboxes.filter((t) => t.id !== textboxId);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  // --- Shapes ---
-
-  addIllustrationShape: (spreadId, shape) =>
-    set((state) => {
-      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread) {
-        log.debug('addIllustrationShape', 'add', { spreadId, shapeId: shape.id });
-        if (!spread.shapes) spread.shapes = [];
-        spread.shapes.push(shape);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  updateIllustrationShape: (spreadId, shapeId, updates) =>
-    set((state) => {
-      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread?.shapes) {
-        const idx = spread.shapes.findIndex((sh) => sh.id === shapeId);
-        if (idx !== -1) {
-          log.debug('updateIllustrationShape', 'update', { spreadId, shapeId, keys: Object.keys(updates) });
-          Object.assign(spread.shapes[idx], updates);
-          state.sync.isDirty = true;
-        }
-      }
-    }),
-
-  deleteIllustrationShape: (spreadId, shapeId) =>
-    set((state) => {
-      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread?.shapes) {
-        log.debug('deleteIllustrationShape', 'delete', { spreadId, shapeId });
-        spread.shapes = spread.shapes.filter((sh) => sh.id !== shapeId);
+      if (spread?.raw_textboxes) {
+        log.debug('deleteRawTextbox', 'delete', { spreadId, textboxId });
+        spread.raw_textboxes = spread.raw_textboxes.filter((t) => t.id !== textboxId);
         state.sync.isDirty = true;
       }
     }),

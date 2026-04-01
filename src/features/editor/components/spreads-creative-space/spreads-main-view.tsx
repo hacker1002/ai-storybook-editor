@@ -99,7 +99,6 @@ export function SpreadsMainView({
             : [basePage],
         images: [],
         textboxes: [],
-        shapes: [],
       };
       log.info('handleSpreadAdd', 'adding spread', { type, spreadId: newSpread.id });
       actions.addIllustrationSpread(newSpread);
@@ -133,27 +132,27 @@ export function SpreadsMainView({
       switch (itemType) {
         case 'image':
           if (action === 'add')
-            actions.addIllustrationImage(spreadId, data as SpreadImage);
+            actions.addRawImage(spreadId, data as SpreadImage);
           else if (action === 'update')
-            actions.updateIllustrationImage(spreadId, itemId as string, data as Partial<SpreadImage>);
+            actions.updateRawImage(spreadId, itemId as string, data as Partial<SpreadImage>);
           else if (action === 'delete')
-            actions.deleteIllustrationImage(spreadId, itemId as string);
+            actions.deleteRawImage(spreadId, itemId as string);
           break;
         case 'textbox':
           if (action === 'add')
-            actions.addIllustrationTextbox(spreadId, data as SpreadTextbox);
+            actions.addRawTextbox(spreadId, data as SpreadTextbox);
           else if (action === 'update')
-            actions.updateIllustrationTextbox(spreadId, itemId as string, data as Partial<SpreadTextbox>);
+            actions.updateRawTextbox(spreadId, itemId as string, data as Partial<SpreadTextbox>);
           else if (action === 'delete')
-            actions.deleteIllustrationTextbox(spreadId, itemId as string);
+            actions.deleteRawTextbox(spreadId, itemId as string);
           break;
         case 'shape':
           if (action === 'add')
-            actions.addIllustrationShape(spreadId, data as SpreadShape);
+            actions.addRetouchShape(spreadId, data as SpreadShape);
           else if (action === 'update')
-            actions.updateIllustrationShape(spreadId, itemId as string, data as Partial<SpreadShape>);
+            actions.updateRetouchShape(spreadId, itemId as string, data as Partial<SpreadShape>);
           else if (action === 'delete')
-            actions.deleteIllustrationShape(spreadId, itemId as string);
+            actions.deleteRetouchShape(spreadId, itemId as string);
           break;
         case 'page':
           if (action === 'update' && typeof itemId === 'number') {
@@ -206,7 +205,7 @@ export function SpreadsMainView({
         },
       };
       log.info('handleCloneShape', 'cloning shape', { spreadId, originalId: shape.id, newId: newShape.id });
-      actions.addIllustrationShape(spreadId, newShape);
+      actions.addRetouchShape(spreadId, newShape);
     },
     [actions]
   );

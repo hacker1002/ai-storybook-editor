@@ -1,7 +1,7 @@
 // features/demo-spread-views/pages/demo-canvas-spread-view.tsx
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   CanvasSpreadView,
   EditableImage,
@@ -12,7 +12,6 @@ import {
   type BaseSpread,
   type SpreadImage,
   type SpreadTextbox,
-  type SpreadShape,
   type SpreadVideo,
   type SpreadAudio,
   type ImageItemContext,
@@ -114,9 +113,20 @@ export function DemoCanvasSpreadView() {
     return createMockSnapshot(snapshotOpts).spreads;
   }, []);
 
-  // Mutable spreads state (for demo mutations)
+  // Mutable spreads state (for demo mutations) — raw_images/raw_textboxes hold illustration layers
   const [spreads, setSpreads] = useState<BaseSpread[]>(() =>
     generateSpreads(DEFAULT_MOCK_OPTIONS)
+  );
+
+  // Derived spreads for CanvasSpreadView: map raw layers → images/textboxes so the canvas renders them
+  const canvasSpreads = useMemo(
+    () =>
+      spreads.map((s) => ({
+        ...s,
+        images: s.raw_images ?? [],
+        textboxes: s.raw_textboxes ?? [],
+      })),
+    [spreads]
   );
 
   // Selected spread tracking - auto-select first spread
@@ -240,11 +250,12 @@ export function DemoCanvasSpreadView() {
           if (s.id !== spreadId) return s;
 
           switch (itemType) {
+            // Illustration context: mutations target raw_images / raw_textboxes
             case "image":
               if (action === "update" && itemId !== null && data) {
                 return {
                   ...s,
-                  images: s.images.map((img) =>
+                  raw_images: (s.raw_images ?? []).map((img) =>
                     img.id === itemId ? { ...img, ...data } : img
                   ),
                 };
@@ -252,11 +263,11 @@ export function DemoCanvasSpreadView() {
               if (action === "delete" && itemId !== null) {
                 return {
                   ...s,
-                  images: s.images.filter((img) => img.id !== itemId),
+                  raw_images: (s.raw_images ?? []).filter((img) => img.id !== itemId),
                 };
               }
               if (action === "add" && data) {
-                return { ...s, images: [...s.images, data as SpreadImage] };
+                return { ...s, raw_images: [...(s.raw_images ?? []), data as SpreadImage] };
               }
               break;
 
@@ -264,7 +275,7 @@ export function DemoCanvasSpreadView() {
               if (action === "update" && itemId !== null && data) {
                 return {
                   ...s,
-                  textboxes: s.textboxes.map((t) =>
+                  raw_textboxes: (s.raw_textboxes ?? []).map((t) =>
                     t.id === itemId ? { ...t, ...data } : t
                   ),
                 };
@@ -272,39 +283,18 @@ export function DemoCanvasSpreadView() {
               if (action === "delete" && itemId !== null) {
                 return {
                   ...s,
-                  textboxes: s.textboxes.filter((t) => t.id !== itemId),
+                  raw_textboxes: (s.raw_textboxes ?? []).filter((t) => t.id !== itemId),
                 };
               }
               if (action === "add" && data) {
                 return {
                   ...s,
-                  textboxes: [...s.textboxes, data as SpreadTextbox],
+                  raw_textboxes: [...(s.raw_textboxes ?? []), data as SpreadTextbox],
                 };
               }
               break;
 
-            case "shape":
-              if (action === "update" && itemId !== null && data) {
-                return {
-                  ...s,
-                  shapes: (s.shapes || []).map((sh) =>
-                    sh.id === itemId ? { ...sh, ...data } : sh
-                  ),
-                };
-              }
-              if (action === "delete" && itemId !== null) {
-                return {
-                  ...s,
-                  shapes: (s.shapes || []).filter((sh) => sh.id !== itemId),
-                };
-              }
-              if (action === "add" && data) {
-                return {
-                  ...s,
-                  shapes: [...(s.shapes || []), data as SpreadShape],
-                };
-              }
-              break;
+            // Shapes are playable-only (no raw_shapes) — illustration context skips shape mutations
 
             case "video":
               if (action === "update" && itemId !== null && data) {
@@ -372,7 +362,8 @@ export function DemoCanvasSpreadView() {
       setSpreads((prev) =>
         prev.map((s) => {
           if (s.id !== spreadId) return s;
-          const item = s.images[imageIndex];
+          const rawImages = s.raw_images ?? [];
+          const item = rawImages[imageIndex];
           if (!item) return s;
           const clonedItem = {
             ...item,
@@ -383,7 +374,7 @@ export function DemoCanvasSpreadView() {
               y: Math.min(100, item.geometry.y + 10),
             },
           };
-          return { ...s, images: [...s.images, clonedItem] };
+          return { ...s, raw_images: [...rawImages, clonedItem] };
         })
       );
     },
@@ -572,7 +563,7 @@ export function DemoCanvasSpreadView() {
           {/* Spread View */}
           <div className="flex-1 overflow-hidden">
             <CanvasSpreadView
-              spreads={spreads}
+              spreads={canvasSpreads}
               renderItems={
                 [
                   itemFlags.showImages && "image",

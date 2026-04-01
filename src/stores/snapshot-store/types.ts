@@ -1,7 +1,6 @@
 import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
-import type { RetouchData } from '@/types/retouch-types';
 import type { Prop, PropVariant, PropSound, CropSheet } from '@/types/prop-types';
 import type { Character, CharacterVariant, CharacterVoice } from '@/types/character-types';
 import type { Stage, StageVariant, StageSound } from '@/types/stage-types';
@@ -62,26 +61,25 @@ export interface IllustrationSlice {
 
   setIllustration: (data: IllustrationData) => void;
 
+  // Spread CRUD (unified — single set of spreads for both phases)
   addIllustrationSpread: (spread: BaseSpread) => void;
   updateIllustrationSpread: (spreadId: string, updates: Partial<BaseSpread>) => void;
   deleteIllustrationSpread: (spreadId: string) => void;
   reorderIllustrationSpreads: (fromIndex: number, toIndex: number) => void;
 
-  addIllustrationImage: (spreadId: string, image: SpreadImage) => void;
-  updateIllustrationImage: (spreadId: string, imageId: string, updates: Partial<SpreadImage>) => void;
-  deleteIllustrationImage: (spreadId: string, imageId: string) => void;
+  // Raw Images (illustration phase, player_visible always false)
+  addRawImage: (spreadId: string, image: SpreadImage) => void;
+  updateRawImage: (spreadId: string, imageId: string, updates: Partial<SpreadImage>) => void;
+  deleteRawImage: (spreadId: string, imageId: string) => void;
 
-  addIllustrationTextbox: (spreadId: string, textbox: SpreadTextbox) => void;
-  updateIllustrationTextbox: (spreadId: string, textboxId: string, updates: Partial<SpreadTextbox>) => void;
-  deleteIllustrationTextbox: (spreadId: string, textboxId: string) => void;
-
-  addIllustrationShape: (spreadId: string, shape: SpreadShape) => void;
-  updateIllustrationShape: (spreadId: string, shapeId: string, updates: Partial<SpreadShape>) => void;
-  deleteIllustrationShape: (spreadId: string, shapeId: string) => void;
+  // Raw Textboxes (illustration phase, player_visible always false)
+  addRawTextbox: (spreadId: string, textbox: SpreadTextbox) => void;
+  updateRawTextbox: (spreadId: string, textboxId: string, updates: Partial<SpreadTextbox>) => void;
+  deleteRawTextbox: (spreadId: string, textboxId: string) => void;
 
   clearIllustration: () => void;
 
-  // Section CRUD (absorbed from SpreadSettingSlice)
+  // Section CRUD (merged into IllustrationSlice)
   addSection: (section: Section) => void;
   updateSection: (sectionId: string, updates: Partial<Omit<Section, 'id'>>) => void;
   deleteSection: (sectionId: string) => void;
@@ -107,16 +105,8 @@ export interface IllustrationSlice {
   deleteBranchLocale: (spreadId: string, branchIndex: number, languageKey: string) => void;
 }
 
+// RetouchSlice — no own state, operates on playable layers in state.illustration.spreads[]
 export interface RetouchSlice {
-  retouch: RetouchData;
-
-  setRetouch: (data: RetouchData) => void;
-
-  addRetouchSpread: (spread: BaseSpread) => void;
-  updateRetouchSpread: (spreadId: string, updates: Partial<BaseSpread>) => void;
-  deleteRetouchSpread: (spreadId: string) => void;
-  reorderRetouchSpreads: (fromIndex: number, toIndex: number) => void;
-
   addRetouchImage: (spreadId: string, image: SpreadImage) => void;
   updateRetouchImage: (spreadId: string, imageId: string, updates: Partial<SpreadImage>) => void;
   deleteRetouchImage: (spreadId: string, imageId: string) => void;
@@ -146,8 +136,6 @@ export interface RetouchSlice {
   deleteRetouchAnimation: (spreadId: string, animationIndex: number) => void;
   deleteRetouchAnimationsByTargetId: (spreadId: string, targetId: string) => void;
   reorderRetouchAnimations: (spreadId: string, fromIndex: number, toIndex: number) => void;
-
-  clearRetouch: () => void;
 }
 
 export interface PropsSlice {
@@ -368,6 +356,6 @@ export interface ImageTaskSlice {
 }
 
 export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
-  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; retouch?: RetouchData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
+  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

@@ -118,25 +118,27 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
-  // Memoize image contexts - skip if renderImageItem not provided
+  // Memoize image contexts - combines raw_images (illustration layer) and images (playable layer).
+  // Combined index: raw images occupy [0..rawCount-1], playable images [rawCount..].
   const imageContexts = useMemo(() => {
     if (!renderItems.includes("image") || !renderImageItem) return [];
-    return spread.images.map((img, idx) => ({
+    return [...(spread.raw_images ?? []), ...spread.images].map((img, combinedIdx) => ({
       image: img,
-      context: buildViewOnlyImageContext(img, idx, spread),
+      context: buildViewOnlyImageContext(img, combinedIdx, spread),
     }));
-  }, [spread.images, spread.id, renderItems, renderImageItem]);
+  }, [spread.raw_images, spread.images, spread.id, renderItems, renderImageItem]);
 
-  // Memoize text contexts - skip if renderTextItem not provided
+  // Memoize text contexts - combines raw_textboxes (illustration layer) and textboxes (playable layer).
+  // Combined index: raw textboxes occupy [0..rawCount-1], playable textboxes [rawCount..].
   const textContexts = useMemo(() => {
     if (!renderItems.includes("textbox") || !renderTextItem) return [];
-    return spread.textboxes.map((textbox, idx) => ({
+    return [...(spread.raw_textboxes ?? []), ...spread.textboxes].map((textbox, combinedIdx) => ({
       textbox,
-      context: buildViewOnlyTextContext(textbox, idx, spread),
+      context: buildViewOnlyTextContext(textbox, combinedIdx, spread),
     }));
-  }, [spread.textboxes, spread.id, renderItems, renderTextItem]);
+  }, [spread.raw_textboxes, spread.textboxes, spread.id, renderItems, renderTextItem]);
 
-  // Memoize shape contexts - skip if renderShapeItem not provided
+  // Memoize shape contexts - shapes are playable-only (no raw shapes)
   const shapeContexts = useMemo(() => {
     if (!renderItems.includes("shape") || !renderShapeItem || !spread.shapes)
       return [];

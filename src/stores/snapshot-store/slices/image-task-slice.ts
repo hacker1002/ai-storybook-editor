@@ -43,12 +43,14 @@ function findIllustrations(
       return stage?.variants.find((st) => st.key === childKey)?.illustrations;
     }
     case 'retouch_image': {
-      const spread = state.retouch.spreads.find((s) => s.id === entityKey);
+      // Playable images now live in illustration.spreads[] (unified)
+      const spread = state.illustration.spreads.find((s) => s.id === entityKey);
       return spread?.images.find((img) => img.id === childKey)?.illustrations;
     }
     case 'illustration_image': {
+      // Raw images in illustration.spreads[]
       const spread = state.illustration?.spreads?.find((s) => s.id === entityKey);
-      return spread?.images.find((img) => img.id === childKey)?.illustrations;
+      return spread?.raw_images?.find((img) => img.id === childKey)?.illustrations;
     }
     default:
       log.warn('findIllustrations', `unsupported entity type: ${entityType}`);

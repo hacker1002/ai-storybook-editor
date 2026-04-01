@@ -247,6 +247,12 @@ export interface SpreadAnimation {
 export interface BaseSpread {
   id: string;
   pages: PageData[];
+
+  // Raw layers (illustration phase — editor-only, player_visible always false)
+  raw_images?: SpreadImage[];
+  raw_textboxes?: SpreadTextbox[];
+
+  // Playable layers (retouch phase — player + editor visible)
   images: SpreadImage[];
   textboxes: SpreadTextbox[];
   shapes?: SpreadShape[];
@@ -254,6 +260,7 @@ export interface BaseSpread {
   audios?: SpreadAudio[];
   quizzes?: SpreadQuiz[];
   animations?: SpreadAnimation[];
+
   manuscript?: string;
   tiny_sketch_media_url?: string;
   branch_setting?: BranchSetting;

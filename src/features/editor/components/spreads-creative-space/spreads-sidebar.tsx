@@ -202,13 +202,13 @@ export function SpreadsSidebar({
 
     const titleUpdate = { title: editValue.trim() };
     if (entry.type === "image") {
-      actions.updateIllustrationImage(
+      actions.updateRawImage(
         selectedSpreadId,
         entry.id,
         titleUpdate as Partial<SpreadImage>
       );
     } else if (entry.type === "shape") {
-      actions.updateIllustrationShape(
+      actions.updateRetouchShape(
         selectedSpreadId,
         entry.id,
         titleUpdate as Partial<SpreadShape>
@@ -263,13 +263,13 @@ export function SpreadsSidebar({
       const entryType = draggedEntry.type;
 
       if (entryType === "image") {
-        const arr = [...spread.images];
+        const arr = [...(spread.raw_images ?? [])];
         const fromIdx = arr.findIndex((i) => i.id === draggedEntry.id);
         const toIdx = arr.findIndex((i) => i.id === targetEntry.id);
         if (fromIdx === -1 || toIdx === -1) return;
         const [moved] = arr.splice(fromIdx, 1);
         arr.splice(toIdx, 0, moved);
-        actions.updateIllustrationSpread(selectedSpreadId, { images: arr });
+        actions.updateIllustrationSpread(selectedSpreadId, { raw_images: arr });
       } else if (entryType === "shape") {
         const arr = [...(spread.shapes ?? [])];
         const fromIdx = arr.findIndex((s) => s.id === draggedEntry.id);
@@ -279,14 +279,14 @@ export function SpreadsSidebar({
         arr.splice(toIdx, 0, moved);
         actions.updateIllustrationSpread(selectedSpreadId, { shapes: arr });
       } else if (entryType === "textbox") {
-        const arr = [...spread.textboxes];
+        const arr = [...(spread.raw_textboxes ?? [])];
         const fromIdx = arr.findIndex((t) => t.id === draggedEntry.id);
         const toIdx = arr.findIndex((t) => t.id === targetEntry.id);
         if (fromIdx === -1 || toIdx === -1) return;
         const [moved] = arr.splice(fromIdx, 1);
         arr.splice(toIdx, 0, moved);
         actions.updateIllustrationSpread(selectedSpreadId, {
-          textboxes: arr,
+          raw_textboxes: arr,
         });
       }
 
@@ -307,14 +307,14 @@ export function SpreadsSidebar({
 
       if (type === "image") {
         const newId = crypto.randomUUID();
-        actions.addIllustrationImage(selectedSpreadId, {
+        actions.addRawImage(selectedSpreadId, {
           id: newId,
           ...NEW_ELEMENT_DEFAULTS.image,
         } as SpreadImage);
         onItemSelect({ type, id: newId });
       } else if (type === "shape") {
         const newId = crypto.randomUUID();
-        actions.addIllustrationShape(selectedSpreadId, {
+        actions.addRetouchShape(selectedSpreadId, {
           id: newId,
           ...NEW_ELEMENT_DEFAULTS.shape,
         } as SpreadShape);
@@ -322,7 +322,7 @@ export function SpreadsSidebar({
       } else if (type === "textbox") {
         const defaults = createDefaultTextbox(langCode);
         const newId = defaults.id;
-        actions.addIllustrationTextbox(selectedSpreadId, defaults);
+        actions.addRawTextbox(selectedSpreadId, defaults);
         onItemSelect({ type, id: newId });
       }
 

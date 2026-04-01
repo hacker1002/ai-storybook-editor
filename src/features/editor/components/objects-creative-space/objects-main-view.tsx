@@ -411,7 +411,7 @@ export function ObjectsMainView({
               ...newPages[itemId],
               ...(data as Partial<PageData>),
             };
-            actions.updateRetouchSpread(spreadId, { pages: newPages });
+            actions.updateIllustrationSpread(spreadId, { pages: newPages });
           }
           break;
       }
@@ -438,21 +438,21 @@ export function ObjectsMainView({
         images: [],
         textboxes: [],
       };
-      actions.addRetouchSpread(newSpread);
+      actions.addIllustrationSpread(newSpread);
     },
     [actions, retouchSpreads.length]
   );
 
   const handleDeleteSpread = useCallback(
     (spreadId: string) => {
-      actions.deleteRetouchSpread(spreadId);
+      actions.deleteIllustrationSpread(spreadId);
     },
     [actions]
   );
 
   const handleSpreadReorder = useCallback(
     (fromIndex: number, toIndex: number) => {
-      actions.reorderRetouchSpreads(fromIndex, toIndex);
+      actions.reorderIllustrationSpreads(fromIndex, toIndex);
     },
     [actions]
   );

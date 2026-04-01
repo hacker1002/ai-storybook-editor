@@ -73,7 +73,6 @@ export const useSnapshotStore = create<SnapshotStore>()(
                 spreads: ill?.spreads ?? [],
                 sections: ill?.sections ?? [],
               };
-              state.retouch = data.retouch ?? { spreads: [] };
               state.props = data.props ?? [];
               state.characters = data.characters ?? [];
               state.stages = data.stages ?? [];
@@ -82,7 +81,6 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.docs = DEFAULT_DOCS;
               state.dummies = [];
               state.illustration = { spreads: [], sections: [] };
-              state.retouch = { spreads: [] };
               state.props = [];
               state.characters = [];
               state.stages = [];
@@ -94,11 +92,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, dummies, illustration, retouch, props, characters, stages, sync } = get();
+          const { meta, docs, dummies, illustration, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
 
-          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, sectionCount: illustration.sections.length, retouchSpreadCount: retouch.spreads.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, sectionCount: illustration.sections.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -112,7 +110,6 @@ export const useSnapshotStore = create<SnapshotStore>()(
             docs,
             dummies,
             illustration,
-            retouch,
             props,
             characters,
             stages,
@@ -124,7 +121,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           if (meta.id) {
             result = await supabase
               .from('snapshots')
-              .update({ docs, dummies, illustration, retouch, props, characters, stages, version })
+              .update({ docs, dummies, illustration, props, characters, stages, version })
               .eq('id', meta.id)
               .select()
               .single();
@@ -166,7 +163,6 @@ export const useSnapshotStore = create<SnapshotStore>()(
               spreads: ill?.spreads ?? [],
               sections: ill?.sections ?? [],
             };
-            state.retouch = data.retouch ?? { spreads: [] };
             state.props = data.props ?? [];
             state.characters = data.characters ?? [];
             state.stages = data.stages ?? [];
@@ -184,7 +180,6 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.docs = DEFAULT_DOCS;
             state.dummies = [];
             state.illustration = { spreads: [], sections: [] };
-            state.retouch = { spreads: [] };
             state.props = [];
             state.characters = [];
             state.stages = [];

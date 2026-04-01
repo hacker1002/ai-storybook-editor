@@ -1,3 +1,6 @@
+// retouch-slice.ts — Playable layer CRUD on unified illustration spreads
+// No own state: reads/writes from state.illustration.spreads[] playable layers
+
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, RetouchSlice } from '../types';
 import { createLogger } from '@/utils/logger';
@@ -10,56 +13,11 @@ export const createRetouchSlice: StateCreator<
   [],
   RetouchSlice
 > = (set) => ({
-  retouch: { spreads: [] },
-
-  setRetouch: (data) =>
-    set((state) => {
-      log.debug('setRetouch', 'replace all', { spreadCount: data.spreads.length });
-      state.retouch = data;
-    }),
-
-  // --- Spread CRUD ---
-
-  addRetouchSpread: (spread) =>
-    set((state) => {
-      log.debug('addRetouchSpread', 'add', { spreadId: spread.id });
-      state.retouch.spreads.push(spread);
-      state.sync.isDirty = true;
-    }),
-
-  updateRetouchSpread: (spreadId, updates) =>
-    set((state) => {
-      const idx = state.retouch.spreads.findIndex((s) => s.id === spreadId);
-      if (idx !== -1) {
-        log.debug('updateRetouchSpread', 'update', { spreadId, keys: Object.keys(updates) });
-        Object.assign(state.retouch.spreads[idx], updates);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  deleteRetouchSpread: (spreadId) =>
-    set((state) => {
-      log.debug('deleteRetouchSpread', 'delete', { spreadId });
-      state.retouch.spreads = state.retouch.spreads.filter((s) => s.id !== spreadId);
-      state.sync.isDirty = true;
-    }),
-
-  reorderRetouchSpreads: (fromIndex, toIndex) =>
-    set((state) => {
-      const { spreads } = state.retouch;
-      if (fromIndex >= 0 && toIndex >= 0 && fromIndex < spreads.length && toIndex < spreads.length) {
-        log.debug('reorderRetouchSpreads', 'reorder', { fromIndex, toIndex });
-        const [removed] = spreads.splice(fromIndex, 1);
-        spreads.splice(toIndex, 0, removed);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  // --- Images ---
+  // --- Images (playable) ---
 
   addRetouchImage: (spreadId, image) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('addRetouchImage', 'add', { spreadId, imageId: image.id });
         spread.images.push(image);
@@ -69,7 +27,7 @@ export const createRetouchSlice: StateCreator<
 
   updateRetouchImage: (spreadId, imageId, updates) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         const idx = spread.images.findIndex((i) => i.id === imageId);
         if (idx !== -1) {
@@ -82,7 +40,7 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchImage: (spreadId, imageId) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('deleteRetouchImage', 'delete', { spreadId, imageId });
         spread.images = spread.images.filter((i) => i.id !== imageId);
@@ -90,11 +48,11 @@ export const createRetouchSlice: StateCreator<
       }
     }),
 
-  // --- Textboxes ---
+  // --- Textboxes (playable) ---
 
   addRetouchTextbox: (spreadId, textbox) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('addRetouchTextbox', 'add', { spreadId, textboxId: textbox.id });
         spread.textboxes.push(textbox);
@@ -104,7 +62,7 @@ export const createRetouchSlice: StateCreator<
 
   updateRetouchTextbox: (spreadId, textboxId, updates) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         const idx = spread.textboxes.findIndex((t) => t.id === textboxId);
         if (idx !== -1) {
@@ -117,7 +75,7 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchTextbox: (spreadId, textboxId) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('deleteRetouchTextbox', 'delete', { spreadId, textboxId });
         spread.textboxes = spread.textboxes.filter((t) => t.id !== textboxId);
@@ -125,11 +83,11 @@ export const createRetouchSlice: StateCreator<
       }
     }),
 
-  // --- Shapes ---
+  // --- Shapes (playable, with z-index/visibility) ---
 
   addRetouchShape: (spreadId, shape) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('addRetouchShape', 'add', { spreadId, shapeId: shape.id });
         if (!spread.shapes) spread.shapes = [];
@@ -140,7 +98,7 @@ export const createRetouchSlice: StateCreator<
 
   updateRetouchShape: (spreadId, shapeId, updates) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.shapes) {
         const idx = spread.shapes.findIndex((sh) => sh.id === shapeId);
         if (idx !== -1) {
@@ -153,7 +111,7 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchShape: (spreadId, shapeId) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.shapes) {
         log.debug('deleteRetouchShape', 'delete', { spreadId, shapeId });
         spread.shapes = spread.shapes.filter((sh) => sh.id !== shapeId);
@@ -165,7 +123,7 @@ export const createRetouchSlice: StateCreator<
 
   addRetouchVideo: (spreadId, video) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('addRetouchVideo', 'add', { spreadId, videoId: video.id });
         if (!spread.videos) spread.videos = [];
@@ -176,7 +134,7 @@ export const createRetouchSlice: StateCreator<
 
   updateRetouchVideo: (spreadId, videoId, updates) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.videos) {
         const idx = spread.videos.findIndex((v) => v.id === videoId);
         if (idx !== -1) {
@@ -189,7 +147,7 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchVideo: (spreadId, videoId) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.videos) {
         log.debug('deleteRetouchVideo', 'delete', { spreadId, videoId });
         spread.videos = spread.videos.filter((v) => v.id !== videoId);
@@ -201,7 +159,7 @@ export const createRetouchSlice: StateCreator<
 
   addRetouchAudio: (spreadId, audio) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('addRetouchAudio', 'add', { spreadId, audioId: audio.id });
         if (!spread.audios) spread.audios = [];
@@ -212,7 +170,7 @@ export const createRetouchSlice: StateCreator<
 
   updateRetouchAudio: (spreadId, audioId, updates) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.audios) {
         const idx = spread.audios.findIndex((a) => a.id === audioId);
         if (idx !== -1) {
@@ -225,7 +183,7 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchAudio: (spreadId, audioId) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.audios) {
         log.debug('deleteRetouchAudio', 'delete', { spreadId, audioId });
         spread.audios = spread.audios.filter((a) => a.id !== audioId);
@@ -237,7 +195,7 @@ export const createRetouchSlice: StateCreator<
 
   addRetouchQuiz: (spreadId, quiz) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('addRetouchQuiz', 'add', { spreadId, quizId: quiz.id });
         if (!spread.quizzes) spread.quizzes = [];
@@ -248,7 +206,7 @@ export const createRetouchSlice: StateCreator<
 
   updateRetouchQuiz: (spreadId, quizId, updates) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.quizzes) {
         const idx = spread.quizzes.findIndex((q) => q.id === quizId);
         if (idx !== -1) {
@@ -261,7 +219,7 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchQuiz: (spreadId, quizId) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.quizzes) {
         log.debug('deleteRetouchQuiz', 'delete', { spreadId, quizId });
         spread.quizzes = spread.quizzes.filter((q) => q.id !== quizId);
@@ -273,7 +231,7 @@ export const createRetouchSlice: StateCreator<
 
   addRetouchAnimation: (spreadId, animation) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         log.debug('addRetouchAnimation', 'add', { spreadId, order: animation.order });
         if (!spread.animations) spread.animations = [];
@@ -284,7 +242,7 @@ export const createRetouchSlice: StateCreator<
 
   updateRetouchAnimation: (spreadId, animationIndex, updates) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.animations && animationIndex >= 0 && animationIndex < spread.animations.length) {
         log.debug('updateRetouchAnimation', 'update', { spreadId, animationIndex, keys: Object.keys(updates) });
         Object.assign(spread.animations[animationIndex], updates);
@@ -294,11 +252,10 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchAnimation: (spreadId, animationIndex) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.animations && animationIndex >= 0 && animationIndex < spread.animations.length) {
         log.debug('deleteRetouchAnimation', 'delete', { spreadId, animationIndex });
         spread.animations.splice(animationIndex, 1);
-        // Re-assign .order to match new array position
         spread.animations.forEach((anim, i) => { anim.order = i; });
         state.sync.isDirty = true;
       }
@@ -306,13 +263,12 @@ export const createRetouchSlice: StateCreator<
 
   deleteRetouchAnimationsByTargetId: (spreadId, targetId) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.animations) {
         const before = spread.animations.length;
         spread.animations = spread.animations.filter((a) => a.target.id !== targetId);
         const removed = before - spread.animations.length;
         if (removed > 0) {
-          // Re-assign .order to match new array positions
           spread.animations.forEach((anim, i) => { anim.order = i; });
           state.sync.isDirty = true;
           log.debug('deleteRetouchAnimationsByTargetId', 'removed', { spreadId, targetId, removed });
@@ -322,7 +278,7 @@ export const createRetouchSlice: StateCreator<
 
   reorderRetouchAnimations: (spreadId, fromIndex, toIndex) =>
     set((state) => {
-      const spread = state.retouch.spreads.find((s) => s.id === spreadId);
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (
         spread?.animations &&
         fromIndex >= 0 &&
@@ -333,18 +289,8 @@ export const createRetouchSlice: StateCreator<
         log.debug('reorderRetouchAnimations', 'reorder', { spreadId, fromIndex, toIndex });
         const [removed] = spread.animations.splice(fromIndex, 1);
         spread.animations.splice(toIndex, 0, removed);
-        // Re-assign .order to match new array position
         spread.animations.forEach((anim, i) => { anim.order = i; });
         state.sync.isDirty = true;
       }
-    }),
-
-  // --- Clear ---
-
-  clearRetouch: () =>
-    set((state) => {
-      log.debug('clearRetouch', 'clear');
-      state.retouch = { spreads: [] };
-      state.sync.isDirty = true;
     }),
 });

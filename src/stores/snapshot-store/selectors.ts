@@ -3,7 +3,6 @@ import { useSnapshotStore } from './index';
 import type { DocType } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/illustration-types';
-import type { RetouchData } from '@/types/retouch-types';
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
@@ -69,38 +68,36 @@ export const useIllustrationSpreadById = (spreadId: string): BaseSpread | undefi
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId));
 export const useIllustrationSpreadCount = (): number => useSnapshotStore((s) => s.illustration.spreads.length);
 
-export const useIllustrationImageById = (spreadId: string, imageId: string): SpreadImage | undefined =>
-  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.images.find((i) => i.id === imageId));
-export const useIllustrationTextboxById = (spreadId: string, textboxId: string): SpreadTextbox | undefined =>
-  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.textboxes.find((t) => t.id === textboxId));
-export const useIllustrationShapeById = (spreadId: string, shapeId: string): SpreadShape | undefined =>
-  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.shapes?.find((sh) => sh.id === shapeId));
+// Raw layer selectors (illustration phase — editor-only)
+export const useRawImageById = (spreadId: string, imageId: string): SpreadImage | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.raw_images?.find((i) => i.id === imageId));
+export const useRawTextboxById = (spreadId: string, textboxId: string): SpreadTextbox | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.raw_textboxes?.find((t) => t.id === textboxId));
 
-// Retouch selectors
-export const useRetouch = (): RetouchData => useSnapshotStore((s) => s.retouch);
-export const useRetouchSpreads = (): BaseSpread[] => useSnapshotStore((s) => s.retouch.spreads);
+// Retouch selectors (reads from unified illustration.spreads — playable layers)
+export const useRetouchSpreads = (): BaseSpread[] => useSnapshotStore((s) => s.illustration.spreads);
 export const useRetouchSpreadIds = (): string[] =>
-  useSnapshotStore(useShallow((s) => s.retouch.spreads.map((sp) => sp.id)));
+  useSnapshotStore(useShallow((s) => s.illustration.spreads.map((sp) => sp.id)));
 export const useRetouchSpreadById = (spreadId: string): BaseSpread | undefined =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId));
-export const useRetouchSpreadCount = (): number => useSnapshotStore((s) => s.retouch.spreads.length);
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId));
+export const useRetouchSpreadCount = (): number => useSnapshotStore((s) => s.illustration.spreads.length);
 
 export const useRetouchImageById = (spreadId: string, imageId: string): SpreadImage | undefined =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.images.find((i) => i.id === imageId));
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.images.find((i) => i.id === imageId));
 export const useRetouchTextboxById = (spreadId: string, textboxId: string): SpreadTextbox | undefined =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.textboxes.find((t) => t.id === textboxId));
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.textboxes.find((t) => t.id === textboxId));
 export const useRetouchShapeById = (spreadId: string, shapeId: string): SpreadShape | undefined =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.shapes?.find((sh) => sh.id === shapeId));
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.shapes?.find((sh) => sh.id === shapeId));
 export const useRetouchVideoById = (spreadId: string, videoId: string): SpreadVideo | undefined =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.videos?.find((v) => v.id === videoId));
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.videos?.find((v) => v.id === videoId));
 export const useRetouchAudioById = (spreadId: string, audioId: string): SpreadAudio | undefined =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.audios?.find((a) => a.id === audioId));
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.audios?.find((a) => a.id === audioId));
 export const useRetouchQuizById = (spreadId: string, quizId: string): SpreadQuiz | undefined =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId));
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId));
 export const useRetouchQuizzes = (spreadId: string): SpreadQuiz[] =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.quizzes ?? EMPTY_QUIZZES);
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes ?? EMPTY_QUIZZES);
 export const useRetouchAnimations = (spreadId: string): SpreadAnimation[] =>
-  useSnapshotStore((s) => s.retouch.spreads.find((sp) => sp.id === spreadId)?.animations ?? EMPTY_ANIMATIONS);
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.animations ?? EMPTY_ANIMATIONS);
 
 // Computed: find all images/videos derived from a specific original illustration image
 export const useRetouchObjectsByImageId = (
@@ -109,7 +106,7 @@ export const useRetouchObjectsByImageId = (
 ): (SpreadImage | SpreadVideo)[] =>
   useSnapshotStore(
     useShallow((s) => {
-      const spread = s.retouch.spreads.find((sp) => sp.id === spreadId);
+      const spread = s.illustration.spreads.find((sp) => sp.id === spreadId);
       if (!spread) return [];
       const images = spread.images.filter((i) => i.original_image_id === originalImageId);
       const videos = (spread.videos ?? []).filter((v) => v.original_image_id === originalImageId);
@@ -204,23 +201,20 @@ export const useSnapshotActions = () =>
       deleteDummySpread: s.deleteDummySpread,
       reorderDummySpreads: s.reorderDummySpreads,
       updateDummySpreads: s.updateDummySpreads,
-      // Illustration
+      // Illustration (unified spread CRUD + raw layers)
       setIllustration: s.setIllustration,
       addIllustrationSpread: s.addIllustrationSpread,
       updateIllustrationSpread: s.updateIllustrationSpread,
       deleteIllustrationSpread: s.deleteIllustrationSpread,
       reorderIllustrationSpreads: s.reorderIllustrationSpreads,
-      addIllustrationImage: s.addIllustrationImage,
-      updateIllustrationImage: s.updateIllustrationImage,
-      deleteIllustrationImage: s.deleteIllustrationImage,
-      addIllustrationTextbox: s.addIllustrationTextbox,
-      updateIllustrationTextbox: s.updateIllustrationTextbox,
-      deleteIllustrationTextbox: s.deleteIllustrationTextbox,
-      addIllustrationShape: s.addIllustrationShape,
-      updateIllustrationShape: s.updateIllustrationShape,
-      deleteIllustrationShape: s.deleteIllustrationShape,
+      addRawImage: s.addRawImage,
+      updateRawImage: s.updateRawImage,
+      deleteRawImage: s.deleteRawImage,
+      addRawTextbox: s.addRawTextbox,
+      updateRawTextbox: s.updateRawTextbox,
+      deleteRawTextbox: s.deleteRawTextbox,
       clearIllustration: s.clearIllustration,
-      // Section / Branch / Navigation (absorbed from SpreadSettingSlice)
+      // Section / Branch / Navigation (merged into IllustrationSlice)
       addSection: s.addSection,
       updateSection: s.updateSection,
       deleteSection: s.deleteSection,
@@ -236,12 +230,7 @@ export const useSnapshotActions = () =>
       deleteBranchSettingLocale: s.deleteBranchSettingLocale,
       updateBranchLocale: s.updateBranchLocale,
       deleteBranchLocale: s.deleteBranchLocale,
-      // Retouch
-      setRetouch: s.setRetouch,
-      addRetouchSpread: s.addRetouchSpread,
-      updateRetouchSpread: s.updateRetouchSpread,
-      deleteRetouchSpread: s.deleteRetouchSpread,
-      reorderRetouchSpreads: s.reorderRetouchSpreads,
+      // Retouch (playable layers on illustration.spreads)
       addRetouchImage: s.addRetouchImage,
       updateRetouchImage: s.updateRetouchImage,
       deleteRetouchImage: s.deleteRetouchImage,
@@ -265,7 +254,6 @@ export const useSnapshotActions = () =>
       deleteRetouchAnimation: s.deleteRetouchAnimation,
       deleteRetouchAnimationsByTargetId: s.deleteRetouchAnimationsByTargetId,
       reorderRetouchAnimations: s.reorderRetouchAnimations,
-      clearRetouch: s.clearRetouch,
       // Props
       setProps: s.setProps,
       addProp: s.addProp,

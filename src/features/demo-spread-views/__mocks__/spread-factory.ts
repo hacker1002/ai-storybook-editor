@@ -429,8 +429,12 @@ export function createMockSpread(options: CreateSpreadOptions = {}): BaseSpread 
   return {
     id: generateUUID(),
     pages,
-    images,
-    textboxes,
+    // Raw layers (illustration phase — editor-only, player_visible always false)
+    raw_images: images,
+    raw_textboxes: textboxes,
+    // Playable layers (required by BaseSpread interface, empty for illustration mock)
+    images: [],
+    textboxes: [],
     shapes,
     videos,
     audios,
