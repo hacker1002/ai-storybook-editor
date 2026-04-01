@@ -27,7 +27,7 @@ function resolveImageUrl(image: SpreadImage): string | null {
   return null;
 }
 
-const RENDER_ITEMS: ('image' | 'textbox' | 'shape')[] = ['image', 'textbox', 'shape'];
+const RENDER_ITEMS: ('raw_image' | 'raw_textbox' | 'shape')[] = ['raw_image', 'raw_textbox', 'shape'];
 const NOOP = () => {};
 
 interface BranchGridBodyProps {

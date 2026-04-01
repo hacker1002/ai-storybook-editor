@@ -10,7 +10,7 @@ import type { BaseSpread } from './branch-types';
 import type { ImageItemContext, TextItemContext, ShapeItemContext } from '@/types/canvas-types';
 
 const log = createLogger('Editor', 'AddModeSpreadThumbnail');
-const RENDER_ITEMS: ('image' | 'textbox' | 'shape')[] = ['image', 'textbox', 'shape'];
+const RENDER_ITEMS: ('raw_image' | 'raw_textbox' | 'shape')[] = ['raw_image', 'raw_textbox', 'shape'];
 
 interface AddModeSpreadThumbnailProps {
   spread: BaseSpread;

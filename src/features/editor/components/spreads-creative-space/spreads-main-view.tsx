@@ -329,7 +329,7 @@ export function SpreadsMainView({
       <CanvasSpreadView
         spreads={illustrationSpreads}
         initialSelectedId={selectedSpreadId}
-        renderItems={['image', 'textbox', 'shape']}
+        renderItems={['raw_image', 'raw_textbox', 'shape']}
         renderImageItem={renderIllustrationImage}
         renderTextItem={renderIllustrationTextbox}
         renderShapeItem={renderIllustrationShape}

@@ -140,6 +140,15 @@ export function buildElementList(
     });
   });
 
+  (spread.shapes ?? []).forEach((shape, i) => {
+    entries.push({
+      id: shape.id,
+      type: "shape",
+      title: shape.title || `Shape ${i + 1}`,
+      zIndex: resolveZIndex(i, LAYER_CONFIG.OBJECTS),
+    });
+  });
+
   return entries.sort((a, b) => b.zIndex - a.zIndex);
 }
 

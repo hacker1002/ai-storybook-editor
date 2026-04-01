@@ -121,8 +121,11 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   // Memoize image contexts - combines raw_images (illustration layer) and images (playable layer).
   // Combined index: raw images occupy [0..rawCount-1], playable images [rawCount..].
   const imageContexts = useMemo(() => {
-    if (!renderItems.includes("image") || !renderImageItem) return [];
-    return [...(spread.raw_images ?? []), ...spread.images].map((img, combinedIdx) => ({
+    if ((!renderItems.includes("image") && !renderItems.includes("raw_image")) || !renderImageItem) return [];
+    const images = renderItems.includes("raw_image")
+      ? (spread.raw_images ?? [])
+      : [...(spread.raw_images ?? []), ...spread.images];
+    return images.map((img, combinedIdx) => ({
       image: img,
       context: buildViewOnlyImageContext(img, combinedIdx, spread),
     }));
@@ -131,8 +134,11 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   // Memoize text contexts - combines raw_textboxes (illustration layer) and textboxes (playable layer).
   // Combined index: raw textboxes occupy [0..rawCount-1], playable textboxes [rawCount..].
   const textContexts = useMemo(() => {
-    if (!renderItems.includes("textbox") || !renderTextItem) return [];
-    return [...(spread.raw_textboxes ?? []), ...spread.textboxes].map((textbox, combinedIdx) => ({
+    if ((!renderItems.includes("textbox") && !renderItems.includes("raw_textbox")) || !renderTextItem) return [];
+    const textboxes = renderItems.includes("raw_textbox")
+      ? (spread.raw_textboxes ?? [])
+      : [...(spread.raw_textboxes ?? []), ...spread.textboxes];
+    return textboxes.map((textbox, combinedIdx) => ({
       textbox,
       context: buildViewOnlyTextContext(textbox, combinedIdx, spread),
     }));

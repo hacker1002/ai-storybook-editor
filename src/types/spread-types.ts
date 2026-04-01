@@ -7,6 +7,8 @@ import type { BranchSetting } from './illustration-types';
 export type ItemType =
   | "image"
   | "textbox"
+  | "raw_image"
+  | "raw_textbox"
   | "shape"
   | "video"
   | "audio"

@@ -838,9 +838,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
         {/* Images: render raw layer (illustration phase) then playable layer (retouch phase).
             Combined index: raw images occupy [0..rawCount-1], playable images [rawCount..]. */}
-        {renderItems.includes("image") &&
+        {(renderItems.includes("image") || renderItems.includes("raw_image")) &&
           renderImageItem &&
-          [...(spread.raw_images ?? []), ...spread.images].map((image, combinedIndex) => {
+          (renderItems.includes("raw_image")
+            ? (spread.raw_images ?? [])
+            : [...(spread.raw_images ?? []), ...spread.images]
+          ).map((image, combinedIndex) => {
             const context = buildImageContext(
               image,
               combinedIndex,
@@ -890,9 +893,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
         {/* Textboxes: render raw layer (illustration phase) then playable layer (retouch phase).
             Combined index: raw textboxes occupy [0..rawCount-1], playable textboxes [rawCount..]. */}
-        {renderItems.includes("textbox") &&
+        {(renderItems.includes("textbox") || renderItems.includes("raw_textbox")) &&
           renderTextItem &&
-          [...(spread.raw_textboxes ?? []), ...spread.textboxes].map((textbox, combinedIndex) => {
+          (renderItems.includes("raw_textbox")
+            ? (spread.raw_textboxes ?? [])
+            : [...(spread.raw_textboxes ?? []), ...spread.textboxes]
+          ).map((textbox, combinedIndex) => {
             const context = buildTextContext(
               textbox,
               combinedIndex,
