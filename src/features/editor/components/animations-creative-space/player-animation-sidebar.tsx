@@ -11,18 +11,23 @@ import {
   useMaxActivatedOrder,
   useCurrentStepIndex,
   useReplayableItems,
-  usePlayVersion,
+  usePlayEdition,
 } from "@/stores/animation-playback-store";
 import type {
   ResolvedAnimation,
   SpreadAnimation,
 } from "@/types/animation-types";
+import type { BranchSetting, BranchLocalizedContent } from "@/types/illustration-types";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
+import { GitFork } from "lucide-react";
 import { AnimationListItem } from "./animation-list-item";
 import { computeStepNumbers } from "./utils";
+import { filterResolvedAnimationsForDynamic } from "../playable-spread-view/player-utils";
 
 interface PlayerAnimationSidebarProps {
   animations: ResolvedAnimation[];
+  branchSetting?: BranchSetting | null;
+  languageCode?: string;
 }
 
 // No-op callbacks for disabled AnimationListItem (editor callbacks required by interface)
@@ -35,6 +40,8 @@ const noopBoolean = (_v: boolean) => {};
 
 export function PlayerAnimationSidebar({
   animations,
+  branchSetting,
+  languageCode,
 }: PlayerAnimationSidebarProps) {
   // Subscribe to playback store for highlight state
   const activeAnimationOrders = useActiveAnimationOrders();
@@ -43,17 +50,20 @@ export function PlayerAnimationSidebar({
   const currentStepIndex = useCurrentStepIndex();
   const steps = usePlaybackStore((s) => s.steps);
   const replayableItems = useReplayableItems();
-  const playVersion = usePlayVersion();
+  const playEdition = usePlayEdition();
 
-  // Classic mode: only show READ_ALONG animations; interactive: show all
+  // Classic: only READ_ALONG; Dynamic: exclude on_click chains; Interactive: show all
   const displayAnimations = useMemo(() => {
-    if (playVersion === "classic") {
+    if (playEdition === "classic") {
       return animations.filter(
         (a) => a.animation.effect.type === EFFECT_TYPE.READ_ALONG
       );
     }
+    if (playEdition === "dynamic") {
+      return filterResolvedAnimationsForDynamic(animations);
+    }
     return animations;
-  }, [animations, playVersion]);
+  }, [animations, playEdition]);
 
   // Pending next animation order (blink indicator) — only when awaiting user input
   const [pendingNextOrder, setPendingNextOrder] = useState<number | null>(null);
@@ -125,44 +135,66 @@ export function PlayerAnimationSidebar({
         <span className="text-sm font-semibold">Animations</span>
       </div>
 
-      {/* Animation list (read-only, filtered by playVersion) */}
+      {/* Animation list (read-only, filtered by playEdition) + branch indicator */}
       <div className="flex-1 overflow-auto p-2 space-y-1">
-        {displayAnimations.length === 0 ? (
+        {displayAnimations.length === 0 && !branchSetting ? (
           <div className="flex items-center justify-center py-8">
             <p className="text-sm text-muted-foreground text-center">
               No animations on this spread
             </p>
           </div>
         ) : (
-          displayAnimations.map((resolvedAnim, index) => (
-            <AnimationListItem
-              key={`player-${resolvedAnim.originalIndex}-${resolvedAnim.animation.effect.type}`}
-              animation={resolvedAnim}
-              index={index}
-              stepNumber={stepNumbers[index]}
-              isExpanded={false}
-              isHighlighted={false}
-              isDragOver={false}
-              isPlaying={activeAnimationOrders.includes(
-                resolvedAnim.animation.order
-              )}
-              isPendingNext={resolvedAnim.animation.order === pendingNextOrder}
-              disabled={true}
-              displayClickLoop={getDisplayClickLoop(resolvedAnim)}
-              onClick={noop}
-              onDelete={noop}
-              onSelectTarget={noop}
-              onDragStart={noopNumber}
-              onDragOver={noopDrag}
-              onDragEnd={noop}
-              onDrop={noopNumber}
-              onEffectTypeChange={noopNumber}
-              onTriggerTypeChange={noopTriggerType}
-              onClickLoopChange={noopNumber}
-              onEffectOptionChange={noopEffectOption}
-              onMustCompleteChange={noopBoolean}
-            />
-          ))
+          <>
+            {displayAnimations.map((resolvedAnim, index) => (
+              <AnimationListItem
+                key={`player-${resolvedAnim.originalIndex}-${resolvedAnim.animation.effect.type}`}
+                animation={resolvedAnim}
+                index={index}
+                stepNumber={stepNumbers[index]}
+                isExpanded={false}
+                isHighlighted={false}
+                isDragOver={false}
+                isPlaying={activeAnimationOrders.includes(
+                  resolvedAnim.animation.order
+                )}
+                isPendingNext={resolvedAnim.animation.order === pendingNextOrder}
+                disabled={true}
+                displayClickLoop={getDisplayClickLoop(resolvedAnim)}
+                onClick={noop}
+                onDelete={noop}
+                onSelectTarget={noop}
+                onDragStart={noopNumber}
+                onDragOver={noopDrag}
+                onDragEnd={noop}
+                onDrop={noopNumber}
+                onEffectTypeChange={noopNumber}
+                onTriggerTypeChange={noopTriggerType}
+                onClickLoopChange={noopNumber}
+                onEffectOptionChange={noopEffectOption}
+                onMustCompleteChange={noopBoolean}
+              />
+            ))}
+
+            {/* Branch indicator — shown when spread has branching */}
+            {branchSetting && branchSetting.branches.length > 0 && (() => {
+              const branchTitle = languageCode
+                ? (branchSetting[languageCode] as BranchLocalizedContent | undefined)?.title
+                : undefined;
+              return (
+                <div className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/50 px-2.5 py-2">
+                  <GitFork className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="flex flex-col min-w-0">
+                    {branchTitle && (
+                      <span className="text-xs font-medium truncate">{branchTitle}</span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      Branch ({branchSetting.branches.length} options)
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </>
         )}
       </div>
     </aside>

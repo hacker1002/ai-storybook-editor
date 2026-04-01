@@ -23,7 +23,8 @@ export { TEXTBOX_Z_INDEX_BASE, PLAYABLE_ZOOM, ANIMATION_PRESETS } from '@/consta
 
 // === Components ===
 export { PlayableSpreadView } from './playable-spread-view';
-export { PlayableHeader } from './playable-header';
+export { PlayablePlayerHeader } from './playable-player-header';
+export { PlayableEditorHeader } from './playable-editor-header';
 export { PlayableThumbnailList } from './playable-thumbnail-list';
 export { AnimationEditorCanvas } from './animation-editor-canvas';
 export { RemixEditorCanvas } from './remix-editor-canvas';

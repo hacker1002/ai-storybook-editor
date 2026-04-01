@@ -2,8 +2,8 @@
 
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type { AnimationStep, PlayerPhase, PlayMode, PlayVersion, ReplayableItem } from '@/types/playable-types';
+import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
+import type { AnimationStep, PlayerPhase, PlayMode, PlayEdition, ReplayableItem } from '@/types/playable-types';
 import {
   findNextOnNextStep,
   findOnClickStepForTarget,
@@ -16,7 +16,7 @@ const log = createLogger('Store', 'AnimationPlaybackStore');
 
 interface PlaybackState {
   playMode: PlayMode;
-  playVersion: PlayVersion;
+  playEdition: PlayEdition;
   isPlaying: boolean;
   volume: number;        // 0..100
   isMuted: boolean;
@@ -27,13 +27,15 @@ interface PlaybackState {
   replayableItems: Map<string, ReplayableItem>;
   activeAnimationOrders: number[];
   maxActivatedOrder: number; // highest order ever passed to addActiveAnimationOrder (reset per phase)
+  narrationLanguage: string; // language code for narration audio (e.g. 'en_US')
+  quizLanguage: string;      // language code for quiz content (e.g. 'en_US')
 }
 
 interface PlaybackActions {
   play: () => void;
   pause: () => void;
   setPlayMode: (mode: PlayMode) => void;
-  setPlayVersion: (version: PlayVersion) => void;
+  setPlayEdition: (edition: PlayEdition) => void;
   setVolume: (volume: number) => void;
   toggleMute: () => void;
   reset: (steps: AnimationStep[]) => void;
@@ -44,6 +46,8 @@ interface PlaybackActions {
   cancelAndNext: () => void;
   clickLoopReplay: (itemId: string) => { shouldReplay: boolean; step?: AnimationStep };
   resetStore: () => void;
+  setNarrationLanguage: (code: string) => void;
+  setQuizLanguage: (code: string) => void;
   setActiveAnimationOrders: (orders: number[]) => void;
   addActiveAnimationOrder: (order: number) => void;
   removeActiveAnimationOrder: (order: number) => void;
@@ -53,7 +57,7 @@ interface PlaybackActions {
 
 const INITIAL_STATE: PlaybackState = {
   playMode: 'off',
-  playVersion: 'classic',
+  playEdition: 'classic',
   isPlaying: true,      // auto-start when mount
   volume: 100,
   isMuted: false,
@@ -64,13 +68,16 @@ const INITIAL_STATE: PlaybackState = {
   replayableItems: new Map(),
   activeAnimationOrders: [],
   maxActivatedOrder: -1,
+  narrationLanguage: 'en_US',
+  quizLanguage: 'en_US',
 };
 
 // === Store creation ===
 
 export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
   devtools(
-    subscribeWithSelector((set, get) => ({
+    subscribeWithSelector(
+      persist((set, get) => ({
       ...INITIAL_STATE,
 
       // ── Playback Controls ────────────────────────────────────────────────
@@ -91,10 +98,22 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         set({ playMode: mode });
       },
 
-      setPlayVersion: (version) => {
-        const prev = get().playVersion;
-        log.info('setPlayVersion', 'transition', { prev, next: version });
-        set({ playVersion: version });
+      setPlayEdition: (version) => {
+        const prev = get().playEdition;
+        log.info('setPlayEdition', 'transition', { prev, next: version });
+        set({ playEdition: version });
+      },
+
+      setNarrationLanguage: (code) => {
+        const prev = get().narrationLanguage;
+        log.info('setNarrationLanguage', 'transition', { prev, next: code });
+        set({ narrationLanguage: code });
+      },
+
+      setQuizLanguage: (code) => {
+        const prev = get().quizLanguage;
+        log.info('setQuizLanguage', 'transition', { prev, next: code });
+        set({ quizLanguage: code });
       },
 
       setVolume: (v) => {
@@ -351,10 +370,15 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       // ── RESET_STORE — full reset with non-playing state ───────────────────
 
       resetStore: () => {
-        log.info('resetStore', 'full reset');
+        log.info('resetStore', 'full reset (preserving user preferences)');
+        const { volume, isMuted, narrationLanguage, quizLanguage } = get();
         set({
           ...INITIAL_STATE,
           isPlaying: false,
+          volume,
+          isMuted,
+          narrationLanguage,
+          quizLanguage,
           replayableItems: new Map(),
           activeAnimationOrders: [],
           maxActivatedOrder: -1,
@@ -384,7 +408,15 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           set({ activeAnimationOrders: filtered });
         }
       },
-    })),
+    }), {
+        name: 'playback-preferences',
+        partialize: (state) => ({
+          volume: state.volume,
+          isMuted: state.isMuted,
+          narrationLanguage: state.narrationLanguage,
+          quizLanguage: state.quizLanguage,
+        }),
+      })),
     { name: 'playback-store' }
   )
 );
@@ -392,7 +424,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
 // === Selectors (fine-grained for optimized re-renders) ===
 
 export const usePlayMode = () => usePlaybackStore((s) => s.playMode);
-export const usePlayVersion = () => usePlaybackStore((s) => s.playVersion);
+export const usePlayEdition = () => usePlaybackStore((s) => s.playEdition);
 export const useIsPlaying = () => usePlaybackStore((s) => s.isPlaying);
 export const useVolume = () => usePlaybackStore((s) => s.volume);
 export const useIsMuted = () => usePlaybackStore((s) => s.isMuted);
@@ -406,6 +438,9 @@ export const useCurrentStep = () =>
     s.currentStepIndex >= 0 ? s.steps[s.currentStepIndex] ?? null : null
   );
 
+export const useNarrationLanguage = () => usePlaybackStore((s) => s.narrationLanguage);
+export const useQuizLanguage = () => usePlaybackStore((s) => s.quizLanguage);
+
 export const useActiveAnimationOrders = () => usePlaybackStore((s) => s.activeAnimationOrders);
 export const useMaxActivatedOrder = () => usePlaybackStore((s) => s.maxActivatedOrder);
 
@@ -415,7 +450,9 @@ export const usePlaybackActions = () =>
       play: s.play,
       pause: s.pause,
       setPlayMode: s.setPlayMode,
-      setPlayVersion: s.setPlayVersion,
+      setPlayEdition: s.setPlayEdition,
+      setNarrationLanguage: s.setNarrationLanguage,
+      setQuizLanguage: s.setQuizLanguage,
       setVolume: s.setVolume,
       toggleMute: s.toggleMute,
       reset: s.reset,

@@ -43,7 +43,7 @@ export type PlayerAction =
 // === Core Enums/Types ===
 export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
 export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
-export type PlayVersion = 'classic' | 'interactive';
+export type PlayEdition = 'classic' | 'dynamic' | 'interactive';
 export type PlayMode = 'off' | 'auto';
 
 // === PlayableSpread ===

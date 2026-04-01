@@ -67,6 +67,63 @@ export function buildAnimationSteps(animations: SpreadAnimation[]): AnimationSte
   return steps;
 }
 
+// === Dynamic edition filter ===
+
+/**
+ * Generic on_click chain filter. Removes on_click items and their chained
+ * with_previous/after_previous followers. Works with any item type via accessors.
+ */
+function filterOutClickChains<T>(
+  items: T[],
+  getOrder: (item: T) => number,
+  getTrigger: (item: T) => string,
+): T[] {
+  if (!items || items.length === 0) return [];
+
+  const sorted = [...items].sort((a, b) => getOrder(a) - getOrder(b));
+  const result: T[] = [];
+  let inClickGroup = false;
+
+  for (const item of sorted) {
+    const trigger = getTrigger(item);
+
+    if (trigger === 'on_click') {
+      inClickGroup = true;
+      continue;
+    }
+
+    if (trigger === 'on_next') {
+      inClickGroup = false;
+      result.push(item);
+      continue;
+    }
+
+    // with_previous or after_previous
+    if (!inClickGroup) {
+      result.push(item);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Filters out on_click animations AND their chained followers for the Dynamic edition.
+ */
+export function filterAnimationsForDynamic(animations: SpreadAnimation[]): SpreadAnimation[] {
+  return filterOutClickChains(animations, (a) => a.order, (a) => a.trigger_type);
+}
+
+/**
+ * Filters out on_click resolved animations AND their chained followers for the Dynamic edition.
+ * Used by player-animation-sidebar which wraps animations in ResolvedAnimation.
+ */
+export function filterResolvedAnimationsForDynamic<T extends { animation: { order: number; trigger_type: string } }>(
+  items: T[],
+): T[] {
+  return filterOutClickChains(items, (i) => i.animation.order, (i) => i.animation.trigger_type);
+}
+
 // === Navigating steps by trigger type ===
 
 /** Find the next step with triggerType='on_next' starting from `fromIndex` */

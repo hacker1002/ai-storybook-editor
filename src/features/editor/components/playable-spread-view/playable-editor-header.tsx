@@ -1,40 +1,33 @@
-// playable-header.tsx - Header with play/stop button, version toggle and zoom slider for PlayableSpreadView
+// playable-editor-header.tsx - Header with play/stop button and zoom slider for animation-editor/remix-editor modes
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Play, Square, Minus, Plus } from "lucide-react";
-import type { ActiveCanvas, PlayVersion } from "@/types/playable-types";
+import type { ActiveCanvas } from "@/types/playable-types";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 
-interface PlayableHeaderProps {
+interface PlayableEditorHeaderProps {
   activeCanvas: ActiveCanvas;
-  playVersion: PlayVersion;
   zoomLevel: number;
   onZoomChange: (level: number) => void;
   onPlay: () => void;
   onStop: () => void;
-  onVersionChange: (version: PlayVersion) => void;
 }
 
-export const PlayableHeader = memo(function PlayableHeader({
+export const PlayableEditorHeader = memo(function PlayableEditorHeader({
   activeCanvas,
-  playVersion,
   zoomLevel,
   onZoomChange,
   onPlay,
   onStop,
-  onVersionChange,
-}: PlayableHeaderProps) {
-  const isPlayerActive = activeCanvas === "player";
-  const isZoomDisabled = isPlayerActive;
-  const isInteractive = playVersion === "interactive";
+}: PlayableEditorHeaderProps) {
+  const isPlaying = activeCanvas === "player";
 
   return (
     <div className="flex items-center justify-between px-3 py-2 border-b bg-background z-10">
       {/* Left: Play/Stop button */}
       <div className="flex items-center">
-        {isPlayerActive ? (
+        {isPlaying ? (
           <Button
             variant="ghost"
             size="icon"
@@ -57,37 +50,14 @@ export const PlayableHeader = memo(function PlayableHeader({
         )}
       </div>
 
-      {/* Center: Version toggle (Classic / Interactive) */}
-      <div className="flex items-center gap-2">
-        <span className={`text-xs font-medium ${!isInteractive ? "text-foreground" : "text-muted-foreground"}`}>
-          Classic
-        </span>
-        <Switch
-          checked={isInteractive}
-          onCheckedChange={(checked) => onVersionChange(checked ? "interactive" : "classic")}
-          aria-label="Toggle interactive mode"
-        />
-        <span className={`text-xs font-medium ${isInteractive ? "text-foreground" : "text-muted-foreground"}`}>
-          Interactive
-        </span>
-      </div>
-
       {/* Right: Zoom slider */}
-      <div
-        className={`flex items-center gap-1 ${
-          isZoomDisabled ? "opacity-40 pointer-events-none" : ""
-        }`}
-      >
+      <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() =>
-            onZoomChange(
-              Math.max(zoomLevel - PLAYABLE_ZOOM.STEP, PLAYABLE_ZOOM.MIN)
-            )
-          }
-          disabled={isZoomDisabled || zoomLevel <= PLAYABLE_ZOOM.MIN}
+          onClick={() => onZoomChange(Math.max(zoomLevel - PLAYABLE_ZOOM.STEP, PLAYABLE_ZOOM.MIN))}
+          disabled={zoomLevel <= PLAYABLE_ZOOM.MIN}
           aria-label="Zoom out"
         >
           <Minus className="h-3.5 w-3.5" />
@@ -99,7 +69,6 @@ export const PlayableHeader = memo(function PlayableHeader({
           max={PLAYABLE_ZOOM.MAX}
           step={PLAYABLE_ZOOM.STEP}
           onValueChange={([v]) => onZoomChange(v)}
-          disabled={isZoomDisabled}
           aria-label="Zoom level"
           className="w-[100px]"
         />
@@ -108,12 +77,8 @@ export const PlayableHeader = memo(function PlayableHeader({
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() =>
-            onZoomChange(
-              Math.min(zoomLevel + PLAYABLE_ZOOM.STEP, PLAYABLE_ZOOM.MAX)
-            )
-          }
-          disabled={isZoomDisabled || zoomLevel >= PLAYABLE_ZOOM.MAX}
+          onClick={() => onZoomChange(Math.min(zoomLevel + PLAYABLE_ZOOM.STEP, PLAYABLE_ZOOM.MAX))}
+          disabled={zoomLevel >= PLAYABLE_ZOOM.MAX}
           aria-label="Zoom in"
         >
           <Plus className="h-3.5 w-3.5" />

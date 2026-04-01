@@ -1,6 +1,6 @@
 // preview-creative-space.tsx - Dedicated creative space for animation preview/playback
-// Renders PlayerAnimationSidebar + PlayableSpreadView(mode=player) without editor logic.
-// Supports both Illustration and Retouch steps — shows static spreads when no animations exist.
+// Always uses retouch animation data regardless of current pipeline step.
+// Renders PlayerAnimationSidebar + PlayableSpreadView(mode=player).
 "use client";
 
 import { useState, useMemo } from "react";
@@ -18,30 +18,19 @@ import {
   useRetouchSpreads,
   useRetouchSpreadById,
   useRetouchAnimations,
-  useIllustrationSpreadIds,
-  useIllustrationSpreads,
-  useIllustrationSpreadById,
 } from "@/stores/snapshot-store/selectors";
-import { useCurrentLanguage, useCurrentStep } from "@/stores/editor-settings-store";
+import { useCurrentLanguage } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "PreviewCreativeSpace");
 
 export function PreviewCreativeSpace() {
-  const currentStep = useCurrentStep();
   const currentLanguage = useCurrentLanguage();
   const languageCode = currentLanguage.code;
 
-  // Select spread data source based on current pipeline step
-  const isRetouch = currentStep === "retouch";
-
-  const retouchSpreadIds = useRetouchSpreadIds();
-  const retouchSpreads = useRetouchSpreads();
-  const illustrationSpreadIds = useIllustrationSpreadIds();
-  const illustrationSpreads = useIllustrationSpreads();
-
-  const spreadIds = isRetouch ? retouchSpreadIds : illustrationSpreadIds;
-  const spreads = isRetouch ? retouchSpreads : illustrationSpreads;
+  // Always use retouch data — animations only exist in retouch step
+  const spreadIds = useRetouchSpreadIds();
+  const spreads = useRetouchSpreads();
 
   // Local state: selected spread (default = first)
   const [userSelectedSpreadId, setUserSelectedSpreadId] = useState<string | null>(null);
@@ -53,13 +42,8 @@ export function PreviewCreativeSpace() {
     return spreadIds[0] ?? null;
   }, [spreadIds, userSelectedSpreadId]);
 
-  // Spread data — use the correct selector based on step
-  const retouchSpread = useRetouchSpreadById(isRetouch ? (effectiveSpreadId ?? "") : "");
-  const illustrationSpread = useIllustrationSpreadById(!isRetouch ? (effectiveSpreadId ?? "") : "");
-  const currentSpread = isRetouch ? retouchSpread : illustrationSpread;
-
-  // Animations — only retouch has animations; illustration has none
-  const animations = useRetouchAnimations(isRetouch ? (effectiveSpreadId ?? "") : "");
+  const currentSpread = useRetouchSpreadById(effectiveSpreadId ?? "");
+  const animations = useRetouchAnimations(effectiveSpreadId ?? "");
 
   // Resolved animations for sidebar
   const itemsMap = useMemo(
@@ -80,13 +64,12 @@ export function PreviewCreativeSpace() {
     } as PlayableSpread));
   }, [spreads]);
 
-  const hasAnimations = animations.length > 0;
+  // Branch setting for the current spread (if any)
+  const branchSetting = currentSpread?.branch_setting ?? null;
 
-  // --- Render ---
   log.debug("render", "PreviewCreativeSpace", {
-    step: currentStep,
     spreadCount: spreadIds.length,
-    hasAnimations,
+    hasBranch: !!branchSetting,
   });
 
   if (spreadIds.length === 0) {
@@ -99,9 +82,11 @@ export function PreviewCreativeSpace() {
 
   return (
     <div className="flex h-full">
-      {hasAnimations && (
-        <PlayerAnimationSidebar animations={resolvedAnimations} />
-      )}
+      <PlayerAnimationSidebar
+        animations={resolvedAnimations}
+        branchSetting={branchSetting}
+        languageCode={languageCode}
+      />
       <div className="flex-1 overflow-hidden">
         <PlayableSpreadView
           mode="player"

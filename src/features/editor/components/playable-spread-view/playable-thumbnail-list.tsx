@@ -11,7 +11,7 @@ import {
   EditableAudio,
 } from "../shared-components";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
-import { useLanguageCode } from "@/stores/editor-settings-store";
+import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 
@@ -58,7 +58,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
   isSelected,
   onClick,
 }: PlayableThumbnailProps) {
-  const editorLangCode = useLanguageCode();
+  const narrationLangCode = useNarrationLanguage();
   // Scale factor: thumbnail width / canvas base width
   const scale = LAYOUT.THUMBNAIL_WIDTH / CANVAS.BASE_WIDTH;
 
@@ -74,12 +74,12 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
     if (!spread.textboxes) return [];
     return spread.textboxes
       .map((textbox) => {
-        const result = getTextboxContentForLanguage(textbox, editorLangCode);
+        const result = getTextboxContentForLanguage(textbox, narrationLangCode);
         if (!result?.content?.geometry) return null;
         return { textbox, langKey: result.langKey, data: result.content };
       })
       .filter(Boolean);
-  }, [spread.textboxes, editorLangCode]);
+  }, [spread.textboxes, narrationLangCode]);
 
   return (
     <button

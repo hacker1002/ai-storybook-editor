@@ -14,15 +14,13 @@ interface IconRailProps {
 export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRailProps) {
   const currentStep = useCurrentStep();
   const stepIcons = getIconsForStep(currentStep);
-  const showPreview = currentStep === 'illustration' || currentStep === 'retouch';
 
   // Auto-select first icon when step changes and current space is invalid
   useEffect(() => {
-    const hasPreview = currentStep === 'illustration' || currentStep === 'retouch';
     const validSpaces = [
       ...stepIcons.map((i) => i.id),
       ...DEFAULT_ICONS.map((i) => i.id),
-      ...(hasPreview ? [PREVIEW_ICON.id] : []),
+      PREVIEW_ICON.id,
       SETTING_ICON.id,
     ];
 
@@ -53,16 +51,14 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRai
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Preview icon (illustration/retouch only) */}
-        {showPreview && (
-          <div className="flex flex-col items-center gap-1 mb-1">
-            <IconRailItem
-              item={PREVIEW_ICON}
-              isActive={activeCreativeSpace === PREVIEW_ICON.id}
-              onClick={() => onCreativeSpaceChange(PREVIEW_ICON.id)}
-            />
-          </div>
-        )}
+        {/* Preview icon (always visible — uses retouch animation data) */}
+        <div className="flex flex-col items-center gap-1 mb-1">
+          <IconRailItem
+            item={PREVIEW_ICON}
+            isActive={activeCreativeSpace === PREVIEW_ICON.id}
+            onClick={() => onCreativeSpaceChange(PREVIEW_ICON.id)}
+          />
+        </div>
 
         {/* Default icons (BOTTOM) */}
         <div className="flex flex-col items-center gap-1">

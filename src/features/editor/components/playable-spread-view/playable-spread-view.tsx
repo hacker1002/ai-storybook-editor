@@ -7,7 +7,7 @@ import type {
   OperationMode,
   ActiveCanvas,
   PlayMode,
-  PlayVersion,
+  PlayEdition,
   PlayableSpread,
   RemixAsset,
   AssetSwapParams,
@@ -15,7 +15,8 @@ import type {
 import type { ItemType } from "@/types/spread-types";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 import { useSetZoomLevel } from '@/stores/editor-settings-store';
-import { PlayableHeader } from "./playable-header";
+import { PlayablePlayerHeader } from "./playable-player-header";
+import { PlayableEditorHeader } from "./playable-editor-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
 import { RemixEditorCanvas } from "./remix-editor-canvas";
@@ -69,7 +70,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }, [mode]); // eslint-disable-line
 
   const [playMode, setPlayMode] = useState<PlayMode>("off");
-  const [playVersion, setPlayVersion] = useState<PlayVersion>("classic");
+  const [playEdition, setPlayEdition] = useState<PlayEdition>("classic");
   const [zoomLevel, setZoomLevel] = useState<number>(PLAYABLE_ZOOM.DEFAULT);
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
@@ -100,14 +101,14 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     onStopPreview?.();
   }, [mode, onStopPreview]);
 
-  // Stop playback when switching versions to force step rebuild
-  const handleVersionChange = useCallback((version: PlayVersion) => {
-    log.info('handleVersionChange', 'version switching', { version, activeCanvas });
+  // Stop playback when switching editions to force step rebuild
+  const handleEditionChange = useCallback((edition: PlayEdition) => {
+    log.info('handleEditionChange', 'edition switching', { edition, activeCanvas });
     if (activeCanvas === 'player') {
       setActiveCanvas(mode);
       onStopPreview?.();
     }
-    setPlayVersion(version);
+    setPlayEdition(edition);
   }, [activeCanvas, mode, onStopPreview]);
 
   const handleSkipPrevious = useCallback(() => {
@@ -223,16 +224,21 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // === Render ===
   return (
     <div className="relative flex flex-col h-full">
-      {/* PlayableHeader - with play/stop button, version toggle and zoom slider */}
-      <PlayableHeader
-        activeCanvas={activeCanvas}
-        playVersion={playVersion}
-        zoomLevel={zoomLevel}
-        onZoomChange={setZoomLevel}
-        onPlay={handlePlay}
-        onStop={handleStop}
-        onVersionChange={handleVersionChange}
-      />
+      {/* Header: player mode gets version toggle only, editor modes get play/stop + zoom */}
+      {mode === "player" ? (
+        <PlayablePlayerHeader
+          playEdition={playEdition}
+          onEditionChange={handleEditionChange}
+        />
+      ) : (
+        <PlayableEditorHeader
+          activeCanvas={activeCanvas}
+          zoomLevel={zoomLevel}
+          onZoomChange={setZoomLevel}
+          onPlay={handlePlay}
+          onStop={handleStop}
+        />
+      )}
 
       {/* Canvas Area - full height (no header row) */}
       <div className="flex-1 overflow-hidden flex">
@@ -260,7 +266,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             spread={selectedSpread}
             zoomLevel={zoomLevel}
             playMode={playMode}
-            playVersion={playVersion}
+            playEdition={playEdition}
             hasNext={hasNext}
             hasPrevious={hasPrevious}
             onSpreadComplete={handleSpreadComplete}

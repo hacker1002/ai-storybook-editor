@@ -12,18 +12,19 @@ import {
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
-import { useLanguageCode } from "@/stores/editor-settings-store";
+import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { TEXTBOX_Z_INDEX_BASE, EFFECT_TYPE } from "@/constants/playable-constants";
 import type {
   PlayableSpread,
   PlayMode,
-  PlayVersion,
+  PlayEdition,
   AnimationStep,
 } from "@/types/playable-types";
 import {
   isReplayableClick,
   buildAnimationSteps,
+  filterAnimationsForDynamic,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
 import {
@@ -46,7 +47,7 @@ export interface PlayerCanvasProps {
   spread: PlayableSpread;
   zoomLevel: number;
   playMode: PlayMode;
-  playVersion: PlayVersion;
+  playEdition: PlayEdition;
   hasNext: boolean;
   hasPrevious: boolean;
   onSpreadComplete: (spreadId: string) => void;
@@ -82,7 +83,7 @@ export function PlayerCanvas({
   spread,
   zoomLevel,
   playMode,
-  playVersion,
+  playEdition,
   hasNext,
   hasPrevious,
   onSpreadComplete,
@@ -96,7 +97,7 @@ export function PlayerCanvas({
   const pendingClickTargetId = usePendingClickTargetId();
   const replayableItems = useReplayableItems();
   const steps = usePlaybackStore((s) => s.steps);
-  const editorLangCode = useLanguageCode();
+  const narrationLangCode = useNarrationLanguage();
 
   // === Quiz modal state ===
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
@@ -106,15 +107,19 @@ export function PlayerCanvas({
     setActiveQuizId(quizId);
   }, []);
 
-  // === Version-filtered animations ===
-  // Classic mode: only READ_ALONG animations (effect type 11)
-  // Interactive mode: all animations
+  // === Edition-filtered animations ===
+  // Classic: only READ_ALONG animations (effect type 11)
+  // Dynamic: all animations except on_click trigger chains
+  // Interactive: all animations
   const filteredAnimations = useMemo(() => {
-    if (playVersion === 'classic') {
+    if (playEdition === 'classic') {
       return spread.animations.filter((a) => a.effect.type === EFFECT_TYPE.READ_ALONG);
     }
+    if (playEdition === 'dynamic') {
+      return filterAnimationsForDynamic(spread.animations);
+    }
     return spread.animations;
-  }, [spread.animations, playVersion]);
+  }, [spread.animations, playEdition]);
 
   // === GSAP engine hook ===
   const {
@@ -129,7 +134,7 @@ export function PlayerCanvas({
     spread,
     filteredAnimations,
     zoomLevel,
-    editorLangCode,
+    narrationLangCode,
     onSpreadComplete,
     onQuizPlay: handleQuizPlay,
   });
@@ -167,12 +172,12 @@ export function PlayerCanvas({
     }
   }, [playMode, playbackActions, filteredAnimations]);
 
-  // 1b. Sync playVersion from props into store
+  // 1b. Sync playEdition from props into store
   useEffect(() => {
-    playbackActions.setPlayVersion(playVersion);
-  }, [playVersion, playbackActions]);
+    playbackActions.setPlayEdition(playEdition);
+  }, [playEdition, playbackActions]);
 
-  // 2. Reset steps on spread change or version change & ensure playback starts
+  // 2. Reset steps on spread change or edition change & ensure playback starts
   useEffect(() => {
     setActiveQuizId(null); // Clear any open quiz modal from previous spread
     const newSteps = buildAnimationSteps(filteredAnimations);
@@ -375,12 +380,12 @@ export function PlayerCanvas({
     if (!spread.textboxes) return [];
     return spread.textboxes
       .map((textbox) => {
-        const result = getTextboxContentForLanguage(textbox, editorLangCode);
+        const result = getTextboxContentForLanguage(textbox, narrationLangCode);
         if (!result?.content?.geometry) return null;
         return { textbox, langKey: result.langKey, data: result.content };
       })
       .filter(Boolean);
-  }, [spread.textboxes, editorLangCode]);
+  }, [spread.textboxes, narrationLangCode]);
 
   // === Render ===
   return (
@@ -590,7 +595,7 @@ export function PlayerCanvas({
           return (
             <PlayQuizModal
               quiz={activeQuiz}
-              languageKey={editorLangCode}
+              languageKey={narrationLangCode}
               onClose={handleQuizModalClose}
             />
           );

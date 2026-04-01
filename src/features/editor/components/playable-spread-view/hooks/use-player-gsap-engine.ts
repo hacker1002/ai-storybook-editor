@@ -34,12 +34,12 @@ const log = createLogger('Editor', 'usePlayerGsapEngine');
 function resolveReadAlongAudioData(
   anim: { effect: { type: number }; target: { id: string; type: string } },
   textboxes: Record<string, unknown>[] | undefined,
-  editorLangCode: string,
+  narrationLangCode: string,
 ): { wordTimings?: import('@/types/spread-types').WordTiming[]; audioUrl?: string } {
   if (anim.effect.type !== EFFECT_TYPE.READ_ALONG || anim.target.type !== 'textbox') return {};
   const textbox = textboxes?.find((tb) => (tb as { id: string }).id === anim.target.id);
   if (!textbox) return {};
-  const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, editorLangCode);
+  const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, narrationLangCode);
   const media = result?.content?.audio?.media;
   const syncedMedia = media?.find((m) => m.script_synced) ?? media?.[0];
   if (!syncedMedia) return {};
@@ -58,10 +58,10 @@ const TRIGGER_DELAY = {
 
 export interface UsePlayerGsapEngineParams {
   spread: PlayableSpread;
-  /** Pre-filtered animations by playVersion (from PlayerCanvas prop, not store) */
+  /** Pre-filtered animations by playEdition (from PlayerCanvas prop, not store) */
   filteredAnimations: PlayableSpread['animations'];
   zoomLevel: number;
-  editorLangCode: string;
+  narrationLangCode: string;
   onSpreadComplete: (spreadId: string) => void;
   onQuizPlay?: (quizId: string) => void;
 }
@@ -86,9 +86,9 @@ export interface UsePlayerGsapEngineReturn {
  */
 export function usePlayerGsapEngine({
   spread,
-  filteredAnimations: versionFilteredAnimations,
+  filteredAnimations: editionFilteredAnimations,
   zoomLevel,
-  editorLangCode,
+  narrationLangCode,
   onSpreadComplete,
   onQuizPlay,
 }: UsePlayerGsapEngineParams): UsePlayerGsapEngineReturn {
@@ -272,7 +272,7 @@ export function usePlayerGsapEngine({
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           ...dims,
-          ...resolveReadAlongAudioData(anim, spread.textboxes, editorLangCode),
+          ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
           onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
           onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
         });
@@ -281,7 +281,7 @@ export function usePlayerGsapEngine({
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]
+    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -295,7 +295,7 @@ export function usePlayerGsapEngine({
     });
 
     const dims = getContainerDims();
-    const animations = [...versionFilteredAnimations].sort((a, b) => a.order - b.order);
+    const animations = [...editionFilteredAnimations].sort((a, b) => a.order - b.order);
 
     animations.forEach((anim, i) => {
       // Quiz PLAY: pause timeline and invoke callback (auto mode too)
@@ -338,7 +338,7 @@ export function usePlayerGsapEngine({
       if (anim.effect.type === EFFECT_TYPE.READ_ALONG && anim.target.type === 'textbox') {
         const textbox = spread.textboxes?.find((tb) => tb.id === anim.target.id);
         if (textbox) {
-          const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, editorLangCode);
+          const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, narrationLangCode);
           const media = result?.content?.audio?.media;
           const syncedMedia = media?.find((m) => m.script_synced) ?? media?.[0];
           if (syncedMedia) {
@@ -360,7 +360,7 @@ export function usePlayerGsapEngine({
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, effectiveVolume, versionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]);
+  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -415,7 +415,7 @@ export function usePlayerGsapEngine({
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           ...dims,
-          ...resolveReadAlongAudioData(anim, spread.textboxes, editorLangCode),
+          ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
           onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
           onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
         });
@@ -424,7 +424,7 @@ export function usePlayerGsapEngine({
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, editorLangCode]
+    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode]
   );
 
   // === Returned utility functions ===
@@ -472,7 +472,7 @@ export function usePlayerGsapEngine({
 
       // Re-apply initial states for affected targets
       applyInitialStates(
-        versionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
+        editionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
         spreadContainerRef.current
       );
@@ -491,7 +491,7 @@ export function usePlayerGsapEngine({
         });
       }
     },
-    [steps, versionFilteredAnimations, findItemGeometry]
+    [steps, editionFilteredAnimations, findItemGeometry]
   );
 
   // === Lifecycle: Cleanup on unmount ===
@@ -503,18 +503,20 @@ export function usePlayerGsapEngine({
     };
   }, [cancelPendingRaf, killTimeline, killReplayTimeline]);
 
-  // === Lifecycle: Spread change → kill timelines, reset styles, apply initial states ===
+  // === Lifecycle: Spread or edition change → kill timelines, reset styles, apply initial states ===
   // NOTE: RESET dispatch (store) is NOT done here — it's done by the parent (PlayerCanvas).
+  // editionFilteredAnimations is included so switching editions re-applies correct initial states
+  // (e.g. entrance animations set opacity:0; removing them must restore normal opacity).
   useEffect(() => {
     cancelPendingRaf();
     killTimeline();
     killReplayTimeline();
     resetElementStyles(elementRefsMap.current);
-    applyInitialStates(versionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
+    applyInitialStates(editionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
 
     prevStepIndexRef.current = -1;
 
-    // Auto mode: rebuild full timeline on spread change if already playing
+    // Auto mode: rebuild full timeline on spread/edition change if already playing
     if (playMode === 'auto' && isPlaying) {
       pendingRafRef.current = requestAnimationFrame(() => {
         pendingRafRef.current = null;
@@ -526,7 +528,7 @@ export function usePlayerGsapEngine({
       cancelPendingRaf();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spread.id]);
+  }, [spread.id, editionFilteredAnimations]);
 
   // === Lifecycle: Phase change → build step timeline (manual/off mode) ===
   useEffect(() => {
@@ -560,7 +562,7 @@ export function usePlayerGsapEngine({
 
       // Re-apply initial states for affected targets
       applyInitialStates(
-        versionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
+        editionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
         spreadContainerRef.current
       );
@@ -597,7 +599,7 @@ export function usePlayerGsapEngine({
       cancelPendingRaf();
       killTimeline();
       resetElementStyles(elementRefsMap.current);
-      applyInitialStates(versionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
+      applyInitialStates(editionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
       return;
     }
 
@@ -611,7 +613,7 @@ export function usePlayerGsapEngine({
         pendingRafRef.current = requestAnimationFrame(() => {
           pendingRafRef.current = null;
           resetElementStyles(elementRefsMap.current);
-          applyInitialStates(versionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
+          applyInitialStates(editionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
           buildAndPlayFullTimeline();
         });
       } else {
