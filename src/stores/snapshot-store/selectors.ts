@@ -108,7 +108,7 @@ export const useRetouchObjectsByImageId = (
     useShallow((s) => {
       const spread = s.illustration.spreads.find((sp) => sp.id === spreadId);
       if (!spread) return [];
-      const images = spread.images.filter((i) => i.original_image_id === originalImageId);
+      const images = (spread.images ?? []).filter((i) => i.original_image_id === originalImageId);
       const videos = (spread.videos ?? []).filter((v) => v.original_image_id === originalImageId);
       return [...images, ...videos];
     }),

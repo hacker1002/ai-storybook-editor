@@ -4,6 +4,17 @@ import { immer } from 'zustand/middleware/immer';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import type { SnapshotStore } from './types';
+import type { BaseSpread } from '@/types/spread-types';
+
+/** Ensure every spread has required arrays so consumers never hit undefined */
+function normalizeSpread(s: BaseSpread): BaseSpread {
+  return {
+    ...s,
+    images: s.images ?? [],
+    textboxes: s.textboxes ?? [],
+    pages: s.pages ?? [],
+  };
+}
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';
 import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
@@ -70,7 +81,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.dummies = data.dummies ?? [];
               const ill = data.illustration;
               state.illustration = {
-                spreads: ill?.spreads ?? [],
+                spreads: (ill?.spreads ?? []).map(normalizeSpread),
                 sections: ill?.sections ?? [],
               };
               state.props = data.props ?? [];
@@ -160,7 +171,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.dummies = data.dummies ?? [];
             const ill = data.illustration;
             state.illustration = {
-              spreads: ill?.spreads ?? [],
+              spreads: (ill?.spreads ?? []).map(normalizeSpread),
               sections: ill?.sections ?? [],
             };
             state.props = data.props ?? [];

@@ -95,7 +95,7 @@ export function collectPictorialZItems(
   excludeId?: string
 ): ZIndexItem[] {
   const items: ZIndexItem[] = [];
-  for (const img of spread.images) {
+  for (const img of spread.images ?? []) {
     if (img.id !== excludeId) {
       items.push({ id: img.id, z: img["z-index"] ?? 0 });
     }
@@ -150,7 +150,7 @@ export function collectTextZItems(
   excludeId?: string
 ): ZIndexItem[] {
   const items: ZIndexItem[] = [];
-  for (const tb of spread.textboxes) {
+  for (const tb of spread.textboxes ?? []) {
     if (tb.id !== excludeId) {
       items.push({ id: tb.id, z: tb["z-index"] ?? 0 });
     }

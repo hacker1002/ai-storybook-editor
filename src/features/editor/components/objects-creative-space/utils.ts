@@ -99,7 +99,7 @@ export function buildObjectList(
   const objectsLayer = LAYER_CONFIG.OBJECTS;
   const textLayer = LAYER_CONFIG.TEXT;
 
-  spread.images.forEach((img, i) => {
+  (spread.images ?? []).forEach((img, i) => {
     entries.push({
       id: img.id,
       type: "image",
@@ -114,7 +114,7 @@ export function buildObjectList(
     });
   });
 
-  spread.textboxes.forEach((tb, i) => {
+  (spread.textboxes ?? []).forEach((tb, i) => {
     entries.push({
       id: tb.id,
       type: "text",
