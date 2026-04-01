@@ -1,6 +1,6 @@
 // spreads-main-view.tsx - CanvasSpreadView wrapper for illustration phase (image, textbox, shape only)
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
 import {
@@ -170,10 +170,17 @@ export function SpreadsMainView({
 
   // === Generate image modal state ===
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [generateModalImage, setGenerateModalImage] = useState<SpreadImage | null>(null);
+  const [generateModalImageId, setGenerateModalImageId] = useState<string | null>(null);
+
+  // Derive live image from store so modal reflects generation results in real-time
+  const generateModalImage = useMemo(() => {
+    if (!generateModalImageId) return null;
+    const spread = illustrationSpreads.find((s) => s.id === selectedSpreadId);
+    return spread?.raw_images?.find((img) => img.id === generateModalImageId) ?? null;
+  }, [generateModalImageId, illustrationSpreads, selectedSpreadId]);
 
   const openGenerateModal = useCallback((image: SpreadImage) => {
-    setGenerateModalImage(image);
+    setGenerateModalImageId(image.id);
     setGenerateModalOpen(true);
   }, []);
 
@@ -360,7 +367,6 @@ export function SpreadsMainView({
           image={generateModalImage}
           onUpdateImage={(updates) => {
             handleGenerateImageUpdate(generateModalImage.id, updates);
-            setGenerateModalImage((prev) => (prev ? { ...prev, ...updates } : null));
           }}
         />
       )}

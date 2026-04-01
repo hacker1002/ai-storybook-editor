@@ -147,6 +147,7 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
         artStyleDescription: params.artStyleDescription,
         stageVariantImageUrl: params.stageVariantImageUrl,
         referenceImages: params.referenceImages,
+        aspectRatio: params.aspectRatio,
       });
 
     default:

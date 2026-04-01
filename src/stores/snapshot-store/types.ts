@@ -329,6 +329,7 @@ interface SceneGenerateParams extends ImageTaskTarget {
   artStyleDescription: string;
   stageVariantImageUrl?: string;
   referenceImages?: ReferenceImages;
+  aspectRatio?: string;
 }
 
 export type StartGenerateTaskParams =

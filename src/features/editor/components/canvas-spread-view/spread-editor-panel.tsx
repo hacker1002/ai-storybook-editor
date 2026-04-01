@@ -70,30 +70,26 @@ const ICON_ELEMENT_PX = 32;
 //   images/textboxes          — playable phase (interactive objects)
 // Combined index: raw items occupy [0..rawCount-1], playable items [rawCount..rawCount+playableCount-1]
 
+// Lookup by index: raw and playable are separate index spaces (no combined offset)
 function getImageAtIndex<TSpread extends BaseSpread>(spread: TSpread, index: number): SpreadImage | undefined {
-  const raw = spread.raw_images ?? [];
-  return index < raw.length ? raw[index] : spread.images[index - raw.length];
+  return (spread.raw_images ?? [])[index] ?? (spread.images ?? [])[index];
 }
 
 function getTextboxAtIndex<TSpread extends BaseSpread>(spread: TSpread, index: number): SpreadTextbox | undefined {
-  const raw = spread.raw_textboxes ?? [];
-  return index < raw.length ? raw[index] : spread.textboxes[index - raw.length];
+  return (spread.raw_textboxes ?? [])[index] ?? (spread.textboxes ?? [])[index];
 }
 
+// Resolve ID → index: search raw first, then playable (separate index spaces)
 function resolveImageIndex<TSpread extends BaseSpread>(spread: TSpread, id: string): number {
-  const raw = spread.raw_images ?? [];
-  const rawIdx = raw.findIndex((img) => img.id === id);
+  const rawIdx = (spread.raw_images ?? []).findIndex((img) => img.id === id);
   if (rawIdx >= 0) return rawIdx;
-  const playableIdx = spread.images.findIndex((img) => img.id === id);
-  return playableIdx >= 0 ? raw.length + playableIdx : -1;
+  return (spread.images ?? []).findIndex((img) => img.id === id);
 }
 
 function resolveTextboxIndex<TSpread extends BaseSpread>(spread: TSpread, id: string): number {
-  const raw = spread.raw_textboxes ?? [];
-  const rawIdx = raw.findIndex((tb) => tb.id === id);
+  const rawIdx = (spread.raw_textboxes ?? []).findIndex((tb) => tb.id === id);
   if (rawIdx >= 0) return rawIdx;
-  const playableIdx = spread.textboxes.findIndex((tb) => tb.id === id);
-  return playableIdx >= 0 ? raw.length + playableIdx : -1;
+  return (spread.textboxes ?? []).findIndex((tb) => tb.id === id);
 }
 
 // === Props Interface ===
@@ -236,7 +232,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       resolvedType = "image";
       // Search raw_images first (illustration layer), then images (playable layer) with offset
       index = resolveImageIndex(spread, id);
-    } else if (type === "text") {
+    } else if (type === "textbox" || type === "text") {
       resolvedType = "textbox";
       // Search raw_textboxes first (illustration layer), then textboxes (playable layer) with offset
       index = resolveTextboxIndex(spread, id);
@@ -768,9 +764,13 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // Unified action handler for context builders
   const handleSpreadItemAction = useCallback(
     (params: Omit<SpreadItemActionUnion, "spreadId">) => {
+      // Clear selection before delete to prevent stale index crash on re-render
+      if (params.action === "delete") {
+        handleElementSelect(null);
+      }
       onSpreadItemAction?.(params);
     },
-    [onSpreadItemAction]
+    [onSpreadItemAction, handleElementSelect]
   );
 
   // === Render ===
@@ -836,13 +836,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           />
         )}
 
-        {/* Images: render raw layer (illustration phase) then playable layer (retouch phase).
-            Combined index: raw images occupy [0..rawCount-1], playable images [rawCount..]. */}
+        {/* Images: raw_image → raw_images only, image → images only */}
         {(renderItems.includes("image") || renderItems.includes("raw_image")) &&
           renderImageItem &&
           (renderItems.includes("raw_image")
             ? (spread.raw_images ?? [])
-            : [...(spread.raw_images ?? []), ...spread.images]
+            : (spread.images ?? [])
           ).map((image, combinedIndex) => {
             const context = buildImageContext(
               image,
@@ -870,7 +869,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             // Offset by total images (raw + playable) so videos stack above all images
-            const totalImageCount = (spread.raw_images?.length ?? 0) + spread.images.length;
+            const totalImageCount = Math.max(spread.raw_images?.length ?? 0, spread.images?.length ?? 0);
             context.zIndex = (video as SpreadVideo)['z-index'] ?? (LAYER_CONFIG.MEDIA.min + totalImageCount + index);
             return <Fragment key={video.id ?? `vid-${index}`}>{renderVideoItem(context)}</Fragment>;
           })}
@@ -891,13 +890,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             return <Fragment key={shape.id ?? `shp-${index}`}>{renderShapeItem(context)}</Fragment>;
           })}
 
-        {/* Textboxes: render raw layer (illustration phase) then playable layer (retouch phase).
-            Combined index: raw textboxes occupy [0..rawCount-1], playable textboxes [rawCount..]. */}
+        {/* Textboxes: raw_textbox → raw_textboxes only, textbox → textboxes only */}
         {(renderItems.includes("textbox") || renderItems.includes("raw_textbox")) &&
           renderTextItem &&
           (renderItems.includes("raw_textbox")
             ? (spread.raw_textboxes ?? [])
-            : [...(spread.raw_textboxes ?? []), ...spread.textboxes]
+            : (spread.textboxes ?? [])
           ).map((textbox, combinedIndex) => {
             const context = buildTextContext(
               textbox,

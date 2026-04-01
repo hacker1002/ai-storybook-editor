@@ -149,11 +149,11 @@ export function GenerateImageModal({
   }, [image.illustrations]);
 
   const handleGallerySelect = useCallback(
-    (index: number) => {
+    (mediaUrl: string) => {
       if (!image.illustrations) return;
-      const updatedIllustrations = image.illustrations.map((ill, i) => ({
+      const updatedIllustrations = image.illustrations.map((ill) => ({
         ...ill,
-        is_selected: i === index,
+        is_selected: ill.media_url === mediaUrl,
       }));
       onUpdateImage({ illustrations: updatedIllustrations });
     },
@@ -203,6 +203,11 @@ export function GenerateImageModal({
           }))
         : undefined;
 
+    log.debug("handleGenerate", "params", {
+      aspectRatio: image.aspect_ratio,
+      imageId: image.id,
+    });
+
     startGenerateTask({
       entityType: "illustration_image",
       entityKey: spreadId,
@@ -213,6 +218,7 @@ export function GenerateImageModal({
       artStyleDescription: artStyleDescription ?? '',
       stageVariantImageUrl: resolveStageVariantImageUrl(),
       referenceImages,
+      aspectRatio: image.aspect_ratio,
     });
 
     generateRefs.clearImages();
@@ -222,6 +228,7 @@ export function GenerateImageModal({
     spreadId,
     image.id,
     image.title,
+    image.aspect_ratio,
     generateRefs,
     selectedStageVariant,
     artStyleDescription,
@@ -263,6 +270,7 @@ export function GenerateImageModal({
       prompt: trimmed,
       imageUrl: selectedIllustration.media_url,
       referenceImages,
+      aspectRatio: image.aspect_ratio,
     });
 
     setEditPromptText("");
@@ -272,6 +280,7 @@ export function GenerateImageModal({
     image.illustrations,
     image.id,
     image.title,
+    image.aspect_ratio,
     isProcessing,
     spreadId,
     editRefs,
@@ -443,7 +452,9 @@ export function GenerateImageModal({
               </div>
               <div className="grid grid-cols-3 gap-2 max-h-[328px] overflow-y-auto p-0.5">
                 {image.illustrations && image.illustrations.length > 0 ? (
-                  image.illustrations.map((illustration, index) => (
+                  [...image.illustrations]
+                    .sort((a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime())
+                    .map((illustration, index) => (
                     <button
                       key={index}
                       className={`relative aspect-square rounded-md transition-all ${
@@ -451,7 +462,7 @@ export function GenerateImageModal({
                           ? "ring-2 ring-primary"
                           : "ring-1 ring-border hover:scale-105"
                       }`}
-                      onClick={() => handleGallerySelect(index)}
+                      onClick={() => handleGallerySelect(illustration.media_url)}
                       disabled={isProcessing}
                     >
                       <img
