@@ -23,6 +23,21 @@ import {
 
 const log = createLogger('Store', 'IllustrationSlice');
 
+/** Recalculate page numbers for all spreads after reorder/delete.
+ *  Single-page spread (DPS) → number: "N-N+1", double-page → numbers: N, N+1 */
+function renumberSpreadPages(spreads: { pages: { number: string | number }[] }[]) {
+  let pageNum = 0;
+  for (const spread of spreads) {
+    if (spread.pages.length === 1) {
+      spread.pages[0].number = `${pageNum}-${pageNum + 1}`;
+    } else {
+      spread.pages[0].number = pageNum;
+      if (spread.pages[1]) spread.pages[1].number = pageNum + 1;
+    }
+    pageNum += 2;
+  }
+}
+
 export const createIllustrationSlice: StateCreator<
   SnapshotStore,
   [['zustand/immer', never]],
@@ -118,6 +133,7 @@ export const createIllustrationSlice: StateCreator<
         }
       }
 
+      renumberSpreadPages(state.illustration.spreads);
       state.sync.isDirty = true;
     }),
 
@@ -132,6 +148,7 @@ export const createIllustrationSlice: StateCreator<
         // Validate section ranges — swap start/end if reorder inverted them
         validateSectionRanges(state);
 
+        renumberSpreadPages(spreads);
         state.sync.isDirty = true;
       }
     }),

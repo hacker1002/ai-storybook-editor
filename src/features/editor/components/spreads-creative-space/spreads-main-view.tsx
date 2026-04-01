@@ -84,9 +84,12 @@ export function SpreadsMainView({
 
   const handleSpreadAdd = useCallback(
     (type: SpreadType) => {
-      const spreadIndex = illustrationSpreads.length;
+      // Each spread consumes 2 page numbers regardless of type
+      const nextPageNum = illustrationSpreads.length * 2;
       const basePage: PageData = {
-        number: spreadIndex * 2,
+        // Single spread (DPS): one page covering two page numbers → "N-N+1"
+        // Double spread: two pages with individual numbers
+        number: type === 'single' ? `${nextPageNum}-${nextPageNum + 1}` : nextPageNum,
         type: 'normal_page',
         layout: null,
         background: { color: '#FFFFFF', texture: null },
@@ -95,7 +98,7 @@ export function SpreadsMainView({
         id: crypto.randomUUID(),
         pages:
           type === 'double'
-            ? [basePage, { ...basePage, number: spreadIndex * 2 + 1 }]
+            ? [basePage, { ...basePage, number: nextPageNum + 1 }]
             : [basePage],
         images: [],
         textboxes: [],
