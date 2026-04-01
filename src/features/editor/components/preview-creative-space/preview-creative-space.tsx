@@ -84,7 +84,6 @@ export function PreviewCreativeSpace() {
       <PlayerAnimationSidebar
         animations={resolvedAnimations}
         branchSetting={branchSetting}
-        languageCode={languageCode}
       />
       <div className="flex-1 overflow-hidden">
         <PlayableSpreadView
