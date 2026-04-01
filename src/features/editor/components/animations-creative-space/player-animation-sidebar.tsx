@@ -6,6 +6,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   usePlaybackStore,
+  useNarrationLanguage,
   useActiveAnimationOrders,
   usePlayerPhase,
   useMaxActivatedOrder,
@@ -27,7 +28,6 @@ import { filterResolvedAnimationsForDynamic } from "../playable-spread-view/play
 interface PlayerAnimationSidebarProps {
   animations: ResolvedAnimation[];
   branchSetting?: BranchSetting | null;
-  languageCode?: string;
 }
 
 // No-op callbacks for disabled AnimationListItem (editor callbacks required by interface)
@@ -41,9 +41,9 @@ const noopBoolean = (_v: boolean) => {};
 export function PlayerAnimationSidebar({
   animations,
   branchSetting,
-  languageCode,
 }: PlayerAnimationSidebarProps) {
-  // Subscribe to playback store for highlight state
+  // Subscribe to playback store for highlight state and language
+  const narrationLanguage = useNarrationLanguage();
   const activeAnimationOrders = useActiveAnimationOrders();
   const phase = usePlayerPhase();
   const maxActivatedOrder = useMaxActivatedOrder();
@@ -177,8 +177,8 @@ export function PlayerAnimationSidebar({
 
             {/* Branch indicator — shown when spread has branching */}
             {branchSetting && branchSetting.branches.length > 0 && (() => {
-              const branchTitle = languageCode
-                ? (branchSetting[languageCode] as BranchLocalizedContent | undefined)?.title
+              const branchTitle = narrationLanguage
+                ? (branchSetting[narrationLanguage] as BranchLocalizedContent | undefined)?.title
                 : undefined;
               return (
                 <div className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/50 px-2.5 py-2">

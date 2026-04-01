@@ -19,14 +19,13 @@ import {
   useRetouchSpreadById,
   useRetouchAnimations,
 } from "@/stores/snapshot-store/selectors";
-import { useCurrentLanguage } from "@/stores/editor-settings-store";
+import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "PreviewCreativeSpace");
 
 export function PreviewCreativeSpace() {
-  const currentLanguage = useCurrentLanguage();
-  const languageCode = currentLanguage.code;
+  const languageCode = useNarrationLanguage();
 
   // Always use retouch data — animations only exist in retouch step
   const spreadIds = useRetouchSpreadIds();
