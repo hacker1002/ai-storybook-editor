@@ -84,6 +84,12 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
   renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
 
+  // Raw item render functions (illustration layer)
+  renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderRawTextbox?: (context: TextItemContext<TSpread>) => ReactNode;
+  renderRawImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
+  renderRawTextboxToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
+
   // Spread-level callbacks
   onSpreadSelect?: (spreadId: string) => void;
   onSpreadReorder?: (fromIndex: number, toIndex: number) => void;
@@ -101,6 +107,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   canDeleteItem?: boolean;
   canResizeItem?: boolean;
   canDragItem?: boolean;
+  preventEditRawItem?: boolean;
 
   // Layout config
   availableLayouts?: LayoutOption[];
@@ -129,6 +136,10 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   renderShapeToolbar,
   renderVideoToolbar,
   renderAudioToolbar,
+  renderRawImage,
+  renderRawTextbox,
+  renderRawImageToolbar,
+  renderRawTextboxToolbar,
   onSpreadSelect,
   onSpreadReorder,
   onSpreadAdd,
@@ -141,6 +152,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   canDeleteItem = false,
   canResizeItem = true,
   canDragItem = true,
+  preventEditRawItem = false,
   availableLayouts = [],
   initialSelectedId,
   initialViewMode = 'edit',
@@ -360,10 +372,15 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderShapeToolbar={renderShapeToolbar}
                 renderVideoToolbar={renderVideoToolbar}
                 renderAudioToolbar={renderAudioToolbar}
+                renderRawImage={renderRawImage}
+                renderRawTextbox={renderRawTextbox}
+                renderRawImageToolbar={renderRawImageToolbar}
+                renderRawTextboxToolbar={renderRawTextboxToolbar}
                 onSpreadItemAction={handleSpreadItemAction}
                 canDeleteItem={canDeleteItem}
                 canResizeItem={canResizeItem}
                 canDragItem={canDragItem}
+                preventEditRawItem={preventEditRawItem}
                 availableLayouts={availableLayouts}
                 externalSelectedItemId={externalSelectedItemId}
               />
@@ -382,6 +399,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderVideoItem={renderVideoItem}
                 renderAudioItem={renderAudioItem}
                 renderQuizItem={renderQuizItem}
+                renderRawImage={renderRawImage}
+                renderRawTextbox={renderRawTextbox}
                 canAdd={canAddSpread}
                 canReorder={canReorderSpread}
                 canDelete={canDeleteSpread}
@@ -406,6 +425,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             renderShapeItem={renderShapeItem}
             renderVideoItem={renderVideoItem}
             renderAudioItem={renderAudioItem}
+            renderRawImage={renderRawImage}
+            renderRawTextbox={renderRawTextbox}
             canAdd={canAddSpread}
             canReorder={canReorderSpread}
             canDelete={canDeleteSpread}

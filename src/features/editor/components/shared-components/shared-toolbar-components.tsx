@@ -129,6 +129,47 @@ export function GeometrySection({
   );
 }
 
+/** Read-only geometry display — shows x, y, w, h as non-editable text */
+export function ReadOnlyGeometrySection({ geometry }: { geometry: Geometry }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground uppercase">
+        Geometry
+      </Label>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground w-14">
+            Position
+          </Label>
+          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
+            <span className="px-2 text-sm text-muted-foreground border-r border-border">X</span>
+            <span className="w-12 px-1 text-sm text-center text-muted-foreground">{Math.round(geometry.x)}</span>
+            <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
+          </div>
+          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
+            <span className="px-2 text-sm text-muted-foreground border-r border-border">Y</span>
+            <span className="w-12 px-1 text-sm text-center text-muted-foreground">{Math.round(geometry.y)}</span>
+            <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground w-14">Size</Label>
+          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
+            <span className="px-2 text-sm text-muted-foreground border-r border-border">W</span>
+            <span className="w-12 px-1 text-sm text-center text-muted-foreground">{Math.round(geometry.w)}</span>
+            <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
+          </div>
+          <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
+            <span className="px-2 text-sm text-muted-foreground border-r border-border">H</span>
+            <span className="w-12 px-1 text-sm text-center text-muted-foreground">{Math.round(geometry.h)}</span>
+            <span className="px-1.5 text-sm text-muted-foreground border-l border-border">%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MediaIdentitySection({
   type,
   name,

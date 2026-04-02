@@ -275,7 +275,7 @@ export function SpreadsMainView({
           isEditable={context.isSpreadSelected}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'image', id: context.item.id });
+            onItemSelect({ type: 'raw_image', id: context.item.id });
           }}
           onArtNoteChange={(artNote) => context.onUpdate({ art_note: artNote })}
           onEditingChange={context.onEditingChange}
@@ -301,7 +301,7 @@ export function SpreadsMainView({
           isEditable={context.isSpreadSelected}
           onSelect={() => {
             context.onSelect();
-            onItemSelect({ type: 'textbox', id: context.item.id });
+            onItemSelect({ type: 'raw_textbox', id: context.item.id });
           }}
           onTextChange={(newText) => {
             context.onUpdate({
@@ -340,11 +340,11 @@ export function SpreadsMainView({
         spreads={illustrationSpreads}
         initialSelectedId={selectedSpreadId}
         renderItems={['raw_image', 'raw_textbox', 'shape']}
-        renderImageItem={renderIllustrationImage}
-        renderTextItem={renderIllustrationTextbox}
+        renderRawImage={renderIllustrationImage}
+        renderRawTextbox={renderIllustrationTextbox}
         renderShapeItem={renderIllustrationShape}
-        renderImageToolbar={renderIllustrationImageToolbar}
-        renderTextToolbar={renderIllustrationTextToolbar}
+        renderRawImageToolbar={renderIllustrationImageToolbar}
+        renderRawTextboxToolbar={renderIllustrationTextToolbar}
         renderShapeToolbar={renderIllustrationShapeToolbar}
         renderPageToolbar={renderIllustrationPageToolbar}
         availableLayouts={AVAILABLE_LAYOUTS}

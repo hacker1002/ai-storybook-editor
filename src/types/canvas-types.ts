@@ -23,6 +23,8 @@ export type ViewMode = "edit" | "grid";
 export type SelectedElementType =
   | "image"
   | "textbox"
+  | "raw_image"
+  | "raw_textbox"
   | "shape"
   | "video"
   | "audio"

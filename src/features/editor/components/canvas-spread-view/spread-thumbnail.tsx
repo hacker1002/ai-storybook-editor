@@ -47,6 +47,10 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
+  // Raw item render functions (illustration layer)
+  renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderRawTextbox?: (context: TextItemContext<TSpread>) => ReactNode;
+
   // Drag state
   isDragEnabled?: boolean;
   isDragging?: boolean;
@@ -75,6 +79,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   renderVideoItem,
   renderAudioItem,
   renderQuizItem,
+  renderRawImage,
+  renderRawTextbox,
   isDragEnabled = false,
   isDragging = false,
   isDropTarget = false,
@@ -118,29 +124,41 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
-  // Memoize image contexts: raw_image → raw_images only, image → images only
-  const imageContexts = useMemo(() => {
-    if ((!renderItems.includes("image") && !renderItems.includes("raw_image")) || !renderImageItem) return [];
-    const images = renderItems.includes("raw_image")
-      ? (spread.raw_images ?? [])
-      : (spread.images ?? []);
-    return images.map((img, combinedIdx) => ({
+  // Memoize raw image contexts (illustration layer)
+  const rawImageContexts = useMemo(() => {
+    if (!renderItems.includes("raw_image") || !renderRawImage) return [];
+    return (spread.raw_images ?? []).map((img, idx) => ({
       image: img,
-      context: buildViewOnlyImageContext(img, combinedIdx, spread),
+      context: buildViewOnlyImageContext(img, idx, spread),
     }));
-  }, [spread.raw_images, spread.images, spread.id, renderItems, renderImageItem]);
+  }, [spread.raw_images, spread.id, renderItems, renderRawImage]);
 
-  // Memoize text contexts: raw_textbox → raw_textboxes only, textbox → textboxes only
-  const textContexts = useMemo(() => {
-    if ((!renderItems.includes("textbox") && !renderItems.includes("raw_textbox")) || !renderTextItem) return [];
-    const textboxes = renderItems.includes("raw_textbox")
-      ? (spread.raw_textboxes ?? [])
-      : (spread.textboxes ?? []);
-    return textboxes.map((textbox, combinedIdx) => ({
-      textbox,
-      context: buildViewOnlyTextContext(textbox, combinedIdx, spread),
+  // Memoize image contexts (playable layer)
+  const imageContexts = useMemo(() => {
+    if (!renderItems.includes("image") || !renderImageItem) return [];
+    return (spread.images ?? []).map((img, idx) => ({
+      image: img,
+      context: buildViewOnlyImageContext(img, idx, spread),
     }));
-  }, [spread.raw_textboxes, spread.textboxes, spread.id, renderItems, renderTextItem]);
+  }, [spread.images, spread.id, renderItems, renderImageItem]);
+
+  // Memoize raw textbox contexts (illustration layer)
+  const rawTextboxContexts = useMemo(() => {
+    if (!renderItems.includes("raw_textbox") || !renderRawTextbox) return [];
+    return (spread.raw_textboxes ?? []).map((textbox, idx) => ({
+      textbox,
+      context: buildViewOnlyTextContext(textbox, idx, spread),
+    }));
+  }, [spread.raw_textboxes, spread.id, renderItems, renderRawTextbox]);
+
+  // Memoize text contexts (playable layer)
+  const textContexts = useMemo(() => {
+    if (!renderItems.includes("textbox") || !renderTextItem) return [];
+    return (spread.textboxes ?? []).map((textbox, idx) => ({
+      textbox,
+      context: buildViewOnlyTextContext(textbox, idx, spread),
+    }));
+  }, [spread.textboxes, spread.id, renderItems, renderTextItem]);
 
   // Memoize shape contexts - shapes are playable-only (no raw shapes)
   const shapeContexts = useMemo(() => {
@@ -282,7 +300,15 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
             <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300" />
           )}
 
-          {/* Images (view-only, pointer-events: none) - skip if renderImageItem not provided */}
+          {/* Raw Images (illustration layer, view-only) */}
+          {renderRawImage &&
+            rawImageContexts.map(({ image, context }, index) => (
+              <div key={image.id || `raw-img-${index}`} style={{ pointerEvents: "none" }}>
+                {renderRawImage(context)}
+              </div>
+            ))}
+
+          {/* Images (playable layer, view-only) */}
           {renderImageItem &&
             imageContexts.map(({ image, context }, index) => (
               <div key={image.id || index} style={{ pointerEvents: "none" }}>
@@ -306,7 +332,15 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
               </div>
             ))}
 
-          {/* Textboxes (view-only, pointer-events: none) - skip if renderTextItem not provided */}
+          {/* Raw Textboxes (illustration layer, view-only) */}
+          {renderRawTextbox &&
+            rawTextboxContexts.map(({ textbox, context }, index) => (
+              <div key={textbox.id || `raw-txt-${index}`} style={{ pointerEvents: "none" }}>
+                {renderRawTextbox(context)}
+              </div>
+            ))}
+
+          {/* Textboxes (playable layer, view-only) */}
           {renderTextItem &&
             textContexts.map(({ textbox, context }, index) => (
               <div key={textbox.id || index} style={{ pointerEvents: "none" }}>

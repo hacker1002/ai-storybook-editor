@@ -77,12 +77,24 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   // --- Context destructuring ---
-  const { item, onUpdate, onDelete, onClone, onFormatText, selectedGeometry, canvasRef } = context;
+  const {
+    item,
+    onUpdate,
+    onDelete,
+    onClone,
+    onFormatText,
+    selectedGeometry,
+    canvasRef,
+  } = context;
 
   // --- Language resolution ---
   const editorLangCode = useLanguageCode();
   const langResult = useMemo(
-    () => getTextboxContentForLanguage(item as unknown as Record<string, unknown>, editorLangCode),
+    () =>
+      getTextboxContentForLanguage(
+        item as unknown as Record<string, unknown>,
+        editorLangCode
+      ),
     [item, editorLangCode]
   );
   const langCode = langResult?.langKey ?? editorLangCode;
@@ -120,10 +132,18 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
   }, [fontSize]);
 
   // --- Positioning ---
-  const position = useToolbarPosition({ geometry: selectedGeometry, canvasRef, toolbarRef });
+  const position = useToolbarPosition({
+    geometry: selectedGeometry,
+    canvasRef,
+    toolbarRef,
+  });
 
   const toolbarStyle: React.CSSProperties = position
-    ? { position: "fixed", top: `${position.top}px`, left: `${position.left}px` }
+    ? {
+        position: "fixed",
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+      }
     : { position: "fixed", opacity: 0, pointerEvents: "none" };
 
   // ---------------------------------------------------------------------------
@@ -140,8 +160,14 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
 
   const handleFontSizeStep = useCallback(
     (delta: 1 | -1) => {
-      const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, localFontSize + delta * FONT_SIZE_STEP));
-      log.debug("handleFontSizeStep", "font size step", { from: localFontSize, to: next });
+      const next = Math.min(
+        MAX_FONT_SIZE,
+        Math.max(MIN_FONT_SIZE, localFontSize + delta * FONT_SIZE_STEP)
+      );
+      log.debug("handleFontSizeStep", "font size step", {
+        from: localFontSize,
+        to: next,
+      });
       setLocalFontSize(next);
       onFormatText({ size: next });
     },
@@ -170,26 +196,38 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
 
   const handleToggleBold = useCallback(() => {
     const next = fontWeight === 700 ? 400 : 700;
-    log.debug("handleToggleBold", "toggle bold", { from: fontWeight, to: next });
+    log.debug("handleToggleBold", "toggle bold", {
+      from: fontWeight,
+      to: next,
+    });
     onFormatText({ weight: next });
   }, [fontWeight, onFormatText]);
 
   const handleToggleItalic = useCallback(() => {
     const next = fontStyle === "italic" ? "normal" : "italic";
-    log.debug("handleToggleItalic", "toggle italic", { from: fontStyle, to: next });
+    log.debug("handleToggleItalic", "toggle italic", {
+      from: fontStyle,
+      to: next,
+    });
     onFormatText({ style: next });
   }, [fontStyle, onFormatText]);
 
   // Underline and strikethrough are mutually exclusive
   const handleToggleUnderline = useCallback(() => {
     const next = textDecoration === "underline" ? "none" : "underline";
-    log.debug("handleToggleUnderline", "toggle underline", { from: textDecoration, to: next });
+    log.debug("handleToggleUnderline", "toggle underline", {
+      from: textDecoration,
+      to: next,
+    });
     onFormatText({ decoration: next });
   }, [textDecoration, onFormatText]);
 
   const handleToggleStrikethrough = useCallback(() => {
     const next = textDecoration === "line-through" ? "none" : "line-through";
-    log.debug("handleToggleStrikethrough", "toggle strikethrough", { from: textDecoration, to: next });
+    log.debug("handleToggleStrikethrough", "toggle strikethrough", {
+      from: textDecoration,
+      to: next,
+    });
     onFormatText({ decoration: next });
   }, [textDecoration, onFormatText]);
 
@@ -206,7 +244,9 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
       const parsed = parseFloat(value);
       if (isNaN(parsed)) return;
       const clamped = Math.min(3.0, Math.max(0.5, parsed));
-      log.debug("handleLineHeightChange", "line height change", { value: clamped });
+      log.debug("handleLineHeightChange", "line height change", {
+        value: clamped,
+      });
       onFormatText({ lineHeight: clamped });
     },
     [onFormatText]
@@ -217,7 +257,9 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
       const parsed = parseFloat(value);
       if (isNaN(parsed)) return;
       const clamped = Math.min(20, Math.max(-5, parsed));
-      log.debug("handleLetterSpacingChange", "letter spacing change", { value: clamped });
+      log.debug("handleLetterSpacingChange", "letter spacing change", {
+        value: clamped,
+      });
       onFormatText({ letterSpacing: clamped });
     },
     [onFormatText]
@@ -230,7 +272,9 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
   const handleGeometryChange = useCallback(
     (field: "x" | "y" | "w" | "h", value: string) => {
       if (!geometry || !content) {
-        log.warn("handleGeometryChange", "no geometry for current language", { langCode });
+        log.warn("handleGeometryChange", "no geometry for current language", {
+          langCode,
+        });
         return;
       }
       const numValue = parseFloat(value);
@@ -242,7 +286,10 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
       if (field === "w") clamped = Math.min(clamped, 100 - geometry.x);
       if (field === "h") clamped = Math.min(clamped, 100 - geometry.y);
 
-      log.debug("handleGeometryChange", "geometry change", { field, value: clamped });
+      log.debug("handleGeometryChange", "geometry change", {
+        field,
+        value: clamped,
+      });
 
       onUpdate({
         [langCode]: {
@@ -276,7 +323,7 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
     <TooltipProvider delayDuration={300}>
       <div
         ref={toolbarRef}
-        data-toolbar="text"
+        data-toolbar="textbox"
         role="toolbar"
         aria-label="Text formatting toolbar"
         className="min-w-[320px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
@@ -286,7 +333,10 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
         <div className="flex items-center gap-2">
           {/* Font family select */}
           <Select value={fontFamily} onValueChange={handleFontChange}>
-            <SelectTrigger className="h-8 text-sm flex-1" aria-label="Font family">
+            <SelectTrigger
+              className="h-8 text-sm flex-1"
+              aria-label="Font family"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -389,7 +439,9 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
         {/* Row 4: Line height / Letter spacing */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 flex-1">
-            <Label className="text-xs text-muted-foreground shrink-0">Line H</Label>
+            <Label className="text-xs text-muted-foreground shrink-0">
+              Line H
+            </Label>
             <input
               type="number"
               step={0.1}
@@ -402,7 +454,9 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
             />
           </div>
           <div className="flex items-center gap-1.5 flex-1">
-            <Label className="text-xs text-muted-foreground shrink-0">Spacing</Label>
+            <Label className="text-xs text-muted-foreground shrink-0">
+              Spacing
+            </Label>
             <input
               type="number"
               step={1}

@@ -24,6 +24,8 @@ import { ObjectsVideoToolbar } from "./objects-video-toolbar";
 import { ObjectsAudioToolbar } from "./objects-audio-toolbar";
 import { ObjectsShapeToolbar } from "./objects-shape-toolbar";
 import { ObjectsTextToolbar } from "./objects-text-toolbar";
+import { ObjectsRawImageToolbar } from "./objects-raw-image-toolbar";
+import { ObjectsRawTextboxToolbar } from "./objects-raw-textbox-toolbar";
 import type { Geometry } from "@/types/canvas-types";
 import {
   useRetouchSpreads,
@@ -115,8 +117,9 @@ export function ObjectsMainView({
   // Generate image modal state — spreadId captured at open time to prevent
   // wrong-spread updates if selection changes while modal is open
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [generateModalImageId, setGenerateModalImageId] =
-    useState<string | null>(null);
+  const [generateModalImageId, setGenerateModalImageId] = useState<
+    string | null
+  >(null);
   const [generateModalSpreadId, setGenerateModalSpreadId] =
     useState<string>("");
 
@@ -342,7 +345,10 @@ export function ObjectsMainView({
               data as Partial<SpreadImage>
             );
           else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
+            actions.deleteRetouchAnimationsByTargetId(
+              spreadId,
+              itemId as string
+            );
             actions.deleteRetouchImage(spreadId, itemId as string);
           }
           break;
@@ -356,7 +362,10 @@ export function ObjectsMainView({
               data as Partial<SpreadTextbox>
             );
           else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
+            actions.deleteRetouchAnimationsByTargetId(
+              spreadId,
+              itemId as string
+            );
             actions.deleteRetouchTextbox(spreadId, itemId as string);
           }
           break;
@@ -370,7 +379,10 @@ export function ObjectsMainView({
               data as Partial<SpreadShape>
             );
           else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
+            actions.deleteRetouchAnimationsByTargetId(
+              spreadId,
+              itemId as string
+            );
             actions.deleteRetouchShape(spreadId, itemId as string);
           }
           break;
@@ -384,7 +396,10 @@ export function ObjectsMainView({
               data as Partial<SpreadVideo>
             );
           else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
+            actions.deleteRetouchAnimationsByTargetId(
+              spreadId,
+              itemId as string
+            );
             actions.deleteRetouchVideo(spreadId, itemId as string);
           }
           break;
@@ -398,7 +413,10 @@ export function ObjectsMainView({
               data as Partial<SpreadAudio>
             );
           else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
+            actions.deleteRetouchAnimationsByTargetId(
+              spreadId,
+              itemId as string
+            );
             actions.deleteRetouchAudio(spreadId, itemId as string);
           }
           break;
@@ -511,7 +529,7 @@ export function ObjectsMainView({
             isEditable={context.isSpreadSelected}
             onSelect={() => {
               context.onSelect();
-              onItemSelect({ type: "text", id: context.item.id });
+              onItemSelect({ type: "textbox", id: context.item.id });
             }}
             onTextChange={(newText) => {
               context.onUpdate({
@@ -621,7 +639,58 @@ export function ObjectsMainView({
     [onItemSelect]
   );
 
-  // === Image toolbar render prop ===
+  // === Raw item render props (illustration layer — read-only on canvas) ===
+
+  const renderRawImage = useCallback(
+    (context: ImageItemContext<BaseSpread>) => {
+      const img = context.item as SpreadImage;
+      if (img.editor_visible === false) return null;
+      return (
+        <EditableImage
+          image={context.item}
+          index={context.itemIndex}
+          zIndex={context.zIndex}
+          isSelected={context.isSelected}
+          isEditable={false}
+          onSelect={() => {
+            context.onSelect();
+            onItemSelect({ type: "raw_image", id: context.item.id });
+          }}
+        />
+      );
+    },
+    [onItemSelect]
+  );
+
+  const renderRawTextbox = useCallback(
+    (context: TextItemContext<BaseSpread>) => {
+      const tb = context.item as SpreadTextbox;
+      if (tb.editor_visible === false) return null;
+      const result = getTextboxContentForLanguage(tb, langCode);
+      if (!result) return null;
+      const { content } = result;
+      return (
+        <EditableTextbox
+          textboxContent={content}
+          index={context.itemIndex}
+          zIndex={context.zIndex}
+          isSelected={context.isSelected}
+          isSelectable={context.isSpreadSelected}
+          isEditable={false}
+          onSelect={() => {
+            context.onSelect();
+            onItemSelect({ type: "raw_textbox", id: context.item.id });
+          }}
+          onTextChange={() => {}}
+          onEditingChange={() => {}}
+        />
+      );
+    },
+    [onItemSelect, langCode]
+  );
+
+  // === Toolbar render props ===
+
   const renderRetouchImageToolbar = useCallback(
     (context: ImageToolbarContext<BaseSpread>) => (
       <ObjectsImageToolbar
@@ -634,6 +703,19 @@ export function ObjectsMainView({
       />
     ),
     [openGenerateModal, openSplitModal, openCropModal]
+  );
+
+  const renderRawImageToolbar = useCallback(
+    (context: ImageToolbarContext<BaseSpread>) => (
+      <ObjectsRawImageToolbar
+        context={{
+          ...context,
+          onSplitImage: () => openSplitModal(context.item),
+          onCropImage: () => openCropModal(context.item),
+        }}
+      />
+    ),
+    [openSplitModal, openCropModal]
   );
 
   // === Text toolbar render prop ===
@@ -690,6 +772,58 @@ export function ObjectsMainView({
     [actions, onItemSelect, langCode]
   );
 
+  // Split raw textbox → creates new retouch textboxes (raw textbox is kept)
+  const handleSplitRawTextbox = useCallback(
+    (spreadId: string, textbox: SpreadTextbox) => {
+      const result = getTextboxContentForLanguage(
+        textbox as unknown as Record<string, unknown>,
+        langCode
+      );
+      if (!result) return;
+      const { langKey, content } = result;
+      if (!content.text) {
+        toast.info("No text to split");
+        return;
+      }
+      const segments = content.text
+        .split(".")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (segments.length <= 1) {
+        toast.info("No sentences to split");
+        return;
+      }
+      log.info("handleSplitRawTextbox", "splitting raw textbox", {
+        itemId: textbox.id,
+        segments: segments.length,
+      });
+      const baseGeometry = content.geometry;
+      for (let i = 0; i < segments.length; i++) {
+        const newTextbox: SpreadTextbox = {
+          id: crypto.randomUUID(),
+          [langKey]: {
+            text: segments[i] + ".",
+            geometry: {
+              x: baseGeometry.x,
+              y: Math.min(
+                baseGeometry.y + baseGeometry.h * i,
+                100 - baseGeometry.h
+              ),
+              w: baseGeometry.w,
+              h: baseGeometry.h,
+            },
+            typography: { ...content.typography },
+          },
+          player_visible: true,
+          editor_visible: true,
+        };
+        actions.addRetouchTextbox(spreadId, newTextbox);
+      }
+      onItemSelect(null);
+    },
+    [actions, onItemSelect, langCode]
+  );
+
   const renderRetouchTextToolbar = useCallback(
     (context: TextToolbarContext<BaseSpread>) => (
       <ObjectsTextToolbar
@@ -701,6 +835,19 @@ export function ObjectsMainView({
       />
     ),
     [selectedSpreadId, handleSplitTextbox]
+  );
+
+  const renderRawTextboxToolbar = useCallback(
+    (context: TextToolbarContext<BaseSpread>) => (
+      <ObjectsRawTextboxToolbar
+        context={{
+          ...context,
+          onSplitTextbox: () =>
+            handleSplitRawTextbox(selectedSpreadId, context.item),
+        }}
+      />
+    ),
+    [selectedSpreadId, handleSplitRawTextbox]
   );
 
   // === Shape toolbar render prop ===
@@ -732,17 +879,29 @@ export function ObjectsMainView({
       <CanvasSpreadView
         spreads={retouchSpreads}
         initialSelectedId={selectedSpreadId}
-        renderItems={["image", "textbox", "shape", "video", "audio"]}
+        renderItems={[
+          "raw_image",
+          "raw_textbox",
+          "image",
+          "textbox",
+          "shape",
+          "video",
+          "audio",
+        ]}
         renderImageItem={renderRetouchImage}
         renderTextItem={renderRetouchTextbox}
         renderShapeItem={renderRetouchShape}
         renderVideoItem={renderRetouchVideo}
         renderAudioItem={renderRetouchAudio}
+        renderRawImage={renderRawImage}
+        renderRawTextbox={renderRawTextbox}
         renderImageToolbar={renderRetouchImageToolbar}
         renderTextToolbar={renderRetouchTextToolbar}
         renderShapeToolbar={renderRetouchShapeToolbar}
         renderVideoToolbar={renderRetouchVideoToolbar}
         renderAudioToolbar={renderRetouchAudioToolbar}
+        renderRawImageToolbar={renderRawImageToolbar}
+        renderRawTextboxToolbar={renderRawTextboxToolbar}
         onSpreadSelect={onSpreadSelect}
         onSpreadReorder={handleSpreadReorder}
         onSpreadAdd={handleSpreadAdd}

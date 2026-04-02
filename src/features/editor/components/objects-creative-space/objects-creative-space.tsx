@@ -15,7 +15,9 @@ export type ObjectElementType =
   | "shape"
   | "video"
   | "audio"
-  | "text";
+  | "textbox"
+  | "raw_image"
+  | "raw_textbox";
 
 export interface SelectedItem {
   type: ObjectElementType;

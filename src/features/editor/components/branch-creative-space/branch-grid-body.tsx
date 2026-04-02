@@ -63,7 +63,7 @@ export function BranchGridBody({
   log.debug('BranchGridBody', 'render', { itemCount: gridItems.length, isAddMode });
 
   // Reuse existing Editable components in read-only mode for thumbnail rendering
-  const renderImageItem = useCallback((ctx: ImageItemContext<BaseSpread>) => {
+  const renderRawImage = useCallback((ctx: ImageItemContext<BaseSpread>) => {
     const imageUrl = resolveImageUrl(ctx.item);
     return (
       <EditableImage
@@ -77,7 +77,7 @@ export function BranchGridBody({
     );
   }, []);
 
-  const renderTextItem = useCallback((ctx: TextItemContext<BaseSpread>) => {
+  const renderRawTextbox = useCallback((ctx: TextItemContext<BaseSpread>) => {
     const result = getTextboxContentForLanguage(ctx.item as unknown as Record<string, unknown>, langCode);
     if (!result) return null;
     return (
@@ -130,8 +130,8 @@ export function BranchGridBody({
                 isSelectable={selectableSpreads.has(spread.id)}
                 isSelected={addSectionSelectedIds.includes(spread.id)}
                 onToggle={() => onAddSectionSpreadToggle(spread.id)}
-                renderImageItem={renderImageItem}
-                renderTextItem={renderTextItem}
+                renderRawImage={renderRawImage}
+                renderRawTextbox={renderRawTextbox}
                 renderShapeItem={renderShapeItem}
               />
             );
@@ -145,8 +145,8 @@ export function BranchGridBody({
                 isSelected={isSelected}
                 size="medium"
                 renderItems={RENDER_ITEMS}
-                renderImageItem={renderImageItem}
-                renderTextItem={renderTextItem}
+                renderRawImage={renderRawImage}
+                renderRawTextbox={renderRawTextbox}
                 renderShapeItem={renderShapeItem}
                 onClick={() => {
                   log.debug('BranchGridBody', 'spread selected', { spreadId: spread.id });
@@ -175,8 +175,8 @@ export function BranchGridBody({
                 isSelectable={selectableSpreads.has(spread.id)}
                 isSelected={addSectionSelectedIds.includes(spread.id)}
                 onToggle={() => onAddSectionSpreadToggle(spread.id)}
-                renderImageItem={renderImageItem}
-                renderTextItem={renderTextItem}
+                renderRawImage={renderRawImage}
+                renderRawTextbox={renderRawTextbox}
                 renderShapeItem={renderShapeItem}
               />
             ));
@@ -199,8 +199,8 @@ export function BranchGridBody({
                   isSelected={selectedSpreadId === spread.id}
                   size="medium"
                   renderItems={RENDER_ITEMS}
-                  renderImageItem={renderImageItem}
-                  renderTextItem={renderTextItem}
+                  renderRawImage={renderRawImage}
+                  renderRawTextbox={renderRawTextbox}
                   renderShapeItem={renderShapeItem}
                   onClick={() => {
                     log.debug('BranchGridBody', 'section spread selected', {

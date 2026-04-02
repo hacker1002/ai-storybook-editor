@@ -46,7 +46,7 @@ export function SpreadsSidebarListItem({
 }: SpreadsSidebarListItemProps) {
   const isEditing = editingId === entry.id;
   // Textbox title is auto-derived from content — renaming is disabled for textbox
-  const isRenameable = entry.type !== "textbox";
+  const isRenameable = entry.type !== "raw_textbox";
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
 

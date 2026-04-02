@@ -338,7 +338,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     <TooltipProvider delayDuration={300}>
       <div
         ref={toolbarRef}
-        data-toolbar="text"
+        data-toolbar="textbox"
         role="toolbar"
         aria-label="Text formatting toolbar"
         className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"

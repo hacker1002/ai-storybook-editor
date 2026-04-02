@@ -178,7 +178,7 @@ export function SpreadsSidebar({
 
   const handleEditStart = useCallback((entry: ElementListEntry) => {
     // Textbox title is auto-derived — renaming not supported
-    if (entry.type === "textbox") return;
+    if (entry.type === "raw_textbox") return;
     setEditingItemId(entry.id);
     setEditValue(entry.title);
   }, []);
@@ -201,7 +201,7 @@ export function SpreadsSidebar({
     });
 
     const titleUpdate = { title: editValue.trim() };
-    if (entry.type === "image") {
+    if (entry.type === "raw_image") {
       actions.updateRawImage(
         selectedSpreadId,
         entry.id,
@@ -262,7 +262,7 @@ export function SpreadsSidebar({
 
       const entryType = draggedEntry.type;
 
-      if (entryType === "image") {
+      if (entryType === "raw_image") {
         const arr = [...(spread.raw_images ?? [])];
         const fromIdx = arr.findIndex((i) => i.id === draggedEntry.id);
         const toIdx = arr.findIndex((i) => i.id === targetEntry.id);
@@ -278,7 +278,7 @@ export function SpreadsSidebar({
         const [moved] = arr.splice(fromIdx, 1);
         arr.splice(toIdx, 0, moved);
         actions.updateIllustrationSpread(selectedSpreadId, { shapes: arr });
-      } else if (entryType === "textbox") {
+      } else if (entryType === "raw_textbox") {
         const arr = [...(spread.raw_textboxes ?? [])];
         const fromIdx = arr.findIndex((t) => t.id === draggedEntry.id);
         const toIdx = arr.findIndex((t) => t.id === targetEntry.id);
@@ -305,7 +305,7 @@ export function SpreadsSidebar({
     (type: SpreadElementType) => {
       log.info("handleAddElement", "adding", { type });
 
-      if (type === "image") {
+      if (type === "raw_image") {
         const newId = crypto.randomUUID();
         actions.addRawImage(selectedSpreadId, {
           id: newId,
@@ -319,7 +319,7 @@ export function SpreadsSidebar({
           ...NEW_ELEMENT_DEFAULTS.shape,
         } as SpreadShape);
         onItemSelect({ type, id: newId });
-      } else if (type === "textbox") {
+      } else if (type === "raw_textbox") {
         const defaults = createDefaultTextbox(langCode);
         const newId = defaults.id;
         actions.addRawTextbox(selectedSpreadId, defaults);

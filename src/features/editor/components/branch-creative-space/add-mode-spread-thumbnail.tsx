@@ -18,8 +18,8 @@ interface AddModeSpreadThumbnailProps {
   isSelectable: boolean;
   isSelected: boolean;
   onToggle: () => void;
-  renderImageItem?: (ctx: ImageItemContext<BaseSpread>) => ReactNode;
-  renderTextItem?: (ctx: TextItemContext<BaseSpread>) => ReactNode;
+  renderRawImage?: (ctx: ImageItemContext<BaseSpread>) => ReactNode;
+  renderRawTextbox?: (ctx: TextItemContext<BaseSpread>) => ReactNode;
   renderShapeItem?: (ctx: ShapeItemContext<BaseSpread>) => ReactNode;
 }
 
@@ -29,8 +29,8 @@ export function AddModeSpreadThumbnail({
   isSelectable,
   isSelected,
   onToggle,
-  renderImageItem,
-  renderTextItem,
+  renderRawImage,
+  renderRawTextbox,
   renderShapeItem,
 }: AddModeSpreadThumbnailProps) {
   const handleToggle = () => {
@@ -53,8 +53,8 @@ export function AddModeSpreadThumbnail({
         isSelected={false}
         size="medium"
         renderItems={RENDER_ITEMS}
-        renderImageItem={renderImageItem}
-        renderTextItem={renderTextItem}
+        renderRawImage={renderRawImage}
+        renderRawTextbox={renderRawTextbox}
         renderShapeItem={renderShapeItem}
         onClick={handleToggle}
       />

@@ -18,8 +18,17 @@ import type { SpreadItemMediaType } from "@/types/spread-types";
 
 type LayerRange = (typeof LAYER_CONFIG)[keyof typeof LAYER_CONFIG];
 
+/** Virtual layer for raw items (no z-index, rendered by array order) */
+export const RAW_LAYER: LayerRange = {
+  min: -100,
+  max: -1,
+  label: "Raw",
+  types: ["raw_image", "raw_textbox"] as unknown as readonly string[],
+} as unknown as LayerRange;
+
 /** Find the layer config for a given element type */
 export function getLayerForType(type: ObjectElementType): LayerRange | null {
+  if (type === "raw_image" || type === "raw_textbox") return RAW_LAYER;
   for (const layer of Object.values(LAYER_CONFIG)) {
     if ((layer.types as readonly string[]).includes(type)) return layer;
   }
@@ -57,7 +66,9 @@ export interface LayerGroup {
 }
 
 export function groupEntriesByLayer(entries: ObjectListEntry[]): LayerGroup[] {
-  const groups: LayerGroup[] = LAYER_ORDER.map((layer) => ({
+  // Standard layers (top z-index first) + RAW layer at bottom
+  const allLayers = [...LAYER_ORDER, RAW_LAYER];
+  const groups: LayerGroup[] = allLayers.map((layer) => ({
     layer,
     entries: [],
   }));
@@ -69,9 +80,11 @@ export function groupEntriesByLayer(entries: ObjectListEntry[]): LayerGroup[] {
     group?.entries.push(entry);
   }
 
-  // Sort each group descending by z-index
+  // Sort each group descending by z-index (RAW layer keeps array order via stable sort)
   for (const group of groups) {
-    group.entries.sort((a, b) => b.zIndex - a.zIndex);
+    if (group.layer !== RAW_LAYER) {
+      group.entries.sort((a, b) => b.zIndex - a.zIndex);
+    }
   }
 
   // Remove empty groups
@@ -117,7 +130,7 @@ export function buildObjectList(
   (spread.textboxes ?? []).forEach((tb, i) => {
     entries.push({
       id: tb.id,
-      type: "text",
+      type: "textbox",
       title: getTextboxTitle(tb as SpreadTextbox, langCode),
       zIndex: resolveZIndex((tb as SpreadTextbox)["z-index"], i, textLayer),
       editorVisible: (tb as SpreadTextbox).editor_visible !== false,
@@ -163,6 +176,32 @@ export function buildObjectList(
       editorVisible: (audio as SpreadAudio).editor_visible !== false,
       playerVisible: (audio as SpreadAudio).player_visible !== false,
       assetType: (audio as SpreadAudio).type,
+    });
+  });
+
+  // Raw images (array order, raw_images first then raw_textboxes on top)
+  (spread.raw_images ?? []).forEach((img, i) => {
+    entries.push({
+      id: img.id,
+      type: "raw_image",
+      title:
+        (img as SpreadImage).title ||
+        (img as SpreadImage).name ||
+        `Raw Image ${i + 1}`,
+      zIndex: -(spread.raw_images?.length ?? 0) + i, // lower = earlier in array
+      editorVisible: true,
+      playerVisible: false,
+    });
+  });
+
+  (spread.raw_textboxes ?? []).forEach((tb, i) => {
+    entries.push({
+      id: tb.id,
+      type: "raw_textbox",
+      title: getTextboxTitle(tb as SpreadTextbox, langCode),
+      zIndex: i, // raw textboxes on top of raw images
+      editorVisible: true,
+      playerVisible: false,
     });
   });
 

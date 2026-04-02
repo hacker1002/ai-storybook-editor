@@ -17,4 +17,4 @@ export { PromptPanel } from './prompt-panel';
 export { GenerateNarrationModal } from './generate-narration-modal';
 export { SoundLibraryModal } from './sound-library-modal';
 export type { LibrarySound } from './sound-library-modal';
-export { clampGeometry, GeometryInput, GeometrySection, MediaIdentitySection, MEDIA_TYPE_OPTIONS, DEFAULT_STATES, ToolbarIconButton } from './shared-toolbar-components';
+export { clampGeometry, GeometryInput, GeometrySection, ReadOnlyGeometrySection, MediaIdentitySection, MEDIA_TYPE_OPTIONS, DEFAULT_STATES, ToolbarIconButton } from './shared-toolbar-components';

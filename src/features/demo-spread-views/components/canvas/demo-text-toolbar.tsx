@@ -28,7 +28,10 @@ import {
   type Typography,
   type Geometry,
 } from "@/features/editor/components/canvas-spread-view";
-import { GeometrySection, ToolbarIconButton } from "@/features/editor/components/shared-components";
+import {
+  GeometrySection,
+  ToolbarIconButton,
+} from "@/features/editor/components/shared-components";
 
 interface DemoTextToolbarProps<TSpread extends BaseSpread> {
   context: TextToolbarContext<TSpread>;
@@ -57,11 +60,14 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
     canvasRef,
   } = context;
 
-  const position = useToolbarPosition({ geometry: selectedGeometry, canvasRef, toolbarRef });
+  const position = useToolbarPosition({
+    geometry: selectedGeometry,
+    canvasRef,
+    toolbarRef,
+  });
 
-  const languageKey = Object.keys(item).find(
-    (k) => k !== "id" && k !== "title"
-  ) || "en_US";
+  const languageKey =
+    Object.keys(item).find((k) => k !== "id" && k !== "title") || "en_US";
   const langData = item[languageKey] as {
     text: string;
     geometry: Geometry;
@@ -116,18 +122,25 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
   }, [typography.weight, onFormatText]);
 
   const handleStyleToggle = useCallback(() => {
-    const newStyle = typography.style === 'italic' ? 'normal' : 'italic';
+    const newStyle = typography.style === "italic" ? "normal" : "italic";
     onFormatText?.({ style: newStyle });
   }, [typography.style, onFormatText]);
 
-  const handleDecorationToggle = useCallback((decoration: 'underline' | 'line-through') => {
-    const newDecoration = typography.decoration === decoration ? 'none' : decoration;
-    onFormatText?.({ decoration: newDecoration });
-  }, [typography.decoration, onFormatText]);
+  const handleDecorationToggle = useCallback(
+    (decoration: "underline" | "line-through") => {
+      const newDecoration =
+        typography.decoration === decoration ? "none" : decoration;
+      onFormatText?.({ decoration: newDecoration });
+    },
+    [typography.decoration, onFormatText]
+  );
 
-  const handleTextAlignChange = useCallback((align: 'left' | 'center' | 'right') => {
-    onFormatText?.({ textAlign: align });
-  }, [onFormatText]);
+  const handleTextAlignChange = useCallback(
+    (align: "left" | "center" | "right") => {
+      onFormatText?.({ textAlign: align });
+    },
+    [onFormatText]
+  );
 
   const handleGeometryChange = useCallback(
     (field: keyof Geometry, value: string) => {
@@ -149,21 +162,23 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
     [geometry, langData, languageKey, onUpdate]
   );
 
-  const toolbarStyle: React.CSSProperties = position ? {
-    position: 'fixed',
-    top: `${position.top}px`,
-    left: `${position.left}px`,
-  } : {
-    position: 'fixed',
-    opacity: 0,
-    pointerEvents: 'none',
-  };
+  const toolbarStyle: React.CSSProperties = position
+    ? {
+        position: "fixed",
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+      }
+    : {
+        position: "fixed",
+        opacity: 0,
+        pointerEvents: "none",
+      };
 
   const toolbarContent = (
     <TooltipProvider delayDuration={300}>
       <div
         ref={toolbarRef}
-        data-toolbar="text"
+        data-toolbar="textbox"
         className="min-w-[320px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
         style={toolbarStyle}
       >
@@ -192,7 +207,9 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
               >
                 <Minus className="h-3 w-3" />
               </button>
-              <span className="w-8 text-center text-sm font-medium">{fontSize}</span>
+              <span className="w-8 text-center text-sm font-medium">
+                {fontSize}
+              </span>
               <button
                 onClick={() => handleSizeChange(1)}
                 className="px-2 hover:bg-muted transition-colors h-full"
@@ -213,25 +230,41 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
           <div className="flex gap-1">
             <button
               onClick={handleWeightToggle}
-              className={`flex-1 py-2 rounded-lg font-bold transition-colors text-sm ${typography.weight === 700 ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+              className={`flex-1 py-2 rounded-lg font-bold transition-colors text-sm ${
+                typography.weight === 700
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary hover:bg-muted"
+              }`}
             >
               B
             </button>
             <button
               onClick={handleStyleToggle}
-              className={`flex-1 py-2 rounded-lg italic transition-colors text-sm ${typography.style === 'italic' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+              className={`flex-1 py-2 rounded-lg italic transition-colors text-sm ${
+                typography.style === "italic"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary hover:bg-muted"
+              }`}
             >
               I
             </button>
             <button
-              onClick={() => handleDecorationToggle('underline')}
-              className={`flex-1 py-2 rounded-lg underline transition-colors text-sm ${typography.decoration === 'underline' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+              onClick={() => handleDecorationToggle("underline")}
+              className={`flex-1 py-2 rounded-lg underline transition-colors text-sm ${
+                typography.decoration === "underline"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary hover:bg-muted"
+              }`}
             >
               U
             </button>
             <button
-              onClick={() => handleDecorationToggle('line-through')}
-              className={`flex-1 py-2 rounded-lg transition-colors ${typography.decoration === 'line-through' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+              onClick={() => handleDecorationToggle("line-through")}
+              className={`flex-1 py-2 rounded-lg transition-colors ${
+                typography.decoration === "line-through"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary hover:bg-muted"
+              }`}
             >
               <Strikethrough className="w-4 h-4 mx-auto" />
             </button>
@@ -239,20 +272,32 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
 
           <div className="flex gap-1">
             <button
-              onClick={() => handleTextAlignChange('left')}
-              className={`flex-1 py-2 rounded-lg transition-colors ${(!typography.textAlign || typography.textAlign === 'left') ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+              onClick={() => handleTextAlignChange("left")}
+              className={`flex-1 py-2 rounded-lg transition-colors ${
+                !typography.textAlign || typography.textAlign === "left"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary hover:bg-muted"
+              }`}
             >
               <AlignLeft className="w-4 h-4 mx-auto" />
             </button>
             <button
-              onClick={() => handleTextAlignChange('center')}
-              className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'center' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+              onClick={() => handleTextAlignChange("center")}
+              className={`flex-1 py-2 rounded-lg transition-colors ${
+                typography.textAlign === "center"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary hover:bg-muted"
+              }`}
             >
               <AlignCenter className="w-4 h-4 mx-auto" />
             </button>
             <button
-              onClick={() => handleTextAlignChange('right')}
-              className={`flex-1 py-2 rounded-lg transition-colors ${typography.textAlign === 'right' ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-muted'}`}
+              onClick={() => handleTextAlignChange("right")}
+              className={`flex-1 py-2 rounded-lg transition-colors ${
+                typography.textAlign === "right"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary hover:bg-muted"
+              }`}
             >
               <AlignRight className="w-4 h-4 mx-auto" />
             </button>
@@ -266,7 +311,9 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
           </div>
 
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-20">Line Height</Label>
+            <Label className="text-xs text-muted-foreground w-20">
+              Line Height
+            </Label>
             <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
               <input
                 type="number"
@@ -278,7 +325,9 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
                 className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
               />
             </div>
-            <Label className="text-xs text-muted-foreground ml-2">Spacing</Label>
+            <Label className="text-xs text-muted-foreground ml-2">
+              Spacing
+            </Label>
             <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
               <input
                 type="number"
@@ -289,23 +338,33 @@ export function DemoTextToolbar<TSpread extends BaseSpread>({
                 onChange={(e) => handleLetterSpacingChange(e.target.value)}
                 className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
               />
-              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">px</span>
+              <span className="px-1.5 text-sm text-muted-foreground border-l border-border">
+                px
+              </span>
             </div>
           </div>
         </div>
 
         {/* Geometry Section */}
-        <GeometrySection geometry={geometry} onGeometryChange={handleGeometryChange} />
+        <GeometrySection
+          geometry={geometry}
+          onGeometryChange={handleGeometryChange}
+        />
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <ToolbarIconButton icon={Copy} label="Clone" onClick={onClone} />
-          <ToolbarIconButton icon={Trash2} label="Delete" onClick={onDelete} variant="destructive" />
+          <ToolbarIconButton
+            icon={Trash2}
+            label="Delete"
+            onClick={onDelete}
+            variant="destructive"
+          />
         </div>
       </div>
     </TooltipProvider>
   );
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === "undefined") return null;
   return createPortal(toolbarContent, document.body);
 }

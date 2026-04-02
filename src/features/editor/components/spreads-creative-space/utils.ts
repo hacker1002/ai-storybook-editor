@@ -12,7 +12,7 @@ import type {
 
 // === Types ===
 
-export type SpreadElementType = "image" | "textbox" | "shape";
+export type SpreadElementType = "shape" | "raw_image" | "raw_textbox";
 
 export interface ElementListEntry {
   id: string;
@@ -36,24 +36,24 @@ export interface LayerGroup {
 // === Constants ===
 
 export const ALL_ELEMENT_TYPES: SpreadElementType[] = [
-  "image",
-  "textbox",
+  "raw_image",
+  "raw_textbox",
   "shape",
 ];
 
 /** Map illustration element types to layer config (different from objects: 'textbox' not 'text') */
 export const ILLUSTRATION_LAYER_MAP: Record<SpreadElementType, LayerRange> = {
-  image: LAYER_CONFIG.MEDIA,
+  raw_image: LAYER_CONFIG.MEDIA,
   shape: LAYER_CONFIG.OBJECTS,
-  textbox: LAYER_CONFIG.TEXT,
+  raw_textbox: LAYER_CONFIG.TEXT,
 };
 
 export const ELEMENT_TYPE_CONFIG: Record<
   SpreadElementType,
   { icon: LucideIcon; label: string }
 > = {
-  image: { icon: Image, label: "Image" },
-  textbox: { icon: Type, label: "Textbox" },
+  raw_image: { icon: Image, label: "Image" },
+  raw_textbox: { icon: Type, label: "Textbox" },
   shape: { icon: Hexagon, label: "Shape" },
 };
 
@@ -115,7 +115,7 @@ export function buildElementList(
   (spread.raw_images ?? []).forEach((img, i) => {
     entries.push({
       id: img.id,
-      type: "image",
+      type: "raw_image",
       title: (img as SpreadImage).title || `Image ${i + 1}`,
       zIndex: resolveZIndex(i, LAYER_CONFIG.MEDIA),
     });
@@ -134,7 +134,7 @@ export function buildElementList(
       : "Empty Textbox";
     entries.push({
       id: tb.id,
-      type: "textbox",
+      type: "raw_textbox",
       title,
       zIndex: resolveZIndex(i, LAYER_CONFIG.TEXT),
     });

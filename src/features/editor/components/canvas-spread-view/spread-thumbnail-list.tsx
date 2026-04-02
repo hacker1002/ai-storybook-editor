@@ -46,6 +46,10 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
+  // Raw item render functions (illustration layer)
+  renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderRawTextbox?: (context: TextItemContext<TSpread>) => ReactNode;
+
   // Feature flags
   canAdd: boolean;
   canReorder: boolean;
@@ -72,6 +76,8 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
   renderVideoItem,
   renderAudioItem,
   renderQuizItem,
+  renderRawImage,
+  renderRawTextbox,
   canAdd,
   canReorder,
   canDelete,
@@ -258,6 +264,8 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
               renderVideoItem={renderVideoItem}
               renderAudioItem={renderAudioItem}
               renderQuizItem={renderQuizItem}
+              renderRawImage={renderRawImage}
+              renderRawTextbox={renderRawTextbox}
               isDragEnabled={canReorder}
               isDragging={spread.id === draggedId}
               isDropTarget={spread.id === dropTargetId}

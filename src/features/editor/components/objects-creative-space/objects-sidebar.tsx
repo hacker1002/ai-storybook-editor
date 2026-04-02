@@ -37,6 +37,7 @@ import {
   filterObjectList,
   groupEntriesByLayer,
   getLayerForType,
+  RAW_LAYER,
   type LayerGroup,
 } from "./utils";
 import type { SelectedItem, ObjectElementType } from "./objects-creative-space";
@@ -53,7 +54,7 @@ const log = createLogger("Editor", "ObjectsSidebar");
 
 const ALL_ELEMENT_TYPES: ObjectElementType[] = [
   "image",
-  "text",
+  "textbox",
   "shape",
   "video",
   "audio",
@@ -277,7 +278,7 @@ export function ObjectsSidebar({
         case "image":
           actions.updateRetouchImage(selectedSpreadId, entry.id, updates);
           break;
-        case "text":
+        case "textbox":
           actions.updateRetouchTextbox(
             selectedSpreadId,
             entry.id,
@@ -319,7 +320,7 @@ export function ObjectsSidebar({
           case "image":
             actions.updateRetouchImage(selectedSpreadId, entry.id, updates);
             break;
-          case "text":
+          case "textbox":
             actions.updateRetouchTextbox(
               selectedSpreadId,
               entry.id,
@@ -355,7 +356,7 @@ export function ObjectsSidebar({
         case "image":
           actions.updateRetouchImage(selectedSpreadId, entry.id, updates);
           break;
-        case "text":
+        case "textbox":
           actions.updateRetouchTextbox(
             selectedSpreadId,
             entry.id,
@@ -377,7 +378,7 @@ export function ObjectsSidebar({
   );
 
   const handleEditStart = useCallback((entry: ObjectListEntry) => {
-    if (entry.type === "text") return; // textbox title is auto-derived
+    if (entry.type === "textbox") return; // textbox title is auto-derived
     setEditingItemId(entry.id);
     setEditValue(entry.title);
   }, []);
@@ -485,7 +486,7 @@ export function ObjectsSidebar({
               "z-index": newZIndex,
             } as Partial<SpreadShape>);
             break;
-          case "text":
+          case "textbox":
             actions.updateRetouchTextbox(selectedSpreadId, entry.id, {
               "z-index": newZIndex,
             } as Partial<SpreadTextbox>);
@@ -535,7 +536,7 @@ export function ObjectsSidebar({
             player_visible: true,
           } as SpreadImage);
           break;
-        case "text":
+        case "textbox":
           actions.addRetouchTextbox(selectedSpreadId, {
             id: crypto.randomUUID(),
             title: "New Text",
@@ -682,6 +683,7 @@ export function ObjectsSidebar({
       ) : (
         <div className="flex-1 overflow-y-auto">
           {layerGroups.map((group) => {
+            const isRawLayer = group.layer === RAW_LAYER;
             const layerItems = allEntries.filter(
               (e) => getLayerForType(e.type)?.label === group.layer.label
             );
@@ -689,12 +691,22 @@ export function ObjectsSidebar({
               layerItems.length > 0 && layerItems.some((e) => e.editorVisible);
             return (
               <div key={group.layer.label}>
-                {/* Layer divider header */}
-                <LayerDivider
-                  label={group.layer.label}
-                  allVisible={layerAllVisible}
-                  onToggleVisibility={() => handleLayerVisibilityToggle(group)}
-                />
+                {/* Layer divider header (no visibility toggle for Raw layer) */}
+                {isRawLayer ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/60 border-y border-border/50 select-none">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1">
+                      {group.layer.label}
+                    </span>
+                  </div>
+                ) : (
+                  <LayerDivider
+                    label={group.layer.label}
+                    allVisible={layerAllVisible}
+                    onToggleVisibility={() =>
+                      handleLayerVisibilityToggle(group)
+                    }
+                  />
+                )}
                 {/* Items within this layer */}
                 {group.entries.map((entry, index) => (
                   <ObjectListItem
@@ -707,7 +719,9 @@ export function ObjectsSidebar({
                     onEditValueChange={setEditValue}
                     onSelect={() => handleItemClick(entry)}
                     onVisibilityToggle={() => handleVisibilityToggle(entry)}
-                    onPlayerVisibilityToggle={() => handlePlayerVisibilityToggle(entry)}
+                    onPlayerVisibilityToggle={() =>
+                      handlePlayerVisibilityToggle(entry)
+                    }
                     onEditStart={() => handleEditStart(entry)}
                     onRenameConfirm={handleRenameConfirm}
                     dragIndex={

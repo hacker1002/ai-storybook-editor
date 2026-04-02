@@ -16,6 +16,7 @@ import type {
   QuizItemContext,
   TextToolbarContext,
   SelectedElement,
+  SelectedElementType,
   Geometry,
   Typography,
   SpreadItemActionUnion,
@@ -38,7 +39,8 @@ export function buildImageContext<TSpread extends BaseSpread>(
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
   onAction: SpreadItemActionHandler,
-  onEditingChange?: (isEditing: boolean) => void
+  onEditingChange?: (isEditing: boolean) => void,
+  elementType: SelectedElementType = "image"
 ): ImageItemContext<TSpread> {
   return {
     item: image,
@@ -46,9 +48,9 @@ export function buildImageContext<TSpread extends BaseSpread>(
     spreadId: spread.id,
     spread,
     isSelected:
-      selectedElement?.type === "image" && selectedElement.index === index,
+      selectedElement?.type === elementType && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: (rect?: DOMRect) => onSelect({ type: "image", index }, rect),
+    onSelect: (rect?: DOMRect) => onSelect({ type: elementType, index }, rect),
     onUpdate: (updates) =>
       onAction({
         itemType: "image",
@@ -85,7 +87,8 @@ export function buildTextContext<TSpread extends BaseSpread>(
   onSelect: SelectFn,
   onAction: SpreadItemActionHandler,
   onEditingChange?: (isEditing: boolean) => void,
-  langCode?: string
+  langCode?: string,
+  elementType: SelectedElementType = "textbox"
 ): TextItemContext<TSpread> {
   const result = langCode
     ? getTextboxContentForLanguage(textbox, langCode)
@@ -99,9 +102,9 @@ export function buildTextContext<TSpread extends BaseSpread>(
     spreadId: spread.id,
     spread,
     isSelected:
-      selectedElement?.type === "textbox" && selectedElement.index === index,
+      selectedElement?.type === elementType && selectedElement.index === index,
     isSpreadSelected: true,
-    onSelect: (rect?: DOMRect) => onSelect({ type: "textbox", index }, rect),
+    onSelect: (rect?: DOMRect) => onSelect({ type: elementType, index }, rect),
     onTextChange: (text) => {
       if (!langKey) return;
       onAction({
@@ -142,7 +145,8 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
   canvasRef: RefObject<HTMLDivElement | null>,
   selectedGeometry: Geometry | null,
   onEditingChange?: (isEditing: boolean) => void,
-  langCode?: string
+  langCode?: string,
+  elementType: SelectedElementType = "textbox"
 ): TextToolbarContext<TSpread> {
   const result = langCode
     ? getTextboxContentForLanguage(textbox, langCode)
@@ -158,7 +162,8 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
     onSelect,
     onAction,
     onEditingChange,
-    langCode
+    langCode,
+    elementType
   );
 
   return {

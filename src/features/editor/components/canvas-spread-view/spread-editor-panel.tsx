@@ -57,40 +57,18 @@ import type {
 } from "@/types/canvas-types";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
-import { createLogger } from '@/utils/logger';
+import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'SpreadEditorPanel');
+const log = createLogger("Editor", "SpreadEditorPanel");
 
 // Fixed pixel size of audio/quiz icon elements (w-8 h-8 = 32px)
 const ICON_ELEMENT_PX = 32;
 
-// === Raw + Playable layer helpers ===
+// === Layer helpers ===
 // Images and textboxes exist in two layers:
 //   raw_images/raw_textboxes  — illustration phase (editor-only art)
 //   images/textboxes          — playable phase (interactive objects)
-// Combined index: raw items occupy [0..rawCount-1], playable items [rawCount..rawCount+playableCount-1]
-
-// Lookup by index: raw and playable are separate index spaces (no combined offset)
-function getImageAtIndex<TSpread extends BaseSpread>(spread: TSpread, index: number): SpreadImage | undefined {
-  return (spread.raw_images ?? [])[index] ?? (spread.images ?? [])[index];
-}
-
-function getTextboxAtIndex<TSpread extends BaseSpread>(spread: TSpread, index: number): SpreadTextbox | undefined {
-  return (spread.raw_textboxes ?? [])[index] ?? (spread.textboxes ?? [])[index];
-}
-
-// Resolve ID → index: search raw first, then playable (separate index spaces)
-function resolveImageIndex<TSpread extends BaseSpread>(spread: TSpread, id: string): number {
-  const rawIdx = (spread.raw_images ?? []).findIndex((img) => img.id === id);
-  if (rawIdx >= 0) return rawIdx;
-  return (spread.images ?? []).findIndex((img) => img.id === id);
-}
-
-function resolveTextboxIndex<TSpread extends BaseSpread>(spread: TSpread, id: string): number {
-  const rawIdx = (spread.raw_textboxes ?? []).findIndex((tb) => tb.id === id);
-  if (rawIdx >= 0) return rawIdx;
-  return (spread.textboxes ?? []).findIndex((tb) => tb.id === id);
-}
+// Each layer has its own SelectedElementType: "raw_image"/"raw_textbox" vs "image"/"textbox"
 
 // === Props Interface ===
 interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
@@ -121,6 +99,12 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
   renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
 
+  // Raw item render functions (illustration layer)
+  renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
+  renderRawTextbox?: (context: TextItemContext<TSpread>) => ReactNode;
+  renderRawImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
+  renderRawTextboxToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
+
   // Callbacks
   onSpreadItemAction?: (
     params: Omit<SpreadItemActionUnion, "spreadId">
@@ -130,6 +114,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   canDeleteItem?: boolean;
   canResizeItem?: boolean;
   canDragItem?: boolean;
+  preventEditRawItem?: boolean; // When true, raw items (raw_image/raw_textbox) cannot drag/resize
 
   // Layout config
   availableLayouts?: LayoutOption[];
@@ -168,10 +153,15 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderShapeToolbar,
   renderVideoToolbar,
   renderAudioToolbar,
+  renderRawImage,
+  renderRawTextbox,
+  renderRawImageToolbar,
+  renderRawTextboxToolbar,
   onSpreadItemAction,
   canDeleteItem = false,
   canResizeItem = true,
   canDragItem = true,
+  preventEditRawItem = false,
   availableLayouts = [],
   externalSelectedItemId,
 }: SpreadEditorPanelProps<TSpread>) {
@@ -228,14 +218,18 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     let resolvedType: SelectedElement["type"] | null = null;
     let index = -1;
 
-    if (type === "image") {
+    if (type === "raw_image") {
+      resolvedType = "raw_image";
+      index = (spread.raw_images ?? []).findIndex((img) => img.id === id);
+    } else if (type === "image") {
       resolvedType = "image";
-      // Search raw_images first (illustration layer), then images (playable layer) with offset
-      index = resolveImageIndex(spread, id);
-    } else if (type === "textbox" || type === "text") {
+      index = (spread.images ?? []).findIndex((img) => img.id === id);
+    } else if (type === "raw_textbox") {
+      resolvedType = "raw_textbox";
+      index = (spread.raw_textboxes ?? []).findIndex((tb) => tb.id === id);
+    } else if (type === "textbox") {
       resolvedType = "textbox";
-      // Search raw_textboxes first (illustration layer), then textboxes (playable layer) with offset
-      index = resolveTextboxIndex(spread, id);
+      index = (spread.textboxes ?? []).findIndex((tb) => tb.id === id);
     } else if (type === "shape") {
       resolvedType = "shape";
       index = (spread.shapes ?? []).findIndex((s) => s.id === id);
@@ -253,32 +247,56 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     if (resolvedType && index >= 0) {
       const element: SelectedElement = { type: resolvedType, index };
       setState((prev) => {
-        if (prev.selectedElement?.type === element.type && prev.selectedElement?.index === element.index) {
+        if (
+          prev.selectedElement?.type === element.type &&
+          prev.selectedElement?.index === element.index
+        ) {
           return prev; // No change, skip re-render
         }
         // Resolve geometry for the selection frame
         let geometry: Geometry | null = null;
-        if (element.type === "image") geometry = getImageAtIndex(spread, element.index)?.geometry ?? null;
-        else if (element.type === "textbox") {
-          const tb = getTextboxAtIndex(spread, element.index);
-          const tbResult = getTextboxContentForLanguage(tb || {}, editorLangCode);
+        if (element.type === "raw_image")
+          geometry = (spread.raw_images ?? [])[element.index]?.geometry ?? null;
+        else if (element.type === "image")
+          geometry = (spread.images ?? [])[element.index]?.geometry ?? null;
+        else if (element.type === "raw_textbox") {
+          const tb = (spread.raw_textboxes ?? [])[element.index];
+          const tbResult = getTextboxContentForLanguage(
+            tb || {},
+            editorLangCode
+          );
           geometry = tbResult?.content?.geometry ?? null;
-        }
-        else if (element.type === "shape") geometry = spread.shapes?.[element.index]?.geometry ?? null;
-        else if (element.type === "video") geometry = spread.videos?.[element.index]?.geometry ?? null;
+        } else if (element.type === "textbox") {
+          const tb = (spread.textboxes ?? [])[element.index];
+          const tbResult = getTextboxContentForLanguage(
+            tb || {},
+            editorLangCode
+          );
+          geometry = tbResult?.content?.geometry ?? null;
+        } else if (element.type === "shape")
+          geometry = spread.shapes?.[element.index]?.geometry ?? null;
+        else if (element.type === "video")
+          geometry = spread.videos?.[element.index]?.geometry ?? null;
         else if (element.type === "audio") {
           const audioGeo = spread.audios?.[element.index]?.geometry;
           geometry = audioGeo ? computeIconGeometry(audioGeo) : null;
-        }
-        else if (element.type === "quiz") {
+        } else if (element.type === "quiz") {
           const quizGeo = spread.quizzes?.[element.index]?.geometry;
           geometry = quizGeo ? computeIconGeometry(quizGeo) : null;
         }
 
-        return { ...prev, selectedElement: element, selectedGeometry: geometry, isDragging: false, isResizing: false, activeHandle: null, originalGeometry: null };
+        return {
+          ...prev,
+          selectedElement: element,
+          selectedGeometry: geometry,
+          isDragging: false,
+          isResizing: false,
+          activeHandle: null,
+          originalGeometry: null,
+        };
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSelectedItemId?.type, externalSelectedItemId?.id, spread]);
 
   // Click outside to deselect
@@ -318,15 +336,30 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // === Selection Handlers ===
   const handleElementSelect = useCallback(
     (element: SelectedElement | null) => {
-      log.info('handleElementSelect', 'element selected', { type: element?.type ?? null, index: element?.index ?? null });
+      log.info("handleElementSelect", "element selected", {
+        type: element?.type ?? null,
+        index: element?.index ?? null,
+      });
       let geometry: Geometry | null = null;
 
       if (element) {
-        if (element.type === "image") {
-          geometry = getImageAtIndex(spread, element.index)?.geometry ?? null;
+        if (element.type === "raw_image") {
+          geometry = (spread.raw_images ?? [])[element.index]?.geometry ?? null;
+        } else if (element.type === "image") {
+          geometry = (spread.images ?? [])[element.index]?.geometry ?? null;
+        } else if (element.type === "raw_textbox") {
+          const item = (spread.raw_textboxes ?? [])[element.index];
+          const tbResult = getTextboxContentForLanguage(
+            item || {},
+            editorLangCode
+          );
+          geometry = tbResult?.content?.geometry ?? null;
         } else if (element.type === "textbox") {
-          const item = getTextboxAtIndex(spread, element.index);
-          const tbResult = getTextboxContentForLanguage(item || {}, editorLangCode);
+          const item = (spread.textboxes ?? [])[element.index];
+          const tbResult = getTextboxContentForLanguage(
+            item || {},
+            editorLangCode
+          );
           geometry = tbResult?.content?.geometry ?? null;
         } else if (element.type === "shape") {
           geometry = spread.shapes?.[element.index]?.geometry ?? null;
@@ -369,10 +402,20 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     if (!selectedElement) return null;
 
     switch (selectedElement.type) {
+      case "raw_image":
+        return (
+          (spread.raw_images ?? [])[selectedElement.index]?.geometry ?? null
+        );
       case "image":
-        return getImageAtIndex(spread, selectedElement.index)?.geometry ?? null;
+        return (spread.images ?? [])[selectedElement.index]?.geometry ?? null;
+      case "raw_textbox": {
+        const rawTb = (spread.raw_textboxes ?? [])[selectedElement.index];
+        if (!rawTb) return null;
+        const rawTbResult = getTextboxContentForLanguage(rawTb, editorLangCode);
+        return rawTbResult?.content?.geometry ?? null;
+      }
       case "textbox": {
-        const tb = getTextboxAtIndex(spread, selectedElement.index);
+        const tb = (spread.textboxes ?? [])[selectedElement.index];
         if (!tb) return null;
         const tbResult = getTextboxContentForLanguage(tb, editorLangCode);
         return tbResult?.content?.geometry ?? null;
@@ -400,9 +443,19 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       if (!onSpreadItemAction) return;
 
       switch (element.type) {
+        case "raw_image": {
+          const rawImg = (spread.raw_images ?? [])[element.index];
+          if (!rawImg?.id) return;
+          onSpreadItemAction({
+            itemType: "image",
+            action: "update",
+            itemId: rawImg.id,
+            data: { geometry },
+          });
+          break;
+        }
         case "image": {
-          // Combined index: raw images first, then playable images
-          const image = getImageAtIndex(spread, element.index);
+          const image = (spread.images ?? [])[element.index];
           if (!image?.id) return;
           onSpreadItemAction({
             itemType: "image",
@@ -412,9 +465,27 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           });
           break;
         }
+        case "raw_textbox": {
+          const rawTb = (spread.raw_textboxes ?? [])[element.index];
+          if (!rawTb?.id) return;
+          const rawTbResult = getTextboxContentForLanguage(
+            rawTb,
+            editorLangCode
+          );
+          if (rawTbResult) {
+            onSpreadItemAction({
+              itemType: "textbox",
+              action: "update",
+              itemId: rawTb.id,
+              data: {
+                [rawTbResult.langKey]: { ...rawTbResult.content, geometry },
+              } as Partial<SpreadTextbox>,
+            });
+          }
+          break;
+        }
         case "textbox": {
-          // Combined index: raw textboxes first, then playable textboxes
-          const tb = getTextboxAtIndex(spread, element.index);
+          const tb = (spread.textboxes ?? [])[element.index];
           if (!tb?.id) return;
           const tbResult = getTextboxContentForLanguage(tb, editorLangCode);
           if (tbResult) {
@@ -490,7 +561,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Drag Handlers ===
   const handleDragStart = useCallback(() => {
-    log.debug('handleDragStart', 'drag started');
+    log.debug("handleDragStart", "drag started");
     const geometry = getSelectedGeometry();
     originalGeometryRef.current = geometry;
     setState((prev) => ({
@@ -548,7 +619,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       let newGeometry: Geometry;
 
       // Image/Video: aspect-ratio-locked resize with proper anchor handling
-      if (selectedElement.type === "image" || selectedElement.type === "video") {
+      if (
+        selectedElement.type === "raw_image" ||
+        selectedElement.type === "image" ||
+        selectedElement.type === "video"
+      ) {
         const aspect = originalGeometry.w / originalGeometry.h;
         newGeometry = applyAspectLockedResize(
           originalGeometry,
@@ -654,9 +729,19 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             !state.isImageEditing &&
             onSpreadItemAction
           ) {
+            if (selectedElement.type === "raw_image") {
+              const rawImg = (spread.raw_images ?? [])[selectedElement.index];
+              if (rawImg?.id) {
+                onSpreadItemAction({
+                  itemType: "image",
+                  action: "delete",
+                  itemId: rawImg.id,
+                  data: null,
+                });
+              }
+            }
             if (selectedElement.type === "image") {
-              // Combined index: raw images first, then playable images
-              const image = getImageAtIndex(spread, selectedElement.index);
+              const image = (spread.images ?? [])[selectedElement.index];
               if (image?.id) {
                 onSpreadItemAction({
                   itemType: "image",
@@ -666,9 +751,19 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 });
               }
             }
+            if (selectedElement.type === "raw_textbox") {
+              const rawTb = (spread.raw_textboxes ?? [])[selectedElement.index];
+              if (rawTb?.id) {
+                onSpreadItemAction({
+                  itemType: "textbox",
+                  action: "delete",
+                  itemId: rawTb.id,
+                  data: null,
+                });
+              }
+            }
             if (selectedElement.type === "textbox") {
-              // Combined index: raw textboxes first, then playable textboxes
-              const textbox = getTextboxAtIndex(spread, selectedElement.index);
+              const textbox = (spread.textboxes ?? [])[selectedElement.index];
               if (textbox?.id) {
                 onSpreadItemAction({
                   itemType: "textbox",
@@ -776,8 +871,16 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
   // Audio/Quiz are fixed-size icons — disable resize, only allow drag
-  const isIconElement = state.selectedElement?.type === "audio" || state.selectedElement?.type === "quiz";
-  const canResizeCurrentItem = canResizeItem && !isIconElement;
+  const isIconElement =
+    state.selectedElement?.type === "audio" ||
+    state.selectedElement?.type === "quiz";
+  // Raw items (raw_image/raw_textbox) cannot drag/resize when preventEditRawItem is enabled
+  const isRawElement =
+    state.selectedElement?.type === "raw_image" ||
+    state.selectedElement?.type === "raw_textbox";
+  const rawBlocked = isRawElement && preventEditRawItem;
+  const canResizeCurrentItem = canResizeItem && !isIconElement && !rawBlocked;
+  const canDragCurrentItem = canDragItem && !rawBlocked;
   const showHandles = canResizeCurrentItem && !state.isDragging;
 
   return (
@@ -836,24 +939,51 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           />
         )}
 
-        {/* Images: raw_image → raw_images only, image → images only */}
-        {(renderItems.includes("image") || renderItems.includes("raw_image")) &&
-          renderImageItem &&
-          (renderItems.includes("raw_image")
-            ? (spread.raw_images ?? [])
-            : (spread.images ?? [])
-          ).map((image, combinedIndex) => {
+        {/* Raw Images (illustration layer) */}
+        {renderItems.includes("raw_image") &&
+          renderRawImage &&
+          (spread.raw_images ?? []).map((image, index) => {
             const context = buildImageContext(
               image,
-              combinedIndex,
+              index,
+              spread,
+              state.selectedElement,
+              handleElementSelect,
+              handleSpreadItemAction,
+              handleImageEditingChange,
+              "raw_image"
+            );
+            context.zIndex =
+              (image as SpreadImage)["z-index"] ??
+              LAYER_CONFIG.MEDIA.min + index;
+            return (
+              <Fragment key={image.id ?? `raw-img-${index}`}>
+                {renderRawImage(context)}
+              </Fragment>
+            );
+          })}
+
+        {/* Images (playable layer) */}
+        {renderItems.includes("image") &&
+          renderImageItem &&
+          (spread.images ?? []).map((image, index) => {
+            const context = buildImageContext(
+              image,
+              index,
               spread,
               state.selectedElement,
               handleElementSelect,
               handleSpreadItemAction,
               handleImageEditingChange
             );
-            context.zIndex = (image as SpreadImage)['z-index'] ?? (LAYER_CONFIG.MEDIA.min + combinedIndex);
-            return <Fragment key={image.id ?? `img-${combinedIndex}`}>{renderImageItem(context)}</Fragment>;
+            context.zIndex =
+              (image as SpreadImage)["z-index"] ??
+              LAYER_CONFIG.MEDIA.min + index;
+            return (
+              <Fragment key={image.id ?? `img-${index}`}>
+                {renderImageItem(context)}
+              </Fragment>
+            );
           })}
 
         {/* Videos */}
@@ -869,9 +999,18 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             // Offset by total images (raw + playable) so videos stack above all images
-            const totalImageCount = Math.max(spread.raw_images?.length ?? 0, spread.images?.length ?? 0);
-            context.zIndex = (video as SpreadVideo)['z-index'] ?? (LAYER_CONFIG.MEDIA.min + totalImageCount + index);
-            return <Fragment key={video.id ?? `vid-${index}`}>{renderVideoItem(context)}</Fragment>;
+            const totalImageCount = Math.max(
+              spread.raw_images?.length ?? 0,
+              spread.images?.length ?? 0
+            );
+            context.zIndex =
+              (video as SpreadVideo)["z-index"] ??
+              LAYER_CONFIG.MEDIA.min + totalImageCount + index;
+            return (
+              <Fragment key={video.id ?? `vid-${index}`}>
+                {renderVideoItem(context)}
+              </Fragment>
+            );
           })}
 
         {/* Shapes */}
@@ -886,20 +1025,48 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            context.zIndex = (shape as { 'z-index'?: number })['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + index);
-            return <Fragment key={shape.id ?? `shp-${index}`}>{renderShapeItem(context)}</Fragment>;
+            context.zIndex =
+              (shape as { "z-index"?: number })["z-index"] ??
+              LAYER_CONFIG.OBJECTS.min + index;
+            return (
+              <Fragment key={shape.id ?? `shp-${index}`}>
+                {renderShapeItem(context)}
+              </Fragment>
+            );
           })}
 
-        {/* Textboxes: raw_textbox → raw_textboxes only, textbox → textboxes only */}
-        {(renderItems.includes("textbox") || renderItems.includes("raw_textbox")) &&
-          renderTextItem &&
-          (renderItems.includes("raw_textbox")
-            ? (spread.raw_textboxes ?? [])
-            : (spread.textboxes ?? [])
-          ).map((textbox, combinedIndex) => {
+        {/* Raw Textboxes (illustration layer) */}
+        {renderItems.includes("raw_textbox") &&
+          renderRawTextbox &&
+          (spread.raw_textboxes ?? []).map((textbox, index) => {
             const context = buildTextContext(
               textbox,
-              combinedIndex,
+              index,
+              spread,
+              state.selectedElement,
+              handleElementSelect,
+              handleSpreadItemAction,
+              handleTextboxEditingChange,
+              editorLangCode,
+              "raw_textbox"
+            );
+            context.zIndex =
+              (textbox as { "z-index"?: number })["z-index"] ??
+              LAYER_CONFIG.TEXT.min + index;
+            return (
+              <Fragment key={textbox.id ?? `raw-txt-${index}`}>
+                {renderRawTextbox(context)}
+              </Fragment>
+            );
+          })}
+
+        {/* Textboxes (playable layer) */}
+        {renderItems.includes("textbox") &&
+          renderTextItem &&
+          (spread.textboxes ?? []).map((textbox, index) => {
+            const context = buildTextContext(
+              textbox,
+              index,
               spread,
               state.selectedElement,
               handleElementSelect,
@@ -907,8 +1074,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleTextboxEditingChange,
               editorLangCode
             );
-            context.zIndex = (textbox as { 'z-index'?: number })['z-index'] ?? (LAYER_CONFIG.TEXT.min + combinedIndex);
-            return <Fragment key={textbox.id ?? `txt-${combinedIndex}`}>{renderTextItem(context)}</Fragment>;
+            context.zIndex =
+              (textbox as { "z-index"?: number })["z-index"] ??
+              LAYER_CONFIG.TEXT.min + index;
+            return (
+              <Fragment key={textbox.id ?? `txt-${index}`}>
+                {renderTextItem(context)}
+              </Fragment>
+            );
           })}
 
         {/* Audios */}
@@ -924,8 +1097,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             const shapesCount = spread.shapes?.length ?? 0;
-            context.zIndex = (audio as SpreadAudio)['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + shapesCount + index);
-            return <Fragment key={audio.id ?? `aud-${index}`}>{renderAudioItem(context)}</Fragment>;
+            context.zIndex =
+              (audio as SpreadAudio)["z-index"] ??
+              LAYER_CONFIG.OBJECTS.min + shapesCount + index;
+            return (
+              <Fragment key={audio.id ?? `aud-${index}`}>
+                {renderAudioItem(context)}
+              </Fragment>
+            );
           })}
 
         {/* Quizzes */}
@@ -942,8 +1121,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
             const shapesCount = spread.shapes?.length ?? 0;
             const audiosCount = spread.audios?.length ?? 0;
-            context.zIndex = (quiz as SpreadQuiz)['z-index'] ?? (LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + index);
-            return <Fragment key={quiz.id ?? `quiz-${index}`}>{renderQuizItem(context)}</Fragment>;
+            context.zIndex =
+              (quiz as SpreadQuiz)["z-index"] ??
+              LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + index;
+            return (
+              <Fragment key={quiz.id ?? `quiz-${index}`}>
+                {renderQuizItem(context)}
+              </Fragment>
+            );
           })}
 
         {/* Selection Frame - frame border allows drag, center passes through for editing */}
@@ -956,9 +1141,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               zoomLevel={zoomLevel}
               showHandles={showHandles}
               activeHandle={state.activeHandle}
-              canDrag={canDragItem}
+              canDrag={canDragCurrentItem}
               canResize={canResizeCurrentItem}
-              borderOnlyDrag={state.selectedElement?.type === "textbox"}
+              borderOnlyDrag={
+                state.selectedElement?.type === "textbox" ||
+                state.selectedElement?.type === "raw_textbox"
+              }
               onDragStart={handleDragStart}
               onDrag={handleDrag}
               onDragEnd={handleDragEnd}
@@ -974,9 +1162,30 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           (() => {
             const { selectedElement } = state;
 
+            if (selectedElement.type === "raw_image" && renderRawImageToolbar) {
+              const rawImg = (spread.raw_images ?? [])[selectedElement.index];
+              if (!rawImg) return null;
+              const context = buildImageContext(
+                rawImg,
+                selectedElement.index,
+                spread,
+                selectedElement,
+                handleElementSelect,
+                handleSpreadItemAction,
+                undefined,
+                "raw_image"
+              );
+              return renderRawImageToolbar({
+                ...context,
+                selectedGeometry: state.selectedGeometry,
+                canvasRef,
+                onGenerateImage: () => {},
+                onReplaceImage: () => {},
+              });
+            }
+
             if (selectedElement.type === "image" && renderImageToolbar) {
-              // Combined index: raw images first, then playable images
-              const image = getImageAtIndex(spread, selectedElement.index);
+              const image = (spread.images ?? [])[selectedElement.index];
               if (!image) return null;
               const context = buildImageContext(
                 image,
@@ -995,11 +1204,31 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               });
             }
 
-            if (selectedElement.type === "textbox" && renderTextToolbar) {
-              // Combined index: raw textboxes first, then playable textboxes
-              const textbox = getTextboxAtIndex(spread, selectedElement.index);
-              if (!textbox) return null;
+            if (
+              selectedElement.type === "raw_textbox" &&
+              renderRawTextboxToolbar
+            ) {
+              const rawTb = (spread.raw_textboxes ?? [])[selectedElement.index];
+              if (!rawTb) return null;
+              const context = buildTextToolbarContext(
+                rawTb,
+                selectedElement.index,
+                spread,
+                selectedElement,
+                handleElementSelect,
+                handleSpreadItemAction,
+                canvasRef,
+                state.selectedGeometry,
+                undefined,
+                editorLangCode,
+                "raw_textbox"
+              );
+              return renderRawTextboxToolbar(context);
+            }
 
+            if (selectedElement.type === "textbox" && renderTextToolbar) {
+              const textbox = (spread.textboxes ?? [])[selectedElement.index];
+              if (!textbox) return null;
               const context = buildTextToolbarContext(
                 textbox,
                 selectedElement.index,
@@ -1012,7 +1241,6 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 undefined,
                 editorLangCode
               );
-
               return renderTextToolbar(context);
             }
 

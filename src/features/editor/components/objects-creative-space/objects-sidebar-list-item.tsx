@@ -14,6 +14,8 @@ import {
   Hexagon,
   Video,
   Volume2,
+  ImageOff,
+  TypeOutline,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/utils/utils";
@@ -40,10 +42,12 @@ export const ELEMENT_TYPE_CONFIG: Record<
   { icon: LucideIcon; label: string }
 > = {
   image: { icon: Image, label: "Image" },
-  text: { icon: Type, label: "Text" },
+  textbox: { icon: Type, label: "Text" },
   shape: { icon: Hexagon, label: "Shape" },
   video: { icon: Video, label: "Video" },
   audio: { icon: Volume2, label: "Audio" },
+  raw_image: { icon: ImageOff, label: "Raw Image" },
+  raw_textbox: { icon: TypeOutline, label: "Raw Text" },
 };
 
 interface ObjectListItemProps {
@@ -84,7 +88,9 @@ export function ObjectListItem({
   onDragEnd,
 }: ObjectListItemProps) {
   const isEditing = editingId === entry.id;
-  const isRenameable = entry.type !== "text";
+  const isRaw = entry.type === "raw_image" || entry.type === "raw_textbox";
+  const isRenameable = entry.type !== "textbox" && !isRaw;
+  const isDraggable = !isRaw;
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
 
@@ -92,29 +98,39 @@ export function ObjectListItem({
     <div
       className={cn(
         "group flex items-center h-12 px-2 gap-1.5 cursor-pointer transition-colors text-sm",
-        isSelected
-          ? "bg-accent/80"
-          : "hover:bg-muted/50",
+        isSelected ? "bg-accent/80" : "hover:bg-muted/50",
         !entry.editorVisible && "opacity-50",
         dragIndex === index && "opacity-40"
       )}
       onClick={onSelect}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "move";
-        onDragStart(index);
-      }}
-      onDragOver={(e) => {
-        e.dataTransfer.dropEffect = "move";
-        onDragOver(e);
-      }}
-      onDrop={() => onDrop(index)}
-      onDragEnd={onDragEnd}
+      draggable={isDraggable}
+      onDragStart={
+        isDraggable
+          ? (e) => {
+              e.dataTransfer.effectAllowed = "move";
+              onDragStart(index);
+            }
+          : undefined
+      }
+      onDragOver={
+        isDraggable
+          ? (e) => {
+              e.dataTransfer.dropEffect = "move";
+              onDragOver(e);
+            }
+          : undefined
+      }
+      onDrop={isDraggable ? () => onDrop(index) : undefined}
+      onDragEnd={isDraggable ? onDragEnd : undefined}
       role="option"
       aria-selected={isSelected}
     >
-      {/* Drag handle */}
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100" />
+      {/* Drag handle (hidden for raw items) */}
+      {isDraggable ? (
+        <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100" />
+      ) : (
+        <div className="w-3.5 flex-shrink-0" />
+      )}
 
       {/* Type icon */}
       <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
@@ -149,72 +165,74 @@ export function ObjectListItem({
         <span className="flex-1 truncate min-w-0">{entry.title}</span>
       )}
 
-      {/* Hover actions with tooltips */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onVisibilityToggle();
-              }}
-              className="p-0.5 rounded hover:bg-muted"
-            >
-              {entry.editorVisible ? (
-                <Eye className="w-3.5 h-3.5" />
-              ) : (
-                <EyeOff className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            {entry.editorVisible ? "Hide in editor" : "Show in editor"}
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPlayerVisibilityToggle();
-              }}
-              className="p-0.5 rounded hover:bg-muted"
-            >
-              {entry.playerVisible ? (
-                <Unlock className="w-3.5 h-3.5" />
-              ) : (
-                <Lock className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            {entry.playerVisible ? "Hide in player" : "Show in player"}
-          </TooltipContent>
-        </Tooltip>
-
-        {isRenameable && (
+      {/* Hover actions with tooltips (hidden for raw items) */}
+      {!isRaw && (
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEditStart();
+                  onVisibilityToggle();
                 }}
                 className="p-0.5 rounded hover:bg-muted"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                {entry.editorVisible ? (
+                  <Eye className="w-3.5 h-3.5" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5" />
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
-              Rename
+              {entry.editorVisible ? "Hide in editor" : "Show in editor"}
             </TooltipContent>
           </Tooltip>
-        )}
-      </div>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPlayerVisibilityToggle();
+                }}
+                className="p-0.5 rounded hover:bg-muted"
+              >
+                {entry.playerVisible ? (
+                  <Unlock className="w-3.5 h-3.5" />
+                ) : (
+                  <Lock className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {entry.playerVisible ? "Hide in player" : "Show in player"}
+            </TooltipContent>
+          </Tooltip>
+
+          {isRenameable && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditStart();
+                  }}
+                  className="p-0.5 rounded hover:bg-muted"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Rename
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      )}
     </div>
   );
 }
