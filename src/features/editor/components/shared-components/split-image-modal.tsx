@@ -21,6 +21,17 @@ import type { SpreadImage } from "@/types/spread-types";
 
 const log = createLogger("Editor", "SplitImageModal");
 
+// === Helpers ===
+
+/** Resolve display URL with priority: final_hires > illustrations[selected] > illustrations[0] > media_url */
+function resolveImageUrl(image: SpreadImage): string | undefined {
+  if (image.final_hires_media_url) return image.final_hires_media_url;
+  const selected = image.illustrations?.find((i) => i.is_selected);
+  if (selected) return selected.media_url;
+  if (image.illustrations?.[0]) return image.illustrations[0].media_url;
+  return image.media_url;
+}
+
 // === Types ===
 
 export interface SplitLayerResult {
@@ -122,7 +133,8 @@ export function SplitImageModal({
   );
 
   const handleSplit = useCallback(async () => {
-    if (!image.media_url) {
+    const imageUrl = resolveImageUrl(image);
+    if (!imageUrl) {
       toast.error("Image has no URL to split.");
       return;
     }
@@ -137,7 +149,7 @@ export function SplitImageModal({
 
     try {
       const result = await callLayeringImage({
-        imageUrl: image.media_url,
+        imageUrl,
         description: description.trim() || undefined,
         numberOfLayers,
         seed,
@@ -170,7 +182,7 @@ export function SplitImageModal({
     } finally {
       setIsSplitting(false);
     }
-  }, [image.id, image.media_url, image.title, description, seed, numberOfLayers]);
+  }, [image, description, seed, numberOfLayers]);
 
   const handleToggleLayer = useCallback((layerId: string) => {
     setSelectedLayerIds((prev) => {

@@ -651,6 +651,7 @@ export function ObjectsMainView({
           index={context.itemIndex}
           zIndex={context.zIndex}
           isSelected={context.isSelected}
+          isSelectable={true}
           isEditable={false}
           onSelect={() => {
             context.onSelect();
@@ -908,6 +909,7 @@ export function ObjectsMainView({
         onDeleteSpread={handleDeleteSpread}
         onUpdateSpreadItem={handleSpreadItemAction}
         isEditable={true}
+        preventEditRawItem={true}
         canAddSpread={false}
         canReorderSpread={false}
         canDeleteSpread={false}

@@ -37,7 +37,6 @@ import {
   filterObjectList,
   groupEntriesByLayer,
   getLayerForType,
-  RAW_LAYER,
   type LayerGroup,
 } from "./utils";
 import type { SelectedItem, ObjectElementType } from "./objects-creative-space";
@@ -294,6 +293,16 @@ export function ObjectsSidebar({
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
           break;
+        case "raw_image":
+          actions.updateRawImage(selectedSpreadId, entry.id, updates);
+          break;
+        case "raw_textbox":
+          actions.updateRawTextbox(
+            selectedSpreadId,
+            entry.id,
+            updates as Partial<SpreadTextbox>
+          );
+          break;
       }
     },
     [actions, selectedSpreadId]
@@ -336,6 +345,16 @@ export function ObjectsSidebar({
           case "audio":
             actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
             break;
+          case "raw_image":
+            actions.updateRawImage(selectedSpreadId, entry.id, updates);
+            break;
+          case "raw_textbox":
+            actions.updateRawTextbox(
+              selectedSpreadId,
+              entry.id,
+              updates as Partial<SpreadTextbox>
+            );
+            break;
         }
       }
     },
@@ -371,6 +390,16 @@ export function ObjectsSidebar({
           break;
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
+          break;
+        case "raw_image":
+          actions.updateRawImage(selectedSpreadId, entry.id, updates);
+          break;
+        case "raw_textbox":
+          actions.updateRawTextbox(
+            selectedSpreadId,
+            entry.id,
+            updates as Partial<SpreadTextbox>
+          );
           break;
       }
     },
@@ -524,10 +553,12 @@ export function ObjectsSidebar({
         }
       }
 
+      const newId = crypto.randomUUID();
+
       switch (type) {
         case "image":
           actions.addRetouchImage(selectedSpreadId, {
-            id: crypto.randomUUID(),
+            id: newId,
             title: "New Image",
             geometry: { x: 10, y: 10, w: 30, h: 30 },
             illustrations: [],
@@ -538,7 +569,7 @@ export function ObjectsSidebar({
           break;
         case "textbox":
           actions.addRetouchTextbox(selectedSpreadId, {
-            id: crypto.randomUUID(),
+            id: newId,
             title: "New Text",
             en_US: {
               text: "",
@@ -562,7 +593,7 @@ export function ObjectsSidebar({
           break;
         case "shape":
           actions.addRetouchShape(selectedSpreadId, {
-            id: crypto.randomUUID(),
+            id: newId,
             type: "rectangle",
             geometry: { x: 10, y: 10, w: 20, h: 20 },
             fill: { is_filled: true, color: "#3b82f6", opacity: 1 },
@@ -573,7 +604,7 @@ export function ObjectsSidebar({
           break;
         case "video":
           actions.addRetouchVideo(selectedSpreadId, {
-            id: crypto.randomUUID(),
+            id: newId,
             name: "New Video",
             title: "New Video",
             geometry: { x: 10, y: 10, w: 30, h: 20 },
@@ -585,7 +616,7 @@ export function ObjectsSidebar({
           break;
         case "audio":
           actions.addRetouchAudio(selectedSpreadId, {
-            id: crypto.randomUUID(),
+            id: newId,
             name: "New Audio",
             title: "New Audio",
             geometry: { x: 10, y: 10, w: 0, h: 0 },
@@ -596,8 +627,11 @@ export function ObjectsSidebar({
           } as SpreadAudio);
           break;
       }
+
+      // Auto-select newly added item
+      onItemSelect({ type, id: newId });
     },
-    [actions, selectedSpreadId, allEntries]
+    [actions, selectedSpreadId, allEntries, onItemSelect]
   );
 
   // Filter toggles
@@ -683,7 +717,6 @@ export function ObjectsSidebar({
       ) : (
         <div className="flex-1 overflow-y-auto">
           {layerGroups.map((group) => {
-            const isRawLayer = group.layer === RAW_LAYER;
             const layerItems = allEntries.filter(
               (e) => getLayerForType(e.type)?.label === group.layer.label
             );
@@ -691,22 +724,13 @@ export function ObjectsSidebar({
               layerItems.length > 0 && layerItems.some((e) => e.editorVisible);
             return (
               <div key={group.layer.label}>
-                {/* Layer divider header (no visibility toggle for Raw layer) */}
-                {isRawLayer ? (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/60 border-y border-border/50 select-none">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1">
-                      {group.layer.label}
-                    </span>
-                  </div>
-                ) : (
-                  <LayerDivider
-                    label={group.layer.label}
-                    allVisible={layerAllVisible}
-                    onToggleVisibility={() =>
-                      handleLayerVisibilityToggle(group)
-                    }
-                  />
-                )}
+                <LayerDivider
+                  label={group.layer.label}
+                  allVisible={layerAllVisible}
+                  onToggleVisibility={() =>
+                    handleLayerVisibilityToggle(group)
+                  }
+                />
                 {/* Items within this layer */}
                 {group.entries.map((entry, index) => (
                   <ObjectListItem

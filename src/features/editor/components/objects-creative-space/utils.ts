@@ -189,8 +189,8 @@ export function buildObjectList(
         (img as SpreadImage).name ||
         `Raw Image ${i + 1}`,
       zIndex: -(spread.raw_images?.length ?? 0) + i, // lower = earlier in array
-      editorVisible: true,
-      playerVisible: false,
+      editorVisible: (img as SpreadImage).editor_visible !== false,
+      playerVisible: (img as SpreadImage).player_visible !== false,
     });
   });
 
@@ -200,8 +200,8 @@ export function buildObjectList(
       type: "raw_textbox",
       title: getTextboxTitle(tb as SpreadTextbox, langCode),
       zIndex: i, // raw textboxes on top of raw images
-      editorVisible: true,
-      playerVisible: false,
+      editorVisible: (tb as SpreadTextbox).editor_visible !== false,
+      playerVisible: (tb as SpreadTextbox).player_visible !== false,
     });
   });
 

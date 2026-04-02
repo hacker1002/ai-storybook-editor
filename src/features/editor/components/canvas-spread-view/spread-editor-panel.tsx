@@ -296,8 +296,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         };
       });
     }
+    // Only re-run when the external selection identity changes, not on spread data updates.
+    // `spread` is read inside but must not trigger re-selection on every store mutation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalSelectedItemId?.type, externalSelectedItemId?.id, spread]);
+  }, [externalSelectedItemId?.type, externalSelectedItemId?.id]);
 
   // Click outside to deselect
   useEffect(() => {
@@ -953,9 +955,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleImageEditingChange,
               "raw_image"
             );
-            context.zIndex =
-              (image as SpreadImage)["z-index"] ??
-              LAYER_CONFIG.MEDIA.min + index;
+            // Raw images render below all editable layers (negative z-index)
+            context.zIndex = -(spread.raw_images?.length ?? 0) + index;
             return (
               <Fragment key={image.id ?? `raw-img-${index}`}>
                 {renderRawImage(context)}
@@ -1050,9 +1051,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               editorLangCode,
               "raw_textbox"
             );
-            context.zIndex =
-              (textbox as { "z-index"?: number })["z-index"] ??
-              LAYER_CONFIG.TEXT.min + index;
+            // Raw textboxes render just above raw images but below all editable layers
+            const rawImgCount = spread.raw_images?.length ?? 0;
+            context.zIndex = -(rawImgCount) + (spread.raw_textboxes?.length ?? 0) + index;
             return (
               <Fragment key={textbox.id ?? `raw-txt-${index}`}>
                 {renderRawTextbox(context)}

@@ -137,9 +137,33 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
           getVideoNaturalDimensions(file),
         ]);
 
-        // Convert video pixel dimensions to canvas percentage
-        const newW = clampGeometry("w", (dimensions.width / CANVAS.BASE_WIDTH) * 100);
-        const newH = clampGeometry("h", (dimensions.height / CANVAS.BASE_HEIGHT) * 100);
+        // Convert video pixel dimensions to canvas percentage, preserving aspect ratio.
+        // If video exceeds canvas, scale so the longer side is 80% of canvas; other side follows ratio.
+        const rawW = (dimensions.width / CANVAS.BASE_WIDTH) * 100;
+        const rawH = (dimensions.height / CANVAS.BASE_HEIGHT) * 100;
+        const MAX_PERCENT = 80;
+        let newW: number;
+        let newH: number;
+        if (rawW <= MAX_PERCENT && rawH <= MAX_PERCENT) {
+          // Video fits within canvas — use natural size
+          newW = rawW;
+          newH = rawH;
+        } else {
+          // Scale down: fit the longer dimension to MAX_PERCENT, compute other from aspect ratio
+          const aspectRatio = dimensions.width / dimensions.height;
+          const canvasAspect = CANVAS.BASE_WIDTH / CANVAS.BASE_HEIGHT;
+          if (aspectRatio >= canvasAspect) {
+            // Landscape or square-ish: width is the constraining dimension
+            newW = MAX_PERCENT;
+            newH = (MAX_PERCENT / aspectRatio) * canvasAspect;
+          } else {
+            // Portrait: height is the constraining dimension
+            newH = MAX_PERCENT;
+            newW = (MAX_PERCENT * aspectRatio) / canvasAspect;
+          }
+        }
+        newW = clampGeometry("w", newW);
+        newH = clampGeometry("h", newH);
         // Re-center around current center, clamped to canvas bounds
         const centerX = geometry.x + geometry.w / 2;
         const centerY = geometry.y + geometry.h / 2;

@@ -20,7 +20,8 @@ interface EditableImageProps {
   index: number;
   zIndex?: number;
   isSelected: boolean;
-  isEditable: boolean;
+  isSelectable?: boolean;  // Controls click selection behavior (defaults to isEditable)
+  isEditable: boolean;     // Controls double-click edit mode & drag/resize
   onSelect: (rect?: DOMRect) => void;
   onArtNoteChange?: (artNote: string) => void;
   onEditingChange?: (isEditing: boolean) => void;
@@ -32,12 +33,14 @@ export function EditableImage({
   index,
   zIndex,
   isSelected,
+  isSelectable,
   isEditable,
   onSelect,
   onArtNoteChange,
   onEditingChange,
   artNoteTypography,
 }: EditableImageProps) {
+  const canSelect = isSelectable ?? isEditable;
   const [isHovered, setIsHovered] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -87,12 +90,12 @@ export function EditableImage({
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    if (isEditable && !isEditing) {
+    if (canSelect && !isEditing) {
       log.info('handleClick', 'image clicked', { imageId: image.id, index });
       const rect = e.currentTarget.getBoundingClientRect();
       onSelect(rect);
     }
-  }, [isEditable, isEditing, onSelect, image.id, index]);
+  }, [canSelect, isEditing, onSelect, image.id, index]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -136,7 +139,7 @@ export function EditableImage({
     <div
       role="img"
       aria-label={artNoteText || `Image ${index + 1}`}
-      tabIndex={isEditable ? 0 : -1}
+      tabIndex={canSelect ? 0 : -1}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
@@ -144,7 +147,7 @@ export function EditableImage({
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
         'absolute overflow-hidden',
-        isEditable && 'cursor-pointer',
+        canSelect && 'cursor-pointer',
         !isSelected && isHovered && 'outline-dashed outline-1',
       )}
       style={{

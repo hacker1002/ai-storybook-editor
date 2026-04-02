@@ -4,6 +4,7 @@
 import { useRef, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
+import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import { Z_INDEX, CANVAS } from '@/constants/spread-constants';
 
@@ -124,26 +125,26 @@ export function SelectionFrame({
           height: `${geometry.h}%`,
           zIndex: Z_INDEX.SELECTION_FRAME,
           pointerEvents: borderOnlyDrag ? 'none' : 'auto',
-          cursor: borderOnlyDrag ? undefined : 'move',
+          cursor: borderOnlyDrag ? undefined : canDrag ? 'move' : 'default',
         }}
       >
         {/* Border-only drag zones (textbox): edges capture drag, center passes through for editing */}
         {borderOnlyDrag && (
           <>
             <div
-              className="absolute left-0 right-0 top-0 cursor-move"
+              className={cn("absolute left-0 right-0 top-0", canDrag ? "cursor-move" : "cursor-default")}
               style={{ height: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
             <div
-              className="absolute left-0 right-0 bottom-0 cursor-move"
+              className={cn("absolute left-0 right-0 bottom-0", canDrag ? "cursor-move" : "cursor-default")}
               style={{ height: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
             <div
-              className="absolute left-0 top-0 bottom-0 cursor-move"
+              className={cn("absolute left-0 top-0 bottom-0", canDrag ? "cursor-move" : "cursor-default")}
               style={{ width: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
             <div
-              className="absolute right-0 top-0 bottom-0 cursor-move"
+              className={cn("absolute right-0 top-0 bottom-0", canDrag ? "cursor-move" : "cursor-default")}
               style={{ width: adaptiveBorderWidth, pointerEvents: 'auto' }}
             />
           </>

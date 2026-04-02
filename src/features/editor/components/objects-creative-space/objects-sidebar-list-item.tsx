@@ -165,31 +165,33 @@ export function ObjectListItem({
         <span className="flex-1 truncate min-w-0">{entry.title}</span>
       )}
 
-      {/* Hover actions with tooltips (hidden for raw items) */}
-      {!isRaw && (
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onVisibilityToggle();
-                }}
-                className="p-0.5 rounded hover:bg-muted"
-              >
-                {entry.editorVisible ? (
-                  <Eye className="w-3.5 h-3.5" />
-                ) : (
-                  <EyeOff className="w-3.5 h-3.5" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              {entry.editorVisible ? "Hide in editor" : "Show in editor"}
-            </TooltipContent>
-          </Tooltip>
+      {/* Hover actions with tooltips */}
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+        {/* Editor visibility toggle */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onVisibilityToggle();
+              }}
+              className="p-0.5 rounded hover:bg-muted"
+            >
+              {entry.editorVisible ? (
+                <Eye className="w-3.5 h-3.5" />
+              ) : (
+                <EyeOff className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            {entry.editorVisible ? "Hide in editor" : "Show in editor"}
+          </TooltipContent>
+        </Tooltip>
 
+        {/* Player visibility toggle (not applicable for raw items) */}
+        {!isRaw && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -211,28 +213,28 @@ export function ObjectListItem({
               {entry.playerVisible ? "Hide in player" : "Show in player"}
             </TooltipContent>
           </Tooltip>
+        )}
 
-          {isRenameable && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditStart();
-                  }}
-                  className="p-0.5 rounded hover:bg-muted"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                Rename
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      )}
+        {isRenameable && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditStart();
+                }}
+                className="p-0.5 rounded hover:bg-muted"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Rename
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
     </div>
   );
 }
