@@ -45,9 +45,8 @@ function resolveNextSpreadId(
 ): NextSpreadResult {
   if (!spread) return null;
   if (spread.branch_setting) return { type: 'branch' };
-  if (currentSection && spread.id === currentSection.end_spread_id) {
-    if (currentSection.next_spread_id) return { type: 'spread', id: currentSection.next_spread_id };
-    return null;
+  if (currentSection && spread.id === currentSection.end_spread_id && currentSection.next_spread_id) {
+    return { type: 'spread', id: currentSection.next_spread_id };
   }
   const linearNext = spreads[spreads.findIndex((s) => s.id === spread.id) + 1]?.id;
   if (linearNext) return { type: 'spread', id: linearNext };
