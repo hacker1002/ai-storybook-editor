@@ -174,8 +174,9 @@ export const useSpreadHasBranching = (spreadId: string): boolean =>
     const spread = s.illustration.spreads?.find((sp) => sp.id === spreadId);
     return !!spread?.branch_setting && spread.branch_setting.branches.length > 0;
   });
+/** next_spread_id of the section ending at spreadId — undefined means follow array order */
 export const useSpreadNextId = (spreadId: string): string | null | undefined =>
-  useSnapshotStore((s) => s.illustration.spreads?.find((sp) => sp.id === spreadId)?.next_spread_id);
+  useSnapshotStore((s) => s.illustration.sections?.find((sec) => sec.end_spread_id === spreadId)?.next_spread_id);
 export const useBranchSetting = (spreadId: string): BranchSetting | undefined =>
   useSnapshotStore((s) => s.illustration.spreads?.find((sp) => sp.id === spreadId)?.branch_setting);
 export const useBranches = (spreadId: string): Branch[] =>

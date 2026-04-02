@@ -19,7 +19,7 @@ export function BranchCreativeSpace() {
   const spreadIds = useIllustrationSpreadIds();
   const spreads = useIllustrationSpreads();
   const sections = useSections();
-  const { addSection, updateSection, deleteSection, clearNextSpreadId } = useSnapshotActions();
+  const { addSection, updateSection, deleteSection } = useSnapshotActions();
 
   // Selection state — spread and section are mutually exclusive
   const [userSelectedSpreadId, setUserSelectedSpreadId] = useState<string | null>(null);
@@ -126,18 +126,11 @@ export function BranchCreativeSpace() {
       log.info('handleConfirmAddSection', 'created', { sectionId: newSectionId, count: sorted.length });
     }
 
-    // Set next_spread_id for the section's last spread to "follow order" (next spread in array)
-    const endIdx = indexMap.get(endSpreadId);
-    if (endIdx !== undefined && endIdx + 1 < spreads.length) {
-      clearNextSpreadId(endSpreadId);
-      log.debug('handleConfirmAddSection', 'cleared next_spread_id for end spread', { endSpreadId });
-    }
-
     setIsAddMode(false);
     setEditSectionId(null);
     setAddSectionTitle('');
     setAddSectionSelectedIds([]);
-  }, [addSectionTitle, addSectionSelectedIds, spreads, addSection, updateSection, editSectionId, clearNextSpreadId]);
+  }, [addSectionTitle, addSectionSelectedIds, spreads, addSection, updateSection, editSectionId]);
 
   const handleAddSectionSpreadToggle = useCallback((spreadId: string) => {
     const indexMap = new Map(spreads.map((sp, i) => [sp.id, i]));

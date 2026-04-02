@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Pencil,
   Settings,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
@@ -83,6 +84,11 @@ function SectionSidebarItemInner({
       <span className="text-xs text-muted-foreground shrink-0">
         ({spreadCount})
       </span>
+
+      {/* Redirect indicator — always visible when next_spread_id is set */}
+      {section.next_spread_id && (
+        <ArrowRight className="w-3.5 h-3.5 text-orange-400 shrink-0" aria-label="Has redirect" />
+      )}
 
       {/* Action icons — visible on hover */}
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

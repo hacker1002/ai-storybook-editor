@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import { Settings, GitBranch, ArrowRight } from "lucide-react";
+import { Settings, GitBranch } from "lucide-react";
 import { cn } from "@/utils/utils";
 import { useSpreadNavigation } from "@/stores/snapshot-store/selectors";
 import { createLogger } from "@/utils/logger";
@@ -27,7 +27,6 @@ function SpreadSidebarItemInner({
 }: SpreadSidebarItemProps) {
   const nav = useSpreadNavigation(spread.id);
   const hasBranching = !!nav?.branch_setting;
-  const nextId = nav?.next_spread_id;
 
   // Derive page label from spread pages
   const pageNumbers =
@@ -71,12 +70,6 @@ function SpreadSidebarItemInner({
           <GitBranch
             className="w-3.5 h-3.5 text-blue-500"
             aria-label="Has branching"
-          />
-        )}
-        {nextId && (
-          <ArrowRight
-            className="w-3.5 h-3.5 text-orange-400"
-            aria-label="Has redirect"
           />
         )}
       </div>

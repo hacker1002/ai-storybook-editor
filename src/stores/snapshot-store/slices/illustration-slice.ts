@@ -242,8 +242,8 @@ export const createIllustrationSlice: StateCreator<
 
   // --- Navigation ---
 
-  setNextSpreadId: (spreadId, nextSpreadId) => set((state) => setNextSpreadIdAction(state, spreadId, nextSpreadId)),
-  clearNextSpreadId: (spreadId) => set((state) => clearNextSpreadIdAction(state, spreadId)),
+  setNextSpreadId: (sectionId, nextSpreadId) => set((state) => setNextSpreadIdAction(state, sectionId, nextSpreadId)),
+  clearNextSpreadId: (sectionId) => set((state) => clearNextSpreadIdAction(state, sectionId)),
 
   // --- Branch Setting ---
 

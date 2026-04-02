@@ -29,6 +29,8 @@ export interface Section {
   title: string;
   start_spread_id: string;
   end_spread_id: string;
+  /** Where to navigate after this section ends. Undefined = follow array order. */
+  next_spread_id?: string | null;
 }
 
 export interface IllustrationData {

@@ -84,9 +84,9 @@ export interface IllustrationSlice {
   updateSection: (sectionId: string, updates: Partial<Omit<Section, 'id'>>) => void;
   deleteSection: (sectionId: string) => void;
 
-  // Navigation
-  setNextSpreadId: (spreadId: string, nextSpreadId: string | null) => void;
-  clearNextSpreadId: (spreadId: string) => void;
+  // Navigation (stored on section, not spread)
+  setNextSpreadId: (sectionId: string, nextSpreadId: string | null) => void;
+  clearNextSpreadId: (sectionId: string) => void;
 
   // Branch Setting
   setBranchSetting: (spreadId: string, setting: BranchSetting) => void;

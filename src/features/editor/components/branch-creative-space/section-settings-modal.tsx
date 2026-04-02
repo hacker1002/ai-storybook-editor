@@ -10,7 +10,6 @@ import { createLogger } from '@/utils/logger';
 import {
   useSectionById,
   useIllustrationSpreads,
-  useSpreadNavigation,
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
 import type { NavigationMode } from './branch-types';
@@ -34,10 +33,9 @@ function deriveInitialState(
 export function SectionSettingsModal({ sectionId, onClose }: SectionSettingsModalProps) {
   const section = useSectionById(sectionId);
   const spreads = useIllustrationSpreads();
-  const spreadNav = useSpreadNavigation(section?.end_spread_id ?? '');
   const { setNextSpreadId, clearNextSpreadId } = useSnapshotActions();
 
-  const initial = deriveInitialState(spreadNav?.next_spread_id);
+  const initial = deriveInitialState(section?.next_spread_id);
 
   const [mode, setMode] = useState<NavigationMode>(initial.mode);
   const [targetSpreadId, setTargetSpreadId] = useState(initial.targetSpreadId);
@@ -47,13 +45,12 @@ export function SectionSettingsModal({ sectionId, onClose }: SectionSettingsModa
   const isSaveDisabled = mode === 'specific-spread' && !targetSpreadId;
 
   const handleSave = () => {
-    const endSpreadId = section.end_spread_id;
-    log.info('handleSave', 'saving section navigation', { sectionId, mode, endSpreadId });
+    log.info('handleSave', 'saving section navigation', { sectionId, mode });
 
     if (mode === 'next-in-order') {
-      clearNextSpreadId(endSpreadId);
+      clearNextSpreadId(sectionId);
     } else {
-      setNextSpreadId(endSpreadId, targetSpreadId);
+      setNextSpreadId(sectionId, targetSpreadId);
     }
     onClose();
   };

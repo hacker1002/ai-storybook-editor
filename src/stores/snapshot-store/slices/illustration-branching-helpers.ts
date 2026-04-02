@@ -69,28 +69,28 @@ export function deleteSectionAction(state: SnapshotStore, sectionId: string) {
   log.debug('deleteSection', 'delete', { sectionId });
   state.illustration.sections = state.illustration.sections.filter((s) => s.id !== sectionId);
 
-  // Cascade: remove branches referencing this section, keep branch_setting intact (user deletes manually)
+  // Cascade: remove branches referencing this section
   removeBranchesForSections(state, [sectionId]);
 
   state.sync.isDirty = true;
 }
 
-// --- Navigation (next_spread_id on spread) ---
+// --- Navigation (next_spread_id on section) ---
 
-export function setNextSpreadIdAction(state: SnapshotStore, spreadId: string, nextSpreadId: string | null) {
-  log.debug('setNextSpreadId', 'set', { spreadId, nextSpreadId });
-  const spread = findIllustrationSpread(state, spreadId);
-  if (spread) {
-    spread.next_spread_id = nextSpreadId;
+export function setNextSpreadIdAction(state: SnapshotStore, sectionId: string, nextSpreadId: string | null) {
+  log.debug('setNextSpreadId', 'set', { sectionId, nextSpreadId });
+  const section = state.illustration.sections.find((s) => s.id === sectionId);
+  if (section) {
+    section.next_spread_id = nextSpreadId;
     state.sync.isDirty = true;
   }
 }
 
-export function clearNextSpreadIdAction(state: SnapshotStore, spreadId: string) {
-  log.debug('clearNextSpreadId', 'clear', { spreadId });
-  const spread = findIllustrationSpread(state, spreadId);
-  if (spread) {
-    delete spread.next_spread_id;
+export function clearNextSpreadIdAction(state: SnapshotStore, sectionId: string) {
+  log.debug('clearNextSpreadId', 'clear', { sectionId });
+  const section = state.illustration.sections.find((s) => s.id === sectionId);
+  if (section) {
+    delete section.next_spread_id;
     state.sync.isDirty = true;
   }
 }
