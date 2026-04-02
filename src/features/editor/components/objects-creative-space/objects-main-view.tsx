@@ -14,6 +14,7 @@ import {
   EditImageModal,
   SplitImageModal,
   CropImageModal,
+  CropAudioModal,
 } from "@/features/editor/components/shared-components";
 import type {
   SplitLayerResult,
@@ -157,6 +158,42 @@ export function ObjectsMainView({
     setSplitModalOpen(open);
     if (!open) setSplitModalImage(null);
   }, []);
+
+  // Crop audio modal state
+  const [cropAudioModalOpen, setCropAudioModalOpen] = useState(false);
+  const [cropAudioItem, setCropAudioItem] = useState<SpreadAudio | null>(null);
+  const [cropAudioSpreadId, setCropAudioSpreadId] = useState<string>("");
+
+  const openCropAudioModal = useCallback(
+    (audio: SpreadAudio) => {
+      setCropAudioItem(audio);
+      setCropAudioSpreadId(selectedSpreadId);
+      setCropAudioModalOpen(true);
+    },
+    [selectedSpreadId]
+  );
+
+  const handleCropAudioModalClose = useCallback(() => {
+    setCropAudioModalOpen(false);
+    setCropAudioItem(null);
+  }, []);
+
+  const handleCropAudioComplete = useCallback(
+    (newMediaUrl: string) => {
+      if (!cropAudioItem) return;
+      actions.updateRetouchAudio(cropAudioSpreadId, cropAudioItem.id, {
+        media_url: newMediaUrl,
+      });
+      log.info("handleCropAudioComplete", "audio cropped", {
+        audioId: cropAudioItem.id,
+        spreadId: cropAudioSpreadId,
+        newMediaUrl,
+      });
+      setCropAudioModalOpen(false);
+      setCropAudioItem(null);
+    },
+    [cropAudioItem, cropAudioSpreadId, actions]
+  );
 
   // Crop image modal state
   const [cropModalOpen, setCropModalOpen] = useState(false);
@@ -870,9 +907,14 @@ export function ObjectsMainView({
   // === Audio toolbar render prop ===
   const renderRetouchAudioToolbar = useCallback(
     (context: AudioToolbarContext<BaseSpread>) => (
-      <ObjectsAudioToolbar context={context} />
+      <ObjectsAudioToolbar
+        context={{
+          ...context,
+          onCropAudio: () => openCropAudioModal(context.item as SpreadAudio),
+        }}
+      />
     ),
-    []
+    [openCropAudioModal]
   );
 
   return (
@@ -943,6 +985,16 @@ export function ObjectsMainView({
           onOpenChange={handleCropModalClose}
           image={cropModalImage}
           onCreateImages={handleCropCreateImages}
+        />
+      )}
+
+      {cropAudioItem?.media_url && (
+        <CropAudioModal
+          isOpen={cropAudioModalOpen}
+          onClose={handleCropAudioModalClose}
+          audioName={cropAudioItem.name}
+          mediaUrl={cropAudioItem.media_url}
+          onCropComplete={handleCropAudioComplete}
         />
       )}
     </>
