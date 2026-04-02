@@ -352,6 +352,7 @@ export interface AudioToolbarContext<TSpread extends BaseSpread>
   extends AudioItemContext<TSpread>,
     BaseToolbarContext {
   onReplaceAudio: () => void;
+  onCropAudio?: () => void;
 }
 
 export interface QuizToolbarContext<TSpread extends BaseSpread>

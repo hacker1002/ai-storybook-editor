@@ -1312,6 +1312,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 selectedGeometry: state.selectedGeometry,
                 canvasRef,
                 onReplaceAudio: () => {},
+                onCropAudio: undefined,
               });
             }
 
