@@ -89,6 +89,15 @@ export function PlayerAnimationSidebar({
     }
   }, [displayAnimations, phase, maxActivatedOrder, currentStepIndex, steps]);
 
+  // Branch item blinks when all animations have played and user must choose a path.
+  // Triggers in awaiting phases when no regular animation is pending, or when phase=complete.
+  const isBranchPending = useMemo(() => {
+    if (!branchSetting || branchSetting.branches.length === 0) return false;
+    if (phase === "complete") return true;
+    if (phase !== "awaiting_next" && phase !== "awaiting_click") return false;
+    return pendingNextOrder === null;
+  }, [branchSetting, phase, pendingNextOrder]);
+
   // Recompute step numbers on the filtered list so numbering is sequential
   const stepNumbers = useMemo(
     () => computeStepNumbers(displayAnimations),
@@ -175,21 +184,28 @@ export function PlayerAnimationSidebar({
               />
             ))}
 
-            {/* Branch indicator — shown when spread has branching */}
-            {branchSetting && branchSetting.branches.length > 0 && (() => {
+            {/* Branch indicator — only in interactive edition */}
+            {playEdition === 'interactive' && branchSetting && branchSetting.branches.length > 0 && (() => {
               const branchTitle = narrationLanguage
                 ? (branchSetting[narrationLanguage] as BranchLocalizedContent | undefined)?.title
                 : undefined;
               return (
-                <div className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/50 px-2.5 py-2">
-                  <GitFork className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="flex flex-col min-w-0">
-                    {branchTitle && (
-                      <span className="text-xs font-medium truncate">{branchTitle}</span>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      Branch ({branchSetting.branches.length} options)
-                    </span>
+                <div className={`rounded border bg-card ${isBranchPending ? "animate-sidebar-blink" : ""}`}>
+                  <div className="relative flex gap-2 px-2 py-1.5">
+                    <div className="flex items-center justify-center shrink-0 w-6">
+                      <GitFork className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <span className="block text-xs font-medium truncate">
+                        {branchTitle || "Branch"}
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground truncate">
+                        Choose a path
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {branchSetting.branches.length} options
+                      </span>
+                    </div>
                   </div>
                 </div>
               );

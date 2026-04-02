@@ -12,19 +12,73 @@ import type {
   RemixAsset,
   AssetSwapParams,
 } from "@/types/playable-types";
+import type { Section } from "@/types/illustration-types";
 import type { ItemType } from "@/types/spread-types";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 import { useSetZoomLevel } from '@/stores/editor-settings-store';
+import {
+  useSpreadHistories,
+  useCurrentSection,
+  usePlaybackActions,
+} from '@/stores/animation-playback-store';
 import { PlayablePlayerHeader } from "./playable-player-header";
 import { PlayableEditorHeader } from "./playable-editor-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
 import { RemixEditorCanvas } from "./remix-editor-canvas";
 import { PlayerCanvas } from "./player-canvas";
+import { BranchPathModal } from "./branch-path-modal";
+
+// === Types ===
+
+type NextSpreadResult =
+  | { type: 'branch' }             // spread has branch_setting → show modal
+  | { type: 'spread'; id: string } // navigate directly
+  | null;                           // end of story
+
+// === Pure helpers (outside component) ===
+
+function resolveNextSpreadId(
+  spread: PlayableSpread | undefined,
+  spreads: PlayableSpread[],
+  currentSection: Section | null,
+): NextSpreadResult {
+  if (!spread) return null;
+  if (spread.branch_setting) return { type: 'branch' };
+  if (currentSection && spread.id === currentSection.end_spread_id) {
+    if (currentSection.next_spread_id) return { type: 'spread', id: currentSection.next_spread_id };
+    return null;
+  }
+  const linearNext = spreads[spreads.findIndex((s) => s.id === spread.id) + 1]?.id;
+  if (linearNext) return { type: 'spread', id: linearNext };
+  return null;
+}
+
+function autoResolveNextSpread(
+  spread: PlayableSpread | undefined,
+  spreads: PlayableSpread[],
+  sections: Section[] | undefined,
+  currentSection: Section | null,
+): string | null {
+  if (!spread) return null;
+  if (spread.branch_setting) {
+    const defaultBranch =
+      spread.branch_setting.branches.find((b) => b.is_default) ??
+      spread.branch_setting.branches[0];
+    const section = sections?.find((s) => s.id === defaultBranch?.section_id);
+    return section?.start_spread_id ?? null;
+  }
+  const result = resolveNextSpreadId(spread, spreads, currentSection);
+  if (result?.type === 'spread') return result.id;
+  return null;
+}
+
+// === Props ===
 
 interface PlayableSpreadViewProps {
   mode: OperationMode;
   spreads: PlayableSpread[];
+  sections?: Section[];
   assets?: RemixAsset[];
   selectedItemId?: string | null;
   selectedItemType?: ItemType | null;
@@ -51,6 +105,7 @@ const KEYBOARD_SHORTCUTS = {
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   mode,
   spreads,
+  sections,
   assets,
   selectedItemId: externalSelectedItemId,
   selectedItemType: externalSelectedItemType,
@@ -75,6 +130,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [pendingBranchSpreadId, setPendingBranchSpreadId] = useState<string | null>(null);
 
   // Sync zoom level to global store for shared components
   const setStoreZoomLevel = useSetZoomLevel();
@@ -82,11 +139,17 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     setStoreZoomLevel(zoomLevel);
   }, [zoomLevel, setStoreZoomLevel]);
 
+  // === Store ===
+  const spreadHistories = useSpreadHistories();
+  const currentSection = useCurrentSection();
+  const playbackActions = usePlaybackActions();
+  const { pushSpreadHistory, popSpreadHistory, setCurrentSection } = playbackActions;
+
   // === Derived State ===
   const selectedSpread = spreads.find((s) => s.id === selectedSpreadId);
-  const selectedIndex = spreads.findIndex((s) => s.id === selectedSpreadId);
-  const hasPrevious = selectedIndex > 0;
-  const hasNext = selectedIndex < spreads.length - 1;
+  const hasPrevious = spreadHistories.length > 1;
+  const nextResult = resolveNextSpreadId(selectedSpread, spreads, currentSection);
+  const hasNext = nextResult !== null;
 
   // === Canvas Switching Handlers ===
   const handlePlay = useCallback(() => {
@@ -111,49 +174,92 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     setPlayEdition(edition);
   }, [activeCanvas, mode, onStopPreview]);
 
-  const handleSkipPrevious = useCallback(() => {
-    if (!hasPrevious) return;
-    const prevSpread = spreads[selectedIndex - 1];
-    setSelectedSpreadId(prevSpread.id);
-    onSpreadSelect?.(prevSpread.id);
-  }, [hasPrevious, spreads, selectedIndex, onSpreadSelect]);
-
-  const handleSkipNext = useCallback(() => {
-    if (!hasNext) return;
-    const nextSpread = spreads[selectedIndex + 1];
-    setSelectedSpreadId(nextSpread.id);
-    onSpreadSelect?.(nextSpread.id);
-  }, [hasNext, spreads, selectedIndex, onSpreadSelect]);
+  // === Navigation Handlers ===
 
   const handleSkipSpread = useCallback((direction: 'next' | 'prev') => {
-    if (direction === 'next') handleSkipNext();
-    else handleSkipPrevious();
-  }, [handleSkipNext, handleSkipPrevious]);
+    if (direction === 'prev') {
+      if (spreadHistories.length <= 1) return;
+      const entry = popSpreadHistory();
+      if (entry) {
+        log.debug('handleSkipSpread', 'back to prev', { spreadId: entry.spreadId });
+        setSelectedSpreadId(entry.spreadId);
+        onSpreadSelect?.(entry.spreadId);
+      }
+      return;
+    }
 
-  // === Spread Selection Handler ===
+    // direction === 'next'
+    const result = resolveNextSpreadId(selectedSpread, spreads, currentSection);
+    if (!result) return;
+
+    if (result.type === 'branch') {
+      if (playEdition === 'interactive') {
+        log.info('handleSkipSpread', 'branch detected, showing modal', { spreadId: selectedSpreadId });
+        setPendingBranchSpreadId(selectedSpreadId);
+        setShowBranchModal(true);
+      } else {
+        // Classic/Dynamic: auto-resolve via default branch, no modal
+        const targetId = autoResolveNextSpread(selectedSpread, spreads, sections, currentSection);
+        if (targetId) {
+          log.debug('handleSkipSpread', 'branch auto-resolved', { targetId, playEdition });
+          pushSpreadHistory(targetId, currentSection);
+          setSelectedSpreadId(targetId);
+          onSpreadSelect?.(targetId);
+        }
+      }
+      return;
+    }
+    if (result.type === 'spread') {
+      log.debug('handleSkipSpread', 'next spread', { targetId: result.id });
+      pushSpreadHistory(result.id, currentSection);
+      setSelectedSpreadId(result.id);
+      onSpreadSelect?.(result.id);
+    }
+  }, [spreadHistories, selectedSpread, spreads, currentSection, playEdition, selectedSpreadId, popSpreadHistory, pushSpreadHistory, onSpreadSelect]);
+
+  // === Branch Modal Handlers ===
+
+  const handleBranchSelect = useCallback((targetSpreadId: string, section: Section) => {
+    log.info('handleBranchSelect', 'branch chosen', { targetSpreadId, sectionId: section.id });
+    setShowBranchModal(false);
+    setPendingBranchSpreadId(null);
+    setCurrentSection(section);
+    pushSpreadHistory(targetSpreadId, section);
+    setSelectedSpreadId(targetSpreadId);
+    onSpreadSelect?.(targetSpreadId);
+  }, [setCurrentSection, pushSpreadHistory, onSpreadSelect]);
+
+  const handleBranchDismiss = useCallback(() => {
+    log.debug('handleBranchDismiss', 'modal dismissed, staying on current spread');
+    setShowBranchModal(false);
+    setPendingBranchSpreadId(null);
+  }, []);
+
+  // === Spread Selection Handler (thumbnail) ===
   const handleSpreadClick = useCallback(
     (spreadId: string) => {
+      log.debug('handleSpreadClick', 'thumbnail clicked', { spreadId });
+      pushSpreadHistory(spreadId, currentSection);
       setSelectedSpreadId(spreadId);
       onSpreadSelect?.(spreadId);
     },
-    [onSpreadSelect]
+    [currentSection, pushSpreadHistory, onSpreadSelect]
   );
 
   // === Spread Complete Handler ===
   const handleSpreadComplete = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     (_spreadId: string) => {
-      if (playMode === 'auto' && hasNext) {
-        const nextSpread = spreads[selectedIndex + 1];
-        if (nextSpread) {
-          setTimeout(() => {
-            setSelectedSpreadId(nextSpread.id);
-            onSpreadSelect?.(nextSpread.id);
-          }, 1000);
-        }
-      }
+      if (playMode !== 'auto') return;
+      const targetId = autoResolveNextSpread(selectedSpread, spreads, sections, currentSection);
+      if (!targetId) return;
+      setTimeout(() => {
+        pushSpreadHistory(targetId, currentSection);
+        setSelectedSpreadId(targetId);
+        onSpreadSelect?.(targetId);
+      }, 1000);
     },
-    [playMode, hasNext, spreads, selectedIndex, onSpreadSelect]
+    [playMode, selectedSpread, spreads, sections, currentSection, pushSpreadHistory, onSpreadSelect]
   );
 
   // === Keyboard Shortcuts ===
@@ -183,10 +289,10 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           handleStop();
           break;
         case KEYBOARD_SHORTCUTS.PREV_SPREAD:
-          handleSkipPrevious();
+          handleSkipSpread('prev');
           break;
         case KEYBOARD_SHORTCUTS.NEXT_SPREAD:
-          handleSkipNext();
+          handleSkipSpread('next');
           break;
         case KEYBOARD_SHORTCUTS.FIRST_SPREAD: {
           e.preventDefault();
@@ -216,8 +322,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     activeCanvas,
     handlePlay,
     handleStop,
-    handleSkipPrevious,
-    handleSkipNext,
+    handleSkipSpread,
     onSpreadSelect,
   ]);
 
@@ -285,6 +390,20 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           onSpreadClick={handleSpreadClick}
         />
       </div>
+
+      {/* Branch Path Modal */}
+      {showBranchModal && pendingBranchSpreadId && (() => {
+        const branchSpread = spreads.find((s) => s.id === pendingBranchSpreadId);
+        if (!branchSpread?.branch_setting) return null;
+        return (
+          <BranchPathModal
+            branchSetting={branchSpread.branch_setting}
+            sections={sections ?? []}
+            onSelect={handleBranchSelect}
+            onDismiss={handleBranchDismiss}
+          />
+        );
+      })()}
     </div>
   );
 };

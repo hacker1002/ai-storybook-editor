@@ -18,6 +18,7 @@ import {
   useRetouchSpreads,
   useRetouchSpreadById,
   useRetouchAnimations,
+  useSections,
 } from "@/stores/snapshot-store/selectors";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { createLogger } from "@/utils/logger";
@@ -30,6 +31,7 @@ export function PreviewCreativeSpace() {
   // Always use retouch data — animations only exist in retouch step
   const spreadIds = useRetouchSpreadIds();
   const spreads = useRetouchSpreads();
+  const sections = useSections();
 
   // Local state: selected spread (default = first)
   const [userSelectedSpreadId, setUserSelectedSpreadId] = useState<string | null>(null);
@@ -89,6 +91,7 @@ export function PreviewCreativeSpace() {
         <PlayableSpreadView
           mode="player"
           spreads={playableSpreads}
+          sections={sections}
           onSpreadSelect={setUserSelectedSpreadId}
         />
       </div>

@@ -3,7 +3,8 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
-import type { AnimationStep, PlayerPhase, PlayMode, PlayEdition, ReplayableItem } from '@/types/playable-types';
+import type { AnimationStep, PlayerPhase, PlayMode, PlayEdition, ReplayableItem, SpreadHistoryEntry } from '@/types/playable-types';
+import type { Section } from '@/types/illustration-types';
 import {
   findNextOnNextStep,
   findOnClickStepForTarget,
@@ -29,6 +30,8 @@ interface PlaybackState {
   maxActivatedOrder: number; // highest order ever passed to addActiveAnimationOrder (reset per phase)
   narrationLanguage: string; // language code for narration audio (e.g. 'en_US')
   quizLanguage: string;      // language code for quiz content (e.g. 'en_US')
+  spreadHistories: SpreadHistoryEntry[]; // breadcrumb trail for branching navigation
+  currentSection: Section | null;        // active section in current player context
 }
 
 interface PlaybackActions {
@@ -48,6 +51,10 @@ interface PlaybackActions {
   resetStore: () => void;
   setNarrationLanguage: (code: string) => void;
   setQuizLanguage: (code: string) => void;
+  pushSpreadHistory: (spreadId: string, section: Section | null) => void;
+  popSpreadHistory: () => SpreadHistoryEntry | null;
+  clearSpreadHistory: () => void;
+  setCurrentSection: (section: Section | null) => void;
   setActiveAnimationOrders: (orders: number[]) => void;
   addActiveAnimationOrder: (order: number) => void;
   removeActiveAnimationOrder: (order: number) => void;
@@ -70,6 +77,8 @@ const INITIAL_STATE: PlaybackState = {
   maxActivatedOrder: -1,
   narrationLanguage: 'en_US',
   quizLanguage: 'en_US',
+  spreadHistories: [],
+  currentSection: null,
 };
 
 // === Store creation ===
@@ -114,6 +123,35 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         const prev = get().quizLanguage;
         log.info('setQuizLanguage', 'transition', { prev, next: code });
         set({ quizLanguage: code });
+      },
+
+      pushSpreadHistory: (spreadId, section) => {
+        const current = get().spreadHistories;
+        log.debug('pushSpreadHistory', 'push', { spreadId, sectionId: section?.id ?? null, newLength: current.length + 1 });
+        set({ spreadHistories: [...current, { spreadId, section }] });
+      },
+
+      popSpreadHistory: () => {
+        const { spreadHistories } = get();
+        if (spreadHistories.length <= 1) {
+          log.debug('popSpreadHistory', 'at root, nothing to pop');
+          return null;
+        }
+        const newHistories = spreadHistories.slice(0, -1);
+        const newTop = newHistories[newHistories.length - 1];
+        log.debug('popSpreadHistory', 'pop', { newLength: newHistories.length, newTopId: newTop.spreadId });
+        set({ spreadHistories: newHistories, currentSection: newTop.section });
+        return newTop;
+      },
+
+      clearSpreadHistory: () => {
+        log.debug('clearSpreadHistory', 'clear');
+        set({ spreadHistories: [], currentSection: null });
+      },
+
+      setCurrentSection: (section) => {
+        log.debug('setCurrentSection', 'set', { sectionId: section?.id ?? null });
+        set({ currentSection: section });
       },
 
       setVolume: (v) => {
@@ -440,6 +478,8 @@ export const useCurrentStep = () =>
 
 export const useNarrationLanguage = () => usePlaybackStore((s) => s.narrationLanguage);
 export const useQuizLanguage = () => usePlaybackStore((s) => s.quizLanguage);
+export const useSpreadHistories = () => usePlaybackStore((s) => s.spreadHistories);
+export const useCurrentSection = () => usePlaybackStore((s) => s.currentSection);
 
 export const useActiveAnimationOrders = () => usePlaybackStore((s) => s.activeAnimationOrders);
 export const useMaxActivatedOrder = () => usePlaybackStore((s) => s.maxActivatedOrder);
@@ -463,5 +503,9 @@ export const usePlaybackActions = () =>
       cancelAndNext: s.cancelAndNext,
       clickLoopReplay: s.clickLoopReplay,
       resetStore: s.resetStore,
+      pushSpreadHistory: s.pushSpreadHistory,
+      popSpreadHistory: s.popSpreadHistory,
+      clearSpreadHistory: s.clearSpreadHistory,
+      setCurrentSection: s.setCurrentSection,
     }))
   );

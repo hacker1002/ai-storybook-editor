@@ -1,6 +1,7 @@
 // playable-types.ts - Domain types for playable spread view (component Props stay in component)
 
 import type { BaseSpread, SpreadAnimation } from './spread-types';
+import type { Section } from './illustration-types';
 
 // === Player Phases ===
 export type PlayerPhase = 'idle' | 'playing' | 'awaiting_next' | 'awaiting_click' | 'complete';
@@ -80,6 +81,12 @@ export interface AssetSwapParams {
   referenceImage: File | null;
   targetId: string;
   spreadId: string;
+}
+
+// === Spread History Entry (navigation breadcrumb for branching player) ===
+export interface SpreadHistoryEntry {
+  spreadId: string;
+  section: Section | null; // active section when at this spread
 }
 
 // Re-export spread types that playable consumers commonly need

@@ -185,12 +185,18 @@ export function PlayerCanvas({
     playbackActions.play();
   }, [spread.id, filteredAnimations]); // eslint-disable-line
 
-  // 3. Cleanup on unmount
+  // 3. Init spread history on mount — push initial spread so Back can return to start
+  useEffect(() => {
+    playbackActions.clearSpreadHistory();
+    playbackActions.pushSpreadHistory(spread.id, null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 4. Cleanup on unmount — resetStore() clears spreadHistories via INITIAL_STATE spread
   useEffect(() => {
     return () => playbackActions.resetStore();
   }, []); // eslint-disable-line
 
-  // 4. Keyboard shortcuts: volume/mute (moved from root)
+  // 5. Keyboard shortcuts: volume/mute (moved from root)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -228,6 +234,11 @@ export function PlayerCanvas({
     if (playMode !== "off") return;
     // Dismiss quiz modal if open before skipping
     if (activeQuizId) setActiveQuizId(null);
+    // No animations on this spread — skip state machine, navigate immediately
+    if (steps.length === 0) {
+      if (hasNext) onSkipSpread("next");
+      return;
+    }
     if (phase === "playing") {
       const currentStep = steps[currentStepIndex];
       if (currentStep?.mustComplete) return;
