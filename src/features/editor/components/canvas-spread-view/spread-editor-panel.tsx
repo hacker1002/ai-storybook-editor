@@ -111,7 +111,6 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   ) => void;
 
   // Item-level feature flags
-  canDeleteItem?: boolean;
   canResizeItem?: boolean;
   canDragItem?: boolean;
   preventEditRawItem?: boolean; // When true, raw items (raw_image/raw_textbox) cannot drag/resize
@@ -164,7 +163,6 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderRawImageToolbar,
   renderRawTextboxToolbar,
   onSpreadItemAction,
-  canDeleteItem = false,
   canResizeItem = true,
   canDragItem = true,
   preventEditRawItem = false,
@@ -740,106 +738,6 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           );
           break;
         }
-        case "Delete":
-        case "Backspace":
-          // Don't delete element if user is editing text
-          if (
-            canDeleteItem &&
-            !state.isTextboxEditing &&
-            !state.isImageEditing &&
-            onSpreadItemAction
-          ) {
-            if (selectedElement.type === "raw_image") {
-              const rawImg = (spread.raw_images ?? [])[selectedElement.index];
-              if (rawImg?.id) {
-                onSpreadItemAction({
-                  itemType: "image",
-                  action: "delete",
-                  itemId: rawImg.id,
-                  data: null,
-                });
-              }
-            }
-            if (selectedElement.type === "image") {
-              const image = (spread.images ?? [])[selectedElement.index];
-              if (image?.id) {
-                onSpreadItemAction({
-                  itemType: "image",
-                  action: "delete",
-                  itemId: image.id,
-                  data: null,
-                });
-              }
-            }
-            if (selectedElement.type === "raw_textbox") {
-              const rawTb = (spread.raw_textboxes ?? [])[selectedElement.index];
-              if (rawTb?.id) {
-                onSpreadItemAction({
-                  itemType: "textbox",
-                  action: "delete",
-                  itemId: rawTb.id,
-                  data: null,
-                });
-              }
-            }
-            if (selectedElement.type === "textbox") {
-              const textbox = (spread.textboxes ?? [])[selectedElement.index];
-              if (textbox?.id) {
-                onSpreadItemAction({
-                  itemType: "textbox",
-                  action: "delete",
-                  itemId: textbox.id,
-                  data: null,
-                });
-              }
-            }
-            if (selectedElement.type === "shape") {
-              const shape = spread.shapes?.[selectedElement.index];
-              if (shape?.id) {
-                onSpreadItemAction({
-                  itemType: "shape",
-                  action: "delete",
-                  itemId: shape.id,
-                  data: null,
-                });
-              }
-            }
-            if (selectedElement.type === "video") {
-              const video = spread.videos?.[selectedElement.index];
-              if (video?.id) {
-                onSpreadItemAction({
-                  itemType: "video",
-                  action: "delete",
-                  itemId: video.id,
-                  data: null,
-                });
-              }
-            }
-            if (selectedElement.type === "audio") {
-              const audio = spread.audios?.[selectedElement.index];
-              if (audio?.id) {
-                onSpreadItemAction({
-                  itemType: "audio",
-                  action: "delete",
-                  itemId: audio.id,
-                  data: null,
-                });
-              }
-            }
-            if (selectedElement.type === "quiz") {
-              const quiz = spread.quizzes?.[selectedElement.index];
-              if (quiz?.id) {
-                onSpreadItemAction({
-                  itemType: "quiz",
-                  action: "delete",
-                  itemId: quiz.id,
-                  data: null,
-                });
-              }
-            }
-            handleElementSelect(null);
-          }
-          break;
       }
     },
     [
@@ -848,17 +746,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       getSelectedGeometry,
       updateElementGeometry,
       handleElementSelect,
-      canDeleteItem,
       canDragItem,
-      onSpreadItemAction,
-      spread.raw_images,
-      spread.raw_textboxes,
-      spread.images,
-      spread.textboxes,
-      spread.shapes,
-      spread.videos,
-      spread.audios,
-      spread.quizzes,
     ]
   );
 

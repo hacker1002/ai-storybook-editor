@@ -71,7 +71,6 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   canAddSpread: true,
   canReorderSpread: true,
   canDeleteSpread: true,
-  canDeleteItem: true,
   canResizeItem: true,
   canDragItem: true,
   renderImageToolbar: true,
@@ -613,7 +612,6 @@ export function DemoCanvasSpreadView() {
               canAddSpread={featureFlags.canAddSpread}
               canReorderSpread={featureFlags.canReorderSpread}
               canDeleteSpread={featureFlags.canDeleteSpread}
-              canDeleteItem={featureFlags.canDeleteItem}
               canResizeItem={featureFlags.canResizeItem}
               canDragItem={featureFlags.canDragItem}
               initialViewMode="edit"

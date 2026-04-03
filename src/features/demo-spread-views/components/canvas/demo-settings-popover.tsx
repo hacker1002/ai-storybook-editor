@@ -37,7 +37,6 @@ export interface FeatureFlags {
   canAddSpread: boolean;
   canReorderSpread: boolean;
   canDeleteSpread: boolean;
-  canDeleteItem: boolean;
   canResizeItem: boolean;
   canDragItem: boolean;
   renderImageToolbar: boolean;

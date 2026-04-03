@@ -989,7 +989,6 @@ export function ObjectsMainView({
         canAddSpread={false}
         canReorderSpread={false}
         canDeleteSpread={false}
-        canDeleteItem={true}
         canResizeItem={true}
         canDragItem={true}
         externalSelectedItemId={selectedItemId}

@@ -368,7 +368,6 @@ export function SpreadsMainView({
         canAddSpread={true}
         canDeleteSpread={true}
         canReorderSpread={true}
-        canDeleteItem={true}
         canResizeItem={true}
         canDragItem={true}
         externalSelectedItemId={selectedItemId}

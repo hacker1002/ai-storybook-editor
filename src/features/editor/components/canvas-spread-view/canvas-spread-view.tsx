@@ -104,7 +104,6 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   canAddSpread?: boolean;
   canReorderSpread?: boolean;
   canDeleteSpread?: boolean;
-  canDeleteItem?: boolean;
   canResizeItem?: boolean;
   canDragItem?: boolean;
   preventEditRawItem?: boolean;
@@ -155,7 +154,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   canAddSpread = false,
   canReorderSpread = false,
   canDeleteSpread = false,
-  canDeleteItem = false,
   canResizeItem = true,
   canDragItem = true,
   preventEditRawItem = false,
@@ -385,7 +383,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderRawImageToolbar={renderRawImageToolbar}
                 renderRawTextboxToolbar={renderRawTextboxToolbar}
                 onSpreadItemAction={handleSpreadItemAction}
-                canDeleteItem={canDeleteItem}
                 canResizeItem={canResizeItem}
                 canDragItem={canDragItem}
                 preventEditRawItem={preventEditRawItem}

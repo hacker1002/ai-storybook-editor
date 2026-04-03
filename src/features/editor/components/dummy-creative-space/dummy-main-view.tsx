@@ -359,7 +359,6 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       canAddSpread={true}
       canReorderSpread={true}
       canDeleteSpread={true}
-      canDeleteItem={true}
       canResizeItem={true}
       canDragItem={true}
       initialViewMode="edit"
