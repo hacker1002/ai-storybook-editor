@@ -1,7 +1,6 @@
 // config-narration-settings.tsx - Narration settings panel for 5 fixed languages.
 // Configures default voice-over (placeholder) and textbox typography per language.
 
-import * as React from 'react';
 import { useCurrentBook, useBookTypography, useBookActions } from '@/stores/book-store';
 import { NARRATION_LANGUAGES, DEFAULT_TYPOGRAPHY } from '@/constants/config-constants';
 import { NarrationLanguageSection } from './narration-language-section';

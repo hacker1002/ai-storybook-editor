@@ -34,7 +34,7 @@ export function ConfigSidebar({ activeSection, onSectionChange }: ConfigSidebarP
         {CONFIG_SECTIONS.map((item) => {
           const isActive = item.key === activeSection;
           // Dynamically resolve lucide icon by name
-          const IconComponent = (Icons as Record<string, React.ComponentType<{ className?: string }>>)[item.icon];
+          const IconComponent = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[item.icon];
 
           return (
             <button
