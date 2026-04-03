@@ -3,9 +3,8 @@
 
 export const BOOK_TYPE_MAP = {
   1: 'Picture Book',
-  2: 'Illustrated Story',
-  3: 'Comic',
-  4: 'Manga',
+  2: 'Illustrated Book',
+  3: 'Comics/Manga',
 } as const;
 
 export const DIMENSION_MAP = {

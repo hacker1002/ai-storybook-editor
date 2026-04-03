@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Plus,
@@ -11,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthStore } from '@/stores/auth-store'
+import { CreateNewStoryDialog } from '@/features/home/components/create-new-story-dialog'
 import { cn } from '@/utils/utils'
 
 const navItems = [
@@ -24,6 +26,7 @@ const navItems = [
 
 export function Sidebar() {
   const { user, isAuthenticated } = useAuthStore()
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
   return (
     <aside className="flex h-screen w-60 flex-col border-r border-sidebar-border bg-sidebar-background">
@@ -32,10 +35,14 @@ export function Sidebar() {
       </div>
 
       <div className="px-3 py-2">
-        <Button className="w-full gap-2" size="lg">
+        <Button className="w-full gap-2" size="lg" onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="h-4 w-4" />
           New Story
         </Button>
+        <CreateNewStoryDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+        />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">
