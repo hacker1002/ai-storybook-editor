@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, ImageIcon } from 'lucide-react';
+import { Volume2, ImageIcon, X } from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Dialog, DialogPortal, DialogOverlay } from '@/components/ui/dialog';
 import { cn } from '@/utils/utils';
@@ -105,6 +105,16 @@ export function BranchPathModal({ branchSetting, sections, onSelect, onDismiss }
         >
           {/* Visually hidden title for screen reader accessibility */}
           <DialogPrimitive.Title className="sr-only">Chọn nhánh câu chuyện</DialogPrimitive.Title>
+
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Đóng"
+            className="absolute right-3 top-3 p-1.5 rounded-full hover:bg-muted transition-colors"
+          >
+            <X className="h-5 w-5 text-muted-foreground" />
+          </button>
 
           {/* Header: replay button + title */}
           {(audioUrl || titleText) && (

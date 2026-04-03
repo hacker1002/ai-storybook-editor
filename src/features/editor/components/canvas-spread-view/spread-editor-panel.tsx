@@ -121,6 +121,12 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
 
   // External selection sync (sidebar → canvas)
   externalSelectedItemId?: { type: string; id: string } | null;
+
+  // Callback when a page background is selected in canvas (canvas → sidebar sync)
+  onPageSelect?: (pageIndex: number) => void;
+
+  // Callback when selection is cleared (click outside canvas)
+  onDeselect?: () => void;
 }
 
 // === Local State Interface ===
@@ -164,8 +170,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   preventEditRawItem = false,
   availableLayouts = [],
   externalSelectedItemId,
+  onPageSelect,
+  onDeselect,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const onDeselectRef = useRef(onDeselect);
+  onDeselectRef.current = onDeselect;
   const editorLangCode = useLanguageCode();
   // Ref for originalGeometry to avoid stale closures in drag/resize handlers.
   // React batches setState from handleResizeStart, so handleResize may still
@@ -242,6 +252,13 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     } else if (type === "quiz") {
       resolvedType = "quiz";
       index = (spread.quizzes ?? []).findIndex((q) => q.id === id);
+    } else if (type === "page") {
+      // Page IDs are "page-0", "page-1" etc. — extract index
+      const pageIndex = parseInt(id.replace("page-", ""), 10);
+      if (!isNaN(pageIndex) && pageIndex >= 0 && pageIndex < spread.pages.length) {
+        resolvedType = "page";
+        index = pageIndex;
+      }
     }
 
     if (resolvedType && index >= 0) {
@@ -325,6 +342,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         selectedElement: null,
         selectedGeometry: null,
       }));
+      onDeselectRef.current?.();
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -924,7 +942,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             }
             onSelect={
               renderPageToolbar
-                ? () => handleElementSelect({ type: "page", index: pageIndex })
+                ? () => {
+                    handleElementSelect({ type: "page", index: pageIndex });
+                    onPageSelect?.(pageIndex);
+                  }
                 : undefined
             }
             onUpdatePage={(updates) => handleUpdatePage(pageIndex, updates)}

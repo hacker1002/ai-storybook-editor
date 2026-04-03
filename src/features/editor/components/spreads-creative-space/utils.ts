@@ -3,7 +3,7 @@
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { LAYER_CONFIG, LAYER_ORDER } from "@/constants/spread-constants";
 import type { LucideIcon } from "lucide-react";
-import { Image, Type, Hexagon } from "lucide-react";
+import { Image, Type, Hexagon, PanelBottom } from "lucide-react";
 import type {
   BaseSpread,
   SpreadImage,
@@ -12,7 +12,7 @@ import type {
 
 // === Types ===
 
-export type SpreadElementType = "shape" | "raw_image" | "raw_textbox";
+export type SpreadElementType = "shape" | "raw_image" | "raw_textbox" | "page";
 
 export interface ElementListEntry {
   id: string;
@@ -35,14 +35,26 @@ export interface LayerGroup {
 
 // === Constants ===
 
-export const ALL_ELEMENT_TYPES: SpreadElementType[] = [
+/** Element types that can be added via the "+" button (excludes page backgrounds) */
+export const ADDABLE_ELEMENT_TYPES: SpreadElementType[] = [
   "raw_image",
   "raw_textbox",
   "shape",
 ];
 
+export const ALL_ELEMENT_TYPES: SpreadElementType[] = [
+  "page",
+  "raw_image",
+  "raw_textbox",
+  "shape",
+];
+
+/** Virtual layer for page backgrounds (below all real layers) */
+const BACKGROUND_LAYER = { min: -1, max: 0, label: "Background", types: ["page"] as const };
+
 /** Map illustration element types to layer config (different from objects: 'textbox' not 'text') */
 export const ILLUSTRATION_LAYER_MAP: Record<SpreadElementType, LayerRange> = {
+  page: BACKGROUND_LAYER as unknown as LayerRange,
   raw_image: LAYER_CONFIG.MEDIA,
   shape: LAYER_CONFIG.OBJECTS,
   raw_textbox: LAYER_CONFIG.TEXT,
@@ -52,6 +64,7 @@ export const ELEMENT_TYPE_CONFIG: Record<
   SpreadElementType,
   { icon: LucideIcon; label: string }
 > = {
+  page: { icon: PanelBottom, label: "Page" },
   raw_image: { icon: Image, label: "Image" },
   raw_textbox: { icon: Type, label: "Textbox" },
   shape: { icon: Hexagon, label: "Shape" },
@@ -112,6 +125,19 @@ export function buildElementList(
 ): ElementListEntry[] {
   const entries: ElementListEntry[] = [];
 
+  // Page backgrounds (z-index 0, below all layers)
+  spread.pages.forEach((page, i) => {
+    const pageLabel = spread.pages.length === 1
+      ? `Page ${page.number}`
+      : i === 0 ? `Page ${page.number} (Left)` : `Page ${page.number} (Right)`;
+    entries.push({
+      id: `page-${i}`,
+      type: "page",
+      title: pageLabel,
+      zIndex: i,
+    });
+  });
+
   (spread.raw_images ?? []).forEach((img, i) => {
     entries.push({
       id: img.id,
@@ -152,12 +178,12 @@ export function buildElementList(
   return entries.sort((a, b) => b.zIndex - a.zIndex);
 }
 
-/** Group entries by layer (TEXT -> OBJECTS -> MEDIA), removing empty groups */
+/** Group entries by layer (TEXT -> OBJECTS -> MEDIA -> BACKGROUND), removing empty groups */
 export function groupEntriesByLayer(entries: ElementListEntry[]): LayerGroup[] {
-  const groups: LayerGroup[] = LAYER_ORDER.map((layer) => ({
-    layer,
-    entries: [],
-  }));
+  const groups: LayerGroup[] = [
+    ...LAYER_ORDER.map((layer) => ({ layer, entries: [] as ElementListEntry[] })),
+    { layer: BACKGROUND_LAYER as unknown as LayerRange, entries: [] as ElementListEntry[] },
+  ];
 
   for (const entry of entries) {
     const layer = ILLUSTRATION_LAYER_MAP[entry.type];

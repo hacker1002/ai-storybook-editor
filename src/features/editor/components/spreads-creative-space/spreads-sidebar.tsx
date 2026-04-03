@@ -23,6 +23,7 @@ import {
   filterElementList,
   groupEntriesByLayer,
   ALL_ELEMENT_TYPES,
+  ADDABLE_ELEMENT_TYPES,
   ELEMENT_TYPE_CONFIG,
   NEW_ELEMENT_DEFAULTS,
   createDefaultTextbox,
@@ -102,7 +103,7 @@ function AddElementPopoverContent({
 }) {
   return (
     <div className="py-1">
-      {ALL_ELEMENT_TYPES.map((type) => {
+      {ADDABLE_ELEMENT_TYPES.map((type) => {
         const config = ELEMENT_TYPE_CONFIG[type];
         return (
           <button

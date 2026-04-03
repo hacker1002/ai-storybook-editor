@@ -45,8 +45,9 @@ export function SpreadsSidebarListItem({
   onDragEnd,
 }: SpreadsSidebarListItemProps) {
   const isEditing = editingId === entry.id;
-  // Textbox title is auto-derived from content — renaming is disabled for textbox
-  const isRenameable = entry.type !== "raw_textbox";
+  const isPage = entry.type === "page";
+  // Textbox title is auto-derived, page backgrounds are fixed — renaming disabled
+  const isRenameable = entry.type !== "raw_textbox" && !isPage;
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
 
@@ -58,7 +59,7 @@ export function SpreadsSidebarListItem({
         dragIndex === index && "opacity-40"
       )}
       onClick={onSelect}
-      draggable
+      draggable={!isPage}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         onDragStart(index);
@@ -72,8 +73,10 @@ export function SpreadsSidebarListItem({
       role="option"
       aria-selected={isSelected}
     >
-      {/* Drag handle */}
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100" />
+      {/* Drag handle (hidden for pages) */}
+      {!isPage && (
+        <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100" />
+      )}
 
       {/* Type icon */}
       <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />

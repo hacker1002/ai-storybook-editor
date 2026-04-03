@@ -118,6 +118,12 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
 
   // External item selection (sidebar → canvas)
   externalSelectedItemId?: { type: string; id: string } | null;
+
+  // Callback when page background selected in canvas (canvas → sidebar)
+  onPageSelect?: (pageIndex: number) => void;
+
+  // Callback when selection is cleared (click outside canvas)
+  onDeselect?: () => void;
 }
 
 // === Main Component ===
@@ -157,6 +163,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   initialSelectedId,
   initialViewMode = 'edit',
   externalSelectedItemId,
+  onPageSelect,
+  onDeselect,
 }: CanvasSpreadViewProps<TSpread>) {
   // === Local View State (with localStorage persistence) ===
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -383,6 +391,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 preventEditRawItem={preventEditRawItem}
                 availableLayouts={availableLayouts}
                 externalSelectedItemId={externalSelectedItemId}
+                onPageSelect={onPageSelect}
+                onDeselect={onDeselect}
               />
             )}
 

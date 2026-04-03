@@ -200,8 +200,19 @@ export function SpreadsMainView({
     [selectedSpreadId, handleSpreadItemAction]
   );
 
-  // === Toolbar handlers ===
+  // === Page & deselect handlers ===
 
+  const handlePageSelect = useCallback(
+    (pageIndex: number) => onItemSelect({ type: 'page', id: `page-${pageIndex}` }),
+    [onItemSelect]
+  );
+
+  const handleDeselect = useCallback(
+    () => onItemSelect(null),
+    [onItemSelect]
+  );
+
+  // === Toolbar handlers ===
 
   const handleCloneShape = useCallback(
     (spreadId: string, shape: SpreadShape) => {
@@ -361,6 +372,8 @@ export function SpreadsMainView({
         canResizeItem={true}
         canDragItem={true}
         externalSelectedItemId={selectedItemId}
+        onPageSelect={handlePageSelect}
+        onDeselect={handleDeselect}
       />
       {generateModalImage && (
         <GenerateImageModal

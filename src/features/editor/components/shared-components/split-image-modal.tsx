@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
+
 import { Scissors, Loader2, Check, ImagePlus, RefreshCw } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { toast } from "sonner";
@@ -49,8 +49,8 @@ interface SplitImageModalProps {
 
 // === Constants ===
 
-const SEED_MIN = 0;
-const SEED_MAX = 999999;
+const SEED_MIN = 1;
+const SEED_MAX = 100;
 const SEED_DEFAULT = 42;
 const LAYERS_MIN = 2;
 const LAYERS_MAX = 8;
@@ -306,15 +306,6 @@ export function SplitImageModal({
                 />
               </div>
             </div>
-            <Slider
-              value={[seed]}
-              onValueChange={([v]) => setSeed(v)}
-              min={SEED_MIN}
-              max={SEED_MAX}
-              step={1}
-              disabled={isSplitting}
-              aria-label="Seed slider"
-            />
           </div>
 
           {/* Number of Layers Section */}
@@ -332,15 +323,6 @@ export function SplitImageModal({
                 className="h-7 w-16 rounded-md border border-input bg-transparent px-2 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
-            <Slider
-              value={[numberOfLayers]}
-              onValueChange={([v]) => setNumberOfLayers(v)}
-              min={LAYERS_MIN}
-              max={LAYERS_MAX}
-              step={1}
-              disabled={isSplitting}
-              aria-label="Number of layers slider"
-            />
           </div>
 
           {/* Split Button */}

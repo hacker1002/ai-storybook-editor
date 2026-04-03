@@ -229,10 +229,23 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }, [setCurrentSection, pushSpreadHistory, onSpreadSelect]);
 
   const handleBranchDismiss = useCallback(() => {
-    log.debug('handleBranchDismiss', 'modal dismissed, staying on current spread');
     setShowBranchModal(false);
     setPendingBranchSpreadId(null);
-  }, []);
+    const branchSetting = selectedSpread?.branch_setting;
+    if (!branchSetting) return;
+    const defaultBranch =
+      branchSetting.branches.find((b) => b.is_default) ?? branchSetting.branches[0];
+    const section = sections?.find((s) => s.id === defaultBranch?.section_id);
+    if (section) {
+      log.info('handleBranchDismiss', 'dismissed, following default branch', { targetId: section.start_spread_id, sectionId: section.id });
+      setCurrentSection(section);
+      pushSpreadHistory(section.start_spread_id, section);
+      setSelectedSpreadId(section.start_spread_id);
+      onSpreadSelect?.(section.start_spread_id);
+    } else {
+      log.debug('handleBranchDismiss', 'dismissed, no default branch section found');
+    }
+  }, [selectedSpread, sections, setCurrentSection, pushSpreadHistory, onSpreadSelect]);
 
   // === Spread Selection Handler (thumbnail) ===
   const handleSpreadClick = useCallback(
