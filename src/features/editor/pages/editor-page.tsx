@@ -25,6 +25,7 @@ import { CharactersCreativeSpace } from '../components/characters-creative-space
 import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
 import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
+import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
@@ -184,13 +185,14 @@ export function EditorPage() {
         return <BranchCreativeSpace />;
       case 'preview':
         return <PreviewCreativeSpace />;
+      case 'setting':
+        return <ConfigCreativeSpace />;
       case 'sketch':
       case 'remix':
       case 'history':
       case 'flag':
       case 'share':
       case 'collaborator':
-      case 'setting':
         return <MockCreativeSpace name={activeCreativeSpace} />;
       default:
         return <MockCreativeSpace name="Unknown" />;

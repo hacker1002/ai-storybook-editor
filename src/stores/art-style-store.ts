@@ -8,6 +8,7 @@ import { createLogger } from '@/utils/logger';
 const log = createLogger('Store', 'ArtStyleStore');
 
 interface ArtStyleStore {
+  name: string | null;
   description: string | null;
   isLoading: boolean;
   error: string | null;
@@ -17,6 +18,7 @@ interface ArtStyleStore {
 }
 
 export const useArtStyleStore = create<ArtStyleStore>()((set, get) => ({
+  name: null,
   description: null,
   isLoading: false,
   error: null,
@@ -32,7 +34,7 @@ export const useArtStyleStore = create<ArtStyleStore>()((set, get) => ({
 
     const { data, error } = await supabase
       .from('art_styles')
-      .select('description')
+      .select('name, description')
       .eq('id', artStyleId)
       .single();
 
@@ -43,11 +45,12 @@ export const useArtStyleStore = create<ArtStyleStore>()((set, get) => ({
     }
 
     log.info('fetchArtStyle', 'done', { hasDescription: !!data?.description });
-    set({ description: data?.description ?? null, isLoading: false });
+    set({ name: data?.name ?? null, description: data?.description ?? null, isLoading: false });
   },
 
-  reset: () => set({ description: null, isLoading: false, error: null }),
+  reset: () => set({ name: null, description: null, isLoading: false, error: null }),
 }));
 
 // Selectors
+export const useArtStyleName = () => useArtStyleStore((s) => s.name);
 export const useArtStyleDescription = () => useArtStyleStore((s) => s.description);

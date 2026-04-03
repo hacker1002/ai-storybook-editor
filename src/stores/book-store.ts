@@ -180,6 +180,8 @@ export const useBooksError = () => useBookStore((s) => s.error);
 export const useBookTitle = () => useBookStore((s) => s.currentBook?.title ?? null);
 export const useBookStep = () => useBookStore((s) => s.currentBook?.step ?? null);
 export const useIsSourceBook = () => useBookStore((s) => s.currentBook?.type === 0);
+export const useBookShape = () => useBookStore((s) => s.currentBook?.shape ?? null);
+export const useBookTypography = () => useBookStore((s) => s.currentBook?.typography ?? null);
 
 // Actions hook (stable reference, no re-render)
 export const useBookActions = () =>

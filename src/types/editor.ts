@@ -58,6 +58,26 @@ export interface SyncState {
   error: string | null;
 }
 
+// Shape settings for objects (fill + outline)
+export interface BookShape {
+  fill: { is_filled: boolean; color: string; opacity: number };
+  outline: { color: string; width: number; radius: number; type: number };
+}
+
+// Per-language typography settings for textbox narration
+export interface TypographySettings {
+  size: number;
+  weight: number;
+  style: string;
+  family: string;
+  color: string;
+  line_height: number;
+  letter_spacing: number;
+  decoration: string;
+  text_align: string;
+  text_transform: string;
+}
+
 // Full Book type matching database schema
 export interface Book {
   id: string;
@@ -77,9 +97,13 @@ export interface Book {
   format_genre: number | null;
   content_genre: number | null;
   writing_style: number | null;
+  format_id: string | null;
   era_id: string | null;
   location_id: string | null;
   artstyle_id: string | null;
+  background_music: { title: string; media_url: string } | null;
+  typography: Record<string, TypographySettings> | null;
+  shape: BookShape | null;
   created_at: string;
   updated_at: string;
 }
