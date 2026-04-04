@@ -109,17 +109,17 @@ export function SpreadsMainView({
           ? [{ ...basePage, number: `${nextPageNum}-${nextPageNum + 1}` }]
           : [basePage, { ...basePage, number: nextPageNum + 1 }];
 
-      // Populate images/textboxes from template (silent empty fallback if not configured)
-      let images: SpreadImage[] = [];
-      let textboxes: SpreadTextbox[] = [];
+      // Populate raw_images/raw_textboxes from template (silent empty fallback)
+      let raw_images: SpreadImage[] = [];
+      let raw_textboxes: SpreadTextbox[] = [];
 
       if (templateLayout) {
         if (type === 'double') {
           const tpl = findTemplateById(spreadLayouts, templateLayout.spread);
           if (tpl) {
             const items = buildIllustrationItemsFromTemplate(tpl, 'full', langCode, bookTypography);
-            images = items.images;
-            textboxes = items.textboxes;
+            raw_images = items.images;
+            raw_textboxes = items.textboxes;
           }
         } else {
           const leftTpl = findTemplateById(singlePageLayouts, templateLayout.left_page);
@@ -131,16 +131,18 @@ export function SpreadsMainView({
             ? buildIllustrationItemsFromTemplate(rightTpl, 'right', langCode, bookTypography)
             : { images: [] as SpreadImage[], textboxes: [] as SpreadTextbox[] };
           const merged = mergeItems(leftItems, rightItems);
-          images = merged.images;
-          textboxes = merged.textboxes;
+          raw_images = merged.images;
+          raw_textboxes = merged.textboxes;
         }
       }
 
       const newSpread: BaseSpread = {
         id: crypto.randomUUID(),
         pages,
-        images,
-        textboxes,
+        raw_images,
+        raw_textboxes,
+        images: [],
+        textboxes: [],
       };
       log.info('handleSpreadAdd', 'adding spread', { type, spreadId: newSpread.id });
       actions.addIllustrationSpread(newSpread);
