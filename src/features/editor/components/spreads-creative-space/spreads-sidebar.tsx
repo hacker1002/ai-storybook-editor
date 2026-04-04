@@ -15,6 +15,8 @@ import {
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { useSnapshotStore } from "@/stores/snapshot-store";
+import { useBookShape, useBookTypography } from "@/stores/book-store";
+import { FALLBACK_SHAPE } from "@/constants/book-defaults";
 import { createLogger } from "@/utils/logger";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { SpreadsSidebarListItem } from "./spreads-sidebar-list-item";
@@ -134,6 +136,8 @@ export function SpreadsSidebar({
   );
   const actions = useSnapshotActions();
   const langCode = useLanguageCode();
+  const bookShape = useBookShape();
+  const bookTypography = useBookTypography();
 
   // Local UI state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -315,13 +319,16 @@ export function SpreadsSidebar({
         onItemSelect({ type, id: newId });
       } else if (type === "shape") {
         const newId = crypto.randomUUID();
+        const shapeDef = bookShape ?? FALLBACK_SHAPE;
         actions.addRetouchShape(selectedSpreadId, {
           id: newId,
           ...NEW_ELEMENT_DEFAULTS.shape,
+          fill: shapeDef.fill,
+          outline: shapeDef.outline,
         } as SpreadShape);
         onItemSelect({ type, id: newId });
       } else if (type === "raw_textbox") {
-        const defaults = createDefaultTextbox(langCode);
+        const defaults = createDefaultTextbox(langCode, bookTypography);
         const newId = defaults.id;
         actions.addRawTextbox(selectedSpreadId, defaults);
         onItemSelect({ type, id: newId });
@@ -329,7 +336,7 @@ export function SpreadsSidebar({
 
       setIsAddOpen(false);
     },
-    [actions, selectedSpreadId, langCode, onItemSelect]
+    [actions, selectedSpreadId, langCode, bookShape, bookTypography, onItemSelect]
   );
 
   // Filter toggles

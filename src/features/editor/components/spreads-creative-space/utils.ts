@@ -2,6 +2,8 @@
 
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { LAYER_CONFIG, LAYER_ORDER } from "@/constants/spread-constants";
+import { DEFAULT_TYPOGRAPHY } from "@/constants/config-constants";
+import { mapTypographyToTextbox } from "@/constants/book-defaults";
 import type { LucideIcon } from "lucide-react";
 import { Image, Type, Hexagon, PanelBottom } from "lucide-react";
 import type {
@@ -9,6 +11,7 @@ import type {
   SpreadImage,
   SpreadTextbox,
 } from "@/types/canvas-types";
+import type { TypographySettings } from "@/types/editor";
 
 // === Types ===
 
@@ -86,27 +89,22 @@ export const NEW_ELEMENT_DEFAULTS = {
     title: "New Shape",
     geometry: { x: 30, y: 30, w: 40, h: 30 },
     type: "rectangle" as const,
-    fill: { is_filled: true, color: "#E0E0E0", opacity: 1 },
-    outline: { color: "#999999", width: 1, radius: 0, type: 0 },
+    // fill & outline injected at call site from bookShape ?? FALLBACK_SHAPE
   },
 };
 
-/** Create default textbox with full language-keyed structure */
-export function createDefaultTextbox(langCode: string): SpreadTextbox {
+/** Create default textbox using book.typography[langCode] when available, else DEFAULT_TYPOGRAPHY. */
+export function createDefaultTextbox(
+  langCode: string,
+  bookTypography: Record<string, TypographySettings> | null
+): SpreadTextbox {
+  const typo = mapTypographyToTextbox(bookTypography?.[langCode] ?? DEFAULT_TYPOGRAPHY);
   return {
     id: crypto.randomUUID(),
     [langCode]: {
       text: "",
       geometry: { x: 20, y: 20, w: 60, h: 15 },
-      typography: {
-        family: "Nunito",
-        size: 16,
-        weight: 400,
-        style: "normal",
-        decoration: "none",
-        textAlign: "left",
-        color: "#000000",
-      },
+      typography: typo,
     },
   };
 }

@@ -25,6 +25,9 @@ import {
   useRetouchSpreadById,
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
+import { useBookShape, useBookTypography } from "@/stores/book-store";
+import { FALLBACK_SHAPE, mapTypographyToTextbox } from "@/constants/book-defaults";
+import { DEFAULT_TYPOGRAPHY } from "@/constants/config-constants";
 import { createLogger } from "@/utils/logger";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import {
@@ -212,6 +215,8 @@ export function ObjectsSidebar({
   const spread = useRetouchSpreadById(selectedSpreadId);
   const actions = useSnapshotActions();
   const editorLangCode = useLanguageCode();
+  const bookShape = useBookShape();
+  const bookTypography = useBookTypography();
 
   // Local UI state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -567,41 +572,34 @@ export function ObjectsSidebar({
             player_visible: true,
           } as SpreadImage);
           break;
-        case "textbox":
+        case "textbox": {
+          const typo = mapTypographyToTextbox(bookTypography?.[editorLangCode] ?? DEFAULT_TYPOGRAPHY);
           actions.addRetouchTextbox(selectedSpreadId, {
             id: newId,
             title: "New Text",
-            en_US: {
+            [editorLangCode]: {
               text: "",
               geometry: { x: 10, y: 10, w: 30, h: 15 },
-              typography: {
-                family: "Arial",
-                size: 14,
-                weight: 400,
-                style: "normal",
-                textAlign: "left",
-                lineHeight: 1.5,
-                letterSpacing: 0,
-                color: "#000000",
-                decoration: "none",
-                textTransform: "none",
-              },
+              typography: typo,
             },
             editor_visible: true,
             player_visible: true,
           } as SpreadTextbox);
           break;
-        case "shape":
+        }
+        case "shape": {
+          const shapeDef = bookShape ?? FALLBACK_SHAPE;
           actions.addRetouchShape(selectedSpreadId, {
             id: newId,
             type: "rectangle",
             geometry: { x: 10, y: 10, w: 20, h: 20 },
-            fill: { is_filled: true, color: "#3b82f6", opacity: 1 },
-            outline: { color: "#000000", width: 1, radius: 0, type: 0 },
+            fill: shapeDef.fill,
+            outline: shapeDef.outline,
             editor_visible: true,
             player_visible: true,
           } as SpreadShape);
           break;
+        }
         case "video":
           actions.addRetouchVideo(selectedSpreadId, {
             id: newId,
@@ -631,7 +629,7 @@ export function ObjectsSidebar({
       // Auto-select newly added item
       onItemSelect({ type, id: newId });
     },
-    [actions, selectedSpreadId, allEntries, onItemSelect]
+    [actions, selectedSpreadId, allEntries, editorLangCode, bookShape, bookTypography, onItemSelect]
   );
 
   // Filter toggles
