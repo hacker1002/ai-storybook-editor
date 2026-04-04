@@ -64,6 +64,62 @@ export interface BookShape {
   outline: { color: string; width: number; radius: number; type: number };
 }
 
+// Per-language typography for branch UI elements (question title + choice labels)
+export interface BranchTypographySettings {
+  family: string;
+  size: number;
+  color: string;
+}
+
+// Branch settings stored on book (book-level default for all branch UI)
+export interface BookBranch {
+  typography: Record<string, BranchTypographySettings>;
+}
+
+// Page numbering display settings
+export type PageNumberingPosition = 'bottom_center' | 'bottom_corner' | 'top_corner' | 'none';
+
+export interface PageNumberingSettings {
+  position: PageNumberingPosition;
+  color: string; // hex
+}
+
+// Template layout selection per slot (spread, left page, right page)
+export interface BookTemplateLayout {
+  spread: string;      // UUID → template_layouts
+  left_page: string;   // UUID → template_layouts
+  right_page: string;  // UUID → template_layouts
+  page_numbering?: PageNumberingSettings;
+}
+
+// Geometry units are percentage (0-100) of the page dimensions
+export interface TemplateLayoutGeometry {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface TemplateLayoutTextbox {
+  geometry: TemplateLayoutGeometry;
+  'z-index': number;
+}
+
+export interface TemplateLayoutImage {
+  geometry: TemplateLayoutGeometry;
+  'z-index': number;
+  edge_treatment: 'crop' | 'spot' | 'vignette';
+}
+
+export interface TemplateLayout {
+  id: string;
+  title: string;
+  book_type: number;
+  type: number;        // 1: double page spread, 2: single page
+  textboxes: TemplateLayoutTextbox[];
+  images: TemplateLayoutImage[];
+}
+
 // Per-language typography settings for textbox narration
 export interface TypographySettings {
   size: number;
@@ -104,6 +160,8 @@ export interface Book {
   background_music: { title: string; media_url: string } | null;
   typography: Record<string, TypographySettings> | null;
   shape: BookShape | null;
+  branch: BookBranch | null;
+  template_layout: BookTemplateLayout | null;
   created_at: string;
   updated_at: string;
 }

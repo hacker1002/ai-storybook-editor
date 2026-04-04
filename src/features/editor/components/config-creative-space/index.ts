@@ -4,3 +4,7 @@ export { ConfigGeneralSettings } from './config-general-settings';
 export { ConfigObjectSettings } from './config-object-settings';
 export { ConfigNarrationSettings } from './config-narration-settings';
 export { NarrationLanguageSection } from './narration-language-section';
+export { ConfigBranchSettings } from './config-branch-settings';
+export { ConfigLayoutSettings } from './config-layout-settings';
+export { LayoutThumbnail } from './layout-thumbnail';
+export { LayoutSelectionModal } from './layout-selection-modal';

@@ -293,6 +293,10 @@ export const useBookShape = () =>
   useBookStore((s) => s.currentBook?.shape ?? null);
 export const useBookTypography = () =>
   useBookStore((s) => s.currentBook?.typography ?? null);
+export const useBookBranch = () =>
+  useBookStore((s) => s.currentBook?.branch ?? null);
+export const useBookTemplateLayout = () =>
+  useBookStore((s) => s.currentBook?.template_layout ?? null);
 
 // Actions hook (stable reference, no re-render)
 export const useBookActions = () =>

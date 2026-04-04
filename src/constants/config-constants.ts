@@ -1,7 +1,7 @@
 // config-constants.ts — Constants for ConfigCreativeSpace settings panels.
 // Sections, mappings, and default values used across all config components.
 
-import type { TypographySettings } from '@/types/editor';
+import type { TypographySettings, BranchTypographySettings } from '@/types/editor';
 
 // ── Section navigation ────────────────────────────────────────────────────────
 
@@ -74,6 +74,12 @@ export const FONT_FAMILY_OPTIONS = [
   'Merriweather',
   'Source Sans Pro',
 ] as const;
+
+export const DEFAULT_BRANCH_TYPOGRAPHY: BranchTypographySettings = {
+  family: 'Nunito',
+  size: 18,
+  color: '#000000',
+};
 
 export const DEFAULT_TYPOGRAPHY: TypographySettings = {
   size: 18,
