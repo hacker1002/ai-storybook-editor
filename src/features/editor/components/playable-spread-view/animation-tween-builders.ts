@@ -1,7 +1,6 @@
 // animation-tween-builders.ts - GSAP tween builders for 17 animation effect types
 
 import type { SpreadAnimation, WordTiming } from "@/types/spread-types";
-import { CANVAS } from "@/constants/spread-constants";
 import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from "@/constants/playable-constants";
 import {
   calculateFlyOffset,
@@ -23,6 +22,9 @@ interface TweenOptions {
   /** Pre-computed container dimensions to avoid repeated getBoundingClientRect calls */
   containerWidth?: number;
   containerHeight?: number;
+  /** Canvas design-space dimensions from store — final fallback for pixel calculations */
+  canvasWidth?: number;
+  canvasHeight?: number;
   /** Item's original geometry position (%) — needed for Lines/Arcs delta calculation */
   itemGeometry?: { x: number; y: number };
   /** Called when any tween in this animation starts — used for sidebar highlight */
@@ -63,11 +65,13 @@ export function addTweenToTimeline(
   const cw =
     options?.containerWidth ??
     options?.spreadContainer?.getBoundingClientRect().width ??
-    CANVAS.BASE_WIDTH;
+    options?.canvasWidth ??
+    800;
   const ch =
     options?.containerHeight ??
     options?.spreadContainer?.getBoundingClientRect().height ??
-    CANVAS.BASE_HEIGHT;
+    options?.canvasHeight ??
+    600;
 
   switch (effectType) {
     // ── Media Play (1) ──────────────────────────────────────────

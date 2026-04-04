@@ -11,6 +11,7 @@ import {
   EditableQuiz,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
+import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { PageItem } from "../canvas-spread-view/page-item";
@@ -98,6 +99,8 @@ export function PlayerCanvas({
   const replayableItems = useReplayableItems();
   const steps = usePlaybackStore((s) => s.steps);
   const narrationLangCode = useNarrationLanguage();
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
 
   // === Quiz modal state ===
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
@@ -151,7 +154,7 @@ export function PlayerCanvas({
   );
 
   const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(zoomLevel);
+    getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
 
   // === Store sync effects ===
 

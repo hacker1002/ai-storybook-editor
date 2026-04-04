@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { Plus, BookOpen, FileText } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CANVAS, THUMBNAIL } from '@/constants/spread-constants';
+import { THUMBNAIL } from '@/constants/spread-constants';
+import { useCanvasAspectRatio } from '@/stores/editor-settings-store';
 
 export type SpreadType = 'double' | 'single';
 
@@ -16,6 +17,7 @@ interface NewSpreadButtonProps {
 
 export function NewSpreadButton({ size, onAdd }: NewSpreadButtonProps) {
   const [open, setOpen] = useState(false);
+  const canvasAspectRatio = useCanvasAspectRatio();
 
   const handleSelect = (type: SpreadType) => {
     onAdd(type);
@@ -36,7 +38,7 @@ export function NewSpreadButton({ size, onAdd }: NewSpreadButtonProps) {
               'cursor-pointer',
             )}
             style={{
-              aspectRatio: `${CANVAS.ASPECT_RATIO}`,
+              aspectRatio: `${canvasAspectRatio}`,
               ...(size === 'small' && { width: THUMBNAIL.SMALL_WIDTH }),
             }}
             aria-label="Add new spread"

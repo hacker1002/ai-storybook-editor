@@ -17,7 +17,8 @@ import {
   buildViewOnlyAudioContext,
   buildViewOnlyQuizContext,
 } from "./utils/context-builders";
-import { CANVAS, THUMBNAIL } from "@/constants/spread-constants";
+import { THUMBNAIL } from "@/constants/spread-constants";
+import { useCanvasWidth, useCanvasAspectRatio } from "@/stores/editor-settings-store";
 import type {
   BaseSpread,
   ItemType,
@@ -95,6 +96,8 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
 }: SpreadThumbnailProps<TSpread>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const canvasWidth = useCanvasWidth();
+  const canvasAspectRatio = useCanvasAspectRatio();
 
   // Track container width for medium mode scaling
   useLayoutEffect(() => {
@@ -114,7 +117,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   // Scale factor: calculated from container width (unified for both sizes)
   const effectiveWidth =
     size === "small" ? THUMBNAIL.SMALL_WIDTH : containerWidth;
-  const scale = effectiveWidth > 0 ? effectiveWidth / CANVAS.BASE_WIDTH : 0;
+  const scale = effectiveWidth > 0 ? effectiveWidth / canvasWidth : 0;
 
   // Page label
   const label = useMemo(() => {
@@ -247,21 +250,21 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
           isSelected && "ring-2 ring-blue-500"
         )}
         style={{
-          // Maintain aspect ratio (4:3) regardless of container width
-          aspectRatio: `${CANVAS.ASPECT_RATIO}`,
+          // Maintain canvas aspect ratio regardless of container width
+          aspectRatio: `${canvasAspectRatio}`,
           // Small size: fixed width, Medium: responsive (aspectRatio handles height)
           ...(size === "small" && { width: THUMBNAIL.SMALL_WIDTH }),
           contain: "layout style paint",
         }}
       >
-        {/* Scaled Content: render at 800×600, scale down to fit container */}
+        {/* Scaled Content: render at canvas size, scale down to fit container */}
         <div
           style={{
             position: "absolute",
             top: 0,
             left: 0,
-            width: CANVAS.BASE_WIDTH,
-            height: CANVAS.BASE_HEIGHT,
+            width: canvasWidth,
+            height: canvasWidth / canvasAspectRatio,
             transform: scale > 0 ? `scale(${scale})` : "scale(0)",
             transformOrigin: "top left",
             pointerEvents: "none",

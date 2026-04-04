@@ -1,7 +1,6 @@
 // coordinate-utils.ts - Coordinate conversion utilities shared across spread views
 
 import type { Point, Geometry } from '@/types/spread-types';
-import { CANVAS } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Util', 'CoordinateUtils');
@@ -41,10 +40,14 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-export function getScaledDimensions(zoomLevel: number): { width: number; height: number } {
+export function getScaledDimensions(
+  canvasWidth: number,
+  canvasHeight: number,
+  zoomLevel: number
+): { width: number; height: number } {
   return {
-    width: CANVAS.BASE_WIDTH * (zoomLevel / 100),
-    height: CANVAS.BASE_HEIGHT * (zoomLevel / 100),
+    width: canvasWidth * (zoomLevel / 100),
+    height: canvasHeight * (zoomLevel / 100),
   };
 }
 

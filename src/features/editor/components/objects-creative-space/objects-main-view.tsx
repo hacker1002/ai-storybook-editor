@@ -38,7 +38,7 @@ import {
   calculateZIndexShifts,
   collectPictorialZItems,
 } from "@/features/editor/utils/z-index-cascade-utils";
-import { CANVAS } from "@/constants/spread-constants";
+import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 import type { SelectedItem } from "./objects-creative-space";
 import type { SpreadType } from "@/features/editor/components/canvas-spread-view";
@@ -69,8 +69,14 @@ import type { Typography } from "@/types/spread-types";
 
 /** Measure required height (%) for text in a textbox of given width (%).
  *  Uses an offscreen DOM element with matching typography to get accurate line wrapping. */
-function measureTextHeightPercent(text: string, widthPercent: number, typography?: Typography): number {
-  const widthPx = (widthPercent / 100) * CANVAS.BASE_WIDTH;
+function measureTextHeightPercent(
+  text: string,
+  widthPercent: number,
+  typography: Typography | undefined,
+  canvasWidth: number,
+  canvasHeight: number
+): number {
+  const widthPx = (widthPercent / 100) * canvasWidth;
   const el = document.createElement('div');
   el.style.position = 'absolute';
   el.style.visibility = 'hidden';
@@ -87,7 +93,7 @@ function measureTextHeightPercent(text: string, widthPercent: number, typography
   document.body.appendChild(el);
   const heightPx = el.scrollHeight;
   document.body.removeChild(el);
-  return (heightPx / CANVAS.BASE_HEIGHT) * 100;
+  return (heightPx / canvasHeight) * 100;
 }
 
 /** Badge overlay shown on canvas items when player_visible = false.
@@ -140,6 +146,8 @@ export function ObjectsMainView({
   const retouchSpreads = useRetouchSpreads();
   const actions = useSnapshotActions();
   const langCode = useLanguageCode();
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
 
   const handleDeselect = useCallback(() => onItemSelect(null), [onItemSelect]);
 
@@ -814,7 +822,7 @@ export function ObjectsMainView({
       let currentY = baseGeometry.y;
       for (let i = 0; i < segments.length; i++) {
         const segmentText = segments[i] + ".";
-        const measuredH = measureTextHeightPercent(segmentText, baseGeometry.w, content.typography);
+        const measuredH = measureTextHeightPercent(segmentText, baseGeometry.w, content.typography, canvasWidth, canvasHeight);
         const h = Math.max(measuredH, 3); // minimum 3% height
         const newTextbox: SpreadTextbox = {
           id: crypto.randomUUID(),
@@ -871,7 +879,7 @@ export function ObjectsMainView({
       let currentY = baseGeometry.y;
       for (let i = 0; i < segments.length; i++) {
         const segmentText = segments[i] + ".";
-        const measuredH = measureTextHeightPercent(segmentText, baseGeometry.w, content.typography);
+        const measuredH = measureTextHeightPercent(segmentText, baseGeometry.w, content.typography, canvasWidth, canvasHeight);
         const h = Math.max(measuredH, 3);
         const newTextbox: SpreadTextbox = {
           id: crypto.randomUUID(),

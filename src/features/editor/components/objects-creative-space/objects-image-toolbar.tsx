@@ -19,10 +19,10 @@ import { toast } from "sonner";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import {
   useToolbarPosition,
-  CANVAS,
   type BaseSpread,
   type ImageToolbarContext,
 } from "@/features/editor/components/canvas-spread-view";
+import { useCanvasAspectRatio } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 import {
@@ -91,7 +91,8 @@ function findClosestRatio(width: number, height: number): string {
  */
 function calculateGeometryForRatio(
   geometry: { x: number; y: number; w: number; h: number },
-  ratioValue: string
+  ratioValue: string,
+  canvasAspectRatio: number
 ): { x: number; y: number; w: number; h: number } | null {
   if (ratioValue === "original") return null;
 
@@ -99,7 +100,7 @@ function calculateGeometryForRatio(
   if (!ratio || ratio.numeric === 0) return null;
 
   // Target ratio is in pixel space; geometry is in % space with canvas aspect ratio
-  const targetRatio = ratio.numeric / CANVAS.ASPECT_RATIO;
+  const targetRatio = ratio.numeric / canvasAspectRatio;
   const area = geometry.w * geometry.h;
   const newW = Math.sqrt(area * targetRatio);
   const newH = newW / targetRatio;
@@ -128,6 +129,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const canvasAspectRatio = useCanvasAspectRatio();
   const {
     item,
     onUpdate,
@@ -154,7 +156,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
   const detectedRatio = useMemo(() => {
     if (item.aspect_ratio) return item.aspect_ratio;
     if (geometry.w <= 0 || geometry.h <= 0) return undefined;
-    const ratio = (geometry.w / geometry.h) * CANVAS.ASPECT_RATIO;
+    const ratio = (geometry.w / geometry.h) * canvasAspectRatio;
     const match = COMMON_RATIOS.find(
       (r) => r.numeric > 0 && Math.abs(r.numeric - ratio) < 0.05
     );
@@ -202,14 +204,14 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         onUpdate({ aspect_ratio: undefined });
         return;
       }
-      const newGeometry = calculateGeometryForRatio(geometry, ratioValue);
+      const newGeometry = calculateGeometryForRatio(geometry, ratioValue, canvasAspectRatio);
       if (newGeometry) {
         onUpdate({ geometry: newGeometry, aspect_ratio: ratioValue });
       } else {
         onUpdate({ aspect_ratio: ratioValue });
       }
     },
-    [geometry, onUpdate]
+    [geometry, onUpdate, canvasAspectRatio]
   );
 
   const handleGeometryChange = useCallback(
@@ -298,7 +300,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         };
 
         // Adjust geometry to match the new ratio
-        const newGeometry = calculateGeometryForRatio(geometry, closestRatio);
+        const newGeometry = calculateGeometryForRatio(geometry, closestRatio, canvasAspectRatio);
         if (newGeometry) {
           updates.geometry = newGeometry;
         }

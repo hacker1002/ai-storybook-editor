@@ -28,6 +28,7 @@ import {
 } from "./utils/geometry-utils";
 import { getScaledDimensions } from "./utils/coordinate-utils";
 import { CANVAS, LAYER_CONFIG } from "@/constants/spread-constants";
+import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import type {
   BaseSpread,
   SpreadTextbox,
@@ -175,6 +176,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const onDeselectRef = useRef(onDeselect);
   onDeselectRef.current = onDeselect;
   const editorLangCode = useLanguageCode();
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
   // Ref for originalGeometry to avoid stale closures in drag/resize handlers.
   // React batches setState from handleResizeStart, so handleResize may still
   // capture old state where originalGeometry is null. The ref is mutated
@@ -349,7 +352,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // Scaled dimensions
   const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(zoomLevel);
+    getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
 
   // === Selection Handlers ===
   const handleElementSelect = useCallback(

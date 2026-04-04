@@ -13,7 +13,7 @@ import {
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import type { Geometry, ItemType } from "@/types/spread-types";
-import { useLanguageCode } from "@/stores/editor-settings-store";
+import { useLanguageCode, useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { SelectionOverlay } from "./selection-overlay";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
@@ -39,6 +39,8 @@ export function AnimationEditorCanvas({
   onItemSelect,
 }: AnimationEditorCanvasProps) {
   const editorLangCode = useLanguageCode();
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemType, setSelectedItemType] = useState<ItemType | null>(
     null
@@ -50,7 +52,7 @@ export function AnimationEditorCanvas({
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(zoomLevel);
+    getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
 
   // Reset selection when spread changes
   useEffect(() => {

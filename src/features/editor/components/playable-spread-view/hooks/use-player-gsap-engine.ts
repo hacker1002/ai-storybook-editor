@@ -24,6 +24,7 @@ import {
   resolveAnimationEndState,
 } from '../player-initial-states';
 import { getScaledDimensions } from '../../../utils/coordinate-utils';
+import { useCanvasWidth, useCanvasHeight } from '@/stores/editor-settings-store';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'usePlayerGsapEngine');
@@ -100,6 +101,8 @@ export function usePlayerGsapEngine({
   const volume = useVolume();
   const isMuted = useIsMuted();
   const playbackActions = usePlaybackActions();
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
 
   const effectiveVolume = isMuted ? 0 : volume;
   // Access steps directly from store for effects that need them
@@ -116,7 +119,7 @@ export function usePlayerGsapEngine({
   /** Tracks media elements that were playing when user paused, so we can resume them */
   const pausedMediaRef = useRef<Set<HTMLMediaElement>>(new Set());
 
-  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(zoomLevel);
+  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
 
   // === Helpers ===
 
@@ -271,6 +274,8 @@ export function usePlayerGsapEngine({
           volume: effectiveVolume / 100,
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
+          canvasWidth,
+          canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
           onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
@@ -281,7 +286,7 @@ export function usePlayerGsapEngine({
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode]
+    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -351,6 +356,8 @@ export function usePlayerGsapEngine({
         volume: effectiveVolume / 100,
         spreadContainer: spreadContainerRef.current,
         itemGeometry: findItemGeometry(anim.target.id),
+        canvasWidth,
+        canvasHeight,
         ...dims,
         ...readAlongExtras,
         onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
@@ -360,7 +367,7 @@ export function usePlayerGsapEngine({
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode]);
+  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -400,7 +407,7 @@ export function usePlayerGsapEngine({
         // Emphasis effects (Spin, Grow/Shrink, Teeter) leave residual rotation/scale;
         // without clearing, absolute tweens (e.g. rotation: 5) would be a no-op.
         gsap.set(el, { clearProps: 'transform,transformOrigin' });
-        const initialProps = resolveInitialState(anim, spreadContainerRef.current);
+        const initialProps = resolveInitialState(anim, spreadContainerRef.current, { width: canvasWidth, height: canvasHeight });
         if (Object.keys(initialProps).length > 0) {
           gsap.set(el, initialProps);
         }
@@ -414,6 +421,8 @@ export function usePlayerGsapEngine({
           volume: effectiveVolume / 100,
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
+          canvasWidth,
+          canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
           onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
@@ -424,7 +433,7 @@ export function usePlayerGsapEngine({
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode]
+    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight]
   );
 
   // === Returned utility functions ===
@@ -438,13 +447,13 @@ export function usePlayerGsapEngine({
       step.animations.forEach((anim) => {
         const el = elementRefsMap.current.get(anim.target.id);
         if (!el) return;
-        const endState = resolveAnimationEndState(anim, spreadContainerRef.current, findItemGeometry(anim.target.id));
+        const endState = resolveAnimationEndState(anim, spreadContainerRef.current, findItemGeometry(anim.target.id), { width: canvasWidth, height: canvasHeight });
         if (Object.keys(endState).length > 0) {
           gsap.set(el, endState);
         }
       });
     },
-    [findItemGeometry]
+    [findItemGeometry, canvasWidth, canvasHeight]
   );
 
   /**
@@ -474,7 +483,8 @@ export function usePlayerGsapEngine({
       applyInitialStates(
         editionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
-        spreadContainerRef.current
+        spreadContainerRef.current,
+        { width: canvasWidth, height: canvasHeight }
       );
 
       // Re-apply end states for steps 0..fromStepIndex-1
@@ -485,13 +495,14 @@ export function usePlayerGsapEngine({
           const endState = resolveAnimationEndState(
             anim,
             spreadContainerRef.current,
-            findItemGeometry(anim.target.id)
+            findItemGeometry(anim.target.id),
+            { width: canvasWidth, height: canvasHeight }
           );
           if (Object.keys(endState).length > 0) gsap.set(el, endState);
         });
       }
     },
-    [steps, editionFilteredAnimations, findItemGeometry]
+    [steps, editionFilteredAnimations, findItemGeometry, canvasWidth, canvasHeight]
   );
 
   // === Lifecycle: Cleanup on unmount ===
@@ -564,7 +575,8 @@ export function usePlayerGsapEngine({
       applyInitialStates(
         editionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
-        spreadContainerRef.current
+        spreadContainerRef.current,
+        { width: canvasWidth, height: canvasHeight }
       );
 
       // Re-apply end states for steps 0..currentIdx-1
@@ -575,7 +587,8 @@ export function usePlayerGsapEngine({
           const endState = resolveAnimationEndState(
             anim,
             spreadContainerRef.current,
-            findItemGeometry(anim.target.id)
+            findItemGeometry(anim.target.id),
+            { width: canvasWidth, height: canvasHeight }
           );
           if (Object.keys(endState).length > 0) gsap.set(el, endState);
         });

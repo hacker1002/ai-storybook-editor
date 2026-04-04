@@ -12,14 +12,9 @@ import {
 } from "../shared-components";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
+import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
 import type { PlayableSpread } from "@/types/playable-types";
-
-// === Canvas Constants (from canvas-spread-view) ===
-const CANVAS = {
-  BASE_WIDTH: 800,
-  BASE_HEIGHT: 600,
-} as const;
 
 // === Layout Constants ===
 const LAYOUT = {
@@ -59,8 +54,10 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
   onClick,
 }: PlayableThumbnailProps) {
   const narrationLangCode = useNarrationLanguage();
-  // Scale factor: thumbnail width / canvas base width
-  const scale = LAYOUT.THUMBNAIL_WIDTH / CANVAS.BASE_WIDTH;
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
+  // Scale factor: thumbnail width / canvas width
+  const scale = LAYOUT.THUMBNAIL_WIDTH / canvasWidth;
 
   // Page label
   const pageLabel = useMemo(() => {
@@ -118,8 +115,8 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             position: "absolute",
             top: 0,
             left: 0,
-            width: CANVAS.BASE_WIDTH,
-            height: CANVAS.BASE_HEIGHT,
+            width: canvasWidth,
+            height: canvasHeight,
             transform: `scale(${scale})`,
             transformOrigin: "top left",
             pointerEvents: "none",

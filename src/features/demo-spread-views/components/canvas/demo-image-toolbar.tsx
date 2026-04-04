@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sparkles, Upload, Copy, Trash2, ChevronDown } from "lucide-react";
-import { useToolbarPosition, CANVAS, type BaseSpread, type ImageToolbarContext } from "@/features/editor/components/canvas-spread-view";
+import { useToolbarPosition, type BaseSpread, type ImageToolbarContext } from "@/features/editor/components/canvas-spread-view";
 import { GeometrySection, ToolbarIconButton } from "@/features/editor/components/shared-components";
 
 const COMMON_RATIOS = [
@@ -22,7 +22,8 @@ const COMMON_RATIOS = [
 function formatAspectRatio(w: number, h: number): string {
   if (w <= 0 || h <= 0) return '—';
 
-  const ratio = (w / h) * CANVAS.ASPECT_RATIO;
+  // Demo uses fixed 4:3 canvas aspect ratio (800×600 design space)
+  const ratio = (w / h) * (4 / 3);
   const match = COMMON_RATIOS.find(r => Math.abs(r.value - ratio) < 0.05);
 
   if (match) return match.label;

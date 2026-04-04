@@ -1,6 +1,12 @@
 // canvas-types.ts - Domain types for canvas spread view
 
 import type { RefObject } from "react";
+
+// === Canvas Dimension Types (cross-module, used by constants/utils/store/components) ===
+export interface CanvasSize {
+  width: number;
+  height: number;
+}
 import type {
   Point,
   Geometry,

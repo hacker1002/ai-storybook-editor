@@ -13,7 +13,7 @@ import {
 import { useToolbarPosition } from "../../hooks/use-toolbar-position";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
-import { useLanguageCode } from "@/stores/editor-settings-store";
+import { useLanguageCode, useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "RemixEditorCanvas");
@@ -45,6 +45,8 @@ export function RemixEditorCanvas({
   onTextChange,
 }: RemixEditorCanvasProps) {
   const editorLangCode = useLanguageCode();
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
   // Selection state - swappable objects (shows toolbar)
   const [selectedSwappableId, setSelectedSwappableId] = useState<string | null>(
     null
@@ -69,7 +71,7 @@ export function RemixEditorCanvas({
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(zoomLevel);
+    getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
 
   // Calculate toolbar position
   const toolbarPosition = useToolbarPosition({

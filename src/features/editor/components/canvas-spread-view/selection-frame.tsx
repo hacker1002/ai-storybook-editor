@@ -6,7 +6,8 @@ import Moveable from 'react-moveable';
 import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
-import { Z_INDEX, CANVAS } from '@/constants/spread-constants';
+import { Z_INDEX } from '@/constants/spread-constants';
+import { useCanvasHeight } from '@/stores/editor-settings-store';
 
 const log = createLogger('Editor', 'SelectionFrame');
 
@@ -53,6 +54,7 @@ export function SelectionFrame({
   const containerRef = useRef<HTMLElement | null>(null);
   const startGeometryRef = useRef<Geometry | null>(null);
   const currentHandleRef = useRef<ResizeHandle | null>(null);
+  const canvasHeight = useCanvasHeight();
 
   // Get container dimensions for percentage calculations
   useEffect(() => {
@@ -101,7 +103,7 @@ export function SelectionFrame({
   // Scales with element pixel height so small textboxes leave center clickable for editing.
   const MAX_DRAG_BORDER = 12;
   const MIN_DRAG_BORDER = 4;
-  const elementPixelHeight = (geometry.h / 100) * CANVAS.BASE_HEIGHT * (zoomLevel / 100);
+  const elementPixelHeight = (geometry.h / 100) * canvasHeight * (zoomLevel / 100);
   // Max 20% of element height so top+bottom never exceed 40%
   const adaptiveBorderWidth = borderOnlyDrag
     ? Math.max(MIN_DRAG_BORDER, Math.min(MAX_DRAG_BORDER, elementPixelHeight * 0.2))

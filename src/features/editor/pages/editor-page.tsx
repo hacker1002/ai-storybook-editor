@@ -79,7 +79,7 @@ export function EditorPage() {
           AVAILABLE_LANGUAGES[0];
         const initialStep = (PIPELINE_STEP_MAP[fetchedBook.step as keyof typeof PIPELINE_STEP_MAP] ??
           'manuscript') as PipelineStep;
-        resetSettings(initialLang, initialStep);
+        resetSettings(initialLang, initialStep, fetchedBook.dimension ?? null);
         setActiveCreativeSpace(getDefaultCreativeSpace(initialStep) as CreativeSpaceType);
 
         // Fetch snapshot for this book

@@ -9,10 +9,10 @@ import { toast } from "sonner";
 import { uploadVideoToStorage } from "@/apis/storage-api";
 import {
   useToolbarPosition,
-  CANVAS,
   type BaseSpread,
   type VideoToolbarContext,
 } from "@/features/editor/components/canvas-spread-view";
+import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 import {
@@ -53,6 +53,8 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
   const { item, onUpdate, onDelete, selectedGeometry, canvasRef } = context;
   const { geometry } = item;
 
@@ -139,8 +141,8 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
 
         // Convert video pixel dimensions to canvas percentage, preserving aspect ratio.
         // If video exceeds canvas, scale so the longer side is 80% of canvas; other side follows ratio.
-        const rawW = (dimensions.width / CANVAS.BASE_WIDTH) * 100;
-        const rawH = (dimensions.height / CANVAS.BASE_HEIGHT) * 100;
+        const rawW = (dimensions.width / canvasWidth) * 100;
+        const rawH = (dimensions.height / canvasHeight) * 100;
         const MAX_PERCENT = 80;
         let newW: number;
         let newH: number;
@@ -151,7 +153,7 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
         } else {
           // Scale down: fit the longer dimension to MAX_PERCENT, compute other from aspect ratio
           const aspectRatio = dimensions.width / dimensions.height;
-          const canvasAspect = CANVAS.BASE_WIDTH / CANVAS.BASE_HEIGHT;
+          const canvasAspect = canvasWidth / canvasHeight;
           if (aspectRatio >= canvasAspect) {
             // Landscape or square-ish: width is the constraining dimension
             newW = MAX_PERCENT;

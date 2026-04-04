@@ -11,9 +11,6 @@ export const COLORS = {
 } as const;
 
 export const CANVAS = {
-  BASE_WIDTH: 800,
-  BASE_HEIGHT: 600,
-  ASPECT_RATIO: 4 / 3,
   MIN_ELEMENT_SIZE: 5,
   NUDGE_STEP: 1,
   NUDGE_STEP_SHIFT: 5,

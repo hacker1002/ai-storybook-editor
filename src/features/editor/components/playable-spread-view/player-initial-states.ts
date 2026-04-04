@@ -2,7 +2,7 @@
 
 import gsap from 'gsap';
 import type { SpreadAnimation } from '@/types/spread-types';
-import { CANVAS } from '@/constants/spread-constants';
+import type { CanvasSize } from '@/types/canvas-types';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
 
 // === Offset Helpers ===
@@ -43,11 +43,12 @@ export function calculateFloatOffset(direction: string | undefined): Offset {
 /** Determine GSAP initial props for a single animation based on its effect type */
 export function resolveInitialState(
   animation: SpreadAnimation,
-  spreadContainer: HTMLElement | null
+  spreadContainer: HTMLElement | null,
+  canvasSize?: CanvasSize
 ): gsap.TweenVars {
   const { type } = animation.effect;
-  const cw = spreadContainer?.getBoundingClientRect().width ?? CANVAS.BASE_WIDTH;
-  const ch = spreadContainer?.getBoundingClientRect().height ?? CANVAS.BASE_HEIGHT;
+  const cw = spreadContainer?.getBoundingClientRect().width ?? canvasSize?.width ?? 800;
+  const ch = spreadContainer?.getBoundingClientRect().height ?? canvasSize?.height ?? 600;
 
   switch (type) {
     // Media Play — handled separately (pause + currentTime=0)
@@ -97,11 +98,12 @@ export function resolveInitialState(
 export function resolveAnimationEndState(
   animation: SpreadAnimation,
   spreadContainer: HTMLElement | null,
-  itemGeometry?: { x: number; y: number }
+  itemGeometry?: { x: number; y: number },
+  canvasSize?: CanvasSize
 ): gsap.TweenVars {
   const { type, amount, direction } = animation.effect;
-  const cw = spreadContainer?.getBoundingClientRect().width ?? CANVAS.BASE_WIDTH;
-  const ch = spreadContainer?.getBoundingClientRect().height ?? CANVAS.BASE_HEIGHT;
+  const cw = spreadContainer?.getBoundingClientRect().width ?? canvasSize?.width ?? 800;
+  const ch = spreadContainer?.getBoundingClientRect().height ?? canvasSize?.height ?? 600;
 
   switch (type) {
     case EFFECT_TYPE.PLAY:
@@ -189,7 +191,8 @@ export function resetElementStyles(elementRefsMap: Map<string, HTMLElement>): vo
 export function applyInitialStates(
   animations: SpreadAnimation[],
   elementRefsMap: Map<string, HTMLElement>,
-  spreadContainer: HTMLElement | null
+  spreadContainer: HTMLElement | null,
+  canvasSize?: CanvasSize
 ): void {
   if (!animations || animations.length === 0) return;
 
@@ -209,7 +212,7 @@ export function applyInitialStates(
     const element = elementRefsMap.get(targetId);
     if (!element) return;
 
-    const initialProps = resolveInitialState(anim, spreadContainer);
+    const initialProps = resolveInitialState(anim, spreadContainer, canvasSize);
     if (Object.keys(initialProps).length > 0) {
       gsap.set(element, initialProps);
     }
