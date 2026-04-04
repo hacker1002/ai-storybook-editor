@@ -6,9 +6,9 @@ import * as React from 'react';
 import { useCurrentBook, useBookTemplateLayout, useBookActions } from '@/stores/book-store';
 import { LayoutThumbnail } from './layout-thumbnail';
 import { LayoutSelectionModal } from './layout-selection-modal';
-import { supabase } from '@/apis/supabase';
+import { useTemplateLayouts } from '@/hooks/use-template-layouts';
 import { SearchableDropdown } from '@/components/ui/searchable-dropdown';
-import type { TemplateLayout, BookTemplateLayout, PageNumberingPosition, PageNumberingSettings } from '@/types/editor';
+import type { BookTemplateLayout, PageNumberingPosition, PageNumberingSettings, TemplateLayout } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 
 const DEFAULT_PAGE_NUMBERING: PageNumberingSettings = {
@@ -77,42 +77,9 @@ export function ConfigLayoutSettings() {
   const templateLayout = useBookTemplateLayout();
   const { updateBook } = useBookActions();
 
-  const [spreadLayouts, setSpreadLayouts] = React.useState<TemplateLayout[]>([]);
-  const [singlePageLayouts, setSinglePageLayouts] = React.useState<TemplateLayout[]>([]);
+  const { spreadLayouts, singlePageLayouts } = useTemplateLayouts(book?.book_type ?? null);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [modalTarget, setModalTarget] = React.useState<LayoutSlot | null>(null);
-
-  // Fetch template_layouts on mount, filtered by book_type
-  React.useEffect(() => {
-    if (!book) return;
-
-    const fetchLayouts = async () => {
-      log.info('fetchLayouts', 'start', { bookType: book.book_type });
-
-      const query = supabase
-        .from('template_layouts')
-        .select('id, title, type, book_type, textboxes, images')
-        .order('title', { ascending: true });
-
-      if (book.book_type !== null) {
-        query.eq('book_type', book.book_type);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        log.error('fetchLayouts', 'failed', { error });
-        return;
-      }
-
-      const layouts = (data ?? []) as TemplateLayout[];
-      setSpreadLayouts(layouts.filter((l) => l.type === 1));
-      setSinglePageLayouts(layouts.filter((l) => l.type === 2));
-      log.info('fetchLayouts', 'done', { total: layouts.length });
-    };
-
-    void fetchLayouts();
-  }, [book?.id, book?.book_type]);
 
   if (!book) return null;
 

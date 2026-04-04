@@ -845,13 +845,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           />
         ))}
 
-        {/* Page Divider */}
-        {spread.pages.length > 1 && (
-          <div
-            className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: "50%", zIndex: 0 }}
-          />
-        )}
+        {/* Page Center Divider — always visible */}
+        <div
+          className="absolute top-0 bottom-0 w-px pointer-events-none"
+          style={{ left: '50%', background: 'rgba(0, 0, 0, 0.12)', zIndex: -999 }}
+        />
 
         {/* Raw Images (illustration layer) */}
         {renderItems.includes("raw_image") &&

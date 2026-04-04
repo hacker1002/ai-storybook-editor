@@ -41,7 +41,6 @@ import {
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 import type { SelectedItem } from "./objects-creative-space";
-import type { SpreadType } from "@/features/editor/components/canvas-spread-view";
 import type {
   BaseSpread,
   ImageItemContext,
@@ -510,29 +509,7 @@ export function ObjectsMainView({
     [actions, retouchSpreads]
   );
 
-  // Spread-level handlers
-  const handleSpreadAdd = useCallback(
-    (type: SpreadType) => {
-      const spreadIndex = retouchSpreads.length;
-      const basePage: PageData = {
-        number: spreadIndex * 2,
-        type: "normal_page",
-        layout: null,
-        background: { color: "#ffffff", texture: null },
-      };
-      const newSpread: BaseSpread = {
-        id: crypto.randomUUID(),
-        pages:
-          type === "double"
-            ? [basePage, { ...basePage, number: spreadIndex * 2 + 1 }]
-            : [basePage],
-        images: [],
-        textboxes: [],
-      };
-      actions.addIllustrationSpread(newSpread);
-    },
-    [actions, retouchSpreads.length]
-  );
+  // Spread-level handlers (canAddSpread={false} — handleSpreadAdd not needed)
 
   const handleDeleteSpread = useCallback(
     (spreadId: string) => {
@@ -989,7 +966,6 @@ export function ObjectsMainView({
         renderRawTextboxToolbar={renderRawTextboxToolbar}
         onSpreadSelect={onSpreadSelect}
         onSpreadReorder={handleSpreadReorder}
-        onSpreadAdd={handleSpreadAdd}
         onDeleteSpread={handleDeleteSpread}
         onUpdateSpreadItem={handleSpreadItemAction}
         isEditable={true}

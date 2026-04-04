@@ -8,6 +8,13 @@ import {
   EditableTextbox,
 } from "@/features/editor/components/shared-components";
 import { useDummyById, useDummyActions } from "./hooks";
+import { useCurrentBook, useBookTemplateLayout } from "@/stores/book-store";
+import { useTemplateLayouts } from "@/hooks/use-template-layouts";
+import {
+  buildDummyItemsFromTemplate,
+  findTemplateById,
+  mergeItems,
+} from "@/utils/template-layout-utils";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger('Editor', 'DummyMainView');
@@ -53,17 +60,24 @@ function convertDummySpreadsToBaseSpreads(
   }));
 }
 
-function createEmptySpread(spreadIndex: number): DummySpread {
+function createEmptySpread(spreadIndex: number, type: SpreadType): DummySpread {
+  const n = spreadIndex * 2;
   const basePage: PageData = {
-    number: spreadIndex * 2,
+    number: n,
     type: "normal_page",
     layout: null,
     background: { color: "#ffffff", texture: null },
   };
 
+  // 'double' = DPS → 1 page spanning two numbers; 'single' = non-DPS → 2 pages
+  const pages: PageData[] =
+    type === "double"
+      ? [{ ...basePage, number: `${n}-${n + 1}` }]
+      : [basePage, { ...basePage, number: n + 1 }];
+
   return {
     id: crypto.randomUUID(),
-    pages: [basePage, { ...basePage, number: spreadIndex * 2 + 1 }],
+    pages,
     images: [],
     textboxes: [],
   };
@@ -72,6 +86,9 @@ function createEmptySpread(spreadIndex: number): DummySpread {
 export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   const dummy = useDummyById(selectedDummyId);
   const actions = useDummyActions();
+  const book = useCurrentBook();
+  const templateLayout = useBookTemplateLayout();
+  const { spreadLayouts, singlePageLayouts } = useTemplateLayouts(book?.book_type ?? null);
 
   const baseSpreads = useMemo(() => {
     if (!dummy) return [];
@@ -92,13 +109,36 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   const handleSpreadAdd = useCallback(
     (type: SpreadType) => {
       if (!dummy) return;
-      const newSpread = createEmptySpread(dummy.spreads.length);
-      if (type !== "double") {
-        newSpread.pages = [newSpread.pages[0]];
+      const langCode = book?.original_language ?? 'en';
+      const newSpread = createEmptySpread(dummy.spreads.length, type);
+
+      // Populate images/textboxes from template (silent empty fallback)
+      if (templateLayout) {
+        if (type === 'double') {
+          const tpl = findTemplateById(spreadLayouts, templateLayout.spread);
+          if (tpl) {
+            const items = buildDummyItemsFromTemplate(tpl, 'full', langCode);
+            newSpread.images = items.images;
+            newSpread.textboxes = items.textboxes;
+          }
+        } else {
+          const leftTpl = findTemplateById(singlePageLayouts, templateLayout.left_page);
+          const rightTpl = findTemplateById(singlePageLayouts, templateLayout.right_page);
+          const leftItems = leftTpl
+            ? buildDummyItemsFromTemplate(leftTpl, 'left', langCode)
+            : { images: [] as DummyImage[], textboxes: [] as DummyTextbox[] };
+          const rightItems = rightTpl
+            ? buildDummyItemsFromTemplate(rightTpl, 'right', langCode)
+            : { images: [] as DummyImage[], textboxes: [] as DummyTextbox[] };
+          const merged = mergeItems(leftItems, rightItems);
+          newSpread.images = merged.images;
+          newSpread.textboxes = merged.textboxes;
+        }
       }
+
       actions.addDummySpread(selectedDummyId, newSpread);
     },
-    [actions, selectedDummyId, dummy]
+    [actions, selectedDummyId, dummy, book?.original_language, templateLayout, spreadLayouts, singlePageLayouts]
   );
 
   const handleDeleteSpread = useCallback(

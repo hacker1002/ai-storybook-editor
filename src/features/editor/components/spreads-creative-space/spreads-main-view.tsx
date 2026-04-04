@@ -16,6 +16,13 @@ import {
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
 import { useLanguageCode } from '@/stores/editor-settings-store';
+import { useCurrentBook, useBookTemplateLayout, useBookTypography } from '@/stores/book-store';
+import { useTemplateLayouts } from '@/hooks/use-template-layouts';
+import {
+  buildIllustrationItemsFromTemplate,
+  findTemplateById,
+  mergeItems,
+} from '@/utils/template-layout-utils';
 import { createLogger } from '@/utils/logger';
 import { SpreadsImageToolbar } from './spreads-image-toolbar';
 import { SpreadsTextToolbar } from './spreads-text-toolbar';
@@ -79,35 +86,67 @@ export function SpreadsMainView({
   );
   const actions = useSnapshotActions();
   const langCode = useLanguageCode();
+  const book = useCurrentBook();
+  const templateLayout = useBookTemplateLayout();
+  const bookTypography = useBookTypography();
+  const { spreadLayouts, singlePageLayouts } = useTemplateLayouts(book?.book_type ?? null);
 
   // === Spread-level handlers ===
 
   const handleSpreadAdd = useCallback(
     (type: SpreadType) => {
-      // Each spread consumes 2 page numbers regardless of type
       const nextPageNum = illustrationSpreads.length * 2;
       const basePage: PageData = {
-        // Single spread (DPS): one page covering two page numbers → "N-N+1"
-        // Double spread: two pages with individual numbers
-        number: type === 'single' ? `${nextPageNum}-${nextPageNum + 1}` : nextPageNum,
+        number: nextPageNum,
         type: 'normal_page',
         layout: null,
         background: { color: '#FFFFFF', texture: null },
       };
+
+      // 'double' = DPS → 1 page spanning two numbers; 'single' = non-DPS → 2 pages
+      const pages: PageData[] =
+        type === 'double'
+          ? [{ ...basePage, number: `${nextPageNum}-${nextPageNum + 1}` }]
+          : [basePage, { ...basePage, number: nextPageNum + 1 }];
+
+      // Populate images/textboxes from template (silent empty fallback if not configured)
+      let images: SpreadImage[] = [];
+      let textboxes: SpreadTextbox[] = [];
+
+      if (templateLayout) {
+        if (type === 'double') {
+          const tpl = findTemplateById(spreadLayouts, templateLayout.spread);
+          if (tpl) {
+            const items = buildIllustrationItemsFromTemplate(tpl, 'full', langCode, bookTypography);
+            images = items.images;
+            textboxes = items.textboxes;
+          }
+        } else {
+          const leftTpl = findTemplateById(singlePageLayouts, templateLayout.left_page);
+          const rightTpl = findTemplateById(singlePageLayouts, templateLayout.right_page);
+          const leftItems = leftTpl
+            ? buildIllustrationItemsFromTemplate(leftTpl, 'left', langCode, bookTypography)
+            : { images: [] as SpreadImage[], textboxes: [] as SpreadTextbox[] };
+          const rightItems = rightTpl
+            ? buildIllustrationItemsFromTemplate(rightTpl, 'right', langCode, bookTypography)
+            : { images: [] as SpreadImage[], textboxes: [] as SpreadTextbox[] };
+          const merged = mergeItems(leftItems, rightItems);
+          images = merged.images;
+          textboxes = merged.textboxes;
+        }
+      }
+
       const newSpread: BaseSpread = {
         id: crypto.randomUUID(),
-        pages:
-          type === 'double'
-            ? [basePage, { ...basePage, number: nextPageNum + 1 }]
-            : [basePage],
-        images: [],
-        textboxes: [],
+        pages,
+        images,
+        textboxes,
       };
       log.info('handleSpreadAdd', 'adding spread', { type, spreadId: newSpread.id });
       actions.addIllustrationSpread(newSpread);
       onSpreadSelect(newSpread.id);
     },
-    [actions, illustrationSpreads.length, onSpreadSelect]
+    [actions, illustrationSpreads.length, onSpreadSelect, templateLayout, spreadLayouts, singlePageLayouts, langCode, bookTypography]
   );
 
   const handleDeleteSpread = useCallback(
