@@ -54,6 +54,7 @@ function buildInitialDrafts(
     imageUrl: branch.image_url,
     title: (branch[langCode] as BranchLocalizedContent | undefined)?.title ?? '',
     isDefault: branch.is_default,
+    _originalBranch: branch,
   }));
 }
 
@@ -188,13 +189,42 @@ export function StoryBranchingModal({ spreadId, onClose }: StoryBranchingModalPr
   function handleSave() {
     log.info('handleSave', 'saving branch setting', { spreadId, branchCount: draftBranches.length });
 
+    // Merge with existing locale data to preserve other languages
+    const existingLocales: Record<string, BranchLocalizedContent> = {};
+    if (branchSetting) {
+      for (const key of Object.keys(branchSetting)) {
+        if (key !== 'branches' && key !== langCode) {
+          const val = branchSetting[key];
+          if (val && typeof val === 'object' && 'title' in val) {
+            existingLocales[key] = val as BranchLocalizedContent;
+          }
+        }
+      }
+    }
+
     const payload = {
-      branches: draftBranches.map((d) => ({
-        section_id: d.sectionId,
-        is_default: d.isDefault,
-        image_url: d.imageUrl,
-        [langCode]: { title: d.title } as BranchLocalizedContent,
-      })),
+      ...existingLocales,
+      branches: draftBranches.map((d) => {
+        // Preserve locale entries from original branch, only update current langCode
+        const preserved: Record<string, BranchLocalizedContent> = {};
+        if (d._originalBranch) {
+          for (const key of Object.keys(d._originalBranch)) {
+            if (key !== 'section_id' && key !== 'is_default' && key !== 'image_url' && key !== langCode) {
+              const val = d._originalBranch[key];
+              if (val && typeof val === 'object' && 'title' in val) {
+                preserved[key] = val as BranchLocalizedContent;
+              }
+            }
+          }
+        }
+        return {
+          ...preserved,
+          section_id: d.sectionId,
+          is_default: d.isDefault,
+          image_url: d.imageUrl,
+          [langCode]: { title: d.title } as BranchLocalizedContent,
+        };
+      }),
       [langCode]: {
         title: promptTitle.trim(),
         audio_url: narrationAudioUrl ?? undefined,

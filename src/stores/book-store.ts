@@ -2,7 +2,8 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { persist, devtools } from "zustand/middleware";
 import { supabase } from "@/apis/supabase";
-import type { Book, BookListItem } from "@/types/editor";
+import type { Book, BookListItem, BranchTypographySettings } from "@/types/editor";
+import { DEFAULT_BRANCH_TYPOGRAPHY } from "@/constants/config-constants";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Store", "BookStore");
@@ -295,6 +296,16 @@ export const useBookTypography = () =>
   useBookStore((s) => s.currentBook?.typography ?? null);
 export const useBookBranch = () =>
   useBookStore((s) => s.currentBook?.branch ?? null);
+export const useBookBranchTypography = (languageCode: string): BranchTypographySettings =>
+  useBookStore((s) => {
+    const book = s.currentBook;
+    const branch = book?.branch;
+    return (
+      branch?.typography?.[languageCode] ??
+      branch?.typography?.[book?.original_language ?? ''] ??
+      DEFAULT_BRANCH_TYPOGRAPHY
+    );
+  });
 export const useBookTemplateLayout = () =>
   useBookStore((s) => s.currentBook?.template_layout ?? null);
 

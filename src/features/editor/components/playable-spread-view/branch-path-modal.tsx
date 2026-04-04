@@ -2,12 +2,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Volume2, ImageIcon, X } from 'lucide-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Dialog, DialogPortal, DialogOverlay } from '@/components/ui/dialog';
 import { cn } from '@/utils/utils';
 import type { BranchSetting, Branch, Section, BranchLocalizedContent } from '@/types/illustration-types';
 import { useNarrationLanguage } from '@/stores/animation-playback-store';
+import { useBookBranchTypography } from '@/stores/book-store';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'BranchPathModal');
@@ -22,10 +24,11 @@ interface BranchPathModalProps {
 interface BranchOptionCardProps {
   branch: Branch;
   languageCode: string;
+  typographyStyle: CSSProperties;
   onClick: () => void;
 }
 
-function BranchOptionCard({ branch, languageCode, onClick }: BranchOptionCardProps) {
+function BranchOptionCard({ branch, languageCode, typographyStyle, onClick }: BranchOptionCardProps) {
   const content = branch[languageCode] as BranchLocalizedContent | undefined;
   const title = content?.title ?? '';
   const imageUrl = branch.image_url ?? null;
@@ -43,13 +46,20 @@ function BranchOptionCard({ branch, languageCode, onClick }: BranchOptionCardPro
           <ImageIcon className="h-8 w-8 text-muted-foreground" />
         )}
       </div>
-      <div className="pt-2 pb-1 text-sm font-medium truncate text-center">{title}</div>
+      <div className="pt-2 pb-1 truncate text-center" style={typographyStyle}>{title}</div>
     </button>
   );
 }
 
 export function BranchPathModal({ branchSetting, sections, onSelect, onDismiss }: BranchPathModalProps) {
   const narrationLanguage = useNarrationLanguage();
+  const branchTypo = useBookBranchTypography(narrationLanguage);
+  const typographyStyle: CSSProperties = {
+    fontFamily: branchTypo.family,
+    fontSize: branchTypo.size,
+    color: branchTypo.color,
+    lineHeight: 1.4,
+  };
   const langData = branchSetting[narrationLanguage] as BranchLocalizedContent | undefined;
   const titleText = langData?.title ?? '';
   const audioUrl = langData?.audio_url ?? null;
@@ -130,7 +140,7 @@ export function BranchPathModal({ branchSetting, sections, onSelect, onDismiss }
                   <Volume2 className={cn('h-5 w-5 text-indigo-500', isAudioPlaying && 'animate-pulse')} />
                 </button>
               )}
-              {titleText && <p className="text-lg font-medium">{titleText}</p>}
+              {titleText && <p style={typographyStyle}>{titleText}</p>}
             </div>
           )}
 
@@ -141,6 +151,7 @@ export function BranchPathModal({ branchSetting, sections, onSelect, onDismiss }
                 key={index}
                 branch={branch}
                 languageCode={narrationLanguage}
+                typographyStyle={typographyStyle}
                 onClick={() => handleOptionSelect(branch)}
               />
             ))}

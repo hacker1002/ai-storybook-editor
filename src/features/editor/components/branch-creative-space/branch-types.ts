@@ -18,6 +18,7 @@ export interface DraftBranch {
   imageUrl?: string;
   title: string;
   isDefault: boolean;
+  _originalBranch?: Branch; // preserve original branch data for locale merge on save
 }
 
 // Sidebar list item — interleaved spreads and section headers
