@@ -200,13 +200,6 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
         scrollIntoView(spreads.length - 1);
         break;
 
-      case 'Delete':
-        if (canDelete) {
-          const selectedSpread = spreads[currentIndex];
-          handleDelete(selectedSpread);
-        }
-        break;
-
       case 'Enter':
         if (layout === 'grid') {
           onSpreadDoubleClick?.(selectedId);
