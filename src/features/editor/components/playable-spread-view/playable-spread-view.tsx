@@ -87,6 +87,10 @@ interface PlayableSpreadViewProps {
   onSpreadSelect?: (spreadId: string) => void;
   onPreview?: () => void;
   onStopPreview?: () => void;
+  // Share preview context — optional, undefined = default editor behavior
+  bookTitle?: string;
+  availableEditions?: { classic?: boolean; dynamic?: boolean; interactive?: boolean };
+  availableLanguages?: { name: string; code: string }[];
 }
 
 const KEYBOARD_SHORTCUTS = {
@@ -114,6 +118,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   onSpreadSelect,
   onPreview,
   onStopPreview,
+  bookTitle,
+  availableEditions,
+  availableLanguages,
 }) => {
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
@@ -346,6 +353,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         <PlayablePlayerHeader
           playEdition={playEdition}
           onEditionChange={handleEditionChange}
+          bookTitle={bookTitle}
+          availableEditions={availableEditions}
+          availableLanguages={availableLanguages}
         />
       ) : (
         <PlayableEditorHeader

@@ -26,6 +26,9 @@ const log = createLogger('Editor', 'PlayablePlayerHeader');
 interface PlayablePlayerHeaderProps {
   playEdition: PlayEdition;
   onEditionChange: (edition: PlayEdition) => void;
+  bookTitle?: string;
+  availableEditions?: { classic?: boolean; dynamic?: boolean; interactive?: boolean };
+  availableLanguages?: { name: string; code: string }[];
 }
 
 const EDITION_OPTIONS: { value: PlayEdition; label: string }[] = [
@@ -37,6 +40,9 @@ const EDITION_OPTIONS: { value: PlayEdition; label: string }[] = [
 export const PlayablePlayerHeader = memo(function PlayablePlayerHeader({
   playEdition,
   onEditionChange,
+  bookTitle,
+  availableEditions,
+  availableLanguages,
 }: PlayablePlayerHeaderProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const narrationLanguage = useNarrationLanguage();
@@ -52,11 +58,30 @@ export const PlayablePlayerHeader = memo(function PlayablePlayerHeader({
     usePlaybackStore.getState().setQuizLanguage(code);
   };
 
+  // Filter edition options based on availableEditions prop (undefined = show all)
+  const filteredEditions = availableEditions
+    ? EDITION_OPTIONS.filter((opt) => availableEditions[opt.value] === true)
+    : EDITION_OPTIONS;
+
+  // Single edition → show disabled dropdown so user can see which edition is active
+  const editionDisabled = filteredEditions.length <= 1;
+
+  // Language list: use availableLanguages if provided, else fall back to AVAILABLE_LANGUAGES
+  const languageOptions = availableLanguages ?? AVAILABLE_LANGUAGES;
+
   return (
     <div className="flex items-center justify-center px-3 h-14 shrink-0 border-b bg-background z-10 relative">
+      {/* Book title — left side, only when provided */}
+      {bookTitle && (
+        <span className="absolute left-3 text-sm font-medium max-w-[180px] truncate text-foreground">
+          {bookTitle}
+        </span>
+      )}
+
       <Select
         value={playEdition}
         onValueChange={(v) => onEditionChange(v as PlayEdition)}
+        disabled={editionDisabled}
       >
         <SelectTrigger
           className="w-[140px] h-7 text-xs"
@@ -65,7 +90,7 @@ export const PlayablePlayerHeader = memo(function PlayablePlayerHeader({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {EDITION_OPTIONS.map((opt) => (
+          {filteredEditions.map((opt) => (
             <SelectItem key={opt.value} value={opt.value} className="text-xs">
               {opt.label}
             </SelectItem>
@@ -98,7 +123,7 @@ export const PlayablePlayerHeader = memo(function PlayablePlayerHeader({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {AVAILABLE_LANGUAGES.map((lang) => (
+                  {languageOptions.map((lang) => (
                     <SelectItem key={lang.code} value={lang.code}>
                       {lang.name}
                     </SelectItem>
@@ -115,7 +140,7 @@ export const PlayablePlayerHeader = memo(function PlayablePlayerHeader({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {AVAILABLE_LANGUAGES.map((lang) => (
+                  {languageOptions.map((lang) => (
                     <SelectItem key={lang.code} value={lang.code}>
                       {lang.name}
                     </SelectItem>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AppLayout } from '@/components/layout/app-layout';
@@ -7,6 +7,10 @@ import { LoginPage } from '@/features/auth';
 import { EditorPage } from '@/features/editor';
 import { DemoCanvasSpreadView, DemoPlayableSpreadView } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
+
+const SharePreviewPage = lazy(() =>
+  import('@/features/share-preview').then((m) => ({ default: m.SharePreviewPage }))
+);
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -48,6 +52,7 @@ export default function App() {
         <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/editor/:bookId" element={<EditorPage />} />
+        <Route path="/share/:slug" element={<Suspense fallback={<LoadingScreen />}><SharePreviewPage /></Suspense>} />
         <Route path="/demo/canvas-spread-view" element={<DemoCanvasSpreadView />} />
         <Route path="/demo/playable-spread-view" element={<DemoPlayableSpreadView />} />
         <Route element={<AppLayout />}>
