@@ -35,6 +35,7 @@ export interface SnapshotPreviewData {
   version: string;
   illustration: {
     spreads: Record<string, unknown>[];
+    sections: { id: string; title: string; start_spread_id: string; end_spread_id: string; next_spread_id?: string | null }[];
   };
 }
 

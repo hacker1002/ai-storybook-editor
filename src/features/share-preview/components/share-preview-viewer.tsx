@@ -39,11 +39,11 @@ export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreview
     ? shareConfig.languages
     : undefined;
 
-  // sections from book.branch
+  // sections from snapshot illustration (authoritative source for playback)
   const sections = useMemo<Section[]>(() => {
-    const branch = book.branch as { sections?: Section[] } | undefined;
-    return branch?.sections ?? [];
-  }, [book.branch]);
+    if (!snapshot) return [];
+    return (snapshot.illustration.sections ?? []) as Section[];
+  }, [snapshot]);
 
   log.info('render', 'share preview viewer', {
     bookId: book.id,
