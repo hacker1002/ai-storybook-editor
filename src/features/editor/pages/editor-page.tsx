@@ -25,6 +25,7 @@ import { StagesCreativeSpace } from '../components/stages-creative-space';
 import { CharactersCreativeSpace } from '../components/characters-creative-space';
 import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
 import { BranchCreativeSpace } from '../components/branch-creative-space';
+import { HistoryCreativeSpace } from '../components/history-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
 import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -192,9 +193,10 @@ export function EditorPage() {
         return <PreviewCreativeSpace />;
       case 'setting':
         return <ConfigCreativeSpace />;
+      case 'history':
+        return <HistoryCreativeSpace />;
       case 'sketch':
       case 'remix':
-      case 'history':
       case 'flag':
       case 'share':
       case 'collaborator':
