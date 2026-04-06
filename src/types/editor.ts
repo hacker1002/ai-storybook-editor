@@ -15,7 +15,7 @@ export type DefaultSpace = 'preview' | 'history' | 'flag' | 'share' | 'collabora
 export type CreativeSpaceType = ManuscriptSpace | IllustrationSpace | RetouchSpace | DefaultSpace;
 
 // Save status indicator
-export type SaveStatus = 'unsaved' | 'saving' | 'saved';
+export type SaveStatus = 'dirty' | 'auto-saving' | 'auto-saved' | 'manual-saving' | 'saved';
 
 // Editor mode (book vs asset)
 export type EditorMode = 'book' | 'asset';
@@ -48,13 +48,16 @@ export interface SnapshotMeta {
   bookId: string | null;
   version: string | null;
   tag: string | null;
+  autoSaveId: string | null;  // auto-save row id (save_type=2)
 }
 
 // Sync state for dirty tracking
 export interface SyncState {
   isDirty: boolean;
-  lastSavedAt: Date | null;
-  isSaving: boolean;
+  lastSavedAt: Date | null;        // last auto-save timestamp
+  lastManualSavedAt: Date | null;  // last manual save timestamp
+  isSaving: boolean;               // shared for both manual & auto
+  isAutoSaving: boolean;           // true when auto-save is in progress
   error: string | null;
 }
 

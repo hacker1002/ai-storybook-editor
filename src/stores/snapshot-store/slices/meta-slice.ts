@@ -9,12 +9,15 @@ const DEFAULT_META = {
   bookId: null,
   version: null,
   tag: null,
+  autoSaveId: null,
 };
 
 const DEFAULT_SYNC = {
   isDirty: false,
   lastSavedAt: null,
+  lastManualSavedAt: null,
   isSaving: false,
+  isAutoSaving: false,
   error: null,
 };
 

@@ -53,16 +53,46 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.fetchError = null;
           });
 
-          const { data, error } = await supabase
-            .from('snapshots')
-            .select('*')
-            .eq('book_id', bookId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          // Step 1: Get current_version from books table
+          const { data: bookData, error: bookError } = await supabase
+            .from('books')
+            .select('current_version')
+            .eq('id', bookId)
+            .single();
 
-          if (error) {
-            log.error('fetchSnapshot', 'failed', { bookId, error });
+          if (bookError) {
+            log.warn('fetchSnapshot', 'could not fetch book current_version, falling back to latest', { bookId, error: bookError });
+          }
+
+          const currentVersion = bookData?.current_version ?? null;
+          log.debug('fetchSnapshot', 'resolved current_version', { bookId, currentVersion });
+
+          // Step 2: Query snapshot — by current_version if available, else latest by updated_at
+          let data = null;
+          let fetchError = null;
+
+          if (currentVersion) {
+            const result = await supabase
+              .from('snapshots')
+              .select('*')
+              .eq('id', currentVersion)
+              .maybeSingle();
+            data = result.data;
+            fetchError = result.error;
+          } else {
+            const result = await supabase
+              .from('snapshots')
+              .select('*')
+              .eq('book_id', bookId)
+              .order('updated_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            data = result.data;
+            fetchError = result.error;
+          }
+
+          if (fetchError) {
+            log.error('fetchSnapshot', 'failed', { bookId, error: fetchError });
             set((state) => {
               state.fetchLoading = false;
               state.fetchError = 'Không thể tải snapshot';
@@ -70,13 +100,14 @@ export const useSnapshotStore = create<SnapshotStore>()(
             return;
           }
 
-          log.info('fetchSnapshot', 'done', { bookId, hasData: !!data, snapshotId: data?.id });
+          log.info('fetchSnapshot', 'done', { bookId, hasData: !!data, snapshotId: data?.id, saveType: data?.save_type });
           set((state) => {
             if (data) {
               state.meta.id = data.id;
               state.meta.bookId = data.book_id;
               state.meta.version = data.version;
               state.meta.tag = data.tag;
+              state.meta.autoSaveId = data.save_type === 2 ? data.id : null;
               state.docs = data.docs?.length ? data.docs : DEFAULT_DOCS;
               state.dummies = data.dummies ?? [];
               const ill = data.illustration;
@@ -87,8 +118,20 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.props = data.props ?? [];
               state.characters = data.characters ?? [];
               state.stages = data.stages ?? [];
+              // Restore save timestamps so deriveSaveStatus reflects the correct initial state
+              const snapshotTime = new Date(data.updated_at ?? data.created_at);
+              if (data.save_type === 2) {
+                // Auto-saved only → user hasn't manually published a version yet
+                state.sync.lastSavedAt = snapshotTime;
+                state.sync.lastManualSavedAt = null;
+              } else {
+                // Manual save → treat as fully saved
+                state.sync.lastManualSavedAt = snapshotTime;
+                state.sync.lastSavedAt = null;
+              }
             } else {
               state.meta.bookId = bookId;
+              state.meta.autoSaveId = null;
               state.docs = DEFAULT_DOCS;
               state.dummies = [];
               state.illustration = { spreads: [], sections: [] };
@@ -107,7 +150,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
           if (!meta.bookId || sync.isSaving) return;
 
-          log.info('saveSnapshot', 'start', { bookId: meta.bookId, snapshotId: meta.id, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, sectionCount: illustration.sections.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, sectionCount: illustration.sections.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -116,33 +159,22 @@ export const useSnapshotStore = create<SnapshotStore>()(
           const now = new Date();
           const version = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
 
-          const snapshotData = {
-            book_id: meta.bookId,
-            docs,
-            dummies,
-            illustration,
-            props,
-            characters,
-            stages,
-            version,
-            save_type: 1, // manual save
-          };
-
-          let result;
-          if (meta.id) {
-            result = await supabase
-              .from('snapshots')
-              .update({ docs, dummies, illustration, props, characters, stages, version })
-              .eq('id', meta.id)
-              .select()
-              .single();
-          } else {
-            result = await supabase
-              .from('snapshots')
-              .insert(snapshotData)
-              .select()
-              .single();
-          }
+          // Always INSERT a new row (manual save = version history)
+          const result = await supabase
+            .from('snapshots')
+            .insert({
+              book_id: meta.bookId,
+              docs,
+              dummies,
+              illustration,
+              props,
+              characters,
+              stages,
+              version,
+              save_type: 1,
+            })
+            .select()
+            .single();
 
           if (result.error) {
             log.error('saveSnapshot', 'failed', { bookId: meta.bookId, error: result.error });
@@ -153,11 +185,94 @@ export const useSnapshotStore = create<SnapshotStore>()(
             return;
           }
 
+          // Update books.current_version — accept eventual consistency on failure
+          const { error: updateError } = await supabase
+            .from('books')
+            .update({ current_version: result.data.id })
+            .eq('id', meta.bookId);
+
+          if (updateError) {
+            log.warn('saveSnapshot', 'failed to update books.current_version', { bookId: meta.bookId, snapshotId: result.data.id, error: updateError });
+          }
+
           log.info('saveSnapshot', 'done', { bookId: meta.bookId, snapshotId: result.data.id, version });
           set((state) => {
             state.meta.id = result.data.id;
             state.meta.version = result.data.version;
             state.sync.isSaving = false;
+            state.sync.isDirty = false;
+            state.sync.lastManualSavedAt = now;
+          });
+        },
+
+        autoSaveSnapshot: async () => {
+          const [set, get] = args;
+          const { meta, docs, dummies, illustration, props, characters, stages, sync } = get();
+
+          if (!meta.bookId || sync.isSaving || !sync.isDirty) return;
+
+          log.info('autoSaveSnapshot', 'start', { bookId: meta.bookId, autoSaveId: meta.autoSaveId });
+          set((state) => {
+            state.sync.isSaving = true;
+            state.sync.isAutoSaving = true;
+            state.sync.error = null;
+          });
+
+          const now = new Date();
+          const version = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+
+          const payload = { docs, dummies, illustration, props, characters, stages, version };
+
+          // Check for existing auto-save row
+          const { data: existingRow } = await supabase
+            .from('snapshots')
+            .select('id')
+            .eq('book_id', meta.bookId)
+            .eq('save_type', 2)
+            .limit(1)
+            .maybeSingle();
+
+          let result;
+          if (existingRow) {
+            result = await supabase
+              .from('snapshots')
+              .update(payload)
+              .eq('id', existingRow.id)
+              .select()
+              .single();
+          } else {
+            result = await supabase
+              .from('snapshots')
+              .insert({ book_id: meta.bookId, save_type: 2, ...payload })
+              .select()
+              .single();
+          }
+
+          if (result.error) {
+            log.error('autoSaveSnapshot', 'failed', { bookId: meta.bookId, error: result.error });
+            set((state) => {
+              state.sync.isSaving = false;
+              state.sync.isAutoSaving = false;
+              state.sync.error = 'Không thể tự động lưu';
+            });
+            return;
+          }
+
+          // Update books.current_version — accept eventual consistency on failure
+          const { error: updateError } = await supabase
+            .from('books')
+            .update({ current_version: result.data.id })
+            .eq('id', meta.bookId);
+
+          if (updateError) {
+            log.warn('autoSaveSnapshot', 'failed to update books.current_version', { bookId: meta.bookId, snapshotId: result.data.id, error: updateError });
+          }
+
+          log.info('autoSaveSnapshot', 'done', { bookId: meta.bookId, snapshotId: result.data.id, isUpdate: !!existingRow });
+          set((state) => {
+            state.meta.autoSaveId = result.data.id;
+            state.sync.isSaving = false;
+            state.sync.isAutoSaving = false;
             state.sync.isDirty = false;
             state.sync.lastSavedAt = now;
           });
@@ -195,8 +310,8 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.characters = [];
             state.stages = [];
             state.imageTasks = [];
-            state.meta = { id: null, bookId: null, version: null, tag: null };
-            state.sync = { isDirty: false, lastSavedAt: null, isSaving: false, error: null };
+            state.meta = { id: null, bookId: null, version: null, tag: null, autoSaveId: null };
+            state.sync = { isDirty: false, lastSavedAt: null, lastManualSavedAt: null, isSaving: false, isAutoSaving: false, error: null };
             state.fetchLoading = false;
             state.fetchError = null;
           });

@@ -40,6 +40,7 @@ export interface FetchSlice {
   fetchError: string | null;
   fetchSnapshot: (bookId: string) => Promise<void>;
   saveSnapshot: () => Promise<void>;
+  autoSaveSnapshot: () => Promise<void>;
 }
 
 export interface DummiesSlice {

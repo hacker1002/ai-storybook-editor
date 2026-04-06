@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEditorSettingsActions } from '@/stores/editor-settings-store';
 import {
   useSnapshotActions,
-  useIsDirty,
-  useIsSaving,
+  useSyncState,
   useSnapshotFetchLoading,
   useSnapshotFetchError,
+  useCanManualSave,
+  deriveSaveStatus,
 } from '@/stores/snapshot-store';
 import { useBookStore, useCurrentBook, useBooksLoading, useBooksError } from '@/stores/book-store';
 import { useArtStyleStore } from '@/stores/art-style-store';
@@ -27,9 +28,10 @@ import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
 import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
+import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
+import { useAutoSave } from '../hooks/use-auto-save';
 
 const log = createLogger('Editor', 'EditorPage');
 
@@ -47,10 +49,13 @@ export function EditorPage() {
 
   // Snapshot store
   const { fetchSnapshot, resetSnapshot, saveSnapshot } = useSnapshotActions();
-  const isDirty = useIsDirty();
-  const isSaving = useIsSaving();
+  const sync = useSyncState();
+  const canManualSave = useCanManualSave();
   const snapshotLoading = useSnapshotFetchLoading();
   const snapshotError = useSnapshotFetchError();
+
+  // Register auto-save timer — must be called exactly once
+  useAutoSave();
 
   // Editor settings
   const { setCurrentStep, resetSettings } = useEditorSettingsActions();
@@ -133,7 +138,7 @@ export function EditorPage() {
   }
 
   // Derived save status
-  const saveStatus: SaveStatus = isSaving ? 'saving' : isDirty ? 'unsaved' : 'saved';
+  const saveStatus = deriveSaveStatus(sync);
 
   // Handlers
   const handleStepChange = (targetStep: PipelineStep) => {
@@ -150,7 +155,7 @@ export function EditorPage() {
     await useBookStore.getState().updateBook(bookId, { title: newTitle });
   };
 
-  const handleSave = async () => {
+  const handleManualSave = async () => {
     await saveSnapshot();
   };
 
@@ -206,11 +211,12 @@ export function EditorPage() {
         <EditorHeader
           bookTitle={book.title}
           saveStatus={saveStatus}
+          canManualSave={canManualSave}
           notificationCount={notificationCount}
           userPoints={MOCK_USER_POINTS}
           editorMode={book.type === 1 ? 'book' : 'asset'}
           onTitleEdit={handleTitleEdit}
-          onSave={handleSave}
+          onManualSave={handleManualSave}
           onNotificationClick={handleNotificationClick}
           onNavigateHome={handleNavigateHome}
           onStepChange={handleStepChange}

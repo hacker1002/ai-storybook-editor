@@ -1,6 +1,6 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
-import type { DocType } from '@/types/editor';
+import type { DocType, SaveStatus, SyncState } from '@/types/editor';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/illustration-types';
 import type { Prop } from '@/types/prop-types';
@@ -30,11 +30,34 @@ const EMPTY_SECTIONS: Section[] = [];
 const EMPTY_BRANCHES: Branch[] = [];
 
 
+// Derives SaveStatus from SyncState — pure function, usable outside React
+export function deriveSaveStatus(sync: SyncState): SaveStatus {
+  if (sync.isAutoSaving) return 'auto-saving';
+  if (sync.isSaving) return 'manual-saving';
+  if (sync.isDirty) return 'dirty';
+  if (
+    sync.lastSavedAt &&
+    (!sync.lastManualSavedAt || sync.lastSavedAt > sync.lastManualSavedAt)
+  )
+    return 'auto-saved';
+  return 'saved';
+}
+
 // Meta selectors
 export const useSnapshotId = () => useSnapshotStore((s) => s.meta.id);
 export const useIsDirty = () => useSnapshotStore((s) => s.sync.isDirty);
 export const useIsSaving = () => useSnapshotStore((s) => s.sync.isSaving);
+export const useIsAutoSaving = () => useSnapshotStore((s) => s.sync.isAutoSaving);
 export const useSyncState = () => useSnapshotStore((s) => s.sync);
+
+export const useCanManualSave = (): boolean =>
+  useSnapshotStore((s) => {
+    const { isDirty, lastSavedAt, lastManualSavedAt } = s.sync;
+    if (isDirty) return true;
+    if (lastSavedAt && lastManualSavedAt == null) return true;
+    if (lastSavedAt && lastManualSavedAt && lastSavedAt > lastManualSavedAt) return true;
+    return false;
+  });
 
 // Docs selectors
 export const useDocs = () => useSnapshotStore((s) => s.docs);
@@ -313,5 +336,6 @@ export const useSnapshotActions = () =>
       resetSnapshot: s.resetSnapshot,
       fetchSnapshot: s.fetchSnapshot,
       saveSnapshot: s.saveSnapshot,
+      autoSaveSnapshot: s.autoSaveSnapshot,
     })),
   );
