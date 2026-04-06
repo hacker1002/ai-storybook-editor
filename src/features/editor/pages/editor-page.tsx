@@ -27,6 +27,7 @@ import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
 import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { HistoryCreativeSpace } from '../components/history-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
+import { SharesCreativeSpace } from '../components/shares-creative-space';
 import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
@@ -195,10 +196,11 @@ export function EditorPage() {
         return <ConfigCreativeSpace />;
       case 'history':
         return <HistoryCreativeSpace />;
+      case 'share':
+        return <SharesCreativeSpace />;
       case 'sketch':
       case 'remix':
       case 'flag':
-      case 'share':
       case 'collaborator':
         return <MockCreativeSpace name={activeCreativeSpace} />;
       default:
