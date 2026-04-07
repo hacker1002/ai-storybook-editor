@@ -8,6 +8,6 @@ export function cn(...inputs: ClassValue[]) {
 /** Generate a URL-safe unique key from a display name */
 export function generateUniqueKey(name: string): string {
   return (
-    name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now().toString(36)
+    name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '_') + '_' + Date.now().toString(36)
   );
 }
