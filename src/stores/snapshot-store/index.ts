@@ -221,32 +221,15 @@ export const useSnapshotStore = create<SnapshotStore>()(
           const now = new Date();
           const version = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
 
-          const payload = { docs, dummies, illustration, props, characters, stages, version };
-
-          // Check for existing auto-save row
-          const { data: existingRow } = await supabase
+          // Upsert: partial unique index (book_id WHERE save_type=2) guarantees one auto-save per book
+          const result = await supabase
             .from('snapshots')
-            .select('id')
-            .eq('book_id', meta.bookId)
-            .eq('save_type', 2)
-            .limit(1)
-            .maybeSingle();
-
-          let result;
-          if (existingRow) {
-            result = await supabase
-              .from('snapshots')
-              .update(payload)
-              .eq('id', existingRow.id)
-              .select()
-              .single();
-          } else {
-            result = await supabase
-              .from('snapshots')
-              .insert({ book_id: meta.bookId, save_type: 2, ...payload })
-              .select()
-              .single();
-          }
+            .upsert(
+              { book_id: meta.bookId, save_type: 2, docs, dummies, illustration, props, characters, stages, version },
+              { onConflict: 'book_id', ignoreDuplicates: false }
+            )
+            .select()
+            .single();
 
           if (result.error) {
             log.error('autoSaveSnapshot', 'failed', { bookId: meta.bookId, error: result.error });
@@ -268,7 +251,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             log.warn('autoSaveSnapshot', 'failed to update books.current_version', { bookId: meta.bookId, snapshotId: result.data.id, error: updateError });
           }
 
-          log.info('autoSaveSnapshot', 'done', { bookId: meta.bookId, snapshotId: result.data.id, isUpdate: !!existingRow });
+          log.info('autoSaveSnapshot', 'done', { bookId: meta.bookId, snapshotId: result.data.id });
           set((state) => {
             state.meta.autoSaveId = result.data.id;
             state.sync.isSaving = false;

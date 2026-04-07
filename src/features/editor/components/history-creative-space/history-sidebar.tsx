@@ -54,7 +54,7 @@ export function HistorySidebar({
       className="flex flex-col w-[280px] shrink-0 border-r h-full overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center px-4 h-12 border-b shrink-0">
+      <div className="flex items-center px-4 h-14 border-b shrink-0">
         <h2 className="text-sm font-semibold">History</h2>
       </div>
 
