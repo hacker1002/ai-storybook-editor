@@ -27,12 +27,13 @@ import {
 } from '@/constants/book-enums'
 import { SUPPORTED_LANGUAGES } from '@/constants/config-constants'
 import { createLogger } from '@/utils/logger'
+import { resolveMultiLangName } from '@/utils/multi-lang-helpers'
 
 const log = createLogger('Home', 'CreateNewStoryDialog')
 
 interface LookupOption {
   id: string
-  name: string
+  name: Record<string, string> | string  // formats use JSONB; art_styles still string
 }
 
 interface CreateNewStoryDialogProps {
@@ -163,7 +164,7 @@ export function CreateNewStoryDialog({ open, onOpenChange }: CreateNewStoryDialo
               <SelectContent>
                 {formats.map((fmt) => (
                   <SelectItem key={fmt.id} value={fmt.id}>
-                    {fmt.name}
+                    {resolveMultiLangName(fmt.name as Record<string, string>, originalLanguage)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -215,7 +216,7 @@ export function CreateNewStoryDialog({ open, onOpenChange }: CreateNewStoryDialo
               <SelectContent>
                 {artStyles.map((style) => (
                   <SelectItem key={style.id} value={style.id}>
-                    {style.name}
+                    {typeof style.name === 'string' ? style.name : resolveMultiLangName(style.name, originalLanguage)}
                   </SelectItem>
                 ))}
               </SelectContent>

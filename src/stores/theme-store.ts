@@ -1,34 +1,43 @@
 // theme-store.ts - Zustand store for themes lookup + book_theme junction CRUD.
 // Themes are many-to-many with books via the book_theme junction table.
+// Supports is_primary: one theme can be marked as primary per book.
 
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
+import type { MultiLangName } from '@/types/editor';
 
 const log = createLogger('Store', 'ThemeStore');
 
 export interface Theme {
   id: string;
-  name: string;
+  name: MultiLangName;
   description: string | null;
+}
+
+export interface BookTheme {
+  id: string;       // junction row id
+  theme_id: string;
+  is_primary: boolean;
 }
 
 interface ThemeStore {
   themes: Theme[];
-  selectedThemeIds: string[];
+  selectedThemes: BookTheme[];
   isLoading: boolean;
   isUpdating: boolean;
   error: string | null;
 
   fetchThemes: () => Promise<void>;
   fetchBookThemes: (bookId: string) => Promise<void>;
-  updateBookThemes: (bookId: string, themeIds: string[]) => Promise<boolean>;
+  updateBookThemes: (bookId: string, themes: { theme_id: string; is_primary: boolean }[]) => Promise<boolean>;
+  setPrimaryTheme: (bookId: string, themeId: string) => Promise<boolean>;
 }
 
 export const useThemeStore = create<ThemeStore>()((set, get) => ({
   themes: [],
-  selectedThemeIds: [],
+  selectedThemes: [],
   isLoading: false,
   isUpdating: false,
   error: null,
@@ -54,7 +63,7 @@ export const useThemeStore = create<ThemeStore>()((set, get) => ({
     }
 
     log.info('fetchThemes', 'done', { count: data?.length ?? 0 });
-    set({ themes: data ?? [], isLoading: false });
+    set({ themes: (data ?? []) as Theme[], isLoading: false });
   },
 
   fetchBookThemes: async (bookId) => {
@@ -62,7 +71,7 @@ export const useThemeStore = create<ThemeStore>()((set, get) => ({
 
     const { data, error } = await supabase
       .from('book_theme')
-      .select('theme_id')
+      .select('id, theme_id, is_primary')
       .eq('book_id', bookId);
 
     if (error) {
@@ -70,19 +79,31 @@ export const useThemeStore = create<ThemeStore>()((set, get) => ({
       return;
     }
 
-    const ids = (data ?? []).map((row) => row.theme_id);
-    log.info('fetchBookThemes', 'done', { bookId, count: ids.length });
-    set({ selectedThemeIds: ids });
+    const themes = (data ?? []) as BookTheme[];
+    log.info('fetchBookThemes', 'done', { bookId, count: themes.length });
+    set({ selectedThemes: themes });
   },
 
-  updateBookThemes: async (bookId, themeIds) => {
-    log.info('updateBookThemes', 'start', { bookId, count: themeIds.length });
-    const previous = get().selectedThemeIds;
+  updateBookThemes: async (bookId, themes) => {
+    log.info('updateBookThemes', 'start', { bookId, count: themes.length });
+    const previous = get().selectedThemes;
 
-    // Optimistic update
-    set({ isUpdating: true, selectedThemeIds: themeIds });
+    // Auto-promote: if no primary in list but list is non-empty, first item becomes primary
+    let normalized = themes;
+    if (themes.length > 0 && !themes.some((t) => t.is_primary)) {
+      normalized = themes.map((t, i) => ({ ...t, is_primary: i === 0 }));
+      log.debug('updateBookThemes', 'auto-promoted first item to primary');
+    }
 
-    // Delete all → insert selected (atomic via sequential ops; RLS protects rows)
+    // Optimistic update (derive temp BookTheme[] without junction ids)
+    const optimistic: BookTheme[] = normalized.map((t) => ({
+      id: '',
+      theme_id: t.theme_id,
+      is_primary: t.is_primary,
+    }));
+    set({ isUpdating: true, selectedThemes: optimistic });
+
+    // Delete all → insert selected
     const { error: deleteError } = await supabase
       .from('book_theme')
       .delete()
@@ -90,30 +111,49 @@ export const useThemeStore = create<ThemeStore>()((set, get) => ({
 
     if (deleteError) {
       log.error('updateBookThemes', 'delete failed, rolling back', { bookId, deleteError });
-      set({ isUpdating: false, selectedThemeIds: previous });
+      set({ isUpdating: false, selectedThemes: previous });
       return false;
     }
 
-    if (themeIds.length > 0) {
-      const rows = themeIds.map((theme_id) => ({ book_id: bookId, theme_id }));
+    if (normalized.length > 0) {
+      const rows = normalized.map((t) => ({
+        book_id: bookId,
+        theme_id: t.theme_id,
+        is_primary: t.is_primary,
+      }));
       const { error: insertError } = await supabase.from('book_theme').insert(rows);
 
       if (insertError) {
         log.error('updateBookThemes', 'insert failed, rolling back', { bookId, insertError });
-        set({ isUpdating: false, selectedThemeIds: previous });
+        set({ isUpdating: false, selectedThemes: previous });
         return false;
       }
     }
 
-    log.info('updateBookThemes', 'done', { bookId, count: themeIds.length });
+    log.info('updateBookThemes', 'done', { bookId, count: normalized.length });
+    // Re-fetch to get real junction row ids
+    await get().fetchBookThemes(bookId);
     set({ isUpdating: false });
     return true;
+  },
+
+  setPrimaryTheme: async (bookId, themeId) => {
+    log.info('setPrimaryTheme', 'start', { bookId, themeId });
+    const current = get().selectedThemes;
+    const updated = current.map((t) => ({ theme_id: t.theme_id, is_primary: t.theme_id === themeId }));
+    return get().updateBookThemes(bookId, updated);
   },
 }));
 
 // Selectors
 export const useThemes = () => useThemeStore((s) => s.themes);
-export const useSelectedThemeIds = () => useThemeStore((s) => s.selectedThemeIds);
+export const useSelectedThemes = () => useThemeStore((s) => s.selectedThemes);
+// Derived: list of theme IDs (backward compat for components using string[])
+// useShallow prevents infinite re-render from new array reference on each selector call
+export const useSelectedThemeIds = () =>
+  useThemeStore(useShallow((s) => s.selectedThemes.map((t) => t.theme_id)));
+export const usePrimaryThemeId = () =>
+  useThemeStore((s) => s.selectedThemes.find((t) => t.is_primary)?.theme_id ?? null);
 export const useThemesLoading = () => useThemeStore((s) => s.isLoading);
 export const useThemeActions = () =>
   useThemeStore(
@@ -121,5 +161,6 @@ export const useThemeActions = () =>
       fetchThemes: s.fetchThemes,
       fetchBookThemes: s.fetchBookThemes,
       updateBookThemes: s.updateBookThemes,
+      setPrimaryTheme: s.setPrimaryTheme,
     }))
   );

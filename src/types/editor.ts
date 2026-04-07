@@ -138,6 +138,9 @@ export interface TypographySettings {
   text_transform: string;
 }
 
+/** JSONB multi-lang name: { "[language_key]": "..." } */
+export type MultiLangName = Record<string, string>;
+
 // Full Book type matching database schema
 export interface Book {
   id: string;
@@ -153,10 +156,6 @@ export interface Book {
   book_type: number | null;
   dimension: number | null;
   target_audience: number | null;
-  target_core_value: number | null;
-  format_genre: number | null;
-  content_genre: number | null;
-  writing_style: number | null;
   format_id: string | null;
   era_id: string | null;
   location_id: string | null;

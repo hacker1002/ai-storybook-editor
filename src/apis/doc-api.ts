@@ -91,12 +91,13 @@ export async function prepareAttachments(
   );
 }
 
-// Helper to build LLMContext from Book fields
+// TODO: refactor LLMContext when edge functions updated — stale fields removed from Book type
+// buildLLMContext currently always returns null; will be fixed in Phase 5 refactor
 export function buildLLMContext(book: {
   target_audience: number | null;
-  target_core_value: number | null;
-  format_genre: number | null;
-  content_genre: number | null;
+  target_core_value?: number | null;
+  format_genre?: number | null;
+  content_genre?: number | null;
   era_id?: string | null;
   location_id?: string | null;
 }): LLMContext | null {

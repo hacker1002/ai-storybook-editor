@@ -7,12 +7,16 @@ import { useCurrentBook, useBookActions } from "@/stores/book-store";
 import {
   useThemes,
   useSelectedThemeIds,
+  usePrimaryThemeId,
   useThemeActions,
+  useSelectedThemes,
 } from "@/stores/theme-store";
 import {
   useGenres,
   useSelectedGenreIds,
+  usePrimaryGenreId,
   useGenreActions,
+  useSelectedGenres,
 } from "@/stores/genre-store";
 import { useFormats, useFormatActions } from "@/stores/format-store";
 import { useEras, useEraActions } from "@/stores/era-store";
@@ -22,6 +26,7 @@ import { SearchableDropdown } from "@/components/ui/searchable-dropdown";
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown";
 import { DIMENSION_MAP, TARGET_AUDIENCE_MAP } from "@/constants/book-enums";
 import { SUPPORTED_LANGUAGES } from "@/constants/config-constants";
+import { resolveMultiLangName } from "@/utils/multi-lang-helpers";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "ConfigGeneralSettings");
@@ -40,11 +45,15 @@ export function ConfigGeneralSettings() {
 
   const themes = useThemes();
   const selectedThemeIds = useSelectedThemeIds();
-  const { fetchThemes, fetchBookThemes, updateBookThemes } = useThemeActions();
+  const selectedThemes = useSelectedThemes();
+  const primaryThemeId = usePrimaryThemeId();
+  const { fetchThemes, fetchBookThemes, updateBookThemes, setPrimaryTheme } = useThemeActions();
 
   const genres = useGenres();
   const selectedGenreIds = useSelectedGenreIds();
-  const { fetchGenres, fetchBookGenres, updateBookGenres } = useGenreActions();
+  const selectedGenres = useSelectedGenres();
+  const primaryGenreId = usePrimaryGenreId();
+  const { fetchGenres, fetchBookGenres, updateBookGenres, setPrimaryGenre } = useGenreActions();
 
   const formats = useFormats();
   const { fetchFormats } = useFormatActions();
@@ -87,9 +96,14 @@ export function ConfigGeneralSettings() {
 
   if (!book) return null;
 
+  const lang = book.original_language;
+
   // ── Derived display values ──────────────────────────────────────────────────
 
-  const formatName = formats.find((f) => f.id === book.format_id)?.name ?? "—";
+  const formatName = resolveMultiLangName(
+    formats.find((f) => f.id === book.format_id)?.name,
+    lang
+  );
   const dimensionLabel =
     book.dimension != null
       ? DIMENSION_MAP[book.dimension as keyof typeof DIMENSION_MAP] ?? "—"
@@ -110,19 +124,45 @@ export function ConfigGeneralSettings() {
     value: l.code,
     label: l.label,
   }));
-  const themeOptions = themes.map((t) => ({ value: t.id, label: t.name }));
-  const genreOptions = genres.map((g) => ({ value: g.id, label: g.name }));
+  const themeOptions = themes.map((t) => ({
+    value: t.id,
+    label: resolveMultiLangName(t.name, lang),
+  }));
+  const genreOptions = genres.map((g) => ({
+    value: g.id,
+    label: resolveMultiLangName(g.name, lang),
+  }));
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleThemeChange = (values: string[]) => {
     log.info("handleThemeChange", "updating", { count: values.length });
-    void updateBookThemes(book.id, values);
+    // Map incoming IDs to { theme_id, is_primary } — preserve existing is_primary flags
+    const newThemes = values.map((id) => {
+      const existing = selectedThemes.find((t) => t.theme_id === id);
+      return { theme_id: id, is_primary: existing?.is_primary ?? false };
+    });
+    // Store action handles auto-promote when primary is removed
+    void updateBookThemes(book.id, newThemes);
   };
 
   const handleGenreChange = (values: string[]) => {
     log.info("handleGenreChange", "updating", { count: values.length });
-    void updateBookGenres(book.id, values);
+    const newGenres = values.map((id) => {
+      const existing = selectedGenres.find((g) => g.genre_id === id);
+      return { genre_id: id, is_primary: existing?.is_primary ?? false };
+    });
+    void updateBookGenres(book.id, newGenres);
+  };
+
+  const handlePrimaryThemeChange = (themeId: string) => {
+    log.info("handlePrimaryThemeChange", "setting primary", { themeId });
+    void setPrimaryTheme(book.id, themeId);
+  };
+
+  const handlePrimaryGenreChange = (genreId: string) => {
+    log.info("handlePrimaryGenreChange", "setting primary", { genreId });
+    void setPrimaryGenre(book.id, genreId);
   };
 
   const handleEraChange = (value: string) => {
@@ -145,7 +185,10 @@ export function ConfigGeneralSettings() {
         <div>
           <FieldLabel>Format</FieldLabel>
           <SearchableDropdown
-            options={formats.map((f) => ({ value: f.id, label: f.name }))}
+            options={formats.map((f) => ({
+              value: f.id,
+              label: resolveMultiLangName(f.name, lang),
+            }))}
             value={book.format_id}
             onChange={() => {}}
             placeholder={formatName}
@@ -177,7 +220,7 @@ export function ConfigGeneralSettings() {
           />
         </div>
 
-        {/* THEME — multi-select, editable */}
+        {/* THEME — multi-select with primary support */}
         <div>
           <FieldLabel>Theme</FieldLabel>
           <MultiSelectDropdown
@@ -185,10 +228,12 @@ export function ConfigGeneralSettings() {
             selectedValues={selectedThemeIds}
             onChange={handleThemeChange}
             placeholder="Select themes..."
+            primaryValue={primaryThemeId ?? undefined}
+            onPrimaryChange={handlePrimaryThemeChange}
           />
         </div>
 
-        {/* GENRE — multi-select, editable */}
+        {/* GENRE — multi-select with primary support */}
         <div>
           <FieldLabel>Genre</FieldLabel>
           <MultiSelectDropdown
@@ -196,6 +241,8 @@ export function ConfigGeneralSettings() {
             selectedValues={selectedGenreIds}
             onChange={handleGenreChange}
             placeholder="Select genres..."
+            primaryValue={primaryGenreId ?? undefined}
+            onPrimaryChange={handlePrimaryGenreChange}
           />
         </div>
 

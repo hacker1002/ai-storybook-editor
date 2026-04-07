@@ -5,12 +5,13 @@ import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
+import type { MultiLangName } from '@/types/editor';
 
 const log = createLogger('Store', 'FormatStore');
 
 export interface Format {
   id: string;
-  name: string;
+  name: MultiLangName;
   description: string | null;
 }
 
@@ -48,7 +49,7 @@ export const useFormatStore = create<FormatStore>()((set, get) => ({
     }
 
     log.info('fetchFormats', 'done', { count: data?.length ?? 0 });
-    set({ formats: data ?? [], isLoading: false });
+    set({ formats: (data ?? []) as Format[], isLoading: false });
   },
 }));
 
