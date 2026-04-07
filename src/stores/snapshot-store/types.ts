@@ -222,15 +222,15 @@ type ReferenceImages = Array<{ base64Data: string; mimeType: string }>;
 interface CharacterBaseGenerateParams extends ImageTaskTarget {
   entityType: 'character';
   isBase: true;
-  basicInfo: {
-    description: string;
-    gender: string;
-    age: string;
-    category_id: string;
-    role: string;
+  basicInfo?: {
+    description?: string;
+    gender?: string;
+    age?: string;
+    category_id?: string;
+    role?: string;
   };
-  personality: {
-    core_essence: string;
+  personality?: {
+    core_essence?: string;
     flaws?: string;
     emotions?: string;
     reactions?: string;
@@ -240,7 +240,7 @@ interface CharacterBaseGenerateParams extends ImageTaskTarget {
     contradictions?: string;
   };
   baseVariant: {
-    appearance: {
+    appearance?: {
       height?: number;
       hair?: string;
       eyes?: string;
@@ -274,10 +274,10 @@ interface PropBaseGenerateParams extends ImageTaskTarget {
   entityType: 'prop';
   isBase: true;
   propKey: string;
-  propName: string;
-  propType: 'narrative' | 'anchor';
-  categoryName: string;
-  categoryType: number;
+  propName?: string;
+  propType?: 'narrative' | 'anchor';
+  categoryName?: string;
+  categoryType?: number;
   baseStateVisualDescription: string;
   artStyleDescription: string;
   referenceImages?: ReferenceImages;
@@ -297,8 +297,8 @@ interface StageBaseGenerateParams extends ImageTaskTarget {
   entityType: 'stage';
   isBase: true;
   stageKey: string;
-  stageName: string;
-  locationDescription: string;
+  stageName?: string;
+  locationDescription?: string;
   eraDescription?: string;
   baseSetting: {
     visual_description: string;

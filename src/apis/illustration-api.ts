@@ -7,15 +7,15 @@ const log = createLogger('API', 'IllustrationApi');
 
 export interface GenerateCharacterBaseParams {
   characterKey: string;
-  basicInfo: {
-    description: string;
-    gender: string;
-    age: string;
-    category_id: string;
-    role: string;
+  basicInfo?: {
+    description?: string;
+    gender?: string;
+    age?: string;
+    category_id?: string;
+    role?: string;
   };
-  personality: {
-    core_essence: string;
+  personality?: {
+    core_essence?: string;
     flaws?: string;
     emotions?: string;
     reactions?: string;
@@ -25,7 +25,7 @@ export interface GenerateCharacterBaseParams {
     contradictions?: string;
   };
   baseVariant: {
-    appearance: {
+    appearance?: {
       height?: number;
       hair?: string;
       eyes?: string;
@@ -91,10 +91,10 @@ export async function callGenerateCharacterBase(
 
 export interface GeneratePropBaseParams {
   propKey: string;
-  propName: string;
-  propType: "narrative" | "anchor";
-  categoryName: string;
-  categoryType: number;
+  propName?: string;
+  propType?: "narrative" | "anchor";
+  categoryName?: string;
+  categoryType?: number;
   baseStateVisualDescription: string;
   artStyleDescription: string;
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
@@ -164,8 +164,8 @@ export async function callGeneratePropVariant(
 
 export interface GenerateStageBaseParams {
   stageKey: string;
-  stageName: string;
-  locationDescription: string;
+  stageName?: string;
+  locationDescription?: string;
   baseSetting: {
     visual_description: string;
     temporal?: { era?: string; season?: string; weather?: string; time_of_day?: string };
