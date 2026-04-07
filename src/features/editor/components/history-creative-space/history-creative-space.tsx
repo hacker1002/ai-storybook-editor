@@ -205,6 +205,17 @@ export function HistoryCreativeSpace() {
       // Step 5: Clear dirty state
       markClean();
 
+      // Step 6: Restore sync timestamps based on reverted version's save_type
+      // (mirrors fetchSnapshot initialization logic — markClean sets lastSavedAt=now which is wrong here)
+      const snapshotTime = new Date(fullData.updated_at ?? fullData.created_at);
+      useSnapshotStore.setState((state) => ({
+        sync: {
+          ...state.sync,
+          lastSavedAt: fullData.save_type === 2 ? snapshotTime : null,
+          lastManualSavedAt: fullData.save_type === 1 ? snapshotTime : null,
+        },
+      }));
+
       log.info("handleRevertConfirm", "revert complete", { versionId: revertConfirmId });
     } catch (err) {
       log.error("handleRevertConfirm", "unexpected error", { error: String(err) });

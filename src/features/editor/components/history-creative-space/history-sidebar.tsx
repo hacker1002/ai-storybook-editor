@@ -161,7 +161,7 @@ export function HistorySidebar({
                     {version.save_type === 1 ? "Manual" : "Auto"}
                   </span>
                   {isCurrent && (
-                    <span className="text-xs text-accent font-medium">
+                    <span className="text-xs text-accent-foreground font-medium">
                       Current
                     </span>
                   )}

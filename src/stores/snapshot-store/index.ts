@@ -201,6 +201,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.meta.version = result.data.version;
             state.sync.isSaving = false;
             state.sync.isDirty = false;
+            state.sync.lastSavedAt = null;       // manual save supersedes auto-save state
             state.sync.lastManualSavedAt = now;
           });
         },
@@ -262,6 +263,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
           log.info('autoSaveSnapshot', 'done', { bookId: meta.bookId, snapshotId: result.data.id });
           set((state) => {
+            state.meta.id = result.data.id;      // sync with books.current_version updated above
             state.meta.autoSaveId = result.data.id;
             state.sync.isSaving = false;
             state.sync.isAutoSaving = false;
