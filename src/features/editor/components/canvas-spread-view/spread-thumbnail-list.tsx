@@ -206,7 +206,7 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
         }
         break;
     }
-  }, [selectedId, spreads, canDelete, layout, onSpreadClick, onSpreadDoubleClick, handleDelete]);
+  }, [selectedId, spreads, layout, onSpreadClick, onSpreadDoubleClick]);
 
   const isHorizontal = layout === 'horizontal';
   const thumbnailSize = isHorizontal ? 'small' : 'medium';
