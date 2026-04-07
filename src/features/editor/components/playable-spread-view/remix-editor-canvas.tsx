@@ -27,6 +27,8 @@ import type {
   RemixAsset,
   AssetSwapParams,
 } from "@/types/playable-types";
+import type { PageNumberingSettings } from "@/types/editor";
+import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 
 // === Props Interface ===
 export interface RemixEditorCanvasProps {
@@ -35,6 +37,7 @@ export interface RemixEditorCanvasProps {
   assets: RemixAsset[];
   onAssetSwap: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
+  pageNumbering?: PageNumberingSettings | null;
 }
 
 export function RemixEditorCanvas({
@@ -43,6 +46,7 @@ export function RemixEditorCanvas({
   assets,
   onAssetSwap,
   onTextChange,
+  pageNumbering,
 }: RemixEditorCanvasProps) {
   const editorLangCode = useLanguageCode();
   const canvasWidth = useCanvasWidth();
@@ -295,11 +299,18 @@ export function RemixEditorCanvas({
           />
         ))}
 
-        {/* Page Divider */}
-        {spread.pages.length > 1 && (
-          <div
-            className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: "50%", zIndex: 0 }}
+        {/* Page Divider — always visible */}
+        <div
+          className="absolute top-0 bottom-0 w-px bg-gray-300"
+          style={{ left: "50%", zIndex: 0 }}
+        />
+
+        {/* Page Number Overlay */}
+        {pageNumbering && pageNumbering.position !== 'none' && (
+          <PageNumberingOverlay
+            pages={spread.pages}
+            position={pageNumbering.position}
+            color={pageNumbering.color}
           />
         )}
 

@@ -16,6 +16,7 @@ import {
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { useCurrentLanguage } from "@/stores/editor-settings-store";
+import { useBookTemplateLayout } from "@/stores/book-store";
 import type { SpreadAnimation } from "@/types/spread-types";
 import type {
   AnimationFilterState,
@@ -48,6 +49,7 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
   const retouchSpreads = useRetouchSpreads();
   const currentLanguage = useCurrentLanguage();
   const actions = useSnapshotActions();
+  const templateLayout = useBookTemplateLayout();
 
   // --- Local state ---
   const [userSelectedSpreadId, setUserSelectedSpreadId] = useState<string | null>(null);
@@ -289,6 +291,7 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
           onItemSelect={handleItemSelect}
           onSpreadSelect={handleSpreadSelect}
           onPreview={onNavigateToPreview}
+          pageNumbering={templateLayout?.page_numbering}
         />
       </div>
     </div>

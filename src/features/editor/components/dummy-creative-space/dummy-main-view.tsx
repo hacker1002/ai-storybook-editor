@@ -402,6 +402,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       canResizeItem={true}
       canDragItem={true}
       initialViewMode="edit"
+      pageNumbering={templateLayout?.page_numbering}
     />
   );
 }

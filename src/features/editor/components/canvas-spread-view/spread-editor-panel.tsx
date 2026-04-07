@@ -59,6 +59,8 @@ import type {
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
+import type { PageNumberingSettings } from "@/types/editor";
+import { PageNumberingOverlay } from "./page-numbering-overlay";
 
 const log = createLogger("Editor", "SpreadEditorPanel");
 
@@ -127,6 +129,9 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
 
   // Callback when selection is cleared (click outside canvas)
   onDeselect?: () => void;
+
+  // Page numbering overlay settings (null/undefined = hidden)
+  pageNumbering?: PageNumberingSettings | null;
 }
 
 // === Local State Interface ===
@@ -171,6 +176,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   externalSelectedItemId,
   onPageSelect,
   onDeselect,
+  pageNumbering,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const onDeselectRef = useRef(onDeselect);
@@ -850,6 +856,15 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           className="absolute top-0 bottom-0 w-px pointer-events-none"
           style={{ left: '50%', background: 'rgba(0, 0, 0, 0.12)', zIndex: -999 }}
         />
+
+        {/* Page Number Overlay */}
+        {pageNumbering && pageNumbering.position !== 'none' && (
+          <PageNumberingOverlay
+            pages={spread.pages}
+            position={pageNumbering.position}
+            color={pageNumbering.color}
+          />
+        )}
 
         {/* Raw Images (illustration layer) */}
         {renderItems.includes("raw_image") &&

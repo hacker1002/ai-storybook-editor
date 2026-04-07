@@ -34,6 +34,7 @@ import {
 } from "@/stores/snapshot-store/selectors";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
+import { useBookTemplateLayout } from "@/stores/book-store";
 import {
   calculateZIndexShifts,
   collectPictorialZItems,
@@ -147,6 +148,7 @@ export function ObjectsMainView({
   const langCode = useLanguageCode();
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
+  const templateLayout = useBookTemplateLayout();
 
   const handleDeselect = useCallback(() => onItemSelect(null), [onItemSelect]);
 
@@ -977,6 +979,7 @@ export function ObjectsMainView({
         canDragItem={true}
         externalSelectedItemId={selectedItemId}
         onDeselect={handleDeselect}
+        pageNumbering={templateLayout?.page_numbering}
       />
 
       {generateModalImageId && (

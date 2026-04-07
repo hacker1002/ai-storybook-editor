@@ -9,6 +9,7 @@ import { ZOOM, COLUMNS } from '@/constants/spread-constants';
 import type { SpreadType } from './new-spread-button';
 import type { ViewMode } from '@/types/canvas-types';
 import { useSetZoomLevel } from '@/stores/editor-settings-store';
+import type { PageNumberingSettings } from '@/types/editor';
 
 const STORAGE_KEY = 'spread-view-prefs';
 
@@ -123,6 +124,9 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
 
   // Callback when selection is cleared (click outside canvas)
   onDeselect?: () => void;
+
+  // Page numbering overlay settings (null/undefined = hidden)
+  pageNumbering?: PageNumberingSettings | null;
 }
 
 // === Main Component ===
@@ -163,6 +167,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   externalSelectedItemId,
   onPageSelect,
   onDeselect,
+  pageNumbering,
 }: CanvasSpreadViewProps<TSpread>) {
   // === Local View State (with localStorage persistence) ===
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -390,6 +395,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 externalSelectedItemId={externalSelectedItemId}
                 onPageSelect={onPageSelect}
                 onDeselect={onDeselect}
+                pageNumbering={pageNumbering}
               />
             )}
 

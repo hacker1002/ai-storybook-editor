@@ -1,5 +1,6 @@
 // playable-spread-view.tsx - Root container component for playable spread view
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { PageNumberingSettings } from "@/types/editor";
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'PlayableSpreadView');
@@ -91,6 +92,10 @@ interface PlayableSpreadViewProps {
   bookTitle?: string;
   availableEditions?: { classic?: boolean; dynamic?: boolean; interactive?: boolean };
   availableLanguages?: { name: string; code: string }[];
+  // Page numbering overlay settings (null/undefined = hidden)
+  pageNumbering?: PageNumberingSettings | null;
+  // Whether to show the thumbnail strip (default: true; share preview hides it)
+  showThumbnails?: boolean;
 }
 
 const KEYBOARD_SHORTCUTS = {
@@ -121,6 +126,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   bookTitle,
   availableEditions,
   availableLanguages,
+  pageNumbering,
+  showThumbnails = true,
 }) => {
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
@@ -131,7 +138,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }, [mode]); // eslint-disable-line
 
   const [playMode, setPlayMode] = useState<PlayMode>("off");
-  const [playEdition, setPlayEdition] = useState<PlayEdition>("classic");
+  const defaultEdition = useMemo<PlayEdition>(() => {
+    // undefined = no constraint (internal editor) → all editions available → pick highest
+    if (!availableEditions || availableEditions.interactive) return 'interactive';
+    if (availableEditions.dynamic) return 'dynamic';
+    return 'classic';
+  }, [availableEditions]);
+  const [playEdition, setPlayEdition] = useState<PlayEdition>(defaultEdition);
   const [zoomLevel, setZoomLevel] = useState<number>(PLAYABLE_ZOOM.DEFAULT);
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
@@ -373,6 +386,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             selectedItemId={externalSelectedItemId}
             selectedItemType={externalSelectedItemType}
             onItemSelect={onItemSelect ?? (() => {})}
+            pageNumbering={pageNumbering}
           />
         ) : activeCanvas === "remix-editor" &&
           selectedSpread &&
@@ -384,6 +398,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             assets={assets}
             onAssetSwap={onAssetSwap}
             onTextChange={onTextChange}
+            pageNumbering={pageNumbering}
           />
         ) : activeCanvas === "player" && selectedSpread ? (
           <PlayerCanvas
@@ -396,6 +411,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             onSpreadComplete={handleSpreadComplete}
             onSkipSpread={handleSkipSpread}
             onPlayModeChange={setPlayMode}
+            pageNumbering={pageNumbering}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -405,13 +421,15 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       </div>
 
       {/* Thumbnail List */}
-      <div className="h-[120px] flex-shrink-0">
-        <PlayableThumbnailList
-          spreads={spreads}
-          selectedId={selectedSpreadId}
-          onSpreadClick={handleSpreadClick}
-        />
-      </div>
+      {showThumbnails && (
+        <div className="h-[120px] flex-shrink-0">
+          <PlayableThumbnailList
+            spreads={spreads}
+            selectedId={selectedSpreadId}
+            onSpreadClick={handleSpreadClick}
+          />
+        </div>
+      )}
 
       {/* Branch Path Modal */}
       {showBranchModal && pendingBranchSpreadId && (() => {

@@ -18,6 +18,8 @@ import { PageItem } from "../canvas-spread-view/page-item";
 import { SelectionOverlay } from "./selection-overlay";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
 import type { PlayableSpread } from "@/types/playable-types";
+import type { PageNumberingSettings } from "@/types/editor";
+import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "AnimationEditorCanvas");
@@ -29,6 +31,7 @@ export interface AnimationEditorCanvasProps {
   selectedItemId?: string | null;
   selectedItemType?: ItemType | null;
   onItemSelect: (itemType: ItemType | null, itemId: string | null) => void;
+  pageNumbering?: PageNumberingSettings | null;
 }
 
 export function AnimationEditorCanvas({
@@ -37,6 +40,7 @@ export function AnimationEditorCanvas({
   selectedItemId: externalItemId,
   selectedItemType: externalItemType,
   onItemSelect,
+  pageNumbering,
 }: AnimationEditorCanvasProps) {
   const editorLangCode = useLanguageCode();
   const canvasWidth = useCanvasWidth();
@@ -286,11 +290,18 @@ export function AnimationEditorCanvas({
           />
         ))}
 
-        {/* Page Divider */}
-        {spread.pages.length > 1 && (
-          <div
-            className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: "50%", zIndex: 0 }}
+        {/* Page Divider — always visible */}
+        <div
+          className="absolute top-0 bottom-0 w-px bg-gray-300"
+          style={{ left: "50%", zIndex: 0 }}
+        />
+
+        {/* Page Number Overlay */}
+        {pageNumbering && pageNumbering.position !== 'none' && (
+          <PageNumberingOverlay
+            pages={spread.pages}
+            position={pageNumbering.position}
+            color={pageNumbering.color}
           />
         )}
 

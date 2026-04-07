@@ -38,6 +38,8 @@ import {
 } from "@/stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
 import { PlayQuizModal } from "./play-quiz-modal";
+import type { PageNumberingSettings } from "@/types/editor";
+import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
 
 // === Constants ===
@@ -54,6 +56,7 @@ export interface PlayerCanvasProps {
   onSpreadComplete: (spreadId: string) => void;
   onSkipSpread: (direction: "next" | "prev") => void;
   onPlayModeChange: (mode: PlayMode) => void;
+  pageNumbering?: PageNumberingSettings | null;
 }
 
 const log = createLogger("Editor", "PlayerCanvas");
@@ -90,6 +93,7 @@ export function PlayerCanvas({
   onSpreadComplete,
   onSkipSpread,
   onPlayModeChange,
+  pageNumbering,
 }: PlayerCanvasProps) {
   // === Store selectors ===
   const playbackActions = usePlaybackActions();
@@ -437,11 +441,18 @@ export function PlayerCanvas({
           />
         ))}
 
-        {/* Page divider */}
-        {spread.pages.length > 1 && (
-          <div
-            className="absolute top-0 bottom-0 w-px bg-gray-300"
-            style={{ left: "50%", zIndex: 0 }}
+        {/* Page divider — always visible */}
+        <div
+          className="absolute top-0 bottom-0 w-px bg-gray-300"
+          style={{ left: "50%", zIndex: 0 }}
+        />
+
+        {/* Page Number Overlay */}
+        {pageNumbering && pageNumbering.position !== 'none' && (
+          <PageNumberingOverlay
+            pages={spread.pages}
+            position={pageNumbering.position}
+            color={pageNumbering.color}
           />
         )}
 

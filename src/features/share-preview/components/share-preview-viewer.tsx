@@ -71,6 +71,8 @@ export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreview
         bookTitle={book.title}
         availableEditions={availableEditions}
         availableLanguages={availableLanguages}
+        pageNumbering={book.template_layout?.page_numbering}
+        showThumbnails={false}
       />
     </div>
   );

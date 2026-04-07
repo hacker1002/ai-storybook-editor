@@ -1,4 +1,5 @@
 // share-preview-types.ts - Types for share preview feature (public, unauthenticated)
+import type { PageNumberingSettings } from '@/types/editor';
 
 // === Status ===
 export type SharePreviewStatus =
@@ -27,6 +28,7 @@ export interface BookPreviewData {
   branch: Record<string, unknown>;
   shape: Record<string, unknown>;
   background_music: { title?: string; media_url?: string };
+  template_layout?: { page_numbering?: PageNumberingSettings };
 }
 
 // === Snapshot Preview Data ===

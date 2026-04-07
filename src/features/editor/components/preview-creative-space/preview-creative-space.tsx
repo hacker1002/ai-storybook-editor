@@ -21,12 +21,14 @@ import {
   useSections,
 } from "@/stores/snapshot-store/selectors";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
+import { useBookTemplateLayout } from "@/stores/book-store";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "PreviewCreativeSpace");
 
 export function PreviewCreativeSpace() {
   const languageCode = useNarrationLanguage();
+  const templateLayout = useBookTemplateLayout();
 
   // Always use retouch data — animations only exist in retouch step
   const spreadIds = useRetouchSpreadIds();
@@ -93,6 +95,7 @@ export function PreviewCreativeSpace() {
           spreads={playableSpreads}
           sections={sections}
           onSpreadSelect={setUserSelectedSpreadId}
+          pageNumbering={templateLayout?.page_numbering}
         />
       </div>
     </div>

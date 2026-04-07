@@ -414,6 +414,7 @@ export function SpreadsMainView({
         externalSelectedItemId={selectedItemId}
         onPageSelect={handlePageSelect}
         onDeselect={handleDeselect}
+        pageNumbering={templateLayout?.page_numbering}
       />
       {generateModalImage && (
         <GenerateImageModal
