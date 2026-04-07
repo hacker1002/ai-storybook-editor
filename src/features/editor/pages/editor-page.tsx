@@ -6,7 +6,6 @@ import {
   useSyncState,
   useSnapshotFetchLoading,
   useSnapshotFetchError,
-  useCanManualSave,
   deriveSaveStatus,
 } from '@/stores/snapshot-store';
 import { useBookStore, useCurrentBook, useBooksLoading, useBooksError } from '@/stores/book-store';
@@ -50,9 +49,8 @@ export function EditorPage() {
   const bookError = useBooksError();
 
   // Snapshot store
-  const { fetchSnapshot, resetSnapshot, saveSnapshot } = useSnapshotActions();
+  const { fetchSnapshot, resetSnapshot } = useSnapshotActions();
   const sync = useSyncState();
-  const canManualSave = useCanManualSave();
   const snapshotLoading = useSnapshotFetchLoading();
   const snapshotError = useSnapshotFetchError();
 
@@ -157,10 +155,6 @@ export function EditorPage() {
     await useBookStore.getState().updateBook(bookId, { title: newTitle });
   };
 
-  const handleManualSave = async () => {
-    await saveSnapshot();
-  };
-
   const handleNavigateHome = () => {
     navigate('/');
   };
@@ -215,12 +209,10 @@ export function EditorPage() {
         <EditorHeader
           bookTitle={book.title}
           saveStatus={saveStatus}
-          canManualSave={canManualSave}
           notificationCount={notificationCount}
           userPoints={MOCK_USER_POINTS}
           editorMode={book.type === 1 ? 'book' : 'asset'}
           onTitleEdit={handleTitleEdit}
-          onManualSave={handleManualSave}
           onNotificationClick={handleNotificationClick}
           onNavigateHome={handleNavigateHome}
           onStepChange={handleStepChange}

@@ -15,12 +15,10 @@ const log = createLogger('Editor', 'EditorHeader');
 interface EditorHeaderProps {
   bookTitle: string;
   saveStatus: SaveStatus;
-  canManualSave: boolean;
   notificationCount: number;
   userPoints: UserPoints;
   editorMode: EditorMode;
   onTitleEdit: (newTitle: string) => void;
-  onManualSave: () => Promise<void>;
   onNotificationClick: () => void;
   onNavigateHome: () => void;
   onStepChange: (targetStep: PipelineStep) => void;
@@ -30,12 +28,10 @@ interface EditorHeaderProps {
 export function EditorHeader({
   bookTitle,
   saveStatus,
-  canManualSave,
   notificationCount,
   userPoints,
   editorMode,
   onTitleEdit,
-  onManualSave,
   onNotificationClick,
   onNavigateHome,
   onStepChange,
@@ -130,7 +126,7 @@ export function EditorHeader({
       {/* Right Section */}
       <div className="flex items-center gap-2">
         {/* Save Status */}
-        <SaveStatusIndicator status={saveStatus} canManualSave={canManualSave} onManualSave={onManualSave} />
+        <SaveStatusIndicator status={saveStatus} />
 
         {/* Language Selector */}
         <LanguageSelector onLanguageChange={onLanguageChange} />
@@ -151,11 +147,9 @@ export function EditorHeader({
 
 interface SaveStatusIndicatorProps {
   status: SaveStatus;
-  canManualSave: boolean;
-  onManualSave: () => void;
 }
 
-function SaveStatusIndicator({ status, canManualSave, onManualSave }: SaveStatusIndicatorProps) {
+function SaveStatusIndicator({ status }: SaveStatusIndicatorProps) {
   const config: Record<SaveStatus, { icon: React.ElementType; text: string; className: string; spin?: boolean }> = {
     saved:          { icon: Check,        text: 'Saved',         className: 'text-green-600' },
     dirty:          { icon: AlertCircle,  text: 'Unsaved',       className: 'text-yellow-600' },
@@ -165,26 +159,11 @@ function SaveStatusIndicator({ status, canManualSave, onManualSave }: SaveStatus
   };
 
   const { icon: Icon, text, className, spin } = config[status];
-  const isBusy = status === 'auto-saving' || status === 'manual-saving';
 
   return (
-    <div className="flex items-center gap-2">
-      {/* Status indicator */}
-      <span className={cn('flex items-center gap-1 text-sm', className)}>
-        <Icon className={cn('h-4 w-4', spin && 'animate-spin')} />
-        <span className="hidden sm:inline">{text}</span>
-      </span>
-
-      {/* Manual save button */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onManualSave}
-        disabled={!canManualSave || isBusy}
-        className="h-7 px-2 text-xs"
-      >
-        Save
-      </Button>
-    </div>
+    <span className={cn('flex items-center gap-1 text-sm', className)}>
+      <Icon className={cn('h-4 w-4', spin && 'animate-spin')} />
+      <span className="hidden sm:inline">{text}</span>
+    </span>
   );
 }

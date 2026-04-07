@@ -23,6 +23,8 @@ import {
 import {
   useSnapshotId,
   useSnapshotActions,
+  useCanManualSave,
+  useIsSaving,
 } from "@/stores/snapshot-store/selectors";
 import { useSnapshotStore } from "@/stores/snapshot-store";
 import { createLogger } from "@/utils/logger";
@@ -37,7 +39,9 @@ export function HistoryCreativeSpace() {
   // Store selectors
   const bookId = useSnapshotStore((s) => s.meta.bookId);
   const currentVersionId = useSnapshotId();
-  const { initSnapshot, setMeta, markClean } = useSnapshotActions();
+  const canManualSave = useCanManualSave();
+  const isSaving = useIsSaving();
+  const { initSnapshot, setMeta, markClean, autoSaveSnapshot, saveSnapshot } = useSnapshotActions();
 
   // Version list state
   const [versions, setVersions] = useState<SnapshotVersion[]>([]);
@@ -54,31 +58,49 @@ export function HistoryCreativeSpace() {
   const [revertConfirmId, setRevertConfirmId] = useState<string | null>(null);
   const [isReverting, setIsReverting] = useState(false);
 
-  // Fetch version list on mount
+  // Auto-save on mount state
+  const [isAutoSavingOnMount, setIsAutoSavingOnMount] = useState(false);
+
+  // Fetch version list on mount (with auto-save if dirty)
   useEffect(() => {
     if (!bookId) return;
-    log.info("useEffect", "fetching version list", { bookId });
-    setIsLoadingList(true);
-    setListError(null);
 
-    fetchVersionList(bookId)
-      .then((result) => {
+    async function init() {
+      // Auto-save if dirty — read directly from store to avoid dependency on reactive isDirty
+      const isDirtyNow = useSnapshotStore.getState().sync.isDirty;
+      if (isDirtyNow) {
+        log.info("useEffect", "dirty on mount — auto-saving before fetch", { bookId });
+        setIsAutoSavingOnMount(true);
+        try {
+          await autoSaveSnapshot();
+        } finally {
+          setIsAutoSavingOnMount(false);
+        }
+      }
+
+      log.info("useEffect", "fetching version list", { bookId });
+      setIsLoadingList(true);
+      setListError(null);
+      try {
+        const result = await fetchVersionList(bookId!);
         setVersions(result);
-        setIsLoadingList(false);
         if (result.length > 0) {
           // Auto-select: prefer current version, fallback to most recent
+          const snap = useSnapshotStore.getState();
           const autoSelect =
-            result.find((v) => v.id === currentVersionId)?.id ?? result[0].id;
+            result.find((v) => v.id === snap.meta.id)?.id ?? result[0].id;
           setSelectedVersionId(autoSelect);
           log.debug("useEffect", "auto-selected version", { autoSelect });
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         log.error("useEffect", "version list fetch error", { error: String(err) });
         setListError("Failed to load versions");
+      } finally {
         setIsLoadingList(false);
-      });
-    // currentVersionId intentionally excluded — auto-select runs once on mount only
+      }
+    }
+
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
@@ -114,6 +136,23 @@ export function HistoryCreativeSpace() {
     log.debug("handleVersionSelect", "selected", { versionId });
     setSelectedVersionId(versionId);
   }, []);
+
+  const handleManualSave = useCallback(async () => {
+    if (!bookId) return;
+    log.info("handleManualSave", "saving manual snapshot", { bookId });
+    await saveSnapshot();
+    // Re-fetch version list and auto-select newest version
+    try {
+      const result = await fetchVersionList(bookId);
+      setVersions(result);
+      if (result.length > 0) {
+        setSelectedVersionId(result[0].id);
+        log.debug("handleManualSave", "auto-selected newest version", { versionId: result[0].id });
+      }
+    } catch (err) {
+      log.error("handleManualSave", "version list re-fetch error", { error: String(err) });
+    }
+  }, [bookId, saveSnapshot]);
 
   const handleRevert = useCallback((versionId: string) => {
     log.info("handleRevert", "open confirm dialog", { versionId });
@@ -182,9 +221,12 @@ export function HistoryCreativeSpace() {
         versions={versions}
         selectedVersionId={selectedVersionId}
         currentVersionId={currentVersionId ?? null}
-        isLoading={isLoadingList}
+        isLoading={isLoadingList || isAutoSavingOnMount}
+        canManualSave={canManualSave}
+        isSavingManual={isSaving}
         onVersionSelect={handleVersionSelect}
         onRevert={handleRevert}
+        onManualSave={handleManualSave}
       />
 
       {/* Right: snapshot preview or state messages */}

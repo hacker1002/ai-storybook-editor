@@ -1,7 +1,7 @@
 // history-sidebar.tsx - Pure presentational sidebar: version list with badges, current indicator, revert button
 "use client";
 
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/utils/utils";
 import { Button } from "@/components/ui/button";
 import { formatHistoryTimestamp } from "./history-types";
@@ -12,8 +12,11 @@ interface HistorySidebarProps {
   selectedVersionId: string | null;
   currentVersionId: string | null;
   isLoading: boolean;
+  canManualSave: boolean;
+  isSavingManual: boolean;
   onVersionSelect: (versionId: string) => void;
   onRevert: (versionId: string) => void;
+  onManualSave: () => Promise<void>;
 }
 
 export function HistorySidebar({
@@ -21,8 +24,11 @@ export function HistorySidebar({
   selectedVersionId,
   currentVersionId,
   isLoading,
+  canManualSave,
+  isSavingManual,
   onVersionSelect,
   onRevert,
+  onManualSave,
 }: HistorySidebarProps) {
   // Keyboard navigation: ArrowUp/Down, Home/End
   const handleKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
@@ -54,8 +60,23 @@ export function HistorySidebar({
       className="flex flex-col w-[280px] shrink-0 border-r h-full overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center px-4 h-14 border-b shrink-0">
+      <div className="flex items-center justify-between px-4 h-14 border-b shrink-0">
         <h2 className="text-sm font-semibold">History</h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          disabled={!canManualSave || isSavingManual}
+          onClick={onManualSave}
+          aria-label="Save new version"
+          title="Save new version"
+        >
+          {isSavingManual ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+        </Button>
       </div>
 
       {/* Loading state — 3 skeleton placeholders */}
