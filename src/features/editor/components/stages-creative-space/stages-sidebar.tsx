@@ -75,9 +75,7 @@ export function StagesSidebar({
   const locations = useLocations();
 
   // UI state
-  const [expandedStageKey, setExpandedStageKey] = useState<string | null>(
-    selectedStageKey
-  );
+  const [expandedStageKey, setExpandedStageKey] = useState<string | null>(null);
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);

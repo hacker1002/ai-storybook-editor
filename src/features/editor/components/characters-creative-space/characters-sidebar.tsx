@@ -103,7 +103,7 @@ export function CharactersSidebar({
   // UI state
   const [expandedCharacterKey, setExpandedCharacterKey] = useState<
     string | null
-  >(selectedCharacterKey);
+  >(null);
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);

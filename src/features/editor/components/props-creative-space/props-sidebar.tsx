@@ -79,9 +79,7 @@ export function PropsSidebar({
   }, [fetchCategories]);
 
   // UI state
-  const [expandedPropKey, setExpandedPropKey] = useState<string | null>(
-    selectedPropKey
-  );
+  const [expandedPropKey, setExpandedPropKey] = useState<string | null>(null);
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
