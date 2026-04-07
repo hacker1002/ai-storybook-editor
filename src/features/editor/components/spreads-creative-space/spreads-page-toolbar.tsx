@@ -13,7 +13,6 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Lock } from "lucide-react";
 import { createLogger } from "@/utils/logger";
 import type {
   BaseSpread,
@@ -189,31 +188,25 @@ export function SpreadsPageToolbar<TSpread extends BaseSpread>({
           <Label className="text-xs text-muted-foreground w-14 shrink-0">
             Layout
           </Label>
-          {isLayoutLocked ? (
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              <span className="text-xs">Locked</span>
-            </div>
-          ) : (
-            <Select
-              value={page.layout ?? "default"}
-              onValueChange={handleLayoutChange}
+          <Select
+            value={page.layout ?? "default"}
+            onValueChange={handleLayoutChange}
+            disabled={isLayoutLocked}
+          >
+            <SelectTrigger
+              className="h-7 text-sm flex-1"
+              aria-label="Page layout"
             >
-              <SelectTrigger
-                className="h-7 text-sm flex-1"
-                aria-label="Page layout"
-              >
-                <SelectValue placeholder="Default" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableLayouts.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+              <SelectValue placeholder="Default" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableLayouts.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Color row */}

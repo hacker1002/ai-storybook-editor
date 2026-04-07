@@ -31,7 +31,7 @@ export function useTemplateLayouts(bookType: number | null): UseTemplateLayoutsR
 
       const { data, error } = await supabase
         .from('template_layouts')
-        .select('id, title, type, book_type, textboxes, images')
+        .select('id, title, thumbnail_url, type, book_type, textboxes, images')
         .eq('book_type', bookType)
         .order('title', { ascending: true });
 

@@ -12,7 +12,7 @@ import type { BookTemplateLayout, PageNumberingPosition, PageNumberingSettings, 
 import { createLogger } from '@/utils/logger';
 
 const DEFAULT_PAGE_NUMBERING: PageNumberingSettings = {
-  position: 'bottom_center',
+  position: 'none',
   color: '#000000',
 };
 

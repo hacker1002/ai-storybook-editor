@@ -117,6 +117,7 @@ export interface TemplateLayoutImage {
 export interface TemplateLayout {
   id: string;
   title: string;
+  thumbnail_url: string;
   book_type: number;
   type: number;        // 1: double page spread, 2: single page
   textboxes: TemplateLayoutTextbox[];

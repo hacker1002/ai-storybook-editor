@@ -60,12 +60,15 @@ function resolveIllustrationImageUrl(image: SpreadImage): string | null {
   return null;
 }
 
-// Hardcoded layout constants for page toolbar (textures are hardcoded in page-item.tsx)
-const AVAILABLE_LAYOUTS: LayoutOption[] = [
-  { id: 'default', title: 'Default', thumbnail_url: '', type: 1 },
-  { id: 'full-bleed', title: 'Full Bleed', thumbnail_url: '', type: 1 },
-  { id: 'centered', title: 'Centered', thumbnail_url: '', type: 1 },
-];
+// Map DB template_layouts → LayoutOption for page toolbar dropdown
+function toLayoutOptions(layouts: { id: string; title: string; thumbnail_url: string; type: number }[]): LayoutOption[] {
+  return layouts.map((l) => ({
+    id: l.id,
+    title: l.title,
+    thumbnail_url: l.thumbnail_url ?? '',
+    type: l.type as 1 | 2,
+  }));
+}
 
 interface SpreadsMainViewProps {
   selectedSpreadId: string;
@@ -89,7 +92,10 @@ export function SpreadsMainView({
   const book = useCurrentBook();
   const templateLayout = useBookTemplateLayout();
   const bookTypography = useBookTypography();
-  const { spreadLayouts, singlePageLayouts } = useTemplateLayouts(book?.book_type ?? null);
+  const { spreadLayouts, singlePageLayouts, allLayouts } = useTemplateLayouts(book?.book_type ?? null);
+
+  // DB layouts → LayoutOption[] for page toolbar dropdown (page-item filters by type internally)
+  const availableLayouts = useMemo(() => toLayoutOptions(allLayouts), [allLayouts]);
 
   // === Spread-level handlers ===
 
@@ -202,14 +208,67 @@ export function SpreadsMainView({
           if (action === 'update' && typeof itemId === 'number') {
             const spread = illustrationSpreads.find((s) => s.id === spreadId);
             if (!spread) break;
-            const newPages = [...spread.pages];
-            newPages[itemId] = { ...newPages[itemId], ...(data as Partial<PageData>) };
-            actions.updateIllustrationSpread(spreadId, { pages: newPages });
+            const pageUpdates = data as Partial<PageData>;
+            const pageIndex = itemId;
+
+            // Layout change → delete old items on this page, add new items from template
+            if (pageUpdates.layout !== undefined && pageUpdates.layout !== null) {
+              const template = findTemplateById(allLayouts, pageUpdates.layout);
+              const isDPS = spread.pages.length === 1;
+              const side: 'full' | 'left' | 'right' = isDPS ? 'full' : pageIndex === 0 ? 'left' : 'right';
+
+              // Filter: keep items NOT on this page
+              const isOnThisPage = (x: number) => {
+                if (isDPS) return true;
+                return pageIndex === 0 ? x < 50 : x >= 50;
+              };
+
+              const existingImages = spread.raw_images ?? [];
+              const existingTextboxes = spread.raw_textboxes ?? [];
+
+              const keptImages = existingImages.filter((img) => !isOnThisPage(img.geometry.x));
+              const keptTextboxes = existingTextboxes.filter((tb) => {
+                for (const val of Object.values(tb)) {
+                  if (typeof val === 'object' && val !== null && 'geometry' in val) {
+                    return !isOnThisPage((val as { geometry: { x: number } }).geometry.x);
+                  }
+                }
+                return true; // no geometry found → keep
+              });
+
+              // Build new items from selected template
+              let newImages: SpreadImage[] = [];
+              let newTextboxes: SpreadTextbox[] = [];
+              if (template) {
+                const items = buildIllustrationItemsFromTemplate(template, side, langCode, bookTypography);
+                newImages = items.images;
+                newTextboxes = items.textboxes;
+              }
+
+              const newPages = [...spread.pages];
+              newPages[pageIndex] = { ...newPages[pageIndex], ...pageUpdates };
+              actions.updateIllustrationSpread(spreadId, {
+                raw_images: [...keptImages, ...newImages],
+                raw_textboxes: [...keptTextboxes, ...newTextboxes],
+                pages: newPages,
+              });
+
+              log.info('handleSpreadItemAction', 'layout changed — items replaced', {
+                spreadId, pageIndex, layoutId: pageUpdates.layout,
+                removed: existingImages.length - keptImages.length + existingTextboxes.length - keptTextboxes.length,
+                added: newImages.length + newTextboxes.length,
+              });
+            } else {
+              // Non-layout page update (color, texture, etc.)
+              const newPages = [...spread.pages];
+              newPages[pageIndex] = { ...newPages[pageIndex], ...pageUpdates };
+              actions.updateIllustrationSpread(spreadId, { pages: newPages });
+            }
           }
           break;
       }
     },
-    [actions, illustrationSpreads]
+    [actions, illustrationSpreads, allLayouts, langCode, bookTypography]
   );
 
   // === Generate image modal state ===
@@ -399,7 +458,7 @@ export function SpreadsMainView({
         renderRawTextboxToolbar={renderIllustrationTextToolbar}
         renderShapeToolbar={renderIllustrationShapeToolbar}
         renderPageToolbar={renderIllustrationPageToolbar}
-        availableLayouts={AVAILABLE_LAYOUTS}
+        availableLayouts={availableLayouts}
         onSpreadSelect={onSpreadSelect}
         onSpreadReorder={handleSpreadReorder}
         onSpreadAdd={handleSpreadAdd}

@@ -25,6 +25,7 @@ import {
   DIMENSION_OPTIONS,
   TARGET_AUDIENCE_OPTIONS,
 } from '@/constants/book-enums'
+import { SUPPORTED_LANGUAGES } from '@/constants/config-constants'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('Home', 'CreateNewStoryDialog')
@@ -48,6 +49,7 @@ export function CreateNewStoryDialog({ open, onOpenChange }: CreateNewStoryDialo
   const [dimension, setDimension] = useState<string>('')
   const [targetAudience, setTargetAudience] = useState<string>('')
   const [artstyleId, setArtstyleId] = useState<string>('')
+  const [originalLanguage, setOriginalLanguage] = useState<string>('en_US')
 
   const [formats, setFormats] = useState<LookupOption[]>([])
   const [artStyles, setArtStyles] = useState<LookupOption[]>([])
@@ -83,7 +85,7 @@ export function CreateNewStoryDialog({ open, onOpenChange }: CreateNewStoryDialo
     if (open) fetchLookups()
   }, [open, fetchLookups])
 
-  const isValid = title.trim() && formatId && dimension && targetAudience && artstyleId
+  const isValid = title.trim() && formatId && dimension && targetAudience && artstyleId && originalLanguage
 
   const handleSubmit = async () => {
     if (!isValid) return
@@ -98,6 +100,7 @@ export function CreateNewStoryDialog({ open, onOpenChange }: CreateNewStoryDialo
       dimension: Number(dimension),
       target_audience: Number(targetAudience),
       artstyle_id: artstyleId,
+      original_language: originalLanguage,
     })
 
     if (book) {
@@ -118,6 +121,7 @@ export function CreateNewStoryDialog({ open, onOpenChange }: CreateNewStoryDialo
       setDimension('')
       setTargetAudience('')
       setArtstyleId('')
+      setOriginalLanguage('en_US')
       setError(null)
     }
     onOpenChange(newOpen)
@@ -212,6 +216,22 @@ export function CreateNewStoryDialog({ open, onOpenChange }: CreateNewStoryDialo
                 {artStyles.map((style) => (
                   <SelectItem key={style.id} value={style.id}>
                     {style.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Original Language</Label>
+            <Select value={originalLanguage} onValueChange={setOriginalLanguage} disabled={isSubmitting}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <SelectItem key={lang.code} value={lang.code}>
+                    {lang.label}
                   </SelectItem>
                 ))}
               </SelectContent>
