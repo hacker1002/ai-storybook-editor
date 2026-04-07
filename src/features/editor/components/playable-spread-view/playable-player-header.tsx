@@ -71,9 +71,9 @@ export const PlayablePlayerHeader = memo(function PlayablePlayerHeader({
 
   return (
     <div className="flex items-center justify-center px-3 h-14 shrink-0 border-b bg-background z-10 relative">
-      {/* Book title — left side, only when provided */}
+      {/* Book title — left side, truncates before overlapping the center dropdown */}
       {bookTitle && (
-        <span className="absolute left-3 text-sm font-medium max-w-[180px] truncate text-foreground">
+        <span className="absolute left-3 right-[calc(50%+80px)] text-sm font-medium truncate text-foreground">
           {bookTitle}
         </span>
       )}

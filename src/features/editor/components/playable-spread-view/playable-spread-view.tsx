@@ -129,6 +129,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   pageNumbering,
   showThumbnails = true,
 }) => {
+  // Share preview: player mode without thumbnails (public /share/:slug page)
+  const isSharePreview = mode === 'player' && !showThumbnails;
+
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
 
@@ -153,10 +156,11 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const [pendingBranchSpreadId, setPendingBranchSpreadId] = useState<string | null>(null);
 
   // Sync zoom level to global store for shared components
+  // (Skip in share preview — PlayerCanvas manages its own fitZoom → store sync)
   const setStoreZoomLevel = useSetZoomLevel();
   useEffect(() => {
-    setStoreZoomLevel(zoomLevel);
-  }, [zoomLevel, setStoreZoomLevel]);
+    if (!isSharePreview) setStoreZoomLevel(zoomLevel);
+  }, [zoomLevel, isSharePreview, setStoreZoomLevel]);
 
   // === Store ===
   const spreadHistories = useSpreadHistories();
@@ -412,6 +416,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             onSkipSpread={handleSkipSpread}
             onPlayModeChange={setPlayMode}
             pageNumbering={pageNumbering}
+            isSharePreview={isSharePreview}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">

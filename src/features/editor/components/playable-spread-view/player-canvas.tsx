@@ -11,7 +11,7 @@ import {
   EditableQuiz,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
-import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
+import { useCanvasWidth, useCanvasHeight, useSetZoomLevel } from "@/stores/editor-settings-store";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { PageItem } from "../canvas-spread-view/page-item";
@@ -41,6 +41,8 @@ import { PlayQuizModal } from "./play-quiz-modal";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
+import { usePlayerOrientation } from "./hooks/use-player-orientation";
+import { useContainerFit } from "./hooks/use-container-fit";
 
 // === Constants ===
 const RAPID_NEXT_THRESHOLD = 150; // ms
@@ -57,6 +59,8 @@ export interface PlayerCanvasProps {
   onSkipSpread: (direction: "next" | "prev") => void;
   onPlayModeChange: (mode: PlayMode) => void;
   pageNumbering?: PageNumberingSettings | null;
+  /** When true, auto-fit spread to container and enable responsive control bar */
+  isSharePreview?: boolean;
 }
 
 const log = createLogger("Editor", "PlayerCanvas");
@@ -94,7 +98,12 @@ export function PlayerCanvas({
   onSkipSpread,
   onPlayModeChange,
   pageNumbering,
+  isSharePreview = false,
 }: PlayerCanvasProps) {
+  // === Responsive hooks (share preview only) ===
+  const orientation = usePlayerOrientation();
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+
   // === Store selectors ===
   const playbackActions = usePlaybackActions();
   const phase = usePlayerPhase();
@@ -128,6 +137,20 @@ export function PlayerCanvas({
     return spread.animations;
   }, [spread.animations, playEdition]);
 
+  // Auto-fit zoom for share preview — overrides prop zoomLevel with computed fit
+  const fitZoom = useContainerFit(
+    canvasContainerRef, canvasWidth, canvasHeight, orientation, isSharePreview,
+  );
+  const effectiveZoom = fitZoom ?? zoomLevel;
+  const isPortrait = isSharePreview && orientation === 'portrait';
+
+  // Sync effective zoom to global store so child components (EditableTextbox etc.)
+  // that read zoomLevel via useZoomLevel() get the correct scale factor
+  const setStoreZoomLevel = useSetZoomLevel();
+  useEffect(() => {
+    setStoreZoomLevel(effectiveZoom);
+  }, [effectiveZoom, setStoreZoomLevel]);
+
   // === GSAP engine hook ===
   const {
     spreadContainerRef,
@@ -140,7 +163,7 @@ export function PlayerCanvas({
   } = usePlayerGsapEngine({
     spread,
     filteredAnimations,
-    zoomLevel,
+    zoomLevel: effectiveZoom,
     narrationLangCode,
     onSpreadComplete,
     onQuizPlay: handleQuizPlay,
@@ -158,7 +181,7 @@ export function PlayerCanvas({
   );
 
   const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
+    getScaledDimensions(canvasWidth, canvasHeight, effectiveZoom);
 
   // === Store sync effects ===
 
@@ -406,8 +429,16 @@ export function PlayerCanvas({
   }, [spread.textboxes, narrationLangCode]);
 
   // === Render ===
+  // Share preview: no padding around canvas, only reserve space for control bar
+  // Editor: original padding for comfortable editing
+  const containerClassName = isSharePreview
+    ? isPortrait
+      ? "relative flex-1 overflow-hidden flex items-center justify-center pb-14 bg-muted/30"
+      : "relative flex-1 overflow-hidden flex items-center justify-center pr-14 bg-muted/30"
+    : "relative flex-1 overflow-auto flex items-center justify-center p-4 pr-[72px] bg-muted/30";
+
   return (
-    <div className="relative flex-1 overflow-auto flex items-center justify-center p-4 pr-[72px] bg-muted/30">
+    <div ref={canvasContainerRef} className={containerClassName}>
       <style>{CLICK_HINT_STYLE}</style>
 
       {/* Spread container */}
@@ -603,13 +634,14 @@ export function PlayerCanvas({
         })}
       </div>
 
-      {/* Player controls sidebar */}
+      {/* Player controls sidebar / bottom bar */}
       <PlayerControlSidebar
         onPlayModeChange={onPlayModeChange}
         onNext={handleNext}
         onBack={handleBack}
         canNext={canGoNext}
         canBack={canGoBack}
+        orientation={isSharePreview ? orientation : 'landscape'}
       />
 
       {/* Quiz modal */}
