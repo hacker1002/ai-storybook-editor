@@ -31,7 +31,7 @@ export const ILLUSTRATION_ICONS: IconRailItemConfig[] = [
   { id: 'prop', icon: 'Box', label: 'Props' },
   { id: 'stage', icon: 'Mountain', label: 'Stages' },
   { id: 'spread', icon: 'BookOpen', label: 'Spreads' },
-  { id: 'branch', icon: 'FolderOpen', label: 'Branches' },
+  { id: 'branch', icon: 'GitBranch', label: 'Branches' },
 ];
 
 // Retouch step icons
@@ -75,8 +75,14 @@ export function getIconsForStep(step: PipelineStep): IconRailItemConfig[] {
   return STEP_ICONS[step] ?? MANUSCRIPT_ICONS;
 }
 
+// Default creative space per step (overrides first-icon fallback)
+const STEP_DEFAULT_CREATIVE_SPACE: Partial<Record<PipelineStep, string>> = {
+  illustration: 'spread',
+};
+
 // Helper: get default creative space for step
 export function getDefaultCreativeSpace(step: PipelineStep): string {
+  if (STEP_DEFAULT_CREATIVE_SPACE[step]) return STEP_DEFAULT_CREATIVE_SPACE[step]!;
   const icons = STEP_ICONS[step];
   return icons?.[0]?.id ?? 'doc';
 }
