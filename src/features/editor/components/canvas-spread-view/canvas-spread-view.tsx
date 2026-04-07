@@ -332,19 +332,12 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             onSpreadSelect?.(lastSpread.id);
           }
           break;
-        case 'delete':
-        case 'backspace':
-          if (canDeleteSpread && selectedId) {
-            e.preventDefault();
-            handleDeleteSpread(selectedId);
-          }
-          break;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [spreads, selectedId, onSpreadSelect, canDeleteSpread, handleDeleteSpread]);
+  }, [spreads, selectedId, onSpreadSelect]);
 
   return (
     <div className="flex flex-col h-full bg-background">
