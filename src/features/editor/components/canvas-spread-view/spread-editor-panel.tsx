@@ -2,10 +2,7 @@
 "use client";
 
 import {
-  useState,
   useRef,
-  useCallback,
-  useEffect,
   Fragment,
   type ReactNode,
 } from "react";
@@ -20,18 +17,11 @@ import {
   buildAudioContext,
   buildQuizContext,
 } from "./utils/context-builders";
-import {
-  applyDragDelta,
-  applyResizeDelta,
-  applyAspectLockedResize,
-  applyNudge,
-} from "./utils/geometry-utils";
 import { getScaledDimensions } from "./utils/coordinate-utils";
-import { CANVAS, LAYER_CONFIG } from "@/constants/spread-constants";
+import { LAYER_CONFIG } from "@/constants/spread-constants";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import type {
   BaseSpread,
-  SpreadTextbox,
   SpreadImage,
   SpreadVideo,
   SpreadAudio,
@@ -39,7 +29,6 @@ import type {
   ItemType,
   SelectedElement,
   ResizeHandle,
-  Point,
   Geometry,
   ImageItemContext,
   TextItemContext,
@@ -56,16 +45,12 @@ import type {
   LayoutOption,
   SpreadItemActionUnion,
 } from "@/types/canvas-types";
-import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
-import { createLogger } from "@/utils/logger";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "./page-numbering-overlay";
-
-const log = createLogger("Editor", "SpreadEditorPanel");
-
-// Fixed pixel size of audio/quiz icon elements (w-8 h-8 = 32px)
-const ICON_ELEMENT_PX = 32;
+import { useZoomCenterScroll } from "./hooks/use-zoom-center-scroll";
+import { useEditorSelection } from "./hooks/use-editor-selection";
+import { useElementDragResize } from "./hooks/use-element-drag-resize";
 
 // === Layer helpers ===
 // Images and textboxes exist in two layers:
@@ -135,7 +120,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
 }
 
 // === Local State Interface ===
-interface EditorState {
+export interface EditorState {
   selectedElement: SelectedElement | null;
   selectedGeometry: Geometry | null; // For toolbar positioning
   isTextboxEditing: boolean;
@@ -179,611 +164,56 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   pageNumbering,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const onDeselectRef = useRef(onDeselect);
-  onDeselectRef.current = onDeselect;
   const editorLangCode = useLanguageCode();
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
-  // Ref for originalGeometry to avoid stale closures in drag/resize handlers.
-  // React batches setState from handleResizeStart, so handleResize may still
-  // capture old state where originalGeometry is null. The ref is mutated
-  // synchronously and always reflects the latest value.
-  const originalGeometryRef = useRef<Geometry | null>(null);
 
-  // Compute geometry for icon-based elements (audio/quiz) — converts fixed
-  // pixel size to percentage relative to the canvas container's actual dimensions.
-  const computeIconGeometry = useCallback((baseGeo: Geometry): Geometry => {
-    const canvas = canvasRef.current;
-    if (!canvas) return baseGeo;
-    const w = (ICON_ELEMENT_PX / canvas.clientWidth) * 100;
-    const h = (ICON_ELEMENT_PX / canvas.clientHeight) * 100;
-    return { x: baseGeo.x, y: baseGeo.y, w, h };
-  }, []);
+  // === Zoom center preservation (delegated to hook) ===
+  const containerRef = useZoomCenterScroll(zoomLevel, canvasRef);
 
-  // Local state
-  const [state, setState] = useState<EditorState>({
-    selectedElement: null,
-    selectedGeometry: null,
-    isTextboxEditing: false,
-    isImageEditing: false,
-    isDragging: false,
-    isResizing: false,
-    activeHandle: null,
-    originalGeometry: null,
+  // === Selection state, handlers, geometry (delegated to hook) ===
+  const {
+    state,
+    setState,
+    handleElementSelect,
+    handleCanvasClick,
+    getSelectedGeometry,
+  } = useEditorSelection({
+    spread,
+    canvasRef,
+    externalSelectedItemId,
+    onDeselect,
+    editorLangCode,
   });
-
-  // Reset selection when switching to different spread
-  useEffect(() => {
-    setState((prev) => ({
-      ...prev,
-      selectedElement: null,
-      selectedGeometry: null,
-      isTextboxEditing: false,
-      isImageEditing: false,
-      isDragging: false,
-      isResizing: false,
-      activeHandle: null,
-      originalGeometry: null,
-    }));
-  }, [spread.id]);
-
-  // Sync external selection (sidebar → canvas): resolve item id to array index
-  useEffect(() => {
-    if (!externalSelectedItemId) return;
-    const { type, id } = externalSelectedItemId;
-
-    let resolvedType: SelectedElement["type"] | null = null;
-    let index = -1;
-
-    if (type === "raw_image") {
-      resolvedType = "raw_image";
-      index = (spread.raw_images ?? []).findIndex((img) => img.id === id);
-    } else if (type === "image") {
-      resolvedType = "image";
-      index = (spread.images ?? []).findIndex((img) => img.id === id);
-    } else if (type === "raw_textbox") {
-      resolvedType = "raw_textbox";
-      index = (spread.raw_textboxes ?? []).findIndex((tb) => tb.id === id);
-    } else if (type === "textbox") {
-      resolvedType = "textbox";
-      index = (spread.textboxes ?? []).findIndex((tb) => tb.id === id);
-    } else if (type === "shape") {
-      resolvedType = "shape";
-      index = (spread.shapes ?? []).findIndex((s) => s.id === id);
-    } else if (type === "video") {
-      resolvedType = "video";
-      index = (spread.videos ?? []).findIndex((v) => v.id === id);
-    } else if (type === "audio") {
-      resolvedType = "audio";
-      index = (spread.audios ?? []).findIndex((a) => a.id === id);
-    } else if (type === "quiz") {
-      resolvedType = "quiz";
-      index = (spread.quizzes ?? []).findIndex((q) => q.id === id);
-    } else if (type === "page") {
-      // Page IDs are "page-0", "page-1" etc. — extract index
-      const pageIndex = parseInt(id.replace("page-", ""), 10);
-      if (!isNaN(pageIndex) && pageIndex >= 0 && pageIndex < spread.pages.length) {
-        resolvedType = "page";
-        index = pageIndex;
-      }
-    }
-
-    if (resolvedType && index >= 0) {
-      const element: SelectedElement = { type: resolvedType, index };
-      setState((prev) => {
-        if (
-          prev.selectedElement?.type === element.type &&
-          prev.selectedElement?.index === element.index
-        ) {
-          return prev; // No change, skip re-render
-        }
-        // Resolve geometry for the selection frame
-        let geometry: Geometry | null = null;
-        if (element.type === "raw_image")
-          geometry = (spread.raw_images ?? [])[element.index]?.geometry ?? null;
-        else if (element.type === "image")
-          geometry = (spread.images ?? [])[element.index]?.geometry ?? null;
-        else if (element.type === "raw_textbox") {
-          const tb = (spread.raw_textboxes ?? [])[element.index];
-          const tbResult = getTextboxContentForLanguage(
-            tb || {},
-            editorLangCode
-          );
-          geometry = tbResult?.content?.geometry ?? null;
-        } else if (element.type === "textbox") {
-          const tb = (spread.textboxes ?? [])[element.index];
-          const tbResult = getTextboxContentForLanguage(
-            tb || {},
-            editorLangCode
-          );
-          geometry = tbResult?.content?.geometry ?? null;
-        } else if (element.type === "shape")
-          geometry = spread.shapes?.[element.index]?.geometry ?? null;
-        else if (element.type === "video")
-          geometry = spread.videos?.[element.index]?.geometry ?? null;
-        else if (element.type === "audio") {
-          const audioGeo = spread.audios?.[element.index]?.geometry;
-          geometry = audioGeo ? computeIconGeometry(audioGeo) : null;
-        } else if (element.type === "quiz") {
-          const quizGeo = spread.quizzes?.[element.index]?.geometry;
-          geometry = quizGeo ? computeIconGeometry(quizGeo) : null;
-        }
-
-        return {
-          ...prev,
-          selectedElement: element,
-          selectedGeometry: geometry,
-          isDragging: false,
-          isResizing: false,
-          activeHandle: null,
-          originalGeometry: null,
-        };
-      });
-    }
-    // Only re-run when the external selection identity changes, not on spread data updates.
-    // `spread` is read inside but must not trigger re-selection on every store mutation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalSelectedItemId?.type, externalSelectedItemId?.id]);
-
-  // Click outside to deselect
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!state.selectedElement) return;
-      if (!canvasRef.current) return;
-
-      const target = e.target as Element;
-      // Check if click is inside canvas
-      if (canvasRef.current.contains(target)) return;
-      // Check if click is inside a toolbar or its children (portaled to body)
-      if (target.closest?.("[data-toolbar]")) return;
-      // Check if click is inside Radix UI portals (Select, Popover, Dialog, etc.)
-      if (
-        target.closest?.(
-          '[data-radix-popper-content-wrapper], [data-radix-select-content], [data-radix-popover-content], [role="listbox"], [role="dialog"]'
-        )
-      )
-        return;
-
-      setState((prev) => ({
-        ...prev,
-        selectedElement: null,
-        selectedGeometry: null,
-      }));
-      onDeselectRef.current?.();
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [state.selectedElement]);
 
   // Scaled dimensions
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
 
-  // === Selection Handlers ===
-  const handleElementSelect = useCallback(
-    (element: SelectedElement | null) => {
-      log.info("handleElementSelect", "element selected", {
-        type: element?.type ?? null,
-        index: element?.index ?? null,
-      });
-      let geometry: Geometry | null = null;
-
-      if (element) {
-        if (element.type === "raw_image") {
-          geometry = (spread.raw_images ?? [])[element.index]?.geometry ?? null;
-        } else if (element.type === "image") {
-          geometry = (spread.images ?? [])[element.index]?.geometry ?? null;
-        } else if (element.type === "raw_textbox") {
-          const item = (spread.raw_textboxes ?? [])[element.index];
-          const tbResult = getTextboxContentForLanguage(
-            item || {},
-            editorLangCode
-          );
-          geometry = tbResult?.content?.geometry ?? null;
-        } else if (element.type === "textbox") {
-          const item = (spread.textboxes ?? [])[element.index];
-          const tbResult = getTextboxContentForLanguage(
-            item || {},
-            editorLangCode
-          );
-          geometry = tbResult?.content?.geometry ?? null;
-        } else if (element.type === "shape") {
-          geometry = spread.shapes?.[element.index]?.geometry ?? null;
-        } else if (element.type === "video") {
-          geometry = spread.videos?.[element.index]?.geometry ?? null;
-        } else if (element.type === "audio") {
-          const audioGeo = spread.audios?.[element.index]?.geometry;
-          geometry = audioGeo ? computeIconGeometry(audioGeo) : null;
-        } else if (element.type === "quiz") {
-          const quizGeo = spread.quizzes?.[element.index]?.geometry;
-          geometry = quizGeo ? computeIconGeometry(quizGeo) : null;
-        }
-      }
-
-      setState((prev) => ({
-        ...prev,
-        selectedElement: element,
-        selectedGeometry: geometry,
-        isDragging: false,
-        isResizing: false,
-        activeHandle: null,
-        originalGeometry: null,
-      }));
-    },
-    [spread, computeIconGeometry]
-  );
-
-  const handleCanvasClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === canvasRef.current) {
-        handleElementSelect(null);
-      }
-    },
-    [handleElementSelect]
-  );
-
-  // === Geometry Access ===
-  const getSelectedGeometry = useCallback((): Geometry | null => {
-    const { selectedElement } = state;
-    if (!selectedElement) return null;
-
-    switch (selectedElement.type) {
-      case "raw_image":
-        return (
-          (spread.raw_images ?? [])[selectedElement.index]?.geometry ?? null
-        );
-      case "image":
-        return (spread.images ?? [])[selectedElement.index]?.geometry ?? null;
-      case "raw_textbox": {
-        const rawTb = (spread.raw_textboxes ?? [])[selectedElement.index];
-        if (!rawTb) return null;
-        const rawTbResult = getTextboxContentForLanguage(rawTb, editorLangCode);
-        return rawTbResult?.content?.geometry ?? null;
-      }
-      case "textbox": {
-        const tb = (spread.textboxes ?? [])[selectedElement.index];
-        if (!tb) return null;
-        const tbResult = getTextboxContentForLanguage(tb, editorLangCode);
-        return tbResult?.content?.geometry ?? null;
-      }
-      case "shape":
-        return spread.shapes?.[selectedElement.index]?.geometry ?? null;
-      case "video":
-        return spread.videos?.[selectedElement.index]?.geometry ?? null;
-      case "audio": {
-        const audioGeo = spread.audios?.[selectedElement.index]?.geometry;
-        return audioGeo ? computeIconGeometry(audioGeo) : null;
-      }
-      case "quiz": {
-        const quizGeo = spread.quizzes?.[selectedElement.index]?.geometry;
-        return quizGeo ? computeIconGeometry(quizGeo) : null;
-      }
-      default:
-        return null;
-    }
-  }, [state, spread, computeIconGeometry]);
-
-  // === Geometry Update ===
-  const updateElementGeometry = useCallback(
-    (element: SelectedElement, geometry: Geometry) => {
-      if (!onSpreadItemAction) return;
-
-      switch (element.type) {
-        case "raw_image": {
-          const rawImg = (spread.raw_images ?? [])[element.index];
-          if (!rawImg?.id) return;
-          onSpreadItemAction({
-            itemType: "image",
-            action: "update",
-            itemId: rawImg.id,
-            data: { geometry },
-          });
-          break;
-        }
-        case "image": {
-          const image = (spread.images ?? [])[element.index];
-          if (!image?.id) return;
-          onSpreadItemAction({
-            itemType: "image",
-            action: "update",
-            itemId: image.id,
-            data: { geometry },
-          });
-          break;
-        }
-        case "raw_textbox": {
-          const rawTb = (spread.raw_textboxes ?? [])[element.index];
-          if (!rawTb?.id) return;
-          const rawTbResult = getTextboxContentForLanguage(
-            rawTb,
-            editorLangCode
-          );
-          if (rawTbResult) {
-            onSpreadItemAction({
-              itemType: "textbox",
-              action: "update",
-              itemId: rawTb.id,
-              data: {
-                [rawTbResult.langKey]: { ...rawTbResult.content, geometry },
-              } as Partial<SpreadTextbox>,
-            });
-          }
-          break;
-        }
-        case "textbox": {
-          const tb = (spread.textboxes ?? [])[element.index];
-          if (!tb?.id) return;
-          const tbResult = getTextboxContentForLanguage(tb, editorLangCode);
-          if (tbResult) {
-            onSpreadItemAction({
-              itemType: "textbox",
-              action: "update",
-              itemId: tb.id,
-              data: {
-                [tbResult.langKey]: { ...tbResult.content, geometry },
-              } as Partial<SpreadTextbox>,
-            });
-          }
-          break;
-        }
-        case "shape": {
-          const shape = spread.shapes?.[element.index];
-          if (!shape?.id) return;
-          onSpreadItemAction({
-            itemType: "shape",
-            action: "update",
-            itemId: shape.id,
-            data: { geometry },
-          });
-          break;
-        }
-        case "video": {
-          const video = spread.videos?.[element.index];
-          if (!video?.id) return;
-          onSpreadItemAction({
-            itemType: "video",
-            action: "update",
-            itemId: video.id,
-            data: { geometry },
-          });
-          break;
-        }
-        case "audio": {
-          const audio = spread.audios?.[element.index];
-          if (!audio?.id) return;
-          onSpreadItemAction({
-            itemType: "audio",
-            action: "update",
-            itemId: audio.id,
-            data: { geometry },
-          });
-          break;
-        }
-        case "quiz": {
-          const quiz = spread.quizzes?.[element.index];
-          if (!quiz?.id) return;
-          onSpreadItemAction({
-            itemType: "quiz",
-            action: "update",
-            itemId: quiz.id,
-            data: { geometry },
-          });
-          break;
-        }
-      }
-    },
-    [
-      spread.raw_images,
-      spread.raw_textboxes,
-      spread.images,
-      spread.textboxes,
-      spread.shapes,
-      spread.videos,
-      spread.audios,
-      spread.quizzes,
-      onSpreadItemAction,
-    ]
-  );
-
-  // === Drag Handlers ===
-  const handleDragStart = useCallback(() => {
-    log.debug("handleDragStart", "drag started");
-    const geometry = getSelectedGeometry();
-    originalGeometryRef.current = geometry;
-    setState((prev) => ({
-      ...prev,
-      isDragging: true,
-      originalGeometry: geometry,
-    }));
-  }, [getSelectedGeometry]);
-
-  const handleDrag = useCallback(
-    (delta: Point) => {
-      const { selectedElement } = state;
-      const originalGeometry = originalGeometryRef.current;
-      if (!selectedElement || !originalGeometry) return;
-
-      const newGeometry = applyDragDelta(originalGeometry, delta.x, delta.y);
-      updateElementGeometry(selectedElement, newGeometry);
-
-      // Update selectedGeometry for toolbar positioning
-      setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
-    },
-    [state, updateElementGeometry]
-  );
-
-  const handleDragEnd = useCallback(() => {
-    originalGeometryRef.current = null;
-    setState((prev) => ({
-      ...prev,
-      isDragging: false,
-      originalGeometry: null,
-    }));
-  }, []);
-
-  // === Resize Handlers ===
-  const handleResizeStart = useCallback(
-    (handle: ResizeHandle) => {
-      const geometry = getSelectedGeometry();
-      originalGeometryRef.current = geometry;
-      setState((prev) => ({
-        ...prev,
-        isResizing: true,
-        activeHandle: handle,
-        originalGeometry: geometry,
-      }));
-    },
-    [getSelectedGeometry]
-  );
-
-  const handleResize = useCallback(
-    (handle: ResizeHandle, delta: Point) => {
-      const { selectedElement } = state;
-      const originalGeometry = originalGeometryRef.current;
-      if (!selectedElement || !originalGeometry) return;
-
-      let newGeometry: Geometry;
-
-      // Image/Video: aspect-ratio-locked resize with proper anchor handling
-      if (
-        selectedElement.type === "raw_image" ||
-        selectedElement.type === "image" ||
-        selectedElement.type === "video"
-      ) {
-        const aspect = originalGeometry.w / originalGeometry.h;
-        newGeometry = applyAspectLockedResize(
-          originalGeometry,
-          handle,
-          delta.x,
-          delta.y,
-          aspect
-        );
-      } else {
-        newGeometry = applyResizeDelta(
-          originalGeometry,
-          handle,
-          delta.x,
-          delta.y
-        );
-      }
-
-      updateElementGeometry(selectedElement, newGeometry);
-
-      // Update selectedGeometry for toolbar positioning
-      setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
-    },
-    [state, updateElementGeometry]
-  );
-
-  const handleResizeEnd = useCallback(() => {
-    originalGeometryRef.current = null;
-    setState((prev) => ({
-      ...prev,
-      isResizing: false,
-      activeHandle: null,
-      originalGeometry: null,
-    }));
-  }, []);
-
-  // === Editing Handlers ===
-  const handleTextboxEditingChange = useCallback((isEditing: boolean) => {
-    setState((prev) => ({ ...prev, isTextboxEditing: isEditing }));
-  }, []);
-
-  const handleImageEditingChange = useCallback((isEditing: boolean) => {
-    setState((prev) => ({ ...prev, isImageEditing: isEditing }));
-  }, []);
-
-  // === Keyboard Handlers ===
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      const { selectedElement, isDragging, isResizing } = state;
-      if (!selectedElement || !isEditable) return;
-
-      // Handle ESC first - works for all selection types including page
-      if (e.key === "Escape") {
-        e.preventDefault();
-        const origGeo = originalGeometryRef.current;
-        if ((isDragging || isResizing) && origGeo) {
-          updateElementGeometry(selectedElement, origGeo);
-          originalGeometryRef.current = null;
-          setState((prev) => ({
-            ...prev,
-            isDragging: false,
-            isResizing: false,
-            activeHandle: null,
-            originalGeometry: null,
-            selectedGeometry: origGeo,
-          }));
-        } else {
-          handleElementSelect(null);
-        }
-        return;
-      }
-
-      switch (e.key) {
-        case "ArrowUp":
-        case "ArrowDown":
-        case "ArrowLeft":
-        case "ArrowRight": {
-          if (state.isTextboxEditing || state.isImageEditing) return;
-          if (!canDragItem) return;
-          const geometry = getSelectedGeometry();
-          if (!geometry) return;
-          e.preventDefault();
-          const step = e.shiftKey ? CANVAS.NUDGE_STEP_SHIFT : CANVAS.NUDGE_STEP;
-          const direction =
-            e.key === "ArrowUp"
-              ? "up"
-              : e.key === "ArrowDown"
-              ? "down"
-              : e.key === "ArrowLeft"
-              ? "left"
-              : "right";
-          updateElementGeometry(
-            selectedElement,
-            applyNudge(geometry, direction, step)
-          );
-          break;
-        }
-      }
-    },
-    [
-      state,
-      isEditable,
-      getSelectedGeometry,
-      updateElementGeometry,
-      handleElementSelect,
-      canDragItem,
-    ]
-  );
-
-  // === Wrapper callback for page updates (used by PageItem) ===
-  const handleUpdatePage = useCallback(
-    (pageIndex: number, updates: Partial<TSpread["pages"][number]>) => {
-      if (!onSpreadItemAction) return;
-      onSpreadItemAction({
-        itemType: "page",
-        action: "update",
-        itemId: pageIndex,
-        data: updates,
-      });
-    },
-    [onSpreadItemAction]
-  );
-
-  // Unified action handler for context builders
-  const handleSpreadItemAction = useCallback(
-    (params: Omit<SpreadItemActionUnion, "spreadId">) => {
-      // Clear selection before delete to prevent stale index crash on re-render
-      if (params.action === "delete") {
-        handleElementSelect(null);
-      }
-      onSpreadItemAction?.(params);
-    },
-    [onSpreadItemAction, handleElementSelect]
-  );
+  // === Drag, resize, keyboard, and geometry update handlers (delegated to hook) ===
+  const {
+    handleDragStart,
+    handleDrag,
+    handleDragEnd,
+    handleResizeStart,
+    handleResize,
+    handleResizeEnd,
+    handleTextboxEditingChange,
+    handleImageEditingChange,
+    handleKeyDown,
+    handleUpdatePage,
+    handleSpreadItemAction,
+  } = useElementDragResize({
+    spread,
+    state,
+    setState,
+    getSelectedGeometry,
+    handleElementSelect,
+    onSpreadItemAction,
+    isEditable,
+    canDragItem,
+    editorLangCode,
+  });
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
@@ -802,13 +232,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   return (
     <div
-      className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30"
+      ref={containerRef}
+      className="flex-1 flex overflow-auto p-4 bg-muted/30"
       role="application"
       aria-label="Spread editor"
     >
       <div
         ref={canvasRef}
-        className="relative bg-white shadow-lg"
+        className="relative shrink-0 m-auto bg-white shadow-lg"
         style={{
           width: scaledWidth,
           height: scaledHeight,

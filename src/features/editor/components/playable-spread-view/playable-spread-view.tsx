@@ -156,11 +156,11 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const [pendingBranchSpreadId, setPendingBranchSpreadId] = useState<string | null>(null);
 
   // Sync zoom level to global store for shared components
-  // (Skip in share preview — PlayerCanvas manages its own fitZoom → store sync)
+  // (Skip in player mode — PlayerCanvas manages its own fitZoom → store sync)
   const setStoreZoomLevel = useSetZoomLevel();
   useEffect(() => {
-    if (!isSharePreview) setStoreZoomLevel(zoomLevel);
-  }, [zoomLevel, isSharePreview, setStoreZoomLevel]);
+    if (activeCanvas !== 'player') setStoreZoomLevel(zoomLevel);
+  }, [zoomLevel, activeCanvas, setStoreZoomLevel]);
 
   // === Store ===
   const spreadHistories = useSpreadHistories();

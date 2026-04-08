@@ -137,9 +137,9 @@ export function PlayerCanvas({
     return spread.animations;
   }, [spread.animations, playEdition]);
 
-  // Auto-fit zoom for share preview — overrides prop zoomLevel with computed fit
+  // Auto-fit zoom — overrides prop zoomLevel with computed fit
   const fitZoom = useContainerFit(
-    canvasContainerRef, canvasWidth, canvasHeight, orientation, isSharePreview,
+    canvasContainerRef, canvasWidth, canvasHeight, orientation, true,
   );
   const effectiveZoom = fitZoom ?? zoomLevel;
   const isPortrait = isSharePreview && orientation === 'portrait';
@@ -435,7 +435,7 @@ export function PlayerCanvas({
     ? isPortrait
       ? "relative flex-1 overflow-hidden flex items-center justify-center pb-14 bg-muted/30"
       : "relative flex-1 overflow-hidden flex items-center justify-center pr-14 bg-muted/30"
-    : "relative flex-1 overflow-auto flex items-center justify-center p-4 pr-[72px] bg-muted/30";
+    : "relative flex-1 overflow-hidden flex items-center justify-center pr-14 bg-muted/30";
 
   return (
     <div ref={canvasContainerRef} className={containerClassName}>
