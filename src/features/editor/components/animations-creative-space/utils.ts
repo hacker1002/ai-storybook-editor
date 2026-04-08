@@ -187,8 +187,8 @@ export function buildItemsMap(
     }
     map.set(tb.id, { title, type: 'textbox' });
   }
-  for (const sh of spread.shapes ?? []) {
-    map.set(sh.id, { title: (sh as { title?: string }).title ?? sh.id, type: 'shape' });
+  for (const [i, sh] of (spread.shapes ?? []).entries()) {
+    map.set(sh.id, { title: (sh as { title?: string }).title || `Shape ${i + 1}`, type: 'shape' });
   }
   for (const vid of spread.videos ?? []) {
     map.set(vid.id, { title: (vid as { title?: string }).title ?? vid.id, type: 'video' });

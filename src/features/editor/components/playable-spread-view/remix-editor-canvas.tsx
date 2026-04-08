@@ -11,6 +11,7 @@ import {
   EditableAudio,
 } from "../shared-components";
 import { useToolbarPosition } from "../../hooks/use-toolbar-position";
+import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useLanguageCode, useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
@@ -72,6 +73,7 @@ export function RemixEditorCanvas({
   const [editingTextboxId, setEditingTextboxId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const containerRef = useZoomCenterScroll(zoomLevel, canvasRef);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const { width: scaledWidth, height: scaledHeight } =
@@ -264,11 +266,11 @@ export function RemixEditorCanvas({
   }, [spread.textboxes, editorLangCode]);
 
   return (
-    <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">
+    <div ref={containerRef} className="flex-1 flex overflow-auto p-4 bg-muted/30">
       {/* Canvas container */}
       <div
         ref={canvasRef}
-        className="relative bg-white shadow-lg"
+        className="relative shrink-0 m-auto bg-white shadow-lg"
         style={{
           width: scaledWidth,
           height: scaledHeight,

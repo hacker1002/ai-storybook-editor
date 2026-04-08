@@ -48,7 +48,7 @@ import type {
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "./page-numbering-overlay";
-import { useZoomCenterScroll } from "./hooks/use-zoom-center-scroll";
+import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
 import { useEditorSelection } from "./hooks/use-editor-selection";
 import { useElementDragResize } from "./hooks/use-element-drag-resize";
 

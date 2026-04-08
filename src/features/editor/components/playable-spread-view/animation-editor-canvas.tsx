@@ -14,6 +14,7 @@ import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import type { Geometry, ItemType } from "@/types/spread-types";
 import { useLanguageCode, useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
+import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { SelectionOverlay } from "./selection-overlay";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
@@ -54,6 +55,7 @@ export function AnimationEditorCanvas({
   );
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const containerRef = useZoomCenterScroll(zoomLevel, canvasRef);
 
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
@@ -255,11 +257,11 @@ export function AnimationEditorCanvas({
   }, [spread.textboxes, editorLangCode]);
 
   return (
-    <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/30">
+    <div ref={containerRef} className="flex-1 flex overflow-auto p-4 bg-muted/30">
       {/* Canvas container - sized like spread-editor-panel */}
       <div
         ref={canvasRef}
-        className="relative bg-white shadow-lg"
+        className="relative shrink-0 m-auto bg-white shadow-lg"
         style={{
           width: scaledWidth,
           height: scaledHeight,

@@ -288,14 +288,17 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     (_spreadId: string) => {
       if (playMode !== 'auto') return;
       const targetId = autoResolveNextSpread(selectedSpread, spreads, sections, currentSection);
-      if (!targetId) return;
+      if (!targetId) {
+        playbackActions.pause();
+        return;
+      }
       setTimeout(() => {
         pushSpreadHistory(targetId, currentSection);
         setSelectedSpreadId(targetId);
         onSpreadSelect?.(targetId);
       }, 1000);
     },
-    [playMode, selectedSpread, spreads, sections, currentSection, pushSpreadHistory, onSpreadSelect]
+    [playMode, selectedSpread, spreads, sections, currentSection, playbackActions, pushSpreadHistory, onSpreadSelect]
   );
 
   // === Keyboard Shortcuts ===
