@@ -22,6 +22,7 @@ import type {
   PlayEdition,
   AnimationStep,
 } from "@/types/playable-types";
+import type { Geometry } from "@/types/spread-types";
 import {
   isReplayableClick,
   buildAnimationSteps,
@@ -43,6 +44,10 @@ import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overl
 import { createLogger } from "@/utils/logger";
 import { usePlayerOrientation } from "./hooks/use-player-orientation";
 import { useContainerFit } from "./hooks/use-container-fit";
+import { MobileFullPageZoomOverlay } from "./mobile-full-page-zoom-overlay";
+
+// === Types ===
+export type FullPageMode = 'spread' | 'left' | 'right';
 
 // === Constants ===
 const RAPID_NEXT_THRESHOLD = 150; // ms
@@ -121,6 +126,9 @@ export function PlayerCanvas({
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
 
+  // === Full page zoom state (mobile portrait share preview only) ===
+  const [fullPageMode, setFullPageMode] = useState<FullPageMode>('spread');
+
   // === Quiz modal state ===
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
 
@@ -144,8 +152,9 @@ export function PlayerCanvas({
   }, [spread.animations, playEdition]);
 
   // Auto-fit zoom — overrides prop zoomLevel with computed fit
+  // In full page mode, useContainerFit fits half the canvas width (one page)
   const fitZoom = useContainerFit(
-    canvasContainerRef, canvasWidth, canvasHeight, orientation, true,
+    canvasContainerRef, canvasWidth, canvasHeight, orientation, true, fullPageMode,
   );
   const effectiveZoom = fitZoom ?? zoomLevel;
   const isPortrait = isSharePreview && orientation === 'portrait';
@@ -214,8 +223,14 @@ export function PlayerCanvas({
   }, [playEdition, playbackActions]);
 
   // 2. Reset steps on spread change or edition change & ensure playback starts
+  const prevSpreadIdRef = useRef(spread.id);
   useEffect(() => {
     setActiveQuizId(null); // Clear any open quiz modal from previous spread
+    // Reset page to left only on actual spread change, not on edition switch
+    if (prevSpreadIdRef.current !== spread.id) {
+      prevSpreadIdRef.current = spread.id;
+      if (fullPageMode !== 'spread') setFullPageMode('left');
+    }
     const newSteps = buildAnimationSteps(filteredAnimations);
     playbackActions.reset(newSteps);
     playbackActions.play();
@@ -226,6 +241,13 @@ export function PlayerCanvas({
     playbackActions.clearSpreadHistory();
     playbackActions.pushSpreadHistory(spread.id, null);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 3b. Reset fullPageMode to 'spread' when orientation switches to landscape
+  useEffect(() => {
+    if (orientation === 'landscape' && fullPageMode !== 'spread') {
+      setFullPageMode('spread'); // eslint-disable-line react-hooks/set-state-in-effect
+    }
+  }, [orientation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 4. Cleanup on unmount — resetStore() clears spreadHistories via INITIAL_STATE spread
   useEffect(() => {
@@ -436,9 +458,43 @@ export function PlayerCanvas({
       .filter(Boolean);
   }, [spread.textboxes, narrationLangCode]);
 
+  // === Full page zoom: hidden click target detection ===
+  // Determines if the pending on_click target is on the hidden page
+  const hiddenPageClickTarget = useMemo((): 'left' | 'right' | null => {
+    if (fullPageMode === 'spread') return null;
+    if (phase !== 'awaiting_click' || !pendingClickTargetId) return null;
+
+    // Find which page side the target item is on via geometry center point
+    const allItems = [
+      ...(spread.images ?? []),
+      ...(spread.shapes ?? []),
+      ...(spread.videos ?? []),
+      ...(spread.audios ?? []),
+      ...(spread.textboxes ?? []),
+      ...(spread.quizzes ?? []),
+    ];
+    const targetItem = allItems.find((item) => item.id === pendingClickTargetId);
+    if (!targetItem?.geometry) return null;
+
+    const geo = targetItem.geometry as Geometry;
+    const targetSide = (geo.x + geo.w / 2) < 50 ? 'left' : 'right';
+    // Blink only when target is on the HIDDEN page (not the currently viewed page)
+    return targetSide !== fullPageMode ? targetSide : null;
+  }, [fullPageMode, phase, pendingClickTargetId, spread]);
+
+  // === Full page zoom: pan offset ===
+  // Pan offset: left page shifts 1px to show divider at right edge; right page divider is naturally at left edge
+  const halfScaled = scaledWidth / 2;
+  const panOffsetX = useMemo(() => {
+    if (fullPageMode === 'left') return -1; // shift 1px left → divider peeks on right edge
+    if (fullPageMode === 'right') return -halfScaled; // divider already visible at left edge
+    return 0;
+  }, [fullPageMode, halfScaled]);
+
   // === Render ===
   // Share preview: no padding around canvas, only reserve space for control bar
   // Editor: original padding for comfortable editing
+  const isFullPage = fullPageMode !== 'spread';
   const containerClassName = isSharePreview
     ? isPortrait
       ? "relative flex-1 overflow-hidden flex items-center justify-center pb-14 bg-muted/30"
@@ -449,6 +505,20 @@ export function PlayerCanvas({
     <div ref={canvasContainerRef} className={containerClassName}>
       <style>{CLICK_HINT_STYLE}</style>
 
+      {/* Spread + controls wrapper: flex column so overlay sits right below the spread */}
+      <div className="flex flex-col items-center" style={isPortrait ? { transition: 'all 0.3s ease' } : undefined}>
+      {/* Clip wrapper: in full page mode, clips to half the spread width (one page).
+           In spread mode, matches full spread dimensions (no clipping). */}
+      <div
+        style={{
+          width: isFullPage ? halfScaled : scaledWidth,
+          height: scaledHeight,
+          overflow: 'hidden',
+          ...(isPortrait && {
+            transition: 'width 0.3s ease, height 0.3s ease',
+          }),
+        }}
+      >
       {/* Spread container */}
       <div
         ref={spreadContainerRef}
@@ -457,6 +527,10 @@ export function PlayerCanvas({
           width: scaledWidth,
           height: scaledHeight,
           willChange: "transform",
+          ...(isPortrait && {
+            transform: `translateX(${panOffsetX}px)`,
+            transition: 'width 0.3s ease, height 0.3s ease, transform 0.3s ease',
+          }),
         }}
       >
         {/* Pages */}
@@ -647,6 +721,18 @@ export function PlayerCanvas({
           );
         })}
       </div>
+      </div>{/* end clip wrapper */}
+
+      {/* Full page zoom overlay (mobile portrait share preview only) — sits right below spread */}
+      {isPortrait && (
+        <MobileFullPageZoomOverlay
+          fullPageMode={fullPageMode}
+          onModeChange={setFullPageMode}
+          hiddenPageClickTarget={hiddenPageClickTarget}
+          spreadWidth={isFullPage ? halfScaled : scaledWidth}
+        />
+      )}
+      </div>{/* end spread + controls wrapper */}
 
       {/* Player controls sidebar / bottom bar */}
       <PlayerControlSidebar

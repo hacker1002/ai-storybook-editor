@@ -1,6 +1,7 @@
 // use-container-fit.ts - Compute zoom level that fits spread into container
 import { useState, useEffect, type RefObject } from 'react';
 import type { PlayerOrientation } from './use-player-orientation';
+import type { FullPageMode } from '../player-canvas';
 
 // Sidebar/bottom bar dimension (w-14 = 56px)
 const CONTROL_BAR_SIZE = 56;
@@ -8,6 +9,9 @@ const CONTROL_BAR_SIZE = 56;
 /**
  * Measures container and computes a zoom level (percentage) that makes the
  * spread fit within the available space while maintaining aspect ratio.
+ *
+ * When fullPageMode is 'left' or 'right', fits half the canvas width instead
+ * so a single page fills the viewport.
  *
  * Returns null when disabled (editor mode) — caller uses its own zoomLevel.
  */
@@ -17,6 +21,7 @@ export function useContainerFit(
   canvasHeight: number,
   orientation: PlayerOrientation,
   enabled: boolean,
+  fullPageMode: FullPageMode = 'spread',
 ): number | null {
   const [fitZoom, setFitZoom] = useState<number | null>(null);
 
@@ -47,7 +52,9 @@ export function useContainerFit(
 
       if (availableW <= 0 || availableH <= 0 || canvasWidth <= 0 || canvasHeight <= 0) return;
 
-      const scale = Math.min(availableW / canvasWidth, availableH / canvasHeight);
+      // Full page mode: fit half the canvas width (one page) to available width
+      const effectiveCanvasW = fullPageMode !== 'spread' ? canvasWidth / 2 : canvasWidth;
+      const scale = Math.min(availableW / effectiveCanvasW, availableH / canvasHeight);
       // Convert to zoom percentage (e.g. 0.31 → 31)
       setFitZoom(scale * 100);
     };
@@ -57,7 +64,7 @@ export function useContainerFit(
     const observer = new ResizeObserver(compute);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [containerRef, canvasWidth, canvasHeight, orientation, enabled]);
+  }, [containerRef, canvasWidth, canvasHeight, orientation, enabled, fullPageMode]);
 
   return fitZoom;
 }
