@@ -230,7 +230,7 @@ export function SharePreviewPage() {
 
   if (state.status === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-dvh items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           <p className="text-sm">Đang tải...</p>
@@ -241,7 +241,7 @@ export function SharePreviewPage() {
 
   if (state.status === 'requires_passcode') {
     return (
-      <div className="h-screen bg-background">
+      <div className="h-dvh bg-background">
         <SharePasscodeForm
           linkName={state.linkName}
           isVerifying={state.isVerifying}
@@ -254,7 +254,7 @@ export function SharePreviewPage() {
 
   if (state.status === 'ready' && state.book && state.shareConfig) {
     return (
-      <div className="h-screen">
+      <div className="h-dvh">
         <SharePreviewViewer
           book={state.book}
           snapshot={state.snapshot}
@@ -266,7 +266,7 @@ export function SharePreviewPage() {
 
   if (state.status === 'not_found') {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-dvh items-center justify-center">
         <div className="text-center text-muted-foreground">
           <p className="text-2xl font-semibold mb-2">404</p>
           <p className="text-sm">Không tìm thấy trang chia sẻ này.</p>
@@ -277,7 +277,7 @@ export function SharePreviewPage() {
 
   // error state
   return (
-    <div className="flex h-screen items-center justify-center">
+    <div className="flex h-dvh items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-muted-foreground">
         <p className="text-base font-medium">Đã có lỗi xảy ra</p>
         {state.error && <p className="text-sm">{state.error}</p>}

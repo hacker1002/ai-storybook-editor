@@ -58,7 +58,7 @@ export function PlayerControlSidebar({
         role="toolbar"
         aria-label="Player controls"
         aria-orientation="horizontal"
-        className="absolute bottom-0 left-0 right-0 h-14 flex items-center justify-between px-4 bg-white border-t border-border z-10"
+        className="absolute bottom-0 left-0 right-0 min-h-14 flex items-center justify-between px-4 pb-[env(safe-area-inset-bottom,0px)] bg-white border-t border-border z-10"
       >
         {/* Left: Auto Mode Toggle */}
         <div className="flex items-center gap-2">
