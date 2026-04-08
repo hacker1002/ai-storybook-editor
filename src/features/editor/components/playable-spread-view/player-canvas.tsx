@@ -423,6 +423,8 @@ export function PlayerCanvas({
       .map((textbox) => {
         const result = getTextboxContentForLanguage(textbox, narrationLangCode);
         if (!result?.content?.geometry) return null;
+        // Skip empty textboxes in player (no "Click to add text" placeholder)
+        if (!result.content.text) return null;
         return { textbox, langKey: result.langKey, data: result.content };
       })
       .filter(Boolean);
@@ -487,9 +489,13 @@ export function PlayerCanvas({
           />
         )}
 
-        {/* Images */}
+        {/* Images — skip empty (no resolved URL) */}
         {spread.images?.map((image, index) => {
           if (image.player_visible === false) return null;
+          const hasUrl = image.final_hires_media_url
+            || image.illustrations?.some(i => i.media_url)
+            || image.media_url;
+          if (!hasUrl) return null;
           return (
             <div
               key={image.id}
@@ -533,9 +539,10 @@ export function PlayerCanvas({
           );
         })}
 
-        {/* Videos */}
+        {/* Videos — skip empty (no media_url) */}
         {spread.videos?.map((video, index) => {
           if (video.player_visible === false) return null;
+          if (!video.media_url) return null;
           return (
             <div
               key={video.id}
@@ -556,9 +563,10 @@ export function PlayerCanvas({
           );
         })}
 
-        {/* Audios */}
+        {/* Audios — skip empty (no media_url) */}
         {spread.audios?.map((audio, index) => {
           if (audio.player_visible === false) return null;
+          if (!audio.media_url) return null;
           return (
             <div
               key={audio.id}

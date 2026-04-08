@@ -5,6 +5,7 @@ import { EFFECT_TYPE, EFFECT_TYPE_NAMES } from "@/constants/playable-constants";
 import {
   calculateFlyOffset,
   calculateFloatOffset,
+  getBaseOpacity,
 } from "./player-initial-states";
 import { createLogger } from "@/utils/logger";
 
@@ -58,6 +59,10 @@ export function addTweenToTimeline(
   const delaySec = (effect.delay ?? 0) / 1000;
   const targetId = animation.target.id;
   const effectName = EFFECT_TYPE_NAMES[effectType] || `Unknown(${effectType})`;
+
+  // Element's natural opacity (e.g. shape fill.opacity) — entrance animations
+  // should end at this value instead of forcing to 1.
+  const baseOpacity = getBaseOpacity(element);
 
   // Capture child count before adding tweens — used for attaching start/end logs
   const childCountBefore = timeline.getChildren().length;
@@ -125,7 +130,7 @@ export function addTweenToTimeline(
 
     // ── Appear (2) ───────────────────────────────────────────────
     case EFFECT_TYPE.APPEAR:
-      timeline.set(element, { autoAlpha: 1, delay: delaySec }, position);
+      timeline.set(element, { autoAlpha: baseOpacity, delay: delaySec }, position);
       break;
 
     // ── Fade In (3) ──────────────────────────────────────────────
@@ -134,7 +139,7 @@ export function addTweenToTimeline(
       timeline.to(
         element,
         {
-          autoAlpha: 1,
+          autoAlpha: baseOpacity,
           duration: dur,
           delay: delaySec,
           ease: "power2.out",
@@ -151,7 +156,7 @@ export function addTweenToTimeline(
       timeline.to(
         element,
         {
-          autoAlpha: 1,
+          autoAlpha: baseOpacity,
           x: 0,
           y: 0,
           duration: dur,
@@ -169,7 +174,7 @@ export function addTweenToTimeline(
       timeline.to(
         element,
         {
-          autoAlpha: 1,
+          autoAlpha: baseOpacity,
           x: 0,
           y: 0,
           duration: dur,
@@ -189,7 +194,7 @@ export function addTweenToTimeline(
       timeline.to(
         element,
         {
-          autoAlpha: 1,
+          autoAlpha: baseOpacity,
           scale: targetScale,
           duration: dur,
           delay: delaySec,

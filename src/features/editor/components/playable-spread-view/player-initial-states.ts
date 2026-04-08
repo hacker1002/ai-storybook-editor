@@ -5,6 +5,16 @@ import type { SpreadAnimation } from '@/types/spread-types';
 import type { CanvasSize } from '@/types/canvas-types';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
 
+// === Base Opacity ===
+
+/**
+ * Read element's base opacity from data attribute (set by React, unaffected by GSAP).
+ * Used to preserve fill.opacity on shapes when GSAP autoAlpha would override it.
+ */
+export function getBaseOpacity(element: HTMLElement): number {
+  return parseFloat(element.dataset.baseOpacity ?? '') || 1;
+}
+
 // === Offset Helpers ===
 
 interface Offset {
@@ -40,11 +50,16 @@ export function calculateFloatOffset(direction: string | undefined): Offset {
 
 // === Resolve Initial State ===
 
-/** Determine GSAP initial props for a single animation based on its effect type */
+/**
+ * Determine GSAP initial props for a single animation based on its effect type.
+ * @param baseOpacity - Element's natural CSS opacity (from data-base-opacity). Defaults to 1.
+ *   Used for "visible" states so GSAP doesn't override e.g. shape fill.opacity.
+ */
 export function resolveInitialState(
   animation: SpreadAnimation,
   spreadContainer: HTMLElement | null,
-  canvasSize?: CanvasSize
+  canvasSize?: CanvasSize,
+  baseOpacity: number = 1
 ): gsap.TweenVars {
   const { type } = animation.effect;
   const cw = spreadContainer?.getBoundingClientRect().width ?? canvasSize?.width ?? 800;
@@ -73,7 +88,7 @@ export function resolveInitialState(
     case EFFECT_TYPE.ZOOM:
       return { autoAlpha: 0, scale: 0, transformOrigin: 'center center' };
 
-    // Emphasis, Exit, Motion: visible at origin
+    // Emphasis, Exit, Motion: visible at element's natural opacity
     case EFFECT_TYPE.SPIN:
     case EFFECT_TYPE.GROW_SHRINK:
     case EFFECT_TYPE.TEETER:
@@ -85,21 +100,26 @@ export function resolveInitialState(
     case EFFECT_TYPE.FLOAT_OUT:
     case EFFECT_TYPE.LINES:
     case EFFECT_TYPE.ARCS:
-      return { autoAlpha: 1 };
+      return { autoAlpha: baseOpacity };
 
     default:
-      return { autoAlpha: 1 };
+      return { autoAlpha: baseOpacity };
   }
 }
 
 // === Resolve Animation End State (for USER_BACK re-apply) ===
 
-/** Determine GSAP final props after animation completes */
+/**
+ * Determine GSAP final props after animation completes.
+ * @param baseOpacity - Element's natural CSS opacity (from data-base-opacity). Defaults to 1.
+ *   Entrance end states use this so the element returns to its natural opacity, not forced to 1.
+ */
 export function resolveAnimationEndState(
   animation: SpreadAnimation,
   spreadContainer: HTMLElement | null,
   itemGeometry?: { x: number; y: number },
-  canvasSize?: CanvasSize
+  canvasSize?: CanvasSize,
+  baseOpacity: number = 1
 ): gsap.TweenVars {
   const { type, amount, direction } = animation.effect;
   const cw = spreadContainer?.getBoundingClientRect().width ?? canvasSize?.width ?? 800;
@@ -113,13 +133,13 @@ export function resolveAnimationEndState(
     case EFFECT_TYPE.APPEAR:
     case EFFECT_TYPE.FADE_IN:
     case EFFECT_TYPE.FLOAT_IN:
-      return { autoAlpha: 1, x: 0, y: 0 };
+      return { autoAlpha: baseOpacity, x: 0, y: 0 };
 
     case EFFECT_TYPE.FLY_IN:
-      return { autoAlpha: 1, x: 0, y: 0 };
+      return { autoAlpha: baseOpacity, x: 0, y: 0 };
 
     case EFFECT_TYPE.ZOOM:
-      return { autoAlpha: 1, x: 0, y: 0, scale: amount ?? 1, transformOrigin: 'center center' };
+      return { autoAlpha: baseOpacity, x: 0, y: 0, scale: amount ?? 1, transformOrigin: 'center center' };
 
     case EFFECT_TYPE.SPIN: {
       const rotations = amount ?? 1;
@@ -177,6 +197,12 @@ export function resolveAnimationEndState(
 export function resetElementStyles(elementRefsMap: Map<string, HTMLElement>): void {
   elementRefsMap.forEach((element) => {
     gsap.set(element, { clearProps: 'opacity,visibility,transform,transformOrigin' });
+    // clearProps removes ALL inline opacity — restore base opacity for elements that have it
+    // (e.g. shapes with fill.opacity). Without this, non-animated items lose their CSS opacity.
+    const bo = getBaseOpacity(element);
+    if (bo < 1) {
+      element.style.opacity = String(bo);
+    }
     // Clear read-along word highlights (CSS class on child spans)
     element.querySelectorAll('.read-along-active-word').forEach((el) => {
       el.classList.remove('read-along-active-word');
@@ -212,7 +238,7 @@ export function applyInitialStates(
     const element = elementRefsMap.get(targetId);
     if (!element) return;
 
-    const initialProps = resolveInitialState(anim, spreadContainer, canvasSize);
+    const initialProps = resolveInitialState(anim, spreadContainer, canvasSize, getBaseOpacity(element));
     if (Object.keys(initialProps).length > 0) {
       gsap.set(element, initialProps);
     }

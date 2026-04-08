@@ -22,6 +22,7 @@ import {
   resetElementStyles,
   resolveInitialState,
   resolveAnimationEndState,
+  getBaseOpacity,
 } from '../player-initial-states';
 import { getScaledDimensions } from '../../../utils/coordinate-utils';
 import { useCanvasWidth, useCanvasHeight } from '@/stores/editor-settings-store';
@@ -447,7 +448,7 @@ export function usePlayerGsapEngine({
       step.animations.forEach((anim) => {
         const el = elementRefsMap.current.get(anim.target.id);
         if (!el) return;
-        const endState = resolveAnimationEndState(anim, spreadContainerRef.current, findItemGeometry(anim.target.id), { width: canvasWidth, height: canvasHeight });
+        const endState = resolveAnimationEndState(anim, spreadContainerRef.current, findItemGeometry(anim.target.id), { width: canvasWidth, height: canvasHeight }, getBaseOpacity(el));
         if (Object.keys(endState).length > 0) {
           gsap.set(el, endState);
         }
@@ -496,7 +497,8 @@ export function usePlayerGsapEngine({
             anim,
             spreadContainerRef.current,
             findItemGeometry(anim.target.id),
-            { width: canvasWidth, height: canvasHeight }
+            { width: canvasWidth, height: canvasHeight },
+            getBaseOpacity(el)
           );
           if (Object.keys(endState).length > 0) gsap.set(el, endState);
         });
@@ -588,7 +590,8 @@ export function usePlayerGsapEngine({
             anim,
             spreadContainerRef.current,
             findItemGeometry(anim.target.id),
-            { width: canvasWidth, height: canvasHeight }
+            { width: canvasWidth, height: canvasHeight },
+            getBaseOpacity(el)
           );
           if (Object.keys(endState).length > 0) gsap.set(el, endState);
         });

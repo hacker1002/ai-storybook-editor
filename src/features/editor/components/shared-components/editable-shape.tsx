@@ -51,6 +51,7 @@ export function EditableShape({
     <div
       role="img"
       aria-label={shape.title || `Shape ${index + 1}`}
+      data-base-opacity={fill.opacity}
       tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
       onKeyDown={(e) => e.key === 'Enter' && isEditable && onSelect()}
