@@ -106,22 +106,24 @@ export function PlayerControlSidebar({
         role="toolbar"
         aria-label="Player controls"
         aria-orientation="horizontal"
-        className="absolute bottom-0 left-0 right-0 min-h-14 flex items-center justify-between px-4 pb-[env(safe-area-inset-bottom,0px)] bg-white border-t border-border z-10"
+        className="absolute bottom-0 left-0 right-0 min-h-14 flex items-center px-4 pb-[env(safe-area-inset-bottom,0px)] bg-white border-t border-border z-10"
       >
-        {/* Left: Auto Mode Toggle */}
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${isAutoMode ? 'text-foreground' : 'text-muted-foreground'}`}>
-            Auto
-          </span>
-          <Switch
-            checked={isAutoMode}
-            onCheckedChange={handleAutoToggle}
-            aria-label={`Auto play: ${isAutoMode ? 'on' : 'off'}`}
-          />
+        {/* Left: Auto Mode Toggle (equal-width section) */}
+        <div className="flex-1 flex items-center justify-start">
+          <div className="flex flex-col items-center gap-0.5">
+            <span className={`text-[10px] font-medium leading-none ${isAutoMode ? 'text-foreground' : 'text-muted-foreground'}`}>
+              Auto
+            </span>
+            <Switch
+              checked={isAutoMode}
+              onCheckedChange={handleAutoToggle}
+              aria-label={`Auto play: ${isAutoMode ? 'on' : 'off'}`}
+            />
+          </div>
         </div>
 
-        {/* Center: Nav Controls */}
-        <div className="flex items-center gap-1">
+        {/* Center: Nav Controls (equal-width section, centered) */}
+        <div className="flex-1 flex items-center justify-center gap-1">
           {showManualNav && (
             <button
               type="button"
@@ -166,19 +168,21 @@ export function PlayerControlSidebar({
           )}
         </div>
 
-        {/* Right: Settings Button */}
-        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogTrigger asChild>
-            <button
-              type="button"
-              aria-label="Player settings"
-              className="flex items-center justify-center w-8 h-8 rounded-md transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <Settings size={18} />
-            </button>
-          </DialogTrigger>
-          {settingsModal}
-        </Dialog>
+        {/* Right: Settings Button (equal-width section) */}
+        <div className="flex-1 flex items-center justify-end">
+          <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                aria-label="Player settings"
+                className="flex items-center justify-center w-8 h-8 rounded-md transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <Settings size={18} />
+              </button>
+            </DialogTrigger>
+            {settingsModal}
+          </Dialog>
+        </div>
       </div>
     );
   }
