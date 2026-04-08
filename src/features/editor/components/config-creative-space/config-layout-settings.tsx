@@ -8,13 +8,19 @@ import { LayoutThumbnail } from './layout-thumbnail';
 import { LayoutSelectionModal } from './layout-selection-modal';
 import { useTemplateLayouts } from '@/hooks/use-template-layouts';
 import { SearchableDropdown } from '@/components/ui/searchable-dropdown';
+import { NumberStepper } from '@/components/ui/number-stepper';
+import { FONT_FAMILY_OPTIONS } from '@/constants/config-constants';
 import type { BookTemplateLayout, PageNumberingPosition, PageNumberingSettings, TemplateLayout } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 
 const DEFAULT_PAGE_NUMBERING: PageNumberingSettings = {
   position: 'none',
   color: '#000000',
+  font_family: 'Nunito',
+  font_size: 18,
 };
+
+const FONT_OPTIONS = FONT_FAMILY_OPTIONS.map((f) => ({ value: f, label: f }));
 
 const PAGE_NUMBERING_POSITION_OPTIONS: { value: PageNumberingPosition; label: string }[] = [
   { value: 'bottom_center', label: 'Bottom Center' },
@@ -192,8 +198,24 @@ export function ConfigLayoutSettings() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs text-muted-foreground">Color</span>
+              <span className="text-xs text-muted-foreground">Font</span>
               <div className="flex items-center gap-2">
+                <div className="w-44 shrink-0">
+                  <SearchableDropdown
+                    options={FONT_OPTIONS}
+                    value={pageNumbering.font_family ?? 'Nunito'}
+                    onChange={(val) => handlePageNumberingChange({ font_family: val })}
+                    placeholder="Font..."
+                  />
+                </div>
+                <NumberStepper
+                  value={pageNumbering.font_size ?? 18}
+                  min={8}
+                  max={72}
+                  step={1}
+                  onChange={(val) => handlePageNumberingChange({ font_size: val })}
+                  className="shrink-0"
+                />
                 <input
                   type="color"
                   value={pageNumbering.color}
@@ -201,7 +223,6 @@ export function ConfigLayoutSettings() {
                   className="h-8 w-9 shrink-0 cursor-pointer rounded border p-0.5"
                   title="Page number color"
                 />
-                <span className="text-sm text-foreground">{pageNumbering.color}</span>
               </div>
             </div>
           </div>

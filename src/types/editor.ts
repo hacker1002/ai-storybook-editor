@@ -84,7 +84,9 @@ export type PageNumberingPosition = 'bottom_center' | 'bottom_corner' | 'top_cor
 
 export interface PageNumberingSettings {
   position: PageNumberingPosition;
-  color: string; // hex
+  color: string;       // hex
+  font_family: string; // font family name, default: 'Inter'
+  font_size: number;   // px, default: 18
 }
 
 // Template layout selection per slot (spread, left page, right page)

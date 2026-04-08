@@ -304,6 +304,8 @@ export function AnimationEditorCanvas({
             pages={spread.pages}
             position={pageNumbering.position}
             color={pageNumbering.color}
+            fontFamily={pageNumbering.font_family}
+            fontSize={pageNumbering.font_size}
           />
         )}
 
