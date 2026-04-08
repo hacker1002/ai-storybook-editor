@@ -22,7 +22,6 @@ import {
   useCurrentSection,
   usePlaybackActions,
 } from '@/stores/animation-playback-store';
-import { PlayablePlayerHeader } from "./playable-player-header";
 import { PlayableEditorHeader } from "./playable-editor-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
@@ -188,9 +187,10 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }, [mode, onStopPreview]);
 
   // Stop playback when switching editions to force step rebuild
+  // In share preview (mode=player), skip canvas remount — PlayerCanvas handles step reset internally
   const handleEditionChange = useCallback((edition: PlayEdition) => {
     log.info('handleEditionChange', 'edition switching', { edition, activeCanvas });
-    if (activeCanvas === 'player') {
+    if (activeCanvas === 'player' && mode !== 'player') {
       setActiveCanvas(mode);
       onStopPreview?.();
     }
@@ -368,16 +368,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // === Render ===
   return (
     <div className="relative flex flex-col h-full">
-      {/* Header: player mode gets version toggle only, editor modes get play/stop + zoom */}
-      {mode === "player" ? (
-        <PlayablePlayerHeader
-          playEdition={playEdition}
-          onEditionChange={handleEditionChange}
-          bookTitle={bookTitle}
-          availableEditions={availableEditions}
-          availableLanguages={availableLanguages}
-        />
-      ) : (
+      {/* Header: editor modes only (player mode has no header — controls in sidebar) */}
+      {mode !== "player" && (
         <PlayableEditorHeader
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
@@ -385,7 +377,14 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       )}
 
       {/* Canvas Area - full height (no header row) */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex-1 overflow-hidden flex relative">
+        {/* Book title overlay — share preview only */}
+        {isSharePreview && bookTitle && (
+          <div className="absolute top-3 left-3 bg-black/40 text-white text-sm font-medium px-3 py-1.5 rounded-md max-w-[60%] truncate opacity-80 hover:opacity-100 z-10 transition-opacity pointer-events-none">
+            {bookTitle}
+          </div>
+        )}
+
         {activeCanvas === "animation-editor" && selectedSpread ? (
           <AnimationEditorCanvas
             spread={selectedSpread}
@@ -418,6 +417,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             onSpreadComplete={handleSpreadComplete}
             onSkipSpread={handleSkipSpread}
             onPlayModeChange={setPlayMode}
+            onEditionChange={handleEditionChange}
+            availableEditions={availableEditions}
+            availableLanguages={availableLanguages}
             pageNumbering={pageNumbering}
             isSharePreview={isSharePreview}
           />

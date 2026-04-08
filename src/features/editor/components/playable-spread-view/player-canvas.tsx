@@ -58,6 +58,9 @@ export interface PlayerCanvasProps {
   onSpreadComplete: (spreadId: string) => void;
   onSkipSpread: (direction: "next" | "prev") => void;
   onPlayModeChange: (mode: PlayMode) => void;
+  onEditionChange: (edition: PlayEdition) => void;
+  availableEditions?: { classic?: boolean; dynamic?: boolean; interactive?: boolean };
+  availableLanguages?: { name: string; code: string }[];
   pageNumbering?: PageNumberingSettings | null;
   /** When true, auto-fit spread to container and enable responsive control bar */
   isSharePreview?: boolean;
@@ -97,6 +100,9 @@ export function PlayerCanvas({
   onSpreadComplete,
   onSkipSpread,
   onPlayModeChange,
+  onEditionChange,
+  availableEditions,
+  availableLanguages,
   pageNumbering,
   isSharePreview = false,
 }: PlayerCanvasProps) {
@@ -650,6 +656,10 @@ export function PlayerCanvas({
         canNext={canGoNext}
         canBack={canGoBack}
         orientation={isSharePreview ? orientation : 'landscape'}
+        playEdition={playEdition}
+        onEditionChange={onEditionChange}
+        availableEditions={availableEditions}
+        availableLanguages={availableLanguages}
       />
 
       {/* Quiz modal */}
