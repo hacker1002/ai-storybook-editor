@@ -22,6 +22,7 @@ import { useFormats, useFormatActions } from "@/stores/format-store";
 import { useEras, useEraActions } from "@/stores/era-store";
 import { useLocations, useLocationActions } from "@/stores/location-store";
 import { useArtStyleStore } from "@/stores/art-style-store";
+import { useLanguageCode } from "@/stores/editor-settings-store";
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown";
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown";
 import { DIMENSION_MAP, TARGET_AUDIENCE_MAP } from "@/constants/book-enums";
@@ -65,6 +66,7 @@ export function ConfigGeneralSettings() {
   const { fetchLocations } = useLocationActions();
 
   const artStyleName = useArtStyleStore((s) => s.name);
+  const lang = useLanguageCode();
 
   // Fetch all lookup data on mount
   React.useEffect(() => {
@@ -95,8 +97,6 @@ export function ConfigGeneralSettings() {
   }, [book?.artstyle_id, artStyleName]);
 
   if (!book) return null;
-
-  const lang = book.original_language;
 
   // ── Derived display values ──────────────────────────────────────────────────
 
