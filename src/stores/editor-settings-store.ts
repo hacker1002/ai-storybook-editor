@@ -20,6 +20,8 @@ interface EditorSettingsStore {
   setCurrentLanguage: (language: Language) => void;
   setCurrentStep: (step: PipelineStep) => void;
   setZoomLevel: (level: number) => void;
+  /** Set canvas size from book dimension (for contexts that don't need full resetSettings). */
+  setCanvasSize: (dimension: number | null) => void;
   resetSettings: (language: Language, step: PipelineStep, dimension: number | null) => void;
 }
 
@@ -45,6 +47,12 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
 
       setZoomLevel: (level) => {
         set({ zoomLevel: level });
+      },
+
+      setCanvasSize: (dimension) => {
+        const canvasSize = resolveCanvasSize(dimension);
+        log.info('setCanvasSize', 'set', { canvasWidth: canvasSize.width, canvasHeight: canvasSize.height });
+        set({ canvasSize });
       },
 
       resetSettings: (language, step, dimension) => {
@@ -90,12 +98,16 @@ export const useCanvasHeight = () =>
 export const useCanvasAspectRatio = () =>
   useEditorSettingsStore((s) => s.canvasSize.width / s.canvasSize.height);
 
+export const useSetCanvasSize = () =>
+  useEditorSettingsStore((s) => s.setCanvasSize);
+
 export const useEditorSettingsActions = () =>
   useEditorSettingsStore(
     useShallow((s) => ({
       setCurrentLanguage: s.setCurrentLanguage,
       setCurrentStep: s.setCurrentStep,
       setZoomLevel: s.setZoomLevel,
+      setCanvasSize: s.setCanvasSize,
       resetSettings: s.resetSettings,
     }))
   );

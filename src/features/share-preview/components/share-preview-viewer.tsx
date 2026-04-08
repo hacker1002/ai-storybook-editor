@@ -1,9 +1,10 @@
 // share-preview-viewer.tsx - Data conversion layer: API response → PlayableSpreadView props
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { PlayableSpreadView } from '@/features/editor/components/playable-spread-view';
 import type { PlayableSpread } from '@/types/playable-types';
 import type { Section } from '@/types/illustration-types';
 import type { BookPreviewData, ShareConfig, SnapshotPreviewData } from '@/types/share-preview-types';
+import { useSetCanvasSize } from '@/stores/editor-settings-store';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('SharePreview', 'SharePreviewViewer');
@@ -15,6 +16,14 @@ interface SharePreviewViewerProps {
 }
 
 export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreviewViewerProps) {
+  const setCanvasSize = useSetCanvasSize();
+
+  // Sync book dimension → canvas size store so PlayerCanvas renders at correct spread dimensions
+  useEffect(() => {
+    log.debug('useEffect:dimension', 'set canvas size', { dimension: book.dimension });
+    setCanvasSize(book.dimension ?? null);
+  }, [book.dimension, setCanvasSize]);
+
   // Convert API spreads → PlayableSpread[] (direct cast with defaults)
   const playableSpreads = useMemo<PlayableSpread[]>(() => {
     if (!snapshot) return [];
