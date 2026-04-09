@@ -4,11 +4,12 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { SpreadViewHeader } from './spread-view-header';
 import { SpreadEditorPanel } from './spread-editor-panel';
-import { SpreadThumbnailList } from './spread-thumbnail-list';
+import { SpreadThumbnailList, type SpreadThumbnailListRef } from './spread-thumbnail-list';
 import { ZOOM, COLUMNS } from '@/constants/spread-constants';
 import type { SpreadType } from './new-spread-button';
 import type { ViewMode } from '@/types/canvas-types';
 import { useSetZoomLevel } from '@/stores/editor-settings-store';
+import { useInteractionLayer } from '../../contexts';
 import type { PageNumberingSettings } from '@/types/editor';
 
 const STORAGE_KEY = 'spread-view-prefs';
@@ -127,6 +128,10 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
 
   // Page numbering overlay settings (null/undefined = hidden)
   pageNumbering?: PageNumberingSettings | null;
+
+  // Force a specific language code for textbox operations (overrides editor language).
+  // Used by DummyMainView to lock dummies to the book's original_language.
+  forceLanguageCode?: string;
 }
 
 // === Main Component ===
@@ -168,6 +173,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   onPageSelect,
   onDeselect,
   pageNumbering,
+  forceLanguageCode,
 }: CanvasSpreadViewProps<TSpread>) {
   // === Local View State (with localStorage persistence) ===
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -185,6 +191,12 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     const prefs = loadViewPreferences();
     return prefs.columnsPerRow ?? COLUMNS.DEFAULT;
   });
+
+  // Ref to the currently mounted SpreadThumbnailList (either the edit-mode
+  // filmstrip OR the grid-mode grid — only one mounts at a time).
+  // Used by keyboard delete to delegate the confirmation dialog logic so it
+  // lives in exactly one place (SpreadThumbnailList.triggerDelete).
+  const filmstripRef = useRef<SpreadThumbnailListRef>(null);
 
   // Persist view preferences to localStorage
   useEffect(() => {
@@ -301,6 +313,39 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     }
   }, [spreads, selectedId, onDeleteSpread, onSpreadSelect]);
 
+  // Delete currently selected spread via keyboard — delegates to the currently
+  // mounted SpreadThumbnailList's triggerDelete so confirmation logic (content
+  // check + dialog) lives in exactly one place. Works in BOTH edit and grid mode
+  // because filmstripRef is attached to whichever list is currently rendered.
+  const handleDeleteCurrentSpread = useCallback(() => {
+    if (!selectedId) return;
+    filmstripRef.current?.triggerDelete(selectedId);
+  }, [selectedId]);
+
+  // === Interaction Layer Stack — slot 'spread' registration ===
+  //
+  // Registered at CanvasSpreadView level (not SpreadEditorPanel) so that:
+  //   1. Slot stays active in BOTH edit mode AND grid mode
+  //   2. Keyboard Delete can remove the selected spread regardless of view mode
+  //   3. SpreadEditorPanel unmounts in grid mode — registering there would
+  //      make the slot disappear when switching to grid view
+  //
+  // No onClickOutside handler — spread slot must stay registered regardless
+  // of where the user clicks (filmstrip, sidebar, toolbars, grid cells, etc.).
+  // Popped only when the spread is removed or a higher slot (item/modal)
+  // cascades it off via setLayer in the provider.
+  const spreadViewRef = useRef<HTMLDivElement>(null);
+  const spreadLayer = useMemo(() => {
+    if (!selectedId) return null;
+    return {
+      id: selectedId,
+      ref: spreadViewRef,
+      hotkeys: canDeleteSpread ? ['Delete', 'Backspace'] : [],
+      onHotkey: canDeleteSpread ? () => handleDeleteCurrentSpread() : undefined,
+    };
+  }, [selectedId, canDeleteSpread, handleDeleteCurrentSpread]);
+  useInteractionLayer('spread', spreadLayer);
+
   // Unified spread item action handler (injects spreadId)
   const handleSpreadItemAction = useCallback(
     (params: Omit<SpreadItemActionUnion, 'spreadId'>) => {
@@ -340,7 +385,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   }, [spreads, selectedId, onSpreadSelect]);
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div ref={spreadViewRef} className="flex flex-col h-full bg-background">
       {/* Header */}
       <SpreadViewHeader
         viewMode={viewMode}
@@ -389,12 +434,14 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 onPageSelect={onPageSelect}
                 onDeselect={onDeselect}
                 pageNumbering={pageNumbering}
+                forceLanguageCode={forceLanguageCode}
               />
             )}
 
             {/* Edit Mode: Thumbnail Filmstrip */}
             <div className="border-t overflow-hidden">
               <SpreadThumbnailList
+                ref={filmstripRef}
                 spreads={spreads}
                 selectedId={selectedId}
                 layout="horizontal"
@@ -421,6 +468,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
         ) : (
           /* Grid Mode: Thumbnail Grid */
           <SpreadThumbnailList
+            ref={filmstripRef}
             spreads={spreads}
             selectedId={selectedId}
             layout="grid"
@@ -444,6 +492,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
           />
         )}
       </div>
+
     </div>
   );
 }

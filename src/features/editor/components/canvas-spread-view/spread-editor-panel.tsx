@@ -3,9 +3,11 @@
 
 import {
   useRef,
+  useMemo,
   Fragment,
   type ReactNode,
 } from "react";
+import { useInteractionLayer } from "../../contexts";
 import { SelectionFrame } from "./selection-frame";
 import { PageItem } from "./page-item";
 import {
@@ -117,6 +119,11 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
 
   // Page numbering overlay settings (null/undefined = hidden)
   pageNumbering?: PageNumberingSettings | null;
+
+  // Force a specific language code for textbox operations (overrides editor language).
+  // Used by DummyMainView to lock all textbox reads/writes to the book's
+  // original_language — dummies never follow the editor's current language.
+  forceLanguageCode?: string;
 }
 
 // === Local State Interface ===
@@ -162,9 +169,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   onPageSelect,
   onDeselect,
   pageNumbering,
+  forceLanguageCode,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const editorLangCode = useLanguageCode();
+  const currentEditorLangCode = useLanguageCode();
+  // When forceLanguageCode is provided (e.g. by DummyMainView passing
+  // book.original_language), it takes priority over the editor's current
+  // language so textbox reads/writes always target the same language key.
+  const editorLangCode = forceLanguageCode ?? currentEditorLangCode;
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
 
@@ -203,6 +215,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     handleKeyDown,
     handleUpdatePage,
     handleSpreadItemAction,
+    handleNudgeSelectedItem,
   } = useElementDragResize({
     spread,
     state,
@@ -214,6 +227,106 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     canDragItem,
     editorLangCode,
   });
+
+  // === Interaction Layer Stack registration ===
+  //
+  // Only slot 'item' is registered here. Slot 'spread' is registered by the
+  // parent CanvasSpreadView so that keyboard Delete can remove the selected
+  // spread from BOTH edit mode and grid mode (this component doesn't mount
+  // in grid mode).
+
+  // Delete selected item (called by slot 'item'.onHotkey for Delete/Backspace)
+  const handleDeleteSelectedItem = () => {
+    const { selectedElement } = state;
+    if (!selectedElement || selectedElement.type === 'page') return;
+
+    let itemId: string | undefined;
+    switch (selectedElement.type) {
+      case 'image': itemId = (spread.images ?? [])[selectedElement.index]?.id; break;
+      case 'raw_image': itemId = (spread.raw_images ?? [])[selectedElement.index]?.id; break;
+      case 'textbox': itemId = (spread.textboxes ?? [])[selectedElement.index]?.id; break;
+      case 'raw_textbox': itemId = (spread.raw_textboxes ?? [])[selectedElement.index]?.id; break;
+      case 'shape': itemId = spread.shapes?.[selectedElement.index]?.id; break;
+      case 'video': itemId = spread.videos?.[selectedElement.index]?.id; break;
+      case 'audio': itemId = spread.audios?.[selectedElement.index]?.id; break;
+      case 'quiz': itemId = spread.quizzes?.[selectedElement.index]?.id; break;
+    }
+    if (!itemId) return;
+
+    const resolvedItemType: 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz' =
+      selectedElement.type === 'raw_image'
+        ? 'image'
+        : selectedElement.type === 'raw_textbox'
+        ? 'textbox'
+        : (selectedElement.type as 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz');
+
+    handleSpreadItemAction({
+      itemType: resolvedItemType,
+      action: 'delete',
+      itemId,
+      data: null,
+    } as Omit<SpreadItemActionUnion, 'spreadId'>);
+  };
+
+  // Route hotkeys for slot 'item'
+  const handleItemHotkey = (key: string) => {
+    if (key === 'Escape') {
+      handleElementSelect(null);
+    } else if (key === 'Delete' || key === 'Backspace') {
+      handleDeleteSelectedItem();
+    } else if (key === 'ArrowUp') {
+      handleNudgeSelectedItem('up');
+    } else if (key === 'ArrowDown') {
+      handleNudgeSelectedItem('down');
+    } else if (key === 'ArrowLeft') {
+      handleNudgeSelectedItem('left');
+    } else if (key === 'ArrowRight') {
+      handleNudgeSelectedItem('right');
+    }
+  };
+
+  // Slot 'item' id: composed from type + resolved item id
+  const itemSlotId = useMemo(() => {
+    const { selectedElement } = state;
+    if (!selectedElement) return null;
+    let itemId: string | undefined;
+    switch (selectedElement.type) {
+      case 'image': itemId = (spread.images ?? [])[selectedElement.index]?.id; break;
+      case 'raw_image': itemId = (spread.raw_images ?? [])[selectedElement.index]?.id; break;
+      case 'textbox': itemId = (spread.textboxes ?? [])[selectedElement.index]?.id; break;
+      case 'raw_textbox': itemId = (spread.raw_textboxes ?? [])[selectedElement.index]?.id; break;
+      case 'shape': itemId = spread.shapes?.[selectedElement.index]?.id; break;
+      case 'video': itemId = spread.videos?.[selectedElement.index]?.id; break;
+      case 'audio': itemId = spread.audios?.[selectedElement.index]?.id; break;
+      case 'quiz': itemId = spread.quizzes?.[selectedElement.index]?.id; break;
+    }
+    if (!itemId) return null;
+    return `${selectedElement.type}:${itemId}`;
+  }, [state.selectedElement, spread]);
+
+  // Slot 'item' registration (active when an item is selected)
+  const itemLayer = useMemo(() => {
+    if (!state.selectedElement || !itemSlotId) return null;
+    return {
+      id: itemSlotId,
+      ref: canvasRef,
+      hotkeys: ['Delete', 'Backspace', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+      portalSelectors: [
+        '[data-toolbar]',
+        '[data-radix-popper-content-wrapper]',
+        '[data-radix-select-content]',
+        '[data-radix-popover-content]',
+        '[role="listbox"]',
+        '[role="dialog"]',
+      ],
+      onHotkey: handleItemHotkey,
+      onClickOutside: () => handleElementSelect(null),
+      onForcePop: () => handleElementSelect(null),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemSlotId]);
+
+  useInteractionLayer('item', itemLayer);
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();

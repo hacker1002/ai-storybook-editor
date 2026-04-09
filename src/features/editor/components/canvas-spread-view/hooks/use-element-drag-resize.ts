@@ -52,6 +52,7 @@ interface UseElementDragResizeReturn {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleUpdatePage: (pageIndex: number, updates: Record<string, unknown>) => void;
   handleSpreadItemAction: (params: Omit<SpreadItemActionUnion, "spreadId">) => void;
+  handleNudgeSelectedItem: (direction: 'up' | 'down' | 'left' | 'right') => void;
 }
 
 // === Hook ===
@@ -309,12 +310,14 @@ export function useElementDragResize<TSpread extends BaseSpread>({
   );
 
   // === Keyboard Handlers ===
+  // Note: Arrow nudge routing was moved to InteractionLayerStack slot 'item'.
+  // This handler retains only ESC-cancel-drag state machine logic.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const { selectedElement, isDragging, isResizing } = state;
       if (!selectedElement || !isEditable) return;
 
-      // Handle ESC first - works for all selection types including page
+      // ESC: cancel in-flight drag/resize and restore original geometry
       if (e.key === "Escape") {
         e.preventDefault();
         const origGeo = originalGeometryRef.current;
@@ -329,48 +332,30 @@ export function useElementDragResize<TSpread extends BaseSpread>({
             originalGeometry: null,
             selectedGeometry: origGeo,
           }));
-        } else {
-          handleElementSelect(null);
         }
+        // Deselect (non-drag ESC) is handled by slot 'item'.onHotkey → handleElementSelect(null)
         return;
-      }
-
-      switch (e.key) {
-        case "ArrowUp":
-        case "ArrowDown":
-        case "ArrowLeft":
-        case "ArrowRight": {
-          if (state.isTextboxEditing || state.isImageEditing) return;
-          if (!canDragItem) return;
-          const geometry = getSelectedGeometry();
-          if (!geometry) return;
-          e.preventDefault();
-          const step = e.shiftKey ? CANVAS.NUDGE_STEP_SHIFT : CANVAS.NUDGE_STEP;
-          const direction =
-            e.key === "ArrowUp"
-              ? "up"
-              : e.key === "ArrowDown"
-              ? "down"
-              : e.key === "ArrowLeft"
-              ? "left"
-              : "right";
-          updateElementGeometry(
-            selectedElement,
-            applyNudge(geometry, direction, step)
-          );
-          break;
-        }
       }
     },
     [
       state,
       isEditable,
-      getSelectedGeometry,
       updateElementGeometry,
-      handleElementSelect,
-      canDragItem,
       setState,
     ]
+  );
+
+  // === Nudge Handler (used by InteractionLayerStack slot 'item'.onHotkey) ===
+  const handleNudgeSelectedItem = useCallback(
+    (direction: 'up' | 'down' | 'left' | 'right') => {
+      const { selectedElement, isTextboxEditing, isImageEditing } = state;
+      if (!selectedElement || !canDragItem) return;
+      if (isTextboxEditing || isImageEditing) return;
+      const geometry = getSelectedGeometry();
+      if (!geometry) return;
+      updateElementGeometry(selectedElement, applyNudge(geometry, direction, CANVAS.NUDGE_STEP));
+    },
+    [state, canDragItem, getSelectedGeometry, updateElementGeometry]
   );
 
   // === Wrapper callback for page updates (used by PageItem) ===
@@ -411,5 +396,6 @@ export function useElementDragResize<TSpread extends BaseSpread>({
     handleKeyDown,
     handleUpdatePage,
     handleSpreadItemAction,
+    handleNudgeSelectedItem,
   };
 }

@@ -1,7 +1,7 @@
 // spread-thumbnail-list.tsx
 'use client';
 
-import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import { cn } from '@/utils/utils';
 import { SpreadThumbnail } from './spread-thumbnail';
 import { NewSpreadButton, type SpreadType } from './new-spread-button';
@@ -27,6 +27,11 @@ import type {
   QuizItemContext,
 } from '@/types/canvas-types';
 import { COLUMNS } from '@/constants/spread-constants';
+
+export interface SpreadThumbnailListRef {
+  /** Trigger delete for a spread by id — shows confirm dialog if spread has content. */
+  triggerDelete: (spreadId: string) => void;
+}
 
 interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   // Data
@@ -64,7 +69,8 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   checkSpreadHasContent?: (spread: TSpread) => boolean;
 }
 
-export function SpreadThumbnailList<TSpread extends BaseSpread>({
+// forwardRef with generic props — cast required because forwardRef doesn't support generic components
+export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<TSpread extends BaseSpread>({
   spreads,
   selectedId,
   layout,
@@ -87,11 +93,19 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
   onSpreadAdd,
   onDeleteSpread,
   checkSpreadHasContent,
-}: SpreadThumbnailListProps<TSpread>) {
+}: SpreadThumbnailListProps<TSpread>, ref: React.ForwardedRef<SpreadThumbnailListRef>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<TSpread | null>(null);
+
+  // Expose triggerDelete so CanvasSpreadView keyboard path can delegate here
+  useImperativeHandle(ref, () => ({
+    triggerDelete: (spreadId: string) => {
+      const spread = spreads.find((s) => s.id === spreadId);
+      if (spread) handleDelete(spread);
+    },
+  }));
 
   // Auto-scroll selected thumbnail into view
   useEffect(() => {
@@ -298,6 +312,8 @@ export function SpreadThumbnailList<TSpread extends BaseSpread>({
       </AlertDialog>
     </>
   );
-}
+}) as <TSpread extends BaseSpread>(
+  props: SpreadThumbnailListProps<TSpread> & { ref?: React.Ref<SpreadThumbnailListRef> }
+) => React.ReactElement;
 
 export default SpreadThumbnailList;

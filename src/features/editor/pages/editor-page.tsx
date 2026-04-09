@@ -29,6 +29,7 @@ import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creat
 import { SharesCreativeSpace } from '../components/shares-creative-space';
 import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { InteractionLayerProvider } from '../contexts';
 import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
@@ -204,6 +205,7 @@ export function EditorPage() {
 
   return (
     <TooltipProvider delayDuration={300}>
+      <InteractionLayerProvider>
       <div className="flex h-screen w-screen max-w-full flex-col overflow-hidden">
         {/* Header */}
         <EditorHeader
@@ -252,6 +254,7 @@ export function EditorPage() {
           </button>
         )}
       </div>
+      </InteractionLayerProvider>
     </TooltipProvider>
   );
 }

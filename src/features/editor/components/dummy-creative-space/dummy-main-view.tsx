@@ -17,7 +17,7 @@ import {
 } from "@/utils/template-layout-utils";
 import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'DummyMainView');
+const log = createLogger("Editor", "DummyMainView");
 import { DummyItemToolbar } from "./dummy-item-toolbar";
 import type {
   BaseSpread,
@@ -35,7 +35,6 @@ import type {
   DummyTextbox,
   DummyTextboxContent,
 } from "@/types/dummy";
-import { getFirstTextboxKey } from "@/types/dummy";
 
 interface DummyMainViewProps {
   selectedDummyId: string;
@@ -88,7 +87,14 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   const actions = useDummyActions();
   const book = useCurrentBook();
   const templateLayout = useBookTemplateLayout();
-  const { spreadLayouts, singlePageLayouts } = useTemplateLayouts(book?.book_type ?? null);
+  const { spreadLayouts, singlePageLayouts } = useTemplateLayouts(
+    book?.book_type ?? null
+  );
+
+  // Dummies always read/write textbox data against the book's original_language,
+  // regardless of the editor's current display language. Dummy is a single-language
+  // planning surface — translations only exist in the playable spreads layer.
+  const originalLangCode = book?.original_language ?? "en_US";
 
   const baseSpreads = useMemo(() => {
     if (!dummy) return [];
@@ -96,7 +102,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   }, [dummy]);
 
   const handleSpreadSelect = useCallback((spreadId: string) => {
-    log.info('handleSpreadSelect', 'spread selected', { spreadId });
+    log.info("handleSpreadSelect", "spread selected", { spreadId });
   }, []);
 
   const handleSpreadReorder = useCallback(
@@ -109,26 +115,32 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   const handleSpreadAdd = useCallback(
     (type: SpreadType) => {
       if (!dummy) return;
-      const langCode = book?.original_language ?? 'en';
+      const langCode = originalLangCode;
       const newSpread = createEmptySpread(dummy.spreads.length, type);
 
       // Populate images/textboxes from template (silent empty fallback)
       if (templateLayout) {
-        if (type === 'double') {
+        if (type === "double") {
           const tpl = findTemplateById(spreadLayouts, templateLayout.spread);
           if (tpl) {
-            const items = buildDummyItemsFromTemplate(tpl, 'full', langCode);
+            const items = buildDummyItemsFromTemplate(tpl, "full", langCode);
             newSpread.images = items.images;
             newSpread.textboxes = items.textboxes;
           }
         } else {
-          const leftTpl = findTemplateById(singlePageLayouts, templateLayout.left_page);
-          const rightTpl = findTemplateById(singlePageLayouts, templateLayout.right_page);
+          const leftTpl = findTemplateById(
+            singlePageLayouts,
+            templateLayout.left_page
+          );
+          const rightTpl = findTemplateById(
+            singlePageLayouts,
+            templateLayout.right_page
+          );
           const leftItems = leftTpl
-            ? buildDummyItemsFromTemplate(leftTpl, 'left', langCode)
+            ? buildDummyItemsFromTemplate(leftTpl, "left", langCode)
             : { images: [] as DummyImage[], textboxes: [] as DummyTextbox[] };
           const rightItems = rightTpl
-            ? buildDummyItemsFromTemplate(rightTpl, 'right', langCode)
+            ? buildDummyItemsFromTemplate(rightTpl, "right", langCode)
             : { images: [] as DummyImage[], textboxes: [] as DummyTextbox[] };
           const merged = mergeItems(leftItems, rightItems);
           newSpread.images = merged.images;
@@ -138,7 +150,15 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
 
       actions.addDummySpread(selectedDummyId, newSpread);
     },
-    [actions, selectedDummyId, dummy, book?.original_language, templateLayout, spreadLayouts, singlePageLayouts]
+    [
+      actions,
+      selectedDummyId,
+      dummy,
+      originalLangCode,
+      templateLayout,
+      spreadLayouts,
+      singlePageLayouts,
+    ]
   );
 
   const handleDeleteSpread = useCallback(
@@ -159,14 +179,11 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       switch (itemType) {
         case "image":
           if (action === "add") {
-            const newImage: DummyImage = {
-              id: crypto.randomUUID(),
-              art_note: "",
-              geometry: { x: 10, y: 10, w: 30, h: 30 },
-              typography: { size: 12, color: "#000000" },
-            };
             actions.updateDummySpread(selectedDummyId, spreadId, {
-              images: [...spread.images, newImage],
+              images: [
+                ...spread.images,
+                { id: crypto.randomUUID(), ...(data as any) },
+              ],
             });
           } else if (action === "update" && itemId && data) {
             actions.updateDummySpread(selectedDummyId, spreadId, {
@@ -183,27 +200,11 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
 
         case "textbox":
           if (action === "add") {
-            const newTextbox: DummyTextbox = {
-              id: crypto.randomUUID(),
-              en_US: {
-                text: "",
-                geometry: { x: 10, y: 10, w: 30, h: 20 },
-                typography: {
-                  family: "Arial",
-                  size: 14,
-                  weight: 400,
-                  style: "normal",
-                  textAlign: "left",
-                  lineHeight: 1.5,
-                  letterSpacing: 0,
-                  color: "#000000",
-                  decoration: "none",
-                  textTransform: "none",
-                },
-              },
-            };
             actions.updateDummySpread(selectedDummyId, spreadId, {
-              textboxes: [...spread.textboxes, newTextbox],
+              textboxes: [
+                ...spread.textboxes,
+                { id: crypto.randomUUID(), ...(data as any) },
+              ],
             });
           } else if (action === "update" && itemId && data) {
             actions.updateDummySpread(selectedDummyId, spreadId, {
@@ -234,7 +235,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
           break;
       }
     },
-    [actions, selectedDummyId, dummy]
+    [actions, selectedDummyId, dummy, originalLangCode]
   );
 
   const renderImageItem = useCallback(
@@ -267,30 +268,33 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
     [dummy]
   );
 
-  const renderTextItem = useCallback((context: TextItemContext<BaseSpread>) => {
-    const textbox = context.item as unknown as DummyTextbox;
-    const langKey = getFirstTextboxKey(textbox);
-    if (!langKey) return null;
+  const renderTextItem = useCallback(
+    (context: TextItemContext<BaseSpread>) => {
+      const textbox = context.item as unknown as DummyTextbox;
+      // Dummy always targets the book's original_language, never the editor language.
+      const langKey = originalLangCode;
+      const langData = textbox[langKey] as DummyTextboxContent | undefined;
+      if (!langData) return null;
 
-    const langData = textbox[langKey] as DummyTextboxContent;
-
-    return (
-      <EditableTextbox
-        textboxContent={langData}
-        index={context.itemIndex}
-        isSelected={context.isSelected}
-        isSelectable={context.isSpreadSelected}
-        isEditable={context.isSpreadSelected}
-        onSelect={context.onSelect}
-        onTextChange={(newText) => {
-          context.onUpdate({
-            [langKey]: { ...langData, text: newText },
-          } as unknown as Partial<DummyTextbox>);
-        }}
-        onEditingChange={context.onEditingChange ?? (() => {})}
-      />
-    );
-  }, []);
+      return (
+        <EditableTextbox
+          textboxContent={langData}
+          index={context.itemIndex}
+          isSelected={context.isSelected}
+          isSelectable={context.isSpreadSelected}
+          isEditable={context.isSpreadSelected}
+          onSelect={context.onSelect}
+          onTextChange={(newText) => {
+            context.onUpdate({
+              [langKey]: { ...langData, text: newText },
+            } as unknown as Partial<DummyTextbox>);
+          }}
+          onEditingChange={context.onEditingChange ?? (() => {})}
+        />
+      );
+    },
+    [originalLangCode]
+  );
 
   const renderImageToolbar = useCallback(
     (context: ImageToolbarContext<BaseSpread>) => {
@@ -340,9 +344,9 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       const contextWithClone: TextToolbarContext<BaseSpread> = {
         ...context,
         onClone: () => {
-          const langKey = getFirstTextboxKey(textbox);
-          if (!langKey) return;
-          const langData = textbox[langKey] as DummyTextboxContent;
+          const langKey = originalLangCode;
+          const langData = textbox[langKey] as DummyTextboxContent | undefined;
+          if (!langData) return;
           const cloned: DummyTextbox = {
             ...textbox,
             id: crypto.randomUUID(),
@@ -371,7 +375,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
         />
       );
     },
-    [dummy, handleSpreadItemAction]
+    [dummy, handleSpreadItemAction, originalLangCode]
   );
 
   if (!dummy) {
@@ -403,6 +407,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       canDragItem={true}
       initialViewMode="edit"
       pageNumbering={templateLayout?.page_numbering}
+      forceLanguageCode={originalLangCode}
     />
   );
 }

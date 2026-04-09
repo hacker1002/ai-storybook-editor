@@ -4,7 +4,6 @@
 
 import {
   useState,
-  useRef,
   useCallback,
   useEffect,
   type RefObject,
@@ -31,6 +30,11 @@ interface UseEditorSelectionParams<TSpread extends BaseSpread> {
   spread: TSpread;
   canvasRef: RefObject<HTMLDivElement | null>;
   externalSelectedItemId?: { type: string; id: string } | null;
+  /**
+   * @deprecated Kept for backward compat with callers; click-outside is now
+   * routed through the InteractionLayerStack (slot 'spread'.onClickOutside).
+   * This hook no longer reads it.
+   */
   onDeselect?: () => void;
   editorLangCode: string;
 }
@@ -52,13 +56,8 @@ export function useEditorSelection<TSpread extends BaseSpread>({
   spread,
   canvasRef,
   externalSelectedItemId,
-  onDeselect,
   editorLangCode,
 }: UseEditorSelectionParams<TSpread>): UseEditorSelectionReturn {
-  // Stable ref for onDeselect to avoid re-running click-outside effect
-  const onDeselectRef = useRef(onDeselect);
-  onDeselectRef.current = onDeselect;
-
   // Compute geometry for icon-based elements (audio/quiz) — converts fixed
   // pixel size to percentage relative to the canvas container's actual dimensions.
   const computeIconGeometry = useCallback((baseGeo: Geometry): Geometry => {
@@ -194,36 +193,10 @@ export function useEditorSelection<TSpread extends BaseSpread>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSelectedItemId?.type, externalSelectedItemId?.id]);
 
-  // Click outside to deselect
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!state.selectedElement) return;
-      if (!canvasRef.current) return;
-
-      const target = e.target as Element;
-      // Check if click is inside canvas
-      if (canvasRef.current.contains(target)) return;
-      // Check if click is inside a toolbar or its children (portaled to body)
-      if (target.closest?.("[data-toolbar]")) return;
-      // Check if click is inside Radix UI portals (Select, Popover, Dialog, etc.)
-      if (
-        target.closest?.(
-          '[data-radix-popper-content-wrapper], [data-radix-select-content], [data-radix-popover-content], [role="listbox"], [role="dialog"]'
-        )
-      )
-        return;
-
-      setState((prev) => ({
-        ...prev,
-        selectedElement: null,
-        selectedGeometry: null,
-      }));
-      onDeselectRef.current?.();
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [state.selectedElement, canvasRef]);
+  // Note: click-outside deselect is now routed via InteractionLayerStack
+  // slot 'item'.onClickOutside → handleElementSelect(null)
+  // and slot 'spread'.onClickOutside → onDeselect?.()
+  // The document mousedown listener has been removed.
 
   // === Selection Handlers ===
   const handleElementSelect = useCallback(

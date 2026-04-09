@@ -1,39 +1,64 @@
-import { useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { Label } from '@/components/ui/label';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { Copy, Trash2, Minus, Plus } from 'lucide-react';
+import { useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { Label } from "@/components/ui/label";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { NumberStepper } from "@/components/ui/number-stepper";
+import { Copy, Trash2 } from "lucide-react";
 import {
   useToolbarPosition,
   type BaseSpread,
   type ImageToolbarContext,
   type TextToolbarContext,
-} from '@/features/editor/components/canvas-spread-view';
-import { GeometrySection, ToolbarIconButton } from '@/features/editor/components/shared-components';
-import type { DummyImage, DummyTextbox, DummyTextboxContent } from '@/types/dummy';
-import { FONT_SIZE_CONFIG, GEOMETRY_CONFIG, DEFAULT_COLOR, getFirstTextboxKey } from '@/types/dummy';
-import type { Geometry } from '@/types/spread-types';
+} from "@/features/editor/components/canvas-spread-view";
+import {
+  GeometrySection,
+  ToolbarIconButton,
+} from "@/features/editor/components/shared-components";
+import { useCurrentBook } from "@/stores/book-store";
+import type {
+  DummyImage,
+  DummyTextbox,
+  DummyTextboxContent,
+} from "@/types/dummy";
+import {
+  FONT_SIZE_CONFIG,
+  GEOMETRY_CONFIG,
+  DEFAULT_COLOR,
+} from "@/types/dummy";
+import type { Geometry } from "@/types/spread-types";
 
 type ToolbarContext<TSpread extends BaseSpread> =
-  | { type: 'image'; context: ImageToolbarContext<TSpread>; item: DummyImage }
-  | { type: 'textbox'; context: TextToolbarContext<TSpread>; item: DummyTextbox };
+  | { type: "image"; context: ImageToolbarContext<TSpread>; item: DummyImage }
+  | {
+      type: "textbox";
+      context: TextToolbarContext<TSpread>;
+      item: DummyTextbox;
+    };
 
 interface DummyItemToolbarProps<TSpread extends BaseSpread> {
   data: ToolbarContext<TSpread>;
 }
 
-function getItemData(data: ToolbarContext<BaseSpread>) {
-  if (data.type === 'image') {
+function getItemData(
+  data: ToolbarContext<BaseSpread>,
+  originalLangCode: string
+) {
+  if (data.type === "image") {
     const img = data.item;
     return {
-      typography: img.typography ?? { size: FONT_SIZE_CONFIG.default, color: DEFAULT_COLOR },
+      typography: img.typography ?? {
+        size: FONT_SIZE_CONFIG.default,
+        color: DEFAULT_COLOR,
+      },
       geometry: img.geometry,
       langKey: null,
       langData: null,
     };
   }
   const tb = data.item;
-  const langKey = getFirstTextboxKey(tb) || 'en_US';
+  // Dummy always targets the book's original_language — never the editor language
+  // or the textbox's arbitrary first key.
+  const langKey = originalLangCode;
   const langData = tb[langKey] as DummyTextboxContent | undefined;
   return {
     typography: {
@@ -50,37 +75,50 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
   data,
 }: DummyItemToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const book = useCurrentBook();
+  const originalLangCode = book?.original_language ?? "en_US";
   const { context } = data;
   const { onUpdate, onDelete, onClone, selectedGeometry, canvasRef } = context;
 
-  const position = useToolbarPosition({ geometry: selectedGeometry, canvasRef, toolbarRef });
-  const { typography, geometry, langKey, langData } = getItemData(data as ToolbarContext<BaseSpread>);
+  const position = useToolbarPosition({
+    geometry: selectedGeometry,
+    canvasRef,
+    toolbarRef,
+  });
+  const { typography, geometry, langKey, langData } = getItemData(
+    data as ToolbarContext<BaseSpread>,
+    originalLangCode
+  );
 
   const handleFontSizeChange = useCallback(
-    (delta: number) => {
-      const newSize = Math.max(
-        FONT_SIZE_CONFIG.min,
-        Math.min(FONT_SIZE_CONFIG.max, typography.size + delta)
-      );
-
-      if (data.type === 'image') {
-        onUpdate?.({ typography: { size: newSize, color: typography.color } } as never);
+    (newSize: number) => {
+      // NumberStepper already clamps to its min/max — no extra clamping needed.
+      if (data.type === "image") {
+        onUpdate?.({
+          typography: { size: newSize, color: typography.color },
+        } as never);
       } else if (langData && langKey) {
         onUpdate?.({
-          [langKey]: { ...langData, typography: { ...langData.typography, size: newSize } },
+          [langKey]: {
+            ...langData,
+            typography: { ...langData.typography, size: newSize },
+          },
         } as never);
       }
     },
-    [data.type, typography, langData, langKey, onUpdate]
+    [data.type, typography.color, langData, langKey, onUpdate]
   );
 
   const handleColorChange = useCallback(
     (color: string) => {
-      if (data.type === 'image') {
+      if (data.type === "image") {
         onUpdate?.({ typography: { size: typography.size, color } } as never);
       } else if (langData && langKey) {
         onUpdate?.({
-          [langKey]: { ...langData, typography: { ...langData.typography, color } },
+          [langKey]: {
+            ...langData,
+            typography: { ...langData.typography, color },
+          },
         } as never);
       }
     },
@@ -93,24 +131,33 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
       if (isNaN(numValue)) return;
 
       const clampedValue =
-        field === 'w' || field === 'h'
+        field === "w" || field === "h"
           ? Math.max(1, Math.min(GEOMETRY_CONFIG.max, numValue))
-          : Math.max(GEOMETRY_CONFIG.min, Math.min(GEOMETRY_CONFIG.max, numValue));
+          : Math.max(
+              GEOMETRY_CONFIG.min,
+              Math.min(GEOMETRY_CONFIG.max, numValue)
+            );
 
       const newGeometry = { ...geometry, [field]: clampedValue };
 
-      if (data.type === 'image') {
+      if (data.type === "image") {
         onUpdate?.({ geometry: newGeometry } as never);
       } else if (langData && langKey) {
-        onUpdate?.({ [langKey]: { ...langData, geometry: newGeometry } } as never);
+        onUpdate?.({
+          [langKey]: { ...langData, geometry: newGeometry },
+        } as never);
       }
     },
     [data.type, geometry, langData, langKey, onUpdate]
   );
 
   const toolbarStyle: React.CSSProperties = position
-    ? { position: 'fixed', top: `${position.top}px`, left: `${position.left}px` }
-    : { position: 'fixed', opacity: 0, pointerEvents: 'none' };
+    ? {
+        position: "fixed",
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+      }
+    : { position: "fixed", opacity: 0, pointerEvents: "none" };
 
   const toolbarContent = (
     <TooltipProvider delayDuration={300}>
@@ -122,26 +169,18 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
       >
         {/* Typography Section */}
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground uppercase">Typography</Label>
+          <Label className="text-xs text-muted-foreground uppercase">
+            Typography
+          </Label>
           <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground w-14">Size</Label>
-            <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
-              <button
-                onClick={() => handleFontSizeChange(-FONT_SIZE_CONFIG.step)}
-                disabled={typography.size <= FONT_SIZE_CONFIG.min}
-                className="px-2 hover:bg-muted transition-colors h-full disabled:opacity-50"
-              >
-                <Minus className="h-3 w-3" />
-              </button>
-              <span className="w-8 text-center text-sm font-medium">{typography.size}</span>
-              <button
-                onClick={() => handleFontSizeChange(FONT_SIZE_CONFIG.step)}
-                disabled={typography.size >= FONT_SIZE_CONFIG.max}
-                className="px-2 hover:bg-muted transition-colors h-full disabled:opacity-50"
-              >
-                <Plus className="h-3 w-3" />
-              </button>
-            </div>
+            <NumberStepper
+              value={typography.size}
+              min={FONT_SIZE_CONFIG.min}
+              max={FONT_SIZE_CONFIG.max}
+              step={FONT_SIZE_CONFIG.step}
+              onChange={handleFontSizeChange}
+            />
             <Label className="text-xs text-muted-foreground ml-2">Color</Label>
             <input
               type="color"
@@ -153,17 +192,25 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
         </div>
 
         {/* Geometry Section */}
-        <GeometrySection geometry={geometry} onGeometryChange={handleGeometryChange} />
+        <GeometrySection
+          geometry={geometry}
+          onGeometryChange={handleGeometryChange}
+        />
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <ToolbarIconButton icon={Copy} label="Clone" onClick={onClone} />
-          <ToolbarIconButton icon={Trash2} label="Delete" onClick={onDelete} variant="destructive" />
+          <ToolbarIconButton
+            icon={Trash2}
+            label="Delete"
+            onClick={onDelete}
+            variant="destructive"
+          />
         </div>
       </div>
     </TooltipProvider>
   );
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === "undefined") return null;
   return createPortal(toolbarContent, document.body);
 }
