@@ -304,27 +304,33 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     return `${selectedElement.type}:${itemId}`;
   }, [state.selectedElement, spread]);
 
-  // Slot 'item' registration (active when an item is selected)
-  const itemLayer = useMemo(() => {
-    if (!state.selectedElement || !itemSlotId) return null;
-    return {
-      id: itemSlotId,
-      ref: canvasRef,
-      hotkeys: ['Delete', 'Backspace', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
-      portalSelectors: [
-        '[data-toolbar]',
-        '[data-radix-popper-content-wrapper]',
-        '[data-radix-select-content]',
-        '[data-radix-popover-content]',
-        '[role="listbox"]',
-        '[role="dialog"]',
-      ],
-      onHotkey: handleItemHotkey,
-      onClickOutside: () => handleElementSelect(null),
-      onForcePop: () => handleElementSelect(null),
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemSlotId]);
+  // Slot 'item' registration (active when an item is selected).
+  //
+  // NOT memoized by design: handlers (onHotkey → handleNudgeSelectedItem) close
+  // over the latest `spread` prop, so we need a fresh object every render to
+  // avoid stale geometry reads on repeated arrow-key nudges. The
+  // useInteractionLayer proxy pattern already handles this efficiently —
+  // layerRef.current is reassigned each render and the registration useEffect
+  // only re-runs when `id` changes, so there is no spurious re-registration.
+  const itemLayer: Parameters<typeof useInteractionLayer>[1] =
+    state.selectedElement && itemSlotId
+      ? {
+          id: itemSlotId,
+          ref: canvasRef,
+          hotkeys: ['Delete', 'Backspace', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          portalSelectors: [
+            '[data-toolbar]',
+            '[data-radix-popper-content-wrapper]',
+            '[data-radix-select-content]',
+            '[data-radix-popover-content]',
+            '[role="listbox"]',
+            '[role="dialog"]',
+          ],
+          onHotkey: handleItemHotkey,
+          onClickOutside: () => handleElementSelect(null),
+          onForcePop: () => handleElementSelect(null),
+        }
+      : null;
 
   useInteractionLayer('item', itemLayer);
 
