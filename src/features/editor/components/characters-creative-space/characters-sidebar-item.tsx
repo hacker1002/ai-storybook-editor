@@ -119,9 +119,8 @@ export function CharactersSidebarItem({
 
   const [editValue, setEditValue] = useState(character?.name ?? "");
   const [isDragging, setIsDragging] = useState(false);
-  // Both sections default to expanded when character is expanded
   const [isBasicInfoOpen, setIsBasicInfoOpen] = useState(true);
-  const [isPersonalityOpen, setIsPersonalityOpen] = useState(true);
+  const [isPersonalityOpen, setIsPersonalityOpen] = useState(false);
 
   // Build category options from real DB data (value=UUID, label=name)
   const categoryOptions = useMemo(
