@@ -27,6 +27,7 @@ export interface Layer {
   onClickOutside?: () => void;
   onForcePop?: () => void;
   portalSelectors?: string[];
+  dropdownSelectors?: string[];
   captureClickOutside?: boolean;
 }
 
@@ -192,6 +193,12 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
 
         if (isClickInsideLayer(layer, target)) {
           // INSIDE this slot — stop walking, pop only what's accumulated above
+          break;
+        } else if (layer.dropdownSelectors?.some(sel => document.querySelector(sel))) {
+          // A transient dropdown/portal for this layer is currently open in the DOM.
+          // The click is intended to dismiss the dropdown, not to deselect the item.
+          // Radix unmounts dropdown content asynchronously (via React re-render), so
+          // the element is still in the DOM at this point even though it will close.
           break;
         } else {
           // Opt-out: layers without onClickOutside do NOT respond to click-outside.

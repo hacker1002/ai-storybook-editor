@@ -326,6 +326,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             '[role="listbox"]',
             '[role="dialog"]',
           ],
+          dropdownSelectors: [
+            '[data-radix-select-content]',
+            '[data-radix-popover-content]',
+            '[role="listbox"]',
+          ],
           onHotkey: handleItemHotkey,
           onClickOutside: () => handleElementSelect(null),
           onForcePop: () => handleElementSelect(null),

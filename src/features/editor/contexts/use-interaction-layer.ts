@@ -137,6 +137,9 @@ function createProxy(
     get portalSelectors() {
       return layerRef.current?.portalSelectors;
     },
+    get dropdownSelectors() {
+      return layerRef.current?.dropdownSelectors;
+    },
     get captureClickOutside() {
       return layerRef.current?.captureClickOutside;
     },
