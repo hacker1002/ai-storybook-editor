@@ -32,6 +32,7 @@ interface SpreadViewHeaderProps {
   onZoomChange: (level: number) => void;
   onColumnsChange: (columns: number) => void;
   enableKeyboardShortcuts?: boolean;
+  showViewToggle?: boolean;
 }
 
 // === Main Component ===
@@ -43,6 +44,7 @@ export function SpreadViewHeader({
   onZoomChange,
   onColumnsChange,
   enableKeyboardShortcuts = true,
+  showViewToggle = true,
 }: SpreadViewHeaderProps) {
   const [announcement, setAnnouncement] = useState("");
 
@@ -61,7 +63,7 @@ export function SpreadViewHeader({
   return (
     <header className="flex items-center justify-between px-4 border-b bg-background h-14">
       {/* Left: View Toggle */}
-      <ViewToggle viewMode={viewMode} onToggle={onViewModeToggle} />
+      {showViewToggle && <ViewToggle viewMode={viewMode} onToggle={onViewModeToggle} />}
 
       {/* Center: Spacer */}
       <div className="flex-grow" />

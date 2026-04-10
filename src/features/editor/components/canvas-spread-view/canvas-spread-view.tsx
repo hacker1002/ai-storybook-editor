@@ -132,6 +132,9 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Force a specific language code for textbox operations (overrides editor language).
   // Used by DummyMainView to lock dummies to the book's original_language.
   forceLanguageCode?: string;
+
+  // Header config
+  showViewToggle?: boolean;
 }
 
 // === Main Component ===
@@ -174,6 +177,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   onDeselect,
   pageNumbering,
   forceLanguageCode,
+  showViewToggle = true,
 }: CanvasSpreadViewProps<TSpread>) {
   // === Local View State (with localStorage persistence) ===
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -395,6 +399,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
         onZoomChange={handleZoomChange}
         onColumnsChange={handleColumnsChange}
         enableKeyboardShortcuts={true}
+        showViewToggle={showViewToggle}
       />
 
       {/* Content */}
