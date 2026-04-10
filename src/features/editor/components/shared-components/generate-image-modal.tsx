@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useMemo } from "react";
+import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
   DialogContent,
@@ -83,6 +84,25 @@ export function GenerateImageModal({
   const [editPromptText, setEditPromptText] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
+
+  // Register modal slot — 2 purposes:
+  // 1. Prevent Delete/Backspace routing to slot 'item' while modal is open.
+  // 2. Capture click-outside at modal level (captureClickOutside: true) so Provider
+  //    stops walking and does NOT fire item's onClickOutside (deselect bug).
+  // onPointerDownOutside on DialogContent prevents Radix from closing modal before
+  // Provider's mousedown handler runs, ensuring modal slot is still in stack.
+  useInteractionLayer('modal', open ? {
+    id: 'generate-image-modal',
+    ref: dialogContentRef,
+    hotkeys: ['Escape'],
+    onHotkey: (key) => {
+      // isProcessing is declared below but freshened via the hook's proxy on every render
+      if (key === 'Escape' && !isProcessing) handleOpenChange(false);
+    },
+    onClickOutside: () => handleOpenChange(false),
+    captureClickOutside: true,
+  } : null);
 
   // Store hooks
   const { startGenerateTask, startEditTask } = useSnapshotActions();
@@ -305,7 +325,12 @@ export function GenerateImageModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+          ref={dialogContentRef}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
+        >
         <DialogHeader>
           <DialogTitle>
             {image.title || "Untitled"} - Image Settings
