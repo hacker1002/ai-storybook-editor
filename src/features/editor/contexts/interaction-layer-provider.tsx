@@ -79,8 +79,20 @@ const SLOT_ORDER: LayerSlot[] = ["modal", "item", "spread"]; // top → bottom
 /**
  * Returns true if the active element should receive raw keyboard input
  * (browser default) rather than triggering interaction layer hotkeys.
- * Covers spec §4.1.1: INPUT, TEXTAREA, SELECT, contentEditable, and
- * ARIA text-entry roles used by Radix UI toolbar controls.
+ *
+ * Covers:
+ * - Native form controls: INPUT, TEXTAREA, SELECT
+ * - contentEditable elements (rich text editors ACTIVELY in edit mode)
+ * - ARIA text-entry roles commonly wrapping real inputs: combobox,
+ *   searchbox, spinbutton (used by Radix UI toolbar controls)
+ *
+ * Notably does NOT include role="textbox" alone — our canvas EditableTextbox
+ * component uses role="textbox" + tabIndex=0 on its wrapper div for a11y
+ * labeling while keeping contentEditable off until the user explicitly
+ * enters edit mode. Treating a "selected but not editing" textbox as
+ * editable would swallow the Delete/Arrow hotkeys the item layer needs.
+ * A rich text editor that IS actively being edited will have
+ * contentEditable=true and hit the check above.
  */
 function isEditableElement(el: Element | null): boolean {
   if (!el) return false;
@@ -89,7 +101,6 @@ function isEditableElement(el: Element | null): boolean {
   if ((el as HTMLElement).isContentEditable) return true;
   const role = el.getAttribute("role");
   if (
-    role === "textbox" ||
     role === "combobox" ||
     role === "searchbox" ||
     role === "spinbutton"

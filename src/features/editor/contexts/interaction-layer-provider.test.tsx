@@ -1,5 +1,5 @@
 // interaction-layer-provider.test.tsx
-// Unit tests for InteractionLayerProvider + useInteractionLayer (18 scenarios).
+// Unit tests for InteractionLayerProvider + useInteractionLayer (20 scenarios).
 // Spec §4 Behaviors matrix — Vitest 4 + jsdom.
 
 import React, { useRef, useState } from "react";
@@ -56,7 +56,7 @@ function mousedown(target: Element = document.body) {
 
 // ── Scenarios ─────────────────────────────────────────────────────────────────
 
-describe("InteractionLayerProvider + useInteractionLayer — 18 scenarios", () => {
+describe("InteractionLayerProvider + useInteractionLayer — 20 scenarios", () => {
   // 1. Push spread slot — isActive, responds to hotkeys
   it("01: spread slot responds to hotkeys when it is the only slot", () => {
     const onHotkey = vi.fn();
@@ -417,6 +417,59 @@ describe("InteractionLayerProvider + useInteractionLayer — 18 scenarios", () =
     } finally {
       textarea.blur();
       textarea.remove();
+    }
+  });
+
+  // 19. role="textbox" without contentEditable → hotkeys MUST fire (canvas textbox
+  // wrapper uses role=textbox for a11y but isn't actively editable until the
+  // user enters edit mode via double-click, which toggles contentEditable).
+  it("19: role=textbox without contentEditable does NOT block hotkeys", () => {
+    const onHotkey = vi.fn();
+    render(
+      <Wrap>
+        <Slot slot="item" config={{ id: "i1", hotkeys: ["Delete"], onHotkey }} />
+      </Wrap>
+    );
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("role", "textbox");
+    wrapper.setAttribute("aria-label", "Textbox 1");
+    wrapper.setAttribute("tabindex", "0");
+    document.body.appendChild(wrapper);
+    try {
+      wrapper.focus();
+      keydown("Delete");
+      expect(onHotkey).toHaveBeenCalledWith("Delete");
+    } finally {
+      wrapper.blur();
+      wrapper.remove();
+    }
+  });
+
+  // 20. contentEditable element → hotkeys blocked (covers the "textbox actively
+  // being edited" case — wrapper now has contentEditable=true).
+  it("20: contentEditable element blocks hotkeys (actively editing rich text)", () => {
+    const onHotkey = vi.fn();
+    render(
+      <Wrap>
+        <Slot slot="item" config={{ id: "i1", hotkeys: ["Delete"], onHotkey }} />
+      </Wrap>
+    );
+    const editable = document.createElement("div");
+    editable.contentEditable = "true";
+    editable.setAttribute("tabindex", "0");
+    // jsdom quirk: isContentEditable getter is not reliable, stub it
+    Object.defineProperty(editable, "isContentEditable", {
+      value: true,
+      configurable: true,
+    });
+    document.body.appendChild(editable);
+    try {
+      editable.focus();
+      keydown("Delete");
+      expect(onHotkey).not.toHaveBeenCalled();
+    } finally {
+      editable.blur();
+      editable.remove();
     }
   });
 });
