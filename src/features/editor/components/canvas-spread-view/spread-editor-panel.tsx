@@ -1,12 +1,7 @@
 // spread-editor-panel.tsx - Main editor canvas for selected spread
 "use client";
 
-import {
-  useRef,
-  useMemo,
-  Fragment,
-  type ReactNode,
-} from "react";
+import { useRef, useMemo, Fragment, type ReactNode } from "react";
 import { useInteractionLayer } from "../../contexts";
 import { SelectionFrame } from "./selection-frame";
 import { PageItem } from "./page-item";
@@ -21,7 +16,10 @@ import {
 } from "./utils/context-builders";
 import { getScaledDimensions } from "./utils/coordinate-utils";
 import { LAYER_CONFIG } from "@/constants/spread-constants";
-import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
+import {
+  useCanvasWidth,
+  useCanvasHeight,
+} from "@/stores/editor-settings-store";
 import type {
   BaseSpread,
   SpreadImage,
@@ -199,8 +197,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   });
 
   // Scaled dimensions
-  const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
+  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(
+    canvasWidth,
+    canvasHeight,
+    zoomLevel
+  );
 
   // === Drag, resize, keyboard, and geometry update handlers (delegated to hook) ===
   const {
@@ -238,50 +239,78 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // Delete selected item (called by slot 'item'.onHotkey for Delete/Backspace)
   const handleDeleteSelectedItem = () => {
     const { selectedElement } = state;
-    if (!selectedElement || selectedElement.type === 'page') return;
+    if (!selectedElement || selectedElement.type === "page") return;
 
     let itemId: string | undefined;
     switch (selectedElement.type) {
-      case 'image': itemId = (spread.images ?? [])[selectedElement.index]?.id; break;
-      case 'raw_image': itemId = (spread.raw_images ?? [])[selectedElement.index]?.id; break;
-      case 'textbox': itemId = (spread.textboxes ?? [])[selectedElement.index]?.id; break;
-      case 'raw_textbox': itemId = (spread.raw_textboxes ?? [])[selectedElement.index]?.id; break;
-      case 'shape': itemId = spread.shapes?.[selectedElement.index]?.id; break;
-      case 'video': itemId = spread.videos?.[selectedElement.index]?.id; break;
-      case 'audio': itemId = spread.audios?.[selectedElement.index]?.id; break;
-      case 'quiz': itemId = spread.quizzes?.[selectedElement.index]?.id; break;
+      case "image":
+        itemId = (spread.images ?? [])[selectedElement.index]?.id;
+        break;
+      case "raw_image":
+        itemId = (spread.raw_images ?? [])[selectedElement.index]?.id;
+        break;
+      case "textbox":
+        itemId = (spread.textboxes ?? [])[selectedElement.index]?.id;
+        break;
+      case "raw_textbox":
+        itemId = (spread.raw_textboxes ?? [])[selectedElement.index]?.id;
+        break;
+      case "shape":
+        itemId = spread.shapes?.[selectedElement.index]?.id;
+        break;
+      case "video":
+        itemId = spread.videos?.[selectedElement.index]?.id;
+        break;
+      case "audio":
+        itemId = spread.audios?.[selectedElement.index]?.id;
+        break;
+      case "quiz":
+        itemId = spread.quizzes?.[selectedElement.index]?.id;
+        break;
     }
     if (!itemId) return;
 
-    const resolvedItemType: 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz' =
-      selectedElement.type === 'raw_image'
-        ? 'image'
-        : selectedElement.type === 'raw_textbox'
-        ? 'textbox'
-        : (selectedElement.type as 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz');
+    const resolvedItemType:
+      | "image"
+      | "textbox"
+      | "shape"
+      | "video"
+      | "audio"
+      | "quiz" =
+      selectedElement.type === "raw_image"
+        ? "image"
+        : selectedElement.type === "raw_textbox"
+        ? "textbox"
+        : (selectedElement.type as
+            | "image"
+            | "textbox"
+            | "shape"
+            | "video"
+            | "audio"
+            | "quiz");
 
     handleSpreadItemAction({
       itemType: resolvedItemType,
-      action: 'delete',
+      action: "delete",
       itemId,
       data: null,
-    } as Omit<SpreadItemActionUnion, 'spreadId'>);
+    } as Omit<SpreadItemActionUnion, "spreadId">);
   };
 
   // Route hotkeys for slot 'item'
   const handleItemHotkey = (key: string) => {
-    if (key === 'Escape') {
+    if (key === "Escape") {
       handleElementSelect(null);
-    } else if (key === 'Delete' || key === 'Backspace') {
+    } else if (key === "Delete" || key === "Backspace") {
       handleDeleteSelectedItem();
-    } else if (key === 'ArrowUp') {
-      handleNudgeSelectedItem('up');
-    } else if (key === 'ArrowDown') {
-      handleNudgeSelectedItem('down');
-    } else if (key === 'ArrowLeft') {
-      handleNudgeSelectedItem('left');
-    } else if (key === 'ArrowRight') {
-      handleNudgeSelectedItem('right');
+    } else if (key === "ArrowUp") {
+      handleNudgeSelectedItem("up");
+    } else if (key === "ArrowDown") {
+      handleNudgeSelectedItem("down");
+    } else if (key === "ArrowLeft") {
+      handleNudgeSelectedItem("left");
+    } else if (key === "ArrowRight") {
+      handleNudgeSelectedItem("right");
     }
   };
 
@@ -291,14 +320,30 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     if (!selectedElement) return null;
     let itemId: string | undefined;
     switch (selectedElement.type) {
-      case 'image': itemId = (spread.images ?? [])[selectedElement.index]?.id; break;
-      case 'raw_image': itemId = (spread.raw_images ?? [])[selectedElement.index]?.id; break;
-      case 'textbox': itemId = (spread.textboxes ?? [])[selectedElement.index]?.id; break;
-      case 'raw_textbox': itemId = (spread.raw_textboxes ?? [])[selectedElement.index]?.id; break;
-      case 'shape': itemId = spread.shapes?.[selectedElement.index]?.id; break;
-      case 'video': itemId = spread.videos?.[selectedElement.index]?.id; break;
-      case 'audio': itemId = spread.audios?.[selectedElement.index]?.id; break;
-      case 'quiz': itemId = spread.quizzes?.[selectedElement.index]?.id; break;
+      case "image":
+        itemId = (spread.images ?? [])[selectedElement.index]?.id;
+        break;
+      case "raw_image":
+        itemId = (spread.raw_images ?? [])[selectedElement.index]?.id;
+        break;
+      case "textbox":
+        itemId = (spread.textboxes ?? [])[selectedElement.index]?.id;
+        break;
+      case "raw_textbox":
+        itemId = (spread.raw_textboxes ?? [])[selectedElement.index]?.id;
+        break;
+      case "shape":
+        itemId = spread.shapes?.[selectedElement.index]?.id;
+        break;
+      case "video":
+        itemId = spread.videos?.[selectedElement.index]?.id;
+        break;
+      case "audio":
+        itemId = spread.audios?.[selectedElement.index]?.id;
+        break;
+      case "quiz":
+        itemId = spread.quizzes?.[selectedElement.index]?.id;
+        break;
     }
     if (!itemId) return null;
     return `${selectedElement.type}:${itemId}`;
@@ -317,19 +362,27 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       ? {
           id: itemSlotId,
           ref: canvasRef,
-          hotkeys: ['Delete', 'Backspace', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          hotkeys: [
+            "Delete",
+            "Backspace",
+            "Escape",
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+          ],
           portalSelectors: [
-            '[data-toolbar]',
-            '[data-radix-popper-content-wrapper]',
-            '[data-radix-select-content]',
-            '[data-radix-popover-content]',
-            '[role="listbox"]',
+            "[data-toolbar]",
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            "[data-radix-popover-content]",
+            // '[role="listbox"]',
             '[role="dialog"]',
           ],
           dropdownSelectors: [
-            '[data-radix-select-content]',
-            '[data-radix-popover-content]',
-            '[role="listbox"]',
+            "[data-radix-select-content]",
+            "[data-radix-popover-content]",
+            "[data-radix-popper-content-wrapper]",
           ],
           onHotkey: handleItemHotkey,
           onClickOutside: () => handleElementSelect(null),
@@ -337,7 +390,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         }
       : null;
 
-  useInteractionLayer('item', itemLayer);
+  useInteractionLayer("item", itemLayer);
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
@@ -409,11 +462,15 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         {/* Page Center Divider — always visible */}
         <div
           className="absolute top-0 bottom-0 w-px pointer-events-none"
-          style={{ left: '50%', background: 'rgba(0, 0, 0, 0.12)', zIndex: -999 }}
+          style={{
+            left: "50%",
+            background: "rgba(0, 0, 0, 0.12)",
+            zIndex: -999,
+          }}
         />
 
         {/* Page Number Overlay */}
-        {pageNumbering && pageNumbering.position !== 'none' && (
+        {pageNumbering && pageNumbering.position !== "none" && (
           <PageNumberingOverlay
             pages={spread.pages}
             position={pageNumbering.position}
@@ -535,7 +592,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
             // Raw textboxes render just above raw images but below all editable layers
             const rawImgCount = spread.raw_images?.length ?? 0;
-            context.zIndex = -(rawImgCount) + (spread.raw_textboxes?.length ?? 0) + index;
+            context.zIndex =
+              -rawImgCount + (spread.raw_textboxes?.length ?? 0) + index;
             return (
               <Fragment key={textbox.id ?? `raw-txt-${index}`}>
                 {renderRawTextbox(context)}

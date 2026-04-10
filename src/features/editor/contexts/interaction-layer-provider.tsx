@@ -10,14 +10,14 @@ import {
   useRef,
   useEffect,
   type ReactNode,
-} from 'react';
-import { createLogger } from '@/utils/logger';
+} from "react";
+import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'InteractionLayerProvider');
+const log = createLogger("Editor", "InteractionLayerProvider");
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type LayerSlot = 'spread' | 'item' | 'modal';
+export type LayerSlot = "spread" | "item" | "modal";
 
 export interface Layer {
   id: string;
@@ -32,8 +32,8 @@ export interface Layer {
 }
 
 export interface LayerStatus {
-  isActive: boolean;   // Is this the top active slot?
-  isInStack: boolean;  // Does this slot hold any layer?
+  isActive: boolean; // Is this the top active slot?
+  isInStack: boolean; // Does this slot hold any layer?
 }
 
 type Subscriber = (status: LayerStatus) => void;
@@ -54,27 +54,32 @@ interface InteractionLayerContextValue {
 
 // ── Context ────────────────────────────────────────────────────────────────────
 
-const InteractionLayerContext = createContext<InteractionLayerContextValue | null>(null);
+const InteractionLayerContext =
+  createContext<InteractionLayerContextValue | null>(null);
 
 export function useInteractionLayerContext(): InteractionLayerContextValue {
   const ctx = useContext(InteractionLayerContext);
   if (!ctx) {
     if (import.meta.env.DEV) {
-      console.warn('[Editor][InteractionLayerProvider] useInteractionLayerContext called outside Provider');
+      console.warn(
+        "[Editor][InteractionLayerProvider] useInteractionLayerContext called outside Provider"
+      );
     }
-    throw new Error('useInteractionLayer must be used inside InteractionLayerProvider');
+    throw new Error(
+      "useInteractionLayer must be used inside InteractionLayerProvider"
+    );
   }
   return ctx;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const SLOT_ORDER: LayerSlot[] = ['modal', 'item', 'spread']; // top → bottom
+const SLOT_ORDER: LayerSlot[] = ["modal", "item", "spread"]; // top → bottom
 
 function getTopActiveSlot(stack: InteractionStack): LayerSlot | null {
-  if (stack.modal) return 'modal';
-  if (stack.item) return 'item';
-  if (stack.spread) return 'spread';
+  if (stack.modal) return "modal";
+  if (stack.item) return "item";
+  if (stack.spread) return "spread";
   return null;
 }
 
@@ -90,8 +95,16 @@ function isClickInsideLayer(layer: Layer, target: Element): boolean {
 
 // ── Provider ───────────────────────────────────────────────────────────────────
 
-export function InteractionLayerProvider({ children }: { children: ReactNode }) {
-  const stackRef = useRef<InteractionStack>({ spread: null, item: null, modal: null });
+export function InteractionLayerProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const stackRef = useRef<InteractionStack>({
+    spread: null,
+    item: null,
+    modal: null,
+  });
   const subscribersRef = useRef<Map<string, Set<Subscriber>>>(new Map());
 
   // Notify subscribers for a slot when its state changes
@@ -102,40 +115,50 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
     const isActive = topSlot === slot;
     const isInStack = layer !== null;
 
-    const key = `${slot}:${layer?.id ?? ''}`;
-    subscribersRef.current.get(key)?.forEach((cb) => cb({ isActive, isInStack }));
+    const key = `${slot}:${layer?.id ?? ""}`;
+    subscribersRef.current
+      .get(key)
+      ?.forEach((cb) => cb({ isActive, isInStack }));
     // Also notify with empty id in case subscriber used undefined id
-    subscribersRef.current.get(`${slot}:`)?.forEach((cb) => cb({ isActive, isInStack }));
+    subscribersRef.current
+      .get(`${slot}:`)
+      ?.forEach((cb) => cb({ isActive, isInStack }));
   };
 
   // Cascade pop upper slots (slots above fromSlot in priority order)
   const cascadePopUpperSlots = (fromSlot: LayerSlot) => {
     const stack = stackRef.current;
-    if (fromSlot === 'spread') {
+    if (fromSlot === "spread") {
       if (stack.modal) {
-        log.warn('cascadePopUpperSlots', 'force-pop modal', { reason: 'spread-change' });
+        log.warn("cascadePopUpperSlots", "force-pop modal", {
+          reason: "spread-change",
+        });
         stack.modal.onForcePop?.();
         stack.modal = null;
-        notifySlot('modal');
+        notifySlot("modal");
       }
       if (stack.item) {
-        log.warn('cascadePopUpperSlots', 'force-pop item', { reason: 'spread-change' });
+        log.warn("cascadePopUpperSlots", "force-pop item", {
+          reason: "spread-change",
+        });
         stack.item.onForcePop?.();
         stack.item = null;
-        notifySlot('item');
+        notifySlot("item");
       }
-    } else if (fromSlot === 'item') {
+    } else if (fromSlot === "item") {
       if (stack.modal) {
-        log.warn('cascadePopUpperSlots', 'force-pop modal', { reason: 'item-change' });
+        log.warn("cascadePopUpperSlots", "force-pop modal", {
+          reason: "item-change",
+        });
         stack.modal.onForcePop?.();
         stack.modal = null;
-        notifySlot('modal');
+        notifySlot("modal");
       }
     }
   };
 
   const pushSlot = (slot: LayerSlot, layer: Layer) => {
-    log.info('pushSlot', 'layer.push', { slot, layerId: layer.id });
+    log.info("pushSlot", "layer.push", { slot, layerId: layer.id });
     cascadePopUpperSlots(slot);
     stackRef.current[slot] = layer;
     notifySlot(slot);
@@ -144,7 +167,7 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
   const popSlot = (slot: LayerSlot, reason: string) => {
     const layer = stackRef.current[slot];
     if (!layer) return;
-    log.info('popSlot', 'layer.pop', { slot, layerId: layer.id, reason });
+    log.info("popSlot", "layer.pop", { slot, layerId: layer.id, reason });
     stackRef.current[slot] = null;
     notifySlot(slot);
   };
@@ -152,7 +175,11 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
   const replaceSlot = (slot: LayerSlot, layer: Layer) => {
     const old = stackRef.current[slot];
     if (old) {
-      log.info('replaceSlot', 'layer.replace', { slot, oldId: old.id, newId: layer.id });
+      log.info("replaceSlot", "layer.replace", {
+        slot,
+        oldId: old.id,
+        newId: layer.id,
+      });
     }
     cascadePopUpperSlots(slot);
     stackRef.current[slot] = layer;
@@ -161,11 +188,28 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
 
   // Document event listeners
   useEffect(() => {
+    // Snapshot whether a dropdown is open at the START of each click sequence
+    // (pointerdown capture fires before Radix's pointerdown bubble handler, which
+    // is what closes the Select and schedules a React re-render to remove the content
+    // from the DOM. By the time mousedown fires, the element may already be gone.)
+    let dropdownOpenOnLastPointerDown = false;
+
+    const handlePointerDownCapture = () => {
+      dropdownOpenOnLastPointerDown = SLOT_ORDER.some((slot) => {
+        const layer = stackRef.current[slot];
+        return (
+          layer?.dropdownSelectors?.some(
+            (sel) => document.querySelector(sel) !== null
+          ) ?? false
+        );
+      });
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
       if (
-        active?.tagName === 'INPUT' ||
-        active?.tagName === 'TEXTAREA' ||
+        active?.tagName === "INPUT" ||
+        active?.tagName === "TEXTAREA" ||
         active?.isContentEditable
       ) {
         return;
@@ -179,7 +223,11 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
 
       e.preventDefault();
       e.stopPropagation();
-      log.debug('handleKeyDown', 'hotkey.fire', { slot: topSlot, key: e.key, layerId: layer.id });
+      log.debug("handleKeyDown", "hotkey.fire", {
+        slot: topSlot,
+        key: e.key,
+        layerId: layer.id,
+      });
       layer.onHotkey?.(e.key);
     };
 
@@ -194,11 +242,14 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
         if (isClickInsideLayer(layer, target)) {
           // INSIDE this slot — stop walking, pop only what's accumulated above
           break;
-        } else if (layer.dropdownSelectors?.some(sel => document.querySelector(sel))) {
-          // A transient dropdown/portal for this layer is currently open in the DOM.
-          // The click is intended to dismiss the dropdown, not to deselect the item.
-          // Radix unmounts dropdown content asynchronously (via React re-render), so
-          // the element is still in the DOM at this point even though it will close.
+        } else if (
+          dropdownOpenOnLastPointerDown &&
+          layer.dropdownSelectors?.length
+        ) {
+          // A dropdown belonging to this layer was open when the click started
+          // (snapshotted in the pointerdown capture listener, before Radix's own
+          // pointerdown handler gets a chance to close and unmount it).
+          // Treat this click as "dismiss dropdown, keep item selected".
           break;
         } else {
           // Opt-out: layers without onClickOutside do NOT respond to click-outside.
@@ -217,31 +268,44 @@ export function InteractionLayerProvider({ children }: { children: ReactNode }) 
       }
 
       for (const { slot, layer } of layersToPop) {
-        log.debug('handleMouseDown', 'clickOutside.fire', { slot, layerId: layer.id });
+        log.debug("handleMouseDown", "clickOutside.fire", {
+          slot,
+          layerId: layer.id,
+        });
         layer.onClickOutside?.();
         stackRef.current[slot] = null;
         notifySlot(slot);
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener("pointerdown", handlePointerDownCapture, true);
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleMouseDown);
 
     if (import.meta.env.DEV) {
-      (window as unknown as Record<string, unknown>).__interactionStack = stackRef.current;
+      (window as unknown as Record<string, unknown>).__interactionStack =
+        stackRef.current;
     }
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDownCapture,
+        true
+      );
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleMouseDown);
       if (import.meta.env.DEV) {
-        delete (window as unknown as Record<string, unknown>).__interactionStack;
+        delete (window as unknown as Record<string, unknown>)
+          .__interactionStack;
       }
     };
   }, []);
 
   return (
-    <InteractionLayerContext.Provider value={{ stackRef, subscribersRef, pushSlot, popSlot, replaceSlot }}>
+    <InteractionLayerContext.Provider
+      value={{ stackRef, subscribersRef, pushSlot, popSlot, replaceSlot }}
+    >
       {children}
     </InteractionLayerContext.Provider>
   );
