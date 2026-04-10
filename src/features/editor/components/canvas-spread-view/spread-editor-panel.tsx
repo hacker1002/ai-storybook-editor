@@ -2,6 +2,9 @@
 "use client";
 
 import { useRef, useMemo, Fragment, type ReactNode } from "react";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Editor", "SpreadEditorPanel");
 import { useInteractionLayer } from "../../contexts";
 import { SelectionFrame } from "./selection-frame";
 import { PageItem } from "./page-item";
@@ -241,6 +244,21 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     const { selectedElement } = state;
     if (!selectedElement || selectedElement.type === "page") return;
 
+    // Guard: raw items are read-only ONLY in spaces that opt-in via
+    // preventEditRawItem (Objects/History retouch). In Illustration space
+    // (preventEditRawItem=false, default) raw items are the editable layer,
+    // so Delete must still route through.
+    if (
+      preventEditRawItem &&
+      (selectedElement.type === "raw_image" ||
+        selectedElement.type === "raw_textbox")
+    ) {
+      log.debug("handleDeleteSelectedItem", "skip.raw-item-read-only", {
+        type: selectedElement.type,
+      });
+      return;
+    }
+
     let itemId: string | undefined;
     switch (selectedElement.type) {
       case "image":
@@ -303,14 +321,31 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       handleElementSelect(null);
     } else if (key === "Delete" || key === "Backspace") {
       handleDeleteSelectedItem();
-    } else if (key === "ArrowUp") {
-      handleNudgeSelectedItem("up");
-    } else if (key === "ArrowDown") {
-      handleNudgeSelectedItem("down");
-    } else if (key === "ArrowLeft") {
-      handleNudgeSelectedItem("left");
-    } else if (key === "ArrowRight") {
-      handleNudgeSelectedItem("right");
+    } else if (
+      key === "ArrowUp" ||
+      key === "ArrowDown" ||
+      key === "ArrowLeft" ||
+      key === "ArrowRight"
+    ) {
+      // Guard: raw items cannot be nudged in spaces that opt-in via
+      // preventEditRawItem (Objects/History retouch). In Illustration space
+      // raw items are the editable layer and nudging is allowed.
+      const { selectedElement } = state;
+      if (
+        preventEditRawItem &&
+        (selectedElement?.type === "raw_image" ||
+          selectedElement?.type === "raw_textbox")
+      ) {
+        log.debug("handleItemHotkey", "skip.raw-item-nudge-read-only", {
+          type: selectedElement.type,
+          key,
+        });
+        return;
+      }
+      if (key === "ArrowUp") handleNudgeSelectedItem("up");
+      else if (key === "ArrowDown") handleNudgeSelectedItem("down");
+      else if (key === "ArrowLeft") handleNudgeSelectedItem("left");
+      else if (key === "ArrowRight") handleNudgeSelectedItem("right");
     }
   };
 

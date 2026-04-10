@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useInteractionLayer } from "@/features/editor/contexts";
 import { Play, Pause, Sparkles, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -114,6 +115,38 @@ export function GenerateNarrationModal({
   const [durations, setDurations] = useState<Record<string, number>>({});
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
+
+  // Sync unsaved script changes and close — shared by Escape hotkey and click-outside.
+  const handleClose = useCallback(() => {
+    if (editableScript !== scriptRef.current) {
+      onScriptChange(editableScript);
+    }
+    onClose();
+  }, [editableScript, onScriptChange, onClose]);
+
+  // Register modal slot — prevents Escape bubbling to item slot while open.
+  // captureClickOutside: true so click outside only closes modal, not deselects item.
+  useInteractionLayer(
+    "modal",
+    isOpen
+      ? {
+          id: "generate-narration-modal",
+          ref: dialogContentRef,
+          hotkeys: ["Escape"],
+          onHotkey: (key) => {
+            if (key === "Escape" && !isGenerating) handleClose();
+          },
+          onClickOutside: () => handleClose(),
+          captureClickOutside: true,
+          portalSelectors: [
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            '[role="listbox"]',
+          ],
+        }
+      : null
+  );
 
   // -- Load durations from audio URLs ---------------------------------------
   useEffect(() => {
@@ -377,16 +410,20 @@ export function GenerateNarrationModal({
 
   // -- Render ---------------------------------------------------------------
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-        if (!open) {
-          // Sync unsaved script changes before closing (safety net for Escape / overlay click)
-          if (editableScript !== scriptRef.current) {
-            onScriptChange(editableScript);
-          }
-          onClose();
-        }
-      }}>
-      <DialogContent className="max-w-[600px]" onKeyDown={(e) => e.stopPropagation()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+    >
+      <DialogContent
+        ref={dialogContentRef}
+        className="max-w-[600px]"
+        onKeyDown={(e) => e.stopPropagation()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Generate Narration</DialogTitle>
         </DialogHeader>

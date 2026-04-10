@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +49,8 @@ export function EditImageModal({
   const image = useRetouchImageById(spreadId, imageId);
   const { startEditTask, updateRetouchImage } = useSnapshotActions();
   const { isEditing } = useImageTasksForChild(spreadId, imageId);
+
+  const dialogContentRef = useRef<HTMLDivElement>(null);
 
   const [prompt, setPrompt] = useState("");
   const [isRemovingBg, setIsRemovingBg] = useState(false);
@@ -217,6 +220,29 @@ export function EditImageModal({
     }
   }, [image, spreadId, imageId, updateRetouchImage]);
 
+  // Register modal slot — prevents Delete/Escape bubbling to item slot while open.
+  // captureClickOutside: true so click outside only closes modal, not deselects item.
+  useInteractionLayer(
+    "modal",
+    open
+      ? {
+          id: "edit-image-modal",
+          ref: dialogContentRef,
+          hotkeys: ["Escape"],
+          onHotkey: (key) => {
+            if (key === "Escape" && !isBusy) handleOpenChange(false);
+          },
+          onClickOutside: () => handleOpenChange(false),
+          captureClickOutside: true,
+          portalSelectors: [
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            '[role="listbox"]',
+          ],
+        }
+      : null
+  );
+
   // Guard: image deleted while modal open
   if (!image) return null;
 
@@ -226,7 +252,13 @@ export function EditImageModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        ref={dialogContentRef}
+        className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>
             {image.title || "Untitled"} - Edit image

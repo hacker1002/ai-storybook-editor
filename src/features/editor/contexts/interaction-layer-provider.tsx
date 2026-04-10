@@ -76,6 +76,28 @@ export function useInteractionLayerContext(): InteractionLayerContextValue {
 
 const SLOT_ORDER: LayerSlot[] = ["modal", "item", "spread"]; // top → bottom
 
+/**
+ * Returns true if the active element should receive raw keyboard input
+ * (browser default) rather than triggering interaction layer hotkeys.
+ * Covers spec §4.1.1: INPUT, TEXTAREA, SELECT, contentEditable, and
+ * ARIA text-entry roles used by Radix UI toolbar controls.
+ */
+function isEditableElement(el: Element | null): boolean {
+  if (!el) return false;
+  const tag = (el as HTMLElement).tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  if ((el as HTMLElement).isContentEditable) return true;
+  const role = el.getAttribute("role");
+  if (
+    role === "textbox" ||
+    role === "combobox" ||
+    role === "searchbox" ||
+    role === "spinbutton"
+  )
+    return true;
+  return false;
+}
+
 function getTopActiveSlot(stack: InteractionStack): LayerSlot | null {
   if (stack.modal) return "modal";
   if (stack.item) return "item";
@@ -206,14 +228,12 @@ export function InteractionLayerProvider({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const active = document.activeElement as HTMLElement | null;
-      if (
-        active?.tagName === "INPUT" ||
-        active?.tagName === "TEXTAREA" ||
-        active?.isContentEditable
-      ) {
-        return;
-      }
+      // Escape is a universal dismiss key — it must bypass the editable-element
+      // guard so modals can always close even when focus is in an input/textarea.
+      // Other hotkeys (Delete, Arrow, Backspace) remain blocked to not interfere
+      // with text editing. Radix dropdowns that handle their own Escape will have
+      // stopped propagation before reaching this document-level listener.
+      if (e.key !== "Escape" && isEditableElement(document.activeElement)) return;
 
       const topSlot = getTopActiveSlot(stackRef.current);
       if (!topSlot) return;

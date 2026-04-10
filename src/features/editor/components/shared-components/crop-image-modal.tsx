@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
   DialogContent,
@@ -82,6 +83,37 @@ export function CropImageModal({
   const imageAreaRef = useRef<HTMLDivElement>(null);
   const resultSectionRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
+
+  // Register modal slot — prevents Delete/Escape bubbling to item slot while open.
+  // captureClickOutside: true so click outside only closes modal, not deselects item.
+  // onForcePop: called on cascade pop (e.g. spread switch) — discard draft + close.
+  useInteractionLayer(
+    "modal",
+    open
+      ? {
+          id: "crop-image-modal",
+          ref: dialogContentRef,
+          hotkeys: ["Escape", "Delete", "Backspace"],
+          onHotkey: (key) => {
+            if (key === "Escape" && !isBusy) handleOpenChange(false);
+            if ((key === "Delete" || key === "Backspace") && selectedBoxId)
+              handleBoxDelete(selectedBoxId);
+          },
+          onClickOutside: () => handleOpenChange(false),
+          onForcePop: () => {
+            resetState();
+            onOpenChange(false);
+          },
+          captureClickOutside: true,
+          portalSelectors: [
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            '[role="listbox"]',
+          ],
+        }
+      : null
+  );
 
   const dragStateRef = useRef<{
     type: "drag" | "resize";
@@ -440,19 +472,14 @@ export function CropImageModal({
 
   // === Keyboard ===
 
+  // Local keyboard handler: Ctrl+Enter (crop) + Arrow nudge for crop boxes.
+  // Delete/Backspace and Escape are handled by the interaction layer modal slot above.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (isBusy) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
         handleCrop();
-        return;
-      }
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedBoxId) {
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-        e.preventDefault();
-        handleBoxDelete(selectedBoxId);
         return;
       }
       if (selectedBoxId && e.key.startsWith("Arrow")) {
@@ -468,14 +495,7 @@ export function CropImageModal({
         handleBoxUpdate(selectedBoxId, { x, y });
       }
     },
-    [
-      isBusy,
-      selectedBoxId,
-      boundingBoxes,
-      handleCrop,
-      handleBoxDelete,
-      handleBoxUpdate,
-    ]
+    [isBusy, selectedBoxId, boundingBoxes, handleCrop, handleBoxUpdate]
   );
 
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
@@ -494,8 +514,12 @@ export function CropImageModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        ref={dialogContentRef}
         className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto"
         onKeyDown={handleKeyDown}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
   DialogContent,
@@ -118,6 +119,7 @@ export function CropAudioModal({
   const animationFrameRef = useRef<number>(0);
   const draggingHandleRef = useRef<"start" | "end" | null>(null);
   const mountedRef = useRef(false);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     mountedRef.current = isOpen;
@@ -467,12 +469,42 @@ export function CropAudioModal({
     onClose();
   }, [isPlaying, stopPlayback, onClose]);
 
+  // Register modal slot — prevents Escape bubbling to item slot while open.
+  // onForcePop: cascade pop (spread switch) — stop playback + abort + close.
+  useInteractionLayer(
+    "modal",
+    isOpen
+      ? {
+          id: "crop-audio-modal",
+          ref: dialogContentRef,
+          hotkeys: ["Escape"],
+          onHotkey: (key) => {
+            if (key === "Escape" && !isCropping) handleClose();
+          },
+          onClickOutside: () => handleClose(),
+          onForcePop: () => handleClose(),
+          captureClickOutside: true,
+          portalSelectors: [
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            '[role="listbox"]',
+          ],
+        }
+      : null
+  );
+
   const selectedDuration = endTime - startTime;
   const canCrop = audioBuffer !== null && !loadError && selectedDuration >= MIN_DURATION && !isCropping;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        ref={dialogContentRef}
+        className="sm:max-w-lg"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Scissors className="h-5 w-5" />

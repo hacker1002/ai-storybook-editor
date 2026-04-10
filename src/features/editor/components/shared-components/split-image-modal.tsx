@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +81,31 @@ export function SplitImageModal({
 
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const generatedSectionRef = useRef<HTMLDivElement>(null);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
+
+  // Register modal slot — prevents Escape bubbling to item slot while open.
+  // captureClickOutside: true so click outside only closes modal, not deselects item.
+  useInteractionLayer(
+    "modal",
+    open
+      ? {
+          id: "split-image-modal",
+          ref: dialogContentRef,
+          hotkeys: ["Escape"],
+          onHotkey: (key) => {
+            if (key === "Escape" && !isSplitting && !isCreating)
+              handleOpenChange(false);
+          },
+          onClickOutside: () => handleOpenChange(false),
+          captureClickOutside: true,
+          portalSelectors: [
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            '[role="listbox"]',
+          ],
+        }
+      : null
+  );
 
   const resetState = useCallback(() => {
     setDescription("");
@@ -252,8 +278,12 @@ export function SplitImageModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        ref={dialogContentRef}
         className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
         onKeyDown={handleKeyDown}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
