@@ -20,3 +20,5 @@ export { SoundLibraryModal } from './sound-library-modal';
 export type { LibrarySound } from './sound-library-modal';
 export { clampGeometry, GeometryInput, GeometrySection, ReadOnlyGeometrySection, MediaIdentitySection, MEDIA_TYPE_OPTIONS, DEFAULT_STATES, ToolbarIconButton } from './shared-toolbar-components';
 export { ShapeToolbar } from './shape-toolbar';
+export { CreateAssetDialog } from './create-asset-dialog';
+export type { CreateAssetDialogProps } from './create-asset-dialog';

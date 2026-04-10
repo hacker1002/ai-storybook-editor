@@ -2,22 +2,13 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
 import { Plus } from 'lucide-react';
 import { useStageByKey, useSnapshotActions } from '@/stores/snapshot-store/selectors';
-import type { StageVariant } from '@/types/stage-types';
 import { VariantsTabPanel } from './variants-tab-panel';
 import { StageSoundsTabPanel } from './sounds-tab-panel';
 import { createLogger } from '@/utils/logger';
-import { cn, generateUniqueKey } from '@/utils/utils';
+import { cn } from '@/utils/utils';
+import { CreateAssetDialog } from '@/features/editor/components/shared-components/create-asset-dialog';
 
 const log = createLogger('Editor', 'StagesContentArea');
 
@@ -38,37 +29,23 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
   const stage = useStageByKey(selectedStageKey);
   const { addStageVariant, addStageSound } = useSnapshotActions();
 
-  // Create Variant modal
   const [isCreateVariantModalOpen, setIsCreateVariantModalOpen] = useState(false);
-  const [newVariantName, setNewVariantName] = useState('');
-  const [newVariantKey, setNewVariantKey] = useState('');
-
-  // Create Sound modal
   const [isCreateSoundModalOpen, setIsCreateSoundModalOpen] = useState(false);
-  const [newSoundName, setNewSoundName] = useState('');
-  const [newSoundKey, setNewSoundKey] = useState('');
 
   const handleAddClick = () => {
     log.debug('handleAddClick', 'add click', { activeTab });
     if (activeTab === 'variants') {
-      setNewVariantName('');
-      setNewVariantKey('');
       setIsCreateVariantModalOpen(true);
     } else if (activeTab === 'sounds') {
-      setNewSoundName('');
-      setNewSoundKey('');
       setIsCreateSoundModalOpen(true);
     }
   };
 
-  const handleCreateVariant = () => {
-    const trimmedName = newVariantName.trim();
-    if (!trimmedName || !newVariantKey) return;
-    log.info('handleCreateVariant', 'create variant', { stageKey: selectedStageKey, name: trimmedName, key: newVariantKey });
-
-    const newVariant: StageVariant = {
-      name: trimmedName,
-      key: newVariantKey,
+  const handleConfirmCreateVariant = (name: string, key: string) => {
+    log.info('handleConfirmCreateVariant', 'creating variant', { stageKey: selectedStageKey, key });
+    addStageVariant(selectedStageKey, {
+      name,
+      key,
       type: 1,
       visual_description: '',
       temporal: { era: '', season: '', weather: '', time_of_day: '' },
@@ -76,25 +53,17 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
       emotional: { mood: '' },
       illustrations: [],
       image_references: [],
-    };
-    addStageVariant(selectedStageKey, newVariant);
-    setIsCreateVariantModalOpen(false);
-    setNewVariantName('');
-    setNewVariantKey('');
+    });
   };
 
-  const handleCreateSound = () => {
-    if (!newSoundName.trim() || !newSoundKey.trim()) return;
-    log.info('handleCreateSound', 'create sound', { stageKey: selectedStageKey, name: newSoundName, key: newSoundKey });
+  const handleConfirmCreateSound = (name: string, key: string) => {
+    log.info('handleConfirmCreateSound', 'creating sound', { stageKey: selectedStageKey, key });
     addStageSound(selectedStageKey, {
-      name: newSoundName.trim(),
-      key: newSoundKey.trim(),
+      name,
+      key,
       description: '',
       media_url: '',
     });
-    setIsCreateSoundModalOpen(false);
-    setNewSoundName('');
-    setNewSoundKey('');
   };
 
   return (
@@ -156,95 +125,25 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
         )}
       </div>
 
-      {/* Create Variant Dialog */}
-      <Dialog open={isCreateVariantModalOpen} onOpenChange={setIsCreateVariantModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Variant</DialogTitle>
-            <DialogDescription>Add a new visual variant to this stage.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Name</label>
-              <Input
-                value={newVariantName}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  setNewVariantName(name);
-                  setNewVariantKey(name.trim() ? generateUniqueKey(name.trim()) : '');
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateVariant(); }}
-                placeholder="e.g. Rainy Night"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Key</label>
-              <Input
-                value={newVariantKey}
-                readOnly
-                className="bg-muted text-muted-foreground"
-                placeholder="Auto-generated from name"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewVariantName(''); setNewVariantKey(''); setIsCreateVariantModalOpen(false); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateVariant}
-              disabled={!newVariantName.trim()}
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateAssetDialog
+        open={isCreateVariantModalOpen}
+        onOpenChange={setIsCreateVariantModalOpen}
+        title="Create Stage Variant"
+        description="Add a new visual variant to this stage."
+        namePlaceholder="e.g. Rainy Night"
+        existingKeys={stage?.variants.map((v) => v.key) ?? []}
+        onCreate={handleConfirmCreateVariant}
+      />
 
-      {/* Create Sound Dialog */}
-      <Dialog open={isCreateSoundModalOpen} onOpenChange={setIsCreateSoundModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Sound</DialogTitle>
-            <DialogDescription>Add a new sound to this stage.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Name</label>
-              <Input
-                value={newSoundName}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  setNewSoundName(name);
-                  setNewSoundKey(name.trim() ? generateUniqueKey(name.trim()) : '');
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateSound(); }}
-                placeholder="e.g. Rain Ambience"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Key</label>
-              <Input
-                value={newSoundKey}
-                readOnly
-                className="bg-muted text-muted-foreground"
-                placeholder="Auto-generated from name"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewSoundName(''); setNewSoundKey(''); setIsCreateSoundModalOpen(false); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateSound}
-              disabled={!newSoundName.trim()}
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateAssetDialog
+        open={isCreateSoundModalOpen}
+        onOpenChange={setIsCreateSoundModalOpen}
+        title="Create Stage Sound"
+        description="Add a new sound to this stage."
+        namePlaceholder="e.g. Rain Ambience"
+        existingKeys={stage?.sounds.map((s) => s.key) ?? []}
+        onCreate={handleConfirmCreateSound}
+      />
     </div>
   );
 }

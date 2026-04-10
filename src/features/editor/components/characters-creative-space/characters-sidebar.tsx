@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CharactersSidebarItem } from "./characters-sidebar-item";
+import { CreateAssetDialog } from "@/features/editor/components/shared-components/create-asset-dialog";
 import {
   useCharacters,
   useSnapshotActions,
@@ -27,7 +28,7 @@ import {
 } from "@/stores/asset-category-store";
 import { CATEGORY_FILTER_OPTIONS } from "@/constants/prop-constants";
 import type { Character } from "@/types/character-types";
-import { cn, generateUniqueKey } from "@/utils/utils";
+import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "CharactersSidebar");
@@ -39,11 +40,11 @@ interface CharactersSidebarProps {
 }
 
 /** Build a blank Character record ready for addCharacter */
-function buildNewCharacter(name: string, order: number): Character {
+function buildNewCharacter(name: string, key: string, order: number): Character {
   return {
     order,
     name,
-    key: generateUniqueKey(name),
+    key,
     basic_info: {
       description: "",
       gender: "",
@@ -106,6 +107,7 @@ export function CharactersSidebar({
   >(null);
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<number | null>(null);
   const [filterStory, setFilterStory] = useState<string | null>(null);
@@ -147,19 +149,22 @@ export function CharactersSidebar({
   );
 
   const handleCreateFromScratch = useCallback(() => {
-    log.info("handleCreateFromScratch", "creating new character");
+    log.info("handleCreateFromScratch", "opening create modal");
     setIsAddPopoverOpen(false);
-    const name = "New Character";
-    const maxOrder = allCharacters.reduce(
-      (max, c) => Math.max(max, c.order),
-      -1
-    );
-    const newCharacter = buildNewCharacter(name, maxOrder + 1);
-    addCharacter(newCharacter);
-    onCharacterSelect(newCharacter.key);
-    setExpandedCharacterKey(newCharacter.key);
-    setEditingNameKey(newCharacter.key);
-  }, [addCharacter, onCharacterSelect, allCharacters]);
+    setIsCreateModalOpen(true);
+  }, []);
+
+  const handleConfirmCreate = useCallback(
+    (name: string, key: string) => {
+      log.info("handleConfirmCreate", "creating character", { key });
+      const maxOrder = allCharacters.reduce((max, c) => Math.max(max, c.order), -1);
+      const newCharacter = buildNewCharacter(name, key, maxOrder + 1);
+      addCharacter(newCharacter);
+      onCharacterSelect(newCharacter.key);
+      setExpandedCharacterKey(newCharacter.key);
+    },
+    [allCharacters, addCharacter, onCharacterSelect]
+  );
 
   const handleDeleteCharacter = useCallback(
     (key: string) => {
@@ -175,29 +180,12 @@ export function CharactersSidebar({
     (key: string, newName: string) => {
       const trimmed = newName.trim();
       if (trimmed) {
-        // On first rename (key still matches "new_character_*"), also update the key
-        const isFirstRename = key.startsWith("new_character_");
-        if (isFirstRename) {
-          const newKey = generateUniqueKey(trimmed);
-          log.debug("handleRenameCharacter", "first rename with key update", {
-            oldKey: key,
-            newKey,
-            newName: trimmed,
-          });
-          updateCharacter(key, { name: trimmed, key: newKey });
-          onCharacterSelect(newKey);
-          setExpandedCharacterKey(newKey);
-        } else {
-          log.debug("handleRenameCharacter", "renaming", {
-            key,
-            newName: trimmed,
-          });
-          updateCharacter(key, { name: trimmed });
-        }
+        log.debug("handleRenameCharacter", "renaming", { key, newName: trimmed });
+        updateCharacter(key, { name: trimmed });
       }
       setEditingNameKey(null);
     },
-    [updateCharacter, onCharacterSelect]
+    [updateCharacter]
   );
 
   const handleDrop = useCallback(
@@ -273,7 +261,10 @@ export function CharactersSidebar({
     [filteredCharacterKeys, selectedCharacterKey, onCharacterSelect, handleToggle]
   );
 
+  const existingCharacterKeys = allCharacters.map((c) => c.key);
+
   return (
+    <>
     <aside
       className="flex flex-col h-full border-r min-w-[280px] max-w-[320px] w-1/4"
       role="navigation"
@@ -446,5 +437,15 @@ export function CharactersSidebar({
         )}
       </div>
     </aside>
+    <CreateAssetDialog
+      open={isCreateModalOpen}
+      onOpenChange={setIsCreateModalOpen}
+      title="Create Character"
+      description="Add a new character to the story."
+      namePlaceholder="e.g. Hero"
+      existingKeys={existingCharacterKeys}
+      onCreate={handleConfirmCreate}
+    />
+    </>
   );
 }

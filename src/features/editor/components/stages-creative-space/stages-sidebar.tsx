@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StagesSidebarItem } from "./stages-sidebar-item";
+import { CreateAssetDialog } from "@/features/editor/components/shared-components/create-asset-dialog";
 import {
   useStages,
   useSnapshotActions,
@@ -23,7 +24,7 @@ import {
 import { useCurrentBook } from "@/stores/book-store";
 import { useLocations } from "@/stores/location-store";
 import type { Stage } from "@/types/stage-types";
-import { cn, generateUniqueKey } from "@/utils/utils";
+import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "StagesSidebar");
@@ -35,11 +36,11 @@ interface StagesSidebarProps {
 }
 
 /** Build a blank Stage record ready for addStage */
-function buildNewStage(name: string, order: number): Stage {
+function buildNewStage(name: string, key: string, order: number): Stage {
   return {
     order,
     name,
-    key: generateUniqueKey(name),
+    key,
     location_id: "",
     variants: [
       {
@@ -78,6 +79,7 @@ export function StagesSidebar({
   const [expandedStageKey, setExpandedStageKey] = useState<string | null>(null);
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [filterLocationId, setFilterLocationId] = useState<string | null>(null);
   const [filterStory, setFilterStory] = useState<string | null>(null);
@@ -104,16 +106,22 @@ export function StagesSidebar({
   }, []);
 
   const handleCreateFromScratch = useCallback(() => {
-    log.info("handleCreateFromScratch", "creating new stage");
+    log.info("handleCreateFromScratch", "opening create modal");
     setIsAddPopoverOpen(false);
-    const name = "New Stage";
-    const maxOrder = allStages.reduce((max, s) => Math.max(max, s.order), -1);
-    const newStage = buildNewStage(name, maxOrder + 1);
-    addStage(newStage);
-    onStageSelect(newStage.key);
-    setExpandedStageKey(newStage.key);
-    setEditingNameKey(newStage.key);
-  }, [addStage, onStageSelect, allStages]);
+    setIsCreateModalOpen(true);
+  }, []);
+
+  const handleConfirmCreate = useCallback(
+    (name: string, key: string) => {
+      log.info("handleConfirmCreate", "creating stage", { key });
+      const maxOrder = allStages.reduce((max, s) => Math.max(max, s.order), -1);
+      const newStage = buildNewStage(name, key, maxOrder + 1);
+      addStage(newStage);
+      onStageSelect(newStage.key);
+      setExpandedStageKey(newStage.key);
+    },
+    [allStages, addStage, onStageSelect]
+  );
 
   const handleDeleteStage = useCallback(
     (key: string) => {
@@ -129,26 +137,12 @@ export function StagesSidebar({
     (key: string, newName: string) => {
       const trimmed = newName.trim();
       if (trimmed) {
-        // On first rename (key still matches "new_stage_*"), also update the key
-        const isFirstRename = key.startsWith("new_stage_");
-        if (isFirstRename) {
-          const newKey = generateUniqueKey(trimmed);
-          log.debug("handleRenameStage", "first rename with key update", {
-            oldKey: key,
-            newKey,
-            newName: trimmed,
-          });
-          updateStage(key, { name: trimmed, key: newKey });
-          onStageSelect(newKey);
-          setExpandedStageKey(newKey);
-        } else {
-          log.debug("handleRenameStage", "renaming", { key, newName: trimmed });
-          updateStage(key, { name: trimmed });
-        }
+        log.debug("handleRenameStage", "renaming", { key, newName: trimmed });
+        updateStage(key, { name: trimmed });
       }
       setEditingNameKey(null);
     },
-    [updateStage, onStageSelect]
+    [updateStage]
   );
 
   const handleDrop = useCallback(
@@ -220,7 +214,10 @@ export function StagesSidebar({
     [filteredStageKeys, selectedStageKey, onStageSelect, handleToggle]
   );
 
+  const existingStageKeys = allStages.map((s) => s.key);
+
   return (
+    <>
     <aside
       className="flex flex-col h-full border-r min-w-[280px] max-w-[320px] w-1/4"
       role="navigation"
@@ -381,5 +378,15 @@ export function StagesSidebar({
         )}
       </div>
     </aside>
+    <CreateAssetDialog
+      open={isCreateModalOpen}
+      onOpenChange={setIsCreateModalOpen}
+      title="Create Stage"
+      description="Add a new stage to the story."
+      namePlaceholder="e.g. Forest"
+      existingKeys={existingStageKeys}
+      onCreate={handleConfirmCreate}
+    />
+    </>
   );
 }

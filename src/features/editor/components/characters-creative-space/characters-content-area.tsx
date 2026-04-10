@@ -2,22 +2,14 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
 import { Plus } from 'lucide-react';
 import { useCharacterByKey, useSnapshotActions } from '@/stores/snapshot-store';
 import { VariantsTabPanel } from './variants-tab-panel';
 import { VoicesTabPanelMock } from './voices-tab-panel-mock';
 import { CropsTabPanelMock } from './crops-tab-panel-mock';
 import { createLogger } from '@/utils/logger';
-import { cn, generateUniqueKey } from '@/utils/utils';
+import { cn } from '@/utils/utils';
+import { CreateAssetDialog } from '@/features/editor/components/shared-components/create-asset-dialog';
 
 const log = createLogger('Editor', 'CharactersContentArea');
 
@@ -43,41 +35,27 @@ export function CharactersContentArea({
   const character = useCharacterByKey(selectedCharacterKey);
   const { addCharacterVariant } = useSnapshotActions();
 
-  // Create Variant modal state
   const [isCreateVariantModalOpen, setIsCreateVariantModalOpen] = useState(false);
-  const [newVariantName, setNewVariantName] = useState('');
-  const [newVariantKey, setNewVariantKey] = useState('');
 
   const handleAddClick = () => {
     log.debug('handleAddClick', 'add click', { activeTab });
     if (activeTab === 'variants') {
-      setNewVariantName('');
-      setNewVariantKey('');
       setIsCreateVariantModalOpen(true);
     }
     // voices and crops: TBD
   };
 
-  const handleCreateVariant = () => {
-    const trimmedName = newVariantName.trim();
-    if (!trimmedName || !newVariantKey) return;
-    log.info('handleCreateVariant', 'create variant', {
-      characterKey: selectedCharacterKey,
-      name: trimmedName,
-      key: newVariantKey,
-    });
+  const handleConfirmCreateVariant = (name: string, key: string) => {
+    log.info('handleConfirmCreateVariant', 'creating variant', { characterKey: selectedCharacterKey, key });
     addCharacterVariant(selectedCharacterKey, {
-      name: trimmedName,
-      key: newVariantKey,
+      name,
+      key,
       type: 1,
       appearance: { height: 0, hair: '', eyes: '', face: '', build: '' },
       visual_description: '',
       illustrations: [],
       image_references: [],
     });
-    setIsCreateVariantModalOpen(false);
-    setNewVariantName('');
-    setNewVariantKey('');
   };
 
   return (
@@ -138,54 +116,15 @@ export function CharactersContentArea({
         {activeTab === 'crops' && <CropsTabPanelMock />}
       </div>
 
-      {/* Create Variant Dialog */}
-      <Dialog open={isCreateVariantModalOpen} onOpenChange={setIsCreateVariantModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create Character Variant</DialogTitle>
-            <DialogDescription>Add a new variant to this character.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Name</label>
-              <Input
-                value={newVariantName}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  setNewVariantName(name);
-                  setNewVariantKey(name.trim() ? generateUniqueKey(name.trim()) : '');
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateVariant(); }}
-                placeholder="e.g. Battle Mode"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Key</label>
-              <Input
-                value={newVariantKey}
-                readOnly
-                className="bg-muted text-muted-foreground"
-                placeholder="Auto-generated from name"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setNewVariantName('');
-                setNewVariantKey('');
-                setIsCreateVariantModalOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleCreateVariant} disabled={!newVariantName.trim()}>
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateAssetDialog
+        open={isCreateVariantModalOpen}
+        onOpenChange={setIsCreateVariantModalOpen}
+        title="Create Character Variant"
+        description="Add a new variant to this character."
+        namePlaceholder="e.g. Battle Mode"
+        existingKeys={character?.variants.map((v) => v.key) ?? []}
+        onCreate={handleConfirmCreateVariant}
+      />
     </div>
   );
 }

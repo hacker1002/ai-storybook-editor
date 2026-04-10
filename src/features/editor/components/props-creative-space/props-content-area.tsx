@@ -2,15 +2,6 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
 import { Plus } from 'lucide-react';
 import { usePropByKey, useSnapshotActions } from '@/stores/snapshot-store';
 import type { ContentTab } from '@/types/prop-types';
@@ -19,7 +10,8 @@ import { VariantsTabPanel } from './variants-tab-panel';
 import { SoundsTabPanel } from './sounds-tab-panel';
 import { CropsTabPanelMock } from './crops-tab-panel-mock';
 import { createLogger } from '@/utils/logger';
-import { cn, generateUniqueKey } from '@/utils/utils';
+import { cn } from '@/utils/utils';
+import { CreateAssetDialog } from '@/features/editor/components/shared-components/create-asset-dialog';
 
 const log = createLogger('Editor', 'PropsContentArea');
 
@@ -33,57 +25,38 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
   const prop = usePropByKey(selectedPropKey);
   const { addPropVariant, addPropSound } = useSnapshotActions();
 
-  // Create Variant modal
   const [isCreateVariantModalOpen, setIsCreateVariantModalOpen] = useState(false);
-  const [newVariantName, setNewVariantName] = useState('');
-  const [newVariantKey, setNewVariantKey] = useState('');
-
-  // Create Sound modal
   const [isCreateSoundModalOpen, setIsCreateSoundModalOpen] = useState(false);
-  const [newSoundName, setNewSoundName] = useState('');
-  const [newSoundKey, setNewSoundKey] = useState('');
 
   const handleAddClick = () => {
     log.debug('handleAddClick', 'add click', { activeTab });
     if (activeTab === 'variants') {
-      setNewVariantName('');
-      setNewVariantKey('');
       setIsCreateVariantModalOpen(true);
     } else if (activeTab === 'sounds') {
-      setNewSoundName('');
-      setNewSoundKey('');
       setIsCreateSoundModalOpen(true);
     }
   };
 
-  const handleCreateVariant = () => {
-    if (!newVariantName.trim() || !newVariantKey) return;
-    log.info('handleCreateVariant', 'create variant', { propKey: selectedPropKey, name: newVariantName, key: newVariantKey });
+  const handleConfirmCreateVariant = (name: string, key: string) => {
+    log.info('handleConfirmCreateVariant', 'creating variant', { propKey: selectedPropKey, key });
     addPropVariant(selectedPropKey, {
-      name: newVariantName.trim(),
-      key: newVariantKey,
+      name,
+      key,
       type: 1,
       visual_description: '',
       illustrations: [],
       image_references: [],
     });
-    setIsCreateVariantModalOpen(false);
-    setNewVariantName('');
-    setNewVariantKey('');
   };
 
-  const handleCreateSound = () => {
-    if (!newSoundName.trim() || !newSoundKey.trim()) return;
-    log.info('handleCreateSound', 'create sound', { propKey: selectedPropKey, name: newSoundName, key: newSoundKey });
+  const handleConfirmCreateSound = (name: string, key: string) => {
+    log.info('handleConfirmCreateSound', 'creating sound', { propKey: selectedPropKey, key });
     addPropSound(selectedPropKey, {
-      name: newSoundName.trim(),
-      key: newSoundKey.trim(),
+      name,
+      key,
       description: '',
       media_url: '',
     });
-    setIsCreateSoundModalOpen(false);
-    setNewSoundName('');
-    setNewSoundKey('');
   };
 
   return (
@@ -146,95 +119,25 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
         {activeTab === 'crops' && <CropsTabPanelMock />}
       </div>
 
-      {/* Create Variant Dialog */}
-      <Dialog open={isCreateVariantModalOpen} onOpenChange={setIsCreateVariantModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Variant</DialogTitle>
-            <DialogDescription>Add a new visual variant to this prop.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Name</label>
-              <Input
-                value={newVariantName}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  setNewVariantName(name);
-                  setNewVariantKey(name.trim() ? generateUniqueKey(name.trim()) : '');
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateVariant(); }}
-                placeholder="e.g. Glowing"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Key</label>
-              <Input
-                value={newVariantKey}
-                readOnly
-                className="bg-muted text-muted-foreground"
-                placeholder="Auto-generated from name"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewVariantName(''); setNewVariantKey(''); setIsCreateVariantModalOpen(false); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateVariant}
-              disabled={!newVariantName.trim()}
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateAssetDialog
+        open={isCreateVariantModalOpen}
+        onOpenChange={setIsCreateVariantModalOpen}
+        title="Create Prop Variant"
+        description="Add a new visual variant to this prop."
+        namePlaceholder="e.g. Glowing"
+        existingKeys={prop?.variants.map((v) => v.key) ?? []}
+        onCreate={handleConfirmCreateVariant}
+      />
 
-      {/* Create Sound Dialog */}
-      <Dialog open={isCreateSoundModalOpen} onOpenChange={setIsCreateSoundModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Sound</DialogTitle>
-            <DialogDescription>Add a new sound to this prop.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Name</label>
-              <Input
-                value={newSoundName}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  setNewSoundName(name);
-                  setNewSoundKey(name.trim() ? generateUniqueKey(name.trim()) : '');
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateSound(); }}
-                placeholder="e.g. Swing Sound"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Key</label>
-              <Input
-                value={newSoundKey}
-                readOnly
-                className="bg-muted text-muted-foreground"
-                placeholder="Auto-generated from name"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewSoundName(''); setNewSoundKey(''); setIsCreateSoundModalOpen(false); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateSound}
-              disabled={!newSoundName.trim()}
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateAssetDialog
+        open={isCreateSoundModalOpen}
+        onOpenChange={setIsCreateSoundModalOpen}
+        title="Create Prop Sound"
+        description="Add a new sound to this prop."
+        namePlaceholder="e.g. Swing Sound"
+        existingKeys={prop?.sounds.map((s) => s.key) ?? []}
+        onCreate={handleConfirmCreateSound}
+      />
     </div>
   );
 }

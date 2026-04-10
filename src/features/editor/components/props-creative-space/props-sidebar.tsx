@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PropsSidebarItem } from "./props-sidebar-item";
+import { CreateAssetDialog } from "@/features/editor/components/shared-components/create-asset-dialog";
 import {
   useProps,
   useSnapshotActions,
@@ -27,7 +28,7 @@ import {
 } from "@/stores/asset-category-store";
 import { CATEGORY_FILTER_OPTIONS } from "@/constants/prop-constants";
 import type { Prop } from "@/types/prop-types";
-import { cn, generateUniqueKey } from "@/utils/utils";
+import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "PropsSidebar");
@@ -39,11 +40,11 @@ interface PropsSidebarProps {
 }
 
 /** Build a blank Prop record ready for addProp */
-function buildNewProp(name: string, order: number): Prop {
+function buildNewProp(name: string, key: string, order: number): Prop {
   return {
     order,
     name,
-    key: generateUniqueKey(name),
+    key,
     category_id: "",
     type: "narrative",
     variants: [
@@ -82,6 +83,7 @@ export function PropsSidebar({
   const [expandedPropKey, setExpandedPropKey] = useState<string | null>(null);
   const [editingNameKey, setEditingNameKey] = useState<string | null>(null);
   const [isAddPopoverOpen, setIsAddPopoverOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<number | null>(null);
   const [filterStory, setFilterStory] = useState<string | null>(null);
@@ -119,16 +121,22 @@ export function PropsSidebar({
   }, []);
 
   const handleCreateFromScratch = useCallback(() => {
-    log.info("handleCreateFromScratch", "creating new prop");
+    log.info("handleCreateFromScratch", "opening create modal");
     setIsAddPopoverOpen(false);
-    const name = "New Prop";
-    const maxOrder = allProps.reduce((max, p) => Math.max(max, p.order), -1);
-    const newProp = buildNewProp(name, maxOrder + 1);
-    addProp(newProp);
-    onPropSelect(newProp.key);
-    setExpandedPropKey(newProp.key);
-    setEditingNameKey(newProp.key);
-  }, [addProp, onPropSelect, allProps]);
+    setIsCreateModalOpen(true);
+  }, []);
+
+  const handleConfirmCreate = useCallback(
+    (name: string, key: string) => {
+      log.info("handleConfirmCreate", "creating prop", { key });
+      const maxOrder = allProps.reduce((max, p) => Math.max(max, p.order), -1);
+      const newProp = buildNewProp(name, key, maxOrder + 1);
+      addProp(newProp);
+      onPropSelect(newProp.key);
+      setExpandedPropKey(newProp.key);
+    },
+    [allProps, addProp, onPropSelect]
+  );
 
   const handleDeleteProp = useCallback(
     (key: string) => {
@@ -144,26 +152,12 @@ export function PropsSidebar({
     (key: string, newName: string) => {
       const trimmed = newName.trim();
       if (trimmed) {
-        // On first rename (key still matches "new_prop_*"), also update the key
-        const isFirstRename = key.startsWith("new_prop_");
-        if (isFirstRename) {
-          const newKey = generateUniqueKey(trimmed);
-          log.debug("handleRenameProp", "first rename with key update", {
-            oldKey: key,
-            newKey,
-            newName: trimmed,
-          });
-          updateProp(key, { name: trimmed, key: newKey });
-          onPropSelect(newKey);
-          setExpandedPropKey(newKey);
-        } else {
-          log.debug("handleRenameProp", "renaming", { key, newName: trimmed });
-          updateProp(key, { name: trimmed });
-        }
+        log.debug("handleRenameProp", "renaming", { key, newName: trimmed });
+        updateProp(key, { name: trimmed });
       }
       setEditingNameKey(null);
     },
-    [updateProp, onPropSelect]
+    [updateProp]
   );
 
   const handleUpdateCategory = useCallback(
@@ -245,7 +239,10 @@ export function PropsSidebar({
     [filteredPropKeys, selectedPropKey, onPropSelect, handleToggle]
   );
 
+  const existingPropKeys = allProps.map((p) => p.key);
+
   return (
+    <>
     <aside
       className="flex flex-col h-full border-r min-w-[280px] max-w-[320px] w-1/4"
       role="navigation"
@@ -418,5 +415,15 @@ export function PropsSidebar({
         )}
       </div>
     </aside>
+    <CreateAssetDialog
+      open={isCreateModalOpen}
+      onOpenChange={setIsCreateModalOpen}
+      title="Create Prop"
+      description="Add a new prop to the story."
+      namePlaceholder="e.g. Sword"
+      existingKeys={existingPropKeys}
+      onCreate={handleConfirmCreate}
+    />
+    </>
   );
 }

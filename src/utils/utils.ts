@@ -5,9 +5,25 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Generate a URL-safe unique key from a display name */
-export function generateUniqueKey(name: string): string {
-  return (
-    name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '_') + '_' + Date.now().toString(36)
-  );
+/**
+ * Convert a display name to a deterministic, Unicode-aware key.
+ * Preserves Unicode letters/digits (Vietnamese, CJK, Arabic, etc.).
+ * Example: nameToKey("Thanh kiếm") === "thanh_kiếm"
+ */
+export function nameToKey(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFC')
+    .replace(/\s+/g, '_')
+    .replace(/[^\p{L}\p{N}_]/gu, '')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/**
+ * Check if a key already exists in a collection.
+ * Example: isKeyTaken("hero", ["hero", "villain"]) === true
+ */
+export function isKeyTaken(key: string, existingKeys: string[]): boolean {
+  return existingKeys.includes(key);
 }
