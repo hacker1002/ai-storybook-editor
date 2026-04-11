@@ -37,6 +37,7 @@ export const ILLUSTRATION_ICONS: IconRailItemConfig[] = [
 // Retouch step icons
 export const RETOUCH_ICONS: IconRailItemConfig[] = [
   { id: 'object', icon: 'Layers', label: 'Objects' },
+  { id: 'quiz', icon: 'HelpCircle', label: 'Quizzes' },
   { id: 'animation', icon: 'Zap', label: 'Animations' },
   { id: 'remix', icon: 'RefreshCw', label: 'Remix' },
 ];

@@ -194,6 +194,7 @@ export function EditorPage() {
       case 'share':
         return <SharesCreativeSpace />;
       case 'sketch':
+      case 'quiz':
       case 'remix':
       case 'flag':
       case 'collaborator':
