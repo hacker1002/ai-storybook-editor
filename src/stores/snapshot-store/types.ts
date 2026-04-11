@@ -12,8 +12,164 @@ import type {
   SpreadVideo,
   SpreadAudio,
   SpreadQuiz,
+  SpreadQuizLocalized,
   SpreadAnimation,
+  QuizAnswerSetting,
+  QuizContainer,
+  ItemContainerRole,
+  ItemContainerStyle,
+  QuizItem,
+  QuizItemContent,
+  QuizPair,
+  QuizTargetZone,
+  QuizDecorImage,
 } from '@/types/spread-types';
+
+// ============================================================================
+// QuizSlice — validation-as-state + type-discriminated CRUD
+// ============================================================================
+
+export type QuizValidationCode =
+  | 'wrong_type'
+  | 'item_not_found'
+  | 'zone_not_found'
+  | 'fk_violation'
+  | 'relation_violation'
+  | 'correct_answer_count'
+  | 'sequence_gap'
+  | 'hotspot_no_zones'
+  | 'hotspot_no_images'
+  | 'source_target_role';
+
+export interface QuizValidationIssue {
+  code: QuizValidationCode;
+  message: string;
+  severity: 'error' | 'warning';
+  context?: Record<string, unknown>;
+}
+
+export interface QuizSlice {
+  // --- Own state ---
+  quizValidationErrors: Record<string, QuizValidationIssue[]>;
+
+  // --- Quiz-level CRUD ---
+  addQuiz: (spreadId: string, quiz: SpreadQuiz) => void;
+  updateQuiz: (
+    spreadId: string,
+    quizId: string,
+    updates: Partial<Omit<SpreadQuiz, 'id' | 'type'>>,
+  ) => void;
+  deleteQuiz: (spreadId: string, quizId: string) => void;
+
+  // --- Quiz-level locale (question + audio_url) ---
+  upsertQuizLocale: (
+    spreadId: string,
+    quizId: string,
+    languageKey: string,
+    content: SpreadQuizLocalized,
+  ) => void;
+  deleteQuizLocale: (spreadId: string, quizId: string, languageKey: string) => void;
+
+  // --- answer_setting / quiz_container ---
+  updateQuizAnswerSetting: (
+    spreadId: string,
+    quizId: string,
+    updates: Partial<QuizAnswerSetting>,
+  ) => void;
+  updateQuizContainer: (
+    spreadId: string,
+    quizId: string,
+    updates: Partial<QuizContainer>,
+  ) => void;
+
+  // --- item_container (per-role style) ---
+  setItemContainerStyle: (
+    spreadId: string,
+    quizId: string,
+    role: ItemContainerRole,
+    style: ItemContainerStyle,
+  ) => void;
+  updateItemContainerStyle: (
+    spreadId: string,
+    quizId: string,
+    role: ItemContainerRole,
+    updates: Partial<ItemContainerStyle>,
+  ) => void;
+
+  // --- elements.items[] ---
+  addQuizItem: (spreadId: string, quizId: string, item: QuizItem) => void;
+  updateQuizItem: (
+    spreadId: string,
+    quizId: string,
+    itemId: string,
+    updates: Partial<QuizItem>,
+  ) => void;
+  deleteQuizItem: (spreadId: string, quizId: string, itemId: string) => void;
+  reorderQuizItems: (
+    spreadId: string,
+    quizId: string,
+    fromIndex: number,
+    toIndex: number,
+  ) => void;
+  upsertQuizItemLocale: (
+    spreadId: string,
+    quizId: string,
+    itemId: string,
+    languageKey: string,
+    content: QuizItemContent,
+  ) => void;
+  deleteQuizItemLocale: (
+    spreadId: string,
+    quizId: string,
+    itemId: string,
+    languageKey: string,
+  ) => void;
+
+  // --- elements.pairs[] (type 1) ---
+  addQuizPair: (spreadId: string, quizId: string, pair: QuizPair) => void;
+  deleteQuizPair: (spreadId: string, quizId: string, pairIndex: number) => void;
+  clearQuizPairs: (spreadId: string, quizId: string) => void;
+
+  // --- elements.target_zones[] (type 3, 4) ---
+  addQuizTargetZone: (
+    spreadId: string,
+    quizId: string,
+    zone: QuizTargetZone,
+  ) => void;
+  updateQuizTargetZone: (
+    spreadId: string,
+    quizId: string,
+    zoneId: string,
+    updates: Partial<QuizTargetZone>,
+  ) => void;
+  deleteQuizTargetZone: (
+    spreadId: string,
+    quizId: string,
+    zoneId: string,
+  ) => void;
+
+  // --- elements.images[] (type 3, 4 decorative) ---
+  addQuizDecorImage: (
+    spreadId: string,
+    quizId: string,
+    image: QuizDecorImage,
+  ) => void;
+  updateQuizDecorImage: (
+    spreadId: string,
+    quizId: string,
+    imageIndex: number,
+    updates: Partial<QuizDecorImage>,
+  ) => void;
+  deleteQuizDecorImage: (
+    spreadId: string,
+    quizId: string,
+    imageIndex: number,
+  ) => void;
+
+  // --- Validation utilities ---
+  revalidateQuiz: (spreadId: string, quizId: string) => void;
+  clearQuizValidation: (quizId: string) => void;
+}
 
 export interface DocsSlice {
   docs: ManuscriptDoc[];
@@ -127,10 +283,6 @@ export interface RetouchSlice {
   addRetouchAudio: (spreadId: string, audio: SpreadAudio) => void;
   updateRetouchAudio: (spreadId: string, audioId: string, updates: Partial<SpreadAudio>) => void;
   deleteRetouchAudio: (spreadId: string, audioId: string) => void;
-
-  addRetouchQuiz: (spreadId: string, quiz: SpreadQuiz) => void;
-  updateRetouchQuiz: (spreadId: string, quizId: string, updates: Partial<SpreadQuiz>) => void;
-  deleteRetouchQuiz: (spreadId: string, quizId: string) => void;
 
   addRetouchAnimation: (spreadId: string, animation: SpreadAnimation) => void;
   updateRetouchAnimation: (spreadId: string, animationIndex: number, updates: Partial<SpreadAnimation>) => void;
@@ -357,7 +509,7 @@ export interface ImageTaskSlice {
   clearAllTasks: () => void;
 }
 
-export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
+export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

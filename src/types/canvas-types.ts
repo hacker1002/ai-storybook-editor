@@ -172,7 +172,7 @@ export type QuizAddAction = SpreadItemActionParams<SpreadQuiz> & {
   itemId: null;
 };
 
-export type QuizUpdateAction = SpreadItemActionParams<Partial<SpreadQuiz>> & {
+export type QuizUpdateAction = SpreadItemActionParams<Partial<Omit<SpreadQuiz, 'id' | 'type'>>> & {
   itemType: 'quiz';
   action: 'update';
   itemId: string;
@@ -297,7 +297,7 @@ export interface QuizItemContext<TSpread extends BaseSpread>
   extends BaseItemContext<TSpread> {
   item: SpreadQuiz;
   onSelect: () => void;
-  onUpdate: (updates: Partial<SpreadQuiz>) => void;
+  onUpdate: (updates: Partial<Omit<SpreadQuiz, 'id' | 'type'>>) => void;
   onDelete: () => void;
 }
 

@@ -6,7 +6,7 @@ import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/i
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask } from './types';
+import type { ImageTask, QuizValidationIssue } from './types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -16,11 +16,25 @@ import type {
   SpreadAudio,
   SpreadQuiz,
   SpreadAnimation,
+  QuizType,
+  QuizItem,
+  QuizPair,
+  QuizTargetZone,
+  QuizDecorImage,
+  QuizAnswerSetting,
+  QuizContainer,
+  ItemContainer,
 } from '@/types/spread-types';
 
 // Stable empty array refs to avoid new [] on every selector evaluation (prevents re-render loops)
 const EMPTY_SPREADS: DummySpread[] = [];
 const EMPTY_QUIZZES: SpreadQuiz[] = [];
+const EMPTY_QUIZ_ITEMS: QuizItem[] = [];
+const EMPTY_QUIZ_PAIRS: QuizPair[] = [];
+const EMPTY_QUIZ_ZONES: QuizTargetZone[] = [];
+const EMPTY_QUIZ_IMAGES: QuizDecorImage[] = [];
+const EMPTY_QUIZ_ISSUES: QuizValidationIssue[] = [];
+const EMPTY_QUIZ_ERRORS_MAP: Record<string, QuizValidationIssue[]> = {};
 const EMPTY_ANIMATIONS: SpreadAnimation[] = [];
 const EMPTY_PROPS: Prop[] = [];
 const EMPTY_CHARACTERS: Character[] = [];
@@ -115,12 +129,106 @@ export const useRetouchVideoById = (spreadId: string, videoId: string): SpreadVi
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.videos?.find((v) => v.id === videoId));
 export const useRetouchAudioById = (spreadId: string, audioId: string): SpreadAudio | undefined =>
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.audios?.find((a) => a.id === audioId));
-export const useRetouchQuizById = (spreadId: string, quizId: string): SpreadQuiz | undefined =>
-  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId));
-export const useRetouchQuizzes = (spreadId: string): SpreadQuiz[] =>
-  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes ?? EMPTY_QUIZZES);
 export const useRetouchAnimations = (spreadId: string): SpreadAnimation[] =>
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.animations ?? EMPTY_ANIMATIONS);
+
+// ============================================================================
+// Quiz selectors (QuizSlice — quiz data reads from illustration.spreads[])
+// ============================================================================
+
+export const useQuizzes = (spreadId: string): SpreadQuiz[] =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes ?? EMPTY_QUIZZES);
+export const useQuizById = (spreadId: string, quizId: string): SpreadQuiz | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId));
+export const useQuizType = (spreadId: string, quizId: string): QuizType | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId)?.type);
+
+// Nested collections
+export const useQuizItems = (spreadId: string, quizId: string): QuizItem[] =>
+  useSnapshotStore((s) => {
+    const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+    return quiz?.elements.items ?? EMPTY_QUIZ_ITEMS;
+  });
+export const useQuizItemById = (spreadId: string, quizId: string, itemId: string): QuizItem | undefined =>
+  useSnapshotStore((s) => {
+    const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+    return quiz?.elements.items?.find((i) => i.id === itemId);
+  });
+export const useQuizPairs = (spreadId: string, quizId: string): QuizPair[] =>
+  useSnapshotStore((s) => {
+    const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+    return quiz?.elements.pairs ?? EMPTY_QUIZ_PAIRS;
+  });
+export const useQuizTargetZones = (spreadId: string, quizId: string): QuizTargetZone[] =>
+  useSnapshotStore((s) => {
+    const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+    return quiz?.elements.target_zones ?? EMPTY_QUIZ_ZONES;
+  });
+export const useQuizTargetZoneById = (spreadId: string, quizId: string, zoneId: string): QuizTargetZone | undefined =>
+  useSnapshotStore((s) => {
+    const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+    return quiz?.elements.target_zones?.find((z) => z.id === zoneId);
+  });
+export const useQuizDecorImages = (spreadId: string, quizId: string): QuizDecorImage[] =>
+  useSnapshotStore((s) => {
+    const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+    return quiz?.elements.images ?? EMPTY_QUIZ_IMAGES;
+  });
+
+// Settings
+export const useQuizAnswerSetting = (spreadId: string, quizId: string): QuizAnswerSetting | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId)?.answer_setting);
+export const useQuizContainer = (spreadId: string, quizId: string): QuizContainer | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId)?.quiz_container);
+export const useQuizItemContainer = (spreadId: string, quizId: string): ItemContainer | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId)?.item_container);
+
+// Computed helpers
+export const useQuizDistractorItems = (spreadId: string, quizId: string): QuizItem[] =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+      const items = quiz?.elements.items ?? EMPTY_QUIZ_ITEMS;
+      if (quiz?.type === 2) {
+        return items.filter((i) => i.order === null || i.order === undefined);
+      }
+      if (quiz?.type === 1) {
+        const pairs = quiz.elements.pairs ?? [];
+        const paired = new Set<string>();
+        pairs.forEach((p) => { paired.add(p.source_id); paired.add(p.target_id); });
+        return items.filter((i) => !paired.has(i.id));
+      }
+      return EMPTY_QUIZ_ITEMS;
+    }),
+  );
+export const useQuizSourceItems = (spreadId: string, quizId: string): QuizItem[] =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+      return (quiz?.elements.items ?? EMPTY_QUIZ_ITEMS).filter((i) => i.type === 'source');
+    }),
+  );
+export const useQuizTargetItems = (spreadId: string, quizId: string): QuizItem[] =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const quiz = s.illustration.spreads.find((sp) => sp.id === spreadId)?.quizzes?.find((q) => q.id === quizId);
+      return (quiz?.elements.items ?? EMPTY_QUIZ_ITEMS).filter((i) => i.type === 'target');
+    }),
+  );
+
+// Validation selectors (QuizSlice own state)
+export const useQuizValidationIssues = (quizId: string): QuizValidationIssue[] =>
+  useSnapshotStore((s) => s.quizValidationErrors[quizId] ?? EMPTY_QUIZ_ISSUES);
+export const useQuizBlockingErrors = (quizId: string): QuizValidationIssue[] =>
+  useSnapshotStore(
+    useShallow((s) => (s.quizValidationErrors[quizId] ?? EMPTY_QUIZ_ISSUES).filter((i) => i.severity === 'error')),
+  );
+export const useHasBlockingQuizErrors = (): boolean =>
+  useSnapshotStore((s) =>
+    Object.values(s.quizValidationErrors).some((issues) => issues.some((i) => i.severity === 'error')),
+  );
+export const useAllQuizValidationErrors = (): Record<string, QuizValidationIssue[]> =>
+  useSnapshotStore((s) => s.quizValidationErrors ?? EMPTY_QUIZ_ERRORS_MAP);
 
 // Computed: find all images/videos derived from a specific original illustration image
 export const useRetouchObjectsByImageId = (
@@ -270,14 +378,38 @@ export const useSnapshotActions = () =>
       addRetouchAudio: s.addRetouchAudio,
       updateRetouchAudio: s.updateRetouchAudio,
       deleteRetouchAudio: s.deleteRetouchAudio,
-      addRetouchQuiz: s.addRetouchQuiz,
-      updateRetouchQuiz: s.updateRetouchQuiz,
-      deleteRetouchQuiz: s.deleteRetouchQuiz,
       addRetouchAnimation: s.addRetouchAnimation,
       updateRetouchAnimation: s.updateRetouchAnimation,
       deleteRetouchAnimation: s.deleteRetouchAnimation,
       deleteRetouchAnimationsByTargetId: s.deleteRetouchAnimationsByTargetId,
       reorderRetouchAnimations: s.reorderRetouchAnimations,
+      // Quiz (QuizSlice — type-discriminated quizzes + validation-as-state)
+      addQuiz: s.addQuiz,
+      updateQuiz: s.updateQuiz,
+      deleteQuiz: s.deleteQuiz,
+      upsertQuizLocale: s.upsertQuizLocale,
+      deleteQuizLocale: s.deleteQuizLocale,
+      updateQuizAnswerSetting: s.updateQuizAnswerSetting,
+      updateQuizContainer: s.updateQuizContainer,
+      setItemContainerStyle: s.setItemContainerStyle,
+      updateItemContainerStyle: s.updateItemContainerStyle,
+      addQuizItem: s.addQuizItem,
+      updateQuizItem: s.updateQuizItem,
+      deleteQuizItem: s.deleteQuizItem,
+      reorderQuizItems: s.reorderQuizItems,
+      upsertQuizItemLocale: s.upsertQuizItemLocale,
+      deleteQuizItemLocale: s.deleteQuizItemLocale,
+      addQuizPair: s.addQuizPair,
+      deleteQuizPair: s.deleteQuizPair,
+      clearQuizPairs: s.clearQuizPairs,
+      addQuizTargetZone: s.addQuizTargetZone,
+      updateQuizTargetZone: s.updateQuizTargetZone,
+      deleteQuizTargetZone: s.deleteQuizTargetZone,
+      addQuizDecorImage: s.addQuizDecorImage,
+      updateQuizDecorImage: s.updateQuizDecorImage,
+      deleteQuizDecorImage: s.deleteQuizDecorImage,
+      revalidateQuiz: s.revalidateQuiz,
+      clearQuizValidation: s.clearQuizValidation,
       // Props
       setProps: s.setProps,
       addProp: s.addProp,

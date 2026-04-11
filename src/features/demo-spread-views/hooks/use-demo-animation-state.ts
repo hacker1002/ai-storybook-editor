@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import type { PlayableSpread } from '@/types/playable-types';
-import type { SpreadQuizContent } from '@/types/spread-types';
+import type { SpreadQuizLocalized } from '@/types/spread-types';
 import type {
   SpreadAnimation,
   AnimationFilterState,
@@ -50,12 +50,24 @@ function buildItemsMap(spread: PlayableSpread | undefined): ItemsMap {
   }
   for (const quiz of spread.quizzes ?? []) {
     // Resolve quiz display name: prefer root title, fallback to first language question
-    const reserved = new Set(['id', 'title', 'geometry', 'z-index', 'player_visible', 'editor_visible', 'options']);
-    let quizTitle = quiz.title ?? quiz.id;
+    const reserved = new Set([
+      'id',
+      'title',
+      'type',
+      'geometry',
+      'z-index',
+      'player_visible',
+      'editor_visible',
+      'answer_setting',
+      'quiz_container',
+      'item_container',
+      'elements',
+    ]);
+    let quizTitle: string = quiz.title || quiz.id;
     if (!quiz.title) {
       for (const key of Object.keys(quiz)) {
         if (reserved.has(key)) continue;
-        const content = quiz[key] as SpreadQuizContent | undefined;
+        const content = quiz[key] as SpreadQuizLocalized | undefined;
         if (content?.question) {
           quizTitle = content.question.length > 20 ? content.question.slice(0, 20) + '…' : content.question;
           break;

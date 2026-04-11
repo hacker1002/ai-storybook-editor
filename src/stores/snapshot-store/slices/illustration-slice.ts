@@ -77,6 +77,13 @@ export const createIllustrationSlice: StateCreator<
       if (deletedIndex === -1) return;
 
       log.debug('deleteIllustrationSpread', 'delete', { spreadId });
+
+      // Cascade: clear QuizSlice validation state for quizzes on the deleted spread
+      const deletedQuizIds = state.illustration.spreads[deletedIndex].quizzes?.map((q) => q.id) ?? [];
+      for (const quizId of deletedQuizIds) {
+        delete state.quizValidationErrors[quizId];
+      }
+
       state.illustration.spreads.splice(deletedIndex, 1);
 
       const spreads = state.illustration.spreads;

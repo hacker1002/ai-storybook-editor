@@ -38,7 +38,6 @@ import {
   useReplayableItems,
 } from "@/stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
-import { PlayQuizModal } from "./play-quiz-modal";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
@@ -184,16 +183,9 @@ export function PlayerCanvas({
     onQuizPlay: handleQuizPlay,
   });
 
-  // Quiz modal close: dismiss modal then complete quiz step
-  const handleQuizModalClose = useCallback(
-    (_completed: boolean) => {
-      setActiveQuizId(null);
-      // Next tick so modal unmounts first; handleQuizComplete resumes timeline
-      // (mixed step / auto) or calls stepComplete (quiz-only step).
-      setTimeout(() => handleQuizComplete(), 0);
-    },
-    [handleQuizComplete]
-  );
+  // TODO(quiz-v2): wire back a quiz player UI for 5 quiz types — previously PlayQuizModal.
+  // handleQuizComplete() đã sẵn sàng để re-use khi UI mới hoàn thành quiz step.
+  void handleQuizComplete;
 
   const { width: scaledWidth, height: scaledHeight } =
     getScaledDimensions(canvasWidth, canvasHeight, effectiveZoom);
@@ -750,19 +742,7 @@ export function PlayerCanvas({
         availableLanguages={availableLanguages}
       />
 
-      {/* Quiz modal */}
-      {activeQuizId &&
-        (() => {
-          const activeQuiz = spread.quizzes?.find((q) => q.id === activeQuizId);
-          if (!activeQuiz) return null;
-          return (
-            <PlayQuizModal
-              quiz={activeQuiz}
-              languageKey={narrationLangCode}
-              onClose={handleQuizModalClose}
-            />
-          );
-        })()}
+      {/* Quiz modal: player UI cho 5 quiz types sẽ được design lại sau Quiz v2 migration */}
     </div>
   );
 }

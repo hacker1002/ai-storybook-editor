@@ -191,42 +191,6 @@ export const createRetouchSlice: StateCreator<
       }
     }),
 
-  // --- Quizzes ---
-
-  addRetouchQuiz: (spreadId, quiz) =>
-    set((state) => {
-      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread) {
-        log.debug('addRetouchQuiz', 'add', { spreadId, quizId: quiz.id });
-        if (!spread.quizzes) spread.quizzes = [];
-        spread.quizzes.push(quiz);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  updateRetouchQuiz: (spreadId, quizId, updates) =>
-    set((state) => {
-      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread?.quizzes) {
-        const idx = spread.quizzes.findIndex((q) => q.id === quizId);
-        if (idx !== -1) {
-          log.debug('updateRetouchQuiz', 'update', { spreadId, quizId, keys: Object.keys(updates) });
-          Object.assign(spread.quizzes[idx], updates);
-          state.sync.isDirty = true;
-        }
-      }
-    }),
-
-  deleteRetouchQuiz: (spreadId, quizId) =>
-    set((state) => {
-      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread?.quizzes) {
-        log.debug('deleteRetouchQuiz', 'delete', { spreadId, quizId });
-        spread.quizzes = spread.quizzes.filter((q) => q.id !== quizId);
-        state.sync.isDirty = true;
-      }
-    }),
-
   // --- Animations (index-based) ---
 
   addRetouchAnimation: (spreadId, animation) =>

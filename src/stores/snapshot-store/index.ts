@@ -20,6 +20,7 @@ import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
 import { createIllustrationSlice } from './slices/illustration-slice';
 import { createRetouchSlice } from './slices/retouch-slice';
+import { createQuizSlice } from './slices/quiz-slice';
 import { createPropsSlice } from './slices/props-slice';
 import { createCharactersSlice } from './slices/characters-slice';
 import { createStagesSlice } from './slices/stages-slice';
@@ -36,6 +37,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createDummiesSlice(...args),
         ...createIllustrationSlice(...args),
         ...createRetouchSlice(...args),
+        ...createQuizSlice(...args),
         ...createPropsSlice(...args),
         ...createCharactersSlice(...args),
         ...createStagesSlice(...args),
@@ -304,6 +306,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.characters = [];
             state.stages = [];
             state.imageTasks = [];
+            state.quizValidationErrors = {};
             state.meta = { id: null, bookId: null, version: null, tag: null, autoSaveId: null };
             state.sync = { isDirty: false, lastSavedAt: null, lastManualSavedAt: null, isSaving: false, isAutoSaving: false, error: null };
             state.fetchLoading = false;

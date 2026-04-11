@@ -106,40 +106,142 @@ export interface SpreadAudio {
   media_url?: string;
 }
 
-// === Quiz Option ===
-export interface SpreadQuizOptionContent {
+// === Quiz v2 — see 11-quiz-slice.md. Breaking change [2026-04-11]. ===
+
+// Quiz type discriminator
+export const QUIZ_TYPE = {
+  SINGLE_SELECT: 0,
+  MATCHING: 1,
+  SEQUENCE: 2,
+  DRAG_DROP: 3,
+  HOTSPOT: 4,
+} as const;
+export type QuizType = typeof QUIZ_TYPE[keyof typeof QUIZ_TYPE];
+
+// answer_setting — flat union, consumer đọc subset theo `type`
+export interface QuizAnswerSetting {
+  has_correct_answer: boolean;
+  shuffle: boolean;
+  layout?: 0 | 1 | 2;                                    // type 0
+  relation?: '1:1' | '1:n' | 'n:1';                       // type 1
+  arrow?: 'none' | 'right' | 'left' | 'bidirectional';    // type 1
+  is_cycle?: boolean;                                     // type 2
+  snap_target?: 0 | 1;                                    // type 3
+  snap_type?: 0 | 1;                                      // type 3
+  replace_previous?: boolean;                             // type 3
+  limit_responses?: boolean;                              // type 4
+  before_replay?: 0 | 1;                                  // type 3, 4
+}
+
+// quiz_container — outer frame config
+export interface QuizContainer {
+  question_audio_auto_play: boolean;
+  background: { is_filled: boolean; color?: string; image_url?: string };
+  skip: { allow: boolean; delay: number };
+  replay: { allow: boolean; count: number };
+}
+
+// item_container — per-role style
+export type ItemContainerRole = 'default' | 'source' | 'target';
+
+export interface ItemContainerStyle {
+  display: { image: boolean; audio: boolean; text: boolean };
+  background: { is_filled: boolean; color: string };
+  border: { is_filled: boolean; color: string };
+  text: { size: number; color: string; align: 'left' | 'center' | 'right' };
+  w: number;
+  h: number;
+}
+
+// type 0, 2, 3, 4 → { default }
+// type 1         → { source; target }
+export type ItemContainer = Partial<Record<ItemContainerRole, ItemContainerStyle>>;
+
+// elements.items
+export interface QuizItemContent {
   text?: string;
   audio_url?: string;
 }
 
-export interface SpreadQuizOption {
+export interface QuizItem {
+  id: string;
+  name: string;                              // reference @character/@prop key
+  variant?: string;
+  geometry: { x: number; y: number };         // % relative on quiz canvas (NOT Geometry)
   image_url?: string;
-  is_answer: boolean;
-  [languageKey: string]: SpreadQuizOptionContent | string | boolean | undefined;
+  is_correct?: boolean;                       // type 0 only
+  type?: 'source' | 'target';                  // type 1 only
+  order?: number | null;                      // type 2 only — null = distractor
+  drop_target_id?: string;                    // type 3 only — FK → target_zones[].id
+  [languageKey: string]:
+    | QuizItemContent
+    | string
+    | number
+    | boolean
+    | { x: number; y: number }
+    | null
+    | undefined;
 }
 
-// === Spread Quiz Content (per language) ===
-export interface SpreadQuizContent {
+export interface QuizPair {
+  source_id: string;                          // FK → items[].id (type = 'source')
+  target_id: string;                          // FK → items[].id (type = 'target')
+}
+
+export interface QuizTargetZone {
+  id: string;
+  name: string;
+  type: 0 | 1 | 2;                             // 0=rectangle | 1=oval | 2=triangle
+  geometry: Geometry;
+  background?: boolean;                        // type 3 only
+  background_color?: string;                   // type 3 only
+  border?: boolean;                            // type 3 only
+  border_color?: string;                       // type 3 only
+}
+
+export interface QuizDecorImage {
+  name: string;
+  image_url: string;
+  geometry: Geometry;
+}
+
+export interface QuizElements {
+  items?: QuizItem[];                          // types 0, 1, 2, 3
+  pairs?: QuizPair[];                          // type 1
+  target_zones?: QuizTargetZone[];             // types 3, 4
+  images?: QuizDecorImage[];                   // types 3, 4
+}
+
+// Quiz-level localized content (question + audio)
+export interface SpreadQuizLocalized {
   question: string;
   audio_url?: string;
 }
 
-// === Spread Quiz ===
+// === Spread Quiz (v2) ===
 export interface SpreadQuiz {
   id: string;
-  title?: string;
+  title: string;                               // editor-only plain string (NOT localized)
+  type: QuizType;                              // immutable after create
   geometry: Geometry;
   "z-index": number;
   player_visible: boolean;
   editor_visible: boolean;
-  options: SpreadQuizOption[];
+  answer_setting: QuizAnswerSetting;
+  quiz_container: QuizContainer;
+  item_container: ItemContainer;
+  elements: QuizElements;
   [languageKey: string]:
-    | SpreadQuizContent
-    | SpreadQuizOption[]
+    | SpreadQuizLocalized
+    | QuizType
     | Geometry
+    | QuizAnswerSetting
+    | QuizContainer
+    | ItemContainer
+    | QuizElements
+    | string
     | number
     | boolean
-    | string
     | undefined;
 }
 

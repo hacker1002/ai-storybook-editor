@@ -827,119 +827,8 @@ function createMockAudio(overrides: Partial<SpreadAudio> = {}): SpreadAudio {
 }
 
 // === Quiz Mock Creators ===
-
-const QUIZ_POSITIONS: Geometry[] = [
-  { x: 85, y: 5, w: 8, h: 6 },
-  { x: 5, y: 5, w: 8, h: 6 },
-  { x: 45, y: 5, w: 8, h: 6 },
-];
-
-const SAMPLE_AUDIO_URL = "https://download.samplelib.com/mp3/sample-12s.mp3";
-
-const QUIZ_CONTENT = {
-  en_US: {
-    full: {
-      question: "Which animal can swim?",
-      options: [
-        { text: "Cat", is_answer: false },
-        { text: "Fish", is_answer: true },
-        { text: "Chicken", is_answer: false },
-      ],
-    },
-    textAudio: {
-      question: "Who lives in the forest?",
-      options: [
-        { text: "Whale", is_answer: false },
-        { text: "Bear", is_answer: true },
-        { text: "Dolphin", is_answer: false },
-      ],
-    },
-    imageOnly: {
-      question: "Find the animal with wings",
-    },
-  },
-  vi_VN: {
-    full: {
-      question: "Con vật nào biết bơi?",
-      options: [
-        { text: "Chú mèo", is_answer: false },
-        { text: "Con cá", is_answer: true },
-        { text: "Chú gà", is_answer: false },
-      ],
-    },
-    textAudio: {
-      question: "Ai sống trong rừng?",
-      options: [
-        { text: "Cá voi", is_answer: false },
-        { text: "Gấu", is_answer: true },
-        { text: "Cá heo", is_answer: false },
-      ],
-    },
-    imageOnly: {
-      question: "Tìm con vật có cánh",
-    },
-  },
-};
-
-function createFullQuiz(language: string): SpreadQuiz {
-  const pos = QUIZ_POSITIONS[0];
-  const content = QUIZ_CONTENT[language as keyof typeof QUIZ_CONTENT]?.full
-    ?? QUIZ_CONTENT.en_US.full;
-
-  return {
-    id: generateUUID(),
-    geometry: clampGeometryToBounds({ ...pos }),
-    "z-index": 350,
-    player_visible: true,
-    editor_visible: true,
-    options: content.options.map((opt, i) => ({
-      image_url: `https://picsum.photos/seed/quiz-full-${i}/200/200`,
-      is_answer: opt.is_answer,
-      [language]: { text: opt.text, audio_url: SAMPLE_AUDIO_URL },
-    })),
-    [language]: { question: content.question, audio_url: SAMPLE_AUDIO_URL },
-  };
-}
-
-function createTextAudioQuiz(language: string): SpreadQuiz {
-  const pos = QUIZ_POSITIONS[1];
-  const content = QUIZ_CONTENT[language as keyof typeof QUIZ_CONTENT]?.textAudio
-    ?? QUIZ_CONTENT.en_US.textAudio;
-
-  return {
-    id: generateUUID(),
-    geometry: clampGeometryToBounds({ ...pos }),
-    "z-index": 350,
-    player_visible: true,
-    editor_visible: true,
-    options: content.options.map((opt) => ({
-      is_answer: opt.is_answer,
-      [language]: { text: opt.text, audio_url: SAMPLE_AUDIO_URL },
-    })),
-    [language]: { question: content.question, audio_url: SAMPLE_AUDIO_URL },
-  };
-}
-
-function createImageOnlyQuiz(language: string): SpreadQuiz {
-  const pos = QUIZ_POSITIONS[2];
-  const content = QUIZ_CONTENT[language as keyof typeof QUIZ_CONTENT]?.imageOnly
-    ?? QUIZ_CONTENT.en_US.imageOnly;
-
-  // Image-only: cat (wrong), bird (correct), fish (wrong)
-  return {
-    id: generateUUID(),
-    geometry: clampGeometryToBounds({ ...pos }),
-    "z-index": 350,
-    player_visible: true,
-    editor_visible: true,
-    options: [
-      { image_url: `https://picsum.photos/seed/quiz-img-cat/200/200`, is_answer: false },
-      { image_url: `https://picsum.photos/seed/quiz-img-bird/200/200`, is_answer: true },
-      { image_url: `https://picsum.photos/seed/quiz-img-fish/200/200`, is_answer: false },
-    ],
-    [language]: { question: content.question },
-  };
-}
+// Removed in Quiz v2 migration [2026-04-11]. Demo spreads now render without
+// quizzes; player UI cho 5 quiz types sẽ được design lại sau.
 
 // === Factory Options ===
 export interface CreatePlayableSpreadOptions {
@@ -993,14 +882,8 @@ export function createPlayableSpreads(
       createMockAudio()
     );
 
-    // Quiz: rotate through 3 types (full → text+audio → image-only)
-    const quizType = spreadIndex % 3;
-    const quiz = quizType === 0
-      ? createFullQuiz(language)
-      : quizType === 1
-      ? createTextAudioQuiz(language)
-      : createImageOnlyQuiz(language);
-    const quizzes: SpreadQuiz[] = [quiz];
+    // Quiz: mocks disabled during Quiz v2 migration — demo spreads render without quizzes
+    const quizzes: SpreadQuiz[] = [];
 
     const animations = generateSpreadAnimations(
       images,
