@@ -315,6 +315,7 @@ export function AnimationEditorCanvas({
             key={image.id}
             image={image}
             index={index}
+            zIndex={image["z-index"]}
             isSelected={
               selectedItemId === image.id && selectedItemType === "image"
             }
@@ -329,6 +330,7 @@ export function AnimationEditorCanvas({
             key={shape.id}
             shape={shape}
             index={index}
+            zIndex={shape["z-index"]}
             isSelected={
               selectedItemId === shape.id && selectedItemType === "shape"
             }
@@ -343,6 +345,7 @@ export function AnimationEditorCanvas({
             key={video.id}
             video={video}
             index={index}
+            zIndex={video["z-index"]}
             isSelected={
               selectedItemId === video.id && selectedItemType === "video"
             }
@@ -357,6 +360,7 @@ export function AnimationEditorCanvas({
             key={audio.id}
             audio={audio}
             index={index}
+            zIndex={audio["z-index"]}
             isSelected={
               selectedItemId === audio.id && selectedItemType === "audio"
             }
@@ -371,6 +375,7 @@ export function AnimationEditorCanvas({
             key={quiz.id}
             quiz={quiz}
             index={index}
+            zIndex={quiz["z-index"]}
             isSelected={
               selectedItemId === quiz.id && selectedItemType === "quiz"
             }
@@ -388,7 +393,7 @@ export function AnimationEditorCanvas({
               key={textbox.id}
               textboxContent={data}
               index={index}
-              zIndex={TEXTBOX_Z_INDEX_BASE + index}
+              zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + index}
               isSelected={
                 selectedItemId === textbox.id && selectedItemType === "textbox"
               }

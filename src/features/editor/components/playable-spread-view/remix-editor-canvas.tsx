@@ -324,6 +324,7 @@ export function RemixEditorCanvas({
             key={image.id}
             image={image}
             index={index}
+            zIndex={image["z-index"]}
             isSelected={selectedSwappableId === image.id}
             isEditable={isSwappable(image.name)}
             onSelect={() => handleImageSelect(image.id)}
@@ -336,6 +337,7 @@ export function RemixEditorCanvas({
             key={shape.id}
             shape={shape}
             index={index}
+            zIndex={shape["z-index"]}
             isSelected={false}
             isEditable={false}
             onSelect={() => {}}
@@ -348,6 +350,7 @@ export function RemixEditorCanvas({
             key={video.id}
             video={video}
             index={index}
+            zIndex={video["z-index"]}
             isSelected={false}
             isEditable={false}
             onSelect={() => {}}
@@ -360,6 +363,7 @@ export function RemixEditorCanvas({
             key={audio.id}
             audio={audio}
             index={index}
+            zIndex={audio["z-index"]}
             isSelected={false}
             isEditable={false}
             onSelect={() => {}}
@@ -378,7 +382,7 @@ export function RemixEditorCanvas({
               key={textbox.id}
               textboxContent={data}
               index={index}
-              zIndex={TEXTBOX_Z_INDEX_BASE + index}
+              zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + index}
               isSelected={isTextboxSelected || isEditing}
               isSelectable={true}
               isEditable={true}
