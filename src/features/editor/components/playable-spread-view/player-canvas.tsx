@@ -582,6 +582,7 @@ export function PlayerCanvas({
               <EditableImage
                 image={image}
                 index={index}
+                zIndex={image["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 onSelect={() => {}}
@@ -605,6 +606,7 @@ export function PlayerCanvas({
               <EditableShape
                 shape={shape}
                 index={index}
+                zIndex={shape["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 onSelect={() => {}}
@@ -629,6 +631,7 @@ export function PlayerCanvas({
               <EditableVideo
                 video={video}
                 index={index}
+                zIndex={video["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 onSelect={() => {}}
@@ -653,6 +656,7 @@ export function PlayerCanvas({
               <EditableAudio
                 audio={audio}
                 index={index}
+                zIndex={audio["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 onSelect={() => {}}
@@ -676,6 +680,7 @@ export function PlayerCanvas({
               <EditableQuiz
                 quiz={quiz}
                 index={index}
+                zIndex={quiz["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 onSelect={() => {}}
@@ -702,7 +707,7 @@ export function PlayerCanvas({
               <EditableTextbox
                 textboxContent={data}
                 index={index}
-                zIndex={TEXTBOX_Z_INDEX_BASE + index}
+                zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + index}
                 isSelected={false}
                 isSelectable={false}
                 isEditable={false}
