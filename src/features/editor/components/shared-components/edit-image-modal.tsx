@@ -271,7 +271,7 @@ export function EditImageModal({
             {/* Main Preview */}
             <div className="flex-[6] flex items-center justify-center">
               {selectedIllustration ? (
-                <div className="relative">
+                <div className="relative rounded-md bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px]">
                   <img
                     key={selectedIllustration.media_url}
                     src={selectedIllustration.media_url}
@@ -328,7 +328,7 @@ export function EditImageModal({
                     .map((illustration) => (
                       <button
                         key={illustration.origIdx}
-                        className={`relative aspect-square rounded-md transition-all ${
+                        className={`relative aspect-square rounded-md transition-all bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:12px_12px] ${
                           illustration.is_selected
                             ? "ring-2 ring-primary"
                             : "ring-1 ring-border hover:scale-105"
