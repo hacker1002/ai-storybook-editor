@@ -1,14 +1,14 @@
 // editable-image.tsx - Utility component for displaying images in CanvasSpreadView
-'use client';
+"use client";
 
-import { useState, useCallback, useRef } from 'react';
-import { ImageIcon, Loader2 } from 'lucide-react';
-import { cn } from '@/utils/utils';
-import type { SpreadImage } from '@/types/spread-types';
-import { COLORS } from '@/constants/spread-constants';
-import { createLogger } from '@/utils/logger';
+import { useState, useCallback, useRef } from "react";
+import { ImageIcon, Loader2 } from "lucide-react";
+import { cn } from "@/utils/utils";
+import type { SpreadImage } from "@/types/spread-types";
+import { COLORS } from "@/constants/spread-constants";
+import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'EditableImage');
+const log = createLogger("Editor", "EditableImage");
 
 interface ArtNoteTypography {
   size?: number;
@@ -20,8 +20,12 @@ interface EditableImageProps {
   index: number;
   zIndex?: number;
   isSelected: boolean;
-  isSelectable?: boolean;  // Controls click selection behavior (defaults to isEditable)
-  isEditable: boolean;     // Controls double-click edit mode & drag/resize
+  isSelectable?: boolean; // Controls click selection behavior (defaults to isEditable)
+  isEditable: boolean; // Controls double-click edit mode & drag/resize
+  /** Render at reduced opacity — used for raw/background layer items in objects space */
+  dimmed?: boolean;
+  /** Show persistent item border (yellow outline) — only in retouch/objects space */
+  showItemBorder?: boolean;
   onSelect: (rect?: DOMRect) => void;
   onArtNoteChange?: (artNote: string) => void;
   onEditingChange?: (isEditing: boolean) => void;
@@ -35,6 +39,8 @@ export function EditableImage({
   isSelected,
   isSelectable,
   isEditable,
+  dimmed,
+  showItemBorder,
   onSelect,
   onArtNoteChange,
   onEditingChange,
@@ -48,13 +54,14 @@ export function EditableImage({
   const editableRef = useRef<HTMLDivElement>(null);
 
   // Image URL priority: final_hires > illustrations[selected] > illustrations[0] > media_url (sketch)
-  const imageUrl = image.final_hires_media_url
-    || image.illustrations?.find(i => i.is_selected)?.media_url
-    || image.illustrations?.[0]?.media_url
-    || image.media_url;
+  const imageUrl =
+    image.final_hires_media_url ||
+    image.illustrations?.find((i) => i.is_selected)?.media_url ||
+    image.illustrations?.[0]?.media_url ||
+    image.media_url;
 
   // Get display content for placeholder
-  const artNoteText = image.art_note || image.visual_description || '';
+  const artNoteText = image.art_note || image.visual_description || "";
   const showImage = imageUrl && !hasError;
   const canEditArtNote = isEditable && !showImage && onArtNoteChange;
 
@@ -77,48 +84,60 @@ export function EditableImage({
     });
   }, [artNoteText, onEditingChange]);
 
-  const exitEditMode = useCallback((save: boolean) => {
-    if (save && editableRef.current && onArtNoteChange) {
-      const newText = editableRef.current.innerText;
-      if (newText !== artNoteText) {
-        onArtNoteChange(newText);
+  const exitEditMode = useCallback(
+    (save: boolean) => {
+      if (save && editableRef.current && onArtNoteChange) {
+        const newText = editableRef.current.innerText;
+        if (newText !== artNoteText) {
+          onArtNoteChange(newText);
+        }
       }
-    }
-    setIsEditing(false);
-    onEditingChange?.(false);
-  }, [artNoteText, onArtNoteChange, onEditingChange]);
+      setIsEditing(false);
+      onEditingChange?.(false);
+    },
+    [artNoteText, onArtNoteChange, onEditingChange]
+  );
 
-  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    if (canSelect && !isEditing) {
-      log.info('handleClick', 'image clicked', { imageId: image.id, index });
-      const rect = e.currentTarget.getBoundingClientRect();
-      onSelect(rect);
-    }
-  }, [canSelect, isEditing, onSelect, image.id, index]);
-
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (canEditArtNote && isSelected) {
-      enterEditMode();
-    }
-  }, [canEditArtNote, isSelected, enterEditMode]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (isSelected && !isEditing && canEditArtNote && e.key === 'Enter') {
-      e.preventDefault();
-      enterEditMode();
-    }
-    if (isEditing) {
-      if (e.key === 'Escape') {
-        exitEditMode(false);
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      if (canSelect && !isEditing) {
+        log.info("handleClick", "image clicked", { imageId: image.id, index });
+        const rect = e.currentTarget.getBoundingClientRect();
+        onSelect(rect);
       }
-      if (e.key === 'Enter' && !e.shiftKey) {
+    },
+    [canSelect, isEditing, onSelect, image.id, index]
+  );
+
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (canEditArtNote && isSelected) {
+        enterEditMode();
+      }
+    },
+    [canEditArtNote, isSelected, enterEditMode]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isSelected && !isEditing && canEditArtNote && e.key === "Enter") {
         e.preventDefault();
-        exitEditMode(true);
+        enterEditMode();
       }
-    }
-  }, [isSelected, isEditing, canEditArtNote, enterEditMode, exitEditMode]);
+      if (isEditing) {
+        if (e.key === "Escape") {
+          exitEditMode(false);
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          exitEditMode(true);
+        }
+      }
+    },
+    [isSelected, isEditing, canEditArtNote, enterEditMode, exitEditMode]
+  );
 
   const handleBlur = useCallback(() => {
     if (isEditing) {
@@ -146,9 +165,10 @@ export function EditableImage({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'absolute overflow-hidden',
-        canSelect && 'cursor-pointer',
-        !isSelected && isHovered && 'outline-dashed outline-1',
+        "absolute overflow-hidden transition-opacity",
+        dimmed && "opacity-35",
+        canSelect && "cursor-pointer",
+        !isSelected && (showItemBorder || isHovered) && "outline outline-1"
       )}
       style={{
         left: `${image.geometry.x}%`,
@@ -156,7 +176,11 @@ export function EditableImage({
         width: `${image.geometry.w}%`,
         height: `${image.geometry.h}%`,
         zIndex,
-        outlineColor: COLORS.HOVER_OUTLINE,
+        outlineColor: !isSelected
+          ? isHovered
+            ? COLORS.ITEM_BORDER_HOVER
+            : COLORS.ITEM_BORDER_IMAGE
+          : undefined,
       }}
     >
       {showImage ? (
@@ -200,7 +224,14 @@ interface ImagePlaceholderProps {
   typography?: ArtNoteTypography;
 }
 
-function ImagePlaceholder({ content, isEditing, canEdit, editableRef, onBlur, typography }: ImagePlaceholderProps) {
+function ImagePlaceholder({
+  content,
+  isEditing,
+  canEdit,
+  editableRef,
+  onBlur,
+  typography,
+}: ImagePlaceholderProps) {
   const textStyle: React.CSSProperties = {
     color: typography?.color || COLORS.PLACEHOLDER_TEXT,
     fontSize: typography?.size ? `${typography.size}px` : undefined,
@@ -210,7 +241,9 @@ function ImagePlaceholder({ content, isEditing, canEdit, editableRef, onBlur, ty
     <div
       className="w-full h-full flex flex-col items-center justify-center gap-2 p-2 border-2 border-dashed"
       style={{
-        backgroundColor: isEditing ? COLORS.EDIT_MODE_BG : COLORS.PLACEHOLDER_BG,
+        backgroundColor: isEditing
+          ? COLORS.EDIT_MODE_BG
+          : COLORS.PLACEHOLDER_BG,
         borderColor: COLORS.PLACEHOLDER_BORDER,
       }}
     >
@@ -227,14 +260,14 @@ function ImagePlaceholder({ content, isEditing, canEdit, editableRef, onBlur, ty
       ) : (
         <p
           className={cn(
-            'text-center line-clamp-3',
-            canEdit && 'cursor-text',
-            !content && 'italic',
-            !typography?.size && 'text-xs',
+            "text-center line-clamp-3",
+            canEdit && "cursor-text",
+            !content && "italic",
+            !typography?.size && "text-xs"
           )}
           style={textStyle}
         >
-          {content || 'Double-click to add art note'}
+          {content || "Double-click to add art note"}
         </p>
       )}
     </div>

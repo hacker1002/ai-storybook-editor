@@ -8,6 +8,11 @@ export const COLORS = {
   EDIT_MODE_BG: "rgba(33, 150, 243, 0.05)",
   PLACEHOLDER_TEXT: "#9e9e9e",
   SELECTION: "#2196F3",
+  // Persistent item borders (visible when not selected)
+  ITEM_BORDER_IMAGE: "rgba(234, 179, 8, 0.75)",    // yellow, solid
+  ITEM_BORDER_TEXTBOX: "rgba(180, 185, 195, 0.85)", // light gray, dashed
+  ITEM_BORDER_VIDEO: "rgba(0, 0, 0, 0.22)",         // black muted, solid
+  ITEM_BORDER_HOVER: "rgba(33, 150, 243, 0.5)",     // light blue hover (lighter than SELECTION)
 } as const;
 
 export const CANVAS = {

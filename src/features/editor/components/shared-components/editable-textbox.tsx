@@ -1,22 +1,26 @@
 // editable-textbox.tsx - Shared utility component for editable text
-'use client';
+"use client";
 
-import { useState, useRef, useCallback } from 'react';
-import { cn } from '@/utils/utils';
-import type { SpreadTextboxContent, WordTiming } from '@/types/spread-types';
-import { COLORS } from '@/constants/spread-constants';
-import { useZoomLevel } from '@/stores/editor-settings-store';
-import { createLogger } from '@/utils/logger';
+import { useState, useRef, useCallback } from "react";
+import { cn } from "@/utils/utils";
+import type { SpreadTextboxContent, WordTiming } from "@/types/spread-types";
+import { COLORS } from "@/constants/spread-constants";
+import { useZoomLevel } from "@/stores/editor-settings-store";
+import { createLogger } from "@/utils/logger";
 
-const log = createLogger('Editor', 'EditableTextbox');
+const log = createLogger("Editor", "EditableTextbox");
 
 interface EditableTextboxProps {
   textboxContent: SpreadTextboxContent;
   index: number;
   zIndex?: number;
   isSelected: boolean;
-  isSelectable: boolean;  // Controls click selection behavior
-  isEditable: boolean;    // Controls double-click edit mode
+  isSelectable: boolean; // Controls click selection behavior
+  isEditable: boolean; // Controls double-click edit mode
+  /** Render at reduced opacity — used for raw/background layer items in objects space */
+  dimmed?: boolean;
+  /** Show persistent item border (dashed gray outline) — only in retouch/objects space */
+  showItemBorder?: boolean;
   onSelect: (rect?: DOMRect) => void;
   onTextChange: (text: string) => void;
   onEditingChange: (isEditing: boolean) => void;
@@ -31,6 +35,8 @@ export function EditableTextbox({
   isSelected,
   isSelectable,
   isEditable,
+  dimmed,
+  showItemBorder,
   onSelect,
   onTextChange,
   onEditingChange,
@@ -62,54 +68,66 @@ export function EditableTextbox({
     });
   }, [text, onEditingChange]);
 
-  const exitEditMode = useCallback((save: boolean) => {
-    if (save && editableRef.current) {
-      const newText = editableRef.current.innerText;
-      if (newText !== text) {
-        onTextChange(newText);
+  const exitEditMode = useCallback(
+    (save: boolean) => {
+      if (save && editableRef.current) {
+        const newText = editableRef.current.innerText;
+        if (newText !== text) {
+          onTextChange(newText);
+        }
       }
-    }
-    setIsEditing(false);
-    onEditingChange(false);
-  }, [text, onTextChange, onEditingChange]);
+      setIsEditing(false);
+      onEditingChange(false);
+    },
+    [text, onTextChange, onEditingChange]
+  );
 
-  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    if (isSelectable && !isEditing) {
-      log.info('handleClick', 'textbox clicked', { index });
-      const rect = e.currentTarget.getBoundingClientRect();
-      onSelect(rect);
-    }
-  }, [isSelectable, isEditing, onSelect, index]);
-
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Allow direct edit mode entry when editable, even if not pre-selected
-    // This enables remix-editor pattern where double-click directly edits
-    if (isEditable) {
-      enterEditMode();
-    }
-  }, [isEditable, enterEditMode]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (isSelected && !isEditing && e.key === 'Enter') {
-      e.preventDefault();
-      enterEditMode();
-    }
-    if (isEditing) {
-      if (e.key === 'Escape') {
-        exitEditMode(false);
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      if (isSelectable && !isEditing) {
+        log.info("handleClick", "textbox clicked", { index });
+        const rect = e.currentTarget.getBoundingClientRect();
+        onSelect(rect);
       }
-      if (e.key === 'Enter' && !e.shiftKey) {
+    },
+    [isSelectable, isEditing, onSelect, index]
+  );
+
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      // Allow direct edit mode entry when editable, even if not pre-selected
+      // This enables remix-editor pattern where double-click directly edits
+      if (isEditable) {
+        enterEditMode();
+      }
+    },
+    [isEditable, enterEditMode]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isSelected && !isEditing && e.key === "Enter") {
         e.preventDefault();
-        exitEditMode(true);
+        enterEditMode();
       }
-      // Prevent Delete/Backspace from bubbling to canvas (which would delete the item)
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.stopPropagation();
+      if (isEditing) {
+        if (e.key === "Escape") {
+          exitEditMode(false);
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          exitEditMode(true);
+        }
+        // Prevent Delete/Backspace from bubbling to canvas (which would delete the item)
+        if (e.key === "Delete" || e.key === "Backspace") {
+          e.stopPropagation();
+        }
       }
-    }
-  }, [isSelected, isEditing, enterEditMode, exitEditMode]);
+    },
+    [isSelected, isEditing, enterEditMode, exitEditMode]
+  );
 
   const handleBlur = useCallback(() => {
     if (isEditing) {
@@ -119,7 +137,7 @@ export function EditableTextbox({
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
-    const plainText = e.clipboardData.getData('text/plain');
+    const plainText = e.clipboardData.getData("text/plain");
 
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
@@ -136,16 +154,20 @@ export function EditableTextbox({
   // Map typography to CSS — scale pixel-based values by zoom factor
   const zoomFactor = zoomLevel / 100;
   const typographyStyle: React.CSSProperties = {
-    fontFamily: typography?.family || 'inherit',
-    fontSize: typography?.size ? `${typography.size * zoomFactor}px` : 'inherit',
-    fontWeight: typography?.weight || 'normal',
-    fontStyle: typography?.style || 'normal',
-    textAlign: typography?.textAlign || 'left',
+    fontFamily: typography?.family || "inherit",
+    fontSize: typography?.size
+      ? `${typography.size * zoomFactor}px`
+      : "inherit",
+    fontWeight: typography?.weight || "normal",
+    fontStyle: typography?.style || "normal",
+    textAlign: typography?.textAlign || "left",
     lineHeight: typography?.lineHeight || 1.5,
-    letterSpacing: typography?.letterSpacing ? `${typography.letterSpacing * zoomFactor}px` : 'inherit',
-    color: typography?.color || 'inherit',
-    textDecoration: typography?.decoration || 'none',
-    textTransform: typography?.textTransform || 'none',
+    letterSpacing: typography?.letterSpacing
+      ? `${typography.letterSpacing * zoomFactor}px`
+      : "inherit",
+    color: typography?.color || "inherit",
+    textDecoration: typography?.decoration || "none",
+    textTransform: typography?.textTransform || "none",
   };
 
   const isEmpty = !text;
@@ -161,7 +183,11 @@ export function EditableTextbox({
       }
       const idx = wordIndex++;
       return (
-        <span key={`w-${idx}`} data-word-index={idx} className="read-along-word">
+        <span
+          key={`w-${idx}`}
+          data-word-index={idx}
+          className="read-along-word"
+        >
           {token}
         </span>
       );
@@ -171,9 +197,9 @@ export function EditableTextbox({
   return (
     <div
       {...(isSelectable && {
-        role: 'textbox',
-        'aria-label': `Textbox ${index + 1}`,
-        'aria-multiline': 'true',
+        role: "textbox",
+        "aria-label": `Textbox ${index + 1}`,
+        "aria-multiline": "true",
       })}
       data-textbox
       tabIndex={isSelectable ? 0 : -1}
@@ -183,9 +209,12 @@ export function EditableTextbox({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'absolute overflow-hidden',
-        isSelectable && 'cursor-pointer',
-        !isSelected && isHovered && 'outline-dashed outline-1',
+        "absolute overflow-hidden transition-opacity",
+        dimmed && "opacity-35",
+        isSelectable && "cursor-pointer",
+        !isSelected &&
+          (showItemBorder || isHovered) &&
+          "outline-dashed outline-1"
       )}
       style={{
         left: `${geometry.x}%`,
@@ -193,7 +222,11 @@ export function EditableTextbox({
         width: `${geometry.w}%`,
         height: `${geometry.h}%`,
         zIndex,
-        outlineColor: COLORS.HOVER_OUTLINE,
+        outlineColor: !isSelected
+          ? isHovered
+            ? COLORS.ITEM_BORDER_HOVER
+            : COLORS.ITEM_BORDER_TEXTBOX
+          : undefined,
         ...typographyStyle,
       }}
     >
@@ -216,7 +249,9 @@ export function EditableTextbox({
         </div>
       ) : (
         <div className="w-full h-full p-1 whitespace-pre-wrap">
-          {wordTimings && wordTimings.length > 0 ? renderTextWithWordSpans(text) : text}
+          {wordTimings && wordTimings.length > 0
+            ? renderTextWithWordSpans(text)
+            : text}
         </div>
       )}
     </div>

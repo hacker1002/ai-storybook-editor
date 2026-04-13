@@ -546,6 +546,7 @@ export function ObjectsMainView({
             zIndex={context.zIndex}
             isSelected={context.isSelected}
             isEditable={context.isSpreadSelected}
+            showItemBorder={true}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: "image", id: context.item.id });
@@ -584,6 +585,7 @@ export function ObjectsMainView({
             isSelected={context.isSelected}
             isSelectable={context.isSpreadSelected}
             isEditable={context.isSpreadSelected}
+            showItemBorder={true}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: "textbox", id: context.item.id });
@@ -649,6 +651,7 @@ export function ObjectsMainView({
             isSelected={context.isSelected}
             isEditable={context.isSpreadSelected}
             isThumbnail={context.isThumbnail}
+            showItemBorder={true}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: "video", id: context.item.id });
@@ -710,6 +713,7 @@ export function ObjectsMainView({
           isSelected={context.isSelected}
           isSelectable={true}
           isEditable={false}
+          dimmed={true}
           onSelect={() => {
             context.onSelect();
             onItemSelect({ type: "raw_image", id: context.item.id });
@@ -735,6 +739,7 @@ export function ObjectsMainView({
           isSelected={context.isSelected}
           isSelectable={context.isSpreadSelected}
           isEditable={false}
+          dimmed={true}
           onSelect={() => {
             context.onSelect();
             onItemSelect({ type: "raw_textbox", id: context.item.id });

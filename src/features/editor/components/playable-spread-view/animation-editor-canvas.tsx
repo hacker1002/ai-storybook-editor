@@ -13,7 +13,11 @@ import {
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import type { Geometry, ItemType } from "@/types/spread-types";
-import { useLanguageCode, useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
+import {
+  useLanguageCode,
+  useCanvasWidth,
+  useCanvasHeight,
+} from "@/stores/editor-settings-store";
 import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { SelectionOverlay } from "./selection-overlay";
@@ -57,8 +61,11 @@ export function AnimationEditorCanvas({
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useZoomCenterScroll(zoomLevel, canvasRef);
 
-  const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(canvasWidth, canvasHeight, zoomLevel);
+  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(
+    canvasWidth,
+    canvasHeight,
+    zoomLevel
+  );
 
   // Reset selection when spread changes
   useEffect(() => {
@@ -257,7 +264,10 @@ export function AnimationEditorCanvas({
   }, [spread.textboxes, editorLangCode]);
 
   return (
-    <div ref={containerRef} className="flex-1 flex overflow-auto p-4 bg-muted/30">
+    <div
+      ref={containerRef}
+      className="flex-1 flex overflow-auto p-4 bg-muted/30"
+    >
       {/* Canvas container - sized like spread-editor-panel */}
       <div
         ref={canvasRef}
@@ -299,7 +309,7 @@ export function AnimationEditorCanvas({
         />
 
         {/* Page Number Overlay */}
-        {pageNumbering && pageNumbering.position !== 'none' && (
+        {pageNumbering && pageNumbering.position !== "none" && (
           <PageNumberingOverlay
             pages={spread.pages}
             position={pageNumbering.position}
@@ -320,6 +330,7 @@ export function AnimationEditorCanvas({
               selectedItemId === image.id && selectedItemType === "image"
             }
             isEditable={true}
+            showItemBorder={true}
             onSelect={() => handleImageSelect(image.id)}
           />
         ))}
@@ -350,6 +361,7 @@ export function AnimationEditorCanvas({
               selectedItemId === video.id && selectedItemType === "video"
             }
             isEditable={true}
+            showItemBorder={true}
             onSelect={() => handleVideoSelect(video.id)}
           />
         ))}
@@ -399,6 +411,7 @@ export function AnimationEditorCanvas({
               }
               isSelectable={true}
               isEditable={false}
+              showItemBorder={true}
               onSelect={() => handleTextboxSelect(textbox.id)}
               onTextChange={() => {}}
               onEditingChange={() => {}}

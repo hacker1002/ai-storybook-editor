@@ -1,11 +1,11 @@
 // editable-video.tsx - Utility component for displaying videos in CanvasSpreadView
-'use client';
+"use client";
 
-import { useState, useCallback } from 'react';
-import { Video, Loader2 } from 'lucide-react';
-import { cn } from '@/utils/utils';
-import type { SpreadVideo } from '@/types/spread-types';
-import { COLORS } from '@/constants/spread-constants';
+import { useState, useCallback } from "react";
+import { Video, Loader2 } from "lucide-react";
+import { cn } from "@/utils/utils";
+import type { SpreadVideo } from "@/types/spread-types";
+import { COLORS } from "@/constants/spread-constants";
 
 interface EditableVideoProps {
   video: SpreadVideo;
@@ -14,6 +14,8 @@ interface EditableVideoProps {
   isSelected: boolean;
   isEditable: boolean;
   isThumbnail?: boolean;
+  /** Show persistent item border (muted black outline) — only in retouch/objects space */
+  showItemBorder?: boolean;
   onSelect: () => void;
 }
 
@@ -24,18 +26,22 @@ export function EditableVideo({
   isSelected,
   isEditable,
   isThumbnail = false,
+  showItemBorder,
   onSelect,
 }: EditableVideoProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isEditable) {
-      onSelect();
-    }
-  }, [isEditable, onSelect]);
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isEditable) {
+        onSelect();
+      }
+    },
+    [isEditable, onSelect]
+  );
 
   const handleLoadedData = useCallback(() => {
     setIsLoading(false);
@@ -54,13 +60,13 @@ export function EditableVideo({
       aria-label={video.title || video.name || `Video ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
-      onKeyDown={(e) => e.key === 'Enter' && isEditable && onSelect()}
+      onKeyDown={(e) => e.key === "Enter" && isEditable && onSelect()}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'absolute overflow-hidden',
-        isEditable && 'cursor-pointer',
-        !isSelected && isHovered && 'outline-dashed outline-1',
+        "absolute overflow-hidden",
+        isEditable && "cursor-pointer",
+        !isSelected && (showItemBorder || isHovered) && "outline outline-1"
       )}
       style={{
         left: `${video.geometry.x}%`,
@@ -68,7 +74,11 @@ export function EditableVideo({
         width: `${video.geometry.w}%`,
         height: `${video.geometry.h}%`,
         zIndex,
-        outlineColor: COLORS.HOVER_OUTLINE,
+        outlineColor: !isSelected
+          ? isHovered
+            ? COLORS.ITEM_BORDER_HOVER
+            : COLORS.ITEM_BORDER_VIDEO
+          : undefined,
       }}
     >
       {showVideo ? (
@@ -98,7 +108,7 @@ export function EditableVideo({
           )}
         </>
       ) : (
-        <VideoPlaceholder name={video.name || video.title || ''} />
+        <VideoPlaceholder name={video.name || video.title || ""} />
       )}
     </div>
   );
@@ -119,10 +129,10 @@ function VideoPlaceholder({ name }: VideoPlaceholderProps) {
     >
       <Video className="h-6 w-6 text-muted-foreground" />
       <p
-        className={cn('text-center line-clamp-2 text-xs', !name && 'italic')}
+        className={cn("text-center line-clamp-2 text-xs", !name && "italic")}
         style={{ color: COLORS.PLACEHOLDER_TEXT }}
       >
-        {name || 'No video'}
+        {name || "No video"}
       </p>
     </div>
   );
