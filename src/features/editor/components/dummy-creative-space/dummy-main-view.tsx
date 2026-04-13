@@ -1,7 +1,7 @@
 // dummy-main-view.tsx - Main editor view for dummy creative space
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
   EditableImage,
@@ -35,6 +35,9 @@ import type {
   DummyTextbox,
   DummyTextboxContent,
 } from "@/types/dummy";
+import { useSpaceViewState } from "@/features/editor/hooks/use-space-view-state";
+import { ZOOM, COLUMNS } from "@/constants/spread-constants";
+import type { ViewMode } from "@/types/canvas-types";
 
 interface DummyMainViewProps {
   selectedDummyId: string;
@@ -96,6 +99,14 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   // planning surface — translations only exist in the playable spreads layer.
   const originalLangCode = book?.original_language ?? "en_US";
 
+  // View state persisted per-book for the dummy space (viewMode/zoom/columns).
+  // activeSpreadId is NOT persisted — selectedSpreadIdLocal is entity-scoped local state.
+  const { viewMode, zoomLevel, columnsPerRow, patch } = useSpaceViewState("dummy");
+  const [selectedSpreadIdLocal, setSelectedSpreadIdLocal] = useState<string | null>(null);
+
+  // Reset spread selection when switching between dummies
+  // (DummyMainView remounts on dummy change, so useState resets automatically)
+
   const baseSpreads = useMemo(() => {
     if (!dummy) return [];
     return convertDummySpreadsToBaseSpreads(dummy.spreads);
@@ -103,7 +114,20 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
 
   const handleSpreadSelect = useCallback((spreadId: string) => {
     log.info("handleSpreadSelect", "spread selected", { spreadId });
+    setSelectedSpreadIdLocal(spreadId);
   }, []);
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    patch({ viewMode: mode });
+  }, [patch]);
+
+  const handleZoomChange = useCallback((level: number) => {
+    patch({ zoomLevel: level });
+  }, [patch]);
+
+  const handleColumnsChange = useCallback((columns: number) => {
+    patch({ columnsPerRow: columns });
+  }, [patch]);
 
   const handleSpreadReorder = useCallback(
     (fromIndex: number, toIndex: number) => {
@@ -389,12 +413,19 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
   return (
     <CanvasSpreadView
       spreads={baseSpreads}
+      selectedSpreadId={selectedSpreadIdLocal}
+      viewMode={viewMode ?? "edit"}
+      zoomLevel={zoomLevel ?? ZOOM.DEFAULT}
+      columnsPerRow={columnsPerRow ?? COLUMNS.DEFAULT}
       renderItems={["image", "textbox"]}
       renderImageItem={renderImageItem}
       renderTextItem={renderTextItem}
       renderImageToolbar={renderImageToolbar}
       renderTextToolbar={renderTextToolbar}
       onSpreadSelect={handleSpreadSelect}
+      onViewModeChange={handleViewModeChange}
+      onZoomChange={handleZoomChange}
+      onColumnsChange={handleColumnsChange}
       onSpreadReorder={handleSpreadReorder}
       onSpreadAdd={handleSpreadAdd}
       onDeleteSpread={handleDeleteSpread}
@@ -405,7 +436,6 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       canDeleteSpread={true}
       canResizeItem={true}
       canDragItem={true}
-      initialViewMode="edit"
       pageNumbering={templateLayout?.page_numbering}
       forceLanguageCode={originalLangCode}
     />

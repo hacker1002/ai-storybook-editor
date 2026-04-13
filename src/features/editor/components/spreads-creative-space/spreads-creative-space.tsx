@@ -1,7 +1,7 @@
 // spreads-creative-space.tsx - Root container for illustration spreads creative space
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { SpreadsMainView } from "./spreads-main-view";
 import { SpreadsSidebar } from "./spreads-sidebar";
@@ -16,6 +16,9 @@ import {
   mergeItems,
 } from "@/utils/template-layout-utils";
 import { createLogger } from "@/utils/logger";
+import { useSpaceViewState, useEffectiveSpreadId } from "@/features/editor/hooks/use-space-view-state";
+import { ZOOM, COLUMNS } from "@/constants/spread-constants";
+import type { ViewMode } from "@/types/canvas-types";
 import type { SelectedItem } from "./utils";
 import type { BaseSpread, PageData, SpreadImage, SpreadTextbox } from "@/features/editor/components/canvas-spread-view";
 
@@ -33,12 +36,12 @@ export function SpreadsCreativeSpace() {
   const langCode = useLanguageCode();
   const { singlePageLayouts } = useTemplateLayouts(book?.book_type ?? null);
 
-  const [userSelectedSpreadId, setUserSelectedSpreadId] = useState<
-    string | null
-  >(null);
   const [selectedItemId, setSelectedItemId] = useState<SelectedItem | null>(
     null
   );
+
+  const { activeSpreadId, zoomLevel, viewMode, columnsPerRow, patch } = useSpaceViewState('spread');
+  const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, illustrationSpreadIds);
 
   // Auto-add 1 default single spread when illustration has no spreads
   const hasAutoAdded = useRef(false);
@@ -79,22 +82,15 @@ export function SpreadsCreativeSpace() {
     actions.addIllustrationSpread(defaultSpread);
   }, [illustrationSpreadIds.length, actions, templateLayout, singlePageLayouts, langCode, bookTypography]);
 
-  // Derive effective spread: user choice if valid, else first available
-  const selectedSpreadId = useMemo(() => {
-    if (
-      userSelectedSpreadId &&
-      illustrationSpreadIds.includes(userSelectedSpreadId)
-    ) {
-      return userSelectedSpreadId;
-    }
-    return illustrationSpreadIds[0] ?? null;
-  }, [illustrationSpreadIds, userSelectedSpreadId]);
-
   const handleSpreadSelect = useCallback((spreadId: string) => {
     log.info("handleSpreadSelect", "spread selected", { spreadId });
-    setUserSelectedSpreadId(spreadId);
+    patch({ activeSpreadId: spreadId });
     setSelectedItemId(null);
-  }, []);
+  }, [patch]);
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => { patch({ viewMode: mode }); }, [patch]);
+  const handleZoomChange = useCallback((level: number) => { patch({ zoomLevel: level }); }, [patch]);
+  const handleColumnsChange = useCallback((columns: number) => { patch({ columnsPerRow: columns }); }, [patch]);
 
   const handleItemSelect = useCallback(
     (item: SelectedItem | null) => {
@@ -111,17 +107,23 @@ export function SpreadsCreativeSpace() {
       aria-label="Spreads creative space"
     >
       <SpreadsSidebar
-        selectedSpreadId={selectedSpreadId ?? ""}
+        selectedSpreadId={effectiveSpreadId ?? ""}
         selectedItemId={selectedItemId}
         onItemSelect={handleItemSelect}
       />
       <div className="flex-1 overflow-hidden">
-        {selectedSpreadId ? (
+        {effectiveSpreadId ? (
           <SpreadsMainView
-            selectedSpreadId={selectedSpreadId}
+            selectedSpreadId={effectiveSpreadId ?? ""}
             selectedItemId={selectedItemId}
             onSpreadSelect={handleSpreadSelect}
             onItemSelect={handleItemSelect}
+            viewMode={viewMode ?? 'edit'}
+            zoomLevel={zoomLevel ?? ZOOM.DEFAULT}
+            columnsPerRow={columnsPerRow ?? COLUMNS.DEFAULT}
+            onViewModeChange={handleViewModeChange}
+            onZoomChange={handleZoomChange}
+            onColumnsChange={handleColumnsChange}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

@@ -29,6 +29,7 @@ import { SpreadsTextToolbar } from './spreads-text-toolbar';
 import { SpreadsShapeToolbar } from './spreads-shape-toolbar';
 import { SpreadsPageToolbar } from './spreads-page-toolbar';
 import type { SelectedItem } from './utils';
+import type { ViewMode } from '@/types/canvas-types';
 import type {
   SpreadType,
   BaseSpread,
@@ -75,6 +76,12 @@ interface SpreadsMainViewProps {
   selectedItemId: SelectedItem | null;
   onSpreadSelect: (spreadId: string) => void;
   onItemSelect: (item: SelectedItem | null) => void;
+  viewMode: ViewMode;
+  zoomLevel: number;
+  columnsPerRow: number;
+  onViewModeChange: (mode: ViewMode) => void;
+  onZoomChange: (level: number) => void;
+  onColumnsChange: (columns: number) => void;
 }
 
 export function SpreadsMainView({
@@ -82,6 +89,12 @@ export function SpreadsMainView({
   selectedItemId,
   onSpreadSelect,
   onItemSelect,
+  viewMode,
+  zoomLevel,
+  columnsPerRow,
+  onViewModeChange,
+  onZoomChange,
+  onColumnsChange,
 }: SpreadsMainViewProps) {
   // Stable ref: return store array directly, fallback to module-level constant
   const illustrationSpreads = useSnapshotStore(
@@ -449,7 +462,10 @@ export function SpreadsMainView({
     <>
       <CanvasSpreadView
         spreads={illustrationSpreads}
-        initialSelectedId={selectedSpreadId}
+        selectedSpreadId={selectedSpreadId}
+        viewMode={viewMode}
+        zoomLevel={zoomLevel}
+        columnsPerRow={columnsPerRow}
         renderItems={['raw_image', 'raw_textbox', 'shape']}
         renderRawImage={renderIllustrationImage}
         renderRawTextbox={renderIllustrationTextbox}
@@ -460,6 +476,9 @@ export function SpreadsMainView({
         renderPageToolbar={renderIllustrationPageToolbar}
         availableLayouts={availableLayouts}
         onSpreadSelect={onSpreadSelect}
+        onViewModeChange={onViewModeChange}
+        onZoomChange={onZoomChange}
+        onColumnsChange={onColumnsChange}
         onSpreadReorder={handleSpreadReorder}
         onSpreadAdd={handleSpreadAdd}
         onDeleteSpread={handleDeleteSpread}

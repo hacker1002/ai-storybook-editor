@@ -95,6 +95,10 @@ interface PlayableSpreadViewProps {
   pageNumbering?: PageNumberingSettings | null;
   // Whether to show the thumbnail strip (default: true; share preview hides it)
   showThumbnails?: boolean;
+  // Controlled-or-uncontrolled props (ADR-021)
+  selectedSpreadId?: string | null;      // controlled from parent
+  zoomLevel?: number;                     // controlled from parent
+  onZoomChange?: (level: number) => void; // notify parent of zoom change
 }
 
 const KEYBOARD_SHORTCUTS = {
@@ -127,6 +131,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   availableLanguages,
   pageNumbering,
   showThumbnails = true,
+  selectedSpreadId: propSelectedSpreadId,
+  zoomLevel: propZoomLevel,
+  onZoomChange: propOnZoomChange,
 }) => {
   // Share preview: player mode without thumbnails (public /share/:slug page)
   const isSharePreview = mode === 'player' && !showThumbnails;
@@ -147,19 +154,44 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     return 'classic';
   }, [availableEditions]);
   const [playEdition, setPlayEdition] = useState<PlayEdition>(defaultEdition);
-  const [zoomLevel, setZoomLevel] = useState<number>(PLAYABLE_ZOOM.DEFAULT);
-  const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
+  const [localZoomLevel, setLocalZoomLevel] = useState<number>(PLAYABLE_ZOOM.DEFAULT);
+  const [localSelectedSpreadId, setLocalSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [pendingBranchSpreadId, setPendingBranchSpreadId] = useState<string | null>(null);
 
+  // Controlled-or-uncontrolled: use prop if provided, else local state.
+  // IMPORTANT: propZoomLevel must remain stable (parent should not flip between
+  // defined and undefined across renders — ADR-021 convention).
+  const effectiveZoomLevel =
+    propZoomLevel !== undefined ? propZoomLevel : localZoomLevel;
+  const effectiveSelectedSpreadId =
+    propSelectedSpreadId !== undefined ? propSelectedSpreadId : localSelectedSpreadId;
+
+  const applyZoomChange = useCallback((n: number) => {
+    if (propZoomLevel !== undefined) {
+      propOnZoomChange?.(n);
+    } else {
+      setLocalZoomLevel(n);
+    }
+  }, [propZoomLevel, propOnZoomChange]);
+
+  const applySelectedSpreadChange = useCallback((spreadId: string) => {
+    if (propSelectedSpreadId !== undefined) {
+      onSpreadSelect?.(spreadId);
+    } else {
+      setLocalSelectedSpreadId(spreadId);
+      onSpreadSelect?.(spreadId);
+    }
+  }, [propSelectedSpreadId, onSpreadSelect]);
+
   // Sync zoom level to global store for shared components
   // (Skip in player mode — PlayerCanvas manages its own fitZoom → store sync)
   const setStoreZoomLevel = useSetZoomLevel();
   useEffect(() => {
-    if (activeCanvas !== 'player') setStoreZoomLevel(zoomLevel);
-  }, [zoomLevel, activeCanvas, setStoreZoomLevel]);
+    if (activeCanvas !== 'player') setStoreZoomLevel(effectiveZoomLevel);
+  }, [effectiveZoomLevel, activeCanvas, setStoreZoomLevel]);
 
   // === Store ===
   const spreadHistories = useSpreadHistories();
@@ -168,17 +200,17 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const { pushSpreadHistory, popSpreadHistory, setCurrentSection } = playbackActions;
 
   // === Derived State ===
-  const selectedSpread = spreads.find((s) => s.id === selectedSpreadId);
+  const selectedSpread = spreads.find((s) => s.id === effectiveSelectedSpreadId);
   const hasPrevious = spreadHistories.length > 1;
   const nextResult = resolveNextSpreadId(selectedSpread, spreads, currentSection);
   const hasNext = nextResult !== null;
 
   // === Canvas Switching Handlers ===
   const handlePlay = useCallback(() => {
-    log.info('handlePlay', 'play started', { spreadId: selectedSpreadId, playMode });
+    log.info('handlePlay', 'play started', { spreadId: effectiveSelectedSpreadId, playMode });
     setActiveCanvas("player");
     onPreview?.();
-  }, [onPreview, selectedSpreadId, playMode]);
+  }, [onPreview, effectiveSelectedSpreadId, playMode]);
 
   const handleStop = useCallback(() => {
     log.info('handleStop', 'playback stopped', { mode });
@@ -205,8 +237,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       const entry = popSpreadHistory();
       if (entry) {
         log.debug('handleSkipSpread', 'back to prev', { spreadId: entry.spreadId });
-        setSelectedSpreadId(entry.spreadId);
-        onSpreadSelect?.(entry.spreadId);
+        applySelectedSpreadChange(entry.spreadId);
       }
       return;
     }
@@ -217,8 +248,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
 
     if (result.type === 'branch') {
       if (playEdition === 'interactive') {
-        log.info('handleSkipSpread', 'branch detected, showing modal', { spreadId: selectedSpreadId });
-        setPendingBranchSpreadId(selectedSpreadId);
+        log.info('handleSkipSpread', 'branch detected, showing modal', { spreadId: effectiveSelectedSpreadId });
+        setPendingBranchSpreadId(effectiveSelectedSpreadId);
         setShowBranchModal(true);
       } else {
         // Classic/Dynamic: auto-resolve via default branch, no modal
@@ -226,8 +257,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         if (targetId) {
           log.debug('handleSkipSpread', 'branch auto-resolved', { targetId, playEdition });
           pushSpreadHistory(targetId, currentSection);
-          setSelectedSpreadId(targetId);
-          onSpreadSelect?.(targetId);
+          applySelectedSpreadChange(targetId);
         }
       }
       return;
@@ -235,10 +265,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     if (result.type === 'spread') {
       log.debug('handleSkipSpread', 'next spread', { targetId: result.id });
       pushSpreadHistory(result.id, currentSection);
-      setSelectedSpreadId(result.id);
-      onSpreadSelect?.(result.id);
+      applySelectedSpreadChange(result.id);
     }
-  }, [spreadHistories, selectedSpread, spreads, currentSection, playEdition, selectedSpreadId, popSpreadHistory, pushSpreadHistory, onSpreadSelect]);
+  }, [spreadHistories, selectedSpread, spreads, currentSection, playEdition, effectiveSelectedSpreadId, popSpreadHistory, pushSpreadHistory, applySelectedSpreadChange]);
 
   // === Branch Modal Handlers ===
 
@@ -248,9 +277,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     setPendingBranchSpreadId(null);
     setCurrentSection(section);
     pushSpreadHistory(targetSpreadId, section);
-    setSelectedSpreadId(targetSpreadId);
-    onSpreadSelect?.(targetSpreadId);
-  }, [setCurrentSection, pushSpreadHistory, onSpreadSelect]);
+    applySelectedSpreadChange(targetSpreadId);
+  }, [setCurrentSection, pushSpreadHistory, applySelectedSpreadChange]);
 
   const handleBranchDismiss = useCallback(() => {
     setShowBranchModal(false);
@@ -264,22 +292,20 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       log.info('handleBranchDismiss', 'dismissed, following default branch', { targetId: section.start_spread_id, sectionId: section.id });
       setCurrentSection(section);
       pushSpreadHistory(section.start_spread_id, section);
-      setSelectedSpreadId(section.start_spread_id);
-      onSpreadSelect?.(section.start_spread_id);
+      applySelectedSpreadChange(section.start_spread_id);
     } else {
       log.debug('handleBranchDismiss', 'dismissed, no default branch section found');
     }
-  }, [selectedSpread, sections, setCurrentSection, pushSpreadHistory, onSpreadSelect]);
+  }, [selectedSpread, sections, setCurrentSection, pushSpreadHistory, applySelectedSpreadChange]);
 
   // === Spread Selection Handler (thumbnail) ===
   const handleSpreadClick = useCallback(
     (spreadId: string) => {
       log.debug('handleSpreadClick', 'thumbnail clicked', { spreadId });
       pushSpreadHistory(spreadId, currentSection);
-      setSelectedSpreadId(spreadId);
-      onSpreadSelect?.(spreadId);
+      applySelectedSpreadChange(spreadId);
     },
-    [currentSection, pushSpreadHistory, onSpreadSelect]
+    [currentSection, pushSpreadHistory, applySelectedSpreadChange]
   );
 
   // === Spread Complete Handler ===
@@ -294,11 +320,10 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       }
       setTimeout(() => {
         pushSpreadHistory(targetId, currentSection);
-        setSelectedSpreadId(targetId);
-        onSpreadSelect?.(targetId);
+        applySelectedSpreadChange(targetId);
       }, 1000);
     },
-    [playMode, selectedSpread, spreads, sections, currentSection, playbackActions, pushSpreadHistory, onSpreadSelect]
+    [playMode, selectedSpread, spreads, sections, currentSection, playbackActions, pushSpreadHistory, applySelectedSpreadChange]
   );
 
   // === Keyboard Shortcuts ===
@@ -337,8 +362,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           e.preventDefault();
           const firstSpread = spreads[0];
           if (firstSpread) {
-            setSelectedSpreadId(firstSpread.id);
-            onSpreadSelect?.(firstSpread.id);
+            applySelectedSpreadChange(firstSpread.id);
           }
           break;
         }
@@ -346,8 +370,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           e.preventDefault();
           const lastSpread = spreads[spreads.length - 1];
           if (lastSpread) {
-            setSelectedSpreadId(lastSpread.id);
-            onSpreadSelect?.(lastSpread.id);
+            applySelectedSpreadChange(lastSpread.id);
           }
           break;
         }
@@ -362,7 +385,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     handlePlay,
     handleStop,
     handleSkipSpread,
-    onSpreadSelect,
+    applySelectedSpreadChange,
   ]);
 
   // === Render ===
@@ -371,8 +394,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       {/* Header: editor modes only (player mode has no header — controls in sidebar) */}
       {mode !== "player" && (
         <PlayableEditorHeader
-          zoomLevel={zoomLevel}
-          onZoomChange={setZoomLevel}
+          zoomLevel={effectiveZoomLevel}
+          onZoomChange={applyZoomChange}
         />
       )}
 
@@ -388,7 +411,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         {activeCanvas === "animation-editor" && selectedSpread ? (
           <AnimationEditorCanvas
             spread={selectedSpread}
-            zoomLevel={zoomLevel}
+            zoomLevel={effectiveZoomLevel}
             selectedItemId={externalSelectedItemId}
             selectedItemType={externalSelectedItemType}
             onItemSelect={onItemSelect ?? (() => {})}
@@ -400,7 +423,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           onAssetSwap ? (
           <RemixEditorCanvas
             spread={selectedSpread}
-            zoomLevel={zoomLevel}
+            zoomLevel={effectiveZoomLevel}
             assets={assets}
             onAssetSwap={onAssetSwap}
             onTextChange={onTextChange}
@@ -409,7 +432,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         ) : activeCanvas === "player" && selectedSpread ? (
           <PlayerCanvas
             spread={selectedSpread}
-            zoomLevel={zoomLevel}
+            zoomLevel={effectiveZoomLevel}
             playMode={playMode}
             playEdition={playEdition}
             hasNext={hasNext}
@@ -435,7 +458,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         <div className="h-[120px] flex-shrink-0">
           <PlayableThumbnailList
             spreads={spreads}
-            selectedId={selectedSpreadId}
+            selectedId={effectiveSelectedSpreadId}
             onSpreadClick={handleSpreadClick}
           />
         </div>

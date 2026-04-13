@@ -41,6 +41,7 @@ import {
 } from "@/features/editor/utils/z-index-cascade-utils";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
+import { COLUMNS } from "@/constants/spread-constants";
 import type { SelectedItem } from "./objects-creative-space";
 import type {
   BaseSpread,
@@ -135,6 +136,8 @@ interface ObjectsMainViewProps {
   selectedItemId: SelectedItem | null;
   onSpreadSelect: (spreadId: string) => void;
   onItemSelect: (item: SelectedItem | null) => void;
+  zoomLevel: number;
+  onZoomChange: (level: number) => void;
 }
 
 export function ObjectsMainView({
@@ -142,6 +145,8 @@ export function ObjectsMainView({
   selectedItemId,
   onSpreadSelect,
   onItemSelect,
+  zoomLevel,
+  onZoomChange,
 }: ObjectsMainViewProps) {
   const retouchSpreads = useRetouchSpreads();
   const actions = useSnapshotActions();
@@ -942,7 +947,13 @@ export function ObjectsMainView({
     <>
       <CanvasSpreadView
         spreads={retouchSpreads}
-        initialSelectedId={selectedSpreadId}
+        selectedSpreadId={selectedSpreadId}
+        viewMode="edit"
+        zoomLevel={zoomLevel}
+        columnsPerRow={COLUMNS.DEFAULT}
+        onViewModeChange={() => {}}
+        onZoomChange={onZoomChange}
+        onColumnsChange={() => {}}
         renderItems={[
           "raw_image",
           "raw_textbox",

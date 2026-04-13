@@ -1,44 +1,16 @@
-// canvas-spread-view.tsx - Root component composing all child components
+// canvas-spread-view.tsx - Root component composing all child components (controlled — ADR-021)
+// Parent owns view state (selectedSpreadId, viewMode, zoomLevel, columnsPerRow).
 'use client';
 
-import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { SpreadViewHeader } from './spread-view-header';
 import { SpreadEditorPanel } from './spread-editor-panel';
 import { SpreadThumbnailList, type SpreadThumbnailListRef } from './spread-thumbnail-list';
-import { ZOOM, COLUMNS } from '@/constants/spread-constants';
 import type { SpreadType } from './new-spread-button';
 import type { ViewMode } from '@/types/canvas-types';
 import { useSetZoomLevel } from '@/stores/editor-settings-store';
 import { useInteractionLayer } from '../../contexts';
 import type { PageNumberingSettings } from '@/types/editor';
-
-const STORAGE_KEY = 'spread-view-prefs';
-
-interface ViewPreferences {
-  viewMode: ViewMode;
-  zoomLevel: number;
-  columnsPerRow: number;
-}
-
-function loadViewPreferences(): Partial<ViewPreferences> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveViewPreferences(prefs: ViewPreferences): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
-  } catch {
-    // Silently fail if localStorage unavailable
-  }
-}
-
 import { createLogger } from '@/utils/logger';
 import type {
   BaseSpread,
@@ -67,6 +39,16 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Data
   spreads: TSpread[];
 
+  // Controlled view state (required — parent owns all four fields)
+  selectedSpreadId: string | null;
+  viewMode: ViewMode;
+  zoomLevel: number;
+  columnsPerRow: number;
+  onSpreadSelect: (spreadId: string) => void; // keep legacy name (Validation Session 1)
+  onViewModeChange: (mode: ViewMode) => void;
+  onZoomChange: (level: number) => void;
+  onColumnsChange: (columns: number) => void;
+
   // Render configuration
   renderItems: ItemType[];
 
@@ -93,7 +75,6 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderRawTextboxToolbar?: (context: TextToolbarContext<TSpread>) => ReactNode;
 
   // Spread-level callbacks
-  onSpreadSelect?: (spreadId: string) => void;
   onSpreadReorder?: (fromIndex: number, toIndex: number) => void;
   onSpreadAdd?: (type: SpreadType) => void;
   onDeleteSpread?: (spreadId: string) => void;
@@ -112,10 +93,6 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
 
   // Layout config
   availableLayouts?: LayoutOption[];
-
-  // Initial state (optional)
-  initialSelectedId?: string;
-  initialViewMode?: ViewMode;
 
   // External item selection (sidebar → canvas)
   externalSelectedItemId?: { type: string; id: string } | null;
@@ -140,6 +117,14 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
 // === Main Component ===
 export function CanvasSpreadView<TSpread extends BaseSpread>({
   spreads,
+  selectedSpreadId,
+  viewMode,
+  zoomLevel,
+  columnsPerRow,
+  onSpreadSelect,
+  onViewModeChange,
+  onZoomChange,
+  onColumnsChange,
   renderItems,
   renderImageItem,
   renderTextItem,
@@ -157,7 +142,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   renderRawTextbox,
   renderRawImageToolbar,
   renderRawTextboxToolbar,
-  onSpreadSelect,
   onSpreadReorder,
   onSpreadAdd,
   onDeleteSpread,
@@ -170,8 +154,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   canDragItem = true,
   preventEditRawItem = false,
   availableLayouts = [],
-  initialSelectedId,
-  initialViewMode = 'edit',
   externalSelectedItemId,
   onPageSelect,
   onDeselect,
@@ -179,22 +161,6 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   forceLanguageCode,
   showViewToggle = true,
 }: CanvasSpreadViewProps<TSpread>) {
-  // === Local View State (with localStorage persistence) ===
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    const prefs = loadViewPreferences();
-    return prefs.viewMode ?? initialViewMode;
-  });
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialSelectedId ?? spreads[0]?.id ?? null
-  );
-  const [zoomLevel, setZoomLevel] = useState<number>(() => {
-    const prefs = loadViewPreferences();
-    return prefs.zoomLevel ?? ZOOM.DEFAULT;
-  });
-  const [columnsPerRow, setColumnsPerRow] = useState<number>(() => {
-    const prefs = loadViewPreferences();
-    return prefs.columnsPerRow ?? COLUMNS.DEFAULT;
-  });
 
   // Ref to the currently mounted SpreadThumbnailList (either the edit-mode
   // filmstrip OR the grid-mode grid — only one mounts at a time).
@@ -202,20 +168,25 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   // lives in exactly one place (SpreadThumbnailList.triggerDelete).
   const filmstripRef = useRef<SpreadThumbnailListRef>(null);
 
-  // Persist view preferences to localStorage
-  useEffect(() => {
-    saveViewPreferences({ viewMode, zoomLevel, columnsPerRow });
-  }, [viewMode, zoomLevel, columnsPerRow]);
-
-  // Sync zoom level to global store for shared components
+  // Sync zoom level to global store for shared components (EditableTextbox, EditableShape, etc.)
+  // zoomLevel is prop-driven → broadcast follows parent's source of truth.
   const setStoreZoomLevel = useSetZoomLevel();
   useEffect(() => {
     setStoreZoomLevel(zoomLevel);
   }, [zoomLevel, setStoreZoomLevel]);
 
-  // Auto-select spread when spreads change
-  // - Complete replacement (generation): select first spread
-  // - Single addition: select last (newly added) spread
+  // Auto-select first spread when selection is null but spreads exist.
+  // Covers: fresh store slot (no persisted value yet), dummy space mount with null localState,
+  // and any case where parent resets selectedSpreadId to null.
+  useEffect(() => {
+    if (!selectedSpreadId && spreads.length > 0) {
+      onSpreadSelect(spreads[0].id);
+    }
+  }, [selectedSpreadId, spreads, onSpreadSelect]);
+
+  // Auto-select spread when spreads list changes:
+  //   - Complete replacement (no shared IDs): select first spread
+  //   - Single addition: select last (newly added) spread
   const prevSpreadIdsRef = useRef<string[]>(spreads.map((s) => s.id));
   useEffect(() => {
     if (spreads.length === 0) {
@@ -228,14 +199,11 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
     const hasSharedIds = currentIds.some((id) => prevIds.has(id));
 
     if (!hasSharedIds && spreads.length > 0) {
-      // Complete replacement (no shared IDs) - select first
-      setSelectedId(spreads[0].id);
-      onSpreadSelect?.(spreads[0].id);
+      // Complete replacement (no shared IDs) → select first
+      onSpreadSelect(spreads[0].id);
     } else if (spreads.length > prevSpreadIdsRef.current.length) {
-      // Addition - select last (newly added)
-      const newSpread = spreads[spreads.length - 1];
-      setSelectedId(newSpread.id);
-      onSpreadSelect?.(newSpread.id);
+      // Addition → select last (newly added)
+      onSpreadSelect(spreads[spreads.length - 1].id);
     }
 
     prevSpreadIdsRef.current = currentIds;
@@ -243,59 +211,53 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
 
   // === Derived State ===
   const selectedSpread = useMemo(
-    () => spreads.find((s) => s.id === selectedId) ?? null,
-    [spreads, selectedId]
+    () => spreads.find((s) => s.id === selectedSpreadId) ?? null,
+    [spreads, selectedSpreadId]
   );
 
   const selectedIndex = useMemo(
-    () => spreads.findIndex((s) => s.id === selectedId),
-    [spreads, selectedId]
+    () => spreads.findIndex((s) => s.id === selectedSpreadId),
+    [spreads, selectedSpreadId]
   );
 
   // === Handlers ===
   const handleViewModeToggle = useCallback(() => {
-    setViewMode((prev) => {
-      const newMode = prev === 'edit' ? 'grid' : 'edit';
-      log.info('handleViewModeToggle', 'mode changed', { prev, newMode });
+    const newMode = viewMode === 'edit' ? 'grid' : 'edit';
+    log.info('handleViewModeToggle', 'mode changed', { prev: viewMode, newMode });
 
-      // Auto-select first spread when switching to Edit without selection
-      if (newMode === 'edit' && !selectedId && spreads.length > 0) {
-        const firstSpreadId = spreads[0].id;
-        setSelectedId(firstSpreadId);
-        onSpreadSelect?.(firstSpreadId);
-      }
+    // Auto-select first spread when switching to Edit without selection
+    if (newMode === 'edit' && !selectedSpreadId && spreads.length > 0) {
+      onSpreadSelect(spreads[0].id);
+    }
 
-      return newMode;
-    });
-  }, [selectedId, spreads, onSpreadSelect]);
+    onViewModeChange(newMode);
+  }, [viewMode, selectedSpreadId, spreads, onSpreadSelect, onViewModeChange]);
 
   const handleZoomChange = useCallback((level: number) => {
-    setZoomLevel(level);
-  }, []);
+    onZoomChange(level);
+  }, [onZoomChange]);
 
   const handleColumnsChange = useCallback((columns: number) => {
-    setColumnsPerRow(columns);
-  }, []);
+    onColumnsChange(columns);
+  }, [onColumnsChange]);
 
   const handleSpreadClick = useCallback((spreadId: string) => {
     log.info('handleSpreadClick', 'spread selected', { spreadId });
-    setSelectedId(spreadId);
-    onSpreadSelect?.(spreadId);
+    onSpreadSelect(spreadId);
   }, [onSpreadSelect]);
 
   const handleSpreadDoubleClick = useCallback((spreadId: string) => {
     // Grid mode: select and switch to Edit
-    setSelectedId(spreadId);
-    onSpreadSelect?.(spreadId);
-    setViewMode('edit');
-  }, [onSpreadSelect]);
+    onSpreadSelect(spreadId);
+    onViewModeChange('edit');
+  }, [onSpreadSelect, onViewModeChange]);
 
   const handleDeleteSpread = useCallback((spreadId: string) => {
     const deletingIndex = spreads.findIndex(s => s.id === spreadId);
     if (deletingIndex === -1) return;
 
     // Only update selection if deleting the currently selected spread
-    const isDeletingSelected = spreadId === selectedId;
+    const isDeletingSelected = spreadId === selectedSpreadId;
 
     // Call parent delete callback
     onDeleteSpread?.(spreadId);
@@ -309,22 +271,21 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
         nextId = spreads[deletingIndex - 1].id;
       }
       if (nextId) {
-        setSelectedId(nextId);
-        onSpreadSelect?.(nextId);
+        onSpreadSelect(nextId);
       }
     } else if (isDeletingSelected) {
-      setSelectedId(null);
+      // last spread deleted — nothing to select (parent handles null case)
     }
-  }, [spreads, selectedId, onDeleteSpread, onSpreadSelect]);
+  }, [spreads, selectedSpreadId, onDeleteSpread, onSpreadSelect]);
 
   // Delete currently selected spread via keyboard — delegates to the currently
   // mounted SpreadThumbnailList's triggerDelete so confirmation logic (content
   // check + dialog) lives in exactly one place. Works in BOTH edit and grid mode
   // because filmstripRef is attached to whichever list is currently rendered.
   const handleDeleteCurrentSpread = useCallback(() => {
-    if (!selectedId) return;
-    filmstripRef.current?.triggerDelete(selectedId);
-  }, [selectedId]);
+    if (!selectedSpreadId) return;
+    filmstripRef.current?.triggerDelete(selectedSpreadId);
+  }, [selectedSpreadId]);
 
   // === Interaction Layer Stack — slot 'spread' registration ===
   //
@@ -336,27 +297,25 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   //
   // No onClickOutside handler — spread slot must stay registered regardless
   // of where the user clicks (filmstrip, sidebar, toolbars, grid cells, etc.).
-  // Popped only when the spread is removed or a higher slot (item/modal)
-  // cascades it off via setLayer in the provider.
   const spreadViewRef = useRef<HTMLDivElement>(null);
   const spreadLayer = useMemo(() => {
-    if (!selectedId) return null;
+    if (!selectedSpreadId) return null;
     return {
-      id: selectedId,
+      id: selectedSpreadId,
       ref: spreadViewRef,
       hotkeys: canDeleteSpread ? ['Delete', 'Backspace'] : [],
       onHotkey: canDeleteSpread ? () => handleDeleteCurrentSpread() : undefined,
     };
-  }, [selectedId, canDeleteSpread, handleDeleteCurrentSpread]);
+  }, [selectedSpreadId, canDeleteSpread, handleDeleteCurrentSpread]);
   useInteractionLayer('spread', spreadLayer);
 
   // Unified spread item action handler (injects spreadId)
   const handleSpreadItemAction = useCallback(
     (params: Omit<SpreadItemActionUnion, 'spreadId'>) => {
-      if (!selectedId || !onUpdateSpreadItem) return;
-      onUpdateSpreadItem({ ...params, spreadId: selectedId } as SpreadItemActionUnion);
+      if (!selectedSpreadId || !onUpdateSpreadItem) return;
+      onUpdateSpreadItem({ ...params, spreadId: selectedSpreadId } as SpreadItemActionUnion);
     },
-    [onUpdateSpreadItem, selectedId]
+    [onUpdateSpreadItem, selectedSpreadId]
   );
 
   // === Global Keyboard Shortcuts ===
@@ -370,15 +329,12 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
       switch (e.key.toLowerCase()) {
         case 'home':
           if (spreads.length > 0) {
-            setSelectedId(spreads[0].id);
-            onSpreadSelect?.(spreads[0].id);
+            onSpreadSelect(spreads[0].id);
           }
           break;
         case 'end':
           if (spreads.length > 0) {
-            const lastSpread = spreads[spreads.length - 1];
-            setSelectedId(lastSpread.id);
-            onSpreadSelect?.(lastSpread.id);
+            onSpreadSelect(spreads[spreads.length - 1].id);
           }
           break;
       }
@@ -386,7 +342,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [spreads, selectedId, onSpreadSelect]);
+  }, [spreads, onSpreadSelect]);
 
   return (
     <div ref={spreadViewRef} className="flex flex-col h-full bg-background">
@@ -448,7 +404,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
               <SpreadThumbnailList
                 ref={filmstripRef}
                 spreads={spreads}
-                selectedId={selectedId}
+                selectedId={selectedSpreadId}
                 layout="horizontal"
                 renderItems={renderItems}
                 renderImageItem={renderImageItem}
@@ -475,7 +431,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
           <SpreadThumbnailList
             ref={filmstripRef}
             spreads={spreads}
-            selectedId={selectedId}
+            selectedId={selectedSpreadId}
             layout="grid"
             columnsPerRow={columnsPerRow}
             renderItems={renderItems}

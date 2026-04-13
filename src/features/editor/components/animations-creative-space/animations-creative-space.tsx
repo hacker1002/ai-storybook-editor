@@ -3,6 +3,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { useSpaceViewState, useEffectiveSpreadId } from "@/features/editor/hooks/use-space-view-state";
 import { AnimationEditorSidebar } from "./animation-editor-sidebar";
 import {
   PlayableSpreadView,
@@ -51,19 +52,16 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
   const actions = useSnapshotActions();
   const templateLayout = useBookTemplateLayout();
 
+  // --- Space view state (ADR-021) ---
+  const { activeSpreadId, zoomLevel, patch } = useSpaceViewState('animation');
+
   // --- Local state ---
-  const [userSelectedSpreadId, setUserSelectedSpreadId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
   const [expandedAnimIndex, setExpandedAnimIndex] = useState<number | null>(null);
   const [filterState, setFilterState] = useState<AnimationFilterState>(createDefaultFilterState);
 
-  // Derived: effective spread ID (user choice if valid, else first)
-  const effectiveSpreadId = useMemo(() => {
-    if (userSelectedSpreadId && retouchSpreadIds.includes(userSelectedSpreadId)) {
-      return userSelectedSpreadId;
-    }
-    return retouchSpreadIds[0] ?? null;
-  }, [retouchSpreadIds, userSelectedSpreadId]);
+  // Derived: effective spread ID (persisted choice if valid, else first)
+  const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
 
   const currentSpread = useRetouchSpreadById(effectiveSpreadId ?? "");
   const animations = useRetouchAnimations(effectiveSpreadId ?? "");
@@ -142,10 +140,10 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
 
   const handleSpreadSelect = useCallback((spreadId: string) => {
     log.info("handleSpreadSelect", "spread selected", { spreadId });
-    setUserSelectedSpreadId(spreadId);
+    patch({ activeSpreadId: spreadId });
     setSelectedItem(null);
     setExpandedAnimIndex(null);
-  }, []);
+  }, [patch]);
 
   const handleAddAnimation = useCallback(
     async (effectType: number) => {
@@ -286,10 +284,13 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
         <PlayableSpreadView
           mode="animation-editor"
           spreads={playableSpreads}
+          selectedSpreadId={effectiveSpreadId}
+          zoomLevel={zoomLevel}
           selectedItemId={selectedItem?.id ?? null}
           selectedItemType={selectedItem?.type ?? null}
           onItemSelect={handleItemSelect}
           onSpreadSelect={handleSpreadSelect}
+          onZoomChange={(level) => patch({ zoomLevel: level })}
           onPreview={onNavigateToPreview}
           pageNumbering={templateLayout?.page_numbering}
         />
