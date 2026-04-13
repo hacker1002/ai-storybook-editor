@@ -50,6 +50,8 @@ import { Upload } from "lucide-react";
 import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
 import type { SpreadTextboxContent } from "@/types/spread-types";
 import { createLogger } from "@/utils/logger";
+import { ZOOM, COLUMNS } from "@/constants/spread-constants";
+import type { ViewMode } from "@/types/canvas-types";
 
 const log = createLogger("Demo", "DemoCanvasSpreadView");
 
@@ -133,6 +135,11 @@ export function DemoCanvasSpreadView() {
     () => spreads[0]?.id ?? null
   );
   const selectedSpread = spreads.find((s) => s.id === selectedSpreadId) ?? null;
+
+  // View state for controlled CanvasSpreadView
+  const [viewMode, setViewMode] = useState<ViewMode>('edit');
+  const [zoomLevel, setZoomLevel] = useState<number>(ZOOM.DEFAULT);
+  const [columnsPerRow, setColumnsPerRow] = useState<number>(COLUMNS.DEFAULT);
 
   // Import dialog state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -603,7 +610,14 @@ export function DemoCanvasSpreadView() {
                   ? renderShapeToolbar
                   : undefined
               }
+              selectedSpreadId={selectedSpreadId}
+              viewMode={viewMode}
+              zoomLevel={zoomLevel}
+              columnsPerRow={columnsPerRow}
               onSpreadSelect={handleSpreadSelect}
+              onViewModeChange={setViewMode}
+              onZoomChange={setZoomLevel}
+              onColumnsChange={setColumnsPerRow}
               onSpreadReorder={handleSpreadReorder}
               onSpreadAdd={handleSpreadAdd}
               onDeleteSpread={handleSpreadDelete}
@@ -614,8 +628,6 @@ export function DemoCanvasSpreadView() {
               canDeleteSpread={featureFlags.canDeleteSpread}
               canResizeItem={featureFlags.canResizeItem}
               canDragItem={featureFlags.canDragItem}
-              initialViewMode="edit"
-              initialSelectedId={spreads[0].id}
             />
           </div>
 

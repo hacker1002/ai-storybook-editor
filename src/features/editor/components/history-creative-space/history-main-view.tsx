@@ -1,8 +1,9 @@
 // history-main-view.tsx - Read-only CanvasSpreadView wrapper for history snapshot preview
 "use client";
 
-import { useCallback } from "react";
+import { useState, useCallback } from "react";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
+import { ZOOM, COLUMNS } from "@/constants/spread-constants";
 import {
   EditableImage,
   EditableTextbox,
@@ -33,6 +34,10 @@ interface HistoryMainViewProps {
 export function HistoryMainView({ snapshot }: HistoryMainViewProps) {
   const langCode = useLanguageCode();
   log.debug("render", "rendering snapshot", { snapshotId: snapshot.id });
+
+  // Read-only view — local spread selection for filmstrip navigation only.
+  // View mode/zoom/columns are fixed (history is display-only, not persisted).
+  const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(null);
 
   // === Read-only render props — no interactions, no toolbars ===
 
@@ -167,6 +172,14 @@ export function HistoryMainView({ snapshot }: HistoryMainViewProps) {
     <CanvasSpreadView
       key={snapshot.id}
       spreads={(snapshot.illustration?.spreads ?? []) as BaseSpread[]}
+      selectedSpreadId={selectedSpreadId}
+      viewMode="edit"
+      zoomLevel={ZOOM.DEFAULT}
+      columnsPerRow={COLUMNS.DEFAULT}
+      onSpreadSelect={setSelectedSpreadId}
+      onViewModeChange={() => {}}
+      onZoomChange={() => {}}
+      onColumnsChange={() => {}}
       renderItems={[
         "raw_image",
         "raw_textbox",
@@ -190,6 +203,7 @@ export function HistoryMainView({ snapshot }: HistoryMainViewProps) {
       canDeleteSpread={false}
       canResizeItem={false}
       canDragItem={false}
+      showViewToggle={false}
     />
   );
 }
