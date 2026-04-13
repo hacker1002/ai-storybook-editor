@@ -4,7 +4,7 @@
 import { useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Scissors, Crop } from "lucide-react";
+import { Scissors, Crop, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
   useToolbarPosition,
@@ -27,7 +27,7 @@ export function ObjectsRawImageToolbar<TSpread extends BaseSpread>({
   context,
 }: ObjectsRawImageToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const { item, onSplitImage, onCropImage, selectedGeometry, canvasRef } =
+  const { item, onSplitImage, onCropImage, onClone, selectedGeometry, canvasRef } =
     context;
 
   const position = useToolbarPosition({
@@ -53,6 +53,15 @@ export function ObjectsRawImageToolbar<TSpread extends BaseSpread>({
       toast.info("Crop feature not available");
     }
   }, [onCropImage, item.id]);
+
+  const handleClone = useCallback(() => {
+    if (onClone) {
+      log.info("handleClone", "cloning raw image as new image item", { itemId: item.id });
+      onClone();
+    } else {
+      toast.info("Clone feature not available");
+    }
+  }, [onClone, item.id]);
 
   const toolbarStyle: React.CSSProperties = position
     ? {
@@ -83,6 +92,7 @@ export function ObjectsRawImageToolbar<TSpread extends BaseSpread>({
             onClick={handleSplit}
           />
           <ToolbarIconButton icon={Crop} label="Crop" onClick={handleCrop} />
+          <ToolbarIconButton icon={Copy} label="Clone" onClick={handleClone} />
         </div>
       </div>
     </TooltipProvider>

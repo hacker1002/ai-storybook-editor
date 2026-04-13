@@ -768,6 +768,36 @@ export function ObjectsMainView({
     [openGenerateModal, openSplitModal, openCropModal]
   );
 
+  const handleCloneRawImage = useCallback(
+    (rawImage: SpreadImage) => {
+      const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
+      const maxZ = spread?.images?.reduce(
+        (max, img) => Math.max(max, img["z-index"] ?? 0),
+        0
+      ) ?? 0;
+
+      const newImage: SpreadImage = {
+        id: crypto.randomUUID(),
+        title: rawImage.title ? `${rawImage.title} - Copy` : "Cloned Image",
+        geometry: { ...rawImage.geometry },
+        media_url: rawImage.media_url,
+        illustrations: rawImage.illustrations ? [...rawImage.illustrations] : [],
+        type: rawImage.type,
+        aspect_ratio: rawImage.aspect_ratio,
+        player_visible: true,
+        editor_visible: true,
+        "z-index": maxZ + 1,
+      };
+      actions.addRetouchImage(selectedSpreadId, newImage);
+      log.info("handleCloneRawImage", "cloned raw image to retouch image", {
+        rawImageId: rawImage.id,
+        newImageId: newImage.id,
+        spreadId: selectedSpreadId,
+      });
+    },
+    [selectedSpreadId, retouchSpreads, actions]
+  );
+
   const renderRawImageToolbar = useCallback(
     (context: ImageToolbarContext<BaseSpread>) => (
       <ObjectsRawImageToolbar
@@ -775,10 +805,11 @@ export function ObjectsMainView({
           ...context,
           onSplitImage: () => openSplitModal(context.item),
           onCropImage: () => openCropModal(context.item),
+          onClone: () => handleCloneRawImage(context.item as SpreadImage),
         }}
       />
     ),
-    [openSplitModal, openCropModal]
+    [openSplitModal, openCropModal, handleCloneRawImage]
   );
 
   // === Text toolbar render prop ===
