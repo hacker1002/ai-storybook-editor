@@ -12,9 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { EffectTypeGrid } from './effect-type-grid';
 
 interface AnimationSettingsPanelProps {
@@ -101,26 +103,29 @@ interface DirectionSelectProps {
   onChange: (field: string, value: number | string) => void;
 }
 
+const DIRECTION_ICONS = {
+  left:  <ArrowLeft  className="h-3.5 w-3.5" />,
+  right: <ArrowRight className="h-3.5 w-3.5" />,
+  up:    <ArrowUp    className="h-3.5 w-3.5" />,
+  down:  <ArrowDown  className="h-3.5 w-3.5" />,
+} as const;
+
 function DirectionSelect({ value, onChange }: DirectionSelectProps) {
-  const directions = ['left', 'right', 'up', 'down'] as const;
   return (
     <div className="space-y-1">
       <Label className="text-xs">Direction</Label>
-      <Select
+      <ToggleGroup
+        type="single"
         value={value ?? 'left'}
-        onValueChange={(v) => onChange('direction', v)}
+        onValueChange={(v) => { if (v) onChange('direction', v as string); }}
+        className="justify-start gap-0.5"
       >
-        <SelectTrigger className="h-7 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {directions.map((d) => (
-            <SelectItem key={d} value={d} className="text-xs capitalize">
-              {d.charAt(0).toUpperCase() + d.slice(1)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        {(Object.keys(DIRECTION_ICONS) as Array<keyof typeof DIRECTION_ICONS>).map((d) => (
+          <ToggleGroupItem key={d} value={d} className="h-7 w-7 p-0">
+            {DIRECTION_ICONS[d]}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
     </div>
   );
 }
