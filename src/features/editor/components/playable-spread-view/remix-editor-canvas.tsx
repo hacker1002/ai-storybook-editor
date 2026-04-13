@@ -22,8 +22,7 @@ import type { Geometry } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
-import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
-import { Z_INDEX } from "@/constants/spread-constants";
+import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import type {
   PlayableSpread,
   RemixAsset,
@@ -383,7 +382,7 @@ export function RemixEditorCanvas({
               key={textbox.id}
               textboxContent={data}
               index={index}
-              zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + index}
+              zIndex={textbox["z-index"] ?? LAYER_CONFIG.TEXT.min + index}
               isSelected={isTextboxSelected || isEditing}
               isSelectable={true}
               isEditable={true}

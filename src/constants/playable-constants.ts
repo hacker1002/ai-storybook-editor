@@ -41,9 +41,6 @@ export const EFFECT_TYPE_NAMES: Record<number, string> = {
   17: 'Arcs',
 };
 
-// === Z-Index Constants (shared across playable canvas components) ===
-export const TEXTBOX_Z_INDEX_BASE = 300;
-
 // === Zoom Constants (playable header + spread view) ===
 export const PLAYABLE_ZOOM = {
   MIN: 25,

@@ -15,8 +15,8 @@ import { useCanvasWidth, useCanvasHeight, useSetZoomLevel } from "@/stores/edito
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { PageItem } from "../canvas-spread-view/page-item";
-import { TEXTBOX_Z_INDEX_BASE, EFFECT_TYPE } from "@/constants/playable-constants";
-import { Z_INDEX } from "@/constants/spread-constants";
+import { EFFECT_TYPE } from "@/constants/playable-constants";
+import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import type {
   PlayableSpread,
   PlayMode,
@@ -708,7 +708,7 @@ export function PlayerCanvas({
               <EditableTextbox
                 textboxContent={data}
                 index={index}
-                zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + index}
+                zIndex={textbox["z-index"] ?? LAYER_CONFIG.TEXT.min + index}
                 isSelected={false}
                 isSelectable={false}
                 isEditable={false}

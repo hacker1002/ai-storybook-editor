@@ -17,8 +17,7 @@ import { useLanguageCode, useCanvasWidth, useCanvasHeight } from "@/stores/edito
 import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { SelectionOverlay } from "./selection-overlay";
-import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
-import { Z_INDEX } from "@/constants/spread-constants";
+import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
@@ -394,7 +393,7 @@ export function AnimationEditorCanvas({
               key={textbox.id}
               textboxContent={data}
               index={index}
-              zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + index}
+              zIndex={textbox["z-index"] ?? LAYER_CONFIG.TEXT.min + index}
               isSelected={
                 selectedItemId === textbox.id && selectedItemType === "textbox"
               }

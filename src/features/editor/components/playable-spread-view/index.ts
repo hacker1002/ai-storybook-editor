@@ -19,7 +19,7 @@ export type {
 export type { ItemType } from '@/types/spread-types';
 
 // === Shared Constants (re-export from @/constants for barrel consumers) ===
-export { TEXTBOX_Z_INDEX_BASE, PLAYABLE_ZOOM, ANIMATION_PRESETS } from '@/constants/playable-constants';
+export { PLAYABLE_ZOOM, ANIMATION_PRESETS } from '@/constants/playable-constants';
 
 // === Components ===
 export { PlayableSpreadView } from './playable-spread-view';

@@ -13,8 +13,7 @@ import {
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
-import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
-import { Z_INDEX } from "@/constants/spread-constants";
+import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 
 // === Layout Constants ===
@@ -221,7 +220,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
                 key={textbox.id || idx}
                 textboxContent={data}
                 index={idx}
-                zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + idx}
+                zIndex={textbox["z-index"] ?? LAYER_CONFIG.TEXT.min + idx}
                 isSelected={false}
                 isSelectable={false}
                 isEditable={false}
