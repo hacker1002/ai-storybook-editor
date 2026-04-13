@@ -426,18 +426,6 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
-  // Mirror selected item's stacking order on the selection frame so items
-  // with a higher z-index than the selected element stay clickable. Items
-  // below the selected one become unreachable — intentional, matches the
-  // "active item is front-most" mental model.
-  const selectedZIndex =
-    state.selectedElement && state.selectedElement.type !== "page"
-      ? resolveItemZIndex(
-          state.selectedElement.type,
-          state.selectedElement.index,
-          spread
-        )
-      : 0;
   // Audio/Quiz are fixed-size icons — disable resize, only allow drag
   const isIconElement =
     state.selectedElement?.type === "audio" ||
@@ -450,6 +438,25 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const canResizeCurrentItem = canResizeItem && !isIconElement && !rawBlocked;
   const canDragCurrentItem = canDragItem && !rawBlocked;
   const showHandles = canResizeCurrentItem && !state.isDragging;
+  // Mirror selected item's stacking order on the selection frame so items
+  // with a higher z-index than the selected element stay clickable. Items
+  // below the selected one become unreachable — intentional, matches the
+  // "active item is front-most" mental model.
+  const calcSelectedZIndex = useMemo(() => {
+    if (!state.selectedElement || state.selectedElement.type == "page")
+      return 0;
+    if (!isRawElement || preventEditRawItem) {
+      return resolveItemZIndex(
+        state.selectedElement.type,
+        state.selectedElement.index,
+        spread
+      );
+    } else {
+      const type =
+        state.selectedElement.type == "raw_image" ? "image" : "textbox";
+      return resolveItemZIndex(type, state.selectedElement.index, spread);
+    }
+  }, [state.selectedElement, spread]);
 
   return (
     <div
@@ -538,7 +545,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleImageEditingChange,
               "raw_image"
             );
-            context.zIndex = resolveItemZIndex("raw_image", index, spread);
+            // if can edit raw item (illustration step) => treat as image item
+            context.zIndex = preventEditRawItem
+              ? resolveItemZIndex("raw_image", index, spread)
+              : resolveItemZIndex("image", index, spread);
             return (
               <Fragment key={image.id ?? `raw-img-${index}`}>
                 {renderRawImage(context)}
@@ -622,7 +632,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               editorLangCode,
               "raw_textbox"
             );
-            context.zIndex = resolveItemZIndex("raw_textbox", index, spread);
+            // if can edit raw item (illustration step) => treat as textbox item
+            context.zIndex = preventEditRawItem
+              ? resolveItemZIndex("raw_textbox", index, spread)
+              : resolveItemZIndex("textbox", index, spread);
             return (
               <Fragment key={textbox.id ?? `raw-txt-${index}`}>
                 {renderRawTextbox(context)}
@@ -699,7 +712,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           state.selectedElement.type !== "page" && (
             <SelectionFrame
               geometry={selectedGeometry}
-              zIndex={selectedZIndex}
+              zIndex={calcSelectedZIndex}
               zoomLevel={zoomLevel}
               showHandles={showHandles}
               activeHandle={state.activeHandle}

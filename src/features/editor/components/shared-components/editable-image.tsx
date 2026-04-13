@@ -166,7 +166,7 @@ export function EditableImage({
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
         "absolute overflow-hidden transition-opacity",
-        dimmed && "opacity-35",
+        dimmed && "opacity-20",
         canSelect && "cursor-pointer",
         !isSelected && (showItemBorder || isHovered) && "outline outline-1"
       )}
