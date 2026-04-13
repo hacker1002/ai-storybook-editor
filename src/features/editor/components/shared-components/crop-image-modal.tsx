@@ -191,7 +191,6 @@ export function CropImageModal({
     };
     setBoundingBoxes((prev) => [...prev, newBox]);
     setSelectedBoxId(newBox.id);
-    setCropResults(null);
     log.debug("handleBoxAdd", "added", { boxId: newBox.id });
   }, [boundingBoxes.length, imageNatural]);
 
@@ -208,7 +207,6 @@ export function CropImageModal({
     (boxId: string) => {
       setBoundingBoxes((prev) => prev.filter((b) => b.id !== boxId));
       if (selectedBoxId === boxId) setSelectedBoxId(null);
-      setCropResults(null);
     },
     [selectedBoxId]
   );
@@ -241,7 +239,6 @@ export function CropImageModal({
           };
         })
       );
-      setCropResults(null);
     },
     [imageNatural]
   );
@@ -260,7 +257,6 @@ export function CropImageModal({
       const box = boundingBoxes.find((b) => b.id === boxId);
       if (!box || isBusy) return;
       setSelectedBoxId(boxId);
-      setCropResults(null);
       dragStateRef.current = {
         type,
         boxId,
@@ -389,8 +385,7 @@ export function CropImageModal({
         croppedCount: results.cropped.length,
       });
       setTimeout(
-        () =>
-          resultSectionRef.current?.scrollIntoView({ behavior: "smooth" }),
+        () => resultSectionRef.current?.scrollIntoView({ behavior: "smooth" }),
         100
       );
     } catch (err) {
