@@ -30,7 +30,7 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
     (set, get) => ({
       currentLanguage: DEFAULT_LANGUAGE,
       currentStep: 'manuscript',
-      zoomLevel: 100,
+      zoomLevel: 90,
       canvasSize: DEFAULT_CANVAS_SIZE,
 
       setCurrentLanguage: (language) => {
