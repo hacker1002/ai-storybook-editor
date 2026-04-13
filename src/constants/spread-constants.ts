@@ -18,7 +18,6 @@ export const CANVAS = {
 
 export const Z_INDEX = {
   PAGE_BACKGROUND: -999,
-  SELECTION_FRAME: 800,
 } as const;
 
 /**

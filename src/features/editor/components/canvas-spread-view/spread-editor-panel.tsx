@@ -18,17 +18,14 @@ import {
   buildQuizContext,
 } from "./utils/context-builders";
 import { getScaledDimensions } from "./utils/coordinate-utils";
-import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
+import { resolveItemZIndex } from "./utils/resolve-item-z-index";
+import { Z_INDEX } from "@/constants/spread-constants";
 import {
   useCanvasWidth,
   useCanvasHeight,
 } from "@/stores/editor-settings-store";
 import type {
   BaseSpread,
-  SpreadImage,
-  SpreadVideo,
-  SpreadAudio,
-  SpreadQuiz,
   ItemType,
   SelectedElement,
   ResizeHandle,
@@ -429,6 +426,18 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
+  // Mirror selected item's stacking order on the selection frame so items
+  // with a higher z-index than the selected element stay clickable. Items
+  // below the selected one become unreachable — intentional, matches the
+  // "active item is front-most" mental model.
+  const selectedZIndex =
+    state.selectedElement && state.selectedElement.type !== "page"
+      ? resolveItemZIndex(
+          state.selectedElement.type,
+          state.selectedElement.index,
+          spread
+        )
+      : 0;
   // Audio/Quiz are fixed-size icons — disable resize, only allow drag
   const isIconElement =
     state.selectedElement?.type === "audio" ||
@@ -529,8 +538,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleImageEditingChange,
               "raw_image"
             );
-            // Raw images render below all editable layers (negative z-index)
-            context.zIndex = -(spread.raw_images?.length ?? 0) + index;
+            context.zIndex = resolveItemZIndex("raw_image", index, spread);
             return (
               <Fragment key={image.id ?? `raw-img-${index}`}>
                 {renderRawImage(context)}
@@ -551,9 +559,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction,
               handleImageEditingChange
             );
-            context.zIndex =
-              (image as SpreadImage)["z-index"] ??
-              LAYER_CONFIG.MEDIA.min + index;
+            context.zIndex = resolveItemZIndex("image", index, spread);
             return (
               <Fragment key={image.id ?? `img-${index}`}>
                 {renderImageItem(context)}
@@ -573,14 +579,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            // Offset by total images (raw + playable) so videos stack above all images
-            const totalImageCount = Math.max(
-              spread.raw_images?.length ?? 0,
-              spread.images?.length ?? 0
-            );
-            context.zIndex =
-              (video as SpreadVideo)["z-index"] ??
-              LAYER_CONFIG.MEDIA.min + totalImageCount + index;
+            context.zIndex = resolveItemZIndex("video", index, spread);
             return (
               <Fragment key={video.id ?? `vid-${index}`}>
                 {renderVideoItem(context)}
@@ -600,9 +599,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            context.zIndex =
-              (shape as { "z-index"?: number })["z-index"] ??
-              LAYER_CONFIG.OBJECTS.min + index;
+            context.zIndex = resolveItemZIndex("shape", index, spread);
             return (
               <Fragment key={shape.id ?? `shp-${index}`}>
                 {renderShapeItem(context)}
@@ -625,10 +622,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               editorLangCode,
               "raw_textbox"
             );
-            // Raw textboxes render just above raw images but below all editable layers
-            const rawImgCount = spread.raw_images?.length ?? 0;
-            context.zIndex =
-              -rawImgCount + (spread.raw_textboxes?.length ?? 0) + index;
+            context.zIndex = resolveItemZIndex("raw_textbox", index, spread);
             return (
               <Fragment key={textbox.id ?? `raw-txt-${index}`}>
                 {renderRawTextbox(context)}
@@ -650,9 +644,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleTextboxEditingChange,
               editorLangCode
             );
-            context.zIndex =
-              (textbox as { "z-index"?: number })["z-index"] ??
-              LAYER_CONFIG.TEXT.min + index;
+            context.zIndex = resolveItemZIndex("textbox", index, spread);
             return (
               <Fragment key={textbox.id ?? `txt-${index}`}>
                 {renderTextItem(context)}
@@ -672,10 +664,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            const shapesCount = spread.shapes?.length ?? 0;
-            context.zIndex =
-              (audio as SpreadAudio)["z-index"] ??
-              LAYER_CONFIG.OBJECTS.min + shapesCount + index;
+            context.zIndex = resolveItemZIndex("audio", index, spread);
             return (
               <Fragment key={audio.id ?? `aud-${index}`}>
                 {renderAudioItem(context)}
@@ -695,11 +684,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleElementSelect,
               handleSpreadItemAction
             );
-            const shapesCount = spread.shapes?.length ?? 0;
-            const audiosCount = spread.audios?.length ?? 0;
-            context.zIndex =
-              (quiz as SpreadQuiz)["z-index"] ??
-              LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + index;
+            context.zIndex = resolveItemZIndex("quiz", index, spread);
             return (
               <Fragment key={quiz.id ?? `quiz-${index}`}>
                 {renderQuizItem(context)}
@@ -714,6 +699,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           state.selectedElement.type !== "page" && (
             <SelectionFrame
               geometry={selectedGeometry}
+              zIndex={selectedZIndex}
               zoomLevel={zoomLevel}
               showHandles={showHandles}
               activeHandle={state.activeHandle}

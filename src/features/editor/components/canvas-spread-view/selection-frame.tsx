@@ -6,13 +6,16 @@ import Moveable from 'react-moveable';
 import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
-import { Z_INDEX } from '@/constants/spread-constants';
 import { useCanvasHeight } from '@/stores/editor-settings-store';
 
 const log = createLogger('Editor', 'SelectionFrame');
 
 interface SelectionFrameProps {
   geometry: Geometry;
+  // Mirror selected item's stacking index — items with a higher z-index than
+  // the selected one stay above the frame and remain interactive. See
+  // resolve-item-z-index.ts for the single source of truth.
+  zIndex: number;
   zoomLevel: number;
   showHandles: boolean;
   activeHandle: ResizeHandle | null;
@@ -36,6 +39,7 @@ interface SelectionFrameProps {
 
 export function SelectionFrame({
   geometry,
+  zIndex,
   zoomLevel,
   showHandles,
   activeHandle,
@@ -125,7 +129,7 @@ export function SelectionFrame({
           top: `${geometry.y}%`,
           width: `${geometry.w}%`,
           height: `${geometry.h}%`,
-          zIndex: Z_INDEX.SELECTION_FRAME,
+          zIndex,
           pointerEvents: borderOnlyDrag ? 'none' : 'auto',
           cursor: borderOnlyDrag ? undefined : canDrag ? 'move' : 'default',
         }}

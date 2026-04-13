@@ -18,7 +18,8 @@ import {
   buildViewOnlyAudioContext,
   buildViewOnlyQuizContext,
 } from "./utils/context-builders";
-import { THUMBNAIL, LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
+import { resolveItemZIndex } from "./utils/resolve-item-z-index";
+import { THUMBNAIL, Z_INDEX } from "@/constants/spread-constants";
 import { useCanvasWidth, useCanvasAspectRatio } from "@/stores/editor-settings-store";
 import type {
   BaseSpread,
@@ -29,10 +30,6 @@ import type {
   VideoItemContext,
   AudioItemContext,
   QuizItemContext,
-  SpreadImage,
-  SpreadVideo,
-  SpreadAudio,
-  SpreadQuiz,
 } from "@/types/canvas-types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
@@ -132,130 +129,84 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
-  // Resolve z-index per item mirroring spread-editor-panel logic so thumbnails
-  // respect the same stacking order as the main canvas. Fallbacks follow
-  // LAYER_CONFIG so items without explicit "z-index" still stack predictably.
-  const rawImageCount = spread.raw_images?.length ?? 0;
-  const rawTextboxCount = spread.raw_textboxes?.length ?? 0;
-  const playableImageCount = spread.images?.length ?? 0;
-  const totalImageCount = Math.max(rawImageCount, playableImageCount);
-  const shapesCount = spread.shapes?.length ?? 0;
-  const audiosCount = spread.audios?.length ?? 0;
+  // Resolve z-index per item via shared helper so thumbnails, editor panel,
+  // and selection frame share a single stacking-order source of truth.
 
-  // Memoize raw image contexts (illustration layer, below all editable layers)
   const rawImageContexts = useMemo(() => {
     if (!renderItems.includes("raw_image") || !renderRawImage) return [];
     return (spread.raw_images ?? []).map((img, idx) => {
       const context = buildViewOnlyImageContext(img, idx, spread);
-      context.zIndex = -rawImageCount + idx;
+      context.zIndex = resolveItemZIndex("raw_image", idx, spread);
       return { image: img, context };
     });
-  }, [spread.raw_images, spread.id, renderItems, renderRawImage, rawImageCount]);
+  }, [spread, renderItems, renderRawImage]);
 
-  // Memoize image contexts (playable layer)
   const imageContexts = useMemo(() => {
     if (!renderItems.includes("image") || !renderImageItem) return [];
     return (spread.images ?? []).map((img, idx) => {
       const context = buildViewOnlyImageContext(img, idx, spread);
-      context.zIndex =
-        (img as SpreadImage)["z-index"] ?? LAYER_CONFIG.MEDIA.min + idx;
+      context.zIndex = resolveItemZIndex("image", idx, spread);
       return { image: img, context };
     });
-  }, [spread.images, spread.id, renderItems, renderImageItem]);
+  }, [spread, renderItems, renderImageItem]);
 
-  // Memoize raw textbox contexts (illustration layer, above raw images, below editable)
   const rawTextboxContexts = useMemo(() => {
     if (!renderItems.includes("raw_textbox") || !renderRawTextbox) return [];
     return (spread.raw_textboxes ?? []).map((textbox, idx) => {
       const context = buildViewOnlyTextContext(textbox, idx, spread);
-      context.zIndex = -rawImageCount + rawTextboxCount + idx;
+      context.zIndex = resolveItemZIndex("raw_textbox", idx, spread);
       return { textbox, context };
     });
-  }, [
-    spread.raw_textboxes,
-    spread.id,
-    renderItems,
-    renderRawTextbox,
-    rawImageCount,
-    rawTextboxCount,
-  ]);
+  }, [spread, renderItems, renderRawTextbox]);
 
-  // Memoize text contexts (playable layer)
   const textContexts = useMemo(() => {
     if (!renderItems.includes("textbox") || !renderTextItem) return [];
     return (spread.textboxes ?? []).map((textbox, idx) => {
       const context = buildViewOnlyTextContext(textbox, idx, spread);
-      context.zIndex =
-        (textbox as { "z-index"?: number })["z-index"] ??
-        LAYER_CONFIG.TEXT.min + idx;
+      context.zIndex = resolveItemZIndex("textbox", idx, spread);
       return { textbox, context };
     });
-  }, [spread.textboxes, spread.id, renderItems, renderTextItem]);
+  }, [spread, renderItems, renderTextItem]);
 
-  // Memoize shape contexts - shapes are playable-only (no raw shapes)
   const shapeContexts = useMemo(() => {
     if (!renderItems.includes("shape") || !renderShapeItem || !spread.shapes)
       return [];
     return spread.shapes.map((shape, idx) => {
       const context = buildViewOnlyShapeContext(shape, idx, spread);
-      context.zIndex =
-        (shape as { "z-index"?: number })["z-index"] ??
-        LAYER_CONFIG.OBJECTS.min + idx;
+      context.zIndex = resolveItemZIndex("shape", idx, spread);
       return { shape, context };
     });
-  }, [spread.shapes, spread.id, renderItems, renderShapeItem]);
+  }, [spread, renderItems, renderShapeItem]);
 
-  // Memoize video contexts - skip if renderVideoItem not provided
   const videoContexts = useMemo(() => {
     if (!renderItems.includes("video") || !renderVideoItem || !spread.videos)
       return [];
     return spread.videos.map((video, idx) => {
       const context = buildViewOnlyVideoContext(video, idx, spread);
-      context.zIndex =
-        (video as SpreadVideo)["z-index"] ??
-        LAYER_CONFIG.MEDIA.min + totalImageCount + idx;
+      context.zIndex = resolveItemZIndex("video", idx, spread);
       return { video, context };
     });
-  }, [
-    spread.videos,
-    spread.id,
-    renderItems,
-    renderVideoItem,
-    totalImageCount,
-  ]);
+  }, [spread, renderItems, renderVideoItem]);
 
-  // Memoize audio contexts - skip if renderAudioItem not provided
   const audioContexts = useMemo(() => {
     if (!renderItems.includes("audio") || !renderAudioItem || !spread.audios)
       return [];
     return spread.audios.map((audio, idx) => {
       const context = buildViewOnlyAudioContext(audio, idx, spread);
-      context.zIndex =
-        (audio as SpreadAudio)["z-index"] ??
-        LAYER_CONFIG.OBJECTS.min + shapesCount + idx;
+      context.zIndex = resolveItemZIndex("audio", idx, spread);
       return { audio, context };
     });
-  }, [spread.audios, spread.id, renderItems, renderAudioItem, shapesCount]);
+  }, [spread, renderItems, renderAudioItem]);
 
-  // Memoize quiz contexts - skip if renderQuizItem not provided
   const quizContexts = useMemo(() => {
     if (!renderItems.includes("quiz") || !renderQuizItem || !spread.quizzes)
       return [];
     return spread.quizzes.map((quiz, idx) => {
       const context = buildViewOnlyQuizContext(quiz, idx, spread);
-      context.zIndex =
-        (quiz as SpreadQuiz)["z-index"] ??
-        LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + idx;
+      context.zIndex = resolveItemZIndex("quiz", idx, spread);
       return { quiz, context };
     });
-  }, [
-    spread.quizzes,
-    spread.id,
-    renderItems,
-    renderQuizItem,
-    shapesCount,
-    audiosCount,
-  ]);
+  }, [spread, renderItems, renderQuizItem]);
 
   // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
   const cursor = isDragging ? "grabbing" : isDragEnabled ? "grab" : "pointer";
