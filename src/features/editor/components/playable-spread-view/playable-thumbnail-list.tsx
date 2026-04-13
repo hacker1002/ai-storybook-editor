@@ -14,6 +14,7 @@ import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
+import { Z_INDEX } from "@/constants/spread-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 
 // === Layout Constants ===
@@ -122,7 +123,8 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             pointerEvents: "none",
           }}
         >
-          {/* Page Backgrounds */}
+          {/* Page Backgrounds — z-index matches canvas convention so items
+              with item["z-index"] stack above pages consistently. */}
           {spread.pages.map((page, pageIndex) => {
             const isDPS = spread.pages.length === 1;
             const positionStyle: React.CSSProperties = isDPS
@@ -143,15 +145,20 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
                     : "none",
                   backgroundRepeat: "repeat",
                   backgroundSize: "256px 256px",
+                  zIndex: Z_INDEX.PAGE_BACKGROUND,
                 }}
               />
             );
           })}
 
-          {/* Page Divider (if 2 pages) */}
-          {spread.pages.length > 1 && (
-            <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300" />
-          )}
+          {/* Page Divider — always visible, khớp với player-canvas */}
+          <div
+            className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300"
+            style={{ zIndex: Z_INDEX.PAGE_BACKGROUND }}
+          />
+
+          {/* Items below forward item["z-index"] to Editable components so
+              thumbnail stacking matches player-canvas.tsx behaviour. */}
 
           {/* Images (using EditableImage component) */}
           {spread.images?.map((image, idx) => (
@@ -159,6 +166,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
               key={image.id || idx}
               image={image}
               index={idx}
+              zIndex={image["z-index"]}
               isSelected={false}
               isEditable={false}
               onSelect={() => {}}
@@ -171,6 +179,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
               key={shape.id || idx}
               shape={shape}
               index={idx}
+              zIndex={shape["z-index"]}
               isSelected={false}
               isEditable={false}
               onSelect={() => {}}
@@ -183,6 +192,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
               key={video.id || idx}
               video={video}
               index={idx}
+              zIndex={video["z-index"]}
               isSelected={false}
               isEditable={false}
               onSelect={() => {}}
@@ -195,6 +205,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
               key={audio.id || idx}
               audio={audio}
               index={idx}
+              zIndex={audio["z-index"]}
               isSelected={false}
               isEditable={false}
               onSelect={() => {}}
@@ -210,7 +221,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
                 key={textbox.id || idx}
                 textboxContent={data}
                 index={idx}
-                zIndex={TEXTBOX_Z_INDEX_BASE + idx}
+                zIndex={textbox["z-index"] ?? TEXTBOX_Z_INDEX_BASE + idx}
                 isSelected={false}
                 isSelectable={false}
                 isEditable={false}

@@ -18,6 +18,7 @@ import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { SelectionOverlay } from "./selection-overlay";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
+import { Z_INDEX } from "@/constants/spread-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
@@ -295,7 +296,7 @@ export function AnimationEditorCanvas({
         {/* Page Divider — always visible */}
         <div
           className="absolute top-0 bottom-0 w-px bg-gray-300"
-          style={{ left: "50%", zIndex: 0 }}
+          style={{ left: "50%", zIndex: Z_INDEX.PAGE_BACKGROUND }}
         />
 
         {/* Page Number Overlay */}

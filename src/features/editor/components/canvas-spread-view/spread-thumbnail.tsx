@@ -2,6 +2,7 @@
 "use client";
 
 import React, {
+  Fragment,
   useMemo,
   useRef,
   useState,
@@ -17,7 +18,7 @@ import {
   buildViewOnlyAudioContext,
   buildViewOnlyQuizContext,
 } from "./utils/context-builders";
-import { THUMBNAIL } from "@/constants/spread-constants";
+import { THUMBNAIL, LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import { useCanvasWidth, useCanvasAspectRatio } from "@/stores/editor-settings-store";
 import type {
   BaseSpread,
@@ -28,6 +29,10 @@ import type {
   VideoItemContext,
   AudioItemContext,
   QuizItemContext,
+  SpreadImage,
+  SpreadVideo,
+  SpreadAudio,
+  SpreadQuiz,
 } from "@/types/canvas-types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
@@ -127,81 +132,130 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
     return `Pages ${spread.pages[0].number}-${spread.pages[1].number}`;
   }, [spread.pages]);
 
-  // Memoize raw image contexts (illustration layer)
+  // Resolve z-index per item mirroring spread-editor-panel logic so thumbnails
+  // respect the same stacking order as the main canvas. Fallbacks follow
+  // LAYER_CONFIG so items without explicit "z-index" still stack predictably.
+  const rawImageCount = spread.raw_images?.length ?? 0;
+  const rawTextboxCount = spread.raw_textboxes?.length ?? 0;
+  const playableImageCount = spread.images?.length ?? 0;
+  const totalImageCount = Math.max(rawImageCount, playableImageCount);
+  const shapesCount = spread.shapes?.length ?? 0;
+  const audiosCount = spread.audios?.length ?? 0;
+
+  // Memoize raw image contexts (illustration layer, below all editable layers)
   const rawImageContexts = useMemo(() => {
     if (!renderItems.includes("raw_image") || !renderRawImage) return [];
-    return (spread.raw_images ?? []).map((img, idx) => ({
-      image: img,
-      context: buildViewOnlyImageContext(img, idx, spread),
-    }));
-  }, [spread.raw_images, spread.id, renderItems, renderRawImage]);
+    return (spread.raw_images ?? []).map((img, idx) => {
+      const context = buildViewOnlyImageContext(img, idx, spread);
+      context.zIndex = -rawImageCount + idx;
+      return { image: img, context };
+    });
+  }, [spread.raw_images, spread.id, renderItems, renderRawImage, rawImageCount]);
 
   // Memoize image contexts (playable layer)
   const imageContexts = useMemo(() => {
     if (!renderItems.includes("image") || !renderImageItem) return [];
-    return (spread.images ?? []).map((img, idx) => ({
-      image: img,
-      context: buildViewOnlyImageContext(img, idx, spread),
-    }));
+    return (spread.images ?? []).map((img, idx) => {
+      const context = buildViewOnlyImageContext(img, idx, spread);
+      context.zIndex =
+        (img as SpreadImage)["z-index"] ?? LAYER_CONFIG.MEDIA.min + idx;
+      return { image: img, context };
+    });
   }, [spread.images, spread.id, renderItems, renderImageItem]);
 
-  // Memoize raw textbox contexts (illustration layer)
+  // Memoize raw textbox contexts (illustration layer, above raw images, below editable)
   const rawTextboxContexts = useMemo(() => {
     if (!renderItems.includes("raw_textbox") || !renderRawTextbox) return [];
-    return (spread.raw_textboxes ?? []).map((textbox, idx) => ({
-      textbox,
-      context: buildViewOnlyTextContext(textbox, idx, spread),
-    }));
-  }, [spread.raw_textboxes, spread.id, renderItems, renderRawTextbox]);
+    return (spread.raw_textboxes ?? []).map((textbox, idx) => {
+      const context = buildViewOnlyTextContext(textbox, idx, spread);
+      context.zIndex = -rawImageCount + rawTextboxCount + idx;
+      return { textbox, context };
+    });
+  }, [
+    spread.raw_textboxes,
+    spread.id,
+    renderItems,
+    renderRawTextbox,
+    rawImageCount,
+    rawTextboxCount,
+  ]);
 
   // Memoize text contexts (playable layer)
   const textContexts = useMemo(() => {
     if (!renderItems.includes("textbox") || !renderTextItem) return [];
-    return (spread.textboxes ?? []).map((textbox, idx) => ({
-      textbox,
-      context: buildViewOnlyTextContext(textbox, idx, spread),
-    }));
+    return (spread.textboxes ?? []).map((textbox, idx) => {
+      const context = buildViewOnlyTextContext(textbox, idx, spread);
+      context.zIndex =
+        (textbox as { "z-index"?: number })["z-index"] ??
+        LAYER_CONFIG.TEXT.min + idx;
+      return { textbox, context };
+    });
   }, [spread.textboxes, spread.id, renderItems, renderTextItem]);
 
   // Memoize shape contexts - shapes are playable-only (no raw shapes)
   const shapeContexts = useMemo(() => {
     if (!renderItems.includes("shape") || !renderShapeItem || !spread.shapes)
       return [];
-    return spread.shapes.map((shape, idx) => ({
-      shape,
-      context: buildViewOnlyShapeContext(shape, idx, spread),
-    }));
+    return spread.shapes.map((shape, idx) => {
+      const context = buildViewOnlyShapeContext(shape, idx, spread);
+      context.zIndex =
+        (shape as { "z-index"?: number })["z-index"] ??
+        LAYER_CONFIG.OBJECTS.min + idx;
+      return { shape, context };
+    });
   }, [spread.shapes, spread.id, renderItems, renderShapeItem]);
 
   // Memoize video contexts - skip if renderVideoItem not provided
   const videoContexts = useMemo(() => {
     if (!renderItems.includes("video") || !renderVideoItem || !spread.videos)
       return [];
-    return spread.videos.map((video, idx) => ({
-      video,
-      context: buildViewOnlyVideoContext(video, idx, spread),
-    }));
-  }, [spread.videos, spread.id, renderItems, renderVideoItem]);
+    return spread.videos.map((video, idx) => {
+      const context = buildViewOnlyVideoContext(video, idx, spread);
+      context.zIndex =
+        (video as SpreadVideo)["z-index"] ??
+        LAYER_CONFIG.MEDIA.min + totalImageCount + idx;
+      return { video, context };
+    });
+  }, [
+    spread.videos,
+    spread.id,
+    renderItems,
+    renderVideoItem,
+    totalImageCount,
+  ]);
 
   // Memoize audio contexts - skip if renderAudioItem not provided
   const audioContexts = useMemo(() => {
     if (!renderItems.includes("audio") || !renderAudioItem || !spread.audios)
       return [];
-    return spread.audios.map((audio, idx) => ({
-      audio,
-      context: buildViewOnlyAudioContext(audio, idx, spread),
-    }));
-  }, [spread.audios, spread.id, renderItems, renderAudioItem]);
+    return spread.audios.map((audio, idx) => {
+      const context = buildViewOnlyAudioContext(audio, idx, spread);
+      context.zIndex =
+        (audio as SpreadAudio)["z-index"] ??
+        LAYER_CONFIG.OBJECTS.min + shapesCount + idx;
+      return { audio, context };
+    });
+  }, [spread.audios, spread.id, renderItems, renderAudioItem, shapesCount]);
 
   // Memoize quiz contexts - skip if renderQuizItem not provided
   const quizContexts = useMemo(() => {
     if (!renderItems.includes("quiz") || !renderQuizItem || !spread.quizzes)
       return [];
-    return spread.quizzes.map((quiz, idx) => ({
-      quiz,
-      context: buildViewOnlyQuizContext(quiz, idx, spread),
-    }));
-  }, [spread.quizzes, spread.id, renderItems, renderQuizItem]);
+    return spread.quizzes.map((quiz, idx) => {
+      const context = buildViewOnlyQuizContext(quiz, idx, spread);
+      context.zIndex =
+        (quiz as SpreadQuiz)["z-index"] ??
+        LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + idx;
+      return { quiz, context };
+    });
+  }, [
+    spread.quizzes,
+    spread.id,
+    renderItems,
+    renderQuizItem,
+    shapesCount,
+    audiosCount,
+  ]);
 
   // Cursor style: grabbing while dragging, grab when can drag, pointer otherwise
   const cursor = isDragging ? "grabbing" : isDragEnabled ? "grab" : "pointer";
@@ -293,78 +347,86 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
                     : "none",
                   backgroundRepeat: "repeat",
                   backgroundSize: "256px 256px",
+                  zIndex: Z_INDEX.PAGE_BACKGROUND,
                 }}
               />
             );
           })}
 
-          {/* Page Divider */}
-          {spread.pages.length > 1 && (
-            <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300" />
-          )}
+          {/* Page Divider — always visible, khớp với spread-editor-panel */}
+          <div
+            className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-300"
+            style={{ zIndex: Z_INDEX.PAGE_BACKGROUND }}
+          />
+
+          {/* NOTE: Items render via Fragment (not wrapper div) so each item's
+              resolved z-index stacks within the scaled-content stacking
+              context. A wrapper div is not positioned and would force items
+              into DOM-order flow on browsers that collapse z-index across
+              sibling subtrees. */}
 
           {/* Raw Images (illustration layer, view-only) */}
           {renderRawImage &&
             rawImageContexts.map(({ image, context }, index) => (
-              <div key={image.id || `raw-img-${index}`} style={{ pointerEvents: "none" }}>
+              <Fragment key={image.id || `raw-img-${index}`}>
                 {renderRawImage(context)}
-              </div>
+              </Fragment>
             ))}
 
           {/* Images (playable layer, view-only) */}
           {renderImageItem &&
             imageContexts.map(({ image, context }, index) => (
-              <div key={image.id || index} style={{ pointerEvents: "none" }}>
+              <Fragment key={image.id || `img-${index}`}>
                 {renderImageItem(context)}
-              </div>
+              </Fragment>
             ))}
 
-          {/* Videos (view-only, pointer-events: none) - skip if renderVideoItem not provided */}
+          {/* Videos (view-only) - skip if renderVideoItem not provided */}
           {renderVideoItem &&
             videoContexts.map(({ video, context }, index) => (
-              <div key={video.id || index} style={{ pointerEvents: "none" }}>
+              <Fragment key={video.id || `vid-${index}`}>
                 {renderVideoItem(context)}
-              </div>
+              </Fragment>
             ))}
 
-          {/* Shapes (view-only, pointer-events: none) - skip if renderShapeItem not provided */}
+          {/* Shapes (view-only) - skip if renderShapeItem not provided */}
           {renderShapeItem &&
             shapeContexts.map(({ shape, context }, index) => (
-              <div key={shape.id || index} style={{ pointerEvents: "none" }}>
+              <Fragment key={shape.id || `shp-${index}`}>
                 {renderShapeItem(context)}
-              </div>
+              </Fragment>
             ))}
 
           {/* Raw Textboxes (illustration layer, view-only) */}
           {renderRawTextbox &&
             rawTextboxContexts.map(({ textbox, context }, index) => (
-              <div key={textbox.id || `raw-txt-${index}`} style={{ pointerEvents: "none" }}>
+              <Fragment key={textbox.id || `raw-txt-${index}`}>
                 {renderRawTextbox(context)}
-              </div>
+              </Fragment>
             ))}
 
           {/* Textboxes (playable layer, view-only) */}
           {renderTextItem &&
             textContexts.map(({ textbox, context }, index) => (
-              <div key={textbox.id || index} style={{ pointerEvents: "none" }}>
+              <Fragment key={textbox.id || `txt-${index}`}>
                 {renderTextItem(context)}
-              </div>
+              </Fragment>
             ))}
 
-          {/* Audios (view-only, pointer-events: none) - skip if renderAudioItem not provided */}
+          {/* Audios (view-only) - skip if renderAudioItem not provided */}
           {renderAudioItem &&
             audioContexts.map(({ audio, context }, index) => (
-              <div key={audio.id || index} style={{ pointerEvents: "none" }}>
+              <Fragment key={audio.id || `aud-${index}`}>
                 {renderAudioItem(context)}
-              </div>
+              </Fragment>
             ))}
 
-          {/* Quizzes (view-only, pointer-events: none) - skip if renderQuizItem not provided */}
+          {/* Quizzes (view-only) - skip if renderQuizItem not provided */}
           {renderQuizItem &&
             quizContexts.map(({ quiz, context }, index) => (
-              <div key={quiz.id || index} style={{ pointerEvents: "none" }}>
+              <Fragment key={quiz.id || `quiz-${index}`}>
                 {renderQuizItem(context)}
-              </div>
+              </Fragment>
             ))}
         </div>
 

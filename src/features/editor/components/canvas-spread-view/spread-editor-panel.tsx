@@ -18,7 +18,7 @@ import {
   buildQuizContext,
 } from "./utils/context-builders";
 import { getScaledDimensions } from "./utils/coordinate-utils";
-import { LAYER_CONFIG } from "@/constants/spread-constants";
+import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import {
   useCanvasWidth,
   useCanvasHeight,
@@ -500,7 +500,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           style={{
             left: "50%",
             background: "rgba(0, 0, 0, 0.12)",
-            zIndex: -999,
+            zIndex: Z_INDEX.PAGE_BACKGROUND,
           }}
         />
 

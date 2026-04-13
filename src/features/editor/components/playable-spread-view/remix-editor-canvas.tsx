@@ -23,6 +23,7 @@ import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
 import { TEXTBOX_Z_INDEX_BASE } from "@/constants/playable-constants";
+import { Z_INDEX } from "@/constants/spread-constants";
 import type {
   PlayableSpread,
   RemixAsset,
@@ -304,7 +305,7 @@ export function RemixEditorCanvas({
         {/* Page Divider — always visible */}
         <div
           className="absolute top-0 bottom-0 w-px bg-gray-300"
-          style={{ left: "50%", zIndex: 0 }}
+          style={{ left: "50%", zIndex: Z_INDEX.PAGE_BACKGROUND }}
         />
 
         {/* Page Number Overlay */}
