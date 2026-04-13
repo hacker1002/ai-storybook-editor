@@ -71,6 +71,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
     if (!spread.textboxes) return [];
     return spread.textboxes
       .map((textbox) => {
+        if (textbox.player_visible === false) return null;
         const result = getTextboxContentForLanguage(textbox, narrationLangCode);
         if (!result?.content?.geometry) return null;
         return { textbox, langKey: result.langKey, data: result.content };
@@ -160,56 +161,68 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
               thumbnail stacking matches player-canvas.tsx behaviour. */}
 
           {/* Images (using EditableImage component) */}
-          {spread.images?.map((image, idx) => (
-            <EditableImage
-              key={image.id || idx}
-              image={image}
-              index={idx}
-              zIndex={image["z-index"]}
-              isSelected={false}
-              isEditable={false}
-              onSelect={() => {}}
-            />
-          ))}
+          {spread.images?.map((image, idx) => {
+            if (image.player_visible === false) return null;
+            return (
+              <EditableImage
+                key={image.id || idx}
+                image={image}
+                index={idx}
+                zIndex={image["z-index"]}
+                isSelected={false}
+                isEditable={false}
+                onSelect={() => {}}
+              />
+            );
+          })}
 
           {/* Shapes (thumbnail) */}
-          {spread.shapes?.map((shape, idx) => (
-            <EditableShape
-              key={shape.id || idx}
-              shape={shape}
-              index={idx}
-              zIndex={shape["z-index"]}
-              isSelected={false}
-              isEditable={false}
-              onSelect={() => {}}
-            />
-          ))}
+          {spread.shapes?.map((shape, idx) => {
+            if (shape.player_visible === false) return null;
+            return (
+              <EditableShape
+                key={shape.id || idx}
+                shape={shape}
+                index={idx}
+                zIndex={shape["z-index"]}
+                isSelected={false}
+                isEditable={false}
+                onSelect={() => {}}
+              />
+            );
+          })}
 
           {/* Videos (thumbnail - static) */}
-          {spread.videos?.map((video, idx) => (
-            <EditableVideo
-              key={video.id || idx}
-              video={video}
-              index={idx}
-              zIndex={video["z-index"]}
-              isSelected={false}
-              isEditable={false}
-              onSelect={() => {}}
-            />
-          ))}
+          {spread.videos?.map((video, idx) => {
+            if (video.player_visible === false) return null;
+            return (
+              <EditableVideo
+                key={video.id || idx}
+                video={video}
+                index={idx}
+                zIndex={video["z-index"]}
+                isSelected={false}
+                isEditable={false}
+                onSelect={() => {}}
+              />
+            );
+          })}
 
           {/* Audios (thumbnail - icon only) */}
-          {spread.audios?.map((audio, idx) => (
-            <EditableAudio
-              key={audio.id || idx}
-              audio={audio}
-              index={idx}
-              zIndex={audio["z-index"]}
-              isSelected={false}
-              isEditable={false}
-              onSelect={() => {}}
-            />
-          ))}
+          {spread.audios?.map((audio, idx) => {
+            if (audio.player_visible === false) return null;
+            return (
+              <EditableAudio
+                key={audio.id || idx}
+                audio={audio}
+                index={idx}
+                zIndex={audio["z-index"]}
+                isSelected={false}
+                isEditable={false}
+                onSelect={() => {}}
+              />
+            );
+          })}
 
           {/* Textboxes (using EditableTextbox component) */}
           {textboxesWithLang.map((item, idx) => {

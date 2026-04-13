@@ -442,6 +442,7 @@ export function PlayerCanvas({
     if (!spread.textboxes) return [];
     return spread.textboxes
       .map((textbox) => {
+        if (textbox.player_visible === false) return null;
         const result = getTextboxContentForLanguage(textbox, narrationLangCode);
         if (!result?.content?.geometry) return null;
         // Skip empty textboxes in player (no "Click to add text" placeholder)
