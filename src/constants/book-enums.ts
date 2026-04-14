@@ -15,6 +15,18 @@ export const DIMENSION_MAP = {
   5: 'Portrait A4 (210×297mm)',
   6: 'Square 8.25×8.25 (210×210mm)',
   7: 'Square 8×8 (203×203mm)',
+  8: 'Square 10×10 (254×254mm)',
+  9: 'Landscape 11×8.5 (279×216mm)',
+  10: 'Landscape 9×7 (229×178mm)',
+  11: 'Portrait 5×8 (127×203mm)',
+  12: 'Portrait 5.25×8 (133×203mm)',
+  13: 'Portrait 5.5×8.5 (140×216mm)',
+  14: 'Portrait 6.14×9.21 (156×234mm)',
+  15: 'Portrait 6.69×9.61 (170×244mm)',
+  16: 'Portrait 7×10 (178×254mm)',
+  17: 'Portrait 7.44×9.69 (189×246mm)',
+  18: 'Portrait 7.5×9.25 (191×235mm)',
+  19: 'Landscape 8.25×6 (210×152mm)',
 } as const;
 
 export const TARGET_AUDIENCE_MAP = {
