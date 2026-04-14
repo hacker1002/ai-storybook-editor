@@ -1,8 +1,9 @@
 // branch-main-view.tsx - Main grid view for BranchCreativeSpace
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { createLogger } from '@/utils/logger';
+import { useSpaceViewState } from '../../hooks/use-space-view-state';
 import { SpreadViewHeader } from '../canvas-spread-view/spread-view-header';
 import { BranchGridBody } from './branch-grid-body';
 import { buildGridLayout, computeAdjacentFreeSpreadIds } from './branch-utils';
@@ -50,7 +51,8 @@ export function BranchMainView({
   const spreads = useIllustrationSpreads();
   const sections = useSections();
 
-  const [columnsPerRow, setColumnsPerRow] = useState(4);
+  const { columnsPerRow = 4, patch } = useSpaceViewState('branch');
+  const setColumnsPerRow = useCallback((cols: number) => patch({ columnsPerRow: cols }), [patch]);
   const [confirmDeleteSectionId, setConfirmDeleteSectionId] = useState<string | null>(null);
 
   const gridItems = useMemo(
