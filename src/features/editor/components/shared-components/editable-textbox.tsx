@@ -237,7 +237,7 @@ export function EditableTextbox({
           suppressContentEditableWarning
           onBlur={handleBlur}
           onPaste={handlePaste}
-          className="w-full h-full outline-none p-1"
+          className="w-full h-full outline-none p-1 break-words"
           style={{ backgroundColor: COLORS.EDIT_MODE_BG }}
         />
       ) : isEmpty ? (
@@ -248,7 +248,7 @@ export function EditableTextbox({
           Click to add text
         </div>
       ) : (
-        <div className="w-full h-full p-1 whitespace-pre-wrap">
+        <div className="w-full h-full p-1 whitespace-pre-wrap break-words">
           {wordTimings && wordTimings.length > 0
             ? renderTextWithWordSpans(text)
             : text}

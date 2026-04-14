@@ -579,7 +579,7 @@ export function ObjectsSidebar({
             title: "New Text",
             [editorLangCode]: {
               text: "",
-              geometry: { x: 10, y: 10, w: 30, h: 15 },
+              geometry: { x: 10, y: 10, w: 25, h: 5 },
               typography: typo,
             },
             editor_visible: true,

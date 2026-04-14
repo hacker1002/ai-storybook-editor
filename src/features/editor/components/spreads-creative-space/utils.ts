@@ -103,7 +103,7 @@ export function createDefaultTextbox(
     id: crypto.randomUUID(),
     [langCode]: {
       text: "",
-      geometry: { x: 20, y: 20, w: 60, h: 15 },
+      geometry: { x: 20, y: 20, w: 25, h: 5 },
       typography: typo,
     },
   };
