@@ -12,6 +12,7 @@ import {
 import {
   cloneItemWithNewId,
   computeDuplicateZShift,
+  shiftTextboxLanguageGeometries,
 } from '@/features/editor/utils/duplicate-item-helpers';
 import {
   useSnapshotActions,
@@ -358,6 +359,7 @@ export function SpreadsMainView({
         const source = spread.raw_textboxes?.find((t) => t.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
         const cloned = cloneItemWithNewId(source);
+        shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
         actions.addRawTextbox(selectedSpreadId, cloned, { insertAfterId: itemId });
         log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id });
         onItemSelect({ type: 'raw_textbox', id: cloned.id });

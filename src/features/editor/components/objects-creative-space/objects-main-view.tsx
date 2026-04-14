@@ -44,6 +44,7 @@ import { createLogger } from "@/utils/logger";
 import {
   cloneItemWithNewId,
   computeDuplicateZShift,
+  shiftTextboxLanguageGeometries,
 } from "@/features/editor/utils/duplicate-item-helpers";
 import { useInteractionLayerContext } from "@/features/editor/contexts/interaction-layer-provider";
 import { useGlobalHotkey } from "@/features/editor/contexts/use-global-hotkey";
@@ -607,6 +608,7 @@ export function ObjectsMainView({
         const origZ = source['z-index'] ?? 0;
         applyTextShifts(origZ, itemId);
         const cloned = cloneItemWithNewId(source);
+        shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
         cloned['z-index'] = origZ + 1;
         actions.addRetouchTextbox(selectedSpreadId, cloned, { insertAfterId: itemId });
         log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
@@ -1078,6 +1080,31 @@ export function ObjectsMainView({
     [selectedSpreadId, handleSplitTextbox]
   );
 
+  const handleCloneRawTextbox = useCallback(
+    (rawTextbox: SpreadTextbox) => {
+      const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
+      const maxZ = spread?.textboxes?.reduce(
+        (max, tb) => Math.max(max, tb["z-index"] ?? 0),
+        0
+      ) ?? 0;
+
+      const cloned: SpreadTextbox = structuredClone(rawTextbox);
+      cloned.id = crypto.randomUUID();
+      shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
+      cloned.player_visible = true;
+      cloned.editor_visible = true;
+      cloned["z-index"] = maxZ + 1;
+
+      actions.addRetouchTextbox(selectedSpreadId, cloned);
+      log.info("handleCloneRawTextbox", "cloned raw textbox to retouch textbox", {
+        rawTextboxId: rawTextbox.id,
+        newTextboxId: cloned.id,
+        spreadId: selectedSpreadId,
+      });
+    },
+    [selectedSpreadId, retouchSpreads, actions]
+  );
+
   const renderRawTextboxToolbar = useCallback(
     (context: TextToolbarContext<BaseSpread>) => (
       <ObjectsRawTextboxToolbar
@@ -1085,10 +1112,11 @@ export function ObjectsMainView({
           ...context,
           onSplitTextbox: () =>
             handleSplitRawTextbox(selectedSpreadId, context.item),
+          onClone: () => handleCloneRawTextbox(context.item),
         }}
       />
     ),
-    [selectedSpreadId, handleSplitRawTextbox]
+    [selectedSpreadId, handleSplitRawTextbox, handleCloneRawTextbox]
   );
 
   // === Shape toolbar render prop ===

@@ -4,7 +4,7 @@
 import { useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Scissors } from "lucide-react";
+import { Scissors, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
   useToolbarPosition,
@@ -29,7 +29,8 @@ export function ObjectsRawTextboxToolbar<TSpread extends BaseSpread>({
   context,
 }: ObjectsRawTextboxToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const { item, onSplitTextbox, selectedGeometry, canvasRef } = context;
+  const { item, onSplitTextbox, onClone, selectedGeometry, canvasRef } =
+    context;
 
   const position = useToolbarPosition({
     geometry: selectedGeometry,
@@ -52,6 +53,17 @@ export function ObjectsRawTextboxToolbar<TSpread extends BaseSpread>({
       toast.info("Split not available");
     }
   }, [onSplitTextbox, item.id]);
+
+  const handleClone = useCallback(() => {
+    if (onClone) {
+      log.info("handleClone", "cloning raw textbox as new textbox item", {
+        itemId: item.id,
+      });
+      onClone();
+    } else {
+      toast.info("Clone feature not available");
+    }
+  }, [onClone, item.id]);
 
   const toolbarStyle: React.CSSProperties = position
     ? {
@@ -80,6 +92,11 @@ export function ObjectsRawTextboxToolbar<TSpread extends BaseSpread>({
             icon={Scissors}
             label="Split textbox"
             onClick={handleSplit}
+          />
+          <ToolbarIconButton
+            icon={Copy}
+            label="Clone"
+            onClick={handleClone}
           />
         </div>
       </div>

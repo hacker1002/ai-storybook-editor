@@ -66,6 +66,32 @@ export function cloneItemWithNewId<T extends { id: string; geometry?: Geometry }
 }
 
 /**
+ * Apply +2% offset to all language-content geometries inside a textbox.
+ * SpreadTextbox stores geometry nested per-language (e.g. textbox.vi.geometry),
+ * so the generic cloneItemWithNewId top-level shift doesn't apply.
+ *
+ * Mutates the textbox in place. Each language entry is shifted independently,
+ * with clamping per its own width/height.
+ */
+export function shiftTextboxLanguageGeometries(
+  textbox: Record<string, unknown>
+): void {
+  for (const key of Object.keys(textbox)) {
+    const value = textbox[key];
+    if (
+      value &&
+      typeof value === "object" &&
+      "geometry" in value &&
+      (value as { geometry?: unknown }).geometry &&
+      typeof (value as { geometry: unknown }).geometry === "object"
+    ) {
+      const content = value as { geometry: Geometry };
+      content.geometry = duplicateGeometry(content.geometry);
+    }
+  }
+}
+
+/**
  * Compute z-index cascade for a duplicate operation (insertCount = 1).
  *
  * The clone takes `sourceZ + 1`. Any existing items in the same tier with
