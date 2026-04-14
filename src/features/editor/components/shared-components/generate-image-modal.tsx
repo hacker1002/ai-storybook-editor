@@ -102,6 +102,19 @@ export function GenerateImageModal({
     },
     onClickOutside: () => handleOpenChange(false),
     captureClickOutside: true,
+    // Include Radix portals so clicks inside them are not outside-clicks on modal.
+    portalSelectors: [
+      '[data-radix-popper-content-wrapper]',
+      '[data-radix-select-content]',
+      '[role="listbox"]',
+    ],
+    // Snapshot open dropdowns/popovers at pointerdown time so that clicking
+    // outside to dismiss them doesn't also close the modal.
+    dropdownSelectors: [
+      '[data-radix-select-content]',
+      '[data-radix-popover-content]',
+      '[data-radix-popper-content-wrapper]',
+    ],
   } : null);
 
   // Store hooks
