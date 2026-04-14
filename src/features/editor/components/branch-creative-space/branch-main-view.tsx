@@ -100,6 +100,7 @@ export function BranchMainView({
         onZoomChange={() => {}}
         onColumnsChange={setColumnsPerRow}
         enableKeyboardShortcuts={false}
+        showViewToggle={false}
       />
 
       <div className="flex-1 overflow-y-auto p-4">
