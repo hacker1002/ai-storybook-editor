@@ -9,6 +9,7 @@ import {
   useContext,
   useRef,
   useEffect,
+  useCallback,
   type ReactNode,
 } from "react";
 import { createLogger } from "@/utils/logger";
@@ -36,6 +37,12 @@ export interface LayerStatus {
   isInStack: boolean; // Does this slot hold any layer?
 }
 
+export interface GlobalHotkeyEntry {
+  id: string;
+  match: (event: KeyboardEvent) => boolean;
+  handler: (event: KeyboardEvent) => void;
+}
+
 type Subscriber = (status: LayerStatus) => void;
 
 interface InteractionStack {
@@ -50,6 +57,7 @@ interface InteractionLayerContextValue {
   pushSlot: (slot: LayerSlot, layer: Layer) => void;
   popSlot: (slot: LayerSlot, reason: string) => void;
   replaceSlot: (slot: LayerSlot, layer: Layer) => void;
+  registerGlobalHotkey: (entry: GlobalHotkeyEntry) => () => void;
 }
 
 // ── Context ────────────────────────────────────────────────────────────────────
@@ -139,6 +147,18 @@ export function InteractionLayerProvider({
     modal: null,
   });
   const subscribersRef = useRef<Map<string, Set<Subscriber>>>(new Map());
+  const globalHotkeysRef = useRef<GlobalHotkeyEntry[]>([]);
+
+  const registerGlobalHotkey = useCallback((entry: GlobalHotkeyEntry) => {
+    globalHotkeysRef.current.push(entry);
+    log.debug('registerGlobalHotkey', 'register', { id: entry.id });
+    return () => {
+      globalHotkeysRef.current = globalHotkeysRef.current.filter(
+        (e) => e.id !== entry.id
+      );
+      log.debug('registerGlobalHotkey', 'unregister', { id: entry.id });
+    };
+  }, []);
 
   // Notify subscribers for a slot when its state changes
   const notifySlot = (slot: LayerSlot) => {
@@ -239,6 +259,20 @@ export function InteractionLayerProvider({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Global hotkey loop: runs before slot-scoped routing.
+      // preventDefault fires before editable-element guard so combos like Ctrl+D
+      // are always captured (prevents browser bookmark dialog, etc.).
+      for (const entry of globalHotkeysRef.current) {
+        if (entry.match(e)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!isEditableElement(document.activeElement)) {
+            entry.handler(e);
+          }
+          return;
+        }
+      }
+
       // Escape is a universal dismiss key — it must bypass the editable-element
       // guard so modals can always close even when focus is in an input/textarea.
       // Other hotkeys (Delete, Arrow, Backspace) remain blocked to not interfere
@@ -335,7 +369,7 @@ export function InteractionLayerProvider({
 
   return (
     <InteractionLayerContext.Provider
-      value={{ stackRef, subscribersRef, pushSlot, popSlot, replaceSlot }}
+      value={{ stackRef, subscribersRef, pushSlot, popSlot, replaceSlot, registerGlobalHotkey }}
     >
       {children}
     </InteractionLayerContext.Provider>

@@ -213,6 +213,10 @@ export interface DummiesSlice {
   updateDummySpreads: (dummyId: string, spreads: DummySpread[]) => void;
 }
 
+export interface AddItemOptions {
+  insertAfterId?: string;
+}
+
 export interface IllustrationSlice {
   illustration: IllustrationData;
 
@@ -225,12 +229,12 @@ export interface IllustrationSlice {
   reorderIllustrationSpreads: (fromIndex: number, toIndex: number) => void;
 
   // Raw Images (illustration phase, player_visible always false)
-  addRawImage: (spreadId: string, image: SpreadImage) => void;
+  addRawImage: (spreadId: string, image: SpreadImage, options?: AddItemOptions) => void;
   updateRawImage: (spreadId: string, imageId: string, updates: Partial<SpreadImage>) => void;
   deleteRawImage: (spreadId: string, imageId: string) => void;
 
   // Raw Textboxes (illustration phase, player_visible always false)
-  addRawTextbox: (spreadId: string, textbox: SpreadTextbox) => void;
+  addRawTextbox: (spreadId: string, textbox: SpreadTextbox, options?: AddItemOptions) => void;
   updateRawTextbox: (spreadId: string, textboxId: string, updates: Partial<SpreadTextbox>) => void;
   deleteRawTextbox: (spreadId: string, textboxId: string) => void;
 
@@ -264,23 +268,23 @@ export interface IllustrationSlice {
 
 // RetouchSlice — no own state, operates on playable layers in state.illustration.spreads[]
 export interface RetouchSlice {
-  addRetouchImage: (spreadId: string, image: SpreadImage) => void;
+  addRetouchImage: (spreadId: string, image: SpreadImage, options?: AddItemOptions) => void;
   updateRetouchImage: (spreadId: string, imageId: string, updates: Partial<SpreadImage>) => void;
   deleteRetouchImage: (spreadId: string, imageId: string) => void;
 
-  addRetouchTextbox: (spreadId: string, textbox: SpreadTextbox) => void;
+  addRetouchTextbox: (spreadId: string, textbox: SpreadTextbox, options?: AddItemOptions) => void;
   updateRetouchTextbox: (spreadId: string, textboxId: string, updates: Partial<SpreadTextbox>) => void;
   deleteRetouchTextbox: (spreadId: string, textboxId: string) => void;
 
-  addRetouchShape: (spreadId: string, shape: SpreadShape) => void;
+  addRetouchShape: (spreadId: string, shape: SpreadShape, options?: AddItemOptions) => void;
   updateRetouchShape: (spreadId: string, shapeId: string, updates: Partial<SpreadShape>) => void;
   deleteRetouchShape: (spreadId: string, shapeId: string) => void;
 
-  addRetouchVideo: (spreadId: string, video: SpreadVideo) => void;
+  addRetouchVideo: (spreadId: string, video: SpreadVideo, options?: AddItemOptions) => void;
   updateRetouchVideo: (spreadId: string, videoId: string, updates: Partial<SpreadVideo>) => void;
   deleteRetouchVideo: (spreadId: string, videoId: string) => void;
 
-  addRetouchAudio: (spreadId: string, audio: SpreadAudio) => void;
+  addRetouchAudio: (spreadId: string, audio: SpreadAudio, options?: AddItemOptions) => void;
   updateRetouchAudio: (spreadId: string, audioId: string, updates: Partial<SpreadAudio>) => void;
   deleteRetouchAudio: (spreadId: string, audioId: string) => void;
 

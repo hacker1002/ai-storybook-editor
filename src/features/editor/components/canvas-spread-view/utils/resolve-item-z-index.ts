@@ -18,7 +18,8 @@ import type {
 export function resolveItemZIndex(
   type: ItemType,
   index: number,
-  spread: BaseSpread
+  spread: BaseSpread,
+  isIllustrationRawItem?: boolean
 ): number {
   const rawImageCount = spread.raw_images?.length ?? 0;
   const rawTextboxCount = spread.raw_textboxes?.length ?? 0;
@@ -31,10 +32,14 @@ export function resolveItemZIndex(
     // Illustration layer — always below editable layers.
     // Raw items ignore any stored z-index and stack by array order.
     case "raw_image":
-      return -rawImageCount + index;
+      return isIllustrationRawItem
+        ? LAYER_CONFIG.MEDIA.min + index
+        : -rawImageCount + index;
 
     case "raw_textbox":
-      return -rawImageCount + rawTextboxCount + index;
+      return isIllustrationRawItem
+        ? LAYER_CONFIG.TEXT.min + index
+        : -rawImageCount + rawTextboxCount + index;
 
     case "image": {
       const img = spread.images?.[index] as SpreadImage | undefined;
@@ -44,8 +49,7 @@ export function resolveItemZIndex(
     case "video": {
       const video = spread.videos?.[index] as SpreadVideo | undefined;
       return (
-        video?.["z-index"] ??
-        LAYER_CONFIG.MEDIA.min + totalImageCount + index
+        video?.["z-index"] ?? LAYER_CONFIG.MEDIA.min + totalImageCount + index
       );
     }
 
@@ -59,8 +63,7 @@ export function resolveItemZIndex(
     case "audio": {
       const audio = spread.audios?.[index] as SpreadAudio | undefined;
       return (
-        audio?.["z-index"] ??
-        LAYER_CONFIG.OBJECTS.min + shapesCount + index
+        audio?.["z-index"] ?? LAYER_CONFIG.OBJECTS.min + shapesCount + index
       );
     }
 

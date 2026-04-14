@@ -14,7 +14,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Sparkles, Upload, Trash2 } from "lucide-react";
+import { Sparkles, Upload, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import {
@@ -134,6 +134,7 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
     onUpdate,
     onDelete,
     onGenerateImage,
+    onClone,
     selectedGeometry,
     canvasRef,
   } = context;
@@ -330,6 +331,13 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
               onClick={handleUploadClick}
               disabled={isUploading}
             />
+            {onClone && (
+              <ToolbarIconButton
+                icon={Copy}
+                label="Clone image"
+                onClick={onClone}
+              />
+            )}
           </div>
           <ToolbarIconButton
             icon={Trash2}

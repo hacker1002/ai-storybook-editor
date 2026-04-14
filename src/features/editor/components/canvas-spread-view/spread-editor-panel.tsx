@@ -442,21 +442,15 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // with a higher z-index than the selected element stay clickable. Items
   // below the selected one become unreachable — intentional, matches the
   // "active item is front-most" mental model.
-  const calcSelectedZIndex = useMemo(() => {
-    if (!state.selectedElement || state.selectedElement.type == "page")
-      return 0;
-    if (!isRawElement || preventEditRawItem) {
-      return resolveItemZIndex(
-        state.selectedElement.type,
-        state.selectedElement.index,
-        spread
-      );
-    } else {
-      const type =
-        state.selectedElement.type == "raw_image" ? "image" : "textbox";
-      return resolveItemZIndex(type, state.selectedElement.index, spread);
-    }
-  }, [state.selectedElement, spread]);
+  const calcSelectedZIndex =
+    state.selectedElement && state.selectedElement.type !== "page"
+      ? resolveItemZIndex(
+          state.selectedElement.type,
+          state.selectedElement.index,
+          spread,
+          isRawElement && !preventEditRawItem
+        )
+      : 0;
 
   return (
     <div
@@ -546,9 +540,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               "raw_image"
             );
             // if can edit raw item (illustration step) => treat as image item
-            context.zIndex = preventEditRawItem
-              ? resolveItemZIndex("raw_image", index, spread)
-              : resolveItemZIndex("image", index, spread);
+            context.zIndex = resolveItemZIndex(
+              "raw_image",
+              index,
+              spread,
+              !preventEditRawItem
+            );
             return (
               <Fragment key={image.id ?? `raw-img-${index}`}>
                 {renderRawImage(context)}
@@ -633,9 +630,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               "raw_textbox"
             );
             // if can edit raw item (illustration step) => treat as textbox item
-            context.zIndex = preventEditRawItem
-              ? resolveItemZIndex("raw_textbox", index, spread)
-              : resolveItemZIndex("textbox", index, spread);
+            context.zIndex = resolveItemZIndex(
+              "raw_textbox",
+              index,
+              spread,
+              !preventEditRawItem
+            );
             return (
               <Fragment key={textbox.id ?? `raw-txt-${index}`}>
                 {renderRawTextbox(context)}

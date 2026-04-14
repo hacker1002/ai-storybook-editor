@@ -8,8 +8,11 @@ import {
   EditableTextbox,
   EditableShape,
   GenerateImageModal,
-  clampGeometry,
 } from '@/features/editor/components/shared-components';
+import {
+  cloneItemWithNewId,
+  computeDuplicateZShift,
+} from '@/features/editor/utils/duplicate-item-helpers';
 import {
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
@@ -24,6 +27,8 @@ import {
   mergeItems,
 } from '@/utils/template-layout-utils';
 import { createLogger } from '@/utils/logger';
+import { useInteractionLayerContext } from '@/features/editor/contexts/interaction-layer-provider';
+import { useGlobalHotkey } from '@/features/editor/contexts/use-global-hotkey';
 import { SpreadsImageToolbar } from './spreads-image-toolbar';
 import { SpreadsTextToolbar } from './spreads-text-toolbar';
 import { SpreadsShapeToolbar } from './spreads-shape-toolbar';
@@ -50,6 +55,11 @@ import type {
 
 const EMPTY_SPREADS: BaseSpread[] = [];
 const log = createLogger('Editor', 'SpreadsMainView');
+
+const matchCtrlD = (e: KeyboardEvent): boolean =>
+  (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd';
+
+const SPREADS_FORBIDDEN = ['page'] as const;
 
 /** Resolve the best available image URL for an illustration spread image.
  *  Priority: final hi-res → selected illustration → first illustration → null */
@@ -327,21 +337,85 @@ export function SpreadsMainView({
 
   // === Toolbar handlers ===
 
-  const handleCloneShape = useCallback(
-    (spreadId: string, shape: SpreadShape) => {
-      const newShape: SpreadShape = {
-        ...structuredClone(shape),
-        id: crypto.randomUUID(),
-        geometry: {
-          ...shape.geometry,
-          x: clampGeometry('x', shape.geometry.x + 2),
-          y: clampGeometry('y', shape.geometry.y + 2),
-        },
-      };
-      log.info('handleCloneShape', 'cloning shape', { spreadId, originalId: shape.id, newId: newShape.id });
-      actions.addRetouchShape(spreadId, newShape);
+  const handleDuplicateItem = useCallback(
+    (itemType: 'raw_image' | 'raw_textbox' | 'shape', itemId: string) => {
+      const spread = illustrationSpreads.find((s) => s.id === selectedSpreadId);
+      if (!spread) {
+        log.warn('handleDuplicateItem', 'spread not found', { selectedSpreadId });
+        return;
+      }
+
+      if (itemType === 'raw_image') {
+        // raw_images không có z-index → không cascade
+        const source = spread.raw_images?.find((i) => i.id === itemId);
+        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
+        const cloned = cloneItemWithNewId(source);
+        actions.addRawImage(selectedSpreadId, cloned, { insertAfterId: itemId });
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id });
+        onItemSelect({ type: 'raw_image', id: cloned.id });
+      } else if (itemType === 'raw_textbox') {
+        // raw_textboxes không có z-index → không cascade
+        const source = spread.raw_textboxes?.find((t) => t.id === itemId);
+        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
+        const cloned = cloneItemWithNewId(source);
+        actions.addRawTextbox(selectedSpreadId, cloned, { insertAfterId: itemId });
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id });
+        onItemSelect({ type: 'raw_textbox', id: cloned.id });
+      } else if (itemType === 'shape') {
+        const source = spread.shapes?.find((s) => s.id === itemId);
+        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
+        const origZ = source['z-index'] ?? 0;
+
+        // Cascade mix tier (shape + audio + quiz). Spread data shared với Objects
+        // space, z-index là property toàn cục → shift bất kể view hiện tại.
+        const { shifts } = computeDuplicateZShift(spread, itemId, origZ, 'mix');
+        for (const shift of shifts) {
+          const isAudio = spread.audios?.some((a) => a.id === shift.id);
+          const isQuiz = spread.quizzes?.some((q) => q.id === shift.id);
+          if (isAudio) {
+            actions.updateRetouchAudio(selectedSpreadId, shift.id, { 'z-index': shift.to });
+          } else if (isQuiz) {
+            actions.updateQuiz(selectedSpreadId, shift.id, { 'z-index': shift.to });
+          } else {
+            actions.updateRetouchShape(selectedSpreadId, shift.id, { 'z-index': shift.to });
+          }
+          log.debug('handleDuplicateItem', 'shifted z-index', { tier: 'mix', itemId: shift.id, from: shift.from, to: shift.to });
+        }
+
+        const cloned = cloneItemWithNewId(source);
+        cloned['z-index'] = origZ + 1;
+        actions.addRetouchShape(selectedSpreadId, cloned, { insertAfterId: itemId });
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        onItemSelect({ type: 'shape', id: cloned.id });
+      }
     },
-    [actions]
+    [actions, illustrationSpreads, selectedSpreadId, onItemSelect]
+  );
+
+  const { stackRef } = useInteractionLayerContext();
+
+  useGlobalHotkey(
+    matchCtrlD,
+    () => {
+      if (stackRef.current.modal !== null) {
+        log.debug('useGlobalHotkey', 'ctrl-d blocked by modal');
+        return;
+      }
+      if (!selectedItemId) {
+        log.debug('useGlobalHotkey', 'ctrl-d no item selected');
+        return;
+      }
+      if ((SPREADS_FORBIDDEN as readonly string[]).includes(selectedItemId.type)) {
+        log.debug('useGlobalHotkey', 'ctrl-d forbidden type', { type: selectedItemId.type });
+        return;
+      }
+      log.debug('useGlobalHotkey', 'ctrl-d duplicating', { type: selectedItemId.type, id: selectedItemId.id });
+      handleDuplicateItem(
+        selectedItemId.type as 'raw_image' | 'raw_textbox' | 'shape',
+        selectedItemId.id
+      );
+    },
+    [selectedItemId, handleDuplicateItem, stackRef]
   );
 
   // === Toolbar render props ===
@@ -352,17 +426,23 @@ export function SpreadsMainView({
         context={{
           ...context,
           onGenerateImage: () => openGenerateModal(context.item),
+          onClone: () => handleDuplicateItem('raw_image', context.item.id),
         }}
       />
     ),
-    [openGenerateModal]
+    [openGenerateModal, handleDuplicateItem]
   );
 
   const renderIllustrationTextToolbar = useCallback(
     (context: TextToolbarContext<BaseSpread>) => (
-      <SpreadsTextToolbar context={context} />
+      <SpreadsTextToolbar
+        context={{
+          ...context,
+          onClone: () => handleDuplicateItem('raw_textbox', context.item.id),
+        }}
+      />
     ),
-    []
+    [handleDuplicateItem]
   );
 
   const renderIllustrationShapeToolbar = useCallback(
@@ -370,11 +450,11 @@ export function SpreadsMainView({
       <SpreadsShapeToolbar
         context={{
           ...context,
-          onClone: () => handleCloneShape(selectedSpreadId, context.item),
+          onClone: () => handleDuplicateItem('shape', context.item.id),
         }}
       />
     ),
-    [selectedSpreadId, handleCloneShape]
+    [handleDuplicateItem]
   );
 
   const renderIllustrationPageToolbar = useCallback(

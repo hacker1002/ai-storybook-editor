@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { SnapshotStore, IllustrationSlice } from '../types';
+import type { SnapshotStore, IllustrationSlice, AddItemOptions } from '../types';
 import { createLogger } from '@/utils/logger';
 import {
   addSectionAction,
@@ -162,12 +162,22 @@ export const createIllustrationSlice: StateCreator<
 
   // --- Raw Images (illustration phase, player_visible always false) ---
 
-  addRawImage: (spreadId, image) =>
+  addRawImage: (spreadId, image, options?: AddItemOptions) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
-        log.debug('addRawImage', 'add', { spreadId, imageId: image.id });
         if (!spread.raw_images) spread.raw_images = [];
+        if (options?.insertAfterId) {
+          const idx = spread.raw_images.findIndex((i) => i.id === options.insertAfterId);
+          if (idx >= 0) {
+            log.debug('addRawImage', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: image.id });
+            spread.raw_images.splice(idx + 1, 0, image);
+            state.sync.isDirty = true;
+            return;
+          }
+          log.warn('addRawImage', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
+        }
+        log.debug('addRawImage', 'add', { spreadId, imageId: image.id });
         spread.raw_images.push(image);
         state.sync.isDirty = true;
       }
@@ -198,12 +208,22 @@ export const createIllustrationSlice: StateCreator<
 
   // --- Raw Textboxes (illustration phase, player_visible always false) ---
 
-  addRawTextbox: (spreadId, textbox) =>
+  addRawTextbox: (spreadId, textbox, options?: AddItemOptions) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
-        log.debug('addRawTextbox', 'add', { spreadId, textboxId: textbox.id });
         if (!spread.raw_textboxes) spread.raw_textboxes = [];
+        if (options?.insertAfterId) {
+          const idx = spread.raw_textboxes.findIndex((t) => t.id === options.insertAfterId);
+          if (idx >= 0) {
+            log.debug('addRawTextbox', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: textbox.id });
+            spread.raw_textboxes.splice(idx + 1, 0, textbox);
+            state.sync.isDirty = true;
+            return;
+          }
+          log.warn('addRawTextbox', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
+        }
+        log.debug('addRawTextbox', 'add', { spreadId, textboxId: textbox.id });
         spread.raw_textboxes.push(textbox);
         state.sync.isDirty = true;
       }
