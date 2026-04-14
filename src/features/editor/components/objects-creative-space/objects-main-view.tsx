@@ -48,7 +48,7 @@ import {
 } from "@/features/editor/utils/duplicate-item-helpers";
 import { useInteractionLayerContext } from "@/features/editor/contexts/interaction-layer-provider";
 import { useGlobalHotkey } from "@/features/editor/contexts/use-global-hotkey";
-import { COLUMNS } from "@/constants/spread-constants";
+import { COLUMNS, LAYER_CONFIG } from "@/constants/spread-constants";
 import type { SelectedItem } from "./objects-creative-space";
 import type {
   BaseSpread,
@@ -914,10 +914,11 @@ export function ObjectsMainView({
   const handleCloneRawImage = useCallback(
     (rawImage: SpreadImage) => {
       const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
+      const imageFloor = LAYER_CONFIG.MEDIA.min - 1;
       const maxZ = spread?.images?.reduce(
-        (max, img) => Math.max(max, img["z-index"] ?? 0),
-        0
-      ) ?? 0;
+        (max, img) => Math.max(max, img["z-index"] ?? imageFloor),
+        imageFloor
+      ) ?? imageFloor;
 
       const newImage: SpreadImage = {
         id: crypto.randomUUID(),
@@ -1083,10 +1084,11 @@ export function ObjectsMainView({
   const handleCloneRawTextbox = useCallback(
     (rawTextbox: SpreadTextbox) => {
       const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
+      const textFloor = LAYER_CONFIG.TEXT.min - 1;
       const maxZ = spread?.textboxes?.reduce(
-        (max, tb) => Math.max(max, tb["z-index"] ?? 0),
-        0
-      ) ?? 0;
+        (max, tb) => Math.max(max, tb["z-index"] ?? textFloor),
+        textFloor
+      ) ?? textFloor;
 
       const cloned: SpreadTextbox = structuredClone(rawTextbox);
       cloned.id = crypto.randomUUID();
