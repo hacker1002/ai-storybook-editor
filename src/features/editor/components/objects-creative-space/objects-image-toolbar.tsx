@@ -14,7 +14,7 @@ import {
 import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Scissors, Crop, Sparkles, Upload, Trash2 } from "lucide-react";
+import { Scissors, Crop, Pencil, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import {
@@ -396,8 +396,8 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
             />
             <ToolbarIconButton icon={Crop} label="Crop" onClick={handleCrop} />
             <ToolbarIconButton
-              icon={Sparkles}
-              label="Generate image"
+              icon={Pencil}
+              label="Edit image"
               onClick={onGenerateImage}
             />
             <ToolbarIconButton
