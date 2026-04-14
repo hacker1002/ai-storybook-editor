@@ -22,7 +22,7 @@ export function resolveItemZIndex(
   isIllustrationRawItem?: boolean
 ): number {
   const rawImageCount = spread.raw_images?.length ?? 0;
-  const rawTextboxCount = spread.raw_textboxes?.length ?? 0;
+  const rawItemCount = (spread.raw_textboxes?.length ?? 0) + rawImageCount;
   const playableImageCount = spread.images?.length ?? 0;
   const totalImageCount = Math.max(rawImageCount, playableImageCount);
   const shapesCount = spread.shapes?.length ?? 0;
@@ -34,12 +34,12 @@ export function resolveItemZIndex(
     case "raw_image":
       return isIllustrationRawItem
         ? LAYER_CONFIG.MEDIA.min + index
-        : -rawImageCount + index;
+        : -rawItemCount + index;
 
     case "raw_textbox":
       return isIllustrationRawItem
         ? LAYER_CONFIG.TEXT.min + index
-        : -rawImageCount + rawTextboxCount + index;
+        : -rawItemCount + rawImageCount + index;
 
     case "image": {
       const img = spread.images?.[index] as SpreadImage | undefined;
