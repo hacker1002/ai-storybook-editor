@@ -4,6 +4,7 @@
 import { useState, useCallback } from "react";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import { ZOOM, COLUMNS } from "@/constants/spread-constants";
+import { useSpaceViewState } from "../../hooks/use-space-view-state";
 import {
   EditableImage,
   EditableTextbox,
@@ -35,9 +36,10 @@ export function HistoryMainView({ snapshot }: HistoryMainViewProps) {
   const langCode = useLanguageCode();
   log.debug("render", "rendering snapshot", { snapshotId: snapshot.id });
 
-  // Read-only view — local spread selection for filmstrip navigation only.
-  // View mode/zoom/columns are fixed (history is display-only, not persisted).
+  // Read-only view — spread selection is local; zoom is persisted per book.
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(null);
+  const { zoomLevel = ZOOM.DEFAULT, patch } = useSpaceViewState('history');
+  const setZoomLevel = useCallback((level: number) => patch({ zoomLevel: level }), [patch]);
 
   // === Read-only render props — no interactions, no toolbars ===
 
@@ -174,11 +176,11 @@ export function HistoryMainView({ snapshot }: HistoryMainViewProps) {
       spreads={(snapshot.illustration?.spreads ?? []) as BaseSpread[]}
       selectedSpreadId={selectedSpreadId}
       viewMode="edit"
-      zoomLevel={ZOOM.DEFAULT}
+      zoomLevel={zoomLevel}
       columnsPerRow={COLUMNS.DEFAULT}
       onSpreadSelect={setSelectedSpreadId}
       onViewModeChange={() => {}}
-      onZoomChange={() => {}}
+      onZoomChange={setZoomLevel}
       onColumnsChange={() => {}}
       renderItems={[
         "raw_image",
