@@ -35,6 +35,7 @@ import {
 } from "./utils";
 import { createLogger } from "@/utils/logger";
 import { EFFECT_TYPE } from "@/constants/animation-constants";
+import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 import { fetchMediaDurationMs, findMediaUrlFromSpread } from "@/utils/media-duration-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 
@@ -129,6 +130,7 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
   const handleItemSelect = useCallback(
     (itemType: ItemType | null, itemId: string | null) => {
       log.debug("handleItemSelect", "item selected", { itemType, itemId });
+      setExpandedAnimIndex(null);
       if (itemType !== null && itemId !== null) {
         setSelectedItem({ id: itemId, type: itemType });
       } else {
@@ -285,7 +287,7 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
           mode="animation-editor"
           spreads={playableSpreads}
           selectedSpreadId={effectiveSpreadId}
-          zoomLevel={zoomLevel}
+          zoomLevel={zoomLevel ?? PLAYABLE_ZOOM.DEFAULT}
           selectedItemId={selectedItem?.id ?? null}
           selectedItemType={selectedItem?.type ?? null}
           onItemSelect={handleItemSelect}
