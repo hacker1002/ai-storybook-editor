@@ -1,7 +1,7 @@
 // spread-editor-panel.tsx - Main editor canvas for selected spread
 "use client";
 
-import { useRef, useMemo, Fragment, type ReactNode } from "react";
+import { useRef, useMemo, useState, useCallback, Fragment, type ReactNode } from "react";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "SpreadEditorPanel");
@@ -229,6 +229,13 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     editorLangCode,
   });
 
+  // === Textbox edit mode (controlled) ===
+  // Single source of truth for which textbox is in controlled edit mode.
+  // Toolbar Edit button and SelectionFrame double-click both set this.
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const handleBeginEdit = useCallback((id: string) => setEditingItemId(id), []);
+  const handleEndEdit = useCallback(() => setEditingItemId(null), []);
+
   // === Interaction Layer Stack registration ===
   //
   // Only slot 'item' is registered here. Slot 'spread' is registered by the
@@ -435,8 +442,37 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     state.selectedElement?.type === "raw_image" ||
     state.selectedElement?.type === "raw_textbox";
   const rawBlocked = isRawElement && preventEditRawItem;
-  const canResizeCurrentItem = canResizeItem && !isIconElement && !rawBlocked;
-  const canDragCurrentItem = canDragItem && !rawBlocked;
+  // Resolve the currently selected item's id so we can check if it's in edit mode.
+  // Covers the four inline-editable types: textbox, raw_textbox, image, raw_image.
+  // Other types (page/shape/video/audio/quiz) have no inline edit → null.
+  const selectedItemId = (() => {
+    const sel = state.selectedElement;
+    if (!sel || sel.type === "page") return null;
+    switch (sel.type) {
+      case "textbox":
+        return (spread.textboxes ?? [])[sel.index]?.id ?? null;
+      case "raw_textbox":
+        return (spread.raw_textboxes ?? [])[sel.index]?.id ?? null;
+      case "image":
+        return (spread.images ?? [])[sel.index]?.id ?? null;
+      case "raw_image":
+        return (spread.raw_images ?? [])[sel.index]?.id ?? null;
+      default:
+        return null;
+    }
+  })();
+
+  // Unified edit-mode flag — single source of truth for disabling drag/resize
+  // and making SelectionFrame pointer-events-transparent. Covers textbox AND
+  // dummy art-note image editing.
+  const isSelectedTextbox =
+    state.selectedElement?.type === "textbox" ||
+    state.selectedElement?.type === "raw_textbox";
+  const isItemInEditMode =
+    (selectedItemId !== null && editingItemId === selectedItemId) ||
+    (isSelectedTextbox && state.isTextboxEditing);
+  const canResizeCurrentItem = canResizeItem && !isIconElement && !rawBlocked && !isItemInEditMode;
+  const canDragCurrentItem = canDragItem && !rawBlocked && !isItemInEditMode;
   const showHandles = canResizeCurrentItem && !state.isDragging;
   // Mirror selected item's stacking order on the selection frame so items
   // with a higher z-index than the selected element stay clickable. Items
@@ -536,7 +572,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               state.selectedElement,
               handleElementSelect,
               handleSpreadItemAction,
-              handleImageEditingChange,
+              (isEditing) => {
+                handleImageEditingChange(isEditing);
+                if (!isEditing && editingItemId === image.id) handleEndEdit();
+              },
               "raw_image"
             );
             // if can edit raw item (illustration step) => treat as image item
@@ -546,6 +585,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               spread,
               !preventEditRawItem
             );
+            context.isEditing = editingItemId === image.id;
             return (
               <Fragment key={image.id ?? `raw-img-${index}`}>
                 {renderRawImage(context)}
@@ -564,9 +604,13 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               state.selectedElement,
               handleElementSelect,
               handleSpreadItemAction,
-              handleImageEditingChange
+              (isEditing) => {
+                handleImageEditingChange(isEditing);
+                if (!isEditing && editingItemId === image.id) handleEndEdit();
+              }
             );
             context.zIndex = resolveItemZIndex("image", index, spread);
+            context.isEditing = editingItemId === image.id;
             return (
               <Fragment key={image.id ?? `img-${index}`}>
                 {renderImageItem(context)}
@@ -625,7 +669,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               state.selectedElement,
               handleElementSelect,
               handleSpreadItemAction,
-              handleTextboxEditingChange,
+              (isEditing) => {
+                handleTextboxEditingChange(isEditing);
+                if (!isEditing && editingItemId === textbox.id) handleEndEdit();
+              },
               editorLangCode,
               "raw_textbox"
             );
@@ -636,6 +683,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               spread,
               !preventEditRawItem
             );
+            context.isEditing = editingItemId === textbox.id;
             return (
               <Fragment key={textbox.id ?? `raw-txt-${index}`}>
                 {renderRawTextbox(context)}
@@ -654,10 +702,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               state.selectedElement,
               handleElementSelect,
               handleSpreadItemAction,
-              handleTextboxEditingChange,
+              (isEditing) => {
+                handleTextboxEditingChange(isEditing);
+                if (!isEditing && editingItemId === textbox.id) handleEndEdit();
+              },
               editorLangCode
             );
             context.zIndex = resolveItemZIndex("textbox", index, spread);
+            context.isEditing = editingItemId === textbox.id;
             return (
               <Fragment key={textbox.id ?? `txt-${index}`}>
                 {renderTextItem(context)}
@@ -718,10 +770,17 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               activeHandle={state.activeHandle}
               canDrag={canDragCurrentItem}
               canResize={canResizeCurrentItem}
-              borderOnlyDrag={
-                state.selectedElement?.type === "textbox" ||
-                state.selectedElement?.type === "raw_textbox"
-              }
+              onDoubleClick={() => {
+                const { selectedElement } = state;
+                if (!selectedElement) return;
+                if (selectedElement.type === "textbox") {
+                  const id = (spread.textboxes ?? [])[selectedElement.index]?.id;
+                  if (id) handleBeginEdit(id);
+                } else if (selectedElement.type === "raw_textbox") {
+                  const id = (spread.raw_textboxes ?? [])[selectedElement.index]?.id;
+                  if (id) handleBeginEdit(id);
+                }
+              }}
               onDragStart={handleDragStart}
               onDrag={handleDrag}
               onDragEnd={handleDragEnd}
@@ -756,6 +815,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 canvasRef,
                 onGenerateImage: () => {},
                 onReplaceImage: () => {},
+                onEditArtNote: () => handleBeginEdit(rawImg.id),
               });
             }
 
@@ -776,6 +836,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 canvasRef,
                 onGenerateImage: () => {},
                 onReplaceImage: () => {},
+                onEditArtNote: () => handleBeginEdit(image.id),
               });
             }
 
@@ -798,7 +859,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 editorLangCode,
                 "raw_textbox"
               );
-              return renderRawTextboxToolbar(context);
+              return renderRawTextboxToolbar({
+                ...context,
+                onEditText: () => handleBeginEdit(rawTb.id),
+              });
             }
 
             if (selectedElement.type === "textbox" && renderTextToolbar) {
@@ -816,7 +880,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 undefined,
                 editorLangCode
               );
-              return renderTextToolbar(context);
+              return renderTextToolbar({
+                ...context,
+                onEditText: () => handleBeginEdit(textbox.id),
+              });
             }
 
             if (selectedElement.type === "shape" && renderShapeToolbar) {

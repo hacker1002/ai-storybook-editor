@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NumberStepper } from "@/components/ui/number-stepper";
-import { Copy, Trash2 } from "lucide-react";
+import { Copy, Trash2, Pencil } from "lucide-react";
 import {
   useToolbarPosition,
   type BaseSpread,
@@ -37,6 +37,15 @@ type ToolbarContext<TSpread extends BaseSpread> =
 
 interface DummyItemToolbarProps<TSpread extends BaseSpread> {
   data: ToolbarContext<TSpread>;
+}
+
+function resolveEditCallback(
+  data: ToolbarContext<BaseSpread>
+): (() => void) | undefined {
+  if (data.type === "image") {
+    return data.context.onEditArtNote;
+  }
+  return data.context.onEditText;
 }
 
 function getItemData(
@@ -79,6 +88,7 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
   const originalLangCode = book?.original_language ?? "en_US";
   const { context } = data;
   const { onUpdate, onDelete, onClone, selectedGeometry, canvasRef } = context;
+  const editCallback = resolveEditCallback(data as ToolbarContext<BaseSpread>);
 
   const position = useToolbarPosition({
     geometry: selectedGeometry,
@@ -199,7 +209,15 @@ export function DummyItemToolbar<TSpread extends BaseSpread>({
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
-          <ToolbarIconButton icon={Copy} label="Clone" onClick={onClone} />
+          <div className="flex items-center gap-1">
+            <ToolbarIconButton
+              icon={Pencil}
+              label="Edit"
+              onClick={editCallback}
+              disabled={!editCallback}
+            />
+            <ToolbarIconButton icon={Copy} label="Clone" onClick={onClone} />
+          </div>
           <ToolbarIconButton
             icon={Trash2}
             label="Delete"

@@ -262,12 +262,11 @@ function ImagePlaceholder({
           className={cn(
             "text-center line-clamp-3",
             canEdit && "cursor-text",
-            !content && "italic",
-            !typography?.size && "text-xs"
+!typography?.size && "text-xs"
           )}
           style={textStyle}
         >
-          {content || "Double-click to add art note"}
+          {content}
         </p>
       )}
     </div>

@@ -255,6 +255,9 @@ export interface ImageItemContext<TSpread extends BaseSpread>
   onDelete: () => void;
   onArtNoteChange?: (artNote: string) => void;
   onEditingChange?: (isEditing: boolean) => void;
+  /** Controlled edit mode — when set, parent (SpreadEditorPanel) owns editing state.
+   *  Only used by spaces with inline image editing (dummy art-note). */
+  isEditing?: boolean;
 }
 
 export interface TextItemContext<TSpread extends BaseSpread>
@@ -265,6 +268,8 @@ export interface TextItemContext<TSpread extends BaseSpread>
   onUpdate: (updates: Partial<SpreadTextbox>) => void;
   onDelete: () => void;
   onEditingChange?: (isEditing: boolean) => void;
+  /** Controlled edit mode — when set, parent (SpreadEditorPanel) owns editing state */
+  isEditing?: boolean;
 }
 
 export interface ShapeItemContext<TSpread extends BaseSpread>
@@ -330,6 +335,9 @@ export interface ImageToolbarContext<TSpread extends BaseSpread>
   onCropImage?: () => void;
   onReplaceImage: () => void;
   onClone?: () => void;
+  /** Trigger inline edit mode for the selected image — set by parent via editingItemId state.
+   *  Only meaningful for spaces with inline image editing (dummy art-note). */
+  onEditArtNote?: () => void;
 }
 
 export interface TextToolbarContext<TSpread extends BaseSpread>
@@ -338,6 +346,8 @@ export interface TextToolbarContext<TSpread extends BaseSpread>
   onFormatText: (format: Partial<Typography>) => void;
   onClone?: () => void;
   onSplitTextbox?: () => void;
+  /** Trigger edit mode for the selected textbox — set by parent via editingItemId state */
+  onEditText?: () => void;
 }
 
 export interface ShapeToolbarContext<TSpread extends BaseSpread>

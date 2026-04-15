@@ -1,67 +1,65 @@
-// editable-textbox.tsx - Shared utility component for editable text
+// editable-art-note.tsx - Inline-editable art note placeholder for dummy image items
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { ImageIcon } from "lucide-react";
 import { cn } from "@/utils/utils";
-import type { SpreadTextboxContent, WordTiming } from "@/types/spread-types";
+import type { Geometry } from "@/types/spread-types";
+import type { DummyTypography } from "@/types/dummy";
 import { COLORS } from "@/constants/spread-constants";
-import { useZoomLevel } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 
-const log = createLogger("Editor", "EditableTextbox");
+const log = createLogger("Editor", "EditableArtNote");
 
-interface EditableTextboxProps {
-  textboxContent: SpreadTextboxContent;
+interface EditableArtNoteProps {
+  artNote: string;
+  geometry: Geometry;
+  typography?: DummyTypography;
+
   index: number;
   zIndex?: number;
   isSelected: boolean;
-  isSelectable: boolean; // Controls click selection behavior
-  isEditable: boolean; // Controls double-click edit mode
+  isEditable: boolean;
   /** Controlled edit mode — when provided, parent owns the editing state */
   isEditing?: boolean;
-  /** Render at reduced opacity — used for raw/background layer items in objects space */
-  dimmed?: boolean;
-  /** Show persistent item border (dashed gray outline) — only in retouch/objects space */
-  showItemBorder?: boolean;
+
   onSelect: (rect?: DOMRect) => void;
-  onTextChange: (text: string) => void;
-  onEditingChange: (isEditing: boolean) => void;
-  /** Word-level timing data — when present, renders words in <span> elements for Read-Along */
-  wordTimings?: WordTiming[];
+  onArtNoteChange: (artNote: string) => void;
+  onEditingChange?: (isEditing: boolean) => void;
 }
 
-export function EditableTextbox({
-  textboxContent,
+export function EditableArtNote({
+  artNote,
+  geometry,
+  typography,
   index,
   zIndex,
   isSelected,
-  isSelectable,
   isEditable,
   isEditing: controlledIsEditing,
-  dimmed,
-  showItemBorder,
   onSelect,
-  onTextChange,
+  onArtNoteChange,
   onEditingChange,
-  wordTimings,
-}: EditableTextboxProps) {
-  const { text, geometry, typography } = textboxContent;
-  const zoomLevel = useZoomLevel();
+}: EditableArtNoteProps) {
   const [internalIsEditing, setInternalIsEditing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const editableRef = useRef<HTMLDivElement>(null);
 
   const isControlled = controlledIsEditing !== undefined;
   const effectiveIsEditing = isControlled ? controlledIsEditing! : internalIsEditing;
-  // Track previous controlled value to detect transitions
   const prevEditingRef = useRef<boolean>(effectiveIsEditing);
 
-  // Side-effect helpers — separated so both controlled and uncontrolled paths reuse them
+  const typographyStyle = useMemo((): React.CSSProperties => ({
+    fontSize: typography?.size ? `${typography.size}px` : undefined,
+    color: typography?.color || undefined,
+  }), [typography]);
+
+  // Side-effect helpers
 
   const applyEnterEditModeSideEffects = useCallback(() => {
     requestAnimationFrame(() => {
       if (editableRef.current) {
-        editableRef.current.innerText = text;
+        editableRef.current.innerText = artNote;
         editableRef.current.focus();
         const selection = window.getSelection();
         const range = document.createRange();
@@ -73,40 +71,41 @@ export function EditableTextbox({
         }
       }
     });
-  }, [text]);
+  }, [artNote]);
 
   const applyExitEditModeSideEffects = useCallback(
     (save: boolean) => {
       if (save && editableRef.current) {
         const newText = editableRef.current.innerText;
-        if (newText !== text) {
-          onTextChange(newText);
+        if (newText !== artNote) {
+          onArtNoteChange(newText);
         }
       }
     },
-    [text, onTextChange]
+    [artNote, onArtNoteChange]
   );
 
-  // Controlled transitions: parent flips isEditing → apply side effects here
+  // Controlled transitions: parent flips isEditing → apply side effects
   useEffect(() => {
     if (!isControlled) return;
     const wasEditing = prevEditingRef.current;
     if (!wasEditing && controlledIsEditing === true) {
+      log.debug("useEffect", "controlled enter edit", { index });
       applyEnterEditModeSideEffects();
     }
     if (wasEditing && controlledIsEditing === false) {
+      log.debug("useEffect", "controlled exit edit", { index });
       applyExitEditModeSideEffects(true);
     }
     prevEditingRef.current = !!controlledIsEditing;
-  }, [controlledIsEditing, isControlled, applyEnterEditModeSideEffects, applyExitEditModeSideEffects]);
+  }, [controlledIsEditing, isControlled, applyEnterEditModeSideEffects, applyExitEditModeSideEffects, index]);
 
   const enterEditMode = useCallback(() => {
     if (isControlled) {
-      // Parent owns state — notify to flip prop; side effects run in useEffect above
-      onEditingChange(true);
+      onEditingChange?.(true);
     } else {
       setInternalIsEditing(true);
-      onEditingChange(true);
+      onEditingChange?.(true);
       applyEnterEditModeSideEffects();
     }
   }, [isControlled, onEditingChange, applyEnterEditModeSideEffects]);
@@ -115,11 +114,11 @@ export function EditableTextbox({
     (save: boolean) => {
       if (isControlled) {
         applyExitEditModeSideEffects(save);
-        onEditingChange(false);
+        onEditingChange?.(false);
       } else {
         applyExitEditModeSideEffects(save);
         setInternalIsEditing(false);
-        onEditingChange(false);
+        onEditingChange?.(false);
       }
     },
     [isControlled, applyExitEditModeSideEffects, onEditingChange]
@@ -128,13 +127,13 @@ export function EditableTextbox({
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       e.stopPropagation();
-      if (isSelectable && !effectiveIsEditing) {
-        log.info("handleClick", "textbox clicked", { index });
+      if (!effectiveIsEditing) {
+        log.info("handleClick", "art note clicked", { index });
         const rect = e.currentTarget.getBoundingClientRect();
         onSelect(rect);
       }
     },
-    [isSelectable, effectiveIsEditing, onSelect, index]
+    [effectiveIsEditing, onSelect, index]
   );
 
   const handleDoubleClick = useCallback(
@@ -149,7 +148,7 @@ export function EditableTextbox({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (isSelected && !effectiveIsEditing && e.key === "Enter") {
+      if (isSelected && !effectiveIsEditing && isEditable && e.key === "Enter") {
         e.preventDefault();
         enterEditMode();
       }
@@ -161,13 +160,12 @@ export function EditableTextbox({
           e.preventDefault();
           exitEditMode(true);
         }
-        // Prevent Delete/Backspace from bubbling to canvas (which would delete the item)
         if (e.key === "Delete" || e.key === "Backspace") {
           e.stopPropagation();
         }
       }
     },
-    [isSelected, effectiveIsEditing, enterEditMode, exitEditMode]
+    [isSelected, effectiveIsEditing, isEditable, enterEditMode, exitEditMode]
   );
 
   const handleBlur = useCallback(() => {
@@ -179,82 +177,30 @@ export function EditableTextbox({
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
     const plainText = e.clipboardData.getData("text/plain");
-
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
-
     const range = selection.getRangeAt(0);
     range.deleteContents();
     range.insertNode(document.createTextNode(plainText));
-
     range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);
   }, []);
 
-  // Map typography to CSS — scale pixel-based values by zoom factor
-  const zoomFactor = zoomLevel / 100;
-  const typographyStyle: React.CSSProperties = {
-    fontFamily: typography?.family || "inherit",
-    fontSize: typography?.size
-      ? `${typography.size * zoomFactor}px`
-      : "inherit",
-    fontWeight: typography?.weight || "normal",
-    fontStyle: typography?.style || "normal",
-    textAlign: typography?.textAlign || "left",
-    lineHeight: typography?.lineHeight || 1.5,
-    letterSpacing: typography?.letterSpacing
-      ? `${typography.letterSpacing * zoomFactor}px`
-      : "inherit",
-    color: typography?.color || "inherit",
-    textDecoration: typography?.decoration || "none",
-    textTransform: typography?.textTransform || "none",
-  };
-
-  const isEmpty = !text;
-
-  /** Render text with per-word <span> elements for Read-Along highlighting */
-  const renderTextWithWordSpans = (textContent: string): React.ReactNode => {
-    const tokens = textContent.split(/(\s+)/);
-    let wordIndex = 0;
-    return tokens.map((token, i) => {
-      if (/^\s+$/.test(token)) {
-        return <span key={`ws-${i}`}>{token}</span>;
-      }
-      const idx = wordIndex++;
-      return (
-        <span
-          key={`w-${idx}`}
-          data-word-index={idx}
-          className="read-along-word"
-        >
-          {token}
-        </span>
-      );
-    });
-  };
-
   return (
     <div
-      {...(isSelectable && {
-        role: "textbox",
-        "aria-label": `Textbox ${index + 1}`,
-        "aria-multiline": "true",
-      })}
-      data-textbox
-      tabIndex={isSelectable ? 0 : -1}
+      role="img"
+      aria-label={artNote || `Art note ${index + 1}`}
+      tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        "absolute overflow-hidden transition-opacity",
-        dimmed && "opacity-20",
-        isSelectable && "cursor-pointer",
-        !isSelected &&
-          (showItemBorder || isHovered) &&
-          "outline-dashed outline-1"
+        "absolute flex flex-col items-center justify-center gap-2 p-2 cursor-pointer",
+        "border-2 border-dashed",
+        !isSelected && isHovered && "outline outline-1"
       )}
       style={{
         left: `${geometry.x}%`,
@@ -262,14 +208,14 @@ export function EditableTextbox({
         width: `${geometry.w}%`,
         height: `${geometry.h}%`,
         zIndex,
-        outlineColor: !isSelected
-          ? isHovered
-            ? COLORS.ITEM_BORDER_HOVER
-            : COLORS.ITEM_BORDER_TEXTBOX
-          : undefined,
+        backgroundColor: COLORS.PLACEHOLDER_BG,
+        borderColor: COLORS.PLACEHOLDER_BORDER,
+        outlineColor: isHovered ? COLORS.HOVER_OUTLINE : undefined,
         ...typographyStyle,
       }}
     >
+      <ImageIcon className="h-6 w-6 text-muted-foreground shrink-0" aria-hidden />
+
       {effectiveIsEditing ? (
         <div
           ref={editableRef}
@@ -277,25 +223,20 @@ export function EditableTextbox({
           suppressContentEditableWarning
           onBlur={handleBlur}
           onPaste={handlePaste}
-          className="w-full h-full outline-none p-1 break-words"
+          className="w-full min-h-0 outline-none px-2 py-1 text-center"
           style={{ backgroundColor: COLORS.EDIT_MODE_BG }}
+          aria-multiline="true"
         />
-      ) : isEmpty ? (
-        <div
-          className="w-full h-full flex items-center justify-center italic p-1"
+      ) : (
+        <p
+          className="line-clamp-3 px-2 text-center italic text-xs"
           style={{ color: COLORS.PLACEHOLDER_TEXT }}
         >
-          Click to add text
-        </div>
-      ) : (
-        <div className="w-full h-full p-1 whitespace-pre-wrap break-words">
-          {wordTimings && wordTimings.length > 0
-            ? renderTextWithWordSpans(text)
-            : text}
-        </div>
+          {artNote || "Click pencil to add art note"}
+        </p>
       )}
     </div>
   );
 }
 
-export default EditableTextbox;
+export default EditableArtNote;

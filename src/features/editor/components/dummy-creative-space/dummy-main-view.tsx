@@ -3,10 +3,8 @@
 
 import { useMemo, useCallback, useState } from "react";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
-import {
-  EditableImage,
-  EditableTextbox,
-} from "@/features/editor/components/shared-components";
+import { EditableTextbox } from "@/features/editor/components/shared-components";
+import { EditableArtNote } from "./editable-art-note";
 import { useDummyById, useDummyActions } from "./hooks";
 import { useCurrentBook, useBookTemplateLayout } from "@/stores/book-store";
 import { useTemplateLayouts } from "@/hooks/use-template-layouts";
@@ -23,10 +21,10 @@ import type {
   BaseSpread,
   ImageItemContext,
   TextItemContext,
-  ImageToolbarContext,
   TextToolbarContext,
   SpreadItemActionUnion,
   PageData,
+  ImageToolbarContext,
 } from "@/types/canvas-types";
 import type { SpreadType } from "@/features/editor/components/canvas-spread-view";
 import type {
@@ -101,8 +99,14 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
 
   // View state persisted per-book for the dummy space (viewMode/zoom/columns).
   // activeSpreadId is NOT persisted — selectedSpreadIdLocal is entity-scoped local state.
-  const { viewMode, zoomLevel, columnsPerRow, patch } = useSpaceViewState("dummy");
-  const [selectedSpreadIdLocal, setSelectedSpreadIdLocal] = useState<string | null>(null);
+  const { viewMode, zoomLevel, columnsPerRow, patch } =
+    useSpaceViewState("dummy");
+  const [selectedSpreadIdLocal, setSelectedSpreadIdLocal] = useState<
+    string | null
+  >(null);
+  // NOTE: Edit mode state is OWNED BY SpreadEditorPanel (single source of truth).
+  // Panel injects context.isEditing + context.onEditArtNote / context.onEditText
+  // into render contexts. DummyMainView is a transparent pass-through.
 
   // Reset spread selection when switching between dummies
   // (DummyMainView remounts on dummy change, so useState resets automatically)
@@ -117,17 +121,26 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
     setSelectedSpreadIdLocal(spreadId);
   }, []);
 
-  const handleViewModeChange = useCallback((mode: ViewMode) => {
-    patch({ viewMode: mode });
-  }, [patch]);
+  const handleViewModeChange = useCallback(
+    (mode: ViewMode) => {
+      patch({ viewMode: mode });
+    },
+    [patch]
+  );
 
-  const handleZoomChange = useCallback((level: number) => {
-    patch({ zoomLevel: level });
-  }, [patch]);
+  const handleZoomChange = useCallback(
+    (level: number) => {
+      patch({ zoomLevel: level });
+    },
+    [patch]
+  );
 
-  const handleColumnsChange = useCallback((columns: number) => {
-    patch({ columnsPerRow: columns });
-  }, [patch]);
+  const handleColumnsChange = useCallback(
+    (columns: number) => {
+      patch({ columnsPerRow: columns });
+    },
+    [patch]
+  );
 
   const handleSpreadReorder = useCallback(
     (fromIndex: number, toIndex: number) => {
@@ -268,24 +281,20 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       const dummyImage = spread?.images.find(
         (img) => img.id === context.item.id
       );
+      if (!dummyImage) return null;
 
       return (
-        <EditableImage
-          image={{
-            id: context.item.id,
-            art_note: context.item.art_note || "",
-            visual_description: context.item.art_note || "",
-            geometry: context.item.geometry,
-            illustrations: [],
-            final_hires_media_url: undefined,
-          }}
+        <EditableArtNote
+          artNote={dummyImage.art_note ?? ""}
+          geometry={dummyImage.geometry}
+          typography={dummyImage.typography}
           index={context.itemIndex}
           isSelected={context.isSelected}
           isEditable={context.isSpreadSelected}
+          isEditing={context.isEditing}
           onSelect={context.onSelect}
           onArtNoteChange={(artNote) => context.onUpdate({ art_note: artNote })}
           onEditingChange={context.onEditingChange}
-          artNoteTypography={dummyImage?.typography}
         />
       );
     },
@@ -307,6 +316,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
           isSelected={context.isSelected}
           isSelectable={context.isSpreadSelected}
           isEditable={context.isSpreadSelected}
+          isEditing={context.isEditing}
           onSelect={context.onSelect}
           onTextChange={(newText) => {
             context.onUpdate({
@@ -327,6 +337,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       const image = spread?.images.find((img) => img.id === context.item.id);
       if (!image) return null;
 
+      // Panel already injected onEditArtNote; only add onClone (dummy-specific).
       const contextWithClone: ImageToolbarContext<BaseSpread> = {
         ...context,
         onClone: () => {
@@ -365,6 +376,7 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
       const textbox = spread?.textboxes.find((tb) => tb.id === context.item.id);
       if (!textbox) return null;
 
+      // Panel already injected onEditText; only add onClone (dummy-specific).
       const contextWithClone: TextToolbarContext<BaseSpread> = {
         ...context,
         onClone: () => {

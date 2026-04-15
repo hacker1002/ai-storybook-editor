@@ -728,6 +728,7 @@ export function ObjectsMainView({
             isSelected={context.isSelected}
             isSelectable={context.isSpreadSelected}
             isEditable={context.isSpreadSelected}
+            isEditing={context.isEditing}
             showItemBorder={true}
             onSelect={() => {
               context.onSelect();

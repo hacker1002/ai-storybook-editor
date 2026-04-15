@@ -12,6 +12,7 @@ import {
   Trash2,
   Play,
   Pause,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { uploadAudioToStorage } from "@/apis/storage-api";
@@ -71,6 +72,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     onUpdate,
     onDelete,
     onSplitTextbox,
+    onEditText,
     selectedGeometry,
     canvasRef,
   } = context;
@@ -395,6 +397,12 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
         {/* Footer Actions */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <div className="flex items-center gap-1">
+            <ToolbarIconButton
+              icon={Pencil}
+              label="Edit text"
+              onClick={onEditText}
+              disabled={!onEditText}
+            />
             <ToolbarIconButton
               icon={Scissors}
               label="Split textbox"

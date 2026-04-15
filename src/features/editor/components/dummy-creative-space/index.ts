@@ -6,6 +6,7 @@ export { DummySidebar } from './dummy-sidebar';
 export { DummyItem } from './dummy-item';
 export { DummyMainView } from './dummy-main-view';
 export { DummyItemToolbar } from './dummy-item-toolbar';
+export { EditableArtNote } from './editable-art-note';
 
 // Hooks
 export * from './hooks';

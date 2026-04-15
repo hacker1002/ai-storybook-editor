@@ -27,6 +27,7 @@ import {
   Trash2,
   Minus,
   Plus,
+  Pencil,
 } from "lucide-react";
 import {
   useToolbarPosition,
@@ -83,6 +84,7 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
     onDelete,
     onClone,
     onFormatText,
+    onEditText,
     selectedGeometry,
     canvasRef,
   } = context;
@@ -479,7 +481,13 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border pt-2">
-          <div>
+          <div className="flex items-center gap-1">
+            <ToolbarIconButton
+              icon={Pencil}
+              label="Edit text"
+              onClick={onEditText}
+              disabled={!onEditText}
+            />
             {onClone && (
               <ToolbarIconButton
                 icon={Copy}

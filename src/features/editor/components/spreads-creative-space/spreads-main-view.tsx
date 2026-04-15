@@ -505,6 +505,7 @@ export function SpreadsMainView({
           isSelected={context.isSelected}
           isSelectable={context.isSpreadSelected}
           isEditable={context.isSpreadSelected}
+          isEditing={context.isEditing}
           onSelect={() => {
             context.onSelect();
             onItemSelect({ type: 'raw_textbox', id: context.item.id });
