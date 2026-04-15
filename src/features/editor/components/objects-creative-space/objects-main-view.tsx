@@ -11,6 +11,7 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
+  EditableAnimatedPic,
   EditImageModal,
   SplitImageModal,
   CropImageModal,
@@ -27,6 +28,7 @@ import { ObjectsShapeToolbar } from "./objects-shape-toolbar";
 import { ObjectsTextToolbar } from "./objects-text-toolbar";
 import { ObjectsRawImageToolbar } from "./objects-raw-image-toolbar";
 import { ObjectsRawTextboxToolbar } from "./objects-raw-textbox-toolbar";
+import { ObjectsAnimatedPicToolbar } from "./objects-animated-pic-toolbar";
 import type { Geometry } from "@/types/canvas-types";
 import {
   useRetouchSpreads,
@@ -58,6 +60,8 @@ import type {
   ShapeToolbarContext,
   VideoToolbarContext,
   AudioToolbarContext,
+  AnimatedPicItemContext,
+  AnimatedPicToolbarContext,
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
@@ -68,6 +72,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
+  SpreadAnimatedPic,
   PageData,
 } from "@/types/canvas-types";
 
@@ -511,6 +516,23 @@ export function ObjectsMainView({
             actions.deleteRetouchAudio(spreadId, itemId as string);
           }
           break;
+        case "animated_pic":
+          if (action === "add")
+            actions.addRetouchAnimatedPic(spreadId, data as SpreadAnimatedPic);
+          else if (action === "update")
+            actions.updateRetouchAnimatedPic(
+              spreadId,
+              itemId as string,
+              data as Partial<SpreadAnimatedPic>
+            );
+          else if (action === "delete") {
+            actions.deleteRetouchAnimationsByTargetId(
+              spreadId,
+              itemId as string
+            );
+            actions.deleteRetouchAnimatedPic(spreadId, itemId as string);
+          }
+          break;
         case "page":
           if (action === "update" && typeof itemId === "number") {
             const spread = retouchSpreads.find((s) => s.id === spreadId);
@@ -545,7 +567,7 @@ export function ObjectsMainView({
   );
 
   const handleDuplicateItem = useCallback(
-    (itemType: 'image' | 'text' | 'shape' | 'video' | 'audio', itemId: string) => {
+    (itemType: 'image' | 'text' | 'shape' | 'video' | 'audio' | 'animated_pic', itemId: string) => {
       const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
       if (!spread) {
         log.warn('handleDuplicateItem', 'spread not found', { selectedSpreadId });
@@ -557,8 +579,11 @@ export function ObjectsMainView({
         const { shifts } = computeDuplicateZShift(spread, sourceId, origZ, 'pictorial');
         for (const shift of shifts) {
           const isVideo = spread.videos?.some((v) => v.id === shift.id);
+          const isAnimatedPic = spread.animated_pics?.some((ap) => ap.id === shift.id);
           if (isVideo) {
             actions.updateRetouchVideo(selectedSpreadId, shift.id, { 'z-index': shift.to });
+          } else if (isAnimatedPic) {
+            actions.updateRetouchAnimatedPic(selectedSpreadId, shift.id, { 'z-index': shift.to });
           } else {
             actions.updateRetouchImage(selectedSpreadId, shift.id, { 'z-index': shift.to });
           }
@@ -643,6 +668,16 @@ export function ObjectsMainView({
         actions.addRetouchAudio(selectedSpreadId, cloned, { insertAfterId: itemId });
         log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
         onItemSelect({ type: 'audio', id: cloned.id });
+      } else if (itemType === 'animated_pic') {
+        const source = spread.animated_pics?.find((ap) => ap.id === itemId);
+        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
+        const origZ = source['z-index'] ?? 0;
+        applyPictorialShifts(origZ, itemId);
+        const cloned = cloneItemWithNewId(source);
+        cloned['z-index'] = origZ + 1;
+        actions.addRetouchAnimatedPic(selectedSpreadId, cloned, { insertAfterId: itemId });
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        onItemSelect({ type: 'animated_pic', id: cloned.id });
       }
     },
     [actions, retouchSpreads, selectedSpreadId, onItemSelect]
@@ -668,7 +703,7 @@ export function ObjectsMainView({
       log.debug('useGlobalHotkey', 'ctrl-d duplicating', { type: selectedItemId.type, id: selectedItemId.id });
       const dupType = selectedItemId.type === 'textbox' ? 'text' : selectedItemId.type;
       handleDuplicateItem(
-        dupType as 'image' | 'text' | 'shape' | 'video' | 'audio',
+        dupType as 'image' | 'text' | 'shape' | 'video' | 'audio' | 'animated_pic',
         selectedItemId.id
       );
     },
@@ -835,6 +870,37 @@ export function ObjectsMainView({
               geometry={audio.geometry}
               zIndex={context.zIndex}
               isIcon
+            />
+          )}
+        </>
+      );
+    },
+    [onItemSelect]
+  );
+
+  const renderRetouchAnimatedPic = useCallback(
+    (context: AnimatedPicItemContext<BaseSpread>) => {
+      const ap = context.item as SpreadAnimatedPic;
+      if (ap.editor_visible === false) return null;
+      return (
+        <>
+          <EditableAnimatedPic
+            animatedPic={context.item}
+            index={context.itemIndex}
+            zIndex={context.zIndex}
+            isSelected={context.isSelected}
+            isEditable={context.isSpreadSelected}
+            isThumbnail={context.isThumbnail}
+            showItemBorder={true}
+            onSelect={() => {
+              context.onSelect();
+              onItemSelect({ type: 'animated_pic', id: context.item.id });
+            }}
+          />
+          {ap.player_visible === false && (
+            <PlayerHiddenBadge
+              geometry={ap.geometry}
+              zIndex={context.zIndex}
             />
           )}
         </>
@@ -1138,6 +1204,14 @@ export function ObjectsMainView({
     []
   );
 
+  // === AnimatedPic toolbar render prop ===
+  const renderRetouchAnimatedPicToolbar = useCallback(
+    (context: AnimatedPicToolbarContext<BaseSpread>) => (
+      <ObjectsAnimatedPicToolbar context={context} />
+    ),
+    []
+  );
+
   // === Audio toolbar render prop ===
   const renderRetouchAudioToolbar = useCallback(
     (context: AudioToolbarContext<BaseSpread>) => (
@@ -1169,12 +1243,14 @@ export function ObjectsMainView({
           "textbox",
           "shape",
           "video",
+          "animated_pic",
           "audio",
         ]}
         renderImageItem={renderRetouchImage}
         renderTextItem={renderRetouchTextbox}
         renderShapeItem={renderRetouchShape}
         renderVideoItem={renderRetouchVideo}
+        renderAnimatedPicItem={renderRetouchAnimatedPic}
         renderAudioItem={renderRetouchAudio}
         renderRawImage={renderRawImage}
         renderRawTextbox={renderRawTextbox}
@@ -1182,6 +1258,7 @@ export function ObjectsMainView({
         renderTextToolbar={renderRetouchTextToolbar}
         renderShapeToolbar={renderRetouchShapeToolbar}
         renderVideoToolbar={renderRetouchVideoToolbar}
+        renderAnimatedPicToolbar={renderRetouchAnimatedPicToolbar}
         renderAudioToolbar={renderRetouchAudioToolbar}
         renderRawImageToolbar={renderRawImageToolbar}
         renderRawTextboxToolbar={renderRawTextboxToolbar}

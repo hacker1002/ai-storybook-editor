@@ -6,6 +6,7 @@ export { EditableImage } from './editable-image';
 export { EditableShape } from './editable-shape';
 export { EditableVideo } from './editable-video';
 export { EditableAudio } from './editable-audio';
+export { EditableAnimatedPic } from './editable-animated-pic';
 export { EditableQuiz } from './editable-quiz';
 export { GenerateImageModal } from './generate-image-modal';
 export { EditImageModal } from './edit-image-modal';

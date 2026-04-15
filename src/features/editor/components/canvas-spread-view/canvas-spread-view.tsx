@@ -26,6 +26,8 @@ import type {
   PageToolbarContext,
   ShapeToolbarContext,
   VideoToolbarContext,
+  AnimatedPicItemContext,
+  AnimatedPicToolbarContext,
   AudioToolbarContext,
   LayoutOption,
   OnUpdateSpreadItemFn,
@@ -59,6 +61,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
+  renderAnimatedPicItem?: (context: AnimatedPicItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
@@ -67,6 +70,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderShapeToolbar?: (context: ShapeToolbarContext<TSpread>) => ReactNode;
   renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
   renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
+  renderAnimatedPicToolbar?: (context: AnimatedPicToolbarContext<TSpread>) => ReactNode;
 
   // Raw item render functions (illustration layer)
   renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
@@ -138,6 +142,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   renderShapeToolbar,
   renderVideoToolbar,
   renderAudioToolbar,
+  renderAnimatedPicItem,
+  renderAnimatedPicToolbar,
   renderRawImage,
   renderRawTextbox,
   renderRawImageToolbar,
@@ -376,12 +382,14 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderVideoItem={renderVideoItem}
                 renderAudioItem={renderAudioItem}
                 renderQuizItem={renderQuizItem}
+                renderAnimatedPicItem={renderAnimatedPicItem}
                 renderImageToolbar={renderImageToolbar}
                 renderTextToolbar={renderTextToolbar}
                 renderPageToolbar={renderPageToolbar}
                 renderShapeToolbar={renderShapeToolbar}
                 renderVideoToolbar={renderVideoToolbar}
                 renderAudioToolbar={renderAudioToolbar}
+                renderAnimatedPicToolbar={renderAnimatedPicToolbar}
                 renderRawImage={renderRawImage}
                 renderRawTextbox={renderRawTextbox}
                 renderRawImageToolbar={renderRawImageToolbar}

@@ -16,6 +16,9 @@ const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const AUDIO_MAX_SIZE = 20 * 1024 * 1024; // 20MB
 const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac'];
 
+const ANIMATED_PIC_MAX_SIZE = 50 * 1024 * 1024; // 50MB — webm HD; .gif blocked (validation session 1)
+const ANIMATED_PIC_TYPES = ['image/webp', 'video/webm'];
+
 export interface UploadResult {
   publicUrl: string;
   path: string;
@@ -71,4 +74,8 @@ export async function uploadVideoToStorage(file: File, pathPrefix = 'videos'): P
 
 export async function uploadAudioToStorage(file: File, pathPrefix = 'audios'): Promise<UploadResult> {
   return uploadToStorage(file, AUDIO_TYPES, AUDIO_MAX_SIZE, pathPrefix, 'uploadAudioToStorage');
+}
+
+export async function uploadAnimatedPicToStorage(file: File, pathPrefix = 'animated-pics'): Promise<UploadResult> {
+  return uploadToStorage(file, ANIMATED_PIC_TYPES, ANIMATED_PIC_MAX_SIZE, pathPrefix, 'uploadAnimatedPicToStorage');
 }
