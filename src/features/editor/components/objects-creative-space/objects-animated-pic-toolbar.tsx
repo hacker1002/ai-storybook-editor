@@ -32,6 +32,7 @@ import { createLogger } from "@/utils/logger";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 import {
   clampGeometry,
+  computeGeometryOnMediaReplace,
   GeometryInput,
   ToolbarIconButton,
   MEDIA_TYPE_OPTIONS,
@@ -224,36 +225,24 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
           h: dims.height,
         });
 
-        // Scale to canvas percentage, fitting longer side to 80% max (same as video toolbar)
-        const rawW = (dims.width / canvasWidth) * 100;
-        const rawH = (dims.height / canvasHeight) * 100;
-        const MAX_PERCENT = 80;
-        let newW: number;
-        let newH: number;
-        if (rawW <= MAX_PERCENT && rawH <= MAX_PERCENT) {
-          newW = rawW;
-          newH = rawH;
-        } else {
-          const natAspect = dims.width / dims.height;
-          const canvasAspect = canvasWidth / canvasHeight;
-          if (natAspect >= canvasAspect) {
-            newW = MAX_PERCENT;
-            newH = (MAX_PERCENT / natAspect) * canvasAspect;
-          } else {
-            newH = MAX_PERCENT;
-            newW = (MAX_PERCENT * natAspect) / canvasAspect;
-          }
-        }
-        newW = clampGeometry("w", newW);
-        newH = clampGeometry("h", newH);
-        const centerX = geometry.x + geometry.w / 2;
-        const centerY = geometry.y + geometry.h / 2;
-        const newX = clampGeometry("x", Math.min(centerX - newW / 2, 100 - newW));
-        const newY = clampGeometry("y", Math.min(centerY - newH / 2, 100 - newH));
+        // Preserve visual area, apply new media aspect, re-center.
+        const nextGeometry = computeGeometryOnMediaReplace({
+          old: geometry,
+          naturalW: dims.width,
+          naturalH: dims.height,
+          canvasW: canvasWidth,
+          canvasH: canvasHeight,
+        });
+
+        log.debug("handleFileChange", "geometry recomputed", {
+          picId: item.id,
+          old: geometry,
+          next: nextGeometry,
+        });
 
         onUpdate({
           media_url: publicUrl,
-          geometry: { x: newX, y: newY, w: newW, h: newH },
+          geometry: nextGeometry,
         });
         toast.success("Animated pic uploaded");
         canvasRef.current?.click();

@@ -46,6 +46,74 @@ export function clampGeometry(field: keyof Geometry, value: number): number {
   return Math.max(min, Math.min(100, value));
 }
 
+export interface GeometryReplaceInput {
+  /** Current item geometry in canvas percentage (0-100) */
+  old: Geometry;
+  /** Replacement media natural pixel dimensions */
+  naturalW: number;
+  naturalH: number;
+  /** Canvas pixel dimensions from store */
+  canvasW: number;
+  canvasH: number;
+}
+
+/**
+ * Recompute geometry when user replaces media on an existing canvas item.
+ *
+ * Strategy: preserve visual area (w*h in %-space) and re-center around the
+ * current center. The new media's aspect ratio replaces the old one, but the
+ * object's overall "visual weight" stays stable — what the user carefully
+ * sized does not get blown away by an upload.
+ *
+ * Canvas aspect correction: 1% horizontal != 1% vertical in pixel size, so
+ * pixel aspect must be divided by canvas aspect to get percent-space aspect.
+ *
+ * Overflow fallback: if preserving area produces a side > 100%, the longer
+ * side is clamped to 100% and the other follows percentAspect.
+ */
+export function computeGeometryOnMediaReplace({
+  old,
+  naturalW,
+  naturalH,
+  canvasW,
+  canvasH,
+}: GeometryReplaceInput): Geometry {
+  if (naturalW <= 0 || naturalH <= 0 || canvasW <= 0 || canvasH <= 0) {
+    return old;
+  }
+
+  const pixelAspect = naturalW / naturalH;
+  const canvasAspect = canvasW / canvasH;
+  const percentAspect = pixelAspect / canvasAspect;
+
+  const area = Math.max(1, old.w * old.h);
+  let newW = Math.sqrt(area * percentAspect);
+  let newH = Math.sqrt(area / percentAspect);
+
+  const MAX = 100;
+  if (newW > MAX || newH > MAX) {
+    if (newW >= newH) {
+      newW = MAX;
+      newH = MAX / percentAspect;
+    } else {
+      newH = MAX;
+      newW = MAX * percentAspect;
+    }
+  }
+
+  newW = clampGeometry("w", newW);
+  newH = clampGeometry("h", newH);
+
+  const centerX = old.x + old.w / 2;
+  const centerY = old.y + old.h / 2;
+  let newX = centerX - newW / 2;
+  let newY = centerY - newH / 2;
+  newX = Math.max(0, Math.min(newX, 100 - newW));
+  newY = Math.max(0, Math.min(newY, 100 - newH));
+
+  return { x: newX, y: newY, w: newW, h: newH };
+}
+
 // === Sub-components ===
 
 export function GeometryInput({

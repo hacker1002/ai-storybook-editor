@@ -17,6 +17,7 @@ import { createLogger } from "@/utils/logger";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 import {
   clampGeometry,
+  computeGeometryOnMediaReplace,
   GeometrySection,
   MediaIdentitySection,
   ToolbarIconButton,
@@ -139,47 +140,24 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
           getVideoNaturalDimensions(file),
         ]);
 
-        // Convert video pixel dimensions to canvas percentage, preserving aspect ratio.
-        // If video exceeds canvas, scale so the longer side is 80% of canvas; other side follows ratio.
-        const rawW = (dimensions.width / canvasWidth) * 100;
-        const rawH = (dimensions.height / canvasHeight) * 100;
-        const MAX_PERCENT = 80;
-        let newW: number;
-        let newH: number;
-        if (rawW <= MAX_PERCENT && rawH <= MAX_PERCENT) {
-          // Video fits within canvas — use natural size
-          newW = rawW;
-          newH = rawH;
-        } else {
-          // Scale down: fit the longer dimension to MAX_PERCENT, compute other from aspect ratio
-          const aspectRatio = dimensions.width / dimensions.height;
-          const canvasAspect = canvasWidth / canvasHeight;
-          if (aspectRatio >= canvasAspect) {
-            // Landscape or square-ish: width is the constraining dimension
-            newW = MAX_PERCENT;
-            newH = (MAX_PERCENT / aspectRatio) * canvasAspect;
-          } else {
-            // Portrait: height is the constraining dimension
-            newH = MAX_PERCENT;
-            newW = (MAX_PERCENT * aspectRatio) / canvasAspect;
-          }
-        }
-        newW = clampGeometry("w", newW);
-        newH = clampGeometry("h", newH);
-        // Re-center around current center, clamped to canvas bounds
-        const centerX = geometry.x + geometry.w / 2;
-        const centerY = geometry.y + geometry.h / 2;
-        const newX = clampGeometry("x", Math.min(centerX - newW / 2, 100 - newW));
-        const newY = clampGeometry("y", Math.min(centerY - newH / 2, 100 - newH));
+        // Preserve visual area, apply new media aspect, re-center.
+        const nextGeometry = computeGeometryOnMediaReplace({
+          old: geometry,
+          naturalW: dimensions.width,
+          naturalH: dimensions.height,
+          canvasW: canvasWidth,
+          canvasH: canvasHeight,
+        });
 
         log.debug("ObjectsVideoToolbar", "video dimensions", {
           natural: `${dimensions.width}x${dimensions.height}`,
-          geometry: { x: newX, y: newY, w: newW, h: newH },
+          old: geometry,
+          next: nextGeometry,
         });
 
         onUpdate({
           media_url: publicUrl,
-          geometry: { x: newX, y: newY, w: newW, h: newH },
+          geometry: nextGeometry,
         });
         toast.success("Video uploaded");
         canvasRef.current?.click();
@@ -192,7 +170,7 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
         setIsUploading(false);
       }
     },
-    [geometry, onUpdate, canvasRef]
+    [geometry, onUpdate, canvasRef, canvasWidth, canvasHeight]
   );
 
   const toolbarStyle: React.CSSProperties = position
