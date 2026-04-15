@@ -242,10 +242,19 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
   const handleReorderAnimation = useCallback(
     (fromIndex: number, toIndex: number) => {
       if (!effectiveSpreadId) return;
-      log.debug("handleReorderAnimation", "reordering", { fromIndex, toIndex });
+      log.debug("handleReorderAnimation", "reordering", { fromIndex, toIndex, expandedAnimIndex });
       actions.reorderRetouchAnimations(effectiveSpreadId, fromIndex, toIndex);
+
+      // Keep expanded index tracking the same item after reorder
+      setExpandedAnimIndex((prev) => {
+        if (prev === null) return null;
+        if (prev === fromIndex) return toIndex;
+        if (fromIndex < toIndex && prev > fromIndex && prev <= toIndex) return prev - 1;
+        if (fromIndex > toIndex && prev >= toIndex && prev < fromIndex) return prev + 1;
+        return prev;
+      });
     },
-    [effectiveSpreadId, actions],
+    [effectiveSpreadId, actions, expandedAnimIndex],
   );
 
   const handleFilterChange = useCallback((updates: Partial<AnimationFilterState>) => {
