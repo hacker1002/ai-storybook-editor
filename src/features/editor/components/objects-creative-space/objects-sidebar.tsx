@@ -49,6 +49,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
+  SpreadAnimatedPic,
 } from "@/types/canvas-types";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -60,6 +61,7 @@ const ALL_ELEMENT_TYPES: ObjectElementType[] = [
   "shape",
   "video",
   "audio",
+  "animated_pic",
 ];
 const ALL_ASSET_TYPES: SpreadItemMediaType[] = [
   "raw",
@@ -298,6 +300,9 @@ export function ObjectsSidebar({
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
           break;
+        case "animated_pic":
+          actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, updates);
+          break;
         case "raw_image":
           actions.updateRawImage(selectedSpreadId, entry.id, updates);
           break;
@@ -350,6 +355,9 @@ export function ObjectsSidebar({
           case "audio":
             actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
             break;
+          case "animated_pic":
+            actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, updates);
+            break;
           case "raw_image":
             actions.updateRawImage(selectedSpreadId, entry.id, updates);
             break;
@@ -395,6 +403,9 @@ export function ObjectsSidebar({
           break;
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
+          break;
+        case "animated_pic":
+          actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, updates);
           break;
         case "raw_image":
           actions.updateRawImage(selectedSpreadId, entry.id, updates);
@@ -450,6 +461,9 @@ export function ObjectsSidebar({
           entry.id,
           titleUpdate as Partial<SpreadShape>
         );
+        break;
+      case "animated_pic":
+        actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, titleUpdate);
         break;
     }
     setEditingItemId(null);
@@ -524,6 +538,11 @@ export function ObjectsSidebar({
             actions.updateRetouchTextbox(selectedSpreadId, entry.id, {
               "z-index": newZIndex,
             } as Partial<SpreadTextbox>);
+            break;
+          case "animated_pic":
+            actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, {
+              "z-index": newZIndex,
+            });
             break;
         }
       });
@@ -623,6 +642,18 @@ export function ObjectsSidebar({
             player_visible: true,
             type: "raw",
           } as SpreadAudio);
+          break;
+        case "animated_pic":
+          actions.addRetouchAnimatedPic(selectedSpreadId, {
+            id: newId,
+            name: "New Animated Pic",
+            title: "New Animated Pic",
+            geometry: { x: 10, y: 10, w: 30, h: 20 },
+            "z-index": newZIndex,
+            editor_visible: true,
+            player_visible: true,
+            type: "raw",
+          } as SpreadAnimatedPic);
           break;
       }
 

@@ -6,12 +6,14 @@ import type {
   SpreadTextbox,
   SpreadShape,
   SpreadVideo,
+  SpreadAnimatedPic,
   SpreadAudio,
   SpreadQuiz,
   ImageItemContext,
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
+  AnimatedPicItemContext,
   AudioItemContext,
   QuizItemContext,
   TextToolbarContext,
@@ -424,6 +426,67 @@ export function buildViewOnlyAudioContext<TSpread extends BaseSpread>(
 ): AudioItemContext<TSpread> {
   return {
     item: audio,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: false,
+    isSpreadSelected: false,
+    isThumbnail: true,
+    onSelect: () => {},
+    onUpdate: () => {},
+    onDelete: () => {},
+  };
+}
+
+/**
+ * Build animated pic item context for render props
+ */
+export function buildAnimatedPicContext<TSpread extends BaseSpread>(
+  animatedPic: SpreadAnimatedPic,
+  index: number,
+  spread: TSpread,
+  selectedElement: SelectedElement | null,
+  onSelect: SelectFn,
+  onAction: SpreadItemActionHandler,
+  isThumbnail = false
+): AnimatedPicItemContext<TSpread> {
+  return {
+    item: animatedPic,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected:
+      selectedElement?.type === "animated_pic" && selectedElement.index === index,
+    isSpreadSelected: true,
+    isThumbnail,
+    onSelect: () => onSelect({ type: "animated_pic", index }),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "animated_pic",
+        action: "update",
+        itemId: animatedPic.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "animated_pic",
+        action: "delete",
+        itemId: animatedPic.id,
+        data: null,
+      }),
+  };
+}
+
+/**
+ * Build view-only animated pic context for thumbnails
+ */
+export function buildViewOnlyAnimatedPicContext<TSpread extends BaseSpread>(
+  animatedPic: SpreadAnimatedPic,
+  index: number,
+  spread: TSpread
+): AnimatedPicItemContext<TSpread> {
+  return {
+    item: animatedPic,
     itemIndex: index,
     spreadId: spread.id,
     spread,

@@ -399,6 +399,12 @@ export interface VideoToolbarContext<TSpread extends BaseSpread>
   onReplaceVideo: () => void;
 }
 
+export interface AnimatedPicToolbarContext<TSpread extends BaseSpread>
+  extends AnimatedPicItemContext<TSpread>,
+    BaseToolbarContext {
+  onReplaceAnimatedPic: () => void;
+}
+
 export interface AudioToolbarContext<TSpread extends BaseSpread>
   extends AudioItemContext<TSpread>,
     BaseToolbarContext {

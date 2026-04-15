@@ -18,6 +18,7 @@ export type ObjectElementType =
   | "video"
   | "audio"
   | "textbox"
+  | "animated_pic"
   | "raw_image"
   | "raw_textbox";
 

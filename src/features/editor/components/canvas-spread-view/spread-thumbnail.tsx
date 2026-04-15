@@ -17,6 +17,7 @@ import {
   buildViewOnlyVideoContext,
   buildViewOnlyAudioContext,
   buildViewOnlyQuizContext,
+  buildViewOnlyAnimatedPicContext,
 } from "./utils/context-builders";
 import { resolveItemZIndex } from "./utils/resolve-item-z-index";
 import { THUMBNAIL, Z_INDEX } from "@/constants/spread-constants";
@@ -30,6 +31,7 @@ import type {
   VideoItemContext,
   AudioItemContext,
   QuizItemContext,
+  AnimatedPicItemContext,
 } from "@/types/canvas-types";
 
 interface SpreadThumbnailProps<TSpread extends BaseSpread> {
@@ -49,6 +51,7 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
+  renderAnimatedPicItem?: (context: AnimatedPicItemContext<TSpread>) => ReactNode;
 
   // Raw item render functions (illustration layer)
   renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
@@ -82,6 +85,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   renderVideoItem,
   renderAudioItem,
   renderQuizItem,
+  renderAnimatedPicItem,
   renderRawImage,
   renderRawTextbox,
   isDragEnabled = false,
@@ -187,6 +191,17 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
       return { video, context };
     });
   }, [spread, renderItems, renderVideoItem]);
+
+  const animatedPicContexts = useMemo(() => {
+    if (!renderItems.includes("animated_pic") || !renderAnimatedPicItem || !spread.animated_pics) {
+      return [];
+    }
+    return spread.animated_pics.map((animatedPic, idx) => {
+      const context = buildViewOnlyAnimatedPicContext(animatedPic, idx, spread);
+      context.zIndex = resolveItemZIndex("animated_pic", idx, spread);
+      return { animatedPic, context };
+    });
+  }, [spread, renderItems, renderAnimatedPicItem]);
 
   const audioContexts = useMemo(() => {
     if (!renderItems.includes("audio") || !renderAudioItem || !spread.audios)
@@ -337,6 +352,14 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
             videoContexts.map(({ video, context }, index) => (
               <Fragment key={video.id || `vid-${index}`}>
                 {renderVideoItem(context)}
+              </Fragment>
+            ))}
+
+          {/* Animated Pics (view-only) - skip if renderAnimatedPicItem not provided */}
+          {renderAnimatedPicItem &&
+            animatedPicContexts.map(({ animatedPic, context }, index) => (
+              <Fragment key={animatedPic.id || `anim-${index}`}>
+                {renderAnimatedPicItem(context)}
               </Fragment>
             ))}
 

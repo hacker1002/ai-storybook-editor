@@ -26,6 +26,7 @@ export function resolveItemZIndex(
   const rawItemCount = (spread.raw_textboxes?.length ?? 0) + rawImageCount;
   const playableImageCount = spread.images?.length ?? 0;
   const totalImageCount = Math.max(rawImageCount, playableImageCount);
+  const totalVideoCount = spread.videos?.length ?? 0;
   const shapesCount = spread.shapes?.length ?? 0;
   const audiosCount = spread.audios?.length ?? 0;
 
@@ -64,7 +65,7 @@ export function resolveItemZIndex(
     case "animated_pic": {
       const animatedPic = spread.animated_pics?.[index] as SpreadAnimatedPic | undefined;
       return (
-        animatedPic?.["z-index"] ?? LAYER_CONFIG.MEDIA.min + totalImageCount + index
+        animatedPic?.["z-index"] ?? LAYER_CONFIG.MEDIA.min + totalImageCount + totalVideoCount + index
       );
     }
 

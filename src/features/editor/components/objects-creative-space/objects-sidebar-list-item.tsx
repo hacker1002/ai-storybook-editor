@@ -16,6 +16,7 @@ import {
   Volume2,
   ImageOff,
   TypeOutline,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/utils/utils";
@@ -46,6 +47,7 @@ export const ELEMENT_TYPE_CONFIG: Record<
   shape: { icon: Hexagon, label: "Shape" },
   video: { icon: Video, label: "Video" },
   audio: { icon: Volume2, label: "Audio" },
+  animated_pic: { icon: Sparkles, label: "Animated Pic" },
   raw_image: { icon: ImageOff, label: "Raw Image" },
   raw_textbox: { icon: TypeOutline, label: "Raw Text" },
 };
