@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
-import { useArtStyleDescription } from '@/stores/art-style-store';
+import { useArtStyleDescription } from "@/stores/art-style-store";
 import {
   useSnapshotActions,
   useStages,
@@ -92,30 +92,35 @@ export function GenerateImageModal({
   //    stops walking and does NOT fire item's onClickOutside (deselect bug).
   // onPointerDownOutside on DialogContent prevents Radix from closing modal before
   // Provider's mousedown handler runs, ensuring modal slot is still in stack.
-  useInteractionLayer('modal', open ? {
-    id: 'generate-image-modal',
-    ref: dialogContentRef,
-    hotkeys: ['Escape'],
-    onHotkey: (key) => {
-      // isProcessing is declared below but freshened via the hook's proxy on every render
-      if (key === 'Escape' && !isProcessing) handleOpenChange(false);
-    },
-    onClickOutside: () => handleOpenChange(false),
-    captureClickOutside: true,
-    // Include Radix portals so clicks inside them are not outside-clicks on modal.
-    portalSelectors: [
-      '[data-radix-popper-content-wrapper]',
-      '[data-radix-select-content]',
-      '[role="listbox"]',
-    ],
-    // Snapshot open dropdowns/popovers at pointerdown time so that clicking
-    // outside to dismiss them doesn't also close the modal.
-    dropdownSelectors: [
-      '[data-radix-select-content]',
-      '[data-radix-popover-content]',
-      '[data-radix-popper-content-wrapper]',
-    ],
-  } : null);
+  useInteractionLayer(
+    "modal",
+    open
+      ? {
+          id: "generate-image-modal",
+          ref: dialogContentRef,
+          hotkeys: ["Escape"],
+          onHotkey: (key) => {
+            // isProcessing is declared below but freshened via the hook's proxy on every render
+            if (key === "Escape" && !isProcessing) handleOpenChange(false);
+          },
+          onClickOutside: () => handleOpenChange(false),
+          captureClickOutside: true,
+          // Include Radix portals so clicks inside them are not outside-clicks on modal.
+          portalSelectors: [
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            '[role="listbox"]',
+          ],
+          // Snapshot open dropdowns/popovers at pointerdown time so that clicking
+          // outside to dismiss them doesn't also close the modal.
+          dropdownSelectors: [
+            "[data-radix-select-content]",
+            "[data-radix-popover-content]",
+            "[data-radix-popper-content-wrapper]",
+          ],
+        }
+      : null
+  );
 
   // Store hooks
   const { startGenerateTask, startEditTask } = useSnapshotActions();
@@ -210,8 +215,10 @@ export function GenerateImageModal({
     const [, stageKey, variantKey] = match;
     const stage = stages.find((s) => s.key === stageKey);
     const variant = stage?.variants.find((s) => s.key === variantKey);
-    return variant?.illustrations.find((ill) => ill.is_selected)?.media_url
-      ?? variant?.illustrations[0]?.media_url;
+    return (
+      variant?.illustrations.find((ill) => ill.is_selected)?.media_url ??
+      variant?.illustrations[0]?.media_url
+    );
   }, [selectedStageVariant, stages]);
 
   const handleGenerate = useCallback(() => {
@@ -248,7 +255,7 @@ export function GenerateImageModal({
       childKey: image.id,
       childName: image.title || "Image",
       visualDescription: trimmedPrompt,
-      artStyleDescription: artStyleDescription ?? '',
+      artStyleDescription: artStyleDescription ?? "",
       stageVariantImageUrl: resolveStageVariantImageUrl(),
       referenceImages,
       aspectRatio: image.aspect_ratio,
@@ -339,11 +346,11 @@ export function GenerateImageModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-          ref={dialogContentRef}
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-          className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
-        >
+        ref={dialogContentRef}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>
             {image.title || "Untitled"} - Image Settings
@@ -491,32 +498,38 @@ export function GenerateImageModal({
               <div className="grid grid-cols-3 gap-2 max-h-[328px] overflow-y-auto p-0.5">
                 {image.illustrations && image.illustrations.length > 0 ? (
                   [...image.illustrations]
-                    .sort((a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime())
+                    .sort(
+                      (a, b) =>
+                        new Date(b.created_time).getTime() -
+                        new Date(a.created_time).getTime()
+                    )
                     .map((illustration, index) => (
-                    <button
-                      key={index}
-                      className={`relative aspect-square rounded-md transition-all ${
-                        illustration.is_selected
-                          ? "ring-2 ring-primary"
-                          : "ring-1 ring-border hover:scale-105"
-                      }`}
-                      onClick={() => handleGallerySelect(illustration.media_url)}
-                      disabled={isProcessing}
-                    >
-                      <img
-                        src={illustration.media_url}
-                        alt={`Illustration ${index + 1}`}
-                        className="w-full h-full object-contain rounded-md"
-                      />
-                      {illustration.is_selected && (
-                        <div className="absolute top-1.5 left-1.5">
-                          <div className="rounded-full bg-primary p-1">
-                            <Check className="h-3 w-3 text-primary-foreground" />
+                      <button
+                        key={index}
+                        className={`relative aspect-square rounded-md transition-all ${
+                          illustration.is_selected
+                            ? "ring-2 ring-primary"
+                            : "ring-1 ring-border hover:scale-105"
+                        }`}
+                        onClick={() =>
+                          handleGallerySelect(illustration.media_url)
+                        }
+                        disabled={isProcessing}
+                      >
+                        <img
+                          src={illustration.media_url}
+                          alt={`Illustration ${index + 1}`}
+                          className="w-full h-full object-contain rounded-md"
+                        />
+                        {illustration.is_selected && (
+                          <div className="absolute top-1.5 left-1.5">
+                            <div className="rounded-full bg-primary p-1">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </button>
-                  ))
+                        )}
+                      </button>
+                    ))
                 ) : (
                   <div className="col-span-3 text-center text-sm text-muted-foreground py-8">
                     No images generated yet
@@ -568,7 +581,9 @@ export function GenerateImageModal({
           {/* Prompt Section — with useReferenceImagePicker */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Label className="text-xs text-muted-foreground">VISUAL DESCRIPTION</Label>
+              <Label className="text-xs text-muted-foreground">
+                VISUAL DESCRIPTION
+              </Label>
               {generateRefs.images.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {generateRefs.images.map((img, idx) => (
@@ -660,7 +675,7 @@ export function GenerateImageModal({
             ) : (
               <>
                 <Sparkles className="h-4 w-4 mr-2" />
-                Regenerate
+                Generate
               </>
             )}
           </Button>
