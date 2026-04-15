@@ -10,6 +10,7 @@ import type {
   SpreadTextbox,
   SpreadShape,
   SpreadVideo,
+  SpreadAnimatedPic,
   SpreadAudio,
   SpreadQuiz,
   SpreadQuizLocalized,
@@ -283,6 +284,10 @@ export interface RetouchSlice {
   addRetouchVideo: (spreadId: string, video: SpreadVideo, options?: AddItemOptions) => void;
   updateRetouchVideo: (spreadId: string, videoId: string, updates: Partial<SpreadVideo>) => void;
   deleteRetouchVideo: (spreadId: string, videoId: string) => void;
+
+  addRetouchAnimatedPic: (spreadId: string, animatedPic: SpreadAnimatedPic, options?: AddItemOptions) => void;
+  updateRetouchAnimatedPic: (spreadId: string, animatedPicId: string, updates: Partial<SpreadAnimatedPic>) => void;
+  deleteRetouchAnimatedPic: (spreadId: string, animatedPicId: string) => void;
 
   addRetouchAudio: (spreadId: string, audio: SpreadAudio, options?: AddItemOptions) => void;
   updateRetouchAudio: (spreadId: string, audioId: string, updates: Partial<SpreadAudio>) => void;

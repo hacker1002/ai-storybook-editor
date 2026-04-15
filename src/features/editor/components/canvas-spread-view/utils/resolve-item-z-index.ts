@@ -11,6 +11,7 @@ import type {
   ItemType,
   SpreadImage,
   SpreadVideo,
+  SpreadAnimatedPic,
   SpreadAudio,
   SpreadQuiz,
 } from "@/types/canvas-types";
@@ -58,6 +59,13 @@ export function resolveItemZIndex(
         | { "z-index"?: number }
         | undefined;
       return shape?.["z-index"] ?? LAYER_CONFIG.OBJECTS.min + index;
+    }
+
+    case "animated_pic": {
+      const animatedPic = spread.animated_pics?.[index] as SpreadAnimatedPic | undefined;
+      return (
+        animatedPic?.["z-index"] ?? LAYER_CONFIG.MEDIA.min + totalImageCount + index
+      );
     }
 
     case "audio": {

@@ -39,7 +39,7 @@ export const LAYER_CONFIG = {
     min: 1,
     max: 500,
     label: "Pictorial",
-    types: ["image", "video"] as const,
+    types: ["image", "video", "animated_pic"] as const,
   },
   OBJECTS: {
     min: 501,

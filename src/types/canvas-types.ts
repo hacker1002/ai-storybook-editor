@@ -15,6 +15,7 @@ import type {
   ShapeOutline,
   SpreadShape,
   SpreadVideo,
+  SpreadAnimatedPic,
   SpreadAudio,
   SpreadQuiz,
   PageData,
@@ -33,6 +34,7 @@ export type SelectedElementType =
   | "raw_textbox"
   | "shape"
   | "video"
+  | "animated_pic"
   | "audio"
   | "quiz"
   | "page";
@@ -54,7 +56,7 @@ export interface SelectedElement {
 }
 
 // === Spread Item Action Types ===
-export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'audio' | 'quiz';
+export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'animated_pic' | 'audio' | 'quiz';
 export type SpreadItemActionType = 'add' | 'update' | 'delete';
 
 export interface SpreadItemActionParams<TData = unknown> {
@@ -145,6 +147,26 @@ export type VideoDeleteAction = SpreadItemActionParams<null> & {
   data: null;
 };
 
+// AnimatedPic actions (itemId: string = UUID)
+export type AnimatedPicAddAction = SpreadItemActionParams<SpreadAnimatedPic> & {
+  itemType: 'animated_pic';
+  action: 'add';
+  itemId: null;
+};
+
+export type AnimatedPicUpdateAction = SpreadItemActionParams<Partial<SpreadAnimatedPic>> & {
+  itemType: 'animated_pic';
+  action: 'update';
+  itemId: string;
+};
+
+export type AnimatedPicDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'animated_pic';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
 // Audio actions (itemId: string = UUID)
 export type AudioAddAction = SpreadItemActionParams<SpreadAudio> & {
   itemType: 'audio';
@@ -206,6 +228,9 @@ export type SpreadItemActionUnion =
   | VideoAddAction
   | VideoUpdateAction
   | VideoDeleteAction
+  | AnimatedPicAddAction
+  | AnimatedPicUpdateAction
+  | AnimatedPicDeleteAction
   | AudioAddAction
   | AudioUpdateAction
   | AudioDeleteAction
@@ -226,6 +251,7 @@ export type {
   ShapeOutline,
   SpreadShape,
   SpreadVideo,
+  SpreadAnimatedPic,
   SpreadAudio,
   SpreadQuiz,
   PageData,
@@ -286,6 +312,15 @@ export interface VideoItemContext<TSpread extends BaseSpread>
   isThumbnail?: boolean;
   onSelect: () => void;
   onUpdate: (updates: Partial<SpreadVideo>) => void;
+  onDelete: () => void;
+}
+
+export interface AnimatedPicItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
+  item: SpreadAnimatedPic;
+  isThumbnail?: boolean;
+  onSelect: () => void;
+  onUpdate: (updates: Partial<SpreadAnimatedPic>) => void;
   onDelete: () => void;
 }
 

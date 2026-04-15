@@ -195,6 +195,52 @@ export const createRetouchSlice: StateCreator<
       }
     }),
 
+  // --- Animated Pics ---
+
+  addRetouchAnimatedPic: (spreadId, animatedPic, options?: AddItemOptions) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (spread) {
+        if (!spread.animated_pics) spread.animated_pics = [];
+        if (options?.insertAfterId) {
+          const idx = spread.animated_pics.findIndex((p) => p.id === options.insertAfterId);
+          if (idx >= 0) {
+            log.debug('addRetouchAnimatedPic', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: animatedPic.id });
+            spread.animated_pics.splice(idx + 1, 0, animatedPic);
+            state.sync.isDirty = true;
+            return;
+          }
+          log.warn('addRetouchAnimatedPic', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
+        }
+        log.debug('addRetouchAnimatedPic', 'add', { spreadId, animatedPicId: animatedPic.id });
+        spread.animated_pics.push(animatedPic);
+        state.sync.isDirty = true;
+      }
+    }),
+
+  updateRetouchAnimatedPic: (spreadId, animatedPicId, updates) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (spread?.animated_pics) {
+        const idx = spread.animated_pics.findIndex((p) => p.id === animatedPicId);
+        if (idx !== -1) {
+          log.debug('updateRetouchAnimatedPic', 'update', { spreadId, animatedPicId, keys: Object.keys(updates) });
+          Object.assign(spread.animated_pics[idx], updates);
+          state.sync.isDirty = true;
+        }
+      }
+    }),
+
+  deleteRetouchAnimatedPic: (spreadId, animatedPicId) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (spread?.animated_pics) {
+        log.debug('deleteRetouchAnimatedPic', 'delete', { spreadId, animatedPicId });
+        spread.animated_pics = spread.animated_pics.filter((p) => p.id !== animatedPicId);
+        state.sync.isDirty = true;
+      }
+    }),
+
   // --- Audios ---
 
   addRetouchAudio: (spreadId, audio, options?: AddItemOptions) =>
