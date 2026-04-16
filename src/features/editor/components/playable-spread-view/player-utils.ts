@@ -4,7 +4,7 @@ import type { SpreadAnimation } from '@/types/spread-types';
 import type { AnimationStep } from '@/types/playable-types';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('PlayerGsapEngine');
+const log = createLogger('Player', 'GsapEngine');
 
 /** Spread item arrays needed for player_visible pre-filter in buildAnimationSteps */
 export interface SpreadItemsForVisibility {

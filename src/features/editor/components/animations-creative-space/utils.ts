@@ -10,7 +10,6 @@ import type {
   ItemType,
 } from '@/types/animation-types';
 import type { BaseSpread } from '@/types/spread-types';
-import type { PlayableSpread } from '@/types/playable-types';
 import { findSpreadItem, isItemPlayerHidden } from '../playable-spread-view/visibility-utils';
 import {
   EFFECT_CATEGORY_MAP,
@@ -26,7 +25,7 @@ type ItemsMap = Map<string, { title: string; type: string }>;
 export function resolveAnimations(
   animations: SpreadAnimation[],
   itemsMap: ItemsMap,
-  spread?: PlayableSpread | null,
+  spread?: BaseSpread | null,
 ): ResolvedAnimation[] {
   const counterMap = new Map<string, number>();
 

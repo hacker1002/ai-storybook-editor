@@ -1,7 +1,7 @@
 // visibility-utils.ts - Shared helpers for player_visible split-by-type rendering rule
 // Used by: animation-editor-canvas, player-canvas, player-utils, animations-creative-space
 
-import type { PlayableSpread } from '@/types/playable-types';
+import type { BaseSpread } from '@/types/spread-types';
 import type { ItemType } from '@/types/spread-types';
 
 /** player_visible=false → hidden. Undefined/true → visible (backward compat). */
@@ -19,7 +19,7 @@ export const isItemPlayerVisible = (
  * Returns null when spread is null or item not found.
  */
 export function findSpreadItem(
-  spread: PlayableSpread | null | undefined,
+  spread: BaseSpread | null | undefined,
   targetId: string,
   targetType: ItemType,
 ): { id: string; player_visible?: boolean } | null {
