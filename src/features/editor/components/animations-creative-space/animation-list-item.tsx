@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Timer,
   Hourglass,
+  Lock,
 } from "lucide-react";
 
 interface AnimationListItemProps {
@@ -230,11 +231,19 @@ export function AnimationListItem({
 
         {/* Right column: object info + effect info + timing */}
         <div className="flex-1 min-w-0 space-y-0.5">
-          {/* Row 1: Object name + type icon */}
+          {/* Row 1: Object name + type icon + hidden indicator */}
           <div className="flex items-center gap-1">
             <span className="text-xs font-medium truncate flex-1">
               {animation.targetItemName}
             </span>
+            {animation.isTargetHidden && (
+              <span
+                title="Target hidden in player"
+                className="inline-flex items-center shrink-0 px-1 py-0.5 rounded bg-muted text-muted-foreground"
+              >
+                <Lock size={10} />
+              </span>
+            )}
             <TargetIcon icon={animation.targetItemIcon} />
           </div>
 

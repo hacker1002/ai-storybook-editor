@@ -10,6 +10,8 @@ import type {
   ItemType,
 } from '@/types/animation-types';
 import type { BaseSpread } from '@/types/spread-types';
+import type { PlayableSpread } from '@/types/playable-types';
+import { findSpreadItem, isItemPlayerHidden } from '../playable-spread-view/visibility-utils';
 import {
   EFFECT_CATEGORY_MAP,
   TARGET_ICON_MAP,
@@ -24,6 +26,7 @@ type ItemsMap = Map<string, { title: string; type: string }>;
 export function resolveAnimations(
   animations: SpreadAnimation[],
   itemsMap: ItemsMap,
+  spread?: PlayableSpread | null,
 ): ResolvedAnimation[] {
   const counterMap = new Map<string, number>();
 
@@ -36,6 +39,10 @@ export function resolveAnimations(
     const title = item?.title ?? 'Unknown';
     const itemType = item?.type ?? 'image';
 
+    const isTargetHidden = isItemPlayerHidden(
+      findSpreadItem(spread ?? null, targetId, animation.target.type),
+    );
+
     return {
       animation,
       originalIndex: index,
@@ -44,6 +51,7 @@ export function resolveAnimations(
       effectName: EFFECT_TYPE_NAMES[animation.effect.type] ?? `Effect ${animation.effect.type}`,
       effectCategory: EFFECT_CATEGORY_MAP[animation.effect.type] ?? 'entrance',
       targetItemIcon: (TARGET_ICON_MAP[itemType] ?? 'image') as TargetItemIcon,
+      isTargetHidden,
     };
   });
 }

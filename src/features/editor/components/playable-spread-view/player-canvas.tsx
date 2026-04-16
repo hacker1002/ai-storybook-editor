@@ -43,6 +43,7 @@ import { PlayerControlSidebar } from "./player-control-sidebar";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
+import { isItemPlayerHidden } from "./visibility-utils";
 import { usePlayerOrientation } from "./hooks/use-player-orientation";
 import { useContainerFit } from "./hooks/use-container-fit";
 import { MobileFullPageZoomOverlay } from "./mobile-full-page-zoom-overlay";
@@ -205,7 +206,7 @@ export function PlayerCanvas({
     // - off→auto: clears stale pendingClickTargetId, phase, replayableItems
     // - auto→off: restarts step-based playback from beginning
     if (prevMode !== playMode) {
-      const newSteps = buildAnimationSteps(filteredAnimations);
+      const newSteps = buildAnimationSteps(filteredAnimations, spread, spread.id);
       playbackActions.reset(newSteps);
       playbackActions.play();
     }
@@ -225,7 +226,7 @@ export function PlayerCanvas({
       prevSpreadIdRef.current = spread.id;
       if (fullPageMode !== 'spread') setFullPageMode('left');
     }
-    const newSteps = buildAnimationSteps(filteredAnimations);
+    const newSteps = buildAnimationSteps(filteredAnimations, spread, spread.id);
     playbackActions.reset(newSteps);
     playbackActions.play();
   }, [spread.id, filteredAnimations]); // eslint-disable-line
@@ -487,6 +488,12 @@ export function PlayerCanvas({
     return 0;
   }, [fullPageMode, halfScaled]);
 
+  // Hidden style for audio/quiz — keep in DOM for GSAP/modal, but invisible + non-interactive
+  const hiddenStyle = (item: { player_visible?: boolean }) =>
+    isItemPlayerHidden(item)
+      ? ({ visibility: 'hidden', pointerEvents: 'none' } as const)
+      : undefined;
+
   // === Render ===
   // Share preview: no padding around canvas, only reserve space for control bar
   // Editor: original padding for comfortable editing
@@ -667,18 +674,16 @@ export function PlayerCanvas({
           );
         })}
 
-        {/* Audios — skip empty (no media_url) */}
+        {/* Audios — skip empty (no media_url); player_visible=false → visibility:hidden to keep GSAP .play() working */}
         {spread.audios?.map((audio, index) => {
-          if (audio.player_visible === false) return null;
           if (!audio.media_url) return null;
           return (
             <div
               key={audio.id}
               ref={registerRef(audio.id)}
-              className={`${getPointerClasses(audio.id)} ${getHighlightClass(
-                audio.id
-              )}`}
-              onClickCapture={() => handleItemClick(audio.id)}
+              className={`${getPointerClasses(audio.id)} ${getHighlightClass(audio.id)}`}
+              style={hiddenStyle(audio)}
+              onClickCapture={() => !isItemPlayerHidden(audio) && handleItemClick(audio.id)}
             >
               <EditableAudio
                 audio={audio}
@@ -692,29 +697,25 @@ export function PlayerCanvas({
           );
         })}
 
-        {/* Quizzes */}
-        {spread.quizzes?.map((quiz, index) => {
-          if (quiz.player_visible === false) return null;
-          return (
-            <div
-              key={quiz.id}
-              ref={registerRef(quiz.id)}
-              className={`${getPointerClasses(quiz.id)} ${getHighlightClass(
-                quiz.id
-              )}`}
-              onClickCapture={() => handleItemClick(quiz.id)}
-            >
-              <EditableQuiz
-                quiz={quiz}
-                index={index}
-                zIndex={quiz["z-index"]}
-                isSelected={false}
-                isEditable={false}
-                onSelect={() => {}}
-              />
-            </div>
-          );
-        })}
+        {/* Quizzes — player_visible=false → visibility:hidden so quiz modal can still trigger via GSAP */}
+        {spread.quizzes?.map((quiz, index) => (
+          <div
+            key={quiz.id}
+            ref={registerRef(quiz.id)}
+            className={`${getPointerClasses(quiz.id)} ${getHighlightClass(quiz.id)}`}
+            style={hiddenStyle(quiz)}
+            onClickCapture={() => !isItemPlayerHidden(quiz) && handleItemClick(quiz.id)}
+          >
+            <EditableQuiz
+              quiz={quiz}
+              index={index}
+              zIndex={quiz["z-index"]}
+              isSelected={false}
+              isEditable={false}
+              onSelect={() => {}}
+            />
+          </div>
+        ))}
 
         {/* Textboxes */}
         {textboxesWithLang.map((item, index) => {

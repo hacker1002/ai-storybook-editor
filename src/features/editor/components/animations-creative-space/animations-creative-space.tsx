@@ -75,8 +75,8 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
   );
 
   const resolvedAnimations = useMemo(
-    () => resolveAnimations(animations, itemsMap),
-    [animations, itemsMap],
+    () => resolveAnimations(animations, itemsMap, currentSpread),
+    [animations, itemsMap, currentSpread],
   );
 
   const filteredAnimations = useMemo(

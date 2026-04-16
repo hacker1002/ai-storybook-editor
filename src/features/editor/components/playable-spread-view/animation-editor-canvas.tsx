@@ -27,6 +27,7 @@ import type { PlayableSpread } from "@/types/playable-types";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
+import { isItemPlayerVisible } from "./visibility-utils";
 
 const log = createLogger("Editor", "AnimationEditorCanvas");
 
@@ -269,10 +270,11 @@ export function AnimationEditorCanvas({
     [onItemSelect]
   );
 
-  // Memoized textboxes with resolved language
+  // Memoized textboxes with resolved language — skip player_visible=false (not renderable as target)
   const textboxesWithLang = useMemo(() => {
     if (!spread.textboxes) return [];
     return spread.textboxes
+      .filter(isItemPlayerVisible)
       .map((textbox) => {
         const result = getTextboxContentForLanguage(textbox, editorLangCode);
         if (!result?.content?.geometry) return null;
@@ -337,8 +339,8 @@ export function AnimationEditorCanvas({
           />
         )}
 
-        {/* Images (selectable) */}
-        {spread.images?.map((image, index) => (
+        {/* Images (selectable) — skip player_visible=false */}
+        {spread.images?.filter(isItemPlayerVisible).map((image, index) => (
           <EditableImage
             key={image.id}
             image={image}
@@ -353,8 +355,8 @@ export function AnimationEditorCanvas({
           />
         ))}
 
-        {/* Shapes (selectable) */}
-        {spread.shapes?.map((shape, index) => (
+        {/* Shapes (selectable) — skip player_visible=false */}
+        {spread.shapes?.filter(isItemPlayerVisible).map((shape, index) => (
           <EditableShape
             key={shape.id}
             shape={shape}
@@ -368,8 +370,8 @@ export function AnimationEditorCanvas({
           />
         ))}
 
-        {/* Videos (selectable) */}
-        {spread.videos?.map((video, index) => (
+        {/* Videos (selectable) — skip player_visible=false */}
+        {spread.videos?.filter(isItemPlayerVisible).map((video, index) => (
           <EditableVideo
             key={video.id}
             video={video}
@@ -384,8 +386,8 @@ export function AnimationEditorCanvas({
           />
         ))}
 
-        {/* Animated Pics (selectable, showItemBorder for animation target visibility) */}
-        {spread.animated_pics?.map((animatedPic, index) => (
+        {/* Animated Pics (selectable, showItemBorder for animation target visibility) — skip player_visible=false */}
+        {spread.animated_pics?.filter(isItemPlayerVisible).map((animatedPic, index) => (
           <EditableAnimatedPic
             key={animatedPic.id}
             animatedPic={animatedPic}

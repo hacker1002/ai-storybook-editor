@@ -19,6 +19,7 @@ export interface ResolvedAnimation {
   effectName: string;             // human-readable effect name (e.g., "Fade In")
   effectCategory: EffectCategory;
   targetItemIcon: TargetItemIcon;
+  isTargetHidden: boolean;        // true when target item has player_visible=false
 }
 
 export interface AnimationFilterState {

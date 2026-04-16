@@ -2,8 +2,96 @@
 
 import type { SpreadAnimation } from '@/types/spread-types';
 import type { AnimationStep } from '@/types/playable-types';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('PlayerGsapEngine');
+
+/** Spread item arrays needed for player_visible pre-filter in buildAnimationSteps */
+export interface SpreadItemsForVisibility {
+  images?: Array<{ id: string; player_visible?: boolean }>;
+  shapes?: Array<{ id: string; player_visible?: boolean }>;
+  videos?: Array<{ id: string; player_visible?: boolean }>;
+  animated_pics?: Array<{ id: string; player_visible?: boolean }>;
+  textboxes?: Array<{ id: string; player_visible?: boolean }>;
+  audios?: Array<{ id: string; player_visible?: boolean }>;
+  quizzes?: Array<{ id: string; player_visible?: boolean }>;
+}
 
 // === Building steps from raw animations ===
+
+/**
+ * Pre-filter animations for player_visible split-by-type rule.
+ * Must be called on already-sorted animations.
+ *
+ * - hiddenVisualIds (5 types): read-along check
+ * - hiddenAllIds (7 types): on_click check
+ * - Cascade drop: followers (with_previous/after_previous) of a dropped boundary are also dropped
+ */
+function preFilterHiddenTargets(
+  sorted: SpreadAnimation[],
+  items: SpreadItemsForVisibility,
+  spreadId?: string,
+): SpreadAnimation[] {
+  // Build 2 id sets — O(n) once before the loop
+  const hiddenVisualIds = new Set<string>();
+  const hiddenAllIds = new Set<string>();
+
+  const markHidden = (arr: Array<{ id: string; player_visible?: boolean }> | undefined, visual: boolean) => {
+    arr?.forEach((item) => {
+      if (item.player_visible === false) {
+        hiddenAllIds.add(item.id);
+        if (visual) hiddenVisualIds.add(item.id);
+      }
+    });
+  };
+
+  markHidden(items.images, true);
+  markHidden(items.shapes, true);
+  markHidden(items.videos, true);
+  markHidden(items.animated_pics, true);
+  markHidden(items.textboxes, true);
+  markHidden(items.audios, false);
+  markHidden(items.quizzes, false);
+
+  if (hiddenAllIds.size === 0) return sorted; // fast path: nothing hidden
+
+  const result: SpreadAnimation[] = [];
+  let skipNextChained = false;
+
+  for (const anim of sorted) {
+    const trigger = anim.trigger_type;
+    const targetId = anim.target.id;
+
+    // Case 1: cascade drop — follower of a dropped boundary
+    if (skipNextChained && (trigger === 'with_previous' || trigger === 'after_previous')) {
+      log.warn('preFilterHiddenTargets', 'chained follower dropped (cascade)', { spreadId, order: anim.order, targetId, reason: 'cascade' });
+      continue;
+    }
+
+    // Reset cascade when a new boundary is encountered
+    if (trigger === 'on_next' || trigger === 'on_click') {
+      skipNextChained = false;
+    }
+
+    // Case 2: read-along (type=11) targeting hidden textbox (visual only)
+    if (anim.effect.type === 11 && hiddenVisualIds.has(targetId)) {
+      log.warn('preFilterHiddenTargets', 'read-along skipped — textbox hidden', { spreadId, order: anim.order, targetId, reason: 'read-along-hidden' });
+      skipNextChained = trigger === 'on_next' || trigger === 'on_click';
+      continue;
+    }
+
+    // Case 3: on_click targeting ANY hidden item (all 7 types)
+    if (trigger === 'on_click' && hiddenAllIds.has(targetId)) {
+      log.warn('preFilterHiddenTargets', 'on_click skipped — target hidden', { spreadId, order: anim.order, targetId, targetType: anim.target.type, reason: 'on-click-hidden' });
+      skipNextChained = true; // on_click is always a boundary
+      continue;
+    }
+
+    result.push(anim);
+  }
+
+  return result;
+}
 
 /**
  * Groups sorted animations into discrete playback steps.
@@ -13,12 +101,23 @@ import type { AnimationStep } from '@/types/playable-types';
  * - after_previous / with_previous append to the current step
  * - If the spread starts with after_previous/with_previous (no preceding trigger),
  *   an 'auto' step is created that plays automatically on spread load
+ *
+ * Pre-filter (when spreadItems provided):
+ * - read-along (effect type=11) targeting hidden textbox → skip + cascade drop chained followers if boundary
+ * - on_click targeting ANY hidden item (all 7 types) → skip + cascade drop chained followers
  */
-export function buildAnimationSteps(animations: SpreadAnimation[]): AnimationStep[] {
+export function buildAnimationSteps(
+  animations: SpreadAnimation[],
+  spreadItems?: SpreadItemsForVisibility,
+  spreadId?: string,
+): AnimationStep[] {
   if (!animations || animations.length === 0) return [];
 
   // Sort by order ascending (don't mutate original)
-  const sorted = [...animations].sort((a, b) => a.order - b.order);
+  const baseSorted = [...animations].sort((a, b) => a.order - b.order);
+
+  // Pre-filter hidden targets before building steps
+  const sorted = spreadItems ? preFilterHiddenTargets(baseSorted, spreadItems, spreadId) : baseSorted;
 
   const steps: AnimationStep[] = [];
   let currentStep: AnimationStep | null = null;
