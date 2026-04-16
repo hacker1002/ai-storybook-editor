@@ -11,7 +11,7 @@ import {
 } from '@/features/editor/components/shared-components';
 import {
   cloneItemWithNewId,
-  computeDuplicateZShift,
+  nextTopZInTier,
   shiftTextboxLanguageGeometries,
 } from '@/features/editor/utils/duplicate-item-helpers';
 import {
@@ -351,7 +351,7 @@ export function SpreadsMainView({
         const source = spread.raw_images?.find((i) => i.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
         const cloned = cloneItemWithNewId(source);
-        actions.addRawImage(selectedSpreadId, cloned, { insertAfterId: itemId });
+        actions.addRawImage(selectedSpreadId, cloned);
         log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id });
         onItemSelect({ type: 'raw_image', id: cloned.id });
       } else if (itemType === 'raw_textbox') {
@@ -360,34 +360,19 @@ export function SpreadsMainView({
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
         const cloned = cloneItemWithNewId(source);
         shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
-        actions.addRawTextbox(selectedSpreadId, cloned, { insertAfterId: itemId });
+        actions.addRawTextbox(selectedSpreadId, cloned);
         log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id });
         onItemSelect({ type: 'raw_textbox', id: cloned.id });
       } else if (itemType === 'shape') {
         const source = spread.shapes?.find((s) => s.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const origZ = source['z-index'] ?? 0;
 
-        // Cascade mix tier (shape + audio + quiz). Spread data shared với Objects
-        // space, z-index là property toàn cục → shift bất kể view hiện tại.
-        const { shifts } = computeDuplicateZShift(spread, itemId, origZ, 'mix');
-        for (const shift of shifts) {
-          const isAudio = spread.audios?.some((a) => a.id === shift.id);
-          const isQuiz = spread.quizzes?.some((q) => q.id === shift.id);
-          if (isAudio) {
-            actions.updateRetouchAudio(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          } else if (isQuiz) {
-            actions.updateQuiz(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          } else {
-            actions.updateRetouchShape(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          }
-          log.debug('handleDuplicateItem', 'shifted z-index', { tier: 'mix', itemId: shift.id, from: shift.from, to: shift.to });
-        }
-
+        // Top-push: clone goes above all existing mix-tier items regardless of source position.
+        const newZ = nextTopZInTier(spread, 'mix');
         const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = origZ + 1;
-        actions.addRetouchShape(selectedSpreadId, cloned, { insertAfterId: itemId });
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        cloned['z-index'] = newZ;
+        actions.addRetouchShape(selectedSpreadId, cloned);
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
         onItemSelect({ type: 'shape', id: cloned.id });
       }
     },

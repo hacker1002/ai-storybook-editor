@@ -2,7 +2,7 @@
 // No own state: reads/writes from state.illustration.spreads[] playable layers
 
 import type { StateCreator } from 'zustand';
-import type { SnapshotStore, RetouchSlice, AddItemOptions } from '../types';
+import type { SnapshotStore, RetouchSlice } from '../types';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'RetouchSlice');
@@ -15,20 +15,10 @@ export const createRetouchSlice: StateCreator<
 > = (set) => ({
   // --- Images (playable) ---
 
-  addRetouchImage: (spreadId, image, options?: AddItemOptions) =>
+  addRetouchImage: (spreadId, image) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
-        if (options?.insertAfterId) {
-          const idx = spread.images.findIndex((i) => i.id === options.insertAfterId);
-          if (idx >= 0) {
-            log.debug('addRetouchImage', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: image.id });
-            spread.images.splice(idx + 1, 0, image);
-            state.sync.isDirty = true;
-            return;
-          }
-          log.warn('addRetouchImage', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
-        }
         log.debug('addRetouchImage', 'add', { spreadId, imageId: image.id });
         spread.images.push(image);
         state.sync.isDirty = true;
@@ -60,20 +50,10 @@ export const createRetouchSlice: StateCreator<
 
   // --- Textboxes (playable) ---
 
-  addRetouchTextbox: (spreadId, textbox, options?: AddItemOptions) =>
+  addRetouchTextbox: (spreadId, textbox) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
-        if (options?.insertAfterId) {
-          const idx = spread.textboxes.findIndex((t) => t.id === options.insertAfterId);
-          if (idx >= 0) {
-            log.debug('addRetouchTextbox', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: textbox.id });
-            spread.textboxes.splice(idx + 1, 0, textbox);
-            state.sync.isDirty = true;
-            return;
-          }
-          log.warn('addRetouchTextbox', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
-        }
         log.debug('addRetouchTextbox', 'add', { spreadId, textboxId: textbox.id });
         spread.textboxes.push(textbox);
         state.sync.isDirty = true;
@@ -105,21 +85,11 @@ export const createRetouchSlice: StateCreator<
 
   // --- Shapes (playable, with z-index/visibility) ---
 
-  addRetouchShape: (spreadId, shape, options?: AddItemOptions) =>
+  addRetouchShape: (spreadId, shape) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         if (!spread.shapes) spread.shapes = [];
-        if (options?.insertAfterId) {
-          const idx = spread.shapes.findIndex((sh) => sh.id === options.insertAfterId);
-          if (idx >= 0) {
-            log.debug('addRetouchShape', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: shape.id });
-            spread.shapes.splice(idx + 1, 0, shape);
-            state.sync.isDirty = true;
-            return;
-          }
-          log.warn('addRetouchShape', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
-        }
         log.debug('addRetouchShape', 'add', { spreadId, shapeId: shape.id });
         spread.shapes.push(shape);
         state.sync.isDirty = true;
@@ -151,21 +121,11 @@ export const createRetouchSlice: StateCreator<
 
   // --- Videos ---
 
-  addRetouchVideo: (spreadId, video, options?: AddItemOptions) =>
+  addRetouchVideo: (spreadId, video) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         if (!spread.videos) spread.videos = [];
-        if (options?.insertAfterId) {
-          const idx = spread.videos.findIndex((v) => v.id === options.insertAfterId);
-          if (idx >= 0) {
-            log.debug('addRetouchVideo', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: video.id });
-            spread.videos.splice(idx + 1, 0, video);
-            state.sync.isDirty = true;
-            return;
-          }
-          log.warn('addRetouchVideo', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
-        }
         log.debug('addRetouchVideo', 'add', { spreadId, videoId: video.id });
         spread.videos.push(video);
         state.sync.isDirty = true;
@@ -197,21 +157,11 @@ export const createRetouchSlice: StateCreator<
 
   // --- Animated Pics ---
 
-  addRetouchAnimatedPic: (spreadId, animatedPic, options?: AddItemOptions) =>
+  addRetouchAnimatedPic: (spreadId, animatedPic) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         if (!spread.animated_pics) spread.animated_pics = [];
-        if (options?.insertAfterId) {
-          const idx = spread.animated_pics.findIndex((p) => p.id === options.insertAfterId);
-          if (idx >= 0) {
-            log.debug('addRetouchAnimatedPic', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: animatedPic.id });
-            spread.animated_pics.splice(idx + 1, 0, animatedPic);
-            state.sync.isDirty = true;
-            return;
-          }
-          log.warn('addRetouchAnimatedPic', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
-        }
         log.debug('addRetouchAnimatedPic', 'add', { spreadId, animatedPicId: animatedPic.id });
         spread.animated_pics.push(animatedPic);
         state.sync.isDirty = true;
@@ -243,21 +193,11 @@ export const createRetouchSlice: StateCreator<
 
   // --- Audios ---
 
-  addRetouchAudio: (spreadId, audio, options?: AddItemOptions) =>
+  addRetouchAudio: (spreadId, audio) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
         if (!spread.audios) spread.audios = [];
-        if (options?.insertAfterId) {
-          const idx = spread.audios.findIndex((a) => a.id === options.insertAfterId);
-          if (idx >= 0) {
-            log.debug('addRetouchAudio', 'insertAfter', { spreadId, afterId: options.insertAfterId, newId: audio.id });
-            spread.audios.splice(idx + 1, 0, audio);
-            state.sync.isDirty = true;
-            return;
-          }
-          log.warn('addRetouchAudio', 'insertAfterId not found, fallback push', { insertAfterId: options.insertAfterId });
-        }
         log.debug('addRetouchAudio', 'add', { spreadId, audioId: audio.id });
         spread.audios.push(audio);
         state.sync.isDirty = true;

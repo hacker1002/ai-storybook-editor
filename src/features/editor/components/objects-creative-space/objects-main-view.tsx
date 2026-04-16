@@ -37,15 +37,11 @@ import {
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { useBookTemplateLayout } from "@/stores/book-store";
-import {
-  calculateZIndexShifts,
-  collectPictorialZItems,
-} from "@/features/editor/utils/z-index-cascade-utils";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 import {
   cloneItemWithNewId,
-  computeDuplicateZShift,
+  nextTopZInTier,
   shiftTextboxLanguageGeometries,
 } from "@/features/editor/utils/duplicate-item-helpers";
 import { useInteractionLayerContext } from "@/features/editor/contexts/interaction-layer-provider";
@@ -279,32 +275,13 @@ export function ObjectsMainView({
     (result: CropCreateResult) => {
       if (!cropModalImage) return;
       const orig = cropModalImage;
-      const origZ = orig["z-index"] ?? 0;
-      const insertCount = result.croppedObjects.length;
+      const count = result.croppedObjects.length;
 
-      // Cascade z-index: push existing items up to make room for new crops
+      // Top-push: new crops go above all existing pictorial-tier items.
       const spread = retouchSpreads.find((s) => s.id === cropModalSpreadId);
-      if (spread) {
-        const tierItems = collectPictorialZItems(spread, cropModalImage.id);
-        const shifts = calculateZIndexShifts(origZ, insertCount, tierItems);
-        for (const shift of shifts) {
-          const isVideo = spread.videos?.some((v) => v.id === shift.id);
-          if (isVideo) {
-            actions.updateRetouchVideo(cropModalSpreadId, shift.id, {
-              "z-index": shift.to,
-            });
-          } else {
-            actions.updateRetouchImage(cropModalSpreadId, shift.id, {
-              "z-index": shift.to,
-            });
-          }
-          log.debug("handleCropCreateImages", "shifted z-index", {
-            itemId: shift.id,
-            from: shift.from,
-            to: shift.to,
-          });
-        }
-      }
+      const firstZ = spread
+        ? nextTopZInTier(spread, "pictorial", { count })
+        : LAYER_CONFIG.MEDIA.min;
 
       // Add cropped objects as new images (original image kept as-is)
       result.croppedObjects.forEach((obj, i) => {
@@ -335,14 +312,15 @@ export function ObjectsMainView({
           aspect_ratio: obj.aspectRatio,
           player_visible: orig.player_visible,
           editor_visible: orig.editor_visible,
-          "z-index": origZ + i + 1,
+          "z-index": Math.min(firstZ + i, LAYER_CONFIG.MEDIA.max),
         };
         actions.addRetouchImage(cropModalSpreadId, newImage);
       });
 
       log.info("handleCropCreateImages", "created new images from crops", {
-        croppedCount: result.croppedObjects.length,
+        croppedCount: count,
         spreadId: cropModalSpreadId,
+        firstZ,
       });
     },
     [cropModalImage, cropModalSpreadId, actions, retouchSpreads]
@@ -352,33 +330,13 @@ export function ObjectsMainView({
     (layers: SplitLayerResult[]) => {
       if (!splitModalImage) return;
       const orig = splitModalImage.geometry;
-      const origZ = splitModalImage["z-index"] ?? 0;
       const isFullScreen = orig.w >= 100 && orig.h >= 100;
       const spread = retouchSpreads.find((s) => s.id === splitModalSpreadId);
 
-      // Cascade z-index: push existing images/videos up only where needed
-      if (spread) {
-        const tierItems = collectPictorialZItems(spread, splitModalImage.id);
-        const shifts = calculateZIndexShifts(origZ, layers.length, tierItems);
-        for (const shift of shifts) {
-          // Determine item type for correct store action
-          const isVideo = spread.videos?.some((v) => v.id === shift.id);
-          if (isVideo) {
-            actions.updateRetouchVideo(splitModalSpreadId, shift.id, {
-              "z-index": shift.to,
-            });
-          } else {
-            actions.updateRetouchImage(splitModalSpreadId, shift.id, {
-              "z-index": shift.to,
-            });
-          }
-          log.debug("handleSplitCreateImages", "shifted z-index", {
-            itemId: shift.id,
-            from: shift.from,
-            to: shift.to,
-          });
-        }
-      }
+      // Top-push: split layers go above all existing pictorial-tier items.
+      const firstZ = spread
+        ? nextTopZInTier(spread, "pictorial", { count: layers.length })
+        : LAYER_CONFIG.MEDIA.min;
 
       // Create new images
       layers.forEach((layer, index) => {
@@ -405,7 +363,7 @@ export function ObjectsMainView({
           aspect_ratio: splitModalImage.aspect_ratio,
           player_visible: splitModalImage.player_visible,
           editor_visible: splitModalImage.editor_visible,
-          "z-index": origZ + index + 1,
+          "z-index": Math.min(firstZ + index, LAYER_CONFIG.MEDIA.max),
         };
         actions.addRetouchImage(splitModalSpreadId, newImage);
       });
@@ -413,7 +371,7 @@ export function ObjectsMainView({
       log.info("handleSplitCreateImages", "created images from split", {
         count: layers.length,
         spreadId: splitModalSpreadId,
-        origZ,
+        firstZ,
         isFullScreen,
       });
     },
@@ -574,109 +532,60 @@ export function ObjectsMainView({
         return;
       }
 
-      // Apply pictorial-tier shifts (images + videos). Dispatch per item type.
-      const applyPictorialShifts = (origZ: number, sourceId: string) => {
-        const { shifts } = computeDuplicateZShift(spread, sourceId, origZ, 'pictorial');
-        for (const shift of shifts) {
-          const isVideo = spread.videos?.some((v) => v.id === shift.id);
-          const isAnimatedPic = spread.animated_pics?.some((ap) => ap.id === shift.id);
-          if (isVideo) {
-            actions.updateRetouchVideo(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          } else if (isAnimatedPic) {
-            actions.updateRetouchAnimatedPic(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          } else {
-            actions.updateRetouchImage(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          }
-          log.debug('handleDuplicateItem', 'shifted z-index', { tier: 'pictorial', itemId: shift.id, from: shift.from, to: shift.to });
-        }
-      };
-
-      // Apply mix-tier shifts (shapes + audios + quizzes). Dispatch per item type.
-      const applyMixShifts = (origZ: number, sourceId: string) => {
-        const { shifts } = computeDuplicateZShift(spread, sourceId, origZ, 'mix');
-        for (const shift of shifts) {
-          const isAudio = spread.audios?.some((a) => a.id === shift.id);
-          const isQuiz = spread.quizzes?.some((q) => q.id === shift.id);
-          if (isAudio) {
-            actions.updateRetouchAudio(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          } else if (isQuiz) {
-            actions.updateQuiz(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          } else {
-            actions.updateRetouchShape(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          }
-          log.debug('handleDuplicateItem', 'shifted z-index', { tier: 'mix', itemId: shift.id, from: shift.from, to: shift.to });
-        }
-      };
-
-      // Apply text-tier shifts (textboxes only).
-      const applyTextShifts = (origZ: number, sourceId: string) => {
-        const { shifts } = computeDuplicateZShift(spread, sourceId, origZ, 'text');
-        for (const shift of shifts) {
-          actions.updateRetouchTextbox(selectedSpreadId, shift.id, { 'z-index': shift.to });
-          log.debug('handleDuplicateItem', 'shifted z-index', { tier: 'text', itemId: shift.id, from: shift.from, to: shift.to });
-        }
-      };
-
       if (itemType === 'image') {
         const source = spread.images?.find((i) => i.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const origZ = source['z-index'] ?? 0;
-        applyPictorialShifts(origZ, itemId);
+        const newZ = nextTopZInTier(spread, 'pictorial');
         const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = origZ + 1;
-        actions.addRetouchImage(selectedSpreadId, cloned, { insertAfterId: itemId });
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        cloned['z-index'] = newZ;
+        actions.addRetouchImage(selectedSpreadId, cloned);
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
         onItemSelect({ type: 'image', id: cloned.id });
       } else if (itemType === 'text') {
         const source = spread.textboxes?.find((t) => t.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const origZ = source['z-index'] ?? 0;
-        applyTextShifts(origZ, itemId);
+        const newZ = nextTopZInTier(spread, 'text');
         const cloned = cloneItemWithNewId(source);
         shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
-        cloned['z-index'] = origZ + 1;
-        actions.addRetouchTextbox(selectedSpreadId, cloned, { insertAfterId: itemId });
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        cloned['z-index'] = newZ;
+        actions.addRetouchTextbox(selectedSpreadId, cloned);
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
         onItemSelect({ type: 'textbox', id: cloned.id });
       } else if (itemType === 'shape') {
         const source = spread.shapes?.find((s) => s.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const origZ = source['z-index'] ?? 0;
-        applyMixShifts(origZ, itemId);
+        const newZ = nextTopZInTier(spread, 'mix');
         const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = origZ + 1;
-        actions.addRetouchShape(selectedSpreadId, cloned, { insertAfterId: itemId });
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        cloned['z-index'] = newZ;
+        actions.addRetouchShape(selectedSpreadId, cloned);
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
         onItemSelect({ type: 'shape', id: cloned.id });
       } else if (itemType === 'video') {
         const source = spread.videos?.find((v) => v.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const origZ = source['z-index'] ?? 0;
-        applyPictorialShifts(origZ, itemId);
+        const newZ = nextTopZInTier(spread, 'pictorial');
         const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = origZ + 1;
-        actions.addRetouchVideo(selectedSpreadId, cloned, { insertAfterId: itemId });
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        cloned['z-index'] = newZ;
+        actions.addRetouchVideo(selectedSpreadId, cloned);
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
         onItemSelect({ type: 'video', id: cloned.id });
       } else if (itemType === 'audio') {
         const source = spread.audios?.find((a) => a.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const origZ = source['z-index'] ?? 0;
-        applyMixShifts(origZ, itemId);
+        const newZ = nextTopZInTier(spread, 'mix');
         const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = origZ + 1;
-        actions.addRetouchAudio(selectedSpreadId, cloned, { insertAfterId: itemId });
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        cloned['z-index'] = newZ;
+        actions.addRetouchAudio(selectedSpreadId, cloned);
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
         onItemSelect({ type: 'audio', id: cloned.id });
       } else if (itemType === 'animated_pic') {
         const source = spread.animated_pics?.find((ap) => ap.id === itemId);
         if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const origZ = source['z-index'] ?? 0;
-        applyPictorialShifts(origZ, itemId);
+        const newZ = nextTopZInTier(spread, 'pictorial');
         const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = origZ + 1;
-        actions.addRetouchAnimatedPic(selectedSpreadId, cloned, { insertAfterId: itemId });
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ: origZ + 1 });
+        cloned['z-index'] = newZ;
+        actions.addRetouchAnimatedPic(selectedSpreadId, cloned);
+        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
         onItemSelect({ type: 'animated_pic', id: cloned.id });
       }
     },
@@ -981,11 +890,10 @@ export function ObjectsMainView({
   const handleCloneRawImage = useCallback(
     (rawImage: SpreadImage) => {
       const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
-      const imageFloor = LAYER_CONFIG.MEDIA.min - 1;
-      const maxZ = spread?.images?.reduce(
-        (max, img) => Math.max(max, img["z-index"] ?? imageFloor),
-        imageFloor
-      ) ?? imageFloor;
+      // nextTopZInTier scans the full MEDIA tier (images + videos + animated_pics)
+      const newZ = spread
+        ? Math.min(nextTopZInTier(spread, 'pictorial'), LAYER_CONFIG.MEDIA.max)
+        : LAYER_CONFIG.MEDIA.min;
 
       const newImage: SpreadImage = {
         id: crypto.randomUUID(),
@@ -997,7 +905,7 @@ export function ObjectsMainView({
         aspect_ratio: rawImage.aspect_ratio,
         player_visible: true,
         editor_visible: true,
-        "z-index": maxZ + 1,
+        "z-index": newZ,
       };
       actions.addRetouchImage(selectedSpreadId, newImage);
       log.info("handleCloneRawImage", "cloned raw image to retouch image", {
@@ -1151,18 +1059,14 @@ export function ObjectsMainView({
   const handleCloneRawTextbox = useCallback(
     (rawTextbox: SpreadTextbox) => {
       const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
-      const textFloor = LAYER_CONFIG.TEXT.min - 1;
-      const maxZ = spread?.textboxes?.reduce(
-        (max, tb) => Math.max(max, tb["z-index"] ?? textFloor),
-        textFloor
-      ) ?? textFloor;
+      const newZ = spread ? nextTopZInTier(spread, 'text') : LAYER_CONFIG.TEXT.min;
 
       const cloned: SpreadTextbox = structuredClone(rawTextbox);
       cloned.id = crypto.randomUUID();
       shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
       cloned.player_visible = true;
       cloned.editor_visible = true;
-      cloned["z-index"] = maxZ + 1;
+      cloned["z-index"] = newZ;
 
       actions.addRetouchTextbox(selectedSpreadId, cloned);
       log.info("handleCloneRawTextbox", "cloned raw textbox to retouch textbox", {
