@@ -420,6 +420,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderShapeItem={renderShapeItem}
                 renderVideoItem={renderVideoItem}
                 renderAudioItem={renderAudioItem}
+                renderAnimatedPicItem={renderAnimatedPicItem}
                 renderQuizItem={renderQuizItem}
                 renderRawImage={renderRawImage}
                 renderRawTextbox={renderRawTextbox}
@@ -448,6 +449,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             renderShapeItem={renderShapeItem}
             renderVideoItem={renderVideoItem}
             renderAudioItem={renderAudioItem}
+            renderAnimatedPicItem={renderAnimatedPicItem}
+            renderQuizItem={renderQuizItem}
             renderRawImage={renderRawImage}
             renderRawTextbox={renderRawTextbox}
             canAdd={canAddSpread}
