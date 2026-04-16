@@ -9,6 +9,7 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
+  EditableAnimatedPic,
 } from "../shared-components";
 import { useToolbarPosition } from "../../hooks/use-toolbar-position";
 import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
@@ -351,6 +352,19 @@ export function RemixEditorCanvas({
             video={video}
             index={index}
             zIndex={video["z-index"]}
+            isSelected={false}
+            isEditable={false}
+            onSelect={() => {}}
+          />
+        ))}
+
+        {/* Animated Pics (render-only, auto-loop) */}
+        {spread.animated_pics?.map((animatedPic, index) => (
+          <EditableAnimatedPic
+            key={animatedPic.id}
+            animatedPic={animatedPic}
+            index={index}
+            zIndex={animatedPic["z-index"]}
             isSelected={false}
             isEditable={false}
             onSelect={() => {}}

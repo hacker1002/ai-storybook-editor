@@ -76,13 +76,15 @@ export function resolveInitialState(
       return { autoAlpha: 0 };
 
     case EFFECT_TYPE.FLY_IN: {
+      // Negate: 'direction' = direction of travel (left = travels leftward = starts offscreen right)
       const offset = calculateFlyOffset(animation.effect.direction, cw, ch);
-      return { autoAlpha: 0, x: offset.x, y: offset.y };
+      return { autoAlpha: 0, x: -offset.x, y: -offset.y };
     }
 
     case EFFECT_TYPE.FLOAT_IN: {
+      // Negate: same semantic — direction = direction of travel
       const offset = calculateFloatOffset(animation.effect.direction);
-      return { autoAlpha: 0, x: offset.x, y: offset.y };
+      return { autoAlpha: 0, x: -offset.x, y: -offset.y };
     }
 
     case EFFECT_TYPE.ZOOM:

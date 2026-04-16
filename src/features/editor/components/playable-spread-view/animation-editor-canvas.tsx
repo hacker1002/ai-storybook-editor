@@ -9,6 +9,7 @@ import {
   EditableVideo,
   EditableAudio,
   EditableQuiz,
+  EditableAnimatedPic,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
@@ -111,6 +112,9 @@ export function AnimationEditorCanvas({
     } else if (externalItemType === "video") {
       geometry =
         spread.videos?.find((v) => v.id === externalItemId)?.geometry ?? null;
+    } else if (externalItemType === "animated_pic") {
+      geometry =
+        spread.animated_pics?.find((p) => p.id === externalItemId)?.geometry ?? null;
     } else if (externalItemType === "audio" || externalItemType === "quiz") {
       // Audio/quiz use fixed-size icons — selection handled by the component itself
       geometry = null;
@@ -227,6 +231,20 @@ export function AnimationEditorCanvas({
       onItemSelect("video", videoId);
     },
     [spread.videos, onItemSelect]
+  );
+
+  // Animated pic selection handler
+  const handleAnimatedPicSelect = useCallback(
+    (animatedPicId: string) => {
+      log.info("handleAnimatedPicSelect", "animated_pic selected", { animatedPicId });
+      const animatedPic = spread.animated_pics?.find((p) => p.id === animatedPicId);
+      if (!animatedPic) return;
+      setSelectedItemId(animatedPicId);
+      setSelectedItemType("animated_pic");
+      setSelectedGeometry(animatedPic.geometry);
+      onItemSelect("animated_pic", animatedPicId);
+    },
+    [spread.animated_pics, onItemSelect]
   );
 
   // Audio selection handler (no SelectionOverlay — component handles its own selection border)
@@ -363,6 +381,20 @@ export function AnimationEditorCanvas({
             isEditable={true}
             showItemBorder={true}
             onSelect={() => handleVideoSelect(video.id)}
+          />
+        ))}
+
+        {/* Animated Pics (selectable, showItemBorder for animation target visibility) */}
+        {spread.animated_pics?.map((animatedPic, index) => (
+          <EditableAnimatedPic
+            key={animatedPic.id}
+            animatedPic={animatedPic}
+            index={index}
+            zIndex={animatedPic["z-index"]}
+            isSelected={selectedItemId === animatedPic.id && selectedItemType === "animated_pic"}
+            isEditable={true}
+            showItemBorder={true}
+            onSelect={() => handleAnimatedPicSelect(animatedPic.id)}
           />
         ))}
 

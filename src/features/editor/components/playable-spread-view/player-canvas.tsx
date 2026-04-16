@@ -9,6 +9,7 @@ import {
   EditableVideo,
   EditableAudio,
   EditableQuiz,
+  EditableAnimatedPic,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { useCanvasWidth, useCanvasHeight, useSetZoomLevel } from "@/stores/editor-settings-store";
@@ -463,6 +464,7 @@ export function PlayerCanvas({
       ...(spread.images ?? []),
       ...(spread.shapes ?? []),
       ...(spread.videos ?? []),
+      ...(spread.animated_pics ?? []),
       ...(spread.audios ?? []),
       ...(spread.textboxes ?? []),
       ...(spread.quizzes ?? []),
@@ -634,6 +636,29 @@ export function PlayerCanvas({
                 video={video}
                 index={index}
                 zIndex={video["z-index"]}
+                isSelected={false}
+                isEditable={false}
+                onSelect={() => {}}
+              />
+            </div>
+          );
+        })}
+
+        {/* Animated Pics — skip empty (no media_url), auto-loop */}
+        {spread.animated_pics?.map((animatedPic, index) => {
+          if (animatedPic.player_visible === false) return null;
+          if (!animatedPic.media_url) return null;
+          return (
+            <div
+              key={animatedPic.id}
+              ref={registerRef(animatedPic.id)}
+              className={`${getPointerClasses(animatedPic.id)} ${getHighlightClass(animatedPic.id)}`}
+              onClickCapture={() => handleItemClick(animatedPic.id)}
+            >
+              <EditableAnimatedPic
+                animatedPic={animatedPic}
+                index={index}
+                zIndex={animatedPic["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 onSelect={() => {}}

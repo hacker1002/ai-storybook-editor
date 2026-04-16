@@ -9,6 +9,7 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
+  EditableAnimatedPic,
 } from "../shared-components";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
@@ -176,22 +177,6 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             );
           })}
 
-          {/* Shapes (thumbnail) */}
-          {spread.shapes?.map((shape, idx) => {
-            if (shape.player_visible === false) return null;
-            return (
-              <EditableShape
-                key={shape.id || idx}
-                shape={shape}
-                index={idx}
-                zIndex={shape["z-index"]}
-                isSelected={false}
-                isEditable={false}
-                onSelect={() => {}}
-              />
-            );
-          })}
-
           {/* Videos (thumbnail - static) */}
           {spread.videos?.map((video, idx) => {
             if (video.player_visible === false) return null;
@@ -201,6 +186,39 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
                 video={video}
                 index={idx}
                 zIndex={video["z-index"]}
+                isSelected={false}
+                isEditable={false}
+                onSelect={() => {}}
+              />
+            );
+          })}
+
+          {/* Animated Pics (thumbnail - auto-loop) */}
+          {spread.animated_pics?.map((animatedPic, idx) => {
+            if (animatedPic.player_visible === false) return null;
+            return (
+              <EditableAnimatedPic
+                key={animatedPic.id || idx}
+                animatedPic={animatedPic}
+                index={idx}
+                zIndex={animatedPic["z-index"]}
+                isSelected={false}
+                isEditable={false}
+                isThumbnail={true}
+                onSelect={() => {}}
+              />
+            );
+          })}
+
+          {/* Shapes (thumbnail) */}
+          {spread.shapes?.map((shape, idx) => {
+            if (shape.player_visible === false) return null;
+            return (
+              <EditableShape
+                key={shape.id || idx}
+                shape={shape}
+                index={idx}
+                zIndex={shape["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 onSelect={() => {}}

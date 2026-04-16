@@ -12,6 +12,7 @@ import {
   Image,
   Volume2,
   Film,
+  ImagePlay,
   Square,
   CircleHelp,
   Star,
@@ -61,6 +62,8 @@ function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
       return <Volume2 className={cls} />;
     case "video":
       return <Film className={cls} />;
+    case "animated_pic":
+      return <ImagePlay className={cls} />;
     case "textbox":
       return (
         <span className="text-[10px] font-bold text-muted-foreground leading-none">
