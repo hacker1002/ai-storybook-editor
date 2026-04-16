@@ -1,9 +1,7 @@
 // objects-main-view.tsx - CanvasSpreadView wrapper with retouch render props
 "use client";
 
-import { useState, useCallback } from "react";
-import { EyeOff } from "lucide-react";
-import { toast } from "sonner";
+import { useCallback } from "react";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
   EditableImage,
@@ -29,7 +27,7 @@ import { ObjectsTextToolbar } from "./objects-text-toolbar";
 import { ObjectsRawImageToolbar } from "./objects-raw-image-toolbar";
 import { ObjectsRawTextboxToolbar } from "./objects-raw-textbox-toolbar";
 import { ObjectsAnimatedPicToolbar } from "./objects-animated-pic-toolbar";
-import type { Geometry } from "@/types/canvas-types";
+import { PlayerHiddenBadge } from "./player-hidden-badge";
 import {
   useRetouchSpreads,
   useSnapshotActions,
@@ -38,15 +36,19 @@ import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-he
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { useBookTemplateLayout } from "@/stores/book-store";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
-import { createLogger } from "@/utils/logger";
-import {
-  cloneItemWithNewId,
-  nextTopZInTier,
-  shiftTextboxLanguageGeometries,
-} from "@/features/editor/utils/duplicate-item-helpers";
 import { useInteractionLayerContext } from "@/features/editor/contexts/interaction-layer-provider";
-import { useGlobalHotkey } from "@/features/editor/contexts/use-global-hotkey";
-import { COLUMNS, LAYER_CONFIG } from "@/constants/spread-constants";
+import { COLUMNS } from "@/constants/spread-constants";
+import {
+  useSpreadHandlers,
+  useSpreadItemDispatch,
+  buildCropImages,
+  buildSplitImages,
+  useSplitTextbox,
+  useObjectModals,
+  useCloneRaw,
+  useDuplicateItem,
+  useDuplicateHotkey,
+} from "./hooks";
 import type { SelectedItem } from "./objects-creative-space";
 import type {
   BaseSpread,
@@ -62,87 +64,13 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
-  SpreadItemActionUnion,
   SpreadImage,
   SpreadTextbox,
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
   SpreadAnimatedPic,
-  PageData,
 } from "@/types/canvas-types";
-
-const log = createLogger("Editor", "ObjectsMainView");
-
-const matchCtrlD = (e: KeyboardEvent): boolean =>
-  (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd';
-
-const OBJECTS_FORBIDDEN = ['raw_image', 'raw_textbox'] as const;
-
-import type { Typography } from "@/types/spread-types";
-
-/** Measure required height (%) for text in a textbox of given width (%).
- *  Uses an offscreen DOM element with matching typography to get accurate line wrapping. */
-function measureTextHeightPercent(
-  text: string,
-  widthPercent: number,
-  typography: Typography | undefined,
-  canvasWidth: number,
-  canvasHeight: number
-): number {
-  const widthPx = (widthPercent / 100) * canvasWidth;
-  const el = document.createElement('div');
-  el.style.position = 'absolute';
-  el.style.visibility = 'hidden';
-  el.style.width = `${widthPx}px`;
-  el.style.whiteSpace = 'pre-wrap';
-  el.style.padding = '4px'; // matches p-1 (0.25rem = 4px)
-  el.style.fontFamily = typography?.family || 'inherit';
-  el.style.fontSize = typography?.size ? `${typography.size}px` : '16px';
-  el.style.fontWeight = String(typography?.weight || 'normal');
-  el.style.fontStyle = typography?.style || 'normal';
-  el.style.lineHeight = String(typography?.lineHeight || 1.5);
-  el.style.letterSpacing = typography?.letterSpacing ? `${typography.letterSpacing}px` : 'normal';
-  el.textContent = text;
-  document.body.appendChild(el);
-  const heightPx = el.scrollHeight;
-  document.body.removeChild(el);
-  return (heightPx / canvasHeight) * 100;
-}
-
-/** Badge overlay shown on canvas items when player_visible = false.
- *  For icon-type items (audio/quiz) with w=0,h=0, uses fixed 32px box matching the icon size. */
-function PlayerHiddenBadge({
-  geometry,
-  zIndex,
-  isIcon,
-}: {
-  geometry: Geometry;
-  zIndex?: number;
-  isIcon?: boolean;
-}) {
-  return (
-    <div
-      className="absolute pointer-events-none"
-      style={{
-        left: `${geometry.x}%`,
-        top: `${geometry.y}%`,
-        ...(isIcon
-          ? { width: 32, height: 32 }
-          : { width: `${geometry.w}%`, height: `${geometry.h}%` }),
-        zIndex: (zIndex ?? 0) + 1,
-      }}
-    >
-      <div
-        className={`absolute rounded-sm bg-black/60 p-0.5 ${
-          isIcon ? "-top-2.5 -right-2.5" : "top-0.5 right-0.5"
-        }`}
-      >
-        <EyeOff className="w-3 h-3 text-white" />
-      </div>
-    </div>
-  );
-}
 
 interface ObjectsMainViewProps {
   selectedSpreadId: string;
@@ -170,454 +98,33 @@ export function ObjectsMainView({
 
   const handleDeselect = useCallback(() => onItemSelect(null), [onItemSelect]);
 
-  // Generate image modal state — spreadId captured at open time to prevent
-  // wrong-spread updates if selection changes while modal is open
-  const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [generateModalImageId, setGenerateModalImageId] = useState<
-    string | null
-  >(null);
-  const [generateModalSpreadId, setGenerateModalSpreadId] =
-    useState<string>("");
+  const { splitTextbox } = useSplitTextbox(actions, onItemSelect, langCode, canvasWidth, canvasHeight);
 
-  const openGenerateModal = useCallback(
-    (image: SpreadImage) => {
-      setGenerateModalImageId(image.id);
-      setGenerateModalSpreadId(selectedSpreadId);
-      setGenerateModalOpen(true);
-    },
-    [selectedSpreadId]
-  );
-
-  const handleGenerateModalClose = useCallback((open: boolean) => {
-    setGenerateModalOpen(open);
-    if (!open) setGenerateModalImageId(null);
-  }, []);
-
-  // Split image modal state
-  const [splitModalOpen, setSplitModalOpen] = useState(false);
-  const [splitModalImage, setSplitModalImage] = useState<SpreadImage | null>(
-    null
-  );
-  const [splitModalSpreadId, setSplitModalSpreadId] = useState<string>("");
-
-  const openSplitModal = useCallback(
-    (image: SpreadImage) => {
-      setSplitModalImage(image);
-      setSplitModalSpreadId(selectedSpreadId);
-      setSplitModalOpen(true);
-    },
-    [selectedSpreadId]
-  );
-
-  const handleSplitModalClose = useCallback((open: boolean) => {
-    setSplitModalOpen(open);
-    if (!open) setSplitModalImage(null);
-  }, []);
-
-  // Crop audio modal state
-  const [cropAudioModalOpen, setCropAudioModalOpen] = useState(false);
-  const [cropAudioItem, setCropAudioItem] = useState<SpreadAudio | null>(null);
-  const [cropAudioSpreadId, setCropAudioSpreadId] = useState<string>("");
-
-  const openCropAudioModal = useCallback(
-    (audio: SpreadAudio) => {
-      setCropAudioItem(audio);
-      setCropAudioSpreadId(selectedSpreadId);
-      setCropAudioModalOpen(true);
-    },
-    [selectedSpreadId]
-  );
-
-  const handleCropAudioModalClose = useCallback(() => {
-    setCropAudioModalOpen(false);
-    setCropAudioItem(null);
-  }, []);
-
-  const handleCropAudioComplete = useCallback(
-    (newMediaUrl: string) => {
-      if (!cropAudioItem) return;
-      actions.updateRetouchAudio(cropAudioSpreadId, cropAudioItem.id, {
-        media_url: newMediaUrl,
-      });
-      log.info("handleCropAudioComplete", "audio cropped", {
-        audioId: cropAudioItem.id,
-        spreadId: cropAudioSpreadId,
-        newMediaUrl,
-      });
-      setCropAudioModalOpen(false);
-      setCropAudioItem(null);
-    },
-    [cropAudioItem, cropAudioSpreadId, actions]
-  );
-
-  // Crop image modal state
-  const [cropModalOpen, setCropModalOpen] = useState(false);
-  const [cropModalImage, setCropModalImage] = useState<SpreadImage | null>(
-    null
-  );
-  const [cropModalSpreadId, setCropModalSpreadId] = useState<string>("");
-
-  const openCropModal = useCallback(
-    (image: SpreadImage) => {
-      setCropModalImage(image);
-      setCropModalSpreadId(selectedSpreadId);
-      setCropModalOpen(true);
-    },
-    [selectedSpreadId]
-  );
-
-  const handleCropModalClose = useCallback((open: boolean) => {
-    setCropModalOpen(open);
-    if (!open) setCropModalImage(null);
-  }, []);
+  const modals = useObjectModals(selectedSpreadId, actions);
+  const { openGenerate, openSplit, openCrop, openCropAudio } = modals;
 
   const handleCropCreateImages = useCallback(
     (result: CropCreateResult) => {
-      if (!cropModalImage) return;
-      const orig = cropModalImage;
-      const count = result.croppedObjects.length;
-
-      // Top-push: new crops go above all existing pictorial-tier items.
-      const spread = retouchSpreads.find((s) => s.id === cropModalSpreadId);
-      const firstZ = spread
-        ? nextTopZInTier(spread, "pictorial", { count })
-        : LAYER_CONFIG.MEDIA.min;
-
-      // Add cropped objects as new images (original image kept as-is)
-      result.croppedObjects.forEach((obj, i) => {
-        const newImage: SpreadImage = {
-          id: crypto.randomUUID(),
-          title: `${orig.title || "Untitled"} - Crop #${obj.boxIndex + 1}`,
-          geometry: {
-            x: Math.min(
-              orig.geometry.x + (obj.geometry.x / 100) * orig.geometry.w,
-              99
-            ),
-            y: Math.min(
-              orig.geometry.y + (obj.geometry.y / 100) * orig.geometry.h,
-              99
-            ),
-            w: Math.min((obj.geometry.w / 100) * orig.geometry.w, 100),
-            h: Math.min((obj.geometry.h / 100) * orig.geometry.h, 100),
-          },
-          media_url: obj.imageUrl,
-          illustrations: [
-            {
-              media_url: obj.imageUrl,
-              created_time: new Date().toISOString(),
-              is_selected: true,
-            },
-          ],
-          type: "other",
-          aspect_ratio: obj.aspectRatio,
-          player_visible: orig.player_visible,
-          editor_visible: orig.editor_visible,
-          "z-index": Math.min(firstZ + i, LAYER_CONFIG.MEDIA.max),
-        };
-        actions.addRetouchImage(cropModalSpreadId, newImage);
-      });
-
-      log.info("handleCropCreateImages", "created new images from crops", {
-        croppedCount: count,
-        spreadId: cropModalSpreadId,
-        firstZ,
-      });
+      if (!modals.crop.image) return;
+      buildCropImages(result, modals.crop.image, modals.crop.spreadId, retouchSpreads, actions);
     },
-    [cropModalImage, cropModalSpreadId, actions, retouchSpreads]
+    [modals.crop.image, modals.crop.spreadId, retouchSpreads, actions]
   );
 
   const handleSplitCreateImages = useCallback(
     (layers: SplitLayerResult[]) => {
-      if (!splitModalImage) return;
-      const orig = splitModalImage.geometry;
-      const isFullScreen = orig.w >= 100 && orig.h >= 100;
-      const spread = retouchSpreads.find((s) => s.id === splitModalSpreadId);
-
-      // Top-push: split layers go above all existing pictorial-tier items.
-      const firstZ = spread
-        ? nextTopZInTier(spread, "pictorial", { count: layers.length })
-        : LAYER_CONFIG.MEDIA.min;
-
-      // Create new images
-      layers.forEach((layer, index) => {
-        const newImage: SpreadImage = {
-          id: crypto.randomUUID(),
-          title: layer.title,
-          geometry: isFullScreen
-            ? { ...orig }
-            : {
-                x: Math.min(orig.x + 5 * (index + 1), 100 - orig.w),
-                y: Math.min(orig.y + 5 * (index + 1), 100 - orig.h),
-                w: orig.w,
-                h: orig.h,
-              },
-          media_url: layer.media_url,
-          illustrations: [
-            {
-              media_url: layer.media_url,
-              created_time: new Date().toISOString(),
-              is_selected: true,
-            },
-          ],
-          type: splitModalImage.type,
-          aspect_ratio: splitModalImage.aspect_ratio,
-          player_visible: splitModalImage.player_visible,
-          editor_visible: splitModalImage.editor_visible,
-          "z-index": Math.min(firstZ + index, LAYER_CONFIG.MEDIA.max),
-        };
-        actions.addRetouchImage(splitModalSpreadId, newImage);
-      });
-
-      log.info("handleSplitCreateImages", "created images from split", {
-        count: layers.length,
-        spreadId: splitModalSpreadId,
-        firstZ,
-        isFullScreen,
-      });
+      if (!modals.split.image) return;
+      buildSplitImages(layers, modals.split.image, modals.split.spreadId, retouchSpreads, actions);
     },
-    [splitModalImage, splitModalSpreadId, actions, retouchSpreads]
+    [modals.split.image, modals.split.spreadId, retouchSpreads, actions]
   );
 
-  // Unified item action handler - dispatches to store per type
-  const handleSpreadItemAction = useCallback(
-    (params: SpreadItemActionUnion) => {
-      const { spreadId, itemType, action, itemId, data } = params;
-      log.debug("handleSpreadItemAction", "dispatch", {
-        spreadId,
-        itemType,
-        action,
-      });
-
-      switch (itemType) {
-        case "image":
-          if (action === "add")
-            actions.addRetouchImage(spreadId, data as SpreadImage);
-          else if (action === "update")
-            actions.updateRetouchImage(
-              spreadId,
-              itemId as string,
-              data as Partial<SpreadImage>
-            );
-          else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(
-              spreadId,
-              itemId as string
-            );
-            actions.deleteRetouchImage(spreadId, itemId as string);
-          }
-          break;
-        case "textbox":
-          if (action === "add")
-            actions.addRetouchTextbox(spreadId, data as SpreadTextbox);
-          else if (action === "update")
-            actions.updateRetouchTextbox(
-              spreadId,
-              itemId as string,
-              data as Partial<SpreadTextbox>
-            );
-          else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(
-              spreadId,
-              itemId as string
-            );
-            actions.deleteRetouchTextbox(spreadId, itemId as string);
-          }
-          break;
-        case "shape":
-          if (action === "add")
-            actions.addRetouchShape(spreadId, data as SpreadShape);
-          else if (action === "update")
-            actions.updateRetouchShape(
-              spreadId,
-              itemId as string,
-              data as Partial<SpreadShape>
-            );
-          else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(
-              spreadId,
-              itemId as string
-            );
-            actions.deleteRetouchShape(spreadId, itemId as string);
-          }
-          break;
-        case "video":
-          if (action === "add")
-            actions.addRetouchVideo(spreadId, data as SpreadVideo);
-          else if (action === "update")
-            actions.updateRetouchVideo(
-              spreadId,
-              itemId as string,
-              data as Partial<SpreadVideo>
-            );
-          else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(
-              spreadId,
-              itemId as string
-            );
-            actions.deleteRetouchVideo(spreadId, itemId as string);
-          }
-          break;
-        case "audio":
-          if (action === "add")
-            actions.addRetouchAudio(spreadId, data as SpreadAudio);
-          else if (action === "update")
-            actions.updateRetouchAudio(
-              spreadId,
-              itemId as string,
-              data as Partial<SpreadAudio>
-            );
-          else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(
-              spreadId,
-              itemId as string
-            );
-            actions.deleteRetouchAudio(spreadId, itemId as string);
-          }
-          break;
-        case "animated_pic":
-          if (action === "add")
-            actions.addRetouchAnimatedPic(spreadId, data as SpreadAnimatedPic);
-          else if (action === "update")
-            actions.updateRetouchAnimatedPic(
-              spreadId,
-              itemId as string,
-              data as Partial<SpreadAnimatedPic>
-            );
-          else if (action === "delete") {
-            actions.deleteRetouchAnimationsByTargetId(
-              spreadId,
-              itemId as string
-            );
-            actions.deleteRetouchAnimatedPic(spreadId, itemId as string);
-          }
-          break;
-        case "page":
-          if (action === "update" && typeof itemId === "number") {
-            const spread = retouchSpreads.find((s) => s.id === spreadId);
-            if (!spread) break;
-            const newPages = [...spread.pages];
-            newPages[itemId] = {
-              ...newPages[itemId],
-              ...(data as Partial<PageData>),
-            };
-            actions.updateIllustrationSpread(spreadId, { pages: newPages });
-          }
-          break;
-      }
-    },
-    [actions, retouchSpreads]
-  );
-
-  // Spread-level handlers (canAddSpread={false} — handleSpreadAdd not needed)
-
-  const handleDeleteSpread = useCallback(
-    (spreadId: string) => {
-      actions.deleteIllustrationSpread(spreadId);
-    },
-    [actions]
-  );
-
-  const handleSpreadReorder = useCallback(
-    (fromIndex: number, toIndex: number) => {
-      actions.reorderIllustrationSpreads(fromIndex, toIndex);
-    },
-    [actions]
-  );
-
-  const handleDuplicateItem = useCallback(
-    (itemType: 'image' | 'text' | 'shape' | 'video' | 'audio' | 'animated_pic', itemId: string) => {
-      const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
-      if (!spread) {
-        log.warn('handleDuplicateItem', 'spread not found', { selectedSpreadId });
-        return;
-      }
-
-      if (itemType === 'image') {
-        const source = spread.images?.find((i) => i.id === itemId);
-        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const newZ = nextTopZInTier(spread, 'pictorial');
-        const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = newZ;
-        actions.addRetouchImage(selectedSpreadId, cloned);
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
-        onItemSelect({ type: 'image', id: cloned.id });
-      } else if (itemType === 'text') {
-        const source = spread.textboxes?.find((t) => t.id === itemId);
-        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const newZ = nextTopZInTier(spread, 'text');
-        const cloned = cloneItemWithNewId(source);
-        shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
-        cloned['z-index'] = newZ;
-        actions.addRetouchTextbox(selectedSpreadId, cloned);
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
-        onItemSelect({ type: 'textbox', id: cloned.id });
-      } else if (itemType === 'shape') {
-        const source = spread.shapes?.find((s) => s.id === itemId);
-        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const newZ = nextTopZInTier(spread, 'mix');
-        const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = newZ;
-        actions.addRetouchShape(selectedSpreadId, cloned);
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
-        onItemSelect({ type: 'shape', id: cloned.id });
-      } else if (itemType === 'video') {
-        const source = spread.videos?.find((v) => v.id === itemId);
-        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const newZ = nextTopZInTier(spread, 'pictorial');
-        const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = newZ;
-        actions.addRetouchVideo(selectedSpreadId, cloned);
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
-        onItemSelect({ type: 'video', id: cloned.id });
-      } else if (itemType === 'audio') {
-        const source = spread.audios?.find((a) => a.id === itemId);
-        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const newZ = nextTopZInTier(spread, 'mix');
-        const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = newZ;
-        actions.addRetouchAudio(selectedSpreadId, cloned);
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
-        onItemSelect({ type: 'audio', id: cloned.id });
-      } else if (itemType === 'animated_pic') {
-        const source = spread.animated_pics?.find((ap) => ap.id === itemId);
-        if (!source) { log.warn('handleDuplicateItem', 'source not found', { itemType, itemId }); return; }
-        const newZ = nextTopZInTier(spread, 'pictorial');
-        const cloned = cloneItemWithNewId(source);
-        cloned['z-index'] = newZ;
-        actions.addRetouchAnimatedPic(selectedSpreadId, cloned);
-        log.info('handleDuplicateItem', 'duplicated', { itemType, sourceId: itemId, cloneId: cloned.id, newZ });
-        onItemSelect({ type: 'animated_pic', id: cloned.id });
-      }
-    },
-    [actions, retouchSpreads, selectedSpreadId, onItemSelect]
-  );
+  const { handleDeleteSpread, handleSpreadReorder } = useSpreadHandlers(actions);
+  const { handleSpreadItemAction } = useSpreadItemDispatch(actions, retouchSpreads);
 
   const { stackRef } = useInteractionLayerContext();
-
-  useGlobalHotkey(
-    matchCtrlD,
-    () => {
-      if (stackRef.current.modal !== null) {
-        log.debug('useGlobalHotkey', 'ctrl-d blocked by modal');
-        return;
-      }
-      if (!selectedItemId) {
-        log.debug('useGlobalHotkey', 'ctrl-d no item selected');
-        return;
-      }
-      if ((OBJECTS_FORBIDDEN as readonly string[]).includes(selectedItemId.type)) {
-        log.debug('useGlobalHotkey', 'ctrl-d forbidden type', { type: selectedItemId.type });
-        return;
-      }
-      log.debug('useGlobalHotkey', 'ctrl-d duplicating', { type: selectedItemId.type, id: selectedItemId.id });
-      const dupType = selectedItemId.type === 'textbox' ? 'text' : selectedItemId.type;
-      handleDuplicateItem(
-        dupType as 'image' | 'text' | 'shape' | 'video' | 'audio' | 'animated_pic',
-        selectedItemId.id
-      );
-    },
-    [selectedItemId, handleDuplicateItem, stackRef]
-  );
+  const { handleDuplicateItem } = useDuplicateItem(retouchSpreads, selectedSpreadId, actions, onItemSelect);
+  useDuplicateHotkey(stackRef, selectedItemId, handleDuplicateItem);
 
   // === Render props for 6 item types ===
 
@@ -878,169 +385,29 @@ export function ObjectsMainView({
       <ObjectsImageToolbar
         context={{
           ...context,
-          onGenerateImage: () => openGenerateModal(context.item),
-          onSplitImage: () => openSplitModal(context.item),
-          onCropImage: () => openCropModal(context.item),
+          onGenerateImage: () => openGenerate(context.item),
+          onSplitImage: () => openSplit(context.item),
+          onCropImage: () => openCrop(context.item),
         }}
       />
     ),
-    [openGenerateModal, openSplitModal, openCropModal]
+    [openGenerate, openSplit, openCrop]
   );
 
-  const handleCloneRawImage = useCallback(
-    (rawImage: SpreadImage) => {
-      const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
-      // nextTopZInTier scans the full MEDIA tier (images + videos + animated_pics)
-      const newZ = spread
-        ? Math.min(nextTopZInTier(spread, 'pictorial'), LAYER_CONFIG.MEDIA.max)
-        : LAYER_CONFIG.MEDIA.min;
-
-      const newImage: SpreadImage = {
-        id: crypto.randomUUID(),
-        title: rawImage.title ? `${rawImage.title} - Copy` : "Cloned Image",
-        geometry: { ...rawImage.geometry },
-        media_url: rawImage.media_url,
-        illustrations: rawImage.illustrations ? [...rawImage.illustrations] : [],
-        type: rawImage.type,
-        aspect_ratio: rawImage.aspect_ratio,
-        player_visible: true,
-        editor_visible: true,
-        "z-index": newZ,
-      };
-      actions.addRetouchImage(selectedSpreadId, newImage);
-      log.info("handleCloneRawImage", "cloned raw image to retouch image", {
-        rawImageId: rawImage.id,
-        newImageId: newImage.id,
-        spreadId: selectedSpreadId,
-      });
-    },
-    [selectedSpreadId, retouchSpreads, actions]
-  );
+  const { cloneRawImage, cloneRawTextbox } = useCloneRaw(retouchSpreads, selectedSpreadId, actions);
 
   const renderRawImageToolbar = useCallback(
     (context: ImageToolbarContext<BaseSpread>) => (
       <ObjectsRawImageToolbar
         context={{
           ...context,
-          onSplitImage: () => openSplitModal(context.item),
-          onCropImage: () => openCropModal(context.item),
-          onClone: () => handleCloneRawImage(context.item as SpreadImage),
+          onSplitImage: () => openSplit(context.item),
+          onCropImage: () => openCrop(context.item),
+          onClone: () => cloneRawImage(context.item as SpreadImage),
         }}
       />
     ),
-    [openSplitModal, openCropModal, handleCloneRawImage]
-  );
-
-  // === Text toolbar render prop ===
-  const handleSplitTextbox = useCallback(
-    (spreadId: string, textbox: SpreadTextbox) => {
-      const result = getTextboxContentForLanguage(
-        textbox as unknown as Record<string, unknown>,
-        langCode
-      );
-      if (!result) return;
-      const { langKey, content } = result;
-      if (!content.text) {
-        toast.info("No text to split");
-        return;
-      }
-      const segments = content.text
-        .split(".")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (segments.length <= 1) {
-        toast.info("No sentences to split");
-        return;
-      }
-      log.info("handleSplitTextbox", "splitting textbox", {
-        itemId: textbox.id,
-        segments: segments.length,
-      });
-      const baseGeometry = content.geometry;
-      const GAP_PERCENT = 1;
-      let currentY = baseGeometry.y;
-      for (let i = 0; i < segments.length; i++) {
-        const segmentText = segments[i] + ".";
-        const measuredH = measureTextHeightPercent(segmentText, baseGeometry.w, content.typography, canvasWidth, canvasHeight);
-        const h = Math.max(measuredH, 3); // minimum 3% height
-        const newTextbox: SpreadTextbox = {
-          id: crypto.randomUUID(),
-          [langKey]: {
-            text: segmentText,
-            geometry: {
-              x: baseGeometry.x,
-              y: Math.min(currentY, 100 - h),
-              w: baseGeometry.w,
-              h,
-            },
-            typography: { ...content.typography },
-          },
-          player_visible: textbox.player_visible,
-          editor_visible: textbox.editor_visible,
-        };
-        actions.addRetouchTextbox(spreadId, newTextbox);
-        currentY += h + GAP_PERCENT;
-      }
-      actions.deleteRetouchAnimationsByTargetId(spreadId, textbox.id);
-      actions.deleteRetouchTextbox(spreadId, textbox.id);
-      onItemSelect(null);
-    },
-    [actions, onItemSelect, langCode]
-  );
-
-  // Split raw textbox → creates new retouch textboxes (raw textbox is kept)
-  const handleSplitRawTextbox = useCallback(
-    (spreadId: string, textbox: SpreadTextbox) => {
-      const result = getTextboxContentForLanguage(
-        textbox as unknown as Record<string, unknown>,
-        langCode
-      );
-      if (!result) return;
-      const { langKey, content } = result;
-      if (!content.text) {
-        toast.info("No text to split");
-        return;
-      }
-      const segments = content.text
-        .split(".")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (segments.length <= 1) {
-        toast.info("No sentences to split");
-        return;
-      }
-      log.info("handleSplitRawTextbox", "splitting raw textbox", {
-        itemId: textbox.id,
-        segments: segments.length,
-      });
-      const baseGeometry = content.geometry;
-      const GAP_PERCENT = 1;
-      let currentY = baseGeometry.y;
-      for (let i = 0; i < segments.length; i++) {
-        const segmentText = segments[i] + ".";
-        const measuredH = measureTextHeightPercent(segmentText, baseGeometry.w, content.typography, canvasWidth, canvasHeight);
-        const h = Math.max(measuredH, 3);
-        const newTextbox: SpreadTextbox = {
-          id: crypto.randomUUID(),
-          [langKey]: {
-            text: segmentText,
-            geometry: {
-              x: baseGeometry.x,
-              y: Math.min(currentY, 100 - h),
-              w: baseGeometry.w,
-              h,
-            },
-            typography: { ...content.typography },
-          },
-          player_visible: true,
-          editor_visible: true,
-        };
-        actions.addRetouchTextbox(spreadId, newTextbox);
-        currentY += h + GAP_PERCENT;
-      }
-      onItemSelect(null);
-    },
-    [actions, onItemSelect, langCode]
+    [openSplit, openCrop, cloneRawImage]
   );
 
   const renderRetouchTextToolbar = useCallback(
@@ -1049,34 +416,13 @@ export function ObjectsMainView({
         context={{
           ...context,
           onSplitTextbox: () =>
-            handleSplitTextbox(selectedSpreadId, context.item),
+            splitTextbox(selectedSpreadId, context.item, { deleteSource: true, inheritVisibility: true }),
         }}
       />
     ),
-    [selectedSpreadId, handleSplitTextbox]
+    [selectedSpreadId, splitTextbox]
   );
 
-  const handleCloneRawTextbox = useCallback(
-    (rawTextbox: SpreadTextbox) => {
-      const spread = retouchSpreads.find((s) => s.id === selectedSpreadId);
-      const newZ = spread ? nextTopZInTier(spread, 'text') : LAYER_CONFIG.TEXT.min;
-
-      const cloned: SpreadTextbox = structuredClone(rawTextbox);
-      cloned.id = crypto.randomUUID();
-      shiftTextboxLanguageGeometries(cloned as unknown as Record<string, unknown>);
-      cloned.player_visible = true;
-      cloned.editor_visible = true;
-      cloned["z-index"] = newZ;
-
-      actions.addRetouchTextbox(selectedSpreadId, cloned);
-      log.info("handleCloneRawTextbox", "cloned raw textbox to retouch textbox", {
-        rawTextboxId: rawTextbox.id,
-        newTextboxId: cloned.id,
-        spreadId: selectedSpreadId,
-      });
-    },
-    [selectedSpreadId, retouchSpreads, actions]
-  );
 
   const renderRawTextboxToolbar = useCallback(
     (context: TextToolbarContext<BaseSpread>) => (
@@ -1084,12 +430,12 @@ export function ObjectsMainView({
         context={{
           ...context,
           onSplitTextbox: () =>
-            handleSplitRawTextbox(selectedSpreadId, context.item),
-          onClone: () => handleCloneRawTextbox(context.item),
+            splitTextbox(selectedSpreadId, context.item, { deleteSource: false, inheritVisibility: false }),
+          onClone: () => cloneRawTextbox(context.item),
         }}
       />
     ),
-    [selectedSpreadId, handleSplitRawTextbox, handleCloneRawTextbox]
+    [selectedSpreadId, splitTextbox, cloneRawTextbox]
   );
 
   // === Shape toolbar render prop ===
@@ -1122,11 +468,11 @@ export function ObjectsMainView({
       <ObjectsAudioToolbar
         context={{
           ...context,
-          onCropAudio: () => openCropAudioModal(context.item as SpreadAudio),
+          onCropAudio: () => openCropAudio(context.item as SpreadAudio),
         }}
       />
     ),
-    [openCropAudioModal]
+    [openCropAudio]
   );
 
   return (
@@ -1183,40 +529,40 @@ export function ObjectsMainView({
         pageNumbering={templateLayout?.page_numbering}
       />
 
-      {generateModalImageId && (
+      {modals.generate.imageId && (
         <EditImageModal
-          open={generateModalOpen}
-          onOpenChange={handleGenerateModalClose}
-          spreadId={generateModalSpreadId}
-          imageId={generateModalImageId}
+          open={modals.generate.open}
+          onOpenChange={modals.closeGenerate}
+          spreadId={modals.generate.spreadId}
+          imageId={modals.generate.imageId}
         />
       )}
 
-      {splitModalImage && (
+      {modals.split.image && (
         <SplitImageModal
-          open={splitModalOpen}
-          onOpenChange={handleSplitModalClose}
-          image={splitModalImage}
+          open={modals.split.open}
+          onOpenChange={modals.closeSplit}
+          image={modals.split.image}
           onCreateImages={handleSplitCreateImages}
         />
       )}
 
-      {cropModalImage && (
+      {modals.crop.image && (
         <CropImageModal
-          open={cropModalOpen}
-          onOpenChange={handleCropModalClose}
-          image={cropModalImage}
+          open={modals.crop.open}
+          onOpenChange={modals.closeCrop}
+          image={modals.crop.image}
           onCreateImages={handleCropCreateImages}
         />
       )}
 
-      {cropAudioItem?.media_url && (
+      {modals.cropAudio.item?.media_url && (
         <CropAudioModal
-          isOpen={cropAudioModalOpen}
-          onClose={handleCropAudioModalClose}
-          audioName={cropAudioItem.name}
-          mediaUrl={cropAudioItem.media_url}
-          onCropComplete={handleCropAudioComplete}
+          isOpen={modals.cropAudio.open}
+          onClose={modals.closeCropAudio}
+          audioName={modals.cropAudio.item.name}
+          mediaUrl={modals.cropAudio.item.media_url}
+          onCropComplete={modals.handleCropAudioComplete}
         />
       )}
     </>
