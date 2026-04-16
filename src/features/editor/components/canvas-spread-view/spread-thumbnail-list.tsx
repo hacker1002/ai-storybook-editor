@@ -102,14 +102,6 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<TSpread | null>(null);
 
-  // Expose triggerDelete so CanvasSpreadView keyboard path can delegate here
-  useImperativeHandle(ref, () => ({
-    triggerDelete: (spreadId: string) => {
-      const spread = spreads.find((s) => s.id === spreadId);
-      if (spread) handleDelete(spread);
-    },
-  }));
-
   // Auto-scroll selected thumbnail into view
   useEffect(() => {
     if (!selectedId || !containerRef.current) return;
@@ -144,6 +136,20 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
       onDeleteSpread?.(spread.id);
     }
   }, [checkSpreadHasContent, hasDefaultContent, onDeleteSpread]);
+
+  // Expose triggerDelete so CanvasSpreadView keyboard path can delegate here.
+  // Placed AFTER handleDelete so deps are resolvable; deps array re-binds imperative
+  // ref when spreads or handleDelete identity changes.
+  useImperativeHandle(
+    ref,
+    () => ({
+      triggerDelete: (spreadId: string) => {
+        const spread = spreads.find((s) => s.id === spreadId);
+        if (spread) handleDelete(spread);
+      },
+    }),
+    [spreads, handleDelete],
+  );
 
   // Confirm delete handler
   const confirmDeleteHandler = useCallback(() => {
@@ -229,17 +235,10 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
   const isHorizontal = layout === 'horizontal';
   const thumbnailSize = isHorizontal ? 'small' : 'medium';
 
-  // Empty state
+  // Defensive: empty state is owned by parent (CanvasSpreadView renders EmptyState and
+  // skips mounting this list). If contract is violated, render nothing.
   if (spreads.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center p-4"
-        role="listbox"
-        aria-label="Spread thumbnails"
-      >
-        {canAdd && onSpreadAdd && <NewSpreadButton size="medium" onAdd={onSpreadAdd} />}
-      </div>
-    );
+    return null;
   }
 
   return (

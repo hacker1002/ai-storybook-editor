@@ -59,20 +59,14 @@ export function ObjectsCreativeSpace() {
         onItemSelect={handleItemSelect}
       />
       <div className="flex-1 overflow-hidden">
-        {selectedSpreadId ? (
-          <ObjectsMainView
-            selectedSpreadId={selectedSpreadId}
-            selectedItemId={selectedItemId}
-            onSpreadSelect={handleSpreadSelect}
-            onItemSelect={handleItemSelect}
-            zoomLevel={zoomLevel ?? ZOOM.DEFAULT}
-            onZoomChange={handleZoomChange}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-muted-foreground">No spreads yet</p>
-          </div>
-        )}
+        <ObjectsMainView
+          selectedSpreadId={selectedSpreadId ?? ""}
+          selectedItemId={selectedItemId}
+          onSpreadSelect={handleSpreadSelect}
+          onItemSelect={handleItemSelect}
+          zoomLevel={zoomLevel ?? ZOOM.DEFAULT}
+          onZoomChange={handleZoomChange}
+        />
       </div>
     </div>
   );

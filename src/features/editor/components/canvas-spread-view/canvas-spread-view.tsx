@@ -3,10 +3,12 @@
 'use client';
 
 import { useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import { BookOpen } from 'lucide-react';
 import { SpreadViewHeader } from './spread-view-header';
 import { SpreadEditorPanel } from './spread-editor-panel';
 import { SpreadThumbnailList, type SpreadThumbnailListRef } from './spread-thumbnail-list';
-import type { SpreadType } from './new-spread-button';
+import { NewSpreadButton, type SpreadType } from './new-spread-button';
+import { EmptyState } from './empty-state';
 import type { ViewMode } from '@/types/canvas-types';
 import { useSetZoomLevel } from '@/stores/editor-settings-store';
 import { useInteractionLayer } from '../../contexts';
@@ -366,7 +368,22 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
 
       {/* Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {viewMode === 'edit' ? (
+        {spreads.length === 0 ? (
+          <EmptyState
+            icon={<BookOpen className="h-12 w-12" />}
+            title="No spreads yet"
+            description={
+              canAddSpread
+                ? 'Add your first spread to start designing'
+                : 'Add spreads in Illustration first'
+            }
+            action={
+              canAddSpread && onSpreadAdd ? (
+                <NewSpreadButton variant="solid" label="Add First Spread" onAdd={onSpreadAdd} />
+              ) : null
+            }
+          />
+        ) : viewMode === 'edit' ? (
           <>
             {/* Edit Mode: Editor Panel */}
             {selectedSpread && (
