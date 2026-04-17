@@ -103,9 +103,11 @@ const MIME_TO_EXT: Record<string, string> = {
 const PASSTHROUGH_MIME = new Set(['image/gif', 'image/svg+xml']);
 
 export class ImageTooTallError extends Error {
-  constructor(public readonly srcRatio: number) {
+  readonly srcRatio: number;
+  constructor(srcRatio: number) {
     super(`Image too tall: ratio ${srcRatio.toFixed(4)} is below minimum ${MIN_SUPPORTED_RATIO.toFixed(4)} (9:16). Please crop and try again.`);
     this.name = 'ImageTooTallError';
+    this.srcRatio = srcRatio;
   }
 }
 
