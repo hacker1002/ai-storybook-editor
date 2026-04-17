@@ -134,11 +134,11 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
       const numValue = parseFloat(value);
       if (isNaN(numValue)) return;
       let clamped = clampGeometry(field, numValue);
-      // Enforce x+w <= 100 and y+h <= 100 to keep items within canvas
-      if (field === "x") clamped = Math.min(clamped, 100 - geometry.w);
-      if (field === "y") clamped = Math.min(clamped, 100 - geometry.h);
-      if (field === "w") clamped = Math.min(clamped, 100 - geometry.x);
-      if (field === "h") clamped = Math.min(clamped, 100 - geometry.y);
+      // Allow items into bleed+staging zone (OVERFLOW_MAX=100 beyond each trim edge)
+      if (field === "x") clamped = Math.min(clamped, 200 - geometry.w);
+      if (field === "y") clamped = Math.min(clamped, 200 - geometry.h);
+      if (field === "w") clamped = Math.min(clamped, 200 - geometry.x);
+      if (field === "h") clamped = Math.min(clamped, 200 - geometry.y);
       log.debug("ObjectsImageToolbar", "geometry change", {
         field,
         value: clamped,

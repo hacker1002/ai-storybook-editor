@@ -105,10 +105,10 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
       const numValue = parseFloat(value);
       if (isNaN(numValue)) return;
       let clamped = clampGeometry(field, numValue);
-      if (field === "x") clamped = Math.min(clamped, 100 - geometry.w);
-      if (field === "y") clamped = Math.min(clamped, 100 - geometry.h);
-      if (field === "w") clamped = Math.min(clamped, 100 - geometry.x);
-      if (field === "h") clamped = Math.min(clamped, 100 - geometry.y);
+      if (field === "x") clamped = Math.min(clamped, 200 - geometry.w);
+      if (field === "y") clamped = Math.min(clamped, 200 - geometry.h);
+      if (field === "w") clamped = Math.min(clamped, 200 - geometry.x);
+      if (field === "h") clamped = Math.min(clamped, 200 - geometry.y);
       log.debug("ObjectsVideoToolbar", "geometry change", {
         field,
         value: clamped,

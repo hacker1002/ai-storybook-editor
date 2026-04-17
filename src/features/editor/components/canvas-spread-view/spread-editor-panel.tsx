@@ -24,7 +24,9 @@ import { Z_INDEX } from "@/constants/spread-constants";
 import {
   useCanvasWidth,
   useCanvasHeight,
+  useBleedPct,
 } from "@/stores/editor-settings-store";
+import { TrimBleedOverlay } from "./trim-bleed-overlay";
 import type {
   BaseSpread,
   ItemType,
@@ -184,6 +186,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const editorLangCode = forceLanguageCode ?? currentEditorLangCode;
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
+  const bleedPct = useBleedPct();
 
   // === Zoom center preservation (delegated to hook) ===
   const containerRef = useZoomCenterScroll(zoomLevel, canvasRef);
@@ -209,6 +212,13 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     canvasHeight,
     zoomLevel
   );
+  const bleedScaledPx = (bleedPct.x / 100) * scaledWidth;
+  const bleedScaledPy = (bleedPct.y / 100) * scaledHeight;
+  // Staging zone extent: items may live at x ∈ [-50, 150], y ∈ [-50, 150] (percent of trim).
+  // Pad each side by half trim dimension so user at max scroll still sees ≥50% spread
+  // (keeps spatial anchoring). Ensures at least bleed + 16px visual margin.
+  const stagingPadX = Math.max(Math.round(scaledWidth / 2), Math.round(bleedScaledPx) + 16);
+  const stagingPadY = Math.max(Math.round(scaledHeight / 2), Math.round(bleedScaledPy) + 16);
 
   // === Drag, resize, keyboard, and geometry update handlers (delegated to hook) ===
   const {
@@ -506,22 +516,32 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex overflow-auto p-4 bg-muted/30"
+      className="flex-1 min-w-0 min-h-0 flex overflow-auto bg-muted/30"
       role="application"
       aria-label="Spread editor"
     >
+      {/* Scroll-content wrapper: padding here (not on containerRef) so containerRef
+          can shrink to parent width. m-auto centers canvas when viewport exceeds content. */}
+      <div
+        className="flex shrink-0 m-auto"
+        style={{ padding: `${stagingPadY}px ${stagingPadX}px` }}
+      >
       <div
         ref={canvasRef}
-        className="relative shrink-0 m-auto bg-white shadow-lg"
+        className="relative shrink-0 bg-white shadow-lg"
         style={{
           width: scaledWidth,
           height: scaledHeight,
           willChange: "transform",
+          overflow: "visible",
         }}
         onClick={handleCanvasClick}
         onKeyDown={handleKeyDown}
         tabIndex={0}
       >
+        {/* Layer A: Backgrounds — clipped to trim box, pointer-events:none so clicks pass through to
+            negative-z-index items in Layer B. PageItem children override with pointer-events:auto. */}
+        <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
         {/* Page Backgrounds */}
         {spread.pages.map((page, pageIndex) => (
           <PageItem
@@ -576,6 +596,11 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           />
         )}
 
+        </div>
+        {/* Items render directly in canvasDiv (which has overflow:visible + will-change:transform
+            creating a stacking context). A wrapper here would intercept clicks for items with
+            negative z-index, since such items paint below a no-z-index absolute wrapper even when
+            they are its DOM descendants. */}
         {/* Raw Images (illustration layer) */}
         {renderItems.includes("raw_image") &&
           renderRawImage &&
@@ -792,6 +817,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
           })}
 
+        {/* Overlay guide — pointer-events none */}
+        <TrimBleedOverlay
+          bleedPct={bleedPct}
+          scaledCanvasWidth={scaledWidth}
+          scaledCanvasHeight={scaledHeight}
+        />
         {/* Selection Frame - frame border allows drag, center passes through for editing */}
         {state.selectedElement &&
           selectedGeometry &&
@@ -1013,6 +1044,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
             return null;
           })()}
+      </div>
       </div>
     </div>
   );

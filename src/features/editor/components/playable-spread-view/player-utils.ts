@@ -1,20 +1,29 @@
 // player-utils.ts - Utility functions for building and navigating animation steps
 
-import type { SpreadAnimation } from '@/types/spread-types';
+import type { SpreadAnimation, Geometry } from '@/types/spread-types';
 import type { AnimationStep } from '@/types/playable-types';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Player', 'GsapEngine');
 
+/**
+ * True when the item's bounding box overlaps the trim area at all.
+ * Items fully outside trim ([0,100]×[0,100]) are culled from player render
+ * and their on_click animation steps are skipped.
+ */
+export function isInTrim(geo: Geometry): boolean {
+  return geo.x + geo.w > 0 && geo.x < 100 && geo.y + geo.h > 0 && geo.y < 100;
+}
+
 /** Spread item arrays needed for player_visible pre-filter in buildAnimationSteps */
 export interface SpreadItemsForVisibility {
-  images?: Array<{ id: string; player_visible?: boolean }>;
-  shapes?: Array<{ id: string; player_visible?: boolean }>;
-  videos?: Array<{ id: string; player_visible?: boolean }>;
-  animated_pics?: Array<{ id: string; player_visible?: boolean }>;
-  textboxes?: Array<{ id: string; player_visible?: boolean }>;
-  audios?: Array<{ id: string; player_visible?: boolean }>;
-  quizzes?: Array<{ id: string; player_visible?: boolean }>;
+  images?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
+  shapes?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
+  videos?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
+  animated_pics?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
+  textboxes?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
+  audios?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
+  quizzes?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
 }
 
 // === Building steps from raw animations ===
@@ -32,15 +41,20 @@ function preFilterHiddenTargets(
   items: SpreadItemsForVisibility,
   spreadId?: string,
 ): SpreadAnimation[] {
-  // Build 2 id sets — O(n) once before the loop
+  // Build id sets — O(n) once before the loop
   const hiddenVisualIds = new Set<string>();
   const hiddenAllIds = new Set<string>();
+  // on_click targets geometrically outside trim are also skipped
+  const outOfTrimIds = new Set<string>();
 
-  const markHidden = (arr: Array<{ id: string; player_visible?: boolean }> | undefined, visual: boolean) => {
+  const markHidden = (arr: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }> | undefined, visual: boolean) => {
     arr?.forEach((item) => {
       if (item.player_visible === false) {
         hiddenAllIds.add(item.id);
         if (visual) hiddenVisualIds.add(item.id);
+      }
+      if (item.geometry && !isInTrim(item.geometry)) {
+        outOfTrimIds.add(item.id);
       }
     });
   };
@@ -53,7 +67,7 @@ function preFilterHiddenTargets(
   markHidden(items.audios, false);
   markHidden(items.quizzes, false);
 
-  if (hiddenAllIds.size === 0) return sorted; // fast path: nothing hidden
+  if (hiddenAllIds.size === 0 && outOfTrimIds.size === 0) return sorted; // fast path
 
   const result: SpreadAnimation[] = [];
   let skipNextChained = false;
@@ -84,6 +98,13 @@ function preFilterHiddenTargets(
     if (trigger === 'on_click' && hiddenAllIds.has(targetId)) {
       log.warn('preFilterHiddenTargets', 'on_click skipped — target hidden', { spreadId, order: anim.order, targetId, targetType: anim.target.type, reason: 'on-click-hidden' });
       skipNextChained = true; // on_click is always a boundary
+      continue;
+    }
+
+    // Case 4: on_click targeting item geometrically outside trim (culled from player render)
+    if (trigger === 'on_click' && outOfTrimIds.has(targetId)) {
+      log.warn('preFilterHiddenTargets', 'on_click skipped — target outside trim', { spreadId, order: anim.order, targetId, targetType: anim.target.type, reason: 'on-click-out-of-trim' });
+      skipNextChained = true;
       continue;
     }
 

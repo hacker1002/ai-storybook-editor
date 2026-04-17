@@ -41,9 +41,10 @@ export const DEFAULT_STATES = [
 
 // === Helpers ===
 
+// Matches OVERFLOW_MAX=100 and SIZE_MAX=300 from geometry-utils.ts
 export function clampGeometry(field: keyof Geometry, value: number): number {
-  const min = field === "w" || field === "h" ? 1 : 0;
-  return Math.max(min, Math.min(100, value));
+  if (field === "w" || field === "h") return Math.max(1, Math.min(300, value));
+  return Math.max(-100, Math.min(200, value));
 }
 
 export interface GeometryReplaceInput {

@@ -4,6 +4,12 @@ import type { Geometry, ResizeHandle } from '@/types/canvas-types';
 import { CANVAS } from '@/constants/spread-constants';
 import { clamp } from './coordinate-utils';
 
+// Items may drag/resize outside trim box into bleed+staging. Soft bounds allow
+// up to ±50% of trim width/height beyond the trim edge on any side — ensures
+// user retains spatial anchoring (≥50% spread visible at max scroll extent).
+const OVERFLOW_MAX = 50;
+const SIZE_MAX = 300;
+
 /**
  * Check if geometry is on left page (center point < 50%)
  */
@@ -26,7 +32,8 @@ export function getPagePosition(geometry: Geometry): 'left' | 'right' {
 }
 
 /**
- * Apply drag delta to geometry with bounds checking
+ * Apply drag delta to geometry with relaxed bounds.
+ * Items may move into bleed+staging area (±OVERFLOW_MAX beyond trim edges).
  */
 export function applyDragDelta(
   geometry: Geometry,
@@ -35,8 +42,8 @@ export function applyDragDelta(
 ): Geometry {
   return {
     ...geometry,
-    x: clamp(geometry.x + deltaX, 0, 100 - geometry.w),
-    y: clamp(geometry.y + deltaY, 0, 100 - geometry.h),
+    x: clamp(geometry.x + deltaX, -OVERFLOW_MAX, 100 - geometry.w + OVERFLOW_MAX),
+    y: clamp(geometry.y + deltaY, -OVERFLOW_MAX, 100 - geometry.h + OVERFLOW_MAX),
   };
 }
 
@@ -56,20 +63,20 @@ export function applyResizeDelta(
 
   // West handles: expanding left means x decreases, w increases
   if (handle.includes('w')) {
-    const newX = clamp(x - deltaX, 0, x + w - minSize);
+    const newX = clamp(x - deltaX, -OVERFLOW_MAX, x + w - minSize);
     w = w + (x - newX);
     x = newX;
   } else if (handle.includes('e')) {
-    w = clamp(w + deltaX, minSize, 100 - x);
+    w = clamp(w + deltaX, minSize, SIZE_MAX);
   }
 
   // North handles: expanding up means y decreases, h increases
   if (handle.includes('n')) {
-    const newY = clamp(y - deltaY, 0, y + h - minSize);
+    const newY = clamp(y - deltaY, -OVERFLOW_MAX, y + h - minSize);
     h = h + (y - newY);
     y = newY;
   } else if (handle.includes('s')) {
-    h = clamp(h + deltaY, minSize, 100 - y);
+    h = clamp(h + deltaY, minSize, SIZE_MAX);
   }
 
   return { x, y, w, h };
@@ -147,27 +154,30 @@ export function applyAspectLockedResize(
   let newX = handle.includes('w') ? anchorRight - newW : x;
   let newY = handle.includes('n') ? anchorBottom - newH : y;
 
-  // Clamp within canvas [0, 100] — each clamp re-derives the linked dimension
-  if (newX < 0) {
-    newW = anchorRight;
+  // Clamp to soft bounds — allow items beyond trim box into bleed+staging
+  if (newX < -OVERFLOW_MAX) {
+    newX = -OVERFLOW_MAX;
+    newW = anchorRight - newX;
     newH = newW / aspect;
-    newX = 0;
     if (handle.includes('n')) newY = anchorBottom - newH;
   }
-  if (newY < 0) {
-    newH = anchorBottom;
+  if (newY < -OVERFLOW_MAX) {
+    newY = -OVERFLOW_MAX;
+    newH = anchorBottom - newY;
     newW = newH * aspect;
-    newY = 0;
     if (handle.includes('w')) newX = anchorRight - newW;
   }
-  if (newX + newW > 100) {
-    newW = 100 - newX;
+  if (newW > SIZE_MAX) {
+    newW = SIZE_MAX;
     newH = newW / aspect;
+    if (handle.includes('w')) newX = anchorRight - newW;
+    if (handle.includes('n')) newY = anchorBottom - newH;
   }
-  if (newY + newH > 100) {
-    newH = 100 - newY;
+  if (newH > SIZE_MAX) {
+    newH = SIZE_MAX;
     newW = newH * aspect;
     if (handle.includes('w')) newX = anchorRight - newW;
+    if (handle.includes('n')) newY = anchorBottom - newH;
   }
 
   return { x: newX, y: newY, w: newW, h: newH };

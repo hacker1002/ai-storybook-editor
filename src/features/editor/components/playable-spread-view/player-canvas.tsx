@@ -12,7 +12,7 @@ import {
   EditableAnimatedPic,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
-import { useCanvasWidth, useCanvasHeight, useSetZoomLevel } from "@/stores/editor-settings-store";
+import { useTrimSize, useSetZoomLevel } from "@/stores/editor-settings-store";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { PageItem } from "../canvas-spread-view/page-item";
@@ -29,6 +29,7 @@ import {
   isReplayableClick,
   buildAnimationSteps,
   filterAnimationsForDynamic,
+  isInTrim,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
 import {
@@ -125,8 +126,7 @@ export function PlayerCanvas({
   const replayableItems = useReplayableItems();
   const steps = usePlaybackStore((s) => s.steps);
   const narrationLangCode = useNarrationLanguage();
-  const canvasWidth = useCanvasWidth();
-  const canvasHeight = useCanvasHeight();
+  const { width: canvasWidth, height: canvasHeight } = useTrimSize();
 
   // === Full page zoom state (mobile portrait share preview only) ===
   const [fullPageMode, setFullPageMode] = useState<FullPageMode>('spread');
@@ -574,9 +574,10 @@ export function PlayerCanvas({
           />
         )}
 
-        {/* Images — skip empty (no resolved URL) */}
+        {/* Images — skip empty (no resolved URL) and fully out-of-trim */}
         {spread.images?.map((image, index) => {
           if (image.player_visible === false) return null;
+          if (!isInTrim(image.geometry)) return null;
           const hasUrl = image.final_hires_media_url
             || image.illustrations?.some(i => i.media_url)
             || image.media_url;
@@ -605,6 +606,7 @@ export function PlayerCanvas({
         {/* Shapes */}
         {spread.shapes?.map((shape, index) => {
           if (shape.player_visible === false) return null;
+          if (!isInTrim(shape.geometry)) return null;
           return (
             <div
               key={shape.id}
@@ -626,9 +628,10 @@ export function PlayerCanvas({
           );
         })}
 
-        {/* Videos — skip empty (no media_url) */}
+        {/* Videos — skip empty (no media_url) and fully out-of-trim */}
         {spread.videos?.map((video, index) => {
           if (video.player_visible === false) return null;
+          if (!isInTrim(video.geometry)) return null;
           if (!video.media_url) return null;
           return (
             <div
@@ -651,9 +654,10 @@ export function PlayerCanvas({
           );
         })}
 
-        {/* Animated Pics — skip empty (no media_url), auto-loop */}
+        {/* Animated Pics — skip empty (no media_url), auto-loop, and fully out-of-trim */}
         {spread.animated_pics?.map((animatedPic, index) => {
           if (animatedPic.player_visible === false) return null;
+          if (!isInTrim(animatedPic.geometry)) return null;
           if (!animatedPic.media_url) return null;
           return (
             <div
@@ -721,6 +725,7 @@ export function PlayerCanvas({
         {textboxesWithLang.map((item, index) => {
           if (!item) return null;
           const { textbox, data } = item;
+          if (!isInTrim(data.geometry)) return null;
           const audioMedia = data.audio?.media;
           const syncedMedia = audioMedia?.find((m) => m.script_synced) ?? audioMedia?.[0];
           return (

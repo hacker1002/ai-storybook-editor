@@ -156,20 +156,20 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
       if ((field === "w" || field === "h") && !hasMedia) return;
 
       let clamped = clampGeometry(field, numValue);
-      if (field === "x") clamped = Math.min(clamped, 100 - geometry.w);
-      if (field === "y") clamped = Math.min(clamped, 100 - geometry.h);
-      if (field === "w") clamped = Math.min(clamped, 100 - geometry.x);
-      if (field === "h") clamped = Math.min(clamped, 100 - geometry.y);
+      if (field === "x") clamped = Math.min(clamped, 200 - geometry.w);
+      if (field === "y") clamped = Math.min(clamped, 200 - geometry.h);
+      if (field === "w") clamped = Math.min(clamped, 200 - geometry.x);
+      if (field === "h") clamped = Math.min(clamped, 200 - geometry.y);
 
       if (aspectRatio !== null) {
         if (field === "w") {
-          const newH = clampGeometry("h", Math.min(clamped / aspectRatio, 100 - geometry.y));
+          const newH = clampGeometry("h", Math.min(clamped / aspectRatio, 200 - geometry.y));
           log.debug("handleGeometryChange", "aspect-locked W→H", { w: clamped, h: newH });
           onUpdate({ geometry: { ...geometry, w: clamped, h: newH } });
           return;
         }
         if (field === "h") {
-          const newW = clampGeometry("w", Math.min(clamped * aspectRatio, 100 - geometry.x));
+          const newW = clampGeometry("w", Math.min(clamped * aspectRatio, 200 - geometry.x));
           log.debug("handleGeometryChange", "aspect-locked H→W", { w: newW, h: clamped });
           onUpdate({ geometry: { ...geometry, w: newW, h: clamped } });
           return;

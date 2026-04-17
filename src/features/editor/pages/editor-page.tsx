@@ -85,7 +85,8 @@ export function EditorPage() {
           AVAILABLE_LANGUAGES[0];
         const initialStep = (PIPELINE_STEP_MAP[fetchedBook.step as keyof typeof PIPELINE_STEP_MAP] ??
           'manuscript') as PipelineStep;
-        resetSettings(initialLang, initialStep, fetchedBook.dimension ?? null);
+        // bleedMm: print_export.bleed not yet in type — default 3mm per ADR-023
+        resetSettings(initialLang, initialStep, fetchedBook.dimension ?? null, 3);
         setActiveCreativeSpace(getDefaultCreativeSpace(initialStep) as CreativeSpaceType);
 
         // Fetch snapshot for this book
@@ -223,7 +224,7 @@ export function EditorPage() {
         />
 
         {/* Main Content */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-w-0 overflow-hidden">
           {/* Icon Rail */}
           <IconRail
             activeCreativeSpace={activeCreativeSpace}
@@ -231,7 +232,7 @@ export function EditorPage() {
           />
 
           {/* Creative Space */}
-          <div className="flex-1 overflow-hidden">{renderCreativeSpace()}</div>
+          <div className="flex-1 min-w-0 overflow-hidden">{renderCreativeSpace()}</div>
 
           {/* Right Sidebar (AI) - Mock */}
           {isSidebarOpen && (

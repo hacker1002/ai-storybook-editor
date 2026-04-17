@@ -22,6 +22,7 @@ export function useZoomCenterScroll(
   const containerRef = useRef<HTMLDivElement>(null);
   const prevZoomRef = useRef(zoomLevel);
   const scrollCenterRef = useRef({ fracX: 0.5, fracY: 0.5 });
+  const didInitialCenterRef = useRef(false);
 
   // Track which fraction of the canvas is at the viewport center
   const updateScrollCenter = useCallback(() => {
@@ -51,6 +52,35 @@ export function useZoomCenterScroll(
     container.addEventListener("scroll", updateScrollCenter);
     return () => container.removeEventListener("scroll", updateScrollCenter);
   }, [updateScrollCenter]);
+
+  // Initial centering: scroll to canvas center on first layout with real dimensions.
+  // Gated by a ref so it runs exactly once — but we need the dependencies to re-fire
+  // until canvas actually has non-zero size (canvas settings load async via store).
+  useLayoutEffect(() => {
+    if (didInitialCenterRef.current) return;
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    const canvasRect = canvas.getBoundingClientRect();
+    if (canvasRect.width === 0 || canvasRect.height === 0) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const canvasLeftInScroll = canvasRect.left - containerRect.left + container.scrollLeft;
+    const canvasTopInScroll = canvasRect.top - containerRect.top + container.scrollTop;
+    const canvasCenterX = canvasLeftInScroll + canvasRect.width / 2;
+    const canvasCenterY = canvasTopInScroll + canvasRect.height / 2;
+
+    container.scrollLeft = Math.max(0, canvasCenterX - container.clientWidth / 2);
+    container.scrollTop = Math.max(0, canvasCenterY - container.clientHeight / 2);
+    didInitialCenterRef.current = true;
+    log.debug("initialCenter", "centered canvas", {
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+      canvasW: canvasRect.width,
+      canvasH: canvasRect.height,
+    });
+  });
 
   // After zoom changes, adjust scroll to keep the same canvas point at viewport center
   useLayoutEffect(() => {

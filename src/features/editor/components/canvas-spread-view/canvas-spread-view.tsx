@@ -367,7 +367,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
       />
 
       {/* Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
         {spreads.length === 0 ? (
           <EmptyState
             icon={<BookOpen className="h-12 w-12" />}

@@ -7,6 +7,13 @@ export interface CanvasSize {
   width: number;
   height: number;
 }
+
+export interface BleedCanvasSize {
+  trim: CanvasSize;
+  bleed: CanvasSize;
+  /** Bleed as % of trim dimensions — used for overlay sizing and clamp offsets */
+  bleedPct: { x: number; y: number };
+}
 import type {
   Point,
   Geometry,
