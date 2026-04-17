@@ -4,8 +4,8 @@ import type { Geometry, ResizeHandle } from '@/types/canvas-types';
 import { CANVAS } from '@/constants/spread-constants';
 import { clamp } from './coordinate-utils';
 
-// Items may drag/resize outside trim box into bleed+staging. Soft bounds allow
-// up to ±50% of trim width/height beyond the trim edge on any side — ensures
+// ⚡ ADR-023: Soft clamp relative to full bleed canvas [0, 100].
+// Items may move into staging area ±50% beyond canvas edge on any side — ensures
 // user retains spatial anchoring (≥50% spread visible at max scroll extent).
 const OVERFLOW_MAX = 50;
 const SIZE_MAX = 300;

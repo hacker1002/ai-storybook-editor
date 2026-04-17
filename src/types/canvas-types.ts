@@ -8,11 +8,14 @@ export interface CanvasSize {
   height: number;
 }
 
+// ⚡ ADR-023: Bleed-relative coordinate space.
+// Canvas [0, 100] = full bleed (tờ giấy vật lý trước khi xén).
+// Trim là vùng advisory bên trong ở [trimPct, 100-trimPct] — không clip, chỉ render dashed guide.
 export interface BleedCanvasSize {
-  trim: CanvasSize;
-  bleed: CanvasSize;
-  /** Bleed as % of trim dimensions — used for overlay sizing and clamp offsets */
-  bleedPct: { x: number; y: number };
+  full: CanvasSize;  // Full canvas = trim + bleed 2 cạnh (editor/reader/print đều dùng)
+  trim: CanvasSize;  // Vùng in an toàn (bên trong full, chỉ để compute trim guide)
+  /** Bleed width/height as % of full canvas — used to position trim guide at [trimPct, 100-trimPct] */
+  trimPct: { x: number; y: number };
 }
 import type {
   Point,

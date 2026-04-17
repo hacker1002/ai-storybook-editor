@@ -32,9 +32,8 @@ export function getScaleFactor(containerWidth: number, canvasWidth: number): num
 
 /**
  * Resolves bleed canvas geometry from book dimension + bleedMm.
- * bleedPxSide = bleedMm × (75dpi / 25.4mm/in) — same for all dimensions (uniform dpi).
- * bleed.width/height = trim + 2 × bleedPxSide (left+right, top+bottom).
- * bleedPct = per-side bleed as % of trim dimension — used by overlay and clamp logic.
+ * ⚡ ADR-023: full = trim + 2×bleedPxSide. Canvas [0, 100] = full bleed.
+ * trimPct = per-side bleed as % of FULL canvas — positions trim guide at [trimPct, 100-trimPct].
  */
 export function resolveBleedCanvasSize(
   dimension: number | null,
@@ -42,20 +41,22 @@ export function resolveBleedCanvasSize(
 ): BleedCanvasSize {
   const trim = resolveCanvasSize(dimension);
   const bleedPxSide = bleedMm * PX_PER_MM;
-  const bleed: CanvasSize = {
+  const full: CanvasSize = {
     width: trim.width + bleedPxSide * 2,
     height: trim.height + bleedPxSide * 2,
   };
-  const bleedPct = {
-    x: (bleedPxSide / trim.width) * 100,
-    y: (bleedPxSide / trim.height) * 100,
+  // trimPct = bleed per side as % of FULL canvas width/height
+  const trimPct = {
+    x: (bleedPxSide / full.width) * 100,
+    y: (bleedPxSide / full.height) * 100,
   };
   log.debug('resolveBleedCanvasSize', 'resolved', {
     dimension, bleedMm, bleedPxSide,
     trimW: trim.width, trimH: trim.height,
-    bleedPctX: bleedPct.x.toFixed(2), bleedPctY: bleedPct.y.toFixed(2),
+    fullW: full.width, fullH: full.height,
+    trimPctX: trimPct.x.toFixed(2), trimPctY: trimPct.y.toFixed(2),
   });
-  return { trim, bleed, bleedPct };
+  return { full, trim, trimPct };
 }
 
 // Re-export DIMENSION_PAGE_SIZE for consumers that need page-level sizing

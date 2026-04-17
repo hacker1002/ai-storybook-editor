@@ -5,7 +5,7 @@ import type { Language, PipelineStep } from '@/types/editor';
 import type { CanvasSize, BleedCanvasSize } from '@/types/canvas-types';
 import { DEFAULT_LANGUAGE } from '@/constants/editor-constants';
 import { DEFAULT_CANVAS_SIZE } from '@/constants/canvas-dimension-constants';
-import { resolveCanvasSize, resolveBleedCanvasSize } from '@/utils/canvas-math-utils';
+import { resolveBleedCanvasSize } from '@/utils/canvas-math-utils';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'EditorSettingsStore');
@@ -54,24 +54,28 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
       },
 
       setCanvasSize: (dimension) => {
-        const canvasSize = resolveCanvasSize(dimension);
+        // ⚡ ADR-023: derive full bleed canvas (fallback bleed=3mm when hydrateBleedCanvas not yet called)
+        const bleedCanvas = resolveBleedCanvasSize(dimension);
+        const canvasSize = bleedCanvas.full;
         log.info('setCanvasSize', 'set', { canvasWidth: canvasSize.width, canvasHeight: canvasSize.height });
-        set({ canvasSize });
+        set({ canvasSize, bleedCanvas });
       },
 
       hydrateBleedCanvas: (dimension, bleedMm = 3) => {
         const bleedCanvas = resolveBleedCanvasSize(dimension, bleedMm);
         log.info('hydrateBleedCanvas', 'hydrated', {
           dimension, bleedMm,
-          bleedPctX: bleedCanvas.bleedPct.x.toFixed(2),
-          bleedPctY: bleedCanvas.bleedPct.y.toFixed(2),
+          trimPctX: bleedCanvas.trimPct.x.toFixed(2),
+          trimPctY: bleedCanvas.trimPct.y.toFixed(2),
         });
-        set({ bleedCanvas });
+        // ⚡ ADR-023: canvasSize = full bleed (editor/reader/print all use same canvas)
+        set({ bleedCanvas, canvasSize: bleedCanvas.full });
       },
 
       resetSettings: (language, step, dimension, bleedMm = 3) => {
-        const canvasSize = resolveCanvasSize(dimension);
         const bleedCanvas = resolveBleedCanvasSize(dimension, bleedMm);
+        // ⚡ ADR-023: canvasSize = full bleed canvas
+        const canvasSize = bleedCanvas.full;
         log.info('resetSettings', 'reset', {
           language: language.code,
           step,
@@ -119,14 +123,16 @@ export const useSetCanvasSize = () =>
 export const useBleedCanvas = () =>
   useEditorSettingsStore((s) => s.bleedCanvas);
 
-export const useBleedSize = () =>
-  useEditorSettingsStore((s) => s.bleedCanvas?.bleed ?? s.canvasSize);
+// ⚡ ADR-023: full bleed = canvas used by editor/reader/print (replaces useBleedSize)
+export const useFullCanvasSize = () =>
+  useEditorSettingsStore((s) => s.bleedCanvas?.full ?? s.canvasSize);
 
 export const useTrimSize = () =>
   useEditorSettingsStore((s) => s.bleedCanvas?.trim ?? s.canvasSize);
 
-export const useBleedPct = () =>
-  useEditorSettingsStore((s) => s.bleedCanvas?.bleedPct ?? { x: 0, y: 0 });
+// ⚡ ADR-023: trimPct = bleed per side as % of full canvas (replaces useBleedPct)
+export const useTrimPct = () =>
+  useEditorSettingsStore((s) => s.bleedCanvas?.trimPct ?? { x: 0, y: 0 });
 
 export const useEditorSettingsActions = () =>
   useEditorSettingsStore(

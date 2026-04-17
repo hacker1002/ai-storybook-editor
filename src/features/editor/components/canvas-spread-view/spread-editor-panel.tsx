@@ -24,9 +24,9 @@ import { Z_INDEX } from "@/constants/spread-constants";
 import {
   useCanvasWidth,
   useCanvasHeight,
-  useBleedPct,
+  useTrimPct,
 } from "@/stores/editor-settings-store";
-import { TrimBleedOverlay } from "./trim-bleed-overlay";
+import { TrimGuideOverlay } from "./trim-guide-overlay";
 import type {
   BaseSpread,
   ItemType,
@@ -186,7 +186,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const editorLangCode = forceLanguageCode ?? currentEditorLangCode;
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
-  const bleedPct = useBleedPct();
+  const trimPct = useTrimPct();
 
   // === Zoom center preservation (delegated to hook) ===
   const containerRef = useZoomCenterScroll(zoomLevel, canvasRef);
@@ -212,13 +212,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     canvasHeight,
     zoomLevel
   );
-  const bleedScaledPx = (bleedPct.x / 100) * scaledWidth;
-  const bleedScaledPy = (bleedPct.y / 100) * scaledHeight;
-  // Staging zone extent: items may live at x ∈ [-50, 150], y ∈ [-50, 150] (percent of trim).
-  // Pad each side by half trim dimension so user at max scroll still sees ≥50% spread
-  // (keeps spatial anchoring). Ensures at least bleed + 16px visual margin.
-  const stagingPadX = Math.max(Math.round(scaledWidth / 2), Math.round(bleedScaledPx) + 16);
-  const stagingPadY = Math.max(Math.round(scaledHeight / 2), Math.round(bleedScaledPy) + 16);
+  // ⚡ ADR-023: Staging zone ±50% of full bleed canvas.
+  // Pad each side by half canvas dimension so user at max scroll still sees ≥50% spread.
+  const stagingPadX = Math.round(scaledWidth / 2);
+  const stagingPadY = Math.round(scaledHeight / 2);
 
   // === Drag, resize, keyboard, and geometry update handlers (delegated to hook) ===
   const {
@@ -817,12 +814,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
           })}
 
-        {/* Overlay guide — pointer-events none */}
-        <TrimBleedOverlay
-          bleedPct={bleedPct}
-          scaledCanvasWidth={scaledWidth}
-          scaledCanvasHeight={scaledHeight}
-        />
+        {/* ⚡ ADR-023: Advisory trim guide — dashed rect at [trimPct, 100-trimPct] inside canvas */}
+        <TrimGuideOverlay trimPct={trimPct} />
         {/* Selection Frame - frame border allows drag, center passes through for editing */}
         {state.selectedElement &&
           selectedGeometry &&

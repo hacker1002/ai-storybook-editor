@@ -7,12 +7,12 @@ import { createLogger } from '@/utils/logger';
 const log = createLogger('Player', 'GsapEngine');
 
 /**
- * True when the item's bounding box overlaps the trim area at all.
- * Items fully outside trim ([0,100]×[0,100]) are culled from player render
- * and their on_click animation steps are skipped.
+ * ⚡ ADR-023: True when the item's bounding box overlaps the staging area.
+ * Staging = [-50, 150] on each axis (relative to full bleed canvas [0, 100]).
+ * Items fully outside staging are culled from player render and their on_click steps skipped.
  */
-export function isInTrim(geo: Geometry): boolean {
-  return geo.x + geo.w > 0 && geo.x < 100 && geo.y + geo.h > 0 && geo.y < 100;
+export function isInStaging(geo: Geometry): boolean {
+  return geo.x + geo.w > -50 && geo.x < 150 && geo.y + geo.h > -50 && geo.y < 150;
 }
 
 /** Spread item arrays needed for player_visible pre-filter in buildAnimationSteps */
@@ -44,8 +44,8 @@ function preFilterHiddenTargets(
   // Build id sets — O(n) once before the loop
   const hiddenVisualIds = new Set<string>();
   const hiddenAllIds = new Set<string>();
-  // on_click targets geometrically outside trim are also skipped
-  const outOfTrimIds = new Set<string>();
+  // on_click targets geometrically outside staging are also skipped
+  const outOfStagingIds = new Set<string>();
 
   const markHidden = (arr: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }> | undefined, visual: boolean) => {
     arr?.forEach((item) => {
@@ -53,8 +53,8 @@ function preFilterHiddenTargets(
         hiddenAllIds.add(item.id);
         if (visual) hiddenVisualIds.add(item.id);
       }
-      if (item.geometry && !isInTrim(item.geometry)) {
-        outOfTrimIds.add(item.id);
+      if (item.geometry && !isInStaging(item.geometry)) {
+        outOfStagingIds.add(item.id);
       }
     });
   };
@@ -67,7 +67,7 @@ function preFilterHiddenTargets(
   markHidden(items.audios, false);
   markHidden(items.quizzes, false);
 
-  if (hiddenAllIds.size === 0 && outOfTrimIds.size === 0) return sorted; // fast path
+  if (hiddenAllIds.size === 0 && outOfStagingIds.size === 0) return sorted; // fast path
 
   const result: SpreadAnimation[] = [];
   let skipNextChained = false;
@@ -101,9 +101,9 @@ function preFilterHiddenTargets(
       continue;
     }
 
-    // Case 4: on_click targeting item geometrically outside trim (culled from player render)
-    if (trigger === 'on_click' && outOfTrimIds.has(targetId)) {
-      log.warn('preFilterHiddenTargets', 'on_click skipped — target outside trim', { spreadId, order: anim.order, targetId, targetType: anim.target.type, reason: 'on-click-out-of-trim' });
+    // Case 4: on_click targeting item geometrically outside staging (culled from player render)
+    if (trigger === 'on_click' && outOfStagingIds.has(targetId)) {
+      log.warn('preFilterHiddenTargets', 'on_click skipped — target outside staging', { spreadId, order: anim.order, targetId, targetType: anim.target.type, reason: 'on-click-out-of-staging' });
       skipNextChained = true;
       continue;
     }
