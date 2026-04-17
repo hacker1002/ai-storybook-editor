@@ -1,6 +1,6 @@
 // spreads-image-toolbar.tsx - Floating toolbar for illustration image items in Spreads Creative Space
 // Simpler than ObjectsImageToolbar: no MediaIdentitySection, no Split/Crop.
-// Provides: aspect ratio display (read-only), geometry editing, and footer actions (Generate, Upload, Delete).
+// Provides: aspect ratio display, geometry editing, and footer actions (Generate, Upload, Delete).
 "use client";
 
 import { useMemo, useRef, useCallback, useState } from "react";
@@ -16,7 +16,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sparkles, Upload, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { uploadImageToStorage } from "@/apis/storage-api";
+import { uploadImageToStorageWithNormalize, ImageTooTallError } from "@/apis/storage-api";
 import {
   useToolbarPosition,
   type BaseSpread,
@@ -29,91 +29,19 @@ import {
   GeometrySection,
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
+import {
+  ASPECT_RATIOS,
+  DEFAULT_ASPECT_RATIO,
+  type AspectRatio,
+} from "@/constants/aspect-ratio-constants";
+import {
+  calculateGeometryForRatio,
+  detectRatioFromGeometry,
+  findClosestRatio,
+  getImageNaturalDimensions,
+} from "@/utils/aspect-ratio-utils";
 
 const log = createLogger("Editor", "SpreadsImageToolbar");
-
-// === Constants (duplicated from objects-image-toolbar — do not import to keep spreads toolbar self-contained) ===
-
-const COMMON_RATIOS = [
-  { label: "1:1", value: "1:1", numeric: 1 },
-  { label: "2:3", value: "2:3", numeric: 2 / 3 },
-  { label: "3:2", value: "3:2", numeric: 3 / 2 },
-  { label: "3:4", value: "3:4", numeric: 3 / 4 },
-  { label: "4:3", value: "4:3", numeric: 4 / 3 },
-  { label: "4:5", value: "4:5", numeric: 4 / 5 },
-  { label: "5:4", value: "5:4", numeric: 5 / 4 },
-  { label: "9:16", value: "9:16", numeric: 9 / 16 },
-  { label: "16:9", value: "16:9", numeric: 16 / 9 },
-  { label: "21:9", value: "21:9", numeric: 21 / 9 },
-  { label: "Original", value: "original", numeric: 0 },
-] as const;
-
-// === Helpers ===
-
-function getImageNaturalDimensions(
-  file: File
-): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Failed to read image dimensions"));
-    };
-    img.src = url;
-  });
-}
-
-function findClosestRatio(width: number, height: number): string {
-  const ratio = width / height;
-  let closest: (typeof COMMON_RATIOS)[number] = COMMON_RATIOS[0];
-  let minDiff = Infinity;
-  for (const r of COMMON_RATIOS) {
-    if (r.value === "original" || r.numeric === 0) continue;
-    const diff = Math.abs(r.numeric - ratio);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = r;
-    }
-  }
-  return closest.value;
-}
-
-/**
- * Calculate new geometry when ratio changes, preserving approximate area.
- * Keeps center position, adjusts w/h to match target ratio.
- */
-function calculateGeometryForRatio(
-  geometry: { x: number; y: number; w: number; h: number },
-  ratioValue: string,
-  canvasAspectRatio: number
-): { x: number; y: number; w: number; h: number } | null {
-  if (ratioValue === "original") return null;
-
-  const ratio = COMMON_RATIOS.find((r) => r.value === ratioValue);
-  if (!ratio || ratio.numeric === 0) return null;
-
-  // Target ratio is in pixel space; geometry is in % space with canvas aspect ratio
-  const targetRatio = ratio.numeric / canvasAspectRatio;
-  const area = geometry.w * geometry.h;
-  const newW = Math.sqrt(area * targetRatio);
-  const newH = newW / targetRatio;
-
-  const clampedW = clampGeometry("w", newW);
-  const clampedH = clampGeometry("h", newH);
-
-  // Re-center around original center
-  const centerX = geometry.x + geometry.w / 2;
-  const centerY = geometry.y + geometry.h / 2;
-  const newX = clampGeometry("x", centerX - clampedW / 2);
-  const newY = clampGeometry("y", centerY - clampedH / 2);
-
-  return { x: newX, y: newY, w: clampedW, h: clampedH };
-}
 
 // === Component ===
 
@@ -144,29 +72,16 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
 
   const detectedRatio = useMemo(() => {
     if (item.aspect_ratio) return item.aspect_ratio;
-    if (geometry.w <= 0 || geometry.h <= 0) return undefined;
-    const ratio = (geometry.w / geometry.h) * canvasAspectRatio;
-    const match = COMMON_RATIOS.find(
-      (r) => r.numeric > 0 && Math.abs(r.numeric - ratio) < 0.05
-    );
-    return match?.value;
-  }, [item.aspect_ratio, geometry.w, geometry.h]);
+    return detectRatioFromGeometry(geometry.w, geometry.h, canvasAspectRatio);
+  }, [item.aspect_ratio, geometry.w, geometry.h, canvasAspectRatio]);
 
   // === Handlers ===
 
   const handleRatioSelect = useCallback(
-    (ratioValue: string) => {
+    (ratioValue: AspectRatio) => {
       log.debug("SpreadsImageToolbar", "ratio change", { ratio: ratioValue });
-      if (ratioValue === "original") {
-        onUpdate({ aspect_ratio: undefined });
-        return;
-      }
-      const newGeometry = calculateGeometryForRatio(geometry, ratioValue, canvasAspectRatio);
-      if (newGeometry) {
-        onUpdate({ geometry: newGeometry, aspect_ratio: ratioValue });
-      } else {
-        onUpdate({ aspect_ratio: ratioValue });
-      }
+      const newGeometry = calculateGeometryForRatio(geometry, ratioValue, canvasAspectRatio, clampGeometry);
+      onUpdate({ geometry: newGeometry, aspect_ratio: ratioValue });
     },
     [geometry, onUpdate, canvasAspectRatio]
   );
@@ -209,15 +124,19 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
       });
 
       try {
-        const [{ publicUrl }, dimensions] = await Promise.all([
-          uploadImageToStorage(file, "illustrations"),
-          getImageNaturalDimensions(file),
-        ]);
+        const uploadResult = await uploadImageToStorageWithNormalize(file, "illustrations");
+        const { publicUrl } = uploadResult;
 
-        const closestRatio = findClosestRatio(dimensions.width, dimensions.height);
-        log.debug("SpreadsImageToolbar", "detected upload ratio", {
-          natural: `${dimensions.width}x${dimensions.height}`,
-          matched: closestRatio,
+        // Server-authoritative ratio for exact-match + slow-path; fallback client dim-read for gif/svg passthrough
+        const ratio: AspectRatio = uploadResult.ratio !== undefined
+          ? uploadResult.ratio
+          : await getImageNaturalDimensions(file)
+              .then(({ width, height }) => findClosestRatio(width, height))
+              .catch(() => DEFAULT_ASPECT_RATIO);
+
+        log.debug("SpreadsImageToolbar", "upload ratio resolved", {
+          ratio,
+          serverProvided: uploadResult.ratio !== undefined,
         });
 
         // Deselect all existing illustrations, add new one as selected
@@ -226,10 +145,11 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
           is_selected: false,
         }));
 
-        const newGeometry = calculateGeometryForRatio(geometry, closestRatio, canvasAspectRatio);
+        const newGeometry = calculateGeometryForRatio(geometry, ratio, canvasAspectRatio, clampGeometry);
         onUpdate({
           media_url: publicUrl,
-          aspect_ratio: closestRatio,
+          aspect_ratio: ratio,
+          geometry: newGeometry,
           illustrations: [
             ...existingIllustrations,
             {
@@ -238,20 +158,21 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
               is_selected: true,
             },
           ],
-          ...(newGeometry ? { geometry: newGeometry } : {}),
         });
 
         toast.success("Image uploaded");
         // Close toolbar by deselecting via canvas background click
         canvasRef.current?.click();
-        log.info("SpreadsImageToolbar", "upload success", {
-          url: publicUrl,
-          ratio: closestRatio,
-        });
+        log.info("SpreadsImageToolbar", "upload success", { url: publicUrl, ratio });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Upload failed";
-        toast.error(message);
-        log.error("SpreadsImageToolbar", "upload failed", { error: message });
+        if (err instanceof ImageTooTallError) {
+          toast.error("Image too tall. Minimum supported ratio is 9:16. Please crop and try again.");
+          log.warn("SpreadsImageToolbar", "upload blocked: too tall", { srcRatio: err.srcRatio });
+        } else {
+          const message = err instanceof Error ? err.message : "Upload failed";
+          toast.error(message);
+          log.error("SpreadsImageToolbar", "upload failed", { error: message });
+        }
       } finally {
         setIsUploading(false);
       }
@@ -294,7 +215,10 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
           <Label className="text-xs text-muted-foreground w-14 shrink-0">
             Ratio
           </Label>
-          <Select value={detectedRatio ?? ""} onValueChange={handleRatioSelect}>
+          <Select
+            value={detectedRatio ?? ""}
+            onValueChange={(v) => handleRatioSelect(v as AspectRatio)}
+          >
             <SelectTrigger
               className="h-7 text-sm flex-1"
               aria-label="Aspect ratio"
@@ -302,7 +226,7 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
               <SelectValue placeholder="Select ratio..." />
             </SelectTrigger>
             <SelectContent>
-              {COMMON_RATIOS.map((r) => (
+              {ASPECT_RATIOS.map((r) => (
                 <SelectItem key={r.value} value={r.value}>
                   {r.label}
                 </SelectItem>

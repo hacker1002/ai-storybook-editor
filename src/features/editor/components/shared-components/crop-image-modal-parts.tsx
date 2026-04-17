@@ -9,20 +9,16 @@ import {
 } from "@/components/ui/select";
 import { X, Check } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
+import {
+  ASPECT_RATIOS,
+  type AspectRatio,
+} from "@/constants/aspect-ratio-constants";
+
+// Re-export for existing consumers (crop-image-modal imports AspectRatio from this module)
+export type { AspectRatio };
 
 // === Shared Types & Constants ===
 
-export type AspectRatio =
-  | "1:1"
-  | "2:3"
-  | "3:2"
-  | "3:4"
-  | "4:3"
-  | "4:5"
-  | "5:4"
-  | "9:16"
-  | "16:9"
-  | "21:9";
 export type ResizeCorner = "nw" | "ne" | "sw" | "se";
 
 export interface CropBoundingBox {
@@ -57,36 +53,7 @@ export const MAX_BOXES = 3;
 export const DEFAULT_BOX_SIZE_PERCENT = 30;
 export const MIN_BOX_SIZE_PERCENT = 2;
 
-export const ASPECT_RATIOS: {
-  label: string;
-  value: AspectRatio;
-  numeric: number;
-}[] = [
-  { label: "1:1", value: "1:1", numeric: 1 },
-  { label: "2:3", value: "2:3", numeric: 2 / 3 },
-  { label: "3:2", value: "3:2", numeric: 3 / 2 },
-  { label: "3:4", value: "3:4", numeric: 3 / 4 },
-  { label: "4:3", value: "4:3", numeric: 4 / 3 },
-  { label: "4:5", value: "4:5", numeric: 4 / 5 },
-  { label: "5:4", value: "5:4", numeric: 5 / 4 },
-  { label: "9:16", value: "9:16", numeric: 9 / 16 },
-  { label: "16:9", value: "16:9", numeric: 16 / 9 },
-  { label: "21:9", value: "21:9", numeric: 21 / 9 },
-];
-
 // === Helpers ===
-
-export function parseRatioNumeric(ratio: AspectRatio): number {
-  return ASPECT_RATIOS.find((r) => r.value === ratio)?.numeric ?? 1;
-}
-
-export function getPercentRatio(
-  ratio: AspectRatio,
-  naturalW: number,
-  naturalH: number
-): number {
-  return parseRatioNumeric(ratio) * (naturalH / naturalW);
-}
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));

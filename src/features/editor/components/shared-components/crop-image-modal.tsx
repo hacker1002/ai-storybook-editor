@@ -25,12 +25,12 @@ import {
   MAX_BOXES,
   DEFAULT_BOX_SIZE_PERCENT,
   MIN_BOX_SIZE_PERCENT,
-  getPercentRatio,
   clamp,
   base64ToFile,
   BoundingBoxOverlay,
   CropResultSection,
 } from "./crop-image-modal-parts";
+import { getPercentRatio } from "@/utils/aspect-ratio-utils";
 
 export type { CropCreateResult } from "./crop-image-modal-parts";
 

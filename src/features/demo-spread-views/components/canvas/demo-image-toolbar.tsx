@@ -5,29 +5,16 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sparkles, Upload, Copy, Trash2, ChevronDown } from "lucide-react";
 import { useToolbarPosition, type BaseSpread, type ImageToolbarContext } from "@/features/editor/components/canvas-spread-view";
 import { GeometrySection, ToolbarIconButton } from "@/features/editor/components/shared-components";
+import { detectRatioFromGeometry } from "@/utils/aspect-ratio-utils";
 
-const COMMON_RATIOS = [
-  { label: '1:1', value: 1 },
-  { label: '2:3', value: 2 / 3 },
-  { label: '3:2', value: 3 / 2 },
-  { label: '3:4', value: 3 / 4 },
-  { label: '4:3', value: 4 / 3 },
-  { label: '4:5', value: 4 / 5 },
-  { label: '5:4', value: 5 / 4 },
-  { label: '9:16', value: 9 / 16 },
-  { label: '16:9', value: 16 / 9 },
-  { label: '21:9', value: 21 / 9 },
-] as const;
+// Demo uses fixed 4:3 canvas aspect ratio (800×600 design space)
+const DEMO_CANVAS_ASPECT_RATIO = 4 / 3;
 
 function formatAspectRatio(w: number, h: number): string {
   if (w <= 0 || h <= 0) return '—';
-
-  // Demo uses fixed 4:3 canvas aspect ratio (800×600 design space)
-  const ratio = (w / h) * (4 / 3);
-  const match = COMMON_RATIOS.find(r => Math.abs(r.value - ratio) < 0.05);
-
-  if (match) return match.label;
-  return ratio.toFixed(2);
+  const match = detectRatioFromGeometry(w, h, DEMO_CANVAS_ASPECT_RATIO);
+  if (match) return match;
+  return ((w / h) * DEMO_CANVAS_ASPECT_RATIO).toFixed(2);
 }
 
 interface DemoImageToolbarProps<TSpread extends BaseSpread> {
