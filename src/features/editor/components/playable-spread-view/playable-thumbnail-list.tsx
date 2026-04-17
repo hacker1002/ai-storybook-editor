@@ -13,7 +13,7 @@ import {
 } from "../shared-components";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
-import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
+import { useCanvasWidth, useCanvasAspectRatio } from "@/stores/editor-settings-store";
 import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import type { PlayableSpread } from "@/types/playable-types";
 
@@ -21,7 +21,7 @@ import type { PlayableSpread } from "@/types/playable-types";
 const LAYOUT = {
   FOOTER_HEIGHT: 120,
   THUMBNAIL_WIDTH: 100,
-  THUMBNAIL_HEIGHT: 80,
+  LABEL_HEIGHT: 20,
   THUMBNAIL_GAP: 8,
 } as const;
 
@@ -56,7 +56,8 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
 }: PlayableThumbnailProps) {
   const narrationLangCode = useNarrationLanguage();
   const canvasWidth = useCanvasWidth();
-  const canvasHeight = useCanvasHeight();
+  const canvasAspectRatio = useCanvasAspectRatio();
+  const canvasHeight = canvasWidth / canvasAspectRatio;
   // Scale factor: thumbnail width / canvas width
   const scale = LAYOUT.THUMBNAIL_WIDTH / canvasWidth;
 
@@ -104,13 +105,15 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
       )}
       style={{
         width: LAYOUT.THUMBNAIL_WIDTH,
-        height: LAYOUT.THUMBNAIL_HEIGHT,
         borderRadius: THUMBNAIL_STYLES.BORDER_RADIUS,
         cursor: "pointer",
       }}
     >
-      {/* Preview Area */}
-      <div className="relative flex-1 bg-white overflow-hidden">
+      {/* Preview Area — aspectRatio matches canvas so thumbnail has no extra padding below */}
+      <div
+        className="relative bg-white overflow-hidden w-full"
+        style={{ aspectRatio: `${canvasAspectRatio}` }}
+      >
         {/* Scaled Content Container */}
         <div
           style={{
