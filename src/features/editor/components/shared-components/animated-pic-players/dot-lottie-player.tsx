@@ -1,14 +1,14 @@
 // dot-lottie-player.tsx — lazy-loaded dotLottie v2 WASM renderer for .lottie animated pics
-// WASM is served from /wasm/dotlottie-player.wasm (copied to public/ by Vite plugin in vite.config.ts)
+// WASM bundled by Vite via ?url import — hashed filename, served from /assets/
 import { useRef, useCallback, useMemo } from "react";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import type { DotLottie } from "@lottiefiles/dotlottie-web";
 import { DotLottie as DotLottieClass } from "@lottiefiles/dotlottie-web";
+import dotLottieWasmUrl from "@lottiefiles/dotlottie-web/dotlottie-player.wasm?url";
 import { createLogger } from "@/utils/logger";
 
 // Register WASM once when this lazy chunk loads — before any instance renders.
-// Path served from public/wasm/ (copied by dotLottieWasmPlugin in vite.config.ts).
-DotLottieClass.setWasmUrl("/wasm/dotlottie-player.wasm");
+DotLottieClass.setWasmUrl(dotLottieWasmUrl);
 
 const log = createLogger("Editor", "DotLottiePlayer");
 

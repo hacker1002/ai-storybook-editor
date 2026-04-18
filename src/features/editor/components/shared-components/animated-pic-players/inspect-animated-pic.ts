@@ -72,8 +72,11 @@ export async function inspectLottieFromUrl(url: string): Promise<LottieInspectio
 }
 
 async function inspectLottieBuffer(buffer: ArrayBuffer): Promise<LottieInspection> {
-  const { DotLottie } = await import("@lottiefiles/dotlottie-web");
-  DotLottie.setWasmUrl("/wasm/dotlottie-player.wasm");
+  const [{ DotLottie }, { default: dotLottieWasmUrl }] = await Promise.all([
+    import("@lottiefiles/dotlottie-web"),
+    import("@lottiefiles/dotlottie-web/dotlottie-player.wasm?url"),
+  ]);
+  DotLottie.setWasmUrl(dotLottieWasmUrl);
 
   const canvas = document.createElement("canvas");
   canvas.width = 1;

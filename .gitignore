@@ -61,6 +61,3 @@ Thumbs.db
 *.local
 .vercel
 .netlify
-
-# Generated WASM assets (copied from node_modules by Vite plugin)
-public/wasm/
