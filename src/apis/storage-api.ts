@@ -40,8 +40,10 @@ async function uploadToStorage(
   maxSize: number,
   pathPrefix: string,
   fnName: string,
+  // When provided, skips MIME validation (caller has validated by extension) and uses this content type
+  validatedContentType?: string,
 ): Promise<UploadResult> {
-  if (!allowedTypes.includes(file.type)) {
+  if (!validatedContentType && !allowedTypes.includes(file.type)) {
     throw new Error(`Unsupported file type: ${file.type}. Allowed: ${allowedTypes.join(', ')}`);
   }
   if (file.size > maxSize) {
@@ -51,12 +53,12 @@ async function uploadToStorage(
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = `${pathPrefix}/${Date.now()}-${sanitizedName}`;
 
-  log.info(fnName, 'uploading', { path: filePath, size: file.size, type: file.type });
+  log.info(fnName, 'uploading', { path: filePath, size: file.size, type: validatedContentType ?? file.type });
 
   const { data, error } = await supabase.storage
     .from(BUCKET)
     .upload(filePath, file, {
-      contentType: file.type,
+      contentType: validatedContentType ?? file.type,
       upsert: false,
     });
 
@@ -87,6 +89,12 @@ export async function uploadAudioToStorage(file: File, pathPrefix = 'audios'): P
 }
 
 export async function uploadAnimatedPicToStorage(file: File, pathPrefix = 'animated-pics'): Promise<UploadResult> {
+  const lowerName = file.name.toLowerCase();
+  // .lottie/.riv have no standard MIME type — browsers report empty string or application/octet-stream.
+  // Validate by extension here; pass validatedContentType to skip MIME check in uploadToStorage.
+  if (lowerName.endsWith('.lottie') || lowerName.endsWith('.riv')) {
+    return uploadToStorage(file, ANIMATED_PIC_TYPES, ANIMATED_PIC_MAX_SIZE, pathPrefix, 'uploadAnimatedPicToStorage', 'application/octet-stream');
+  }
   return uploadToStorage(file, ANIMATED_PIC_TYPES, ANIMATED_PIC_MAX_SIZE, pathPrefix, 'uploadAnimatedPicToStorage');
 }
 

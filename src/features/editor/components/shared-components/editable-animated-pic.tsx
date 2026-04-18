@@ -1,7 +1,7 @@
 // editable-animated-pic.tsx - Canvas component for animated_pic items (WebP/WebM auto-loop)
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/utils/utils";
 import type { SpreadAnimatedPic } from "@/types/spread-types";
@@ -10,13 +10,28 @@ import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "EditableAnimatedPic");
 
-type MediaKind = "webp" | "webm" | "unknown";
+const DotLottiePlayer = lazy(() =>
+  import("./animated-pic-players/dot-lottie-player").then((m) => ({ default: m.DotLottiePlayer })),
+);
+const RivePlayer = lazy(() =>
+  import("./animated-pic-players/rive-player").then((m) => ({ default: m.RivePlayer })),
+);
+
+const lazyFallback = (
+  <div className="absolute inset-0 flex items-center justify-center bg-muted">
+    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+  </div>
+);
+
+type MediaKind = "webp" | "webm" | "lottie" | "riv" | "unknown";
 
 function detectMediaKind(url: string | undefined): MediaKind {
   if (!url) return "unknown";
   const lower = url.toLowerCase().split("?")[0];
   if (lower.endsWith(".webp")) return "webp";
   if (lower.endsWith(".webm")) return "webm";
+  if (lower.endsWith(".lottie")) return "lottie";
+  if (lower.endsWith(".riv")) return "riv";
   return "unknown";
 }
 
@@ -77,7 +92,7 @@ export function EditableAnimatedPic({
   onSelect,
 }: EditableAnimatedPicProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!!animatedPic.media_url);
   const [hasError, setHasError] = useState(false);
 
   const mediaKind = detectMediaKind(animatedPic.media_url);
@@ -100,6 +115,12 @@ export function EditableAnimatedPic({
     setHasError(true);
     log.warn("handleError", "animated_pic media load failed", { id: animatedPic.id, url: animatedPic.media_url, mediaKind });
   }, [animatedPic.id, animatedPic.media_url, mediaKind]);
+
+  useEffect(() => {
+    if (mediaKind === "lottie" || mediaKind === "riv") {
+      log.debug("render", `${mediaKind} player dispatched`, { isThumbnail, id: animatedPic.id });
+    }
+  }, [mediaKind, isThumbnail, animatedPic.id]);
 
   return (
     <div
@@ -144,6 +165,26 @@ export function EditableAnimatedPic({
               onLoad={handleLoaded}
               onError={handleError}
             />
+          ) : mediaKind === "lottie" ? (
+            <Suspense fallback={lazyFallback}>
+              <DotLottiePlayer
+                src={animatedPic.media_url!}
+                isThumbnail={isThumbnail}
+                options={animatedPic.lottie}
+                onLoad={handleLoaded}
+                onError={handleError}
+              />
+            </Suspense>
+          ) : mediaKind === "riv" ? (
+            <Suspense fallback={lazyFallback}>
+              <RivePlayer
+                src={animatedPic.media_url!}
+                isThumbnail={isThumbnail}
+                options={animatedPic.rive}
+                onLoad={handleLoaded}
+                onError={handleError}
+              />
+            </Suspense>
           ) : (
             // WebM: thumbnail uses preload=metadata (first frame, no autoplay).
             // onLoadedMetadata fires reliably with preload=metadata on Firefox/Safari;

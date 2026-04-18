@@ -45,6 +45,7 @@ import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
 import { isItemPlayerHidden } from "./visibility-utils";
+import { isAnimatedPicInteractive } from "../shared-components/animated-pic-players/inspect-animated-pic";
 import { usePlayerOrientation } from "./hooks/use-player-orientation";
 import { useContainerFit } from "./hooks/use-container-fit";
 import { MobileFullPageZoomOverlay } from "./mobile-full-page-zoom-overlay";
@@ -655,17 +656,26 @@ export function PlayerCanvas({
           );
         })}
 
-        {/* Animated Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150] */}
+        {/* Animated Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150].
+            Interactive pics (Rive/Lottie with state_machine set) bypass narration click-loop:
+            pointer events route directly to the runtime canvas so state machines receive input. */}
         {spread.animated_pics?.map((animatedPic, index) => {
           if (animatedPic.player_visible === false) return null;
           if (!isInStaging(animatedPic.geometry)) return null;
           if (!animatedPic.media_url) return null;
+          const interactive = isAnimatedPicInteractive(animatedPic);
+          const pointerClass = interactive
+            ? "pointer-events-auto cursor-pointer"
+            : getPointerClasses(animatedPic.id);
+          const onClickCapture = interactive
+            ? undefined
+            : () => handleItemClick(animatedPic.id);
           return (
             <div
               key={animatedPic.id}
               ref={registerRef(animatedPic.id)}
-              className={`${getPointerClasses(animatedPic.id)} ${getHighlightClass(animatedPic.id)}`}
-              onClickCapture={() => handleItemClick(animatedPic.id)}
+              className={`${pointerClass} ${getHighlightClass(animatedPic.id)}`}
+              onClickCapture={onClickCapture}
             >
               <EditableAnimatedPic
                 animatedPic={animatedPic}

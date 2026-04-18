@@ -1,9 +1,9 @@
 // objects-animated-pic-toolbar.tsx - Floating toolbar for animated_pic items in Objects Creative Space
 // Differences from video toolbar: no playback, aspect-locked W/H post-upload, W/H disabled pre-upload,
-// variant as free-text, upload accept webp+webm only (.gif blocked — validation session 1)
+// variant as free-text, upload accept webp+webm+lottie+riv (.gif blocked — validation session 1)
 "use client";
 
-import { useRef, useCallback, useState, useMemo } from "react";
+import { useRef, useCallback, useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   TooltipProvider,
@@ -23,6 +23,14 @@ import { Upload, Trash2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { uploadAnimatedPicToStorage } from "@/apis/storage-api";
 import {
+  inspectLottie,
+  inspectRive,
+  inspectLottieFromUrl,
+  inspectRiveFromUrl,
+  type LottieInspection,
+  type RiveInspection,
+} from "@/features/editor/components/shared-components/animated-pic-players/inspect-animated-pic";
+import {
   useToolbarPosition,
   type BaseSpread,
   type AnimatedPicToolbarContext,
@@ -41,8 +49,15 @@ import {
 const log = createLogger("Editor", "ObjectsAnimatedPicToolbar");
 
 // .gif blocked client-side — validation session 1
-const ANIMATED_PIC_ACCEPT = "image/webp,video/webm";
+// .lottie/.riv validated by extension only (MIME unreliable — browser returns application/octet-stream)
+const ANIMATED_PIC_ACCEPT = "image/webp,video/webm,.lottie,.riv";
 const VALID_MIME_TYPES = ["image/webp", "video/webm"];
+
+function isValidAnimatedPicFile(file: File): boolean {
+  if (VALID_MIME_TYPES.includes(file.type)) return true;
+  const name = file.name.toLowerCase();
+  return name.endsWith(".lottie") || name.endsWith(".riv");
+}
 
 function detectImageDimensions(
   file: File
@@ -81,13 +96,20 @@ function detectVideoDimensions(
   });
 }
 
-function deriveMediaKind(mediaUrl: string | undefined): "webp" | "webm" | null {
+type DerivedMediaKind = "webp" | "webm" | "lottie" | "riv" | null;
+
+function deriveMediaKind(mediaUrl: string | undefined): DerivedMediaKind {
   if (!mediaUrl) return null;
   const ext = mediaUrl.split("?")[0].split(".").pop()?.toLowerCase();
   if (ext === "webm") return "webm";
   if (ext === "webp") return "webp";
+  if (ext === "lottie") return "lottie";
+  if (ext === "riv") return "riv";
   return null;
 }
+
+// "__none__" used as Select sentinel since SelectItem cannot have empty-string value
+const NONE_VALUE = "__none__";
 
 interface ObjectsAnimatedPicToolbarProps<TSpread extends BaseSpread> {
   context: AnimatedPicToolbarContext<TSpread>;
@@ -113,6 +135,40 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
   // hasMedia gates W/H inputs and aspect-lock (validation session 1)
   const hasMedia = !!item.media_url;
   const mediaKind = useMemo(() => deriveMediaKind(item.media_url), [item.media_url]);
+
+  // Inspection metadata — populated on upload (fresh inspect) or on mount for existing
+  // items (lazy fetch+probe from stored URL, with module-level cache).
+  const [riveMeta, setRiveMeta] = useState<RiveInspection | null>(null);
+  const [lottieMeta, setLottieMeta] = useState<LottieInspection | null>(null);
+
+  useEffect(() => {
+    if (!item.media_url) {
+      setRiveMeta(null);
+      setLottieMeta(null);
+      return;
+    }
+    const url = item.media_url;
+    let cancelled = false;
+    if (mediaKind === "riv") {
+      inspectRiveFromUrl(url)
+        .then((m) => { if (!cancelled) setRiveMeta(m); })
+        .catch((err) => {
+          log.warn("useEffect", "rive inspect-from-url failed", { error: String(err) });
+          if (!cancelled) setRiveMeta(null);
+        });
+    } else if (mediaKind === "lottie") {
+      inspectLottieFromUrl(url)
+        .then((m) => { if (!cancelled) setLottieMeta(m); })
+        .catch((err) => {
+          log.warn("useEffect", "lottie inspect-from-url failed", { error: String(err) });
+          if (!cancelled) setLottieMeta(null);
+        });
+    } else {
+      setRiveMeta(null);
+      setLottieMeta(null);
+    }
+    return () => { cancelled = true; };
+  }, [item.media_url, mediaKind]);
   // Aspect ratio derived from stored geometry — set accurately on upload, so ratio persists
   const aspectRatio = useMemo(
     () => (hasMedia && geometry.h > 0 ? geometry.w / geometry.h : null),
@@ -192,11 +248,11 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
       if (!file) return;
       e.target.value = "";
 
-      if (!VALID_MIME_TYPES.includes(file.type)) {
+      if (!isValidAnimatedPicFile(file)) {
         toast.error(
-          "Please use .webp (animated) or .webm format. .gif is not supported."
+          "Please use .webp, .webm, .lottie, or .riv format. .gif is not supported."
         );
-        log.warn("handleFileChange", "rejected invalid type", { type: file.type });
+        log.warn("handleFileChange", "rejected invalid type", { type: file.type, name: file.name });
         return;
       }
 
@@ -209,47 +265,84 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
       });
 
       try {
-        const dimensionPromise =
-          file.type === "image/webp"
-            ? detectImageDimensions(file)
-            : detectVideoDimensions(file);
+        const lowerName = file.name.toLowerCase();
+        const isLottie = lowerName.endsWith(".lottie");
+        const isRive = lowerName.endsWith(".riv");
 
-        const [{ publicUrl }, dims] = await Promise.all([
+        type Probe =
+          | { kind: "image" | "video"; dims: { width: number; height: number } }
+          | { kind: "lottie"; inspection: LottieInspection }
+          | { kind: "rive"; inspection: RiveInspection }
+          | null;
+
+        const probePromise: Promise<Probe> =
+          file.type === "image/webp"
+            ? detectImageDimensions(file).then((d) => ({ kind: "image" as const, dims: d })).catch(() => null)
+            : file.type === "video/webm"
+            ? detectVideoDimensions(file).then((d) => ({ kind: "video" as const, dims: d })).catch(() => null)
+            : isLottie
+            ? inspectLottie(file).then((i) => ({ kind: "lottie" as const, inspection: i })).catch((err) => {
+                log.warn("handleFileChange", "lottie inspect failed", { error: String(err) });
+                return null;
+              })
+            : isRive
+            ? inspectRive(file).then((i) => ({ kind: "rive" as const, inspection: i })).catch((err) => {
+                log.warn("handleFileChange", "rive inspect failed", { error: String(err) });
+                return null;
+              })
+            : Promise.resolve(null);
+
+        const [{ publicUrl }, probe] = await Promise.all([
           uploadAnimatedPicToStorage(file, "animated-pics"),
-          dimensionPromise,
+          probePromise,
         ]);
 
-        log.debug("handleFileChange", "detected dimensions", {
-          kind: file.type,
-          w: dims.width,
-          h: dims.height,
-        });
+        const dims = probe && "inspection" in probe
+          ? { width: probe.inspection.width, height: probe.inspection.height }
+          : probe && "dims" in probe
+          ? probe.dims
+          : null;
 
-        // Preserve visual area, apply new media aspect, re-center.
-        const nextGeometry = computeGeometryOnMediaReplace({
-          old: geometry,
-          naturalW: dims.width,
-          naturalH: dims.height,
-          canvasW: canvasWidth,
-          canvasH: canvasHeight,
-        });
+        const updates: Parameters<typeof onUpdate>[0] = { media_url: publicUrl };
 
-        log.debug("handleFileChange", "geometry recomputed", {
-          picId: item.id,
-          old: geometry,
-          next: nextGeometry,
-        });
+        if (dims) {
+          log.debug("handleFileChange", "detected dimensions", {
+            kind: file.type || lowerName.split(".").pop(),
+            w: dims.width,
+            h: dims.height,
+          });
+          updates.geometry = computeGeometryOnMediaReplace({
+            old: geometry,
+            naturalW: dims.width,
+            naturalH: dims.height,
+            canvasW: canvasWidth,
+            canvasH: canvasHeight,
+          });
+        }
 
-        onUpdate({
-          media_url: publicUrl,
-          geometry: nextGeometry,
-        });
+        // Auto-select first state machine when present → item becomes interactive by default.
+        // User can clear via dropdown to fall back to linear animation.
+        if (probe?.kind === "rive") {
+          setRiveMeta(probe.inspection);
+          const autoSm = probe.inspection.stateMachines[0];
+          updates.rive = {
+            ...(item.rive ?? {}),
+            ...(autoSm ? { state_machine: autoSm } : {}),
+          };
+        } else if (probe?.kind === "lottie") {
+          setLottieMeta(probe.inspection);
+          const autoSm = probe.inspection.stateMachines[0];
+          updates.lottie = {
+            ...(item.lottie ?? {}),
+            ...(autoSm ? { state_machine: autoSm } : {}),
+          };
+        }
+
+        onUpdate(updates);
+
         toast.success("Animated pic uploaded");
         canvasRef.current?.click();
-        log.info("handleFileChange", "upload success", {
-          picId: item.id,
-          url: publicUrl,
-        });
+        log.info("handleFileChange", "upload success", { picId: item.id, name: file.name });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Upload failed";
         toast.error(message);
@@ -261,7 +354,27 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
         setIsUploading(false);
       }
     },
-    [geometry, item.id, onUpdate, canvasRef, canvasWidth, canvasHeight]
+    [geometry, item.id, item.rive, item.lottie, onUpdate, canvasRef, canvasWidth, canvasHeight]
+  );
+
+  // === Interactivity config handlers ===
+
+  const handleRiveStateMachineChange = useCallback(
+    (value: string) => {
+      const next = value === NONE_VALUE ? undefined : value;
+      log.debug("handleRiveStateMachineChange", "select", { value: next });
+      onUpdate({ rive: { ...(item.rive ?? {}), state_machine: next } });
+    },
+    [item.rive, onUpdate],
+  );
+
+  const handleLottieStateMachineChange = useCallback(
+    (value: string) => {
+      const next = value === NONE_VALUE ? undefined : value;
+      log.debug("handleLottieStateMachineChange", "select", { value: next });
+      onUpdate({ lottie: { ...(item.lottie ?? {}), state_machine: next } });
+    },
+    [item.lottie, onUpdate],
   );
 
   const toolbarStyle: React.CSSProperties = position
@@ -338,6 +451,54 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
             {mediaKind ?? "—"}
           </span>
         </div>
+
+        {/* Row 3b: Interactivity — Rive state machine (present → item is interactive in play mode) */}
+        {mediaKind === "riv" && (
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground w-14 shrink-0">
+              State
+            </Label>
+            <Select
+              value={item.rive?.state_machine ?? NONE_VALUE}
+              onValueChange={handleRiveStateMachineChange}
+              disabled={!riveMeta || riveMeta.stateMachines.length === 0}
+            >
+              <SelectTrigger className="h-7 text-sm flex-1" aria-label="Rive state machine">
+                <SelectValue placeholder={riveMeta ? "No state machine" : "Loading..."} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_VALUE}>None (linear)</SelectItem>
+                {riveMeta?.stateMachines.map((sm) => (
+                  <SelectItem key={sm} value={sm}>{sm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Row 3c: Interactivity — Lottie state machine */}
+        {mediaKind === "lottie" && (
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground w-14 shrink-0">
+              State
+            </Label>
+            <Select
+              value={item.lottie?.state_machine ?? NONE_VALUE}
+              onValueChange={handleLottieStateMachineChange}
+              disabled={!lottieMeta || lottieMeta.stateMachines.length === 0}
+            >
+              <SelectTrigger className="h-7 text-sm flex-1" aria-label="Lottie state machine">
+                <SelectValue placeholder={lottieMeta ? "No state machine" : "Loading..."} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_VALUE}>None (linear)</SelectItem>
+                {lottieMeta?.stateMachines.map((sm) => (
+                  <SelectItem key={sm} value={sm}>{sm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* Row 4-5: Geometry — W/H disabled pre-upload, aspect-locked post-upload */}
         <div className="space-y-1.5">

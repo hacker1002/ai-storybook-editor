@@ -107,7 +107,20 @@ export interface SpreadAnimatedPic {
   name: string;
   variant?: string;
   type: SpreadItemMediaType;
-  media_url?: string; // .webp (animated) | .webm (loop=true)
+  media_url?: string; // .webp (animated) | .webm (loop=true) | .lottie | .riv
+  /** dotLottie v2 renderer hints — absent means use library defaults */
+  lottie?: {
+    theme?: string;         // dotLottie v2 theme id
+    state_machine?: string; // state machine id; absent → default animation
+    speed?: number;         // default 1
+  };
+  /** Rive renderer hints — absent means use library defaults */
+  rive?: {
+    artboard?: string;      // default: file's default artboard
+    animation?: string;     // default: 'Idle' or first linear animation
+    state_machine?: string; // mutually exclusive with animation; wins if both present
+    fit?: 'contain' | 'cover' | 'fill' | 'fitWidth' | 'fitHeight' | 'none' | 'scaleDown'; // default: 'contain'
+  };
 }
 
 // === Spread Audio ===
