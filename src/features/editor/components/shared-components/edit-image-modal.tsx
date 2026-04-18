@@ -28,6 +28,7 @@ import {
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { downloadImage } from "@/utils/download-image";
 import { callImageRemoveBg } from "@/apis/retouch-api";
+import { EraseImageModal } from "./erase-image-modal";
 import {
   useRetouchImageById,
   useSnapshotActions,
@@ -54,6 +55,7 @@ export function EditImageModal({
 
   const dialogContentRef = useRef<HTMLDivElement>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [isEraseOpen, setIsEraseOpen] = useState(false);
 
   const [prompt, setPrompt] = useState("");
   const [isRemovingBg, setIsRemovingBg] = useState(false);
@@ -71,6 +73,7 @@ export function EditImageModal({
     setPrompt("");
     clearImages();
     setIsRemovingBg(false);
+    setIsEraseOpen(false);
   }, [clearImages]);
 
   const handleOpenChange = useCallback(
@@ -212,11 +215,24 @@ export function EditImageModal({
     }
   }, [image, spreadId, imageId, updateRetouchImage]);
 
+  const handleEraseSaved = useCallback(
+    (url: string) => {
+      if (!image) return;
+      log.info("handleEraseSaved", "prepending erased illustration", { url: url.slice(0, 60) });
+      const updatedIllustrations = [
+        { media_url: url, created_time: new Date().toISOString(), is_selected: true },
+        ...(image.illustrations || []).map((ill) => ({ ...ill, is_selected: false })),
+      ];
+      updateRetouchImage(spreadId, imageId, { illustrations: updatedIllustrations });
+    },
+    [image, spreadId, imageId, updateRetouchImage]
+  );
+
   // Register modal slot — prevents Delete/Escape bubbling to item slot while open.
   // captureClickOutside: true so click outside only closes modal, not deselects item.
   useInteractionLayer(
     "modal",
-    open && !zoomOpen
+    open && !zoomOpen && !isEraseOpen
       ? {
           id: "edit-image-modal",
           ref: dialogContentRef,
@@ -243,6 +259,7 @@ export function EditImageModal({
   );
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         ref={dialogContentRef}
@@ -295,6 +312,18 @@ export function EditImageModal({
                     </div>
                   )}
                   <div className="absolute bottom-2 right-2 flex gap-2 z-20">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        log.debug("EditImageModal", "opening erase modal");
+                        setIsEraseOpen(true);
+                      }}
+                      disabled={isBusy || !selectedIllustration}
+                      aria-label="Erase image"
+                    >
+                      <Eraser className="h-4 w-4" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -446,5 +475,22 @@ export function EditImageModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {isEraseOpen && selectedIllustration && (
+      <ErrorBoundary fallback={null} onError={() => setIsEraseOpen(false)}>
+        <EraseImageModal
+          open={isEraseOpen}
+          onOpenChange={setIsEraseOpen}
+          imageUrl={selectedIllustration.media_url}
+          imageTitle={image.title}
+          pathPrefix={`retouch/${imageId}/erased`}
+          onSaved={handleEraseSaved}
+          yieldedFrom={{
+            parentId: "edit-image-modal",
+            onParentForcePop: () => { resetState(); onOpenChange(false); },
+          }}
+        />
+      </ErrorBoundary>
+    )}
+    </>
   );
 }

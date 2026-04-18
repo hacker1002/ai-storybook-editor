@@ -10,6 +10,7 @@ export { EditableAnimatedPic } from './editable-animated-pic';
 export { EditableQuiz } from './editable-quiz';
 export { GenerateImageModal } from './generate-image-modal';
 export { EditImageModal } from './edit-image-modal';
+export { EraseImageModal } from './erase-image-modal';
 export { SplitImageModal } from './split-image-modal';
 export type { SplitLayerResult } from './split-image-modal';
 export { CropImageModal } from './crop-image-modal';
