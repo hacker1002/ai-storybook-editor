@@ -2,9 +2,13 @@
 
 export const BRUSH_PX = { S: 8, M: 16, L: 32 } as const;
 
+export type StrokeMode = "paint" | "erase";
+
 export interface Stroke {
   points: { x: number; y: number }[];
   size: "S" | "M" | "L";
+  mode: StrokeMode;
+  /** Only consulted when mode === "paint". Erase strokes ignore color. */
   color: string;
 }
 
@@ -17,9 +21,12 @@ export function rgbToHex(r: number, g: number, b: number): string {
 }
 
 /** Renders all strokes onto a canvas context. brushScale > 1 for natural-resolution export.
- *  clearFirst=true (default) wipes the canvas before painting — correct for live overlay
- *  which re-renders from scratch each frame. Pass false when compositing strokes ON TOP
- *  of existing content (e.g. export pipeline after drawImage). */
+ *  clearFirst=true (default) wipes the canvas before painting — correct for overlays
+ *  that re-render from scratch each frame. Pass false when compositing strokes ON TOP
+ *  of existing content (e.g. after drawImage in the main workspace or export pipeline).
+ *
+ *  Erase strokes use globalCompositeOperation="destination-out" to subtract alpha from
+ *  existing pixels, producing true transparency that reveals the layer below the canvas. */
 export function paintStrokesOnCtx(
   ctx: CanvasRenderingContext2D,
   strokes: Stroke[],
@@ -30,11 +37,20 @@ export function paintStrokesOnCtx(
   clearFirst = true
 ) {
   if (clearFirst) ctx.clearRect(0, 0, canvasW, canvasH);
+  const prevOp = ctx.globalCompositeOperation;
   for (const stroke of [...strokes, activeStroke].filter(Boolean) as Stroke[]) {
     if (stroke.points.length === 0) continue;
     const radius = BRUSH_PX[stroke.size] * brushScale;
-    ctx.strokeStyle = stroke.color;
-    ctx.fillStyle = stroke.color;
+    if (stroke.mode === "erase") {
+      ctx.globalCompositeOperation = "destination-out";
+      // destination-out only cares about the stroke's alpha; color value is irrelevant.
+      ctx.strokeStyle = "#000";
+      ctx.fillStyle = "#000";
+    } else {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = stroke.color;
+      ctx.fillStyle = stroke.color;
+    }
     ctx.lineWidth = radius * 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -58,4 +74,5 @@ export function paintStrokesOnCtx(
       ctx.stroke();
     }
   }
+  ctx.globalCompositeOperation = prevOp;
 }
