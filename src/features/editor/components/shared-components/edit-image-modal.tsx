@@ -280,27 +280,33 @@ export function EditImageModal({
             {/* Main Preview */}
             <div className="flex-[6] flex items-center justify-center">
               {selectedIllustration ? (
-                <div className="relative rounded-md bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px]">
-                  <img
-                    key={selectedIllustration.media_url}
-                    src={selectedIllustration.media_url}
-                    alt="Selected illustration"
-                    className="h-[360px] w-auto rounded-md object-contain"
-                  />
-                  <ErrorBoundary fallback={null} onError={() => setZoomOpen(false)}>
-                    <ImageZoomPreview
+                // Outer frame: consistent size + solid gray bg (letterbox dead-space).
+                <div className="relative w-full h-[360px] rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                  {/* Inner wrapper: hugs the rendered image rect exactly (img sizes
+                      naturally via max-w/max-h), so the checker bg only shows through
+                      genuinely transparent pixels — not through letterbox gaps. */}
+                  <div className="relative rounded-md bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] overflow-hidden">
+                    <img
+                      key={selectedIllustration.media_url}
                       src={selectedIllustration.media_url}
                       alt="Selected illustration"
-                      className="absolute inset-0 h-full w-full rounded-md"
-                      disabled={isBusy}
-                      open={zoomOpen}
-                      onOpenChange={setZoomOpen}
-                      yieldedFrom={{
-                        parentId: "edit-image-modal",
-                        onParentForcePop: () => handleOpenChange(false),
-                      }}
+                      className="max-w-full max-h-[360px] rounded-md block"
                     />
-                  </ErrorBoundary>
+                    <ErrorBoundary fallback={null} onError={() => setZoomOpen(false)}>
+                      <ImageZoomPreview
+                        src={selectedIllustration.media_url}
+                        alt="Selected illustration"
+                        className="absolute inset-0 h-full w-full rounded-md"
+                        disabled={isBusy}
+                        open={zoomOpen}
+                        onOpenChange={setZoomOpen}
+                        yieldedFrom={{
+                          parentId: "edit-image-modal",
+                          onParentForcePop: () => handleOpenChange(false),
+                        }}
+                      />
+                    </ErrorBoundary>
+                  </div>
                   {isBusy && (
                     <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center z-20">
                       <div className="text-center">
@@ -357,7 +363,7 @@ export function EditImageModal({
                     .map((illustration) => (
                       <button
                         key={illustration.origIdx}
-                        className={`relative aspect-square rounded-md transition-all bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:12px_12px] ${
+                        className={`relative aspect-square rounded-md transition-all bg-muted flex items-center justify-center overflow-hidden ${
                           illustration.is_selected
                             ? "ring-2 ring-primary"
                             : "ring-1 ring-border hover:scale-105"
@@ -367,11 +373,16 @@ export function EditImageModal({
                         }
                         disabled={isBusy}
                       >
-                        <img
-                          src={illustration.media_url}
-                          alt={`Illustration ${illustration.origIdx + 1}`}
-                          className="w-full h-full object-contain rounded-md"
-                        />
+                        {/* Inner wrapper hugs the rendered image rect so the
+                            checker bg only shows through genuinely transparent
+                            pixels, not through letterbox gaps. */}
+                        <div className="relative rounded-md bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:12px_12px] overflow-hidden">
+                          <img
+                            src={illustration.media_url}
+                            alt={`Illustration ${illustration.origIdx + 1}`}
+                            className="max-w-full max-h-full block rounded-md"
+                          />
+                        </div>
                         {illustration.is_selected && (
                           <div className="absolute top-1.5 left-1.5">
                             <div className="rounded-full bg-primary p-1">

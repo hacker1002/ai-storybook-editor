@@ -350,13 +350,16 @@ export function EraseImageModal({
               />
               {cursorPos && !isSaving && (
                 <div
-                  className="absolute pointer-events-none rounded-full border border-white/60"
+                  className="absolute pointer-events-none rounded-full"
                   style={{
                     width: BRUSH_PX[brushSize] * 2,
                     height: BRUSH_PX[brushSize] * 2,
                     left: cursorPos.x - BRUSH_PX[brushSize],
                     top: cursorPos.y - BRUSH_PX[brushSize],
                     backgroundColor: `${color}80`,
+                    // Dual ring: inner white + outer black so cursor stays visible
+                    // regardless of brush color vs. background color contrast.
+                    boxShadow: "0 0 0 1px #fff, 0 0 0 2px #000",
                   }}
                 />
               )}
