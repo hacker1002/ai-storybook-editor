@@ -25,6 +25,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
+import { downloadImage } from "@/utils/download-image";
 import { callImageRemoveBg } from "@/apis/retouch-api";
 import {
   useRetouchImageById,
@@ -106,18 +107,7 @@ export function EditImageModal({
     if (!selectedIllustration) return;
 
     try {
-      const response = await fetch(selectedIllustration.media_url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `${image.title || "image"}_${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(blobUrl);
+      await downloadImage(selectedIllustration.media_url, image.title);
     } catch {
       alert("Failed to download image");
     }
@@ -238,6 +228,7 @@ export function EditImageModal({
             "[data-radix-popper-content-wrapper]",
             "[data-radix-select-content]",
             '[role="listbox"]',
+            "[data-image-zoom-dialog]",
           ],
         }
       : null

@@ -41,6 +41,7 @@ import { useArtStyleDescription } from '@/stores/art-style-store';
 import type { StageVariant } from '@/types/stage-types';
 import { uploadImageToStorage } from '@/apis/storage-api';
 import { createLogger } from '@/utils/logger';
+import { downloadImage } from '@/utils/download-image';
 import { cn } from '@/utils/utils';
 import { toast } from 'sonner';
 import { VariantAttributeSections } from './variant-attribute-sections';
@@ -404,10 +405,14 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
             editPromptText={editPromptText}
             editRefImages={editRefs.images}
             onSelectIllustration={setSelectedIllustrationIndex}
-            onDownload={() => {
+            onDownload={async () => {
               if (!selectedIllustration) return;
-              log.debug('handleDownload', 'open in new tab', { url: selectedIllustration.media_url });
-              window.open(selectedIllustration.media_url, '_blank');
+              try {
+                await downloadImage(selectedIllustration.media_url, variantData.name);
+              } catch (err) {
+                log.error('handleDownload', 'failed', { error: String(err) });
+                alert('Failed to download image');
+              }
             }}
             onEditPopoverOpenChange={setIsEditPopoverOpen}
             onEditPromptChange={setEditPromptText}

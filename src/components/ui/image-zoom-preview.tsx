@@ -151,7 +151,10 @@ export function ImageZoomDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[90vw] max-h-[95vh] p-0 overflow-hidden bg-black/95 border-none [&>button]:text-white [&>button]:hover:text-white/80">
+      <DialogContent
+        data-image-zoom-dialog=""
+        className="sm:max-w-[90vw] max-h-[95vh] p-0 overflow-hidden bg-black/95 border-none [&>button]:text-white [&>button]:hover:text-white/80"
+      >
         <DialogTitle className="sr-only">Image preview</DialogTitle>
         {/* Zoom controls */}
         <div className="absolute top-3 left-3 z-20 flex gap-1">

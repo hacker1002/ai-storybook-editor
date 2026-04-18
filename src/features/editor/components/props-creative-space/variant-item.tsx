@@ -49,6 +49,7 @@ import { useArtStyleDescription } from '@/stores/art-style-store';
 import type { PropVariant } from "@/types/prop-types";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import { createLogger } from "@/utils/logger";
+import { downloadImage } from "@/utils/download-image";
 import { cn } from "@/utils/utils";
 import { toast } from "sonner";
 
@@ -116,12 +117,14 @@ export function VariantItem({
     updatePropVariant(propKey, variantData.key, { visual_description: trimmed });
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!selectedIllustration) return;
-    log.debug("handleDownload", "open in new tab", {
-      url: selectedIllustration.media_url,
-    });
-    window.open(selectedIllustration.media_url, "_blank");
+    try {
+      await downloadImage(selectedIllustration.media_url, variantData.name);
+    } catch (err) {
+      log.error("handleDownload", "failed", { error: String(err) });
+      alert("Failed to download image");
+    }
   };
 
   const handleEditImage = () => {

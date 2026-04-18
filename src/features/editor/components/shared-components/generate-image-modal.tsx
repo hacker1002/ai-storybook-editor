@@ -34,6 +34,7 @@ import {
   Send,
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
+import { downloadImage } from "@/utils/download-image";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
 import { useArtStyleDescription } from "@/stores/art-style-store";
 import {
@@ -110,6 +111,7 @@ export function GenerateImageModal({
             "[data-radix-popper-content-wrapper]",
             "[data-radix-select-content]",
             '[role="listbox"]',
+            "[data-image-zoom-dialog]",
           ],
           // Snapshot open dropdowns/popovers at pointerdown time so that clicking
           // outside to dismiss them doesn't also close the modal.
@@ -175,16 +177,19 @@ export function GenerateImageModal({
     [onOpenChange, resetState]
   );
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     const selectedIllustration = image.illustrations?.find(
       (ill) => ill.is_selected
     );
     if (!selectedIllustration) return;
-    log.debug("handleDownload", "open in new tab", {
-      url: selectedIllustration.media_url,
-    });
-    window.open(selectedIllustration.media_url, "_blank");
-  }, [image.illustrations]);
+
+    try {
+      await downloadImage(selectedIllustration.media_url, image.title);
+    } catch (err) {
+      log.error("handleDownload", "failed", { error: String(err) });
+      alert("Failed to download image");
+    }
+  }, [image.illustrations, image.title]);
 
   const handleGallerySelect = useCallback(
     (mediaUrl: string) => {
