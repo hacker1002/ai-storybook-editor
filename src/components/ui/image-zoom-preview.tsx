@@ -1,14 +1,12 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Search, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { cn } from "@/utils/utils";
+import { useInteractionLayer } from "@/features/editor/contexts/use-interaction-layer";
+import type { YieldedFromLinkage } from "@/features/editor/contexts/interaction-layer-provider";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
@@ -20,6 +18,10 @@ interface ImageZoomPreviewProps {
   className?: string;
   iconClassName?: string;
   disabled?: boolean;
+  /** Controlled mode — parent modal manages open state + yields its slot. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  yieldedFrom?: YieldedFromLinkage;
 }
 
 export function ImageZoomPreview({
@@ -28,8 +30,16 @@ export function ImageZoomPreview({
   className,
   iconClassName,
   disabled = false,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  yieldedFrom,
 }: ImageZoomPreviewProps) {
-  const [open, setOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled
+    ? controlledOnOpenChange ?? (() => {})
+    : setInternalOpen;
 
   return (
     <>
@@ -58,6 +68,7 @@ export function ImageZoomPreview({
         onOpenChange={setOpen}
         src={src}
         alt={alt}
+        yieldedFrom={yieldedFrom}
       />
     </>
   );
@@ -68,6 +79,7 @@ interface ImageZoomDialogProps {
   onOpenChange: (open: boolean) => void;
   src: string;
   alt?: string;
+  yieldedFrom?: YieldedFromLinkage;
 }
 
 export function ImageZoomDialog({
@@ -75,6 +87,7 @@ export function ImageZoomDialog({
   onOpenChange,
   src,
   alt = "Preview",
+  yieldedFrom,
 }: ImageZoomDialogProps) {
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
@@ -82,6 +95,25 @@ export function ImageZoomDialog({
   const dragStart = useRef({ x: 0, y: 0 });
   const translateStart = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
+
+  useInteractionLayer(
+    "modal",
+    open
+      ? {
+          id: "image-zoom-preview",
+          ref: dialogContentRef,
+          captureClickOutside: true,
+          hotkeys: ["Escape"],
+          onHotkey: (key) => {
+            if (key === "Escape") onOpenChange(false);
+          },
+          onClickOutside: () => onOpenChange(false),
+          onForcePop: () => onOpenChange(false),
+          yieldedFrom,
+        }
+      : null
+  );
 
   const resetView = useCallback(() => {
     setScale(1);
@@ -152,8 +184,11 @@ export function ImageZoomDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        data-image-zoom-dialog=""
+        ref={dialogContentRef}
         className="sm:max-w-[90vw] max-h-[95vh] p-0 overflow-hidden bg-black/95 border-none [&>button]:text-white [&>button]:hover:text-white/80"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">Image preview</DialogTitle>
         {/* Zoom controls */}
@@ -210,7 +245,9 @@ export function ImageZoomDialog({
             draggable={false}
             className="max-w-full max-h-full object-contain transition-transform duration-100"
             style={{
-              transform: `scale(${scale}) translate(${translate.x / scale}px, ${translate.y / scale}px)`,
+              transform: `scale(${scale}) translate(${translate.x / scale}px, ${
+                translate.y / scale
+              }px)`,
             }}
           />
         </div>

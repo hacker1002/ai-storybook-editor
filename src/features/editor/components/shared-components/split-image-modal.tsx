@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
@@ -69,6 +70,7 @@ export function SplitImageModal({
   const [seed, setSeed] = useState(SEED_DEFAULT);
   const [numberOfLayers, setNumberOfLayers] = useState(LAYERS_DEFAULT);
 
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null);
   const [isSplitting, setIsSplitting] = useState(false);
   const [generatedLayers, setGeneratedLayers] = useState<
     SplitLayerResult[] | null
@@ -87,7 +89,7 @@ export function SplitImageModal({
   // captureClickOutside: true so click outside only closes modal, not deselects item.
   useInteractionLayer(
     "modal",
-    open
+    open && zoomSrc === null
       ? {
           id: "split-image-modal",
           ref: dialogContentRef,
@@ -115,6 +117,7 @@ export function SplitImageModal({
     setIsCreating(false);
     setGeneratedLayers(null);
     setSelectedLayerIds(new Set());
+    setZoomSrc(null);
   }, []);
 
   const handleOpenChange = useCallback(
@@ -409,11 +412,19 @@ export function SplitImageModal({
                           alt={layer.title}
                           className="w-full aspect-square object-contain bg-muted"
                         />
-                        <ImageZoomPreview
-                          src={layer.media_url}
-                          alt={layer.title}
-                          className="absolute inset-0 w-full h-full"
-                        />
+                        <ErrorBoundary fallback={null} onError={() => setZoomSrc(null)}>
+                          <ImageZoomPreview
+                            src={layer.media_url}
+                            alt={layer.title}
+                            className="absolute inset-0 w-full h-full"
+                            open={zoomSrc === layer.media_url}
+                            onOpenChange={(v) => setZoomSrc(v ? layer.media_url : null)}
+                            yieldedFrom={{
+                              parentId: "split-image-modal",
+                              onParentForcePop: () => handleOpenChange(false),
+                            }}
+                          />
+                        </ErrorBoundary>
                         {/* Select button */}
                         <button
                           onClick={() => handleToggleLayer(layer.id)}

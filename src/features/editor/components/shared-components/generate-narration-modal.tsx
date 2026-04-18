@@ -97,16 +97,16 @@ export function GenerateNarrationModal({
 }: GenerateNarrationModalProps) {
   // -- Local state ----------------------------------------------------------
   const [selectedVoice, setSelectedVoice] = useState("");
-  const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(
+    null
+  );
   const [selectedEmotion, setSelectedEmotion] = useState(
-    existingAudio?.emotion ?? "neutral",
+    existingAudio?.emotion ?? "neutral"
   );
-  const [selectedSpeed, setSelectedSpeed] = useState(
-    existingAudio?.speed ?? 1,
-  );
+  const [selectedSpeed, setSelectedSpeed] = useState(existingAudio?.speed ?? 1);
   const [editableScript, setEditableScript] = useState(script);
   const [mediaList, setMediaList] = useState<TextboxAudioMedia[]>(
-    existingAudio?.media ?? [],
+    existingAudio?.media ?? []
   );
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -143,6 +143,11 @@ export function GenerateNarrationModal({
             "[data-radix-popper-content-wrapper]",
             "[data-radix-select-content]",
             '[role="listbox"]',
+          ],
+          dropdownSelectors: [
+            "[data-radix-select-content]",
+            "[data-radix-popover-content]",
+            "[data-radix-popper-content-wrapper]",
           ],
         }
       : null
@@ -193,19 +198,16 @@ export function GenerateNarrationModal({
 
   // -- Script change handler ------------------------------------------------
   // On each keystroke: update local state + mark all media as stale immediately
-  const handleScriptInputChange = useCallback(
-    (newScript: string) => {
-      setEditableScript(newScript);
-      // Mark media stale only when script actually differs from original
-      if (newScript !== scriptRef.current) {
-        setMediaList((prev) => {
-          if (prev.every((m) => m.script_synced === false)) return prev;
-          return prev.map((m) => ({ ...m, script_synced: false }));
-        });
-      }
-    },
-    [],
-  );
+  const handleScriptInputChange = useCallback((newScript: string) => {
+    setEditableScript(newScript);
+    // Mark media stale only when script actually differs from original
+    if (newScript !== scriptRef.current) {
+      setMediaList((prev) => {
+        if (prev.every((m) => m.script_synced === false)) return prev;
+        return prev.map((m) => ({ ...m, script_synced: false }));
+      });
+    }
+  }, []);
 
   // On blur: persist script → textbox text (+ audio stale flags handled by toolbar in single update)
   const handleScriptBlur = useCallback(() => {
@@ -228,7 +230,7 @@ export function GenerateNarrationModal({
         const selectedMedia = mediaList[selectedMediaIndex];
         if (selectedMedia && !selectedMedia.voice_id) {
           const updatedList = mediaList.map((m, i) =>
-            i === selectedMediaIndex ? { ...m, voice_id: newVoice } : m,
+            i === selectedMediaIndex ? { ...m, voice_id: newVoice } : m
           );
           setMediaList(updatedList);
           onGenerated({
@@ -249,7 +251,14 @@ export function GenerateNarrationModal({
       const matchIdx = mediaList.findIndex((m) => m.voice_id === newVoice);
       setSelectedMediaIndex(matchIdx >= 0 ? matchIdx : null);
     },
-    [selectedMediaIndex, mediaList, editableScript, selectedSpeed, selectedEmotion, onGenerated],
+    [
+      selectedMediaIndex,
+      mediaList,
+      editableScript,
+      selectedSpeed,
+      selectedEmotion,
+      onGenerated,
+    ]
   );
 
   // -- Select a media row ---------------------------------------------------
@@ -259,7 +268,7 @@ export function GenerateNarrationModal({
       const media = mediaList[index];
       setSelectedVoice(media?.voice_id ?? "");
     },
-    [mediaList],
+    [mediaList]
   );
 
   // -- Generate handler -----------------------------------------------------
@@ -292,10 +301,12 @@ export function GenerateNarrationModal({
         voice_id: response.data.voiceId,
         url: response.data.audioUrl,
         script_synced: true,
-        ...(response.data.wordTimings && { word_timings: response.data.wordTimings }),
+        ...(response.data.wordTimings && {
+          word_timings: response.data.wordTimings,
+        }),
       };
       const existingIdx = mediaList.findIndex(
-        (m) => m.voice_id === selectedVoice,
+        (m) => m.voice_id === selectedVoice
       );
       const updatedList =
         existingIdx >= 0
@@ -367,7 +378,7 @@ export function GenerateNarrationModal({
 
       handleSelectRow(index);
     },
-    [mediaList, playingIndex, isPlaying, handleSelectRow],
+    [mediaList, playingIndex, isPlaying, handleSelectRow]
   );
 
   // -- Delete a media row ---------------------------------------------------
@@ -398,7 +409,15 @@ export function GenerateNarrationModal({
       });
       log.info("handleDeleteRow", "media deleted", { index });
     },
-    [mediaList, playingIndex, selectedMediaIndex, editableScript, selectedSpeed, selectedEmotion, onGenerated],
+    [
+      mediaList,
+      playingIndex,
+      selectedMediaIndex,
+      editableScript,
+      selectedSpeed,
+      selectedEmotion,
+      onGenerated,
+    ]
   );
 
   // -- Audio ended handler --------------------------------------------------
@@ -419,7 +438,6 @@ export function GenerateNarrationModal({
       <DialogContent
         ref={dialogContentRef}
         className="max-w-[600px]"
-        onKeyDown={(e) => e.stopPropagation()}
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
@@ -449,7 +467,7 @@ export function GenerateNarrationModal({
                     className={cn(
                       "flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/50",
                       isHighlighted &&
-                        "border-l-3 border-primary bg-primary/10 shadow-[inset_0_0_0_1px] shadow-primary/20",
+                        "border-l-3 border-primary bg-primary/10 shadow-[inset_0_0_0_1px] shadow-primary/20"
                     )}
                   >
                     <button
@@ -470,7 +488,7 @@ export function GenerateNarrationModal({
                       className={cn(
                         "flex-1 text-sm font-medium",
                         isHighlighted && "text-primary",
-                        !media.voice_id && "italic text-muted-foreground",
+                        !media.voice_id && "italic text-muted-foreground"
                       )}
                     >
                       {voiceLabel}
@@ -510,7 +528,9 @@ export function GenerateNarrationModal({
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={!editableScript.trim() || !selectedVoice || isGenerating}
+              disabled={
+                !editableScript.trim() || !selectedVoice || isGenerating
+              }
               className="flex items-center gap-2 rounded-lg bg-primary px-8 py-2.5 font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
             >
               {isGenerating ? (
@@ -528,10 +548,7 @@ export function GenerateNarrationModal({
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Voice
               </Label>
-              <Select
-                value={selectedVoice}
-                onValueChange={handleVoiceChange}
-              >
+              <Select value={selectedVoice} onValueChange={handleVoiceChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a voice" />
                 </SelectTrigger>
@@ -582,7 +599,7 @@ export function GenerateNarrationModal({
                     "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
                     selectedSpeed === opt.value
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-foreground hover:bg-muted",
+                      : "border-border bg-background text-foreground hover:bg-muted"
                   )}
                 >
                   {opt.label}

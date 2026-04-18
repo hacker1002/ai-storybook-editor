@@ -143,5 +143,8 @@ function createProxy(
     get captureClickOutside() {
       return layerRef.current?.captureClickOutside;
     },
+    get yieldedFrom() {
+      return layerRef.current?.yieldedFrom;
+    },
   };
 }

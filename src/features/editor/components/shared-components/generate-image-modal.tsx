@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useMemo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
@@ -84,6 +85,7 @@ export function GenerateImageModal({
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState("");
 
+  const [zoomOpen, setZoomOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dialogContentRef = useRef<HTMLDivElement>(null);
 
@@ -95,7 +97,7 @@ export function GenerateImageModal({
   // Provider's mousedown handler runs, ensuring modal slot is still in stack.
   useInteractionLayer(
     "modal",
-    open
+    open && !zoomOpen
       ? {
           id: "generate-image-modal",
           ref: dialogContentRef,
@@ -106,15 +108,11 @@ export function GenerateImageModal({
           },
           onClickOutside: () => handleOpenChange(false),
           captureClickOutside: true,
-          // Include Radix portals so clicks inside them are not outside-clicks on modal.
           portalSelectors: [
             "[data-radix-popper-content-wrapper]",
             "[data-radix-select-content]",
             '[role="listbox"]',
-            "[data-image-zoom-dialog]",
           ],
-          // Snapshot open dropdowns/popovers at pointerdown time so that clicking
-          // outside to dismiss them doesn't also close the modal.
           dropdownSelectors: [
             "[data-radix-select-content]",
             "[data-radix-popover-content]",
@@ -376,12 +374,20 @@ export function GenerateImageModal({
                     className="h-[360px] w-auto rounded-md object-contain"
                   />
                   {/* Zoom overlay */}
-                  <ImageZoomPreview
-                    src={selectedIllustration.media_url}
-                    alt={image.title || "Preview"}
-                    className="absolute inset-0 h-full w-full rounded-md"
-                    disabled={isProcessing}
-                  />
+                  <ErrorBoundary fallback={null} onError={() => setZoomOpen(false)}>
+                    <ImageZoomPreview
+                      src={selectedIllustration.media_url}
+                      alt={image.title || "Preview"}
+                      className="absolute inset-0 h-full w-full rounded-md"
+                      disabled={isProcessing}
+                      open={zoomOpen}
+                      onOpenChange={setZoomOpen}
+                      yieldedFrom={{
+                        parentId: "generate-image-modal",
+                        onParentForcePop: () => handleOpenChange(false),
+                      }}
+                    />
+                  </ErrorBoundary>
                   {/* Processing overlay */}
                   {isProcessing && (
                     <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center z-20">

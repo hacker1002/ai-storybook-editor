@@ -7,7 +7,7 @@ import { render, act } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { InteractionLayerProvider } from "./interaction-layer-provider";
 import { useInteractionLayer } from "./use-interaction-layer";
-import type { Layer, LayerSlot } from "./interaction-layer-provider";
+import type { Layer, LayerSlot, YieldedFromLinkage } from "./interaction-layer-provider";
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -443,6 +443,98 @@ describe("InteractionLayerProvider + useInteractionLayer — 20 scenarios", () =
       wrapper.blur();
       wrapper.remove();
     }
+  });
+
+  // 21. cascadePopUpperSlots calls onForcePop THEN yieldedFrom.onParentForcePop (order matters)
+  it("21: cascade pop modal calls onForcePop then yieldedFrom.onParentForcePop in order", () => {
+    const callOrder: string[] = [];
+    const childForcePop = vi.fn(() => callOrder.push("child"));
+    const parentForcePop = vi.fn(() => callOrder.push("parent"));
+    const yieldedFrom: YieldedFromLinkage = {
+      parentId: "parent-modal",
+      onParentForcePop: parentForcePop,
+    };
+
+    function App() {
+      const [spreadId, setSpreadId] = useState("s1");
+      return (
+        <Wrap>
+          <Slot slot="spread" config={{ id: spreadId, hotkeys: [] }} />
+          <Slot
+            slot="modal"
+            config={{ id: "child-modal", hotkeys: [], onForcePop: childForcePop, yieldedFrom }}
+          />
+          <button data-testid="switch" onClick={() => setSpreadId("s2")} />
+        </Wrap>
+      );
+    }
+
+    const { getByTestId } = render(<App />);
+    act(() => { getByTestId("switch").click(); });
+
+    expect(childForcePop).toHaveBeenCalledTimes(1);
+    expect(parentForcePop).toHaveBeenCalledTimes(1);
+    expect(callOrder).toEqual(["child", "parent"]);
+  });
+
+  // 22. cascadePopUpperSlots with modal that has no yieldedFrom — only onForcePop, no throw
+  it("22: cascade pop modal without yieldedFrom only calls onForcePop, no error", () => {
+    const forcePop = vi.fn();
+
+    function App() {
+      const [spreadId, setSpreadId] = useState("s1");
+      return (
+        <Wrap>
+          <Slot slot="spread" config={{ id: spreadId, hotkeys: [] }} />
+          <Slot slot="modal" config={{ id: "m1", hotkeys: [], onForcePop: forcePop }} />
+          <button data-testid="switch" onClick={() => setSpreadId("s2")} />
+        </Wrap>
+      );
+    }
+
+    const { getByTestId } = render(<App />);
+    expect(() => {
+      act(() => { getByTestId("switch").click(); });
+    }).not.toThrow();
+    expect(forcePop).toHaveBeenCalledTimes(1);
+  });
+
+  // 23. replaceSlot('modal') when new layer lacks yieldedFrom linkage → console.warn
+  it("23: replaceSlot emits console.warn when modal replaced without yieldedFrom linkage", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    function App() {
+      const [modalId, setModalId] = useState("modal-a");
+      return (
+        <Wrap>
+          <Slot slot="modal" config={{ id: modalId, hotkeys: [] }} />
+          <button data-testid="replace" onClick={() => setModalId("modal-b")} />
+        </Wrap>
+      );
+    }
+
+    const { getByTestId } = render(<App />);
+    act(() => { getByTestId("replace").click(); });
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("modal-stomp"));
+    warnSpy.mockRestore();
+  });
+
+  // 24. replaceSlot('modal') when slot is null (first push) → no console.warn
+  it("24: first push to empty modal slot does not emit console.warn", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    render(
+      <Wrap>
+        <Slot slot="modal" config={{ id: "modal-a", hotkeys: [] }} />
+      </Wrap>
+    );
+
+    const stompWarnings = warnSpy.mock.calls.filter((args) =>
+      typeof args[0] === "string" && args[0].includes("modal-stomp")
+    );
+    expect(stompWarnings).toHaveLength(0);
+    warnSpy.mockRestore();
   });
 
   // 20. contentEditable element → hotkeys blocked (covers the "textbox actively

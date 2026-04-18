@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { useInteractionLayer } from "@/features/editor/contexts";
 import {
   Dialog,
@@ -52,6 +53,7 @@ export function EditImageModal({
   const { isEditing } = useImageTasksForChild(spreadId, imageId);
 
   const dialogContentRef = useRef<HTMLDivElement>(null);
+  const [zoomOpen, setZoomOpen] = useState(false);
 
   const [prompt, setPrompt] = useState("");
   const [isRemovingBg, setIsRemovingBg] = useState(false);
@@ -214,7 +216,7 @@ export function EditImageModal({
   // captureClickOutside: true so click outside only closes modal, not deselects item.
   useInteractionLayer(
     "modal",
-    open
+    open && !zoomOpen
       ? {
           id: "edit-image-modal",
           ref: dialogContentRef,
@@ -228,7 +230,6 @@ export function EditImageModal({
             "[data-radix-popper-content-wrapper]",
             "[data-radix-select-content]",
             '[role="listbox"]',
-            "[data-image-zoom-dialog]",
           ],
         }
       : null
@@ -269,12 +270,20 @@ export function EditImageModal({
                     alt="Selected illustration"
                     className="h-[360px] w-auto rounded-md object-contain"
                   />
-                  <ImageZoomPreview
-                    src={selectedIllustration.media_url}
-                    alt="Selected illustration"
-                    className="absolute inset-0 h-full w-full rounded-md"
-                    disabled={isBusy}
-                  />
+                  <ErrorBoundary fallback={null} onError={() => setZoomOpen(false)}>
+                    <ImageZoomPreview
+                      src={selectedIllustration.media_url}
+                      alt="Selected illustration"
+                      className="absolute inset-0 h-full w-full rounded-md"
+                      disabled={isBusy}
+                      open={zoomOpen}
+                      onOpenChange={setZoomOpen}
+                      yieldedFrom={{
+                        parentId: "edit-image-modal",
+                        onParentForcePop: () => handleOpenChange(false),
+                      }}
+                    />
+                  </ErrorBoundary>
                   {isBusy && (
                     <div className="absolute inset-0 bg-white/80 rounded-md flex items-center justify-center z-20">
                       <div className="text-center">

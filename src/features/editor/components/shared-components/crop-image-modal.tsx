@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useInteractionLayer } from "@/features/editor/contexts";
+import type { YieldedFromLinkage } from "@/features/editor/contexts/interaction-layer-provider";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +64,7 @@ export function CropImageModal({
   image,
   onCreateImages,
 }: CropImageModalProps) {
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null);
   const [boundingBoxes, setBoundingBoxes] = useState<CropBoundingBox[]>([]);
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
   const [isCropping, setIsCropping] = useState(false);
@@ -90,7 +92,7 @@ export function CropImageModal({
   // onForcePop: called on cascade pop (e.g. spread switch) — discard draft + close.
   useInteractionLayer(
     "modal",
-    open
+    open && zoomSrc === null
       ? {
           id: "crop-image-modal",
           ref: dialogContentRef,
@@ -148,6 +150,7 @@ export function CropImageModal({
     setIsCreating(false);
     setImageNatural(null);
     setImageDisplay(null);
+    setZoomSrc(null);
   }, []);
 
   const handleOpenChange = useCallback(
@@ -655,6 +658,14 @@ export function CropImageModal({
                 results={cropResults}
                 selectedIndices={selectedCropIndices}
                 onToggleSelect={handleToggleSelect}
+                zoomSrc={zoomSrc}
+                onZoomSrcChange={setZoomSrc}
+                zoomYieldedFrom={
+                  {
+                    parentId: "crop-image-modal",
+                    onParentForcePop: () => handleOpenChange(false),
+                  } satisfies YieldedFromLinkage
+                }
               />
               <Button
                 onClick={handleCreateNewImages}

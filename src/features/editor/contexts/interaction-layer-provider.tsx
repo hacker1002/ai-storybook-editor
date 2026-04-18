@@ -20,6 +20,12 @@ const log = createLogger("Editor", "InteractionLayerProvider");
 
 export type LayerSlot = "spread" | "item" | "modal";
 
+/** Linkage from a child modal back to the parent that yielded its slot. */
+export interface YieldedFromLinkage {
+  parentId: string;
+  onParentForcePop: () => void;
+}
+
 export interface Layer {
   id: string;
   ref: React.RefObject<HTMLElement | null>;
@@ -30,6 +36,8 @@ export interface Layer {
   portalSelectors?: string[];
   dropdownSelectors?: string[];
   captureClickOutside?: boolean;
+  /** Set by child modal when opened inside a parent modal (Yielded Parent pattern). */
+  yieldedFrom?: YieldedFromLinkage;
 }
 
 export interface LayerStatus {
@@ -187,6 +195,7 @@ export function InteractionLayerProvider({
           reason: "spread-change",
         });
         stack.modal.onForcePop?.();
+        stack.modal.yieldedFrom?.onParentForcePop?.();
         stack.modal = null;
         notifySlot("modal");
       }
@@ -204,6 +213,7 @@ export function InteractionLayerProvider({
           reason: "item-change",
         });
         stack.modal.onForcePop?.();
+        stack.modal.yieldedFrom?.onParentForcePop?.();
         stack.modal = null;
         notifySlot("modal");
       }
@@ -233,6 +243,16 @@ export function InteractionLayerProvider({
         oldId: old.id,
         newId: layer.id,
       });
+      if (import.meta.env.DEV && slot === "modal") {
+        if (!layer.yieldedFrom || layer.yieldedFrom.parentId !== old.id) {
+          console.warn(
+            `[InteractionLayerStack] Modal replace without yieldedFrom linkage.\n` +
+            `  Suspicious modal-stomp: new="${layer.id}", old="${old.id}".\n` +
+            `  If child overlay: pass yieldedFrom from parent.\n` +
+            `  If replacing modal entirely: ignore this warning.`
+          );
+        }
+      }
     }
     cascadePopUpperSlots(slot);
     stackRef.current[slot] = layer;

@@ -8,7 +8,9 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { X, Check } from "lucide-react";
+import { ErrorBoundary } from "react-error-boundary";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
+import type { YieldedFromLinkage } from "@/features/editor/contexts/interaction-layer-provider";
 import {
   ASPECT_RATIOS,
   type AspectRatio,
@@ -200,10 +202,16 @@ export function CropResultSection({
   results,
   selectedIndices,
   onToggleSelect,
+  zoomSrc,
+  onZoomSrcChange,
+  zoomYieldedFrom,
 }: {
   results: CropResults;
   selectedIndices: Set<number>;
   onToggleSelect: (boxIndex: number) => void;
+  zoomSrc?: string | null;
+  onZoomSrcChange?: (src: string | null) => void;
+  zoomYieldedFrom?: YieldedFromLinkage;
 }) {
   const selectedCount = selectedIndices.size;
 
@@ -240,11 +248,16 @@ export function CropResultSection({
                       alt={`Cropped #${obj.boxIndex + 1}`}
                       className="w-full aspect-square object-contain bg-muted"
                     />
-                    <ImageZoomPreview
-                      src={dataUrl}
-                      alt={`Cropped #${obj.boxIndex + 1}`}
-                      className="absolute inset-0 w-full h-full"
-                    />
+                    <ErrorBoundary fallback={null} onError={() => onZoomSrcChange?.(null)}>
+                      <ImageZoomPreview
+                        src={dataUrl}
+                        alt={`Cropped #${obj.boxIndex + 1}`}
+                        className="absolute inset-0 w-full h-full"
+                        open={zoomSrc === dataUrl}
+                        onOpenChange={(v) => onZoomSrcChange?.(v ? dataUrl : null)}
+                        yieldedFrom={zoomYieldedFrom}
+                      />
+                    </ErrorBoundary>
                     <button
                       onClick={() => onToggleSelect(obj.boxIndex)}
                       role="checkbox"
