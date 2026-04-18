@@ -329,13 +329,19 @@ export function EraseImageModal({
                 <Loader2 className="animate-spin h-8 w-8 text-white/40" />
               </div>
             )}
-            <div ref={wrapperRef} className="relative inline-block">
+            {/* Inner wrapper hugs the rendered image rect (img uses intrinsic
+                sizing, no object-contain), so checker bg shows only through
+                genuinely transparent pixels — not through letterbox gaps. */}
+            <div
+              ref={wrapperRef}
+              className="relative inline-block bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] overflow-hidden"
+            >
               <img
                 ref={imgRef}
                 src={imageUrl}
                 alt={imageTitle ?? "Source image"}
                 crossOrigin="anonymous"
-                className="max-h-[68vh] max-w-full object-contain block"
+                className="max-h-[68vh] max-w-[85vw] block"
                 onLoad={handleImageLoad}
               />
               <canvas

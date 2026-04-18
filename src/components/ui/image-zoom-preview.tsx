@@ -225,7 +225,10 @@ export function ImageZoomDialog({
           </span>
         </div>
 
-        {/* Image container */}
+        {/* Image container — outer holds solid letterbox dead-space (dialog's
+            bg-black/95); inner wrapper hugs the rendered image rect and carries
+            the checker bg + zoom/pan transform, so the checker only shows
+            through genuinely transparent pixels and scales with the image. */}
         <div
           ref={containerRef}
           className={cn(
@@ -239,17 +242,21 @@ export function ImageZoomDialog({
           onPointerUp={handlePointerUp}
           onDoubleClick={handleDoubleClick}
         >
-          <img
-            src={src}
-            alt={alt}
-            draggable={false}
-            className="max-w-full max-h-full object-contain transition-transform duration-100"
+          <div
+            className="relative inline-block bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] overflow-hidden transition-transform duration-100"
             style={{
               transform: `scale(${scale}) translate(${translate.x / scale}px, ${
                 translate.y / scale
               }px)`,
             }}
-          />
+          >
+            <img
+              src={src}
+              alt={alt}
+              draggable={false}
+              className="max-w-[85vw] max-h-[88vh] block"
+            />
+          </div>
         </div>
       </DialogContent>
     </Dialog>
