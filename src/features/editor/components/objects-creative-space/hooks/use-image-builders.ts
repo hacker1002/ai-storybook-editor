@@ -9,6 +9,7 @@ import type { BaseSpread, SpreadImage } from "@/types/canvas-types";
 import type {
   CropCreateResult,
   SplitLayerResult,
+  SegmentResult,
 } from "@/features/editor/components/shared-components";
 
 const log = createLogger("Editor", "useImageBuilders");
@@ -113,5 +114,49 @@ export function buildSplitImages(
     spreadId: splitModalSpreadId,
     firstZ,
     isFullScreen,
+  });
+}
+
+export function buildSegmentImage(
+  segment: SegmentResult,
+  sourceImage: SpreadImage,
+  segmentSpreadId: string,
+  retouchSpreads: BaseSpread[],
+  actions: SnapshotActions,
+  onItemSelect: (item: { type: 'image'; id: string }) => void
+): void {
+  const spread = retouchSpreads.find((s) => s.id === segmentSpreadId);
+  const zIndex = spread
+    ? nextTopZInTier(spread, "pictorial")
+    : LAYER_CONFIG.MEDIA.min;
+
+  const newImage: SpreadImage = {
+    id: crypto.randomUUID(),
+    title: `${sourceImage.title ?? "Image"} - Segment`,
+    geometry: { ...sourceImage.geometry },
+    aspect_ratio: sourceImage.aspect_ratio,
+    type: sourceImage.type,
+    name: sourceImage.name,
+    state: sourceImage.state,
+    media_url: segment.media_url,
+    illustrations: [
+      {
+        media_url: segment.media_url,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      },
+    ],
+    player_visible: true,
+    editor_visible: true,
+    "z-index": zIndex,
+  };
+
+  actions.addRetouchImage(segmentSpreadId, newImage);
+  onItemSelect({ type: "image", id: newImage.id });
+
+  log.info("buildSegmentImage", "created segment image", {
+    newImageId: newImage.id,
+    spreadId: segmentSpreadId,
+    zIndex,
   });
 }

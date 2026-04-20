@@ -14,6 +14,7 @@ export interface UseObjectModalsReturn {
   generate: { open: boolean; imageId: string | null; spreadId: string };
   split: { open: boolean; image: SpreadImage | null; spreadId: string };
   crop: { open: boolean; image: SpreadImage | null; spreadId: string };
+  segment: { open: boolean; image: SpreadImage | null; spreadId: string };
   cropAudio: { open: boolean; item: SpreadAudio | null; spreadId: string };
 
   openGenerate: (img: SpreadImage) => void;
@@ -22,6 +23,8 @@ export interface UseObjectModalsReturn {
   closeSplit: (open: boolean) => void;
   openCrop: (img: SpreadImage) => void;
   closeCrop: (open: boolean) => void;
+  openSegment: (img: SpreadImage) => void;
+  closeSegment: (open: boolean) => void;
   openCropAudio: (audio: SpreadAudio) => void;
   closeCropAudio: () => void;
   handleCropAudioComplete: (newMediaUrl: string) => void;
@@ -45,6 +48,11 @@ export function useObjectModals(
   const [cropOpen, setCropOpen] = useState(false);
   const [cropImage, setCropImage] = useState<SpreadImage | null>(null);
   const [cropSpreadId, setCropSpreadId] = useState<string>("");
+
+  // Segment image modal
+  const [segmentOpen, setSegmentOpen] = useState(false);
+  const [segmentImage, setSegmentImage] = useState<SpreadImage | null>(null);
+  const [segmentSpreadId, setSegmentSpreadId] = useState<string>("");
 
   // Crop audio modal
   const [cropAudioOpen, setCropAudioOpen] = useState(false);
@@ -94,6 +102,20 @@ export function useObjectModals(
     if (!open) setCropImage(null);
   }, []);
 
+  const openSegment = useCallback(
+    (img: SpreadImage) => {
+      setSegmentImage(img);
+      setSegmentSpreadId(selectedSpreadId);
+      setSegmentOpen(true);
+    },
+    [selectedSpreadId]
+  );
+
+  const closeSegment = useCallback((open: boolean) => {
+    setSegmentOpen(open);
+    if (!open) setSegmentImage(null);
+  }, []);
+
   const openCropAudio = useCallback(
     (audio: SpreadAudio) => {
       setCropAudioItem(audio);
@@ -129,6 +151,7 @@ export function useObjectModals(
     generate: { open: generateOpen, imageId: generateImageId, spreadId: generateSpreadId },
     split: { open: splitOpen, image: splitImage, spreadId: splitSpreadId },
     crop: { open: cropOpen, image: cropImage, spreadId: cropSpreadId },
+    segment: { open: segmentOpen, image: segmentImage, spreadId: segmentSpreadId },
     cropAudio: { open: cropAudioOpen, item: cropAudioItem, spreadId: cropAudioSpreadId },
     openGenerate,
     closeGenerate,
@@ -136,6 +159,8 @@ export function useObjectModals(
     closeSplit,
     openCrop,
     closeCrop,
+    openSegment,
+    closeSegment,
     openCropAudio,
     closeCropAudio,
     handleCropAudioComplete,

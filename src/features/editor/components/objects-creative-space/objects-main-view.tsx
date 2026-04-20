@@ -14,10 +14,12 @@ import {
   SplitImageModal,
   CropImageModal,
   CropAudioModal,
+  SegmentLayerModal,
 } from "@/features/editor/components/shared-components";
 import type {
   SplitLayerResult,
   CropCreateResult,
+  SegmentResult,
 } from "@/features/editor/components/shared-components";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import { ObjectsVideoToolbar } from "./objects-video-toolbar";
@@ -43,6 +45,7 @@ import {
   useSpreadItemDispatch,
   buildCropImages,
   buildSplitImages,
+  buildSegmentImage,
   useSplitTextbox,
   useObjectModals,
   useCloneRaw,
@@ -101,7 +104,7 @@ export function ObjectsMainView({
   const { splitTextbox } = useSplitTextbox(actions, onItemSelect, langCode, canvasWidth, canvasHeight);
 
   const modals = useObjectModals(selectedSpreadId, actions);
-  const { openGenerate, openSplit, openCrop, openCropAudio } = modals;
+  const { openGenerate, openSplit, openCrop, openSegment, openCropAudio } = modals;
 
   const handleCropCreateImages = useCallback(
     (result: CropCreateResult) => {
@@ -117,6 +120,21 @@ export function ObjectsMainView({
       buildSplitImages(layers, modals.split.image, modals.split.spreadId, retouchSpreads, actions);
     },
     [modals.split.image, modals.split.spreadId, retouchSpreads, actions]
+  );
+
+  const handleSegmentCreateImage = useCallback(
+    (segment: SegmentResult) => {
+      if (!modals.segment.image) return;
+      buildSegmentImage(
+        segment,
+        modals.segment.image,
+        modals.segment.spreadId,
+        retouchSpreads,
+        actions,
+        (item) => onItemSelect(item)
+      );
+    },
+    [modals.segment.image, modals.segment.spreadId, retouchSpreads, actions, onItemSelect]
   );
 
   const { handleDeleteSpread, handleSpreadReorder } = useSpreadHandlers(actions);
@@ -386,12 +404,13 @@ export function ObjectsMainView({
         context={{
           ...context,
           onGenerateImage: () => openGenerate(context.item),
+          onSegmentImage: () => openSegment(context.item),
           onSplitImage: () => openSplit(context.item),
           onCropImage: () => openCrop(context.item),
         }}
       />
     ),
-    [openGenerate, openSplit, openCrop]
+    [openGenerate, openSegment, openSplit, openCrop]
   );
 
   const { cloneRawImage, cloneRawTextbox } = useCloneRaw(retouchSpreads, selectedSpreadId, actions);
@@ -544,6 +563,15 @@ export function ObjectsMainView({
           onOpenChange={modals.closeSplit}
           image={modals.split.image}
           onCreateImages={handleSplitCreateImages}
+        />
+      )}
+
+      {modals.segment.image && (
+        <SegmentLayerModal
+          open={modals.segment.open}
+          onOpenChange={modals.closeSegment}
+          image={modals.segment.image}
+          onCreateSegment={handleSegmentCreateImage}
         />
       )}
 

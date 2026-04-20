@@ -14,7 +14,7 @@ import {
 import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Scissors, Crop, Pencil, Upload, Trash2 } from "lucide-react";
+import { Scissors, Crop, Pencil, Upload, Trash2, MousePointerSquareDashed } from "lucide-react";
 import { toast } from "sonner";
 import { uploadImageToStorageWithNormalize, ImageTooTallError } from "@/apis/storage-api";
 import {
@@ -63,6 +63,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     onUpdate,
     onDelete,
     onGenerateImage,
+    onSegmentImage,
     onSplitImage,
     onCropImage,
     selectedGeometry,
@@ -147,6 +148,14 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     },
     [geometry, onUpdate]
   );
+
+  const handleSegment = useCallback(() => {
+    if (onSegmentImage) {
+      onSegmentImage();
+    } else {
+      toast.info("Segment feature not available");
+    }
+  }, [onSegmentImage]);
 
   const handleSplit = useCallback(() => {
     if (onSplitImage) {
@@ -313,6 +322,11 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         {/* === FOOTER === */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <div className="flex items-center gap-1">
+            <ToolbarIconButton
+              icon={MousePointerSquareDashed}
+              label="Segment Layer (AI)"
+              onClick={handleSegment}
+            />
             <ToolbarIconButton
               icon={Scissors}
               label="Split"

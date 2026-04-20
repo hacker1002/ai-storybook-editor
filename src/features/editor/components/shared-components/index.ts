@@ -23,5 +23,7 @@ export type { LibrarySound } from './sound-library-modal';
 export { clampGeometry, computeGeometryOnMediaReplace, GeometryInput, GeometrySection, ReadOnlyGeometrySection, MediaIdentitySection, MEDIA_TYPE_OPTIONS, DEFAULT_STATES, ToolbarIconButton } from './shared-toolbar-components';
 export type { GeometryReplaceInput } from './shared-toolbar-components';
 export { ShapeToolbar } from './shape-toolbar';
+export { SegmentLayerModal } from './segment-layer-modal';
+export type { SegmentResult } from './segment-layer-modal';
 export { CreateAssetDialog } from './create-asset-dialog';
 export type { CreateAssetDialogProps } from './create-asset-dialog';
