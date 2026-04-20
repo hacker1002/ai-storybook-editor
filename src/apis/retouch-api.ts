@@ -1,4 +1,5 @@
 import { callEdgeFunction } from './edge-function-client';
+import { callImageApi } from './image-api-client';
 import { createLogger } from '@/utils/logger';
 import type { WordTiming } from '@/types/spread-types';
 
@@ -201,7 +202,7 @@ export async function callSegmentLayer(
   const promptPreview = params.prompt.slice(0, 100);
   log.info('callSegmentLayer', 'start', { promptLen: params.prompt.length, threshold: params.threshold, promptPreview });
   try {
-    const res = await callEdgeFunction<SegmentLayerResult>('retouch-segment-layer', params);
+    const res = await callImageApi<SegmentLayerResult>('/api/retouch/segment-layer', params);
     if (!res.success) {
       const msg = res.error ?? 'Segmentation failed';
       const code = classifySegmentError(undefined, msg);
