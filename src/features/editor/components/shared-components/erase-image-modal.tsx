@@ -61,7 +61,7 @@ export function EraseImageModal({
   onSaved,
   yieldedFrom,
 }: EraseImageModalProps) {
-  const [brushSize, setBrushSize] = useState<"S" | "M" | "L">("M");
+  const [brushSize, setBrushSize] = useState<"T" | "S" | "M" | "L">("M");
   const [color, setColor] = useState("#ffffff");
   const [mode, setMode] = useState<StrokeMode>("paint");
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -98,12 +98,13 @@ export function EraseImageModal({
       ? {
           id: "erase-image-modal",
           ref: dialogContentRef,
-          hotkeys: ["Escape", "1", "2", "3", "e", "E"],
+          hotkeys: ["Escape", "1", "2", "3", "4", "e", "E"],
           onHotkey: (key) => {
             if (key === "Escape") handleCancel();
-            if (key === "1") { setBrushSize("S"); log.debug("onHotkey", "brush:S"); }
-            if (key === "2") { setBrushSize("M"); log.debug("onHotkey", "brush:M"); }
-            if (key === "3") { setBrushSize("L"); log.debug("onHotkey", "brush:L"); }
+            if (key === "1") { setBrushSize("T"); log.debug("onHotkey", "brush:T"); }
+            if (key === "2") { setBrushSize("S"); log.debug("onHotkey", "brush:S"); }
+            if (key === "3") { setBrushSize("M"); log.debug("onHotkey", "brush:M"); }
+            if (key === "4") { setBrushSize("L"); log.debug("onHotkey", "brush:L"); }
             if (key === "e" || key === "E") toggleMode();
           },
           onForcePop: () => {
@@ -465,7 +466,7 @@ export function EraseImageModal({
           {/* Toolbar */}
           <div className="px-4 pb-4 flex items-center gap-2 flex-wrap shrink-0">
             {/* Brush size */}
-            {(["S", "M", "L"] as const).map((size) => (
+            {(["T", "S", "M", "L"] as const).map((size) => (
               <Button
                 key={size}
                 size="sm"

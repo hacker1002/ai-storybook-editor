@@ -1,12 +1,12 @@
 /** Pure canvas utilities for EraseImageModal — exported separately for unit testing (react-refresh/only-export-components). */
 
-export const BRUSH_PX = { S: 8, M: 16, L: 32 } as const;
+export const BRUSH_PX = { T: 4, S: 8, M: 16, L: 32 } as const;
 
 export type StrokeMode = "paint" | "erase";
 
 export interface Stroke {
   points: { x: number; y: number }[];
-  size: "S" | "M" | "L";
+  size: "T" | "S" | "M" | "L";
   mode: StrokeMode;
   /** Only consulted when mode === "paint". Erase strokes ignore color. */
   color: string;
