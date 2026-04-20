@@ -5,7 +5,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { HomePage } from '@/features/home';
 import { LoginPage } from '@/features/auth';
 import { EditorPage } from '@/features/editor';
-import { DemoCanvasSpreadView, DemoPlayableSpreadView } from '@/features/demo-spread-views';
+import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
 
 const SharePreviewPage = lazy(() =>
@@ -55,6 +55,7 @@ export default function App() {
         <Route path="/share/:slug" element={<Suspense fallback={<LoadingScreen />}><SharePreviewPage /></Suspense>} />
         <Route path="/demo/canvas-spread-view" element={<DemoCanvasSpreadView />} />
         <Route path="/demo/playable-spread-view" element={<DemoPlayableSpreadView />} />
+        <Route path="/demo/rive-player" element={<DemoRivePlayer />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/explore" element={<PlaceholderPage title="Explore Community" />} />

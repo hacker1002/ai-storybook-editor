@@ -49,6 +49,9 @@ export function RivePlayer({ src, isThumbnail = false, options, onLoad, onError 
           ? { animations: [options.animation] }
           : {}),
         autoplay: true,
+        // Default @rive-app/canvas is `false` → audio events / URL events don't fire.
+        // Interactive .riv files with embedded sounds need this ON.
+        automaticallyHandleEvents: true,
         layout: new Layout({ fit: fitEnum, alignment: Alignment.Center }),
       };
     },
