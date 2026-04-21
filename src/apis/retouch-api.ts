@@ -57,6 +57,8 @@ export interface CropObjectResult {
   base64: string;
   mimeType: 'image/png';
   aspectRatio: string;
+  width?: number;
+  height?: number;
 }
 
 export interface CropObjectImageResult {
@@ -65,7 +67,13 @@ export interface CropObjectImageResult {
     croppedObjects: CropObjectResult[];
   };
   error?: string;
-  meta?: { processingTime?: number; sourceWidth?: number; sourceHeight?: number };
+  meta?: {
+    processingTime?: number;
+    sourceWidth?: number;
+    sourceHeight?: number;
+    sourceMimeType?: string;
+    inputBytes?: number;
+  };
 }
 
 export interface ImageRemoveBgParams {
@@ -108,12 +116,20 @@ export interface GenerateNarrationResult {
 
 export async function callCropObjectImage(
   params: CropObjectImageParams
-): Promise<CropObjectImageResult> {
+): Promise<CropObjectImageResult | ImageApiFailure> {
   log.info('callCropObjectImage', 'start', { boxCount: params.boundingBoxes.length });
-  return callEdgeFunction<CropObjectImageResult>(
-    'retouch-crop-object-image',
-    params
-  );
+  const res = await callImageApi<CropObjectImageResult>('/api/retouch/crop-object-image', params);
+  if (res.success) {
+    const data = (res as CropObjectImageResult).data;
+    log.info('callCropObjectImage', 'success', {
+      count: data?.croppedObjects.length ?? 0,
+      processingMs: (res as CropObjectImageResult).meta?.processingTime,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callCropObjectImage', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
 }
 
 export async function callEditObjectImage(

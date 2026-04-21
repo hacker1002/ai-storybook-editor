@@ -14,6 +14,7 @@ import { Crop, Loader2, Plus, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
 import { callCropObjectImage } from "@/apis/retouch-api";
+import type { ImageApiFailure } from "@/apis/image-api-client";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import type { SpreadImage } from "@/types/spread-types";
 import {
@@ -369,9 +370,16 @@ export function CropImageModal({
       });
 
       if (!mountedRef.current) return;
-      if (!cropRes.success || !cropRes.data) {
-        throw new Error(cropRes.error || "Crop failed");
+      if (!cropRes.success) {
+        const { error, errorCode } = cropRes as ImageApiFailure;
+        const msg = errorCode === "EMPTY_CROP_RESULT"
+          ? "No valid crop region — try repositioning the boxes."
+          : errorCode === "SSRF_BLOCKED"
+            ? "Source image URL is not allowed."
+            : error || "Crop failed";
+        throw new Error(msg);
       }
+      if (!cropRes.data) throw new Error("Crop failed: empty response");
 
       const results: CropResults = {
         cropped: cropRes.data.croppedObjects.map((o) => ({
