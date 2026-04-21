@@ -27,7 +27,9 @@ import {
 } from "lucide-react";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { downloadImage } from "@/utils/download-image";
+import { toast } from "sonner";
 import { callImageRemoveBg } from "@/apis/retouch-api";
+import type { ImageApiFailure } from "@/apis/image-api-client";
 import { EraseImageModal } from "./erase-image-modal";
 import {
   useRetouchImageById,
@@ -114,7 +116,7 @@ export function EditImageModal({
     try {
       await downloadImage(selectedIllustration.media_url, image.title);
     } catch {
-      alert("Failed to download image");
+      toast.error("Failed to download image");
     }
   }, [image]);
 
@@ -140,7 +142,7 @@ export function EditImageModal({
     if (!selectedIllustration) return;
 
     if (!prompt.trim()) {
-      alert("Please enter an editing prompt");
+      toast.warning("Please enter an editing prompt");
       return;
     }
 
@@ -184,8 +186,21 @@ export function EditImageModal({
       });
 
       if (!result.success || !result.data) {
-        log.error("handleRemoveBackground", "API error", { error: result.error });
-        alert(result.error || "Failed to remove background");
+        const { error, errorCode, httpStatus } = result as ImageApiFailure;
+        const msg =
+          errorCode === "REPLICATE_RATE_LIMIT"
+            ? "Service is busy — please retry in a few seconds."
+            : errorCode === "TIMEOUT"
+              ? "Processing took too long — try a smaller image."
+              : errorCode === "IMAGE_FETCH_ERROR"
+                ? "Could not fetch the source image — check the URL."
+                : errorCode === "SSRF_BLOCKED"
+                  ? "Source image URL is not allowed."
+                  : errorCode === "CONNECTION_ERROR"
+                    ? "Lost connection to the server — please retry."
+                    : error || "Failed to remove background.";
+        log.error("handleRemoveBackground", "API error", { errorCode, httpStatus, msg });
+        toast.error(msg);
         return;
       }
 
@@ -207,9 +222,10 @@ export function EditImageModal({
       ];
 
       updateRetouchImage(spreadId, imageId, { illustrations: updatedIllustrations });
+      toast.success("Background removed");
     } catch (err) {
       log.error("handleRemoveBackground", "unexpected error", { error: err });
-      alert("An unexpected error occurred");
+      toast.error(err instanceof Error ? err.message : "Unexpected error removing background.");
     } finally {
       setIsRemovingBg(false);
     }

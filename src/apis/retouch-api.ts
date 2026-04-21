@@ -85,7 +85,7 @@ export interface ImageRemoveBgResult {
   success: boolean;
   data?: { imageUrl: string; storagePath: string };
   error?: string;
-  meta?: { processingTime?: number; mimeType?: string };
+  meta?: { processingTime?: number; mimeType?: string; replicatePredictionId?: string };
 }
 
 export interface GenerateNarrationParams {
@@ -157,12 +157,24 @@ export async function callEditObjectImage(
 
 export async function callImageRemoveBg(
   params: ImageRemoveBgParams
-): Promise<ImageRemoveBgResult> {
-  log.info('callImageRemoveBg', 'start', { imageUrl: params.imageUrl.slice(0, 80) });
-  return callEdgeFunction<ImageRemoveBgResult>(
-    'retouch-image-remove-bg',
-    params
-  );
+): Promise<ImageRemoveBgResult | ImageApiFailure> {
+  log.info('callImageRemoveBg', 'start', {
+    imageUrl: params.imageUrl.slice(0, 80),
+    preserveAlpha: params.preserveAlpha,
+  });
+  const res = await callImageApi<ImageRemoveBgResult>('/api/retouch/image-remove-bg', params);
+  if (res.success) {
+    const r = res as ImageRemoveBgResult;
+    log.info('callImageRemoveBg', 'success', {
+      processingMs: r.meta?.processingTime,
+      mimeType: r.meta?.mimeType,
+      predictionId: r.meta?.replicatePredictionId,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callImageRemoveBg', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
 }
 
 export async function callGenerateNarration(
