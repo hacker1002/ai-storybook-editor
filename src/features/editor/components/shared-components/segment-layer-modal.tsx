@@ -15,6 +15,7 @@ import { MousePointerSquareDashed, Loader2, Plus, AlertCircle } from "lucide-rea
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
 import { callSegmentLayer } from "@/apis/retouch-api";
+import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import type { ImageApiFailure } from "@/apis/image-api-client";
 import type { SpreadImage } from "@/types/spread-types";
 
@@ -62,13 +63,15 @@ export function SegmentLayerModal({
   const [segmentResult, setSegmentResult] = useState<SegmentResult | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [zoomOpenOriginal, setZoomOpenOriginal] = useState(false);
+  const [zoomOpenSegment, setZoomOpenSegment] = useState(false);
 
   const dialogContentRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useInteractionLayer(
     "modal",
-    open
+    open && !zoomOpenOriginal && !zoomOpenSegment
       ? {
           id: "segment-layer-modal",
           ref: dialogContentRef,
@@ -217,11 +220,22 @@ export function SegmentLayerModal({
               <Label className="text-xs text-muted-foreground mb-1.5 block">Original Image</Label>
               <div className="h-[300px] w-full border rounded-lg bg-muted overflow-hidden flex items-center justify-center">
                 {resolvedImageUrl ? (
-                  <div className="bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] leading-[0] rounded-sm overflow-hidden">
+                  <div className="relative bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] leading-[0] rounded-sm overflow-hidden">
                     <img
                       src={resolvedImageUrl}
                       alt={`Original image: ${imageTitle}`}
                       className="max-w-full max-h-[300px] block"
+                    />
+                    <ImageZoomPreview
+                      src={resolvedImageUrl}
+                      alt={`Original image: ${imageTitle}`}
+                      className="absolute inset-0 h-full w-full"
+                      open={zoomOpenOriginal}
+                      onOpenChange={setZoomOpenOriginal}
+                      yieldedFrom={{
+                        parentId: "segment-layer-modal",
+                        onParentForcePop: () => setZoomOpenOriginal(false),
+                      }}
                     />
                   </div>
                 ) : (
@@ -243,11 +257,22 @@ export function SegmentLayerModal({
                     <span className="text-xs">Segmenting...</span>
                   </div>
                 ) : segmentResult ? (
-                  <div className="bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] leading-[0] rounded-sm overflow-hidden">
+                  <div className="relative bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] leading-[0] rounded-sm overflow-hidden">
                     <img
                       src={segmentResult.media_url}
                       alt={`Segmented: ${segmentResult.prompt}`}
                       className="max-w-full max-h-[300px] block"
+                    />
+                    <ImageZoomPreview
+                      src={segmentResult.media_url}
+                      alt={`Segmented: ${segmentResult.prompt}`}
+                      className="absolute inset-0 h-full w-full"
+                      open={zoomOpenSegment}
+                      onOpenChange={setZoomOpenSegment}
+                      yieldedFrom={{
+                        parentId: "segment-layer-modal",
+                        onParentForcePop: () => setZoomOpenSegment(false),
+                      }}
                     />
                   </div>
                 ) : errorMessage ? (
