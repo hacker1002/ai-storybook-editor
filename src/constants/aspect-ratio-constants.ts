@@ -1,8 +1,8 @@
 // aspect-ratio-constants.ts
 // Single source of truth for supported image aspect ratios across the app.
-// Order: portrait → landscape — must match server RATIO_VALUES in edge function
-// `image-normalize-ratio`. Changing this order or set requires a coordinated
-// edge-function update.
+// Order: portrait → landscape — must match server RATIO_VALUES in FastAPI
+// image-api `/api/image/normalize-ratio`. Changing this set requires a coordinated
+// image-api update.
 
 export type AspectRatio =
   | '9:16'
@@ -39,6 +39,3 @@ export const DEFAULT_ASPECT_RATIO: AspectRatio = '1:1';
 
 // 9:16 = 0.5625 — matches server ImageTooTallError threshold
 export const MIN_SUPPORTED_RATIO = 9 / 16;
-
-// Looser than server 1e-6 to skip round-trip for near-exact user images
-export const EXACT_MATCH_TOLERANCE = 0.005;

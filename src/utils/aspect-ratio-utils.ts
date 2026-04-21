@@ -5,7 +5,6 @@
 import {
   ASPECT_RATIOS,
   DEFAULT_ASPECT_RATIO,
-  EXACT_MATCH_TOLERANCE,
   type AspectRatio,
 } from '@/constants/aspect-ratio-constants';
 
@@ -21,13 +20,6 @@ export function getPercentRatio(
   naturalH: number,
 ): number {
   return parseRatioNumeric(ratio) * (naturalH / naturalW);
-}
-
-/** Exact-match lookup within EXACT_MATCH_TOLERANCE (used by fast-path upload). */
-export function findExactRatioMatch(srcRatio: number): AspectRatio | undefined {
-  return ASPECT_RATIOS.find(
-    (r) => Math.abs(r.numeric - srcRatio) < EXACT_MATCH_TOLERANCE,
-  )?.value;
 }
 
 /** Closest supported ratio for a given width/height. Always returns a valid AspectRatio. */

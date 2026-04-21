@@ -6,11 +6,7 @@ import {
   type AspectRatio,
   MIN_SUPPORTED_RATIO,
 } from '@/constants/aspect-ratio-constants';
-import {
-  findExactRatioMatch,
-  getImageNaturalDimensions,
-} from '@/utils/aspect-ratio-utils';
-import { callNormalizeRatio } from './image-api';
+import { normalizeImage } from './image-api';
 
 const log = createLogger('API', 'Storage');
 
@@ -100,16 +96,6 @@ export async function uploadAnimatedPicToStorage(file: File, pathPrefix = 'anima
 
 // --- Normalize-ratio upload flow ---
 
-const MIME_TO_EXT: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-  'image/svg+xml': 'svg',
-};
-
-const PASSTHROUGH_MIME = new Set(['image/gif', 'image/svg+xml']);
-
 export class ImageTooTallError extends Error {
   readonly srcRatio: number;
   constructor(srcRatio: number) {
@@ -119,33 +105,10 @@ export class ImageTooTallError extends Error {
   }
 }
 
-async function fastPathUpload(file: File, outputPrefix: string, ratio: AspectRatio | undefined): Promise<UploadResult> {
-  const ext = MIME_TO_EXT[file.type] ?? 'bin';
-  const uuid = crypto.randomUUID();
-  const filePath = `${outputPrefix}/${Date.now()}-${uuid}.${ext}`;
-
-  log.info('fastPathUpload', 'uploading', { path: filePath, type: file.type, size: file.size });
-
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .upload(filePath, file, { contentType: file.type, upsert: false });
-
-  if (error) {
-    log.error('fastPathUpload', 'upload failed', { path: filePath, error: error.message });
-    throw error;
-  }
-
-  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(data.path);
-  log.info('fastPathUpload', 'upload complete', { path: data.path });
-
-  return { publicUrl: urlData.publicUrl, path: data.path, ratio };
-}
-
 /**
- * Upload image with client-side pre-check to avoid unnecessary edge fn round-trips.
- * GIF/SVG → fast-path (passthrough). Exact-ratio JPEG/PNG/WebP → fast-path.
- * Too-tall images → blocked client-side (ImageTooTallError). Others → slow-path via edge fn.
- * Preserves `uploadImageToStorage` signature — `UploadResult.ratio` is an additive optional field.
+ * Upload image and normalize its aspect ratio via FastAPI image-api (1-step multipart).
+ * Server decides passthrough/pad/reject — no client-side ratio pre-check.
+ * Throws ImageTooTallError for images below 9:16, generic Error for other failures.
  */
 export async function uploadImageToStorageWithNormalize(
   file: File,
@@ -158,62 +121,25 @@ export async function uploadImageToStorageWithNormalize(
     throw new Error(`File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB. Max: ${IMAGE_MAX_SIZE / 1024 / 1024}MB`);
   }
 
-  // GIF/SVG: edge fn passthrough — skip round-trip entirely
-  if (PASSTHROUGH_MIME.has(file.type)) {
-    log.info('uploadImageToStorageWithNormalize', 'fast-path:passthrough', { type: file.type });
-    return fastPathUpload(file, outputPrefix, undefined);
+  log.info('uploadImageToStorageWithNormalize', 'start', { name: file.name, size: file.size, type: file.type, outputPrefix });
+
+  const result = await normalizeImage(file, outputPrefix);
+
+  if (result.success) {
+    log.info('uploadImageToStorageWithNormalize', 'done', {
+      path: result.data.path,
+      ratio: result.data.ratio,
+      wasPadded: result.data.wasPadded,
+      wasConverted: result.data.wasConverted,
+      wasPassthrough: result.data.wasPassthrough,
+    });
+    return { publicUrl: result.data.publicUrl, path: result.data.path, ratio: result.data.ratio ?? undefined };
   }
 
-  // Read natural dims for ratio pre-check; fall back to slow-path if decode fails
-  let dims: { width: number; height: number } | null = null;
-  try {
-    dims = await getImageNaturalDimensions(file);
-  } catch (err) {
-    log.warn('uploadImageToStorageWithNormalize', 'dim read failed, falling back to slow-path', { error: err });
+  if (result.errorCode === 'IMAGE_TOO_TALL') {
+    throw new ImageTooTallError(result.srcRatio ?? 0);
   }
 
-  if (dims) {
-    const srcRatio = dims.width / dims.height;
-
-    if (srcRatio < MIN_SUPPORTED_RATIO) {
-      log.debug('uploadImageToStorageWithNormalize', 'blocked:too-tall', { srcRatio });
-      throw new ImageTooTallError(srcRatio);
-    }
-
-    const exactLabel = findExactRatioMatch(srcRatio);
-    if (exactLabel) {
-      log.info('uploadImageToStorageWithNormalize', 'fast-path:exact-ratio', { srcRatio, label: exactLabel });
-      return fastPathUpload(file, outputPrefix, exactLabel);
-    }
-  }
-
-  // Slow-path: upload raw → edge fn normalize
-  const ext = MIME_TO_EXT[file.type] ?? 'bin';
-  const uuid = crypto.randomUUID();
-  const rawPath = `uploads/_raw/${uuid}.${ext}`;
-
-  log.info('uploadImageToStorageWithNormalize', 'slow-path:normalize', { rawPath, outputPrefix });
-
-  const { error: rawError } = await supabase.storage
-    .from(BUCKET)
-    .upload(rawPath, file, { contentType: file.type, upsert: false });
-
-  if (rawError) {
-    log.error('uploadImageToStorageWithNormalize', 'raw upload failed', { rawPath, error: rawError.message });
-    throw rawError;
-  }
-
-  const result = await callNormalizeRatio({ rawPath, outputPrefix });
-
-  if (!result.success || !result.data) {
-    const msg = result.error ?? 'Normalize failed';
-    log.error('uploadImageToStorageWithNormalize', 'normalize failed', { rawPath, error: msg });
-    throw new Error(msg);
-  }
-
-  return {
-    publicUrl: result.data.publicUrl,
-    path: result.data.path,
-    ratio: result.data.ratio,
-  };
+  log.error('uploadImageToStorageWithNormalize', 'failed', { errorCode: result.errorCode, httpStatus: result.httpStatus, error: result.error });
+  throw new Error(result.error);
 }
