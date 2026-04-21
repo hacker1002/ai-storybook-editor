@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import { MousePointerSquareDashed, Loader2, Plus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
-import { callSegmentLayer, SegmentLayerError } from "@/apis/retouch-api";
+import { callSegmentLayer } from "@/apis/retouch-api";
+import type { ImageApiFailure } from "@/apis/image-api-client";
 import type { SpreadImage } from "@/types/spread-types";
 
 const log = createLogger("UI", "SegmentLayerModal");
@@ -134,6 +135,18 @@ export function SegmentLayerModal({
       const res = await callSegmentLayer({ imageUrl, prompt: prompt.trim() });
       if (controller.signal.aborted) return;
 
+      if (!res.success) {
+        const { error, errorCode } = res as ImageApiFailure;
+        const msg = errorCode === "EMPTY_SEGMENTATION"
+          ? "No object matched your prompt. Try a different one."
+          : error || "Segmentation failed. Please try again.";
+        log.error("handleSegment", "failed", { errorCode, msg });
+        setSegmentResult(null);
+        setErrorMessage(msg);
+        toast.error(msg);
+        return;
+      }
+
       setSegmentResult({
         id: crypto.randomUUID(),
         media_url: res.data!.imageUrl,
@@ -143,15 +156,8 @@ export function SegmentLayerModal({
       log.info("handleSegment", "success", { coverageRatio: res.meta?.coverageRatio });
     } catch (err) {
       if (controller.signal.aborted) return;
-      let msg = "Segmentation failed. Please try again.";
-      if (err instanceof SegmentLayerError) {
-        if (err.code === "EMPTY_SEGMENTATION") {
-          msg = "No object matched your prompt. Try a different one.";
-        } else {
-          msg = err.message || msg;
-        }
-      }
-      log.error("handleSegment", "failed", { error: String(err) });
+      const msg = err instanceof Error ? err.message : "Segmentation failed. Please try again.";
+      log.error("handleSegment", "unexpected error", { error: String(err) });
       setSegmentResult(null);
       setErrorMessage(msg);
       toast.error(msg);
