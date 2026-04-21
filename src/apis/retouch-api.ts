@@ -36,7 +36,7 @@ export interface EditObjectImageResult {
   success: boolean;
   data?: { imageUrl: string; storagePath: string };
   error?: string;
-  meta?: { processingTime?: number; mimeType?: string };
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
 
 export interface CropBoundingBox {
@@ -134,12 +134,25 @@ export async function callCropObjectImage(
 
 export async function callEditObjectImage(
   params: EditObjectImageParams
-): Promise<EditObjectImageResult> {
-  log.info('callEditObjectImage', 'start', { promptLength: params.prompt.length, refCount: params.referenceImages?.length ?? 0 });
-  return callEdgeFunction<EditObjectImageResult>(
-    'retouch-edit-object-image',
-    params
-  );
+): Promise<EditObjectImageResult | ImageApiFailure> {
+  log.info('callEditObjectImage', 'start', {
+    promptLength: params.prompt.length,
+    refCount: params.referenceImages?.length ?? 0,
+    aspectRatio: params.aspectRatio,
+    imageSize: params.imageSize,
+  });
+  const res = await callImageApi<EditObjectImageResult>('/api/retouch/edit-object-image', params);
+  if (res.success) {
+    const r = res as EditObjectImageResult;
+    log.info('callEditObjectImage', 'success', {
+      processingMs: r.meta?.processingTime,
+      mimeType: r.meta?.mimeType,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callEditObjectImage', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
 }
 
 export async function callImageRemoveBg(

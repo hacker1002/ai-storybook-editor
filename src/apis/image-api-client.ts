@@ -47,9 +47,27 @@ export async function callImageApi<R extends { success: boolean; error?: string 
     log.debug('callImageApi', 'response ok', { path, status: response.status });
     return data as R;
   } catch (err) {
-    log.error('callImageApi', 'network error', { path, error: err });
-    return { success: false, error: 'Network error. Please try again.', httpStatus: 0 };
+    return classifyFetchError(path, err);
   }
+}
+
+function classifyFetchError(path: string, err: unknown): ImageApiFailure {
+  const name = (err as { name?: string } | null)?.name;
+  const rawMessage = err instanceof Error ? err.message : String(err);
+
+  // TypeError from fetch = connection-level: offline, DNS, CORS, gateway reset mid-stream (including upstream timeout closing connection)
+  if (err instanceof TypeError) {
+    log.error('callImageApi', 'connection error', { path, message: rawMessage });
+    return {
+      success: false,
+      error: `Không kết nối được máy chủ (${rawMessage}). Có thể máy chủ đang xử lý quá lâu hoặc mất kết nối — vui lòng thử lại.`,
+      httpStatus: 0,
+      errorCode: 'CONNECTION_ERROR',
+    };
+  }
+
+  log.error('callImageApi', 'unknown error', { path, name, message: rawMessage });
+  return { success: false, error: rawMessage || 'Unknown network error', httpStatus: 0, errorCode: 'UNKNOWN' };
 }
 
 async function extractErrorInfo(
