@@ -18,6 +18,7 @@ import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
 import { callLayeringImage } from "@/apis/retouch-api";
+import type { ImageApiFailure } from "@/apis/image-api-client";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import type { SpreadImage } from "@/types/spread-types";
 
@@ -184,7 +185,12 @@ export function SplitImageModal({
         seed,
       });
 
-      if (!result.success || !result.data) {
+      if (!result.success) {
+        const { error, errorCode, httpStatus } = result as ImageApiFailure;
+        log.error("handleSplit", "failed", { errorCode, httpStatus });
+        throw new Error(error || "Split failed");
+      }
+      if (!result.data) {
         throw new Error(result.error || "Split failed");
       }
 

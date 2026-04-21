@@ -21,7 +21,7 @@ export interface LayeringImageResult {
   success: boolean;
   data?: { urls: string[]; contentType: string };
   error?: string;
-  meta?: { processingTime?: number; replicatePredictionId?: string };
+  meta?: { processingTime?: number; numberOfLayers?: number; replicatePredictionId?: string };
 }
 
 export interface EditObjectImageParams {
@@ -164,12 +164,21 @@ export async function callGenerateNarration(
 
 export async function callLayeringImage(
   params: LayeringImageParams
-): Promise<LayeringImageResult> {
+): Promise<LayeringImageResult | ImageApiFailure> {
   log.info('callLayeringImage', 'start', { hasDescription: !!params.description, layers: params.numberOfLayers });
-  return callEdgeFunction<LayeringImageResult>(
-    'retouch-layering-image',
-    params
-  );
+  const res = await callImageApi<LayeringImageResult>('/api/retouch/layering-image', params);
+  if (res.success) {
+    const meta = (res as LayeringImageResult).meta;
+    log.info('callLayeringImage', 'success', {
+      layerCount: (res as LayeringImageResult).data?.urls.length ?? 0,
+      processingMs: meta?.processingTime,
+      predictionId: meta?.replicatePredictionId,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callLayeringImage', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
 }
 
 // --- Segment Layer ---
