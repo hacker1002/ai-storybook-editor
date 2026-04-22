@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEditorSettingsActions } from '@/stores/editor-settings-store';
+import { useEditorSettingsActions, useEditorSettingsStore } from '@/stores/editor-settings-store';
 import {
   useSnapshotActions,
   useSyncState,
@@ -59,7 +59,8 @@ export function EditorPage() {
   useAutoSave();
 
   // Editor settings
-  const { setCurrentStep, resetSettings } = useEditorSettingsActions();
+  const { setCurrentStep, resetSettings, rememberLanguageForBook, rememberStepForBook } =
+    useEditorSettingsActions();
 
   // Global toast notifications for background image tasks
   useImageTaskNotifications();
@@ -79,12 +80,27 @@ export function EditorPage() {
     const loadData = async () => {
       const fetchedBook = await fetchBook(bookId);
       if (fetchedBook) {
-        // Initialize editor settings based on book
-        const initialLang =
+        const store = useEditorSettingsStore.getState();
+        const persistedLangCode = store.getPersistedLanguageForBook(bookId);
+        const persistedLang = persistedLangCode
+          ? AVAILABLE_LANGUAGES.find((l) => l.code === persistedLangCode)
+          : undefined;
+        const fallbackLang =
           AVAILABLE_LANGUAGES.find((l) => l.code === fetchedBook.original_language) ??
           AVAILABLE_LANGUAGES[0];
-        const initialStep = (PIPELINE_STEP_MAP[fetchedBook.step as keyof typeof PIPELINE_STEP_MAP] ??
+        const initialLang = persistedLang ?? fallbackLang;
+
+        const persistedStep = store.getPersistedStepForBook(bookId);
+        const backendStep = (PIPELINE_STEP_MAP[fetchedBook.step as keyof typeof PIPELINE_STEP_MAP] ??
           'manuscript') as PipelineStep;
+        const initialStep = persistedStep ?? backendStep;
+
+        log.info('loadData', 'hydrate', {
+          bookId,
+          lang: { persisted: persistedLangCode, picked: initialLang.code },
+          step: { persisted: persistedStep, picked: initialStep },
+        });
+
         // bleedMm: print_export.bleed not yet in type — default 3mm per ADR-023
         resetSettings(initialLang, initialStep, fetchedBook.dimension ?? null, 3);
         setActiveCreativeSpace(getDefaultCreativeSpace(initialStep) as CreativeSpaceType);
@@ -107,6 +123,11 @@ export function EditorPage() {
       useArtStyleStore.getState().reset();
     };
   }, [bookId, fetchBook, fetchSnapshot, resetSnapshot, resetSettings, navigate]);
+
+  // Remember step choice per book
+  const handleStepChangePersist = (targetStep: PipelineStep) => {
+    if (bookId) rememberStepForBook(bookId, targetStep);
+  };
 
   // Loading state
   const isLoading = bookLoading || snapshotLoading;
@@ -146,10 +167,12 @@ export function EditorPage() {
   const handleStepChange = (targetStep: PipelineStep) => {
     setCurrentStep(targetStep);
     setActiveCreativeSpace(getDefaultCreativeSpace(targetStep) as CreativeSpaceType);
+    handleStepChangePersist(targetStep);
   };
 
   const handleLanguageChange = (newLang: Language, prevLang: Language) => {
     log.info('handleLanguageChange', 'changed', { from: prevLang.code, to: newLang.code });
+    if (bookId) rememberLanguageForBook(bookId, newLang.code);
   };
 
   const handleTitleEdit = async (newTitle: string) => {

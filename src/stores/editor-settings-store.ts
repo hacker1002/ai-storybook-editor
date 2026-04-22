@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import { devtools } from 'zustand/middleware';
+import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import type { Language, PipelineStep } from '@/types/editor';
 import type { CanvasSize, BleedCanvasSize } from '@/types/canvas-types';
 import { DEFAULT_LANGUAGE } from '@/constants/editor-constants';
@@ -9,6 +9,17 @@ import { resolveBleedCanvasSize } from '@/utils/canvas-math-utils';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'EditorSettingsStore');
+
+const PERSIST_BOOK_CAP = 50;
+
+function rememberBookEntry<T>(map: Record<string, T>, bookId: string, value: T): Record<string, T> {
+  const next = { ...map };
+  delete next[bookId];
+  next[bookId] = value;
+  const keys = Object.keys(next);
+  if (keys.length > PERSIST_BOOK_CAP) delete next[keys[0]];
+  return next;
+}
 
 interface EditorSettingsStore {
   currentLanguage: Language;
@@ -19,6 +30,10 @@ interface EditorSettingsStore {
   canvasSize: CanvasSize;
   /** Bleed canvas geometry — null until hydrateBleedCanvas is called on book load. */
   bleedCanvas: BleedCanvasSize | null;
+  /** Persisted per-book language code. Key: bookId → Language.code. */
+  languageByBook: Record<string, string>;
+  /** Persisted per-book pipeline step. Key: bookId → PipelineStep. */
+  stepByBook: Record<string, PipelineStep>;
   setCurrentLanguage: (language: Language) => void;
   setCurrentStep: (step: PipelineStep) => void;
   setZoomLevel: (level: number) => void;
@@ -26,16 +41,23 @@ interface EditorSettingsStore {
   setCanvasSize: (dimension: number | null) => void;
   hydrateBleedCanvas: (dimension: number | null, bleedMm?: number) => void;
   resetSettings: (language: Language, step: PipelineStep, dimension: number | null, bleedMm?: number) => void;
+  rememberLanguageForBook: (bookId: string, code: string) => void;
+  rememberStepForBook: (bookId: string, step: PipelineStep) => void;
+  getPersistedLanguageForBook: (bookId: string) => string | null;
+  getPersistedStepForBook: (bookId: string) => PipelineStep | null;
 }
 
 export const useEditorSettingsStore = create<EditorSettingsStore>()(
   devtools(
-    (set, get) => ({
-      currentLanguage: DEFAULT_LANGUAGE,
-      currentStep: 'manuscript',
-      zoomLevel: 90,
-      canvasSize: DEFAULT_CANVAS_SIZE,
-      bleedCanvas: null,
+    persist(
+      (set, get) => ({
+        currentLanguage: DEFAULT_LANGUAGE,
+        currentStep: 'manuscript',
+        zoomLevel: 90,
+        canvasSize: DEFAULT_CANVAS_SIZE,
+        bleedCanvas: null,
+        languageByBook: {},
+        stepByBook: {},
 
       setCurrentLanguage: (language) => {
         const prev = get().currentLanguage.code;
@@ -84,7 +106,33 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
         });
         set({ currentLanguage: language, currentStep: step, canvasSize, bleedCanvas });
       },
-    }),
+
+      rememberLanguageForBook: (bookId, code) => {
+        const next = rememberBookEntry(get().languageByBook, bookId, code);
+        log.debug('rememberLanguageForBook', 'saved', { bookId, code });
+        set({ languageByBook: next });
+      },
+
+      rememberStepForBook: (bookId, step) => {
+        const next = rememberBookEntry(get().stepByBook, bookId, step);
+        log.debug('rememberStepForBook', 'saved', { bookId, step });
+        set({ stepByBook: next });
+      },
+
+      getPersistedLanguageForBook: (bookId) => get().languageByBook[bookId] ?? null,
+
+      getPersistedStepForBook: (bookId) => get().stepByBook[bookId] ?? null,
+      }),
+      {
+        name: 'editor-settings',
+        version: 1,
+        storage: createJSONStorage(() => localStorage),
+        partialize: (s) => ({
+          languageByBook: s.languageByBook,
+          stepByBook: s.stepByBook,
+        }),
+      }
+    ),
     { name: 'editor-settings-store' }
   )
 );
@@ -143,5 +191,7 @@ export const useEditorSettingsActions = () =>
       setCanvasSize: s.setCanvasSize,
       hydrateBleedCanvas: s.hydrateBleedCanvas,
       resetSettings: s.resetSettings,
+      rememberLanguageForBook: s.rememberLanguageForBook,
+      rememberStepForBook: s.rememberStepForBook,
     }))
   );
