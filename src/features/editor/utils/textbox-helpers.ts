@@ -1,7 +1,10 @@
 // textbox-helpers.ts - Shared utilities for textbox data access
 
 import { createLogger } from '@/utils/logger';
-import type { SpreadTextboxContent } from '@/types/spread-types';
+import { mapTypographyToTextbox } from '@/constants/book-defaults';
+import { DEFAULT_TYPOGRAPHY } from '@/constants/config-constants';
+import type { SpreadTextboxContent, Typography } from '@/types/spread-types';
+import type { TypographySettings } from '@/types/editor';
 
 const log = createLogger('Util', 'TextboxHelpers');
 
@@ -30,16 +33,20 @@ export function getFirstTextboxKey(textbox: Record<string, unknown>): string | n
 /**
  * Get textbox content for the given language code.
  * - If langCode exists → returns existing content as-is.
- * - If langCode doesn't exist → clones a new empty entry from the first
- *   available language (geometry + typography copied, text empty, audio reset).
+ * - If langCode doesn't exist → clones a new empty entry: geometry copied
+ *   from the first available language (layout intent preserved), typography
+ *   resolved from `bookTypography[langCode]` when provided (narration
+ *   settings) else copied from fallback, text empty, audio reset.
  * - Returns null only when the textbox has zero language keys.
  *
- * Callers always receive `{ langKey: langCode, content }` and can use it
- * directly without branching on exact/fallback.
+ * Pass `bookTypography` at call sites that render or persist the result so
+ * new-language entries inherit per-language narration config instead of the
+ * previously-authored language's typography.
  */
 export function getTextboxContentForLanguage(
   textbox: Record<string, unknown>,
-  langCode: string
+  langCode: string,
+  bookTypography?: Record<string, TypographySettings> | null
 ): { langKey: string; content: SpreadTextboxContent } | null {
   const langKeys = getLangKeys(textbox);
 
@@ -52,13 +59,26 @@ export function getTextboxContentForLanguage(
   const fallbackKey = langKeys[0];
   if (fallbackKey) {
     const fallback = textbox[fallbackKey] as SpreadTextboxContent;
-    log.debug('getTextboxContentForLanguage', 'cloned empty entry from fallback', { langCode, fallback: fallbackKey });
+    const typography: Typography = bookTypography?.[langCode]
+      ? mapTypographyToTextbox(bookTypography[langCode])
+      : bookTypography === undefined
+        ? { ...fallback.typography }
+        : mapTypographyToTextbox(DEFAULT_TYPOGRAPHY);
+    log.debug('getTextboxContentForLanguage', 'cloned empty entry', {
+      langCode,
+      fallback: fallbackKey,
+      typographySource: bookTypography?.[langCode]
+        ? 'book'
+        : bookTypography === undefined
+          ? 'fallback'
+          : 'default',
+    });
     return {
       langKey: langCode,
       content: {
         text: '',
         geometry: { ...fallback.geometry },
-        typography: { ...fallback.typography },
+        typography,
         audio: { script: '', speed: 1, emotion: 'neutral', media: [] },
       },
     };

@@ -479,7 +479,7 @@ export function SpreadsMainView({
   const renderIllustrationTextbox = useCallback(
     (context: TextItemContext<BaseSpread>) => {
       const tb = context.item as SpreadTextbox;
-      const result = getTextboxContentForLanguage(tb as unknown as Record<string, unknown>, langCode);
+      const result = getTextboxContentForLanguage(tb as unknown as Record<string, unknown>, langCode, bookTypography);
       if (!result) return null;
       const { langKey, content } = result;
       return (
@@ -504,7 +504,7 @@ export function SpreadsMainView({
         />
       );
     },
-    [onItemSelect, langCode]
+    [onItemSelect, langCode, bookTypography]
   );
 
   const renderIllustrationShape = useCallback(

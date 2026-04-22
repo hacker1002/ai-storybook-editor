@@ -51,6 +51,7 @@ import type {
   SpreadItemActionUnion,
 } from "@/types/canvas-types";
 import { useLanguageCode } from "@/stores/editor-settings-store";
+import { useBookTypography } from "@/stores/book-store";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "./page-numbering-overlay";
 import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
@@ -184,6 +185,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // book.original_language), it takes priority over the editor's current
   // language so textbox reads/writes always target the same language key.
   const editorLangCode = forceLanguageCode ?? currentEditorLangCode;
+  const bookTypography = useBookTypography();
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
   const trimPct = useTrimPct();
@@ -731,7 +733,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 if (!isEditing && editingItemId === textbox.id) handleEndEdit();
               },
               editorLangCode,
-              "raw_textbox"
+              "raw_textbox",
+              bookTypography
             );
             // if can edit raw item (illustration step) => treat as textbox item
             context.zIndex = resolveItemZIndex(
@@ -763,7 +766,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 handleTextboxEditingChange(isEditing);
                 if (!isEditing && editingItemId === textbox.id) handleEndEdit();
               },
-              editorLangCode
+              editorLangCode,
+              "textbox",
+              bookTypography
             );
             context.zIndex = resolveItemZIndex("textbox", index, spread);
             context.isEditing = editingItemId === textbox.id;
@@ -916,7 +921,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 state.selectedGeometry,
                 undefined,
                 editorLangCode,
-                "raw_textbox"
+                "raw_textbox",
+                bookTypography
               );
               return renderRawTextboxToolbar({
                 ...context,
@@ -937,7 +943,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 canvasRef,
                 state.selectedGeometry,
                 undefined,
-                editorLangCode
+                editorLangCode,
+                "textbox",
+                bookTypography
               );
               return renderTextToolbar({
                 ...context,

@@ -41,6 +41,7 @@ import {
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
 import { useLanguageCode } from "@/stores/editor-settings-store";
+import { useBookTypography } from "@/stores/book-store";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import type { SpreadTextbox, SpreadTextboxContent } from "@/types/spread-types";
 
@@ -91,13 +92,15 @@ export function SpreadsTextToolbar<TSpread extends BaseSpread>({
 
   // --- Language resolution ---
   const editorLangCode = useLanguageCode();
+  const bookTypography = useBookTypography();
   const langResult = useMemo(
     () =>
       getTextboxContentForLanguage(
         item as unknown as Record<string, unknown>,
-        editorLangCode
+        editorLangCode,
+        bookTypography
       ),
-    [item, editorLangCode]
+    [item, editorLangCode, bookTypography]
   );
   const langCode = langResult?.langKey ?? editorLangCode;
   const content = langResult?.content as SpreadTextboxContent | undefined;

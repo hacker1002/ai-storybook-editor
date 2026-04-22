@@ -24,6 +24,7 @@ import type {
   SpreadItemActionUnion,
 } from "@/types/canvas-types";
 import { getTextboxContentForLanguage } from "../../../utils/textbox-helpers";
+import type { TypographySettings } from "@/types/editor";
 import type { RefObject } from "react";
 
 type SpreadItemActionHandler = (
@@ -90,10 +91,11 @@ export function buildTextContext<TSpread extends BaseSpread>(
   onAction: SpreadItemActionHandler,
   onEditingChange?: (isEditing: boolean) => void,
   langCode?: string,
-  elementType: SelectedElementType = "textbox"
+  elementType: SelectedElementType = "textbox",
+  bookTypography?: Record<string, TypographySettings> | null
 ): TextItemContext<TSpread> {
   const result = langCode
-    ? getTextboxContentForLanguage(textbox, langCode)
+    ? getTextboxContentForLanguage(textbox, langCode, bookTypography)
     : null;
   const langKey = result?.langKey;
   const langContent = result?.content;
@@ -148,10 +150,11 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
   selectedGeometry: Geometry | null,
   onEditingChange?: (isEditing: boolean) => void,
   langCode?: string,
-  elementType: SelectedElementType = "textbox"
+  elementType: SelectedElementType = "textbox",
+  bookTypography?: Record<string, TypographySettings> | null
 ): TextToolbarContext<TSpread> {
   const result = langCode
-    ? getTextboxContentForLanguage(textbox, langCode)
+    ? getTextboxContentForLanguage(textbox, langCode, bookTypography)
     : null;
   const langKey = result?.langKey;
   const langContent = result?.content;
@@ -165,7 +168,8 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
     onAction,
     onEditingChange,
     langCode,
-    elementType
+    elementType,
+    bookTypography
   );
 
   return {
@@ -192,7 +196,7 @@ export function buildTextToolbarContext<TSpread extends BaseSpread>(
 
       // Offset geometry for current language in the clone
       if (langCode) {
-        const cloneResult = getTextboxContentForLanguage(clonedItem, langCode);
+        const cloneResult = getTextboxContentForLanguage(clonedItem, langCode, bookTypography);
         if (cloneResult) {
           const cloneContent = cloneResult.content;
           const maxX = Math.max(0, 100 - cloneContent.geometry.w);
