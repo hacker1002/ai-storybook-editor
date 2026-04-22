@@ -90,8 +90,8 @@ const CLICK_HINT_STYLE = `
 }
 .read-along-word {
   transition: background-color 0.15s ease, color 0.15s ease;
-  border-radius: 2px;
-  padding: 0 1px;
+  border-radius: 0.1em;
+  padding: 0 0.05em;
 }
 .read-along-active-word {
   background-color: rgba(59, 130, 246, 0.25);
