@@ -1,57 +1,59 @@
 // page-numbering-overlay.tsx - Renders page numbers on the canvas spread
 // Non-interactive overlay; handles both DPS (single page object) and non-DPS (two page objects).
 // Font size is scaled by zoom factor (zoomLevel / 100) — same pattern as editable-textbox.
-import type { PageData } from '@/types/canvas-types';
-import type { PageNumberingPosition } from '@/types/editor';
-import { useZoomLevel } from '@/stores/editor-settings-store';
+import type { PageData } from "@/types/canvas-types";
+import type { PageNumberingPosition } from "@/types/editor";
+import { useZoomLevel } from "@/stores/editor-settings-store";
 
 interface PageNumberingOverlayProps {
   pages: PageData[];
-  position: Exclude<PageNumberingPosition, 'none'>;
+  position: Exclude<PageNumberingPosition, "none">;
   color: string;
   fontFamily?: string;
   fontSize?: number;
 }
 
-type Side = 'left' | 'right';
+type Side = "left" | "right";
 
 function getPageStyle(
   side: Side,
-  position: Exclude<PageNumberingPosition, 'none'>,
+  position: Exclude<PageNumberingPosition, "none">,
   color: string,
   fontFamily: string,
   scaledFontSize: number,
+  zoomFactor: number
 ): React.CSSProperties {
+  const pad = (v: number) => `${v * zoomFactor}px`;
   const base: React.CSSProperties = {
-    position: 'absolute',
+    position: "absolute",
     color,
     fontSize: `${scaledFontSize}px`,
     fontFamily,
-    padding: '4px 8px',
-    pointerEvents: 'none',
+    padding: `${6 * zoomFactor}px`,
+    pointerEvents: "none",
     zIndex: 1,
-    lineHeight: '1',
+    lineHeight: "1",
   };
 
   switch (position) {
-    case 'bottom_center':
+    case "bottom_center":
       return {
         ...base,
-        bottom: '8px',
-        left: side === 'left' ? '25%' : '75%',
-        transform: 'translateX(-50%)',
+        bottom: pad(8),
+        left: side === "left" ? "25%" : "75%",
+        transform: "translateX(-50%)",
       };
-    case 'bottom_corner':
+    case "bottom_corner":
       return {
         ...base,
-        bottom: '8px',
-        ...(side === 'left' ? { left: '12px' } : { right: '12px' }),
+        bottom: pad(8),
+        ...(side === "left" ? { left: pad(12) } : { right: pad(12) }),
       };
-    case 'top_corner':
+    case "top_corner":
       return {
         ...base,
-        top: '8px',
-        ...(side === 'left' ? { left: '12px' } : { right: '12px' }),
+        top: pad(8),
+        ...(side === "left" ? { left: pad(12) } : { right: pad(12) }),
       };
   }
 }
@@ -60,7 +62,7 @@ export function PageNumberingOverlay({
   pages,
   position,
   color,
-  fontFamily = 'Nunito',
+  fontFamily = "Nunito",
   fontSize = 18,
 }: PageNumberingOverlayProps) {
   const zoomLevel = useZoomLevel();
@@ -70,14 +72,36 @@ export function PageNumberingOverlay({
   if (isDPS) {
     // DPS: single page object stores number as "left-right" string (e.g. "2-3")
     const raw = String(pages[0].number);
-    const dashIdx = raw.indexOf('-');
+    const dashIdx = raw.indexOf("-");
     const leftNum = dashIdx !== -1 ? raw.slice(0, dashIdx) : raw;
     const rightNum = dashIdx !== -1 ? raw.slice(dashIdx + 1) : raw;
 
     return (
       <>
-        <span style={getPageStyle('left', position, color, fontFamily, scaledFontSize)}>{leftNum}</span>
-        <span style={getPageStyle('right', position, color, fontFamily, scaledFontSize)}>{rightNum}</span>
+        <span
+          style={getPageStyle(
+            "left",
+            position,
+            color,
+            fontFamily,
+            scaledFontSize,
+            zoomLevel / 100
+          )}
+        >
+          {leftNum}
+        </span>
+        <span
+          style={getPageStyle(
+            "right",
+            position,
+            color,
+            fontFamily,
+            scaledFontSize,
+            zoomLevel / 100
+          )}
+        >
+          {rightNum}
+        </span>
       </>
     );
   }
@@ -86,10 +110,32 @@ export function PageNumberingOverlay({
   return (
     <>
       {pages[0] && (
-        <span style={getPageStyle('left', position, color, fontFamily, scaledFontSize)}>{pages[0].number}</span>
+        <span
+          style={getPageStyle(
+            "left",
+            position,
+            color,
+            fontFamily,
+            scaledFontSize,
+            zoomLevel / 100
+          )}
+        >
+          {pages[0].number}
+        </span>
       )}
       {pages[1] && (
-        <span style={getPageStyle('right', position, color, fontFamily, scaledFontSize)}>{pages[1].number}</span>
+        <span
+          style={getPageStyle(
+            "right",
+            position,
+            color,
+            fontFamily,
+            scaledFontSize,
+            zoomLevel / 100
+          )}
+        >
+          {pages[1].number}
+        </span>
       )}
     </>
   );

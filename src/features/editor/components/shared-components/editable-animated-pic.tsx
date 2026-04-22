@@ -7,6 +7,7 @@ import { cn } from "@/utils/utils";
 import type { SpreadAnimatedPic } from "@/types/spread-types";
 import { COLORS } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
+import { useZoomLevel } from "@/stores/editor-settings-store";
 
 const log = createLogger("Editor", "EditableAnimatedPic");
 
@@ -41,6 +42,7 @@ interface AnimatedPicPlaceholderProps {
 }
 
 function AnimatedPicPlaceholder({ name, type }: AnimatedPicPlaceholderProps) {
+  const zoomFactor = useZoomLevel() / 100;
   return (
     <div
       className="w-full h-full flex flex-col items-center justify-center gap-2 p-2 border-2 border-dashed"
@@ -51,16 +53,18 @@ function AnimatedPicPlaceholder({ name, type }: AnimatedPicPlaceholderProps) {
     >
       <Sparkles className="h-6 w-6 text-muted-foreground" />
       <p
-        className={cn("text-center line-clamp-2 text-xs", !name && "italic")}
-        style={{ color: COLORS.PLACEHOLDER_TEXT }}
+        className={cn("text-center line-clamp-2", !name && "italic")}
+        style={{ color: COLORS.PLACEHOLDER_TEXT, fontSize: `${12 * zoomFactor}px` }}
       >
         {name || "No animated pic"}
       </p>
       <span
-        className="text-[10px] px-1 rounded"
+        className="rounded"
         style={{
           backgroundColor: COLORS.PLACEHOLDER_BORDER,
           color: COLORS.PLACEHOLDER_TEXT,
+          fontSize: `${10 * zoomFactor}px`,
+          padding: `0 ${4 * zoomFactor}px`,
         }}
       >
         {type}

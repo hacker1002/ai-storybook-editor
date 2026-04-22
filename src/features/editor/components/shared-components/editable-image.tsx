@@ -7,6 +7,7 @@ import { cn } from "@/utils/utils";
 import type { SpreadImage } from "@/types/spread-types";
 import { COLORS } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
+import { useZoomLevel } from "@/stores/editor-settings-store";
 
 const log = createLogger("Editor", "EditableImage");
 
@@ -232,9 +233,10 @@ function ImagePlaceholder({
   onBlur,
   typography,
 }: ImagePlaceholderProps) {
+  const zoomFactor = useZoomLevel() / 100;
   const textStyle: React.CSSProperties = {
     color: typography?.color || COLORS.PLACEHOLDER_TEXT,
-    fontSize: typography?.size ? `${typography.size}px` : undefined,
+    fontSize: typography?.size ? `${typography.size * zoomFactor}px` : undefined,
   };
 
   return (
