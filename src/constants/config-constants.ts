@@ -2,6 +2,9 @@
 // Sections, mappings, and default values used across all config components.
 
 import type { TypographySettings, BranchTypographySettings } from '@/types/editor';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Utils', 'LanguageName');
 
 // ── Section navigation ────────────────────────────────────────────────────────
 
@@ -47,12 +50,28 @@ export const OUTLINE_STYLES = [
 // ── General settings ──────────────────────────────────────────────────────────
 
 export const SUPPORTED_LANGUAGES = [
-  { code: 'en_US', label: 'English (US)'       },
-  { code: 'vi_VN', label: 'Vietnamese (VI-VN)' },
-  { code: 'ja_JP', label: 'Japanese (JA-JP)'   },
-  { code: 'ko_KR', label: 'Korean (KO-KR)'     },
-  { code: 'zh_CN', label: 'Chinese (ZH-CN)'    },
+  { code: 'en_US', label: 'English (US)',       name: 'English'    },
+  { code: 'vi_VN', label: 'Vietnamese (VI-VN)', name: 'Tiếng Việt' },
+  { code: 'ja_JP', label: 'Japanese (JA-JP)',   name: '日本語'        },
+  { code: 'ko_KR', label: 'Korean (KO-KR)',     name: '한국어'        },
+  { code: 'zh_CN', label: 'Chinese (ZH-CN)',    name: '中文'         },
 ] as const;
+
+export function getLanguageName(code: string): string {
+  const entry = SUPPORTED_LANGUAGES.find(l => l.code === code);
+  if (!entry) {
+    log.warn('getLanguageName', 'unknown code, returning raw', { code });
+    return code;
+  }
+  return entry.name;
+}
+
+export const TARGET_AUDIENCE_LABELS: Record<number, string> = {
+  1: 'Kindergarten (ages 2-3)',
+  2: 'Preschool (ages 4-5)',
+  3: 'Primary (ages 6-8)',
+  4: 'Middle grade (ages 9+)',
+};
 
 // ── Narration settings ────────────────────────────────────────────────────────
 

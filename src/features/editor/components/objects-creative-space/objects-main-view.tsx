@@ -1,7 +1,13 @@
 // objects-main-view.tsx - CanvasSpreadView wrapper with retouch render props
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Languages } from "lucide-react";
+import { createLogger } from "@/utils/logger";
+import { TranslateSpreadModal, type ApplyTranslationsPayload } from "./translate-spread-modal";
+import { buildTranslateContext } from "./build-translate-context";
+import type { SpreadTextboxContent } from "@/types/spread-types";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
   EditableImage,
@@ -36,7 +42,7 @@ import {
 } from "@/stores/snapshot-store/selectors";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
-import { useBookTemplateLayout } from "@/stores/book-store";
+import { useBookTemplateLayout, useCurrentBook } from "@/stores/book-store";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { useInteractionLayerContext } from "@/features/editor/contexts/interaction-layer-provider";
 import { COLUMNS } from "@/constants/spread-constants";
@@ -75,6 +81,8 @@ import type {
   SpreadAnimatedPic,
 } from "@/types/canvas-types";
 
+const log = createLogger("UI", "ObjectsMainView");
+
 interface ObjectsMainViewProps {
   selectedSpreadId: string;
   selectedItemId: SelectedItem | null;
@@ -98,6 +106,87 @@ export function ObjectsMainView({
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
   const templateLayout = useBookTemplateLayout();
+  const book = useCurrentBook();
+
+  const [translateModalOpen, setTranslateModalOpen] = useState(false);
+
+  const selectedSpread = useMemo(
+    () => retouchSpreads.find(s => s.id === selectedSpreadId),
+    [retouchSpreads, selectedSpreadId]
+  );
+
+  const originalLanguage = book?.original_language ?? "en_US";
+
+  const translateContext = useMemo(
+    () => buildTranslateContext(book, selectedSpread),
+    [book, selectedSpread]
+  );
+
+  const handleApplyTranslations = useCallback(
+    (payload: ApplyTranslationsPayload) => {
+      const spread = retouchSpreads.find(s => s.id === payload.spreadId);
+      if (!spread) {
+        log.warn("handleApplyTranslations", "spread not found", { spreadId: payload.spreadId });
+        return;
+      }
+      log.info("handleApplyTranslations", "start", {
+        spreadId: payload.spreadId,
+        count: payload.results.length,
+        targetLang: payload.targetLang,
+      });
+      for (const { id, translated_text } of payload.results) {
+        const textbox = spread.textboxes.find(tb => tb.id === id);
+        if (!textbox) {
+          log.debug("handleApplyTranslations", "textbox missing", { id });
+          continue;
+        }
+        const existing = (textbox as Record<string, unknown>)[payload.targetLang] as
+          | SpreadTextboxContent
+          | undefined;
+        let newContent: SpreadTextboxContent;
+        if (existing && typeof existing === "object" && "text" in existing) {
+          newContent = { ...existing, text: translated_text };
+        } else {
+          const baseline = (textbox as Record<string, unknown>)[originalLanguage] as
+            | SpreadTextboxContent
+            | undefined;
+          if (!baseline || typeof baseline !== "object" || !("text" in baseline)) {
+            log.warn("handleApplyTranslations", "baseline missing, skip", { id });
+            continue;
+          }
+          newContent = {
+            text: translated_text,
+            geometry: { ...baseline.geometry },
+            typography: { ...baseline.typography },
+          };
+        }
+        actions.updateRetouchTextbox(payload.spreadId, id, {
+          [payload.targetLang]: newContent,
+        } as Partial<SpreadTextbox>);
+      }
+      log.info("handleApplyTranslations", "done", { spreadId: payload.spreadId });
+    },
+    [retouchSpreads, actions, originalLanguage]
+  );
+
+  const translateLeftAction = useMemo(
+    () => (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          log.info("translateButton", "click", { spreadId: selectedSpreadId });
+          setTranslateModalOpen(true);
+        }}
+        disabled={!selectedSpreadId || !selectedSpread}
+        aria-label="Translate spread"
+      >
+        <Languages className="h-4 w-4 mr-1.5" />
+        Translate
+      </Button>
+    ),
+    [selectedSpreadId, selectedSpread]
+  );
 
   const handleDeselect = useCallback(() => onItemSelect(null), [onItemSelect]);
 
@@ -541,6 +630,7 @@ export function ObjectsMainView({
         canReorderSpread={false}
         canDeleteSpread={false}
         showViewToggle={false}
+        leftActions={translateLeftAction}
         canResizeItem={true}
         canDragItem={true}
         externalSelectedItemId={selectedItemId}
@@ -581,6 +671,19 @@ export function ObjectsMainView({
           onOpenChange={modals.closeCrop}
           image={modals.crop.image}
           onCreateImages={handleCropCreateImages}
+        />
+      )}
+
+      {selectedSpread && (
+        <TranslateSpreadModal
+          isOpen={translateModalOpen}
+          onClose={() => setTranslateModalOpen(false)}
+          spreadId={selectedSpreadId}
+          textboxes={selectedSpread.textboxes ?? []}
+          originalLang={originalLanguage}
+          editorLang={langCode}
+          context={translateContext}
+          onApplyTranslations={handleApplyTranslations}
         />
       )}
 

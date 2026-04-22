@@ -1,7 +1,7 @@
 // spread-view-header.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -33,6 +33,7 @@ interface SpreadViewHeaderProps {
   onColumnsChange: (columns: number) => void;
   enableKeyboardShortcuts?: boolean;
   showViewToggle?: boolean;
+  leftActions?: ReactNode;
 }
 
 // === Main Component ===
@@ -45,6 +46,7 @@ export function SpreadViewHeader({
   onColumnsChange,
   enableKeyboardShortcuts = true,
   showViewToggle = true,
+  leftActions,
 }: SpreadViewHeaderProps) {
   const [announcement, setAnnouncement] = useState("");
 
@@ -62,8 +64,11 @@ export function SpreadViewHeader({
 
   return (
     <header className="flex items-center justify-between px-4 border-b bg-background h-14">
-      {/* Left: View Toggle */}
-      {showViewToggle && <ViewToggle viewMode={viewMode} onToggle={onViewModeToggle} />}
+      {/* Left: View Toggle + optional actions */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {showViewToggle && <ViewToggle viewMode={viewMode} onToggle={onViewModeToggle} />}
+        {leftActions}
+      </div>
 
       {/* Center: Spacer */}
       <div className="flex-grow" />

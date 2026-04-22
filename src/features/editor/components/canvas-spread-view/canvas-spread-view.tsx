@@ -118,6 +118,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
 
   // Header config
   showViewToggle?: boolean;
+  leftActions?: ReactNode;
 }
 
 // === Main Component ===
@@ -168,6 +169,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   pageNumbering,
   forceLanguageCode,
   showViewToggle = true,
+  leftActions,
 }: CanvasSpreadViewProps<TSpread>) {
 
   // Ref to the currently mounted SpreadThumbnailList (either the edit-mode
@@ -364,6 +366,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
         onColumnsChange={handleColumnsChange}
         enableKeyboardShortcuts={true}
         showViewToggle={showViewToggle}
+        leftActions={leftActions}
       />
 
       {/* Content */}
