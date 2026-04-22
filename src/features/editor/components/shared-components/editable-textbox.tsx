@@ -52,7 +52,9 @@ export function EditableTextbox({
   const editableRef = useRef<HTMLDivElement>(null);
 
   const isControlled = controlledIsEditing !== undefined;
-  const effectiveIsEditing = isControlled ? controlledIsEditing! : internalIsEditing;
+  const effectiveIsEditing = isControlled
+    ? controlledIsEditing!
+    : internalIsEditing;
   // Track previous controlled value to detect transitions
   const prevEditingRef = useRef<boolean>(effectiveIsEditing);
 
@@ -98,7 +100,12 @@ export function EditableTextbox({
       applyExitEditModeSideEffects(true);
     }
     prevEditingRef.current = !!controlledIsEditing;
-  }, [controlledIsEditing, isControlled, applyEnterEditModeSideEffects, applyExitEditModeSideEffects]);
+  }, [
+    controlledIsEditing,
+    isControlled,
+    applyEnterEditModeSideEffects,
+    applyExitEditModeSideEffects,
+  ]);
 
   const enterEditMode = useCallback(() => {
     if (isControlled) {
@@ -288,7 +295,7 @@ export function EditableTextbox({
           Click to add text
         </div>
       ) : (
-        <div className="w-full h-full p-1 whitespace-pre-wrap break-words">
+        <div className="w-full h-full whitespace-pre-wrap break-words">
           {wordTimings && wordTimings.length > 0
             ? renderTextWithWordSpans(text)
             : text}
