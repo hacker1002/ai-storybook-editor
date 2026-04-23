@@ -39,7 +39,7 @@ export const useVoicesStore = create<VoicesStore>()(
         const { data, error } = await supabase
           .from('voices')
           .select('*')
-          .order('name');
+          .order('created_at', { ascending: false });
 
         if (error) {
           log.error('fetchVoices', 'failed', { error });
@@ -101,7 +101,7 @@ export const useVoicesStore = create<VoicesStore>()(
         set((state) => ({
           voices: existing
             ? state.voices.map((v) => (v.id === voice.id ? voice : v))
-            : [...state.voices, voice],
+            : [voice, ...state.voices],
         }));
       },
     }),

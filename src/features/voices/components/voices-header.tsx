@@ -7,6 +7,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Voices', 'VoicesHeader');
 
 interface DisabledActionProps {
   icon: ComponentType<{ className?: string }>;
@@ -31,7 +34,16 @@ function DisabledAction({ icon: Icon, label, variant, tooltip }: DisabledActionP
   );
 }
 
-export function VoicesHeader() {
+interface VoicesHeaderProps {
+  onPromptClick: () => void;
+}
+
+export function VoicesHeader({ onPromptClick }: VoicesHeaderProps) {
+  const handlePromptClick = () => {
+    log.info('onPromptClick', 'open prompt modal');
+    onPromptClick();
+  };
+
   return (
     <TooltipProvider delayDuration={200}>
       <header className="flex items-center justify-between py-4 px-6">
@@ -39,7 +51,10 @@ export function VoicesHeader() {
           Voices
         </h1>
         <div className="flex gap-2">
-          <DisabledAction icon={Sparkles} label="Prompt" variant="ghost" tooltip="Coming soon" />
+          <Button variant="ghost" className="gap-2" onClick={handlePromptClick}>
+            <Sparkles className="h-4 w-4" />
+            Prompt
+          </Button>
           <DisabledAction icon={Copy} label="Clone" variant="ghost" tooltip="Coming soon" />
           <DisabledAction icon={Shuffle} label="Remix" variant="ghost" tooltip="Coming soon" />
           <DisabledAction icon={Download} label="Import" variant="default" tooltip="Coming soon" />

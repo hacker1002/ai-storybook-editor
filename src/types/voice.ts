@@ -18,6 +18,7 @@ export interface Voice {
   sampleAudioUrl: string | null;
   loudness: number | null;
   guidance: number | null;
+  createdAt: string;
 }
 
 export interface VoicesFilterState {
@@ -46,4 +47,5 @@ export interface VoiceRow {
   sample_audio_url: string | null;
   loudness: number | null;
   guidance: number | null;
+  created_at: string;
 }

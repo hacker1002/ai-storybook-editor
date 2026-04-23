@@ -17,5 +17,6 @@ export function mapVoiceRow(row: VoiceRow): Voice {
     sampleAudioUrl: row.sample_audio_url,
     loudness: row.loudness,
     guidance: row.guidance,
+    createdAt: row.created_at,
   };
 }

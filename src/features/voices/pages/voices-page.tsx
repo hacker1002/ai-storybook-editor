@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { VoicesHeader } from '@/features/voices/components/voices-header';
 import { VoicesToolbar } from '@/features/voices/components/voices-toolbar';
 import { VoicesGrid } from '@/features/voices/components/voices-grid';
 import { EditVoiceModal } from '@/features/voices/components/edit-voice-modal';
 import { DeleteVoiceDialog } from '@/features/voices/components/delete-voice-dialog';
+import { PromptVoiceModal } from '@/features/voices/components/prompt-voice-modal/prompt-voice-modal';
 import { useVoiceAudioPlayer } from '@/features/voices/hooks/use-voice-audio-player';
 import {
   applyFilters,
@@ -38,12 +40,13 @@ function GridSkeleton() {
 export function VoicesPage() {
   const voices = useVoices();
   const isLoading = useVoicesLoading();
-  const { fetchVoices } = useVoicesActions();
+  const { fetchVoices, upsertLocal } = useVoicesActions();
   const { playingId, play, stop } = useVoiceAudioPlayer();
 
   const [filters, setFilters] = useState<VoicesFilterState>(DEFAULT_VOICES_FILTERS);
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
   const [deletingVoice, setDeletingVoice] = useState<Voice | null>(null);
+  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
 
   useEffect(() => {
     log.info('mount', 'fetching voices');
@@ -85,12 +88,22 @@ export function VoicesPage() {
     [playingId, stop]
   );
 
+  const handlePromptSaved = useCallback(
+    (voice: Voice) => {
+      log.info('handlePromptSaved', 'voice created', { voiceId: voice.id });
+      upsertLocal(voice);
+      toast.success(`Voice "${voice.name}" đã được tạo`);
+      setIsPromptModalOpen(false);
+    },
+    [upsertLocal]
+  );
+
   return (
     <main
       aria-labelledby="voices-heading"
       className="mx-auto w-full max-w-7xl space-y-4"
     >
-      <VoicesHeader />
+      <VoicesHeader onPromptClick={() => setIsPromptModalOpen(true)} />
       <VoicesToolbar
         filters={filters}
         count={filtered.length}
@@ -124,6 +137,13 @@ export function VoicesPage() {
           voice={deletingVoice}
           onClose={() => setDeletingVoice(null)}
           onDeleted={handleDeleted}
+        />
+      ) : null}
+
+      {isPromptModalOpen ? (
+        <PromptVoiceModal
+          onClose={() => setIsPromptModalOpen(false)}
+          onSaved={handlePromptSaved}
         />
       ) : null}
     </main>
