@@ -1,13 +1,13 @@
 import { Outlet } from 'react-router-dom'
 import { Search, Bell } from 'lucide-react'
-import { Sidebar } from './sidebar'
+import { AppSidebar } from './app-sidebar'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
 export function AppLayout() {
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
+      <AppSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-14 items-center justify-between border-b px-6">
           <div className="flex-1" />

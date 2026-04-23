@@ -12,6 +12,23 @@ const SharePreviewPage = lazy(() =>
   import('@/features/share-preview').then((m) => ({ default: m.SharePreviewPage }))
 );
 
+const SIDEBAR_PLACEHOLDER_ROUTES: Array<{ path: string; title: string }> = [
+  { path: '/books',      title: 'Books' },
+  { path: '/products',   title: 'Products' },
+  { path: '/assets',     title: 'Assets' },
+  { path: '/concepts',   title: 'Concepts' },
+  { path: '/styles',     title: 'Styles' },
+  { path: '/sounds',     title: 'Sounds' },
+  { path: '/voices',     title: 'Voices' },
+  { path: '/musics',     title: 'Musics' },
+  { path: '/categories', title: 'Categories' },
+  { path: '/eras',       title: 'Eras' },
+  { path: '/locations',  title: 'Locations' },
+  { path: '/themes',     title: 'Themes' },
+  { path: '/genres',     title: 'Genres' },
+  { path: '/formats',    title: 'Formats' },
+];
+
 function PlaceholderPage({ title }: { title: string }) {
   return (
     <div className="flex h-full items-center justify-center">
@@ -58,12 +75,9 @@ export default function App() {
         <Route path="/demo/rive-player" element={<DemoRivePlayer />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
-          <Route path="/explore" element={<PlaceholderPage title="Explore Community" />} />
-          <Route path="/library" element={<PlaceholderPage title="Asset Library" />} />
-          <Route path="/assets" element={<PlaceholderPage title="My Assets" />} />
-          <Route path="/templates" element={<PlaceholderPage title="Templates" />} />
-          <Route path="/learn" element={<PlaceholderPage title="Learn" />} />
-          <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+          {SIDEBAR_PLACEHOLDER_ROUTES.map(({ path, title }) => (
+            <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
+          ))}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
