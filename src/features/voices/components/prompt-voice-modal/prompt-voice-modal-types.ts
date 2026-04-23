@@ -10,8 +10,8 @@ export type PromptVoiceModalStep = 'idle' | 'generating' | 'audition' | 'saving'
 
 export interface PromptVoiceFormState {
   name: string;
-  gender: VoiceGender;
-  age: VoiceAge;
+  gender: NonNullable<VoiceGender>;
+  age: NonNullable<VoiceAge>;
   language: string;
   accent: string;
   description: string;

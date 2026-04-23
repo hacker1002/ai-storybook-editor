@@ -160,7 +160,7 @@ export function PromptVoiceForm({
         <FieldBlock id={genderId} label="Gender">
           <Select
             value={String(value.gender)}
-            onValueChange={(v) => updateField('gender', Number(v) as VoiceGender)}
+            onValueChange={(v) => updateField('gender', Number(v) as NonNullable<VoiceGender>)}
             disabled={disabled}
           >
             <SelectTrigger id={genderId}>
@@ -179,7 +179,7 @@ export function PromptVoiceForm({
         <FieldBlock id={ageId} label="Age">
           <Select
             value={String(value.age)}
-            onValueChange={(v) => updateField('age', Number(v) as VoiceAge)}
+            onValueChange={(v) => updateField('age', Number(v) as NonNullable<VoiceAge>)}
             disabled={disabled}
           >
             <SelectTrigger id={ageId}>

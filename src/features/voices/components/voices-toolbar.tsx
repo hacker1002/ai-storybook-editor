@@ -116,7 +116,7 @@ export function VoicesToolbar({
     { value: 3, label: TYPE_LABEL[3] },
   ];
 
-  const genderOptions: FilterOption<VoiceGender>[] = [
+  const genderOptions: FilterOption<NonNullable<VoiceGender>>[] = [
     { value: 0, label: GENDER_LABEL[0] },
     { value: 1, label: GENDER_LABEL[1] },
   ];

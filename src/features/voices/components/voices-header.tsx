@@ -36,12 +36,17 @@ function DisabledAction({ icon: Icon, label, variant, tooltip }: DisabledActionP
 
 interface VoicesHeaderProps {
   onPromptClick: () => void;
+  onImportClick: () => void;
 }
 
-export function VoicesHeader({ onPromptClick }: VoicesHeaderProps) {
+export function VoicesHeader({ onPromptClick, onImportClick }: VoicesHeaderProps) {
   const handlePromptClick = () => {
     log.info('onPromptClick', 'open prompt modal');
     onPromptClick();
+  };
+  const handleImportClick = () => {
+    log.info('onImportClick', 'open import modal');
+    onImportClick();
   };
 
   return (
@@ -57,7 +62,10 @@ export function VoicesHeader({ onPromptClick }: VoicesHeaderProps) {
           </Button>
           <DisabledAction icon={Copy} label="Clone" variant="ghost" tooltip="Coming soon" />
           <DisabledAction icon={Shuffle} label="Remix" variant="ghost" tooltip="Coming soon" />
-          <DisabledAction icon={Download} label="Import" variant="default" tooltip="Coming soon" />
+          <Button variant="default" className="gap-2" onClick={handleImportClick}>
+            <Download className="h-4 w-4" />
+            Import
+          </Button>
         </div>
       </header>
     </TooltipProvider>

@@ -2,6 +2,7 @@ import { createLogger } from '@/utils/logger';
 
 const logGenerate = createLogger('VoiceApi', 'callGenerateFromPrompt');
 const logSave = createLogger('VoiceApi', 'callSavePreview');
+const logGet = createLogger('VoiceApi', 'callGetFromElevenId');
 
 const imageApiBaseUrl = import.meta.env.VITE_IMAGE_API_BASE_URL as string;
 const imageApiKey = import.meta.env.VITE_IMAGE_API_KEY as string;
@@ -134,6 +135,53 @@ export interface SavePreviewFailure {
 }
 
 export type SavePreviewResult = SavePreviewSuccess | SavePreviewFailure;
+
+// ───────────────────────── Get from ElevenLabs voice ID (read-only proxy) ─────────────────────────
+
+export interface GetFromElevenIdData {
+  elevenId: string;
+  name: string;
+  gender: 0 | 1 | null;
+  age: 0 | 1 | 2 | null;
+  language: string | null;
+  accent: string;
+  description: string | null;
+  tags: string | null;
+  previewAudioUrl: string | null;
+}
+
+export interface GetFromElevenIdMeta {
+  processingTimeMs?: number;
+  elevenFetchMs?: number;
+  cacheHit?: boolean;
+}
+
+export interface GetFromElevenIdSuccess {
+  success: true;
+  data: GetFromElevenIdData;
+  meta?: GetFromElevenIdMeta;
+}
+
+export type GetFromElevenIdErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'INVALID_API_KEY'
+  | 'ELEVEN_VOICE_NOT_FOUND'
+  | 'ELEVEN_AUTH_FAILED'
+  | 'ELEVEN_RATE_LIMITED'
+  | 'ELEVEN_UPSTREAM_ERROR'
+  | 'TIMEOUT'
+  | 'CONNECTION_ERROR'
+  | 'ABORT'
+  | 'UNKNOWN';
+
+export interface GetFromElevenIdFailure {
+  success: false;
+  error: string;
+  httpStatus: number;
+  errorCode: GetFromElevenIdErrorCode;
+}
+
+export type GetFromElevenIdResult = GetFromElevenIdSuccess | GetFromElevenIdFailure;
 
 export interface VoiceApiCallOptions {
   signal?: AbortSignal;
@@ -448,3 +496,134 @@ export async function callSavePreview(
     return saveFailure('UNKNOWN', rawMessage || 'Unknown error', 0);
   }
 }
+
+// ───────────────────────── callGetFromElevenId ─────────────────────────
+
+const GET_FROM_ELEVEN_ID_PATH = '/api/voice/get-from-eleven-id';
+const ELEVEN_ID_PATTERN = /^[A-Za-z0-9]{10,40}$/;
+
+function getFromElevenIdFailure(
+  errorCode: GetFromElevenIdErrorCode,
+  error: string,
+  httpStatus = 0
+): GetFromElevenIdFailure {
+  return { success: false, error, httpStatus, errorCode };
+}
+
+function mapGetFromElevenIdErrorCode(code: string | undefined): GetFromElevenIdErrorCode {
+  switch (code) {
+    case 'VALIDATION_ERROR':
+    case 'INVALID_API_KEY':
+    case 'ELEVEN_VOICE_NOT_FOUND':
+    case 'ELEVEN_AUTH_FAILED':
+    case 'ELEVEN_RATE_LIMITED':
+    case 'ELEVEN_UPSTREAM_ERROR':
+    case 'TIMEOUT':
+      return code;
+    default:
+      return 'UNKNOWN';
+  }
+}
+
+export async function callGetFromElevenId(
+  elevenId: string,
+  options?: VoiceApiCallOptions
+): Promise<GetFromElevenIdResult> {
+  const trimmed = elevenId.trim();
+  if (!ELEVEN_ID_PATTERN.test(trimmed)) {
+    return getFromElevenIdFailure('VALIDATION_ERROR', 'Invalid ID format');
+  }
+
+  const url = `${imageApiBaseUrl}${GET_FROM_ELEVEN_ID_PATH}?elevenId=${encodeURIComponent(trimmed)}`;
+
+  logGet.info('callGetFromElevenId', 'start', { elevenIdLength: trimmed.length });
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'X-API-Key': imageApiKey },
+      signal: options?.signal,
+    });
+
+    if (options?.signal?.aborted) {
+      return getFromElevenIdFailure('ABORT', 'Request aborted', 0);
+    }
+
+    if (!response.ok) {
+      const { message, errorCode } = await extractErrorInfo(response);
+      logGet.error('callGetFromElevenId', 'http error', {
+        httpStatus: response.status,
+        errorCode,
+      });
+      return {
+        success: false,
+        error: message,
+        httpStatus: response.status,
+        errorCode: mapGetFromElevenIdErrorCode(errorCode),
+      };
+    }
+
+    const body = (await response.json()) as {
+      success?: boolean;
+      data?: GetFromElevenIdData;
+      meta?: GetFromElevenIdMeta;
+      error?: string;
+    };
+
+    if (body.success === false) {
+      logGet.error('callGetFromElevenId', 'server returned success=false', {
+        error: body.error,
+      });
+      return getFromElevenIdFailure(
+        'UNKNOWN',
+        body.error || 'Server returned success=false',
+        response.status
+      );
+    }
+
+    const data = body.data;
+    if (!data || data.elevenId !== trimmed) {
+      logGet.error('callGetFromElevenId', 'malformed response', {
+        hasData: Boolean(data),
+        echoMatches: data?.elevenId === trimmed,
+      });
+      return getFromElevenIdFailure(
+        'UNKNOWN',
+        'Response missing elevenId or mismatched echo',
+        response.status
+      );
+    }
+
+    logGet.info('callGetFromElevenId', 'success', {
+      cacheHit: body.meta?.cacheHit,
+      elevenFetchMs: body.meta?.elevenFetchMs,
+      mappedLanguage: data.language,
+      hasPreview: Boolean(data.previewAudioUrl),
+    });
+
+    return { success: true, data, meta: body.meta };
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === 'AbortError' || options?.signal?.aborted) {
+      logGet.info('callGetFromElevenId', 'aborted');
+      return getFromElevenIdFailure('ABORT', 'Request aborted', 0);
+    }
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    if (err instanceof TypeError) {
+      logGet.error('callGetFromElevenId', 'connection error', {
+        msg: rawMessage.slice(0, 100),
+      });
+      return getFromElevenIdFailure(
+        'CONNECTION_ERROR',
+        `Không kết nối được máy chủ (${rawMessage}). Vui lòng thử lại.`,
+        0
+      );
+    }
+    logGet.error('callGetFromElevenId', 'unknown error', {
+      name,
+      msg: rawMessage.slice(0, 100),
+    });
+    return getFromElevenIdFailure('UNKNOWN', rawMessage || 'Unknown error', 0);
+  }
+}
+

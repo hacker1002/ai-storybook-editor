@@ -6,6 +6,7 @@ import { VoicesGrid } from '@/features/voices/components/voices-grid';
 import { EditVoiceModal } from '@/features/voices/components/edit-voice-modal';
 import { DeleteVoiceDialog } from '@/features/voices/components/delete-voice-dialog';
 import { PromptVoiceModal } from '@/features/voices/components/prompt-voice-modal/prompt-voice-modal';
+import { ImportVoiceModal } from '@/features/voices/components/import-voice-modal/import-voice-modal';
 import { useVoiceAudioPlayer } from '@/features/voices/hooks/use-voice-audio-player';
 import {
   applyFilters,
@@ -47,6 +48,7 @@ export function VoicesPage() {
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
   const [deletingVoice, setDeletingVoice] = useState<Voice | null>(null);
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   useEffect(() => {
     log.info('mount', 'fetching voices');
@@ -98,12 +100,25 @@ export function VoicesPage() {
     [upsertLocal]
   );
 
+  const handleImportImported = useCallback(
+    (voice: Voice) => {
+      log.info('handleImportImported', 'voice imported', { voiceId: voice.id });
+      upsertLocal(voice);
+      toast.success(`Voice "${voice.name}" imported`);
+      setIsImportModalOpen(false);
+    },
+    [upsertLocal]
+  );
+
   return (
     <main
       aria-labelledby="voices-heading"
       className="mx-auto w-full max-w-7xl space-y-4"
     >
-      <VoicesHeader onPromptClick={() => setIsPromptModalOpen(true)} />
+      <VoicesHeader
+        onPromptClick={() => setIsPromptModalOpen(true)}
+        onImportClick={() => setIsImportModalOpen(true)}
+      />
       <VoicesToolbar
         filters={filters}
         count={filtered.length}
@@ -144,6 +159,13 @@ export function VoicesPage() {
         <PromptVoiceModal
           onClose={() => setIsPromptModalOpen(false)}
           onSaved={handlePromptSaved}
+        />
+      ) : null}
+
+      {isImportModalOpen ? (
+        <ImportVoiceModal
+          onClose={() => setIsImportModalOpen(false)}
+          onImported={handleImportImported}
         />
       ) : null}
     </main>

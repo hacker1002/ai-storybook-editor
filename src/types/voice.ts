@@ -1,6 +1,6 @@
 export type VoiceType = 0 | 1 | 2 | 3; // prompt | clone | remix | import
-export type VoiceGender = 0 | 1; // female | male
-export type VoiceAge = 0 | 1 | 2; // young | middle | old
+export type VoiceGender = 0 | 1 | null; // female | male | unspecified (imported voices may lack metadata)
+export type VoiceAge = 0 | 1 | 2 | null; // young | middle | old | unspecified
 
 export interface Voice {
   id: string;
@@ -34,8 +34,8 @@ export type VoicesActiveModal = 'prompt' | 'import' | null;
 export interface VoiceRow {
   id: string;
   name: string;
-  gender: number;
-  age: number;
+  gender: number | null;
+  age: number | null;
   language: string;
   accent: string;
   description: string | null;

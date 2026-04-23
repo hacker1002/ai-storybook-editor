@@ -3,9 +3,9 @@ import type { MouseEvent } from 'react';
 import { Pencil, Play, Square, Trash } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import {
-  AGE_LABEL,
-  GENDER_LABEL,
   TYPE_LABEL,
+  getAgeLabel,
+  getGenderLabel,
   getLanguageName,
   titleCase,
 } from '@/features/voices/utils/voice-labels';
@@ -118,7 +118,7 @@ function VoiceCardInner({
             </span>
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            {GENDER_LABEL[voice.gender]} · {AGE_LABEL[voice.age]} ·{' '}
+            {getGenderLabel(voice.gender)} · {getAgeLabel(voice.age)} ·{' '}
             {getLanguageName(voice.language)}
           </div>
         </div>

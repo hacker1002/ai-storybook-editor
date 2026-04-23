@@ -128,8 +128,8 @@ function dtoToVoice(dto: SavePreviewVoiceDTO): Voice {
   return {
     id: dto.id,
     name: dto.name,
-    gender: dto.gender as VoiceGender,
-    age: dto.age as VoiceAge,
+    gender: dto.gender as NonNullable<VoiceGender>,
+    age: dto.age as NonNullable<VoiceAge>,
     language: dto.language,
     accent: dto.accent,
     description: dto.description ?? null,
