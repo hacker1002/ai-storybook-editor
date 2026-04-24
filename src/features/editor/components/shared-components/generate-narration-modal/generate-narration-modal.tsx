@@ -184,27 +184,33 @@ export function GenerateNarrationModal({
   useEffect(() => {
     if (!isOpen) return;
     const { existingAudio, textboxText } = prefillPropsRef.current;
+    const trimmedText = textboxText.trim();
+    const wrappedFromText = trimmedText ? `@narrator: ${trimmedText}` : '';
     if (existingAudio) {
-      setEditableScript(existingAudio.script);
-      setSettings({ ...DEFAULT_SETTINGS, ...existingAudio.settings });
+      // If the stored audio row has no script yet (brand-new audio record on a
+      // textbox that already has text), seed it from textboxText so the user
+      // isn't staring at an empty editor.
+      const script = existingAudio.script?.trim()
+        ? existingAudio.script
+        : wrappedFromText;
+      const mergedSettings = { ...DEFAULT_SETTINGS, ...existingAudio.settings };
+      setEditableScript(script);
+      setSettings(mergedSettings);
       setMedia(existingAudio.media);
       setLastGeneratedSignature(
-        existingAudio.media
-          ? signatureOf(existingAudio.script, { ...DEFAULT_SETTINGS, ...existingAudio.settings })
-          : null,
+        existingAudio.media ? signatureOf(script, mergedSettings) : null,
       );
       log.debug('prefill', 'restored from existingAudio', {
         hasMedia: existingAudio.media != null,
+        scriptSeededFromText: !existingAudio.script?.trim() && trimmedText.length > 0,
       });
     } else {
-      const trimmed = textboxText.trim();
-      const initial = trimmed ? `@narrator: ${trimmed}` : '';
-      setEditableScript(initial);
+      setEditableScript(wrappedFromText);
       setSettings(DEFAULT_SETTINGS);
       setMedia(null);
       setLastGeneratedSignature(null);
       log.debug('prefill', 'fresh wrap from textboxText', {
-        hasText: trimmed.length > 0,
+        hasText: trimmedText.length > 0,
       });
     }
     setPreviewError(null);
