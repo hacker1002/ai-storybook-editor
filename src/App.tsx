@@ -8,6 +8,7 @@ import { EditorPage } from '@/features/editor';
 import { VoicesPage } from '@/features/voices';
 import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
+import { useVoicesActions } from '@/stores/voices-store';
 
 const SharePreviewPage = lazy(() =>
   import('@/features/share-preview').then((m) => ({ default: m.SharePreviewPage }))
@@ -52,11 +53,18 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { initialize, isInitialized } = useAuthStore();
+  const { initialize, isInitialized, isAuthenticated } = useAuthStore();
+  const { fetchVoices } = useVoicesActions();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (isInitialized && isAuthenticated) {
+      void fetchVoices();
+    }
+  }, [isInitialized, isAuthenticated, fetchVoices]);
 
   if (!isInitialized) {
     return <LoadingScreen />;

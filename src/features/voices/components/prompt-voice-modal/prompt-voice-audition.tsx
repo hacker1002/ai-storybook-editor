@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/utils/utils';
 import type { PreviewCandidate } from '@/apis/voice-api';
 import { createLogger } from '@/utils/logger';
+import { formatDuration } from '@/features/voices/utils/format-duration';
 
 const log = createLogger('Voices', 'PromptVoiceAudition');
 
@@ -11,13 +12,6 @@ interface PromptVoiceAuditionProps {
   selectedIndex: number | null;
   onSelect: (index: number) => void;
   disabled?: boolean;
-}
-
-function formatDuration(secs: number): string {
-  const total = Math.max(0, Math.round(secs));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function RadioDot({ selected }: { selected: boolean }) {

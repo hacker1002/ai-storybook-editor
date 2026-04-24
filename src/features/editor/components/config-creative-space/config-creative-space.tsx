@@ -6,6 +6,7 @@ import { ConfigSidebar } from './config-sidebar';
 import { ConfigGeneralSettings } from './config-general-settings';
 import { ConfigObjectSettings } from './config-object-settings';
 import { ConfigTextSettings } from './config-text-settings';
+import { ConfigNarratorSettings } from './config-narrator-settings';
 import { ConfigBranchSettings } from './config-branch-settings';
 import { ConfigLayoutSettings } from './config-layout-settings';
 import type { ConfigSection } from '@/constants/config-constants';
@@ -34,6 +35,7 @@ export function ConfigCreativeSpace() {
       case 'general': return <ConfigGeneralSettings />;
       case 'objects': return <ConfigObjectSettings />;
       case 'text':    return <ConfigTextSettings />;
+      case 'narrator': return <ConfigNarratorSettings />;
       case 'branch':  return <ConfigBranchSettings />;
       case 'layout':  return <ConfigLayoutSettings />;
       default:        return <PlaceholderPanel section={activeSection} />;
