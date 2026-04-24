@@ -42,17 +42,35 @@ export interface CharacterVariant {
   image_references: ImageReference[];
 }
 
-export interface CharacterVoice {
-  name: string;
-  key: string;
+/**
+ * Per-language preview entry inside `CharacterVoiceSetting`.
+ * Language keys match `^[a-z]{2}_[A-Z]{2}$`; value holds last-generated preview audio URL.
+ */
+export interface CharacterVoicePreviewEntry {
+  media_url: string | null;
+}
+
+/**
+ * Hybrid shape mirroring `NarratorSettings`:
+ * - Literal inference keys: voice_id / model / stability / similarity / speed / style_exaggeration / speaker_boost
+ * - Language keys match `^[a-z]{2}_[A-Z]{2}$` → `CharacterVoicePreviewEntry`
+ */
+export type CharacterVoiceSetting = {
+  voice_id: string | null;
+  model: string;
   stability: number;
-  clarity: number;
   similarity: number;
+  speed: number;
   style_exaggeration: number;
   speaker_boost: boolean;
-  system_voice: string;
-  media_url: string;
-}
+} & {
+  [languageKey: string]:
+    | CharacterVoicePreviewEntry
+    | string
+    | number
+    | boolean
+    | null;
+};
 
 export interface Character {
   order: number;
@@ -61,6 +79,6 @@ export interface Character {
   basic_info: CharacterBasicInfo;
   personality: CharacterPersonality;
   variants: CharacterVariant[];
-  voices: CharacterVoice[];
+  voice_setting: CharacterVoiceSetting | null;
   crop_sheets: CropSheet[];
 }

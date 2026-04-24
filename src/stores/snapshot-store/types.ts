@@ -2,7 +2,7 @@ import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/ed
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
 import type { Prop, PropVariant, PropSound, CropSheet } from '@/types/prop-types';
-import type { Character, CharacterVariant, CharacterVoice } from '@/types/character-types';
+import type { Character, CharacterVariant, CharacterVoiceSetting } from '@/types/character-types';
 import type { Stage, StageVariant, StageSound } from '@/types/stage-types';
 import type {
   BaseSpread,
@@ -324,9 +324,7 @@ export interface CharactersSlice {
   addCharacterVariant: (key: string, variant: CharacterVariant) => void;
   updateCharacterVariant: (key: string, variantKey: string, updates: Partial<CharacterVariant>) => void;
   deleteCharacterVariant: (key: string, variantKey: string) => void;
-  addCharacterVoice: (key: string, voice: CharacterVoice) => void;
-  updateCharacterVoice: (key: string, voiceKey: string, updates: Partial<CharacterVoice>) => void;
-  deleteCharacterVoice: (key: string, voiceKey: string) => void;
+  updateCharacterVoiceSetting: (characterKey: string, next: CharacterVoiceSetting) => void;
   addCharacterCropSheet: (key: string, cropSheet: CropSheet) => void;
   updateCharacterCropSheet: (key: string, cropSheetIndex: number, updates: Partial<CropSheet>) => void;
   deleteCharacterCropSheet: (key: string, cropSheetIndex: number) => void;

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { useCharacterByKey, useSnapshotActions } from '@/stores/snapshot-store';
 import { VariantsTabPanel } from './variants-tab-panel';
-import { VoicesTabPanelMock } from './voices-tab-panel-mock';
+import { VoiceSettingTabPanel } from './voice-setting';
 import { CropsTabPanelMock } from './crops-tab-panel-mock';
 import { createLogger } from '@/utils/logger';
 import { cn } from '@/utils/utils';
@@ -17,7 +17,7 @@ export type CharacterContentTab = 'variants' | 'voices' | 'crops';
 
 const CHARACTER_CONTENT_TABS = [
   { value: 'variants' as const, label: 'Variants' },
-  { value: 'voices' as const, label: 'Voices' },
+  { value: 'voices' as const, label: 'Voice Setting' },
   { value: 'crops' as const, label: 'Crops' },
 ];
 
@@ -112,7 +112,18 @@ export function CharactersContentArea({
             Character not found.
           </div>
         )}
-        {activeTab === 'voices' && <VoicesTabPanelMock />}
+        {activeTab === 'voices' && character && (
+          <VoiceSettingTabPanel
+            key={selectedCharacterKey}
+            characterKey={selectedCharacterKey}
+            voiceSetting={character.voice_setting}
+          />
+        )}
+        {activeTab === 'voices' && !character && (
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+            Character not found.
+          </div>
+        )}
         {activeTab === 'crops' && <CropsTabPanelMock />}
       </div>
 

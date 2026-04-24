@@ -5,7 +5,7 @@ import type { Voice } from '@/types/voice';
 import { createLogger } from '@/utils/logger';
 import { cn } from '@/utils/utils';
 
-const log = createLogger('ConfigNarrator', 'VoiceSelectorItem');
+const log = createLogger('VoicePreview', 'VoiceSelectorItem');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VoiceSelectorItem — one row inside VoiceSelector popover.

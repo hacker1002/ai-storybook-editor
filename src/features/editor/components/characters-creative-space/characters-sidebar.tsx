@@ -79,7 +79,7 @@ function buildNewCharacter(name: string, key: string, order: number): Character 
         image_references: [],
       },
     ],
-    voices: [],
+    voice_setting: null,
     crop_sheets: [],
   };
 }

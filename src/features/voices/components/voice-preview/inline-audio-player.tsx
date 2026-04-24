@@ -9,23 +9,11 @@ import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// InlineAudioPlayer — custom-UI audio player for narrator previews.
-//
-// Design decisions (Phase 04 / Validation S1):
-// - NOT using native <audio controls>. Uses `new Audio(src)` pattern (parity
-//   with `useVoiceAudioPlayer`). Circular Play/Pause + linear scrubber + M:SS
-//   + volume popover with HORIZONTAL slider (trade-off approved S1).
-// - Volume is session-only (no persistence). Default 1.0.
-// - `isActive=false` while playing → auto-pause (parent enforces single-active
-//   player rule across the panel).
-// - On `ended`: scrubber resets to 0:00 and icon returns to Play. Player stays
-//   mounted (not removed from DOM).
-// - On `src` change: full reset (new Audio, listeners re-bound). Old audio
-//   cleaned up by effect's teardown.
-// - Audio URL PII: never log full URL at INFO. Log `host` only for debug.
+// InlineAudioPlayer — custom-UI audio player for voice previews.
+// Single-active-player rule enforced by parent via `isActive` prop.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const log = createLogger('ConfigNarrator', 'InlineAudioPlayer');
+const log = createLogger('VoicePreview', 'InlineAudioPlayer');
 
 export interface InlineAudioPlayerProps {
   src: string;
@@ -48,14 +36,12 @@ export function InlineAudioPlayer({ src, isActive, onPlayStart }: InlineAudioPla
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
 
-  // ── Bind audio lifecycle to `src` ─────────────────────────────────────────
   useEffect(() => {
     log.info('mount', 'init audio', { host: getUrlHost(src) });
     const audio = new Audio(src);
     audio.preload = 'metadata';
     audioRef.current = audio;
 
-    // Reset UI state for new source.
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
@@ -82,7 +68,6 @@ export function InlineAudioPlayer({ src, isActive, onPlayStart }: InlineAudioPla
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
-    // Apply current volume.
     audio.volume = volume;
 
     return () => {
@@ -94,20 +79,15 @@ export function InlineAudioPlayer({ src, isActive, onPlayStart }: InlineAudioPla
       audio.src = '';
       audioRef.current = null;
     };
-    // `volume` intentionally excluded — volume changes are applied via the
-    // volume-sync effect below; including here would re-create the audio
-    // element on every volume tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
-  // ── Sync volume without re-initializing audio ─────────────────────────────
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume;
     }
   }, [volume]);
 
-  // ── External pause: when parent deactivates this player ──────────────────
   useEffect(() => {
     if (!isActive && isPlaying) {
       log.debug('isActive:false', 'auto-pause');
@@ -126,7 +106,6 @@ export function InlineAudioPlayer({ src, isActive, onPlayStart }: InlineAudioPla
       return;
     }
     log.debug('togglePlay', 'play');
-    // Notify parent BEFORE play so it can stop other active players first.
     onPlayStart();
     audio
       .play()

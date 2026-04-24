@@ -93,37 +93,17 @@ export const createCharactersSlice: StateCreator<
       }
     }),
 
-  // --- Nested: Voices ---
+  // --- Nested: Voice Setting (single-object) ---
 
-  addCharacterVoice: (key, voice) =>
+  updateCharacterVoiceSetting: (characterKey, next) =>
     set((state) => {
-      const char = state.characters.find((c) => c.key === key);
+      const char = state.characters.find((c) => c.key === characterKey);
       if (char) {
-        log.debug('addCharacterVoice', 'add', { key, voiceKey: voice.key });
-        char.voices.push(voice);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  updateCharacterVoice: (key, voiceKey, updates) =>
-    set((state) => {
-      const char = state.characters.find((c) => c.key === key);
-      if (char) {
-        const idx = char.voices.findIndex((v) => v.key === voiceKey);
-        if (idx !== -1) {
-          log.debug('updateCharacterVoice', 'update', { key, voiceKey, fields: Object.keys(updates) });
-          Object.assign(char.voices[idx], updates);
-          state.sync.isDirty = true;
-        }
-      }
-    }),
-
-  deleteCharacterVoice: (key, voiceKey) =>
-    set((state) => {
-      const char = state.characters.find((c) => c.key === key);
-      if (char) {
-        log.debug('deleteCharacterVoice', 'delete', { key, voiceKey });
-        char.voices = char.voices.filter((v) => v.key !== voiceKey);
+        log.debug('updateCharacterVoiceSetting', 'replace', {
+          characterKey,
+          keyCount: Object.keys(next).length,
+        });
+        char.voice_setting = next;
         state.sync.isDirty = true;
       }
     }),

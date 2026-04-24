@@ -8,17 +8,12 @@ import { InlineAudioPlayer } from './inline-audio-player';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VoicePreviewCard — 3-state preview widget (pure controlled component).
-//
-// States (driven entirely by props):
 //   1. idle         → Preview button (disabled if !voiceId || isGenerating).
 //   2. generating   → disabled button with spinner + "Generating...".
-//   3. has-media    → InlineAudioPlayer + Regenerate icon button (↻).
-//
-// Validation S1: has-media MUST expose Regenerate affordance — sole way for
-// user to force fresh audio after inference changes (auto-wipe removed).
+//   3. has-media    → InlineAudioPlayer below Preview button.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const log = createLogger('ConfigNarrator', 'VoicePreviewCard');
+const log = createLogger('VoicePreview', 'VoicePreviewCard');
 
 export interface VoicePreviewCardProps {
   languageCode: string;

@@ -9,8 +9,7 @@ import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { NarratorLanguageEntry } from '@/types/editor';
 
-import { VoiceSelector } from './voice-selector';
-import { VoicePreviewCard } from './voice-preview-card';
+import { VoiceSelector, VoicePreviewCard } from '@/features/voices/components/voice-preview';
 
 const log = createLogger('Editor', 'NarratorLanguageSection');
 

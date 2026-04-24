@@ -124,6 +124,9 @@ export const DEFAULT_TYPOGRAPHY: TypographySettings = {
 // Reuses TEXT_LANGUAGES (same 5 languages); re-exported for clarity at import site.
 export const NARRATOR_LANGUAGES = TEXT_LANGUAGES;
 
+// Alias for character voice setting (same 5 languages).
+export const VOICE_LANGUAGES = TEXT_LANGUAGES;
+
 // UI speed options (API accepts continuous [0.7, 1.2]; UI is coarse).
 export const SPEED_OPTIONS = [0.75, 1.0, 1.25] as const;
 
