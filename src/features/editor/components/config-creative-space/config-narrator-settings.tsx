@@ -78,14 +78,22 @@ export function ConfigNarratorSettings() {
     narratorRef.current = narrator;
   }, [narrator]);
 
-  // Derive inference params (memoized — stable unless narrator values actually change).
-  const inference = React.useMemo<VoiceInferenceParamsValue>(
+  // Local mirror of inference params. Drives the controlled VoiceInferenceParams so
+  // sliders track drag at 60fps regardless of the network-debounced store commit.
+  // Reconciled from the store when `narrator` changes externally AND no commit is pending.
+  const [localInference, setLocalInference] = React.useState<VoiceInferenceParamsValue>(
     () => extractInference(narrator),
-    [narrator],
   );
+  const pendingCommitRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (pendingCommitRef.current) return;
+    setLocalInference(extractInference(narrator));
+  }, [narrator]);
 
   // Debounced commit for slider-driven updates (see CONTINUOUS_FIELDS).
   const debouncedCommit = useDebouncedCallback((next: NarratorSettings) => {
+    pendingCommitRef.current = false;
     if (!book) return;
     log.debug('debouncedCommit', 'flushing narrator update', { bookId: book.id });
     void updateBook(book.id, { narrator: next });
@@ -105,18 +113,23 @@ export function ConfigNarratorSettings() {
         return;
       }
 
+      // Instant visual update — slider tracks drag without waiting for store.
+      setLocalInference(next);
+
       // Per Validation S1: do NOT wipe media_url — preserve prior language entries.
       const merged: NarratorSettings = { ...current, ...next };
 
       const isContinuous = CONTINUOUS_FIELDS.includes(changedField);
-      log.info('handleInferenceChange', 'param changed', {
+      log.debug('handleInferenceChange', 'param changed', {
         field: String(changedField),
         debounced: isContinuous,
       });
 
       if (isContinuous) {
+        pendingCommitRef.current = true;
         debouncedCommit(merged);
       } else {
+        pendingCommitRef.current = false;
         void updateBook(book.id, { narrator: merged });
       }
     },
@@ -129,6 +142,8 @@ export function ConfigNarratorSettings() {
     const current = narratorRef.current ?? DEFAULT_NARRATOR;
     const next: NarratorSettings = { ...current, ...DEFAULT_INFERENCE_PARAMS };
     log.info('handleInferenceReset', 'reset to defaults (media_url preserved)');
+    setLocalInference({ ...DEFAULT_INFERENCE_PARAMS });
+    pendingCommitRef.current = false;
     void updateBook(book.id, { narrator: next });
   }, [book, updateBook]);
 
@@ -172,7 +187,7 @@ export function ConfigNarratorSettings() {
 
       <div className="flex flex-col gap-5 overflow-y-auto p-4">
         <VoiceInferenceParams
-          value={inference}
+          value={localInference}
           onChange={handleInferenceChange}
           onReset={handleInferenceReset}
           disabled={generatingLangCode !== null}
