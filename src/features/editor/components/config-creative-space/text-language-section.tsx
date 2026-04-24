@@ -1,5 +1,5 @@
-// narration-language-section.tsx - Per-language typography editor section for narration settings.
-// Renders voice-over placeholder + textbox typography controls for one language.
+// text-language-section.tsx - Per-language typography editor for Text settings.
+// Renders textbox typography controls (font/size/color/decoration/align/spacing) for one language.
 
 import * as React from 'react';
 import { AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
@@ -12,19 +12,19 @@ import { cn } from '@/utils/utils';
 
 const FONT_OPTIONS = FONT_FAMILY_OPTIONS.map((f) => ({ value: f, label: f }));
 
-interface NarrationLanguageSectionProps {
+interface TextLanguageSectionProps {
   langCode: string;
   langLabel: string;
   typography: TypographySettings;
   onChange: (langCode: string, updates: Partial<TypographySettings>) => void;
 }
 
-export function NarrationLanguageSection({
+export function TextLanguageSection({
   langCode,
   langLabel,
   typography,
   onChange,
-}: NarrationLanguageSectionProps) {
+}: TextLanguageSectionProps) {
   const typo = { ...DEFAULT_TYPOGRAPHY, ...typography };
 
   // Decoration is a space-separated CSS value: "none" | "underline" | "line-through" | "underline line-through"
@@ -70,20 +70,6 @@ export function NarrationLanguageSection({
     <div className="flex flex-col gap-4 border-b pb-5 last:border-b-0">
       {/* Language header */}
       <p className="text-xs font-bold uppercase tracking-wider">{langLabel}</p>
-
-      {/* VOICE-OVER — disabled placeholder */}
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Voice-Over
-        </p>
-        <SearchableDropdown
-          options={[]}
-          value={null}
-          onChange={() => {}}
-          placeholder="Coming soon..."
-          disabled
-        />
-      </div>
 
       {/* TEXTBOX TYPOGRAPHY */}
       <div>

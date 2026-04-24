@@ -11,7 +11,8 @@ const log = createLogger('Utils', 'LanguageName');
 export type ConfigSection =
   | 'general'
   | 'objects'
-  | 'narration'
+  | 'text'
+  | 'narrator'
   | 'quiz'
   | 'branch'
   | 'layout'
@@ -27,16 +28,17 @@ export interface ConfigSectionItem {
 }
 
 export const CONFIG_SECTIONS: ConfigSectionItem[] = [
-  { key: 'general',   label: 'General',   icon: 'Settings'       },
-  { key: 'objects',   label: 'Objects',   icon: 'Box'            },
-  { key: 'narration', label: 'Narration', icon: 'Mic'            },
-  { key: 'quiz',      label: 'Quiz',      icon: 'HelpCircle'     },
-  { key: 'branch',    label: 'Branch',    icon: 'GitBranch'      },
-  { key: 'layout',    label: 'Layout',    icon: 'LayoutGrid'     },
-  { key: 'remix',     label: 'Remix',     icon: 'RefreshCw'      },
-  { key: 'preview',   label: 'Preview',   icon: 'Eye'            },
-  { key: 'export',    label: 'Export',    icon: 'Download'       },
-  { key: 'print',     label: 'Print',     icon: 'Printer'        },
+  { key: 'general',  label: 'General',  icon: 'Settings'       },
+  { key: 'objects',  label: 'Objects',  icon: 'Box'            },
+  { key: 'text',     label: 'Text',     icon: 'Type'           },
+  { key: 'narrator', label: 'Narrator', icon: 'AudioLines'     },
+  { key: 'quiz',     label: 'Quiz',     icon: 'HelpCircle'     },
+  { key: 'branch',   label: 'Branch',   icon: 'GitBranch'      },
+  { key: 'layout',   label: 'Layout',   icon: 'LayoutGrid'     },
+  { key: 'remix',    label: 'Remix',    icon: 'RefreshCw'      },
+  { key: 'preview',  label: 'Preview',  icon: 'Eye'            },
+  { key: 'export',   label: 'Export',   icon: 'Download'       },
+  { key: 'print',    label: 'Print',    icon: 'Printer'        },
 ];
 
 // ── Object settings ───────────────────────────────────────────────────────────
@@ -73,9 +75,9 @@ export const TARGET_AUDIENCE_LABELS: Record<number, string> = {
   4: 'Middle grade (ages 9+)',
 };
 
-// ── Narration settings ────────────────────────────────────────────────────────
+// ── Text / Narrator settings (shared 5-language list) ────────────────────────
 
-export const NARRATION_LANGUAGES = [
+export const TEXT_LANGUAGES = [
   { code: 'en_US', label: 'English (EN-US)'      },
   { code: 'vi_VN', label: 'Vietnamese (VI-VN)'   },
   { code: 'ja_JP', label: 'Japanese (JA-JP)'     },

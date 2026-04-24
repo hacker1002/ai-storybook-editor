@@ -1,15 +1,15 @@
-// config-narration-settings.tsx - Narration settings panel for 5 fixed languages.
-// Configures default voice-over (placeholder) and textbox typography per language.
+// config-text-settings.tsx - Text settings panel: textbox typography for 5 fixed languages.
+// Voice-over moved to ConfigNarratorSettings (separate section).
 
 import { useCurrentBook, useBookTypography, useBookActions } from '@/stores/book-store';
-import { NARRATION_LANGUAGES, DEFAULT_TYPOGRAPHY } from '@/constants/config-constants';
-import { NarrationLanguageSection } from './narration-language-section';
+import { TEXT_LANGUAGES, DEFAULT_TYPOGRAPHY } from '@/constants/config-constants';
+import { TextLanguageSection } from './text-language-section';
 import type { TypographySettings } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Editor', 'ConfigNarrationSettings');
+const log = createLogger('Editor', 'ConfigTextSettings');
 
-export function ConfigNarrationSettings() {
+export function ConfigTextSettings() {
   const book = useCurrentBook();
   const typography = useBookTypography();
   const { updateBook } = useBookActions();
@@ -28,11 +28,11 @@ export function ConfigNarrationSettings() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex h-14 shrink-0 items-center border-b px-4">
-        <h3 className="text-sm font-semibold">Narration Settings</h3>
+        <h3 className="text-sm font-semibold">Text Settings</h3>
       </div>
       <div className="flex flex-col gap-5 overflow-y-auto p-4">
-      {NARRATION_LANGUAGES.map((lang) => (
-        <NarrationLanguageSection
+      {TEXT_LANGUAGES.map((lang) => (
+        <TextLanguageSection
           key={lang.code}
           langCode={lang.code}
           langLabel={lang.label}

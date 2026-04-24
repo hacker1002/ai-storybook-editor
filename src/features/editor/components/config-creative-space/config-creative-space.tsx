@@ -1,11 +1,11 @@
 // config-creative-space.tsx - Root component for book configuration settings.
-// Sidebar navigation + panel switch between general, objects, narration, and future sections.
+// Sidebar navigation + panel switch between general, objects, text, narrator, and future sections.
 
 import * as React from 'react';
 import { ConfigSidebar } from './config-sidebar';
 import { ConfigGeneralSettings } from './config-general-settings';
 import { ConfigObjectSettings } from './config-object-settings';
-import { ConfigNarrationSettings } from './config-narration-settings';
+import { ConfigTextSettings } from './config-text-settings';
 import { ConfigBranchSettings } from './config-branch-settings';
 import { ConfigLayoutSettings } from './config-layout-settings';
 import type { ConfigSection } from '@/constants/config-constants';
@@ -31,12 +31,12 @@ export function ConfigCreativeSpace() {
 
   const renderPanel = () => {
     switch (activeSection) {
-      case 'general':   return <ConfigGeneralSettings />;
-      case 'objects':   return <ConfigObjectSettings />;
-      case 'narration': return <ConfigNarrationSettings />;
-      case 'branch':    return <ConfigBranchSettings />;
-      case 'layout':    return <ConfigLayoutSettings />;
-      default:          return <PlaceholderPanel section={activeSection} />;
+      case 'general': return <ConfigGeneralSettings />;
+      case 'objects': return <ConfigObjectSettings />;
+      case 'text':    return <ConfigTextSettings />;
+      case 'branch':  return <ConfigBranchSettings />;
+      case 'layout':  return <ConfigLayoutSettings />;
+      default:        return <PlaceholderPanel section={activeSection} />;
     }
   };
 
