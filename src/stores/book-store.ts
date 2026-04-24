@@ -2,8 +2,19 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { persist, devtools } from "zustand/middleware";
 import { supabase } from "@/apis/supabase";
-import type { Book, BookListItem, BranchTypographySettings } from "@/types/editor";
-import { DEFAULT_BRANCH_TYPOGRAPHY } from "@/constants/config-constants";
+import type {
+  Book,
+  BookListItem,
+  BranchTypographySettings,
+  NarratorSettings,
+  NarratorInferenceParams,
+  NarratorLanguageEntry,
+} from "@/types/editor";
+import {
+  DEFAULT_BRANCH_TYPOGRAPHY,
+  DEFAULT_INFERENCE_PARAMS,
+  NARRATOR_LANGUAGE_KEY_REGEX,
+} from "@/constants/config-constants";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Store", "BookStore");
@@ -309,6 +320,58 @@ export const useBookBranchTypography = (languageCode: string): BranchTypographyS
   });
 export const useBookTemplateLayout = () =>
   useBookStore((s) => s.currentBook?.template_layout ?? null);
+
+// ── Narrator selectors ──────────────────────────────────────────────────────
+
+export const useBookNarrator = (): NarratorSettings | null =>
+  useBookStore((s) => s.currentBook?.narrator ?? null);
+
+/**
+ * Pull the 5 inference params from narrator (fallback to defaults when null).
+ * Components can diff against DEFAULT_INFERENCE_PARAMS to show "modified" state.
+ */
+export const useNarratorInferenceParams = (): NarratorInferenceParams =>
+  useBookStore((s) => {
+    const n = s.currentBook?.narrator;
+    if (!n) {
+      log.debug("useNarratorInferenceParams", "narrator null, returning defaults");
+      return DEFAULT_INFERENCE_PARAMS;
+    }
+    return {
+      speed: typeof n.speed === "number" ? n.speed : DEFAULT_INFERENCE_PARAMS.speed,
+      stability:
+        typeof n.stability === "number" ? n.stability : DEFAULT_INFERENCE_PARAMS.stability,
+      similarity:
+        typeof n.similarity === "number" ? n.similarity : DEFAULT_INFERENCE_PARAMS.similarity,
+      style_exaggeration:
+        typeof n.style_exaggeration === "number"
+          ? n.style_exaggeration
+          : DEFAULT_INFERENCE_PARAMS.style_exaggeration,
+      speaker_boost:
+        typeof n.speaker_boost === "boolean"
+          ? n.speaker_boost
+          : DEFAULT_INFERENCE_PARAMS.speaker_boost,
+    };
+  });
+
+/**
+ * Read the narrator entry for a specific language code (returns null when unset).
+ * Guards key via NARRATOR_LANGUAGE_KEY_REGEX so a literal setting key (e.g. "model")
+ * can never be misread as a language entry.
+ */
+export const useNarratorLanguageEntry = (
+  code: string,
+): NarratorLanguageEntry | null =>
+  useBookStore((s) => {
+    if (!NARRATOR_LANGUAGE_KEY_REGEX.test(code)) {
+      log.warn("useNarratorLanguageEntry", "invalid language code", { code });
+      return null;
+    }
+    const n = s.currentBook?.narrator;
+    const entry = n?.[code];
+    if (!entry || typeof entry !== "object") return null;
+    return entry as NarratorLanguageEntry;
+  });
 
 // Actions hook (stable reference, no re-render)
 export const useBookActions = () =>

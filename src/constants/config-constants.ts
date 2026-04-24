@@ -1,7 +1,12 @@
 // config-constants.ts — Constants for ConfigCreativeSpace settings panels.
 // Sections, mappings, and default values used across all config components.
 
-import type { TypographySettings, BranchTypographySettings } from '@/types/editor';
+import type {
+  TypographySettings,
+  BranchTypographySettings,
+  NarratorInferenceParams,
+  NarratorSettings,
+} from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Utils', 'LanguageName');
@@ -113,4 +118,40 @@ export const DEFAULT_TYPOGRAPHY: TypographySettings = {
   decoration: 'none',
   text_align: 'left',
   text_transform: 'none',
+};
+
+// ── Narrator settings ────────────────────────────────────────────────────────
+// Reuses TEXT_LANGUAGES (same 5 languages); re-exported for clarity at import site.
+export const NARRATOR_LANGUAGES = TEXT_LANGUAGES;
+
+// UI speed options (API accepts continuous [0.7, 1.2]; UI is coarse).
+export const SPEED_OPTIONS = [0.75, 1.0, 1.25] as const;
+
+// Language keys inside `books.narrator` JSONB match this regex; anything else is a literal setting key.
+export const NARRATOR_LANGUAGE_KEY_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
+
+export const DEFAULT_INFERENCE_PARAMS: NarratorInferenceParams = {
+  speed: 1.0,
+  stability: 0.5,
+  similarity: 0.75,
+  style_exaggeration: 0,
+  speaker_boost: true,
+};
+
+export const DEFAULT_NARRATOR: NarratorSettings = {
+  model: 'eleven_v3',
+  ...DEFAULT_INFERENCE_PARAMS,
+};
+
+/**
+ * Preview texts per language (used by narrator voice preview cards).
+ * MUST match backend `PREVIEW_TEXT_BY_LANGUAGE` byte-exact so SHA256 cache paths align.
+ * Reference: ai-storybook-design/component/editor-page/config-creative-space/05-config-narrator-settings.md §3.4
+ */
+export const PREVIEW_TEXTS: Record<string, string> = {
+  en_US: 'Once upon a time, in a land far away, a small dragon discovered a hidden secret that would change everything.',
+  vi_VN: 'Ngày xửa ngày xưa, ở một vùng đất xa xôi, một chú rồng nhỏ đã phát hiện ra một bí mật ẩn giấu có thể thay đổi tất cả.',
+  ja_JP: 'むかしむかし、遠い国に小さなドラゴンがいました。ある日、すべてを変える秘密を発見しました。',
+  ko_KR: '옛날 옛적에, 먼 나라에 작은 용이 모든 것을 바꿀 숨겨진 비밀을 발견했습니다.',
+  zh_CN: '很久很久以前，在一个遥远的地方，一条小龙发现了一个能改变一切的隐藏秘密。',
 };

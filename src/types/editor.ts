@@ -140,6 +140,32 @@ export interface TypographySettings {
   text_transform: string;
 }
 
+// Per-language narrator voice entry (inside NarratorSettings hybrid JSONB)
+export interface NarratorLanguageEntry {
+  voice_id: string;
+  media_url: string | null;
+}
+
+// Inference parameters shared across all languages for narrator preview/generation
+export interface NarratorInferenceParams {
+  speed: number;              // UI options: 0.75 | 1.0 | 1.25 (API range [0.7, 1.2])
+  stability: number;          // 0..1
+  similarity: number;         // 0..1 (maps to API `similarityBoost`)
+  style_exaggeration: number; // 0..1 (maps to API `style`)
+  speaker_boost: boolean;     // UI-persisted, NOT sent to API (v3 unsupported)
+}
+
+/**
+ * Narrator settings hybrid JSONB stored on `books.narrator`.
+ * - Literal keys: `model` + inference params (NarratorInferenceParams).
+ * - Language keys: match /^[a-z]{2}_[A-Z]{2}$/ → NarratorLanguageEntry.
+ * Indexer type is intentionally wide; use `splitNarrator` helper to narrow at point of use.
+ */
+export type NarratorSettings = NarratorInferenceParams & {
+  model: string; // e.g. 'eleven_v3'
+  [languageKey: string]: NarratorLanguageEntry | string | number | boolean;
+};
+
 /** JSONB multi-lang name: { "[language_key]": "..." } */
 export type MultiLangName = Record<string, string>;
 
@@ -164,6 +190,7 @@ export interface Book {
   artstyle_id: string | null;
   background_music: { title: string; media_url: string } | null;
   typography: Record<string, TypographySettings> | null;
+  narrator: NarratorSettings | null;
   shape: BookShape | null;
   branch: BookBranch | null;
   template_layout: BookTemplateLayout | null;
