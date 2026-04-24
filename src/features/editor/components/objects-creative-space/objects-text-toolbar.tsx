@@ -1,7 +1,7 @@
 // objects-text-toolbar.tsx - Floating toolbar for textbox items on canvas in Objects Creative Space
 "use client";
 
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
@@ -10,8 +10,6 @@ import {
   AudioLines,
   Upload,
   Trash2,
-  Play,
-  Pause,
   Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +20,7 @@ import {
   type TextToolbarContext,
 } from "@/features/editor/components/canvas-spread-view";
 import { createLogger } from "@/utils/logger";
+import { InlineAudioPlayer } from "@/features/voices/components/voice-preview/inline-audio-player";
 import {
   clampGeometry,
   GeometrySection,
@@ -29,20 +28,24 @@ import {
 } from "@/features/editor/components/shared-components";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
-import { GenerateNarrationModal } from "@/features/editor/components/shared-components";
-import type { SpreadTextboxContent, TextboxAudio } from "@/types/spread-types";
+import {
+  GenerateNarrationModal,
+  DEFAULT_SETTINGS,
+  probeAudioDuration,
+  sha256HexOfFile,
+} from "@/features/editor/components/shared-components/generate-narration-modal";
+import type {
+  SpreadTextboxContent,
+  TextboxAudio,
+  TextboxAudioMedia,
+  TextboxAudioSettings,
+} from "@/types/spread-types";
 
 const log = createLogger("Editor", "ObjectsTextToolbar");
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -57,14 +60,11 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
 }: ObjectsTextToolbarProps<TSpread>) {
   // --- Refs ---
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- State ---
   const [isUploading, setIsUploading] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
 
   // --- Context destructuring ---
   const {
@@ -96,14 +96,14 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
   const geometry = content?.geometry;
   const audio = content?.audio;
   const hasText = !!content?.text;
-  // TODO: use activeVoiceId when available instead of picking first media entry
-  const audioUrl = audio?.media[0]?.url ?? null;
+  const audioUrl = audio?.media?.url ?? null;
+  const isStale = audio?.media != null && !audio.media.script_synced;
 
   log.debug("render", "toolbar state", {
     itemId: item.id,
     langCode,
-    hasGeometry: !!geometry,
     hasAudio: !!audioUrl,
+    isStale,
   });
 
   // --- Geometry change handler ---
@@ -140,64 +140,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     [geometry, content, langCode, onUpdate]
   );
 
-  // --- Audio playback handlers ---
-  const handlePlayPause = useCallback(() => {
-    const el = audioRef.current;
-    if (!el || !audioUrl) return;
-
-    if (isPlaying) {
-      el.pause();
-      log.debug("handlePlayPause", "paused narration");
-    } else {
-      el.play().catch((err) => {
-        log.error("handlePlayPause", "play failed", { error: String(err) });
-      });
-      log.debug("handlePlayPause", "playing narration");
-    }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying, audioUrl]);
-
-  const handleTimeUpdate = useCallback(() => {
-    const el = audioRef.current;
-    if (el) setCurrentTime(el.currentTime);
-  }, []);
-
-  const handleLoadedMetadata = useCallback(() => {
-    const el = audioRef.current;
-    if (el) {
-      setDuration(el.duration);
-      log.debug("handleLoadedMetadata", "audio loaded", {
-        duration: el.duration,
-      });
-    }
-  }, []);
-
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-    log.debug("handleEnded", "narration playback ended");
-  }, []);
-
-  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const el = audioRef.current;
-    if (!el) return;
-    const time = parseFloat(e.target.value);
-    el.currentTime = time;
-    setCurrentTime(time);
-  }, []);
-
-  // Cleanup: stop audio on unmount
-  useEffect(() => {
-    const el = audioRef.current;
-    return () => {
-      if (el) {
-        el.pause();
-        el.currentTime = 0;
-      }
-    };
-  }, []);
-
-  // --- Upload handler ---
+// --- Upload handler ---
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
@@ -215,39 +158,47 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
       });
 
       try {
-        const { publicUrl } = await uploadAudioToStorage(
-          file,
-          "narration-objects"
-        );
+        const [{ publicUrl }, durationMs, fileHash] = await Promise.all([
+          uploadAudioToStorage(file, "narration-objects"),
+          probeAudioDuration(file),
+          sha256HexOfFile(file),
+        ]);
 
-        // Replace existing uploaded audio (voice_id="") or append if none exists
-        const existingMedia = audio?.media ?? [];
-        const uploadedIdx = existingMedia.findIndex((m) => !m.voice_id);
-        const updatedMedia =
-          uploadedIdx >= 0
-            ? existingMedia.map((m, i) =>
-                i === uploadedIdx ? { voice_id: "", url: publicUrl } : m
-              )
-            : [...existingMedia, { voice_id: "", url: publicUrl }];
+        const newMedia: TextboxAudioMedia = {
+          url: publicUrl,
+          duration_ms: durationMs,
+          output_format: "user-uploaded",
+          path_key: `upload:${fileHash}`,
+          script_synced: true, // user takes responsibility for match
+          generated_at: new Date().toISOString(),
+          segments: [],
+          raw_alignment: {
+            characters: [],
+            character_start_times_seconds: [],
+            character_end_times_seconds: [],
+          },
+        };
 
-        const updatedAudio: TextboxAudio = {
-          script: content?.text ?? "",
-          speed: audio?.speed ?? 1,
-          emotion: audio?.emotion ?? "neutral",
-          media: updatedMedia,
+        const existingAudio = content?.audio;
+        const newAudio: TextboxAudio = {
+          script: existingAudio?.script ?? content?.text ?? "",
+          settings: existingAudio?.settings ?? DEFAULT_SETTINGS,
+          media: newMedia,
         };
 
         if (!content) return;
+        // Single atomic onUpdate — no separate text/audio calls
         onUpdate({
           [langCode]: {
             ...content,
-            audio: updatedAudio,
+            audio: newAudio,
           } as SpreadTextboxContent,
         });
         toast.success("Narration uploaded");
         canvasRef.current?.click();
         log.info("handleFileChange", "narration upload success", {
           url: publicUrl,
+          durationMs,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Upload failed";
@@ -259,7 +210,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
         setIsUploading(false);
       }
     },
-    [audio, content, langCode, onUpdate, canvasRef]
+    [content, langCode, onUpdate, canvasRef]
   );
 
   // --- Footer action handlers ---
@@ -273,9 +224,6 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     }
   }, [onSplitTextbox, item.id]);
 
-  // State for GenerateNarrationModal — modal will be wired in Phase 2
-  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
-
   const handleGenerateNarration = useCallback(() => {
     setIsGenerateModalOpen(true);
     log.info("handleGenerateNarration", "opening generate narration modal", {
@@ -283,45 +231,60 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     });
   }, [item.id]);
 
-  // --- Script change handler (syncs modal script → textbox text + marks audio stale) ---
-  // Single combined update to avoid race condition between separate text/audio updates
-  const handleScriptChange = useCallback(
-    (newScript: string) => {
+// --- Narration generated handler (persist; keep modal open for further edits) ---
+  const handleNarrationGenerated = useCallback(
+    (narrationAudio: TextboxAudio) => {
       if (!content) return;
-      const updatedContent = { ...content, text: newScript };
-      // Mark all audio media as stale when script changes
-      if (updatedContent.audio?.media?.length) {
-        updatedContent.audio = {
-          ...updatedContent.audio,
-          script: newScript,
-          media: updatedContent.audio.media.map((m) => ({
-            ...m,
-            script_synced: false,
-          })),
-        };
-      }
-      onUpdate({ [langCode]: updatedContent });
-      log.info("handleScriptChange", "textbox text + audio stale synced", {
+      onUpdate({
+        [langCode]: { ...content, audio: narrationAudio } as SpreadTextboxContent,
+      });
+      log.info("handleNarrationGenerated", "narration audio updated", {
         itemId: item.id,
-        langCode,
-        staleMediaCount: updatedContent.audio?.media?.length ?? 0,
+        hasMedia: narrationAudio.media != null,
       });
     },
     [content, langCode, onUpdate, item.id]
   );
 
-  const handleNarrationGenerated = useCallback(
-    (narrationAudio: TextboxAudio) => {
+  // --- Draft save handler (persist unfinalized script/settings edits on close) ---
+  const handleDraftSave = useCallback(
+    (draft: { script: string; settings: TextboxAudioSettings }) => {
       if (!content) return;
-      onUpdate({ [langCode]: { ...content, audio: narrationAudio } });
-      // Don't close modal here — let user close explicitly to avoid state-update race
-      log.info("handleNarrationGenerated", "narration audio updated", {
+      const prev = content.audio;
+      const nextAudio: TextboxAudio = {
+        script: draft.script,
+        settings: draft.settings,
+        media: prev?.media
+          ? { ...prev.media, script_synced: false }
+          : null,
+      };
+      onUpdate({
+        [langCode]: { ...content, audio: nextAudio } as SpreadTextboxContent,
+      });
+      log.debug("handleDraftSave", "persisted draft edits", {
         itemId: item.id,
-        mediaCount: narrationAudio.media.length,
+        hasMedia: nextAudio.media != null,
       });
     },
     [content, langCode, onUpdate, item.id]
   );
+
+  // --- Mark-stale handler (modal script/settings edits → flip script_synced) ---
+  const handleMarkStale = useCallback(() => {
+    if (!content?.audio?.media) return;
+    if (content.audio.media.script_synced === false) return;
+    const updated: SpreadTextboxContent = {
+      ...content,
+      audio: {
+        ...content.audio,
+        media: { ...content.audio.media, script_synced: false },
+      },
+    };
+    onUpdate({ [langCode]: updated });
+    log.debug("handleMarkStale", "flipped script_synced=false", {
+      itemId: item.id,
+    });
+  }, [content, langCode, onUpdate, item.id]);
 
   // --- Positioning style ---
   const toolbarStyle: React.CSSProperties = position
@@ -354,44 +317,32 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
 
         {/* Narration Section */}
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground uppercase font-semibold">
-            Narration
-          </Label>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePlayPause}
-              disabled={!audioUrl}
-              aria-label={isPlaying ? "Pause narration" : "Play narration"}
-              className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none shrink-0"
-            >
-              {isPlaying ? (
-                <Pause className="w-3.5 h-3.5" />
-              ) : (
-                <Play className="w-3.5 h-3.5 ml-0.5" />
-              )}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              value={currentTime}
-              onChange={handleSeek}
-              disabled={!audioUrl}
-              aria-label="Narration progress"
-              className="flex-1 h-1 accent-primary"
-            />
-            <span className="text-xs text-muted-foreground tabular-nums w-10 text-right">
-              {formatTime(currentTime)}
-            </span>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground uppercase font-semibold">
+              Narration
+            </Label>
+            {isStale && (
+              <span
+                className="text-[10px] uppercase font-semibold rounded px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                title="Script changed — re-generate to refresh narration"
+              >
+                Stale
+              </span>
+            )}
           </div>
-          <audio
-            ref={audioRef}
-            src={audioUrl ?? undefined}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={handleEnded}
-            className="hidden"
-          />
+          {audioUrl ? (
+            <InlineAudioPlayer
+              key={audioUrl}
+              src={audioUrl}
+              isActive
+              onPlayStart={() => {}}
+              className="border-0 px-0 py-0"
+            />
+          ) : (
+            <div className="flex h-10 items-center justify-center rounded-md border border-dashed bg-muted/30 px-3 text-xs text-muted-foreground">
+              No narration audio
+            </div>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -448,10 +399,12 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
           <GenerateNarrationModal
             isOpen={isGenerateModalOpen}
             onClose={() => setIsGenerateModalOpen(false)}
-            script={content?.text ?? ""}
-            existingAudio={audio}
+            textboxText={content?.text ?? ""}
+            existingAudio={audio ?? null}
+            currentLanguage={langCode}
             onGenerated={handleNarrationGenerated}
-            onScriptChange={handleScriptChange}
+            onMarkStale={handleMarkStale}
+            onDraftSave={handleDraftSave}
           />
         )}
       </div>

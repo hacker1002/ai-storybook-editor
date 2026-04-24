@@ -1,4 +1,5 @@
 import { createLogger } from '@/utils/logger';
+import type { RawAlignment } from '@/types/spread-types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // narrate-script API client
@@ -73,6 +74,8 @@ export interface NarrateScriptSuccess {
     audioUrl: string;
     durationMs: number;
     segments: NarrationSegment[];
+    /** Raw ElevenLabs alignment — persisted verbatim in TextboxAudioMedia. */
+    rawAlignment: RawAlignment;
   };
   meta?: NarrateScriptMeta;
 }

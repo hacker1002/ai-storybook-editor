@@ -19,6 +19,8 @@ export interface InlineAudioPlayerProps {
   src: string;
   isActive: boolean;
   onPlayStart: () => void;
+  /** Extra classes merged onto the outer container (e.g. `border-0`, `px-0`). */
+  className?: string;
 }
 
 function getUrlHost(url: string): string {
@@ -29,7 +31,7 @@ function getUrlHost(url: string): string {
   }
 }
 
-export function InlineAudioPlayer({ src, isActive, onPlayStart }: InlineAudioPlayerProps) {
+export function InlineAudioPlayer({ src, isActive, onPlayStart, className }: InlineAudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -136,7 +138,7 @@ export function InlineAudioPlayer({ src, isActive, onPlayStart }: InlineAudioPla
   const sliderMax = duration > 0 ? duration : 1;
 
   return (
-    <div className={cn('flex items-center gap-3 rounded-md border px-3 py-2 bg-background')}>
+    <div className={cn('flex items-center gap-3 rounded-md border px-3 py-2 bg-background', className)}>
       <Button
         type="button"
         variant="default"

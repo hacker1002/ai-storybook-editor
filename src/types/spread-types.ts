@@ -330,23 +330,67 @@ export interface SpreadTextbox {
 }
 
 // === Textbox Audio (retouch phase TTS) ===
+// Shape: ai-storybook-design/snapshot/illustration-structure.md#textboxes
+// API contract: ai-storybook-design/api/text-generation/02-narrate-script.md
+
+/** Per-word timing within a NarrationSegment. `text` = the word glyph,
+ *  charStart/charEnd = offset into segment.text so UI can highlight ranges. */
 export interface WordTiming {
-  word: string;
+  text: string;
   startMs: number;
+  endMs: number;
+  charStart: number;
+  charEnd: number;
 }
 
-export interface TextboxAudioMedia {
+/** Turn-level segment: one line per speaker with resolved voice_id.
+ *  Persisted form of API `NarrationSegment` — camelCase `voiceId` renamed to
+ *  snake_case `voice_id` via `mapApiSegmentToSnapshot`. */
+export interface NarrationSegment {
+  index: number;
   voice_id: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  words: WordTiming[];
+}
+
+/** Raw ElevenLabs alignment. Persisted verbatim for forward compat. */
+export interface RawAlignment {
+  characters: string[];
+  character_start_times_seconds: number[];
+  character_end_times_seconds: number[];
+  [key: string]: unknown;
+}
+
+/** Generated audio + timing metadata for a textbox. Single object; null when
+ *  not generated yet. */
+export interface TextboxAudioMedia {
   url: string;
-  script_synced?: boolean; // true when audio matches current script, false when script was edited after generation
-  word_timings?: WordTiming[];
+  duration_ms: number;
+  output_format: string;
+  path_key: string;
+  script_synced: boolean;
+  generated_at: string;
+  segments: NarrationSegment[];
+  raw_alignment: RawAlignment;
+}
+
+/** User-tunable ElevenLabs v3 settings persisted with each textbox. */
+export interface TextboxAudioSettings {
+  model: string;
+  stability: number;
+  similarity: number;
+  style_exaggeration: number;
+  speed: number;
+  speaker_boost: boolean;
+  seed: number | null;
 }
 
 export interface TextboxAudio {
   script: string;
-  speed: number;
-  emotion: string;
-  media: TextboxAudioMedia[];
+  settings: TextboxAudioSettings;
+  media: TextboxAudioMedia | null;
 }
 
 export interface SpreadTextboxContent {
