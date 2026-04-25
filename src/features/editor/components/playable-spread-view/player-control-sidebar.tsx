@@ -15,12 +15,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import type { PlayMode, PlayEdition } from '@/types/playable-types';
 import type { PlayerOrientation } from './hooks/use-player-orientation';
 import { AVAILABLE_LANGUAGES } from '@/constants/editor-constants';
@@ -78,6 +76,7 @@ export function PlayerControlSidebar({
   const isPlaying = useIsPlaying();
   const playbackActions = usePlaybackActions();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const popoverSide = orientation === 'portrait' ? 'top' : 'left';
 
   // Toggle auto mode: off <-> auto
   const isAutoMode = playMode === 'auto';
@@ -90,14 +89,21 @@ export function PlayerControlSidebar({
   // Back/Next visible only in manual (off) mode
   const showManualNav = playMode === 'off';
 
-  // Settings modal content (shared between portrait & landscape)
-  const settingsModal = (
-    <SettingsModalContent
-      playEdition={playEdition}
-      onEditionChange={onEditionChange}
-      availableEditions={availableEditions}
-      availableLanguages={availableLanguages}
-    />
+  // Settings popover content (shared between portrait & landscape)
+  const settingsPopover = (
+    <PopoverContent
+      side={popoverSide}
+      align="center"
+      sideOffset={8}
+      className="w-72 p-3"
+    >
+      <SettingsPopoverContent
+        playEdition={playEdition}
+        onEditionChange={onEditionChange}
+        availableEditions={availableEditions}
+        availableLanguages={availableLanguages}
+      />
+    </PopoverContent>
   );
 
   if (orientation === 'portrait') {
@@ -170,8 +176,8 @@ export function PlayerControlSidebar({
 
         {/* Right: Settings Button (equal-width section) */}
         <div className="flex-1 flex items-center justify-end">
-          <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <DialogTrigger asChild>
+          <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+            <PopoverTrigger asChild>
               <button
                 type="button"
                 aria-label="Player settings"
@@ -179,9 +185,9 @@ export function PlayerControlSidebar({
               >
                 <Settings size={18} />
               </button>
-            </DialogTrigger>
-            {settingsModal}
-          </Dialog>
+            </PopoverTrigger>
+            {settingsPopover}
+          </Popover>
         </div>
       </div>
     );
@@ -196,8 +202,8 @@ export function PlayerControlSidebar({
       className="absolute right-0 top-0 bottom-0 w-14 flex flex-col items-center justify-between py-4 bg-white border-l border-border z-10"
     >
       {/* Top section — Settings Button */}
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogTrigger asChild>
+      <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <PopoverTrigger asChild>
           <button
             type="button"
             aria-label="Player settings"
@@ -205,9 +211,9 @@ export function PlayerControlSidebar({
           >
             <Settings size={18} />
           </button>
-        </DialogTrigger>
-        {settingsModal}
-      </Dialog>
+        </PopoverTrigger>
+        {settingsPopover}
+      </Popover>
 
       {/* Middle section — Player Controls (Back, Play/Pause, Forward) */}
       <div className="flex flex-col items-center gap-1">
@@ -270,21 +276,21 @@ export function PlayerControlSidebar({
   );
 }
 
-// === Settings Modal Content (extracted for reuse between layouts) ===
+// === Settings Popover Content (extracted for reuse between layouts) ===
 
-interface SettingsModalContentProps {
+interface SettingsPopoverContentProps {
   playEdition: PlayEdition;
   onEditionChange: (edition: PlayEdition) => void;
   availableEditions?: { classic?: boolean; dynamic?: boolean; interactive?: boolean };
   availableLanguages?: { name: string; code: string }[];
 }
 
-function SettingsModalContent({
+function SettingsPopoverContent({
   playEdition,
   onEditionChange,
   availableEditions,
   availableLanguages,
-}: SettingsModalContentProps) {
+}: SettingsPopoverContentProps) {
   const narrationLanguage = useNarrationLanguage();
   const quizLanguage = useQuizLanguage();
   const volume = useVolume();
@@ -308,95 +314,93 @@ function SettingsModalContent({
     playbackActions.setQuizLanguage(code);
   };
 
+  const labelClass = 'text-xs font-medium text-foreground w-20 shrink-0';
+  const triggerClass = 'h-8 text-xs flex-1';
+
   return (
-    <DialogContent className="sm:max-w-[400px]">
-      <DialogHeader>
-        <DialogTitle>Player Settings</DialogTitle>
-      </DialogHeader>
-      <div className="flex flex-col gap-4 pt-2">
-        {/* Edition */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="settings-edition" className="text-sm font-medium">Edition</label>
-          <Select
-            value={playEdition}
-            onValueChange={(v) => onEditionChange(v as PlayEdition)}
-            disabled={editionDisabled}
+    <div className="flex flex-col gap-2.5">
+      {/* Edition */}
+      <div className="flex items-center gap-2">
+        <span className={labelClass}>Edition</span>
+        <Select
+          value={playEdition}
+          onValueChange={(v) => onEditionChange(v as PlayEdition)}
+          disabled={editionDisabled}
+        >
+          <SelectTrigger aria-label="Select play edition" className={triggerClass}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {filteredEditions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Narration */}
+      <div className="flex items-center gap-2">
+        <span className={labelClass}>Narration</span>
+        <Select value={narrationLanguage} onValueChange={handleNarrationLanguageChange}>
+          <SelectTrigger aria-label="Select narration language" className={triggerClass}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {languageOptions.map((lang) => (
+              <SelectItem key={lang.code} value={lang.code}>
+                {lang.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Quiz */}
+      <div className="flex items-center gap-2">
+        <span className={labelClass}>Quiz</span>
+        <Select value={quizLanguage} onValueChange={handleQuizLanguageChange}>
+          <SelectTrigger aria-label="Select quiz language" className={triggerClass}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {languageOptions.map((lang) => (
+              <SelectItem key={lang.code} value={lang.code}>
+                {lang.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Volume */}
+      <div className="flex items-center gap-2">
+        <span className={labelClass}>Volume</span>
+        <div className="flex items-center gap-2 flex-1">
+          <button
+            type="button"
+            onClick={() => playbackActions.toggleMute()}
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
+            className="flex items-center justify-center w-6 h-6 rounded-md transition-colors text-muted-foreground hover:bg-accent hover:text-foreground shrink-0"
           >
-            <SelectTrigger aria-label="Select play edition">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {filteredEditions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Narration Language */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="settings-narration-language" className="text-sm font-medium">Narration Language</label>
-          <Select value={narrationLanguage} onValueChange={handleNarrationLanguageChange}>
-            <SelectTrigger aria-label="Select narration language">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {languageOptions.map((lang) => (
-                <SelectItem key={lang.code} value={lang.code}>
-                  {lang.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Quiz Language */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="settings-quiz-language" className="text-sm font-medium">Quiz Language</label>
-          <Select value={quizLanguage} onValueChange={handleQuizLanguageChange}>
-            <SelectTrigger aria-label="Select quiz language">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {languageOptions.map((lang) => (
-                <SelectItem key={lang.code} value={lang.code}>
-                  {lang.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Volume */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="settings-volume" className="text-sm font-medium">Volume</label>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => playbackActions.toggleMute()}
-              aria-label={isMuted ? 'Unmute' : 'Mute'}
-              className="flex items-center justify-center w-8 h-8 rounded-md transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            </button>
-            <Slider
-              orientation="horizontal"
-              min={0}
-              max={100}
-              step={1}
-              value={[isMuted ? 0 : volume]}
-              onValueChange={([v]) => playbackActions.setVolume(v)}
-              aria-label="Volume"
-              className="flex-1"
-            />
-            <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
-              {isMuted ? 0 : volume}%
-            </span>
-          </div>
+            {isMuted || volume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </button>
+          <Slider
+            orientation="horizontal"
+            min={0}
+            max={100}
+            step={1}
+            value={[isMuted ? 0 : volume]}
+            onValueChange={([v]) => playbackActions.setVolume(v)}
+            aria-label="Volume"
+            className="flex-1"
+          />
+          <span className="text-[10px] text-muted-foreground w-7 text-right tabular-nums shrink-0">
+            {isMuted ? 0 : volume}%
+          </span>
         </div>
       </div>
-    </DialogContent>
+    </div>
   );
 }

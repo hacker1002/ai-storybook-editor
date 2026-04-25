@@ -44,7 +44,7 @@ function resolveReadAlongAudioData(
   const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, narrationLangCode);
   const media = result?.content?.audio?.media;
   if (!media) return {};
-  const wordTimings = media.segments.flatMap((seg) => seg.words);
+  const wordTimings = media.segments?.flatMap((seg) => seg.words);
   return { wordTimings, audioUrl: media.url };
 }
 

@@ -739,7 +739,7 @@ export function PlayerCanvas({
           if (!isInStaging(data.geometry)) return null;
           const audioMedia = data.audio?.media;
           // Flatten word timings across all segments for the editable textbox renderer.
-          const wordTimings = audioMedia?.segments.flatMap((seg) => seg.words);
+          const wordTimings = audioMedia?.segments?.flatMap((seg) => seg.words);
           return (
             <div
               key={textbox.id}
