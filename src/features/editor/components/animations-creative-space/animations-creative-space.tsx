@@ -38,6 +38,7 @@ import { EFFECT_TYPE } from "@/constants/animation-constants";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 import { fetchMediaDurationMs, findMediaUrlFromSpread } from "@/utils/media-duration-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
+import { computePlayEffectDuration } from "@/features/editor/utils/compute-play-effect-duration";
 
 const log = createLogger("Editor", "AnimationsCreativeSpace");
 
@@ -212,16 +213,48 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
       // Component must merge effect fields before calling store (shallow replace)
       if (updates.effect && animations[index]) {
         const current = animations[index];
+        const mergedEffect = { ...current.effect, ...updates.effect };
+
+        // Auto-sync effect.duration for PLAY + audio target on loop/type change.
+        const isPlayAudio =
+          mergedEffect.type === EFFECT_TYPE.PLAY && current.target.type === 'audio';
+        const loopChanged = updates.effect.loop !== undefined;
+        const typeChangedToPlay =
+          updates.effect.type === EFFECT_TYPE.PLAY && current.effect.type !== EFFECT_TYPE.PLAY;
+
+        if (isPlayAudio && (loopChanged || typeChangedToPlay)) {
+          const audio = currentSpread?.audios?.find((a) => a.id === current.target.id);
+          if (audio?.media_length && audio.media_length > 0) {
+            const newDuration = computePlayEffectDuration({
+              loop: mergedEffect.loop,
+              media_length: audio.media_length,
+            });
+            if (newDuration !== undefined) {
+              log.info("handleUpdateAnimation", "auto-sync effect.duration", {
+                animationId: current.target.id,
+                loop: mergedEffect.loop,
+                media_length: audio.media_length,
+                newDuration,
+              });
+              mergedEffect.duration = newDuration;
+            }
+          } else {
+            log.warn("handleUpdateAnimation", "media_length missing — keeping user-set duration", {
+              audioId: current.target.id,
+            });
+          }
+        }
+
         const merged: Partial<SpreadAnimation> = {
           ...updates,
-          effect: { ...current.effect, ...updates.effect },
+          effect: mergedEffect,
         };
         actions.updateRetouchAnimation(effectiveSpreadId, index, merged);
       } else {
         actions.updateRetouchAnimation(effectiveSpreadId, index, updates);
       }
     },
-    [effectiveSpreadId, animations, actions],
+    [effectiveSpreadId, animations, actions, currentSpread],
   );
 
   const handleDeleteAnimation = useCallback(

@@ -33,6 +33,17 @@ const log = createLogger('Editor', 'usePlayerGsapEngine');
 
 // === Helpers ===
 
+/** Resolve audio item media_length for PLAY runtime fallback (animations targeting audio). */
+function resolveAudioMediaLength(
+  anim: { effect: { type: number }; target: { id: string; type: string } },
+  audios: { id: string; media_length?: number }[] | undefined,
+): { media_length?: number } {
+  if (anim.effect.type !== EFFECT_TYPE.PLAY || anim.target.type !== 'audio') return {};
+  const audio = audios?.find((a) => a.id === anim.target.id);
+  if (!audio?.media_length) return {};
+  return { media_length: audio.media_length };
+}
+
 /** Resolve textbox audio data (wordTimings + audioUrl) for READ_ALONG animations */
 function resolveReadAlongAudioData(
   anim: { effect: { type: number }; target: { id: string; type: string } },
@@ -350,6 +361,7 @@ export function usePlayerGsapEngine({
           canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
+          ...resolveAudioMediaLength(anim, spread.audios),
           ...buildAnimCallbacks(anim),
         });
       });
@@ -357,7 +369,7 @@ export function usePlayerGsapEngine({
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
+    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -433,13 +445,14 @@ export function usePlayerGsapEngine({
         canvasHeight,
         ...dims,
         ...readAlongExtras,
+        ...resolveAudioMediaLength(anim, spread.audios),
         ...buildAnimCallbacks(anim),
       });
     });
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]);
+  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -497,6 +510,7 @@ export function usePlayerGsapEngine({
           canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
+          ...resolveAudioMediaLength(anim, spread.audios),
           ...buildAnimCallbacks(anim),
         });
       });
@@ -504,7 +518,7 @@ export function usePlayerGsapEngine({
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
+    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
   );
 
   // === Returned utility functions ===

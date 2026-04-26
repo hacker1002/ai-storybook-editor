@@ -4,6 +4,7 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, RetouchSlice } from '../types';
 import { createLogger } from '@/utils/logger';
+import { loadAudioMetadata } from '@/features/editor/utils/load-audio-metadata';
 
 const log = createLogger('Store', 'RetouchSlice');
 
@@ -12,7 +13,7 @@ export const createRetouchSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   RetouchSlice
-> = (set) => ({
+> = (set, get) => ({
   // --- Images (playable) ---
 
   addRetouchImage: (spreadId, image) =>
@@ -193,7 +194,7 @@ export const createRetouchSlice: StateCreator<
 
   // --- Audios ---
 
-  addRetouchAudio: (spreadId, audio) =>
+  addRetouchAudio: (spreadId, audio) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -202,7 +203,23 @@ export const createRetouchSlice: StateCreator<
         spread.audios.push(audio);
         state.sync.isDirty = true;
       }
-    }),
+    });
+
+    // Fire-and-forget media_length capture if missing.
+    if (audio.media_url && !audio.media_length) {
+      log.debug('addRetouchAudio', 'schedule media_length capture', { audioId: audio.id });
+      void loadAudioMetadata(audio.media_url).then((ms) => {
+        if (!ms) {
+          log.warn('addRetouchAudio', 'media_length not persisted', {
+            audioId: audio.id,
+            reason: 'load failed or timed out',
+          });
+          return;
+        }
+        get().updateRetouchAudio(spreadId, audio.id, { media_length: ms });
+      });
+    }
+  },
 
   updateRetouchAudio: (spreadId, audioId, updates) =>
     set((state) => {

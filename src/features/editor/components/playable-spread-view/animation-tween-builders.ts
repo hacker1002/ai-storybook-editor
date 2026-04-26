@@ -8,6 +8,7 @@ import {
   getBaseOpacity,
 } from "./player-initial-states";
 import { createLogger } from "@/utils/logger";
+import { computePlayEffectDuration } from "@/features/editor/utils/compute-play-effect-duration";
 
 const log = createLogger('Editor', 'AnimationTweenBuilders');
 
@@ -40,6 +41,8 @@ interface TweenOptions {
   wordTimings?: WordTiming[];
   /** Audio URL for Read-Along narration playback */
   audioUrl?: string;
+  /** Audio item media_length (ms) for PLAY runtime fallback duration */
+  media_length?: number;
 }
 
 /**
@@ -93,7 +96,32 @@ export function addTweenToTimeline(
         return;
       }
       const volume = options?.volume ?? 1;
-      const durationSec = (effect.duration ?? 0) / 1000;
+      // Runtime fallback: when effect.duration is missing/0 but media_length is known,
+      // derive timeline-progression duration from media_length × loop. Snapshot is not
+      // healed here — Phase 2/3 own the write path.
+      let resolvedDurationMs = effect.duration ?? 0;
+      if (
+        resolvedDurationMs <= 0 &&
+        animation.target.type === 'audio' &&
+        options?.media_length &&
+        options.media_length > 0 &&
+        effect.loop !== -1
+      ) {
+        const computed = computePlayEffectDuration({
+          loop: effect.loop,
+          media_length: options.media_length,
+        });
+        if (computed !== undefined && computed > 0) {
+          log.debug('addTweenToTimeline', 'runtime fallback duration computed', {
+            targetId: animation.target.id,
+            loop: effect.loop,
+            media_length: options.media_length,
+            resolvedDuration: computed,
+          });
+          resolvedDurationMs = computed;
+        }
+      }
+      const durationSec = resolvedDurationMs / 1000;
       // Loop semantics (parity with SPIN/TEETER): N = total play count, -1 = infinite, ≤1 = once.
       const totalPlays = effect.loop === -1 ? -1 : Math.max(1, effect.loop ?? 1);
       let playsDone = 0;

@@ -135,6 +135,7 @@ export interface SpreadAudio {
   variant?: string;
   type: SpreadItemMediaType;
   media_url?: string;
+  media_length?: number; // duration in milliseconds, populated on pick/upload
 }
 
 // === Quiz v2 — see 11-quiz-slice.md. Breaking change [2026-04-11]. ===

@@ -1,7 +1,7 @@
 // objects-audio-toolbar.tsx - Floating toolbar for audio items on canvas in Objects Creative Space
 "use client";
 
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,7 @@ import {
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
 import { InlineAudioPlayer } from "@/features/voices/components/voice-preview/inline-audio-player";
+import { loadAudioMetadata } from "@/features/editor/utils/load-audio-metadata";
 
 const log = createLogger("Editor", "ObjectsAudioToolbar");
 
@@ -59,6 +60,28 @@ export function ObjectsAudioToolbar<TSpread extends BaseSpread>({
   const currentName = item.name ?? "";
   const currentState = item.variant ?? "default";
   const audioUrl = item.media_url ?? null;
+  const mediaLength = item.media_length ?? 0;
+
+  // --- Lazy backfill media_length for legacy audio items ---
+  useEffect(() => {
+    if (!audioUrl) return;
+    if (mediaLength > 0) return;
+
+    log.info("backfill", "audio media_length backfill triggered", { audioId: item.id });
+    let cancelled = false;
+    void loadAudioMetadata(audioUrl).then((ms) => {
+      if (cancelled) return;
+      if (!ms) {
+        log.debug("backfill", "load fail", { audioId: item.id });
+        return;
+      }
+      log.debug("backfill", "load OK via toolbar", { audioId: item.id, ms });
+      onUpdate({ media_length: ms });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [audioUrl, mediaLength, item.id, onUpdate]);
 
   // --- Type / Name / State handlers ---
   const handleTypeChange = useCallback(
