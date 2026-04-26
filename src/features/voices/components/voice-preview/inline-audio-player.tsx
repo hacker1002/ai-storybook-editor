@@ -19,6 +19,11 @@ export interface InlineAudioPlayerProps {
   src: string;
   isActive: boolean;
   onPlayStart: () => void;
+  /**
+   * Increment to request playback (one-shot). Each new value triggers play().
+   * Use 0/undefined to mean "no auto-play". Resilient to identical src reuse.
+   */
+  autoPlayKey?: number;
   /** Extra classes merged onto the outer container (e.g. `border-0`, `px-0`). */
   className?: string;
 }
@@ -31,7 +36,7 @@ function getUrlHost(url: string): string {
   }
 }
 
-export function InlineAudioPlayer({ src, isActive, onPlayStart, className }: InlineAudioPlayerProps) {
+export function InlineAudioPlayer({ src, isActive, onPlayStart, autoPlayKey, className }: InlineAudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -97,6 +102,27 @@ export function InlineAudioPlayer({ src, isActive, onPlayStart, className }: Inl
       setIsPlaying(false);
     }
   }, [isActive, isPlaying]);
+
+  useEffect(() => {
+    if (!autoPlayKey) {
+      log.debug('autoPlay', 'no token, skip', { autoPlayKey });
+      return;
+    }
+    const audio = audioRef.current;
+    if (!audio) {
+      log.warn('autoPlay', 'audioRef missing at trigger', { autoPlayKey });
+      return;
+    }
+    log.info('autoPlay', 'parent triggered playback', { autoPlayKey, host: getUrlHost(src) });
+    audio
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch((err) => {
+        log.warn('autoPlay', 'play() rejected', { err: String(err) });
+        setIsPlaying(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlayKey]);
 
   const handleTogglePlay = useCallback(() => {
     const audio = audioRef.current;

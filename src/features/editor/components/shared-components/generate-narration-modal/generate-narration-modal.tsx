@@ -159,6 +159,20 @@ export function GenerateNarrationModal({
     lastGeneratedSignature != null &&
     currentSignature !== lastGeneratedSignature;
 
+  // ── Auto-play after generate ──────────────────────────────────────────────
+  // Mirror VoicePreviewCard behavior: when generation completes with media,
+  // increment a one-shot token so InlineAudioPlayer plays immediately.
+  const prevGeneratingRef = useRef(isGenerating);
+  const [autoPlayKey, setAutoPlayKey] = useState(0);
+  useEffect(() => {
+    const wasGenerating = prevGeneratingRef.current;
+    prevGeneratingRef.current = isGenerating;
+    if (wasGenerating && !isGenerating && media?.url) {
+      log.info('generation:complete', 'auto-play narration', {});
+      setAutoPlayKey((k) => k + 1);
+    }
+  }, [isGenerating, media?.url]);
+
   // ── Propagate stale flag to parent ────────────────────────────────────────
   // Fire `onMarkStale` once when the local signature first diverges from the
   // last-generated one AND the stored media still claims synced. Parent flips
@@ -347,6 +361,7 @@ export function GenerateNarrationModal({
               src={media.url}
               isActive
               onPlayStart={() => {}}
+              autoPlayKey={autoPlayKey}
             />
           ) : (
             <div className="flex h-12 items-center justify-center rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

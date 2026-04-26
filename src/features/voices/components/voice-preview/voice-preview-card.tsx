@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,19 @@ export function VoicePreviewCard({
 
   const canTrigger = !!voiceId && !isGenerating;
 
+  const prevGeneratingRef = useRef(isGenerating);
+  const [autoPlayKey, setAutoPlayKey] = useState(0);
+
+  useEffect(() => {
+    const wasGenerating = prevGeneratingRef.current;
+    prevGeneratingRef.current = isGenerating;
+    if (wasGenerating && !isGenerating && mediaUrl) {
+      log.info('generation:complete', 'auto-play preview', { languageCode });
+      onPlayStart();
+      setAutoPlayKey((k) => k + 1);
+    }
+  }, [isGenerating, mediaUrl, languageCode, onPlayStart]);
+
   return (
     <div className="space-y-2">
       <p className="text-xs uppercase tracking-wide text-muted-foreground">Preview</p>
@@ -85,6 +99,7 @@ export function VoicePreviewCard({
           src={mediaUrl}
           isActive={isActivePlayer}
           onPlayStart={onPlayStart}
+          autoPlayKey={autoPlayKey}
         />
       ) : null}
     </div>
