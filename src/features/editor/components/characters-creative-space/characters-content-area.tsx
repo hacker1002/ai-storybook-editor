@@ -59,7 +59,7 @@ export function CharactersContentArea({
   };
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden" role="region" aria-label="Character content">
+    <div className="flex flex-col flex-1 h-full overflow-hidden" role="region" aria-label="Character content">
       {/* Tab Bar */}
       <div
         className="flex items-center h-11 border-b shrink-0 px-2"
