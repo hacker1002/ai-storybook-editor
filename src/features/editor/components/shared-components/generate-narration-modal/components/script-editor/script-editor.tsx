@@ -109,13 +109,18 @@ export function ScriptEditor({
 
   const closeMention = useCallback(() => setMention(null), []);
 
-  // Replace `@{filter}` with `@{speakerKey}: ` at the current mention.
+  // Replace the existing `@<key>(:\s?)?` token at the mention site with
+  // `@{speakerKey}: `. Extends past the caret so picking from the dropdown
+  // while the caret sits mid-key (e.g. `@nar|rator: text`) replaces the full
+  // existing token instead of stranding the tail.
   const insertMention = useCallback(
     (speakerKey: string) => {
       const ta = textareaRef.current;
       if (!ta || !mention) return;
       const start = mention.atIndex;
-      const end = start + 1 + mention.filter.length; // `@` + filter
+      const tail = value.slice(start);
+      const tokenMatch = tail.match(/^@[a-z0-9_]*(?::\s?)?/);
+      const end = start + (tokenMatch ? tokenMatch[0].length : 1 + mention.filter.length);
       const before = value.slice(0, start);
       const after = value.slice(end);
       const insertion = `@${speakerKey}: `;
