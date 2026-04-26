@@ -1,11 +1,11 @@
 // objects-audio-toolbar.tsx - Floating toolbar for audio items on canvas in Objects Creative Space
 "use client";
 
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
-import { Upload, Trash2, Play, Pause, Scissors } from "lucide-react";
+import { Upload, Trash2, Scissors } from "lucide-react";
 import { toast } from "sonner";
 import { uploadAudioToStorage } from "@/apis/storage-api";
 import {
@@ -21,18 +21,9 @@ import {
   MediaIdentitySection,
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
+import { InlineAudioPlayer } from "@/features/voices/components/voice-preview/inline-audio-player";
 
 const log = createLogger("Editor", "ObjectsAudioToolbar");
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -48,13 +39,9 @@ export function ObjectsAudioToolbar<TSpread extends BaseSpread>({
   // --- Refs ---
   const toolbarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
 
   // --- State ---
   const [isUploading, setIsUploading] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
 
   // --- Context ---
   const { item, onUpdate, onDelete, onCropAudio, selectedGeometry, canvasRef } = context;
@@ -114,68 +101,6 @@ export function ObjectsAudioToolbar<TSpread extends BaseSpread>({
     [geometry, onUpdate]
   );
 
-  // --- Audio playback handlers ---
-  const handlePlayPause = useCallback(() => {
-    const el = audioRef.current;
-    if (!el || !audioUrl) return;
-
-    if (isPlaying) {
-      el.pause();
-      log.debug("handlePlayPause", "paused");
-    } else {
-      el.play().catch((err) => {
-        log.error("handlePlayPause", "play failed", { error: String(err) });
-      });
-      log.debug("handlePlayPause", "playing");
-    }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying, audioUrl]);
-
-  const handleTimeUpdate = useCallback(() => {
-    const el = audioRef.current;
-    if (el) setCurrentTime(el.currentTime);
-  }, []);
-
-  const handleLoadedMetadata = useCallback(() => {
-    const el = audioRef.current;
-    if (el) {
-      setDuration(el.duration);
-      log.debug("handleLoadedMetadata", "audio loaded", { duration: el.duration });
-    }
-  }, []);
-
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-    log.debug("handleEnded", "playback ended");
-  }, []);
-
-  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const el = audioRef.current;
-    if (!el) return;
-    const time = parseFloat(e.target.value);
-    el.currentTime = time;
-    setCurrentTime(time);
-  }, []);
-
-  // Reset playback state when audio source changes
-  useEffect(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-  }, [audioUrl]);
-
-  // Stop audio on unmount
-  useEffect(() => {
-    const el = audioRef.current;
-    return () => {
-      if (el) {
-        el.pause();
-        el.currentTime = 0;
-      }
-    };
-  }, []);
-
   // --- Upload handler ---
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -206,13 +131,8 @@ export function ObjectsAudioToolbar<TSpread extends BaseSpread>({
     [onUpdate]
   );
 
-  // --- Delete handler: stop audio first ---
+  // --- Delete handler ---
   const handleDelete = useCallback(() => {
-    const el = audioRef.current;
-    if (el) {
-      el.pause();
-      el.currentTime = 0;
-    }
     onDelete();
   }, [onDelete]);
 
@@ -255,44 +175,19 @@ export function ObjectsAudioToolbar<TSpread extends BaseSpread>({
           <Label className="text-xs text-muted-foreground uppercase font-semibold">
             Audio Playback
           </Label>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePlayPause}
-              disabled={!audioUrl}
-              aria-label={isPlaying ? "Pause audio" : "Play audio"}
-              className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none shrink-0"
-            >
-              {isPlaying ? (
-                <Pause className="w-3.5 h-3.5" />
-              ) : (
-                <Play className="w-3.5 h-3.5 ml-0.5" />
-              )}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              value={currentTime}
-              onChange={handleSeek}
-              disabled={!audioUrl}
-              aria-label="Audio progress"
-              aria-valuemin={0}
-              aria-valuemax={duration}
-              aria-valuenow={currentTime}
-              className="flex-1 h-1 accent-primary"
+          {audioUrl ? (
+            <InlineAudioPlayer
+              key={audioUrl}
+              src={audioUrl}
+              isActive
+              onPlayStart={() => {}}
+              className="border-0 px-0 py-0"
             />
-            <span className="text-xs text-muted-foreground tabular-nums w-10 text-right">
-              {formatTime(currentTime)}
-            </span>
-          </div>
-          <audio
-            ref={audioRef}
-            src={audioUrl ?? undefined}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={handleEnded}
-            className="hidden"
-          />
+          ) : (
+            <div className="flex h-10 items-center justify-center rounded-md border border-dashed bg-muted/30 px-3 text-xs text-muted-foreground">
+              No audio
+            </div>
+          )}
         </div>
 
         {/* Footer */}
