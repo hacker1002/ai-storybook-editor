@@ -10,6 +10,75 @@ import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "EditableTextbox");
 
+// Codepoint ranges that should emit one token per character (no inter-word
+// whitespace). Mirrors `_CJK_RANGES` in
+// `ai-storybook-image-api/src/services/alignment_aggregator.py` — must stay in
+// sync so word-span count matches `wordTimings.length` from /api/text/narrate-script.
+// Korean (Hangul) is intentionally excluded: modern orthography uses spaces
+// between eojeol, so the default whitespace split produces natural word units.
+const CJK_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x3000, 0x303f], // CJK Symbols and Punctuation
+  [0x3040, 0x309f], // Hiragana
+  [0x30a0, 0x30ff], // Katakana
+  [0x31f0, 0x31ff], // Katakana Phonetic Extensions
+  [0x3400, 0x4dbf], // CJK Unified Ideographs Extension A
+  [0x4e00, 0x9fff], // CJK Unified Ideographs
+  [0xf900, 0xfaff], // CJK Compatibility Ideographs
+  [0xff00, 0xffef], // Halfwidth and Fullwidth Forms
+  [0x20000, 0x2ffff], // CJK Ext B–F (supplementary planes)
+];
+
+function isCjkCodePoint(cp: number): boolean {
+  for (const [lo, hi] of CJK_RANGES) {
+    if (cp >= lo && cp <= hi) return true;
+  }
+  return false;
+}
+
+type WordSegment =
+  | { kind: "word"; text: string }
+  | { kind: "whitespace"; text: string };
+
+/**
+ * Tokenize for Read-Along word spans. Parity with API
+ * `_iter_word_tokens` (alignment_aggregator.py):
+ *   - whitespace runs: emitted as `whitespace` (no word index)
+ *   - each CJK codepoint: one `word` token
+ *   - runs of non-CJK non-whitespace: one `word` token
+ *
+ * Iterates by codepoint via `Array.from` so astral-plane CJK (Ext B+) counts
+ * as a single token rather than two surrogate halves.
+ */
+function tokenizeForWordSpans(text: string): WordSegment[] {
+  const chars = Array.from(text);
+  const segments: WordSegment[] = [];
+  let i = 0;
+  while (i < chars.length) {
+    if (/^\s$/.test(chars[i])) {
+      const start = i;
+      while (i < chars.length && /^\s$/.test(chars[i])) i++;
+      segments.push({ kind: "whitespace", text: chars.slice(start, i).join("") });
+      continue;
+    }
+    const cp = chars[i].codePointAt(0)!;
+    if (isCjkCodePoint(cp)) {
+      segments.push({ kind: "word", text: chars[i] });
+      i++;
+      continue;
+    }
+    const start = i;
+    while (
+      i < chars.length &&
+      !/^\s$/.test(chars[i]) &&
+      !isCjkCodePoint(chars[i].codePointAt(0)!)
+    ) {
+      i++;
+    }
+    segments.push({ kind: "word", text: chars.slice(start, i).join("") });
+  }
+  return segments;
+}
+
 interface EditableTextboxProps {
   textboxContent: SpreadTextboxContent;
   index: number;
@@ -220,13 +289,14 @@ export function EditableTextbox({
 
   const isEmpty = !text;
 
-  /** Render text with per-word <span> elements for Read-Along highlighting */
+  /** Render text with per-word <span> elements for Read-Along highlighting.
+   *  Token order/count must match wordTimings emitted by /api/text/narrate-script. */
   const renderTextWithWordSpans = (textContent: string): React.ReactNode => {
-    const tokens = textContent.split(/(\s+)/);
+    const segments = tokenizeForWordSpans(textContent);
     let wordIndex = 0;
-    return tokens.map((token, i) => {
-      if (/^\s+$/.test(token)) {
-        return <span key={`ws-${i}`}>{token}</span>;
+    return segments.map((seg, i) => {
+      if (seg.kind === "whitespace") {
+        return <span key={`ws-${i}`}>{seg.text}</span>;
       }
       const idx = wordIndex++;
       return (
@@ -235,7 +305,7 @@ export function EditableTextbox({
           data-word-index={idx}
           className="read-along-word"
         >
-          {token}
+          {seg.text}
         </span>
       );
     });
