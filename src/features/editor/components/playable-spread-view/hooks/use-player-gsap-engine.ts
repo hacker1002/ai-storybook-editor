@@ -144,13 +144,28 @@ export function usePlayerGsapEngine({
     pausedMediaRef.current.clear();
   }, []);
 
+  // Clear read-along leftovers (highlight class + dynamically-created orphan audio elements).
+  // Centralized so manual Next, USER_BACK, spread change, and unmount all reset cleanly.
+  const cleanupReadAlongArtifacts = useCallback(() => {
+    const container = spreadContainerRef.current;
+    if (!container) return;
+    container.querySelectorAll('.read-along-active-word').forEach((el) => {
+      el.classList.remove('read-along-active-word');
+    });
+    container.querySelectorAll<HTMLAudioElement>('audio[style*="display: none"]').forEach((el) => {
+      el.pause();
+      el.remove();
+    });
+  }, []);
+
   const killTimeline = useCallback(() => {
     if (timelineRef.current) {
       timelineRef.current.kill();
       timelineRef.current = null;
     }
     pauseAllMedia();
-  }, [pauseAllMedia]);
+    cleanupReadAlongArtifacts();
+  }, [pauseAllMedia, cleanupReadAlongArtifacts]);
 
   const killReplayTimeline = useCallback(() => {
     if (replayTimelineRef.current) {
@@ -158,7 +173,8 @@ export function usePlayerGsapEngine({
       replayTimelineRef.current = null;
     }
     pauseAllMedia();
-  }, [pauseAllMedia]);
+    cleanupReadAlongArtifacts();
+  }, [pauseAllMedia, cleanupReadAlongArtifacts]);
 
   const cancelPendingRaf = useCallback(() => {
     if (pendingRafRef.current !== null) {

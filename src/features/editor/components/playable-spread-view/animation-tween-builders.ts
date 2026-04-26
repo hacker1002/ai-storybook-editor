@@ -308,7 +308,15 @@ export function addTweenToTimeline(
 
       const volume = options?.volume ?? 1;
       const wordTimings = options?.wordTimings;
-      const durationSec = (effect.duration ?? 0) / 1000;
+      // Derive duration from wordTimings[last].endMs (TTS metadata).
+      // Fallback to effect.duration only when wordTimings empty (backward-compat for legacy spreads).
+      // Pad +150ms to absorb TTS endMs drift vs real audio length (avoid cutting last word / audio tail).
+      const READ_ALONG_TAIL_PAD_MS = 150;
+      const lastEndMs = wordTimings && wordTimings.length > 0
+        ? wordTimings[wordTimings.length - 1].endMs
+        : 0;
+      const baseMs = lastEndMs > 0 ? lastEndMs : (effect.duration ?? 0);
+      const durationSec = baseMs > 0 ? (baseMs + READ_ALONG_TAIL_PAD_MS) / 1000 : 0;
 
       // Create audio element and attach to DOM so pauseAllMedia() can find it on killTimeline
       const audio = document.createElement('audio');
