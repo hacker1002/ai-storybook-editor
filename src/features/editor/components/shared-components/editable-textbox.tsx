@@ -57,7 +57,10 @@ function tokenizeForWordSpans(text: string): WordSegment[] {
     if (/^\s$/.test(chars[i])) {
       const start = i;
       while (i < chars.length && /^\s$/.test(chars[i])) i++;
-      segments.push({ kind: "whitespace", text: chars.slice(start, i).join("") });
+      segments.push({
+        kind: "whitespace",
+        text: chars.slice(start, i).join(""),
+      });
       continue;
     }
     const cp = chars[i].codePointAt(0)!;
@@ -354,12 +357,12 @@ export function EditableTextbox({
           suppressContentEditableWarning
           onBlur={handleBlur}
           onPaste={handlePaste}
-          className="w-full h-full outline-none p-1 break-words"
+          className="w-full h-full outline-none break-words"
           style={{ backgroundColor: COLORS.EDIT_MODE_BG }}
         />
       ) : isEmpty ? (
         <div
-          className="w-full h-full flex items-center justify-center italic p-1"
+          className="w-full h-full flex items-center justify-center italic"
           style={{ color: COLORS.PLACEHOLDER_TEXT }}
         >
           Click to add text
