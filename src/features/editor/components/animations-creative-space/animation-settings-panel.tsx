@@ -98,6 +98,49 @@ function NumberField({ label, value, step, min, max, unit, field, onChange }: Nu
   );
 }
 
+interface LoopFieldProps {
+  value: number | undefined;
+  onChange: (field: string, value: number | string) => void;
+}
+
+function LoopField({ value, onChange }: LoopFieldProps) {
+  const isInfinite = value === -1;
+  // When toggling off infinite, restore to 1 (a sensible default play count).
+  const numericValue = isInfinite ? 1 : (value ?? 0);
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">Loop</Label>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="loop-infinite" className="text-[10px] text-muted-foreground">
+            Infinite
+          </Label>
+          <Switch
+            id="loop-infinite"
+            checked={isInfinite}
+            onCheckedChange={(checked) => onChange('loop', checked ? -1 : 1)}
+            className="scale-75"
+          />
+        </div>
+      </div>
+      {isInfinite ? (
+        <div className="flex h-7 items-center justify-center rounded-md border border-input bg-muted text-xs text-muted-foreground">
+          ∞
+        </div>
+      ) : (
+        <Input
+          type="number"
+          step={1}
+          min={0}
+          value={numericValue}
+          onChange={(e) => onChange('loop', Number(e.target.value))}
+          className="h-7 text-xs"
+        />
+      )}
+    </div>
+  );
+}
+
 interface DirectionSelectProps {
   value: string | undefined;
   onChange: (field: string, value: number | string) => void;
@@ -238,14 +281,7 @@ function EffectOptionsForm({
           />
         )}
         {visibleOptions.includes('loop') && (
-          <NumberField
-            label="Loop"
-            field="loop"
-            value={effect.loop}
-            step={1}
-            min={0}
-            onChange={onEffectOptionChange}
-          />
+          <LoopField value={effect.loop} onChange={onEffectOptionChange} />
         )}
         {visibleOptions.includes('geometry') && effect.geometry && (
           <GeometryInputs

@@ -4,6 +4,7 @@
 import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import gsap from 'gsap';
 import type { AnimationStep, PlayableSpread } from '@/types/playable-types';
+import type { SpreadAnimation } from '@/types/spread-types';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
 import {
   usePlaybackStore,
@@ -193,6 +194,7 @@ export function usePlayerGsapEngine({
     }
     pauseAllMedia();
     cleanupReadAlongArtifacts();
+    usePlaybackStore.getState().clearEffectLoopRemaining();
   }, [pauseAllMedia, cleanupReadAlongArtifacts]);
 
   const killReplayTimeline = useCallback(() => {
@@ -202,7 +204,31 @@ export function usePlayerGsapEngine({
     }
     pauseAllMedia();
     cleanupReadAlongArtifacts();
+    usePlaybackStore.getState().clearEffectLoopRemaining();
   }, [pauseAllMedia, cleanupReadAlongArtifacts]);
+
+  /** Build the per-animation lifecycle callbacks for addTweenToTimeline.
+   *  Seeds eLoop counter on start (finite N>1 only), decrements on repeat,
+   *  clears on complete. -1 (infinite) and ≤1 fall through to static display. */
+  const buildAnimCallbacks = useCallback((anim: SpreadAnimation) => {
+    const loopVal = anim.effect.loop ?? 0;
+    const trackable = loopVal > 1;
+    return {
+      onTweenStart: () => {
+        const s = usePlaybackStore.getState();
+        s.addActiveAnimationOrder(anim.order);
+        if (trackable) s.setEffectLoopRemaining(anim.order, loopVal);
+      },
+      onTweenRepeat: trackable
+        ? () => usePlaybackStore.getState().decrementEffectLoopRemaining(anim.order)
+        : undefined,
+      onTweenComplete: () => {
+        const s = usePlaybackStore.getState();
+        s.removeActiveAnimationOrder(anim.order);
+        s.clearEffectLoopRemaining(anim.order);
+      },
+    };
+  }, []);
 
   const cancelPendingRaf = useCallback(() => {
     if (pendingRafRef.current !== null) {
@@ -324,15 +350,14 @@ export function usePlayerGsapEngine({
           canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
-          onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
-          onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
+          ...buildAnimCallbacks(anim),
         });
       });
 
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight]
+    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -408,14 +433,13 @@ export function usePlayerGsapEngine({
         canvasHeight,
         ...dims,
         ...readAlongExtras,
-        onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
-        onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
+        ...buildAnimCallbacks(anim),
       });
     });
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight]);
+  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -473,15 +497,14 @@ export function usePlayerGsapEngine({
           canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
-          onTweenStart: () => usePlaybackStore.getState().addActiveAnimationOrder(anim.order),
-          onTweenComplete: () => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
+          ...buildAnimCallbacks(anim),
         });
       });
 
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight]
+    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
   );
 
   // === Returned utility functions ===
@@ -765,7 +788,9 @@ export function usePlayerGsapEngine({
   // === Lifecycle: Clear active animation orders when playback stops ===
   useEffect(() => {
     if (phase === 'idle' || phase === 'complete' || phase === 'awaiting_next' || phase === 'awaiting_click') {
-      usePlaybackStore.getState().setActiveAnimationOrders([]);
+      const s = usePlaybackStore.getState();
+      s.setActiveAnimationOrders([]);
+      s.clearEffectLoopRemaining();
     }
   }, [phase]);
 

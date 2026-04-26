@@ -30,6 +30,10 @@ interface TweenOptions {
   itemGeometry?: { x: number; y: number };
   /** Called when any tween in this animation starts — used for sidebar highlight */
   onTweenStart?: () => void;
+  /** Fired once per completed loop iteration (excluding the last). Drives eLoop
+   *  remaining-counter in the sidebar. SPIN/TEETER use GSAP onRepeat; PLAY uses
+   *  the audio 'ended' event before scheduling the next replay. */
+  onTweenRepeat?: () => void;
   /** Called when any tween in this animation completes — used to remove from active list */
   onTweenComplete?: () => void;
   /** Word-level timing data for Read-Along effect */
@@ -90,16 +94,73 @@ export function addTweenToTimeline(
       }
       const volume = options?.volume ?? 1;
       const durationSec = (effect.duration ?? 0) / 1000;
+      // Loop semantics (parity with SPIN/TEETER): N = total play count, -1 = infinite, ≤1 = once.
+      const totalPlays = effect.loop === -1 ? -1 : Math.max(1, effect.loop ?? 1);
+      let playsDone = 0;
+      let teardown = false;
+      let completeFired = false;
 
-      // timeline.call() creates DelayedCall children that don't support eventCallback(),
-      // so we fire onTweenStart/onTweenComplete directly inside the lambdas.
+      // Strip any previously-registered listener on the same element (prior tween
+      // invocation that was killed without natural end). Without this, USER_BACK +
+      // replay double-counts 'ended' between stale + new closures.
+      type MediaWithRef = HTMLMediaElement & { __playEndedRef?: () => void };
+      const m = mediaEl as MediaWithRef;
+      if (m.__playEndedRef) {
+        m.removeEventListener('ended', m.__playEndedRef);
+        m.__playEndedRef = undefined;
+      }
+
+      let onEnded: () => void = () => {};
+
+      const fireComplete = () => {
+        if (completeFired) return;
+        completeFired = true;
+        options?.onTweenComplete?.();
+      };
+
+      const teardownAudio = () => {
+        if (teardown) return;
+        teardown = true;
+        if (m.__playEndedRef === onEnded) {
+          m.removeEventListener('ended', onEnded);
+          m.__playEndedRef = undefined;
+        }
+        try { mediaEl.pause(); } catch { /* element may be gone */ }
+      };
+
+      // Manual-replay loop (mediaEl.loop=true suppresses 'ended', preventing per-iteration
+      // counter signaling). For finite N>1 we replay on each 'ended' until N reached.
+      // onTweenComplete fires only here (last 'ended') so sidebar pulse + eLoop counter
+      // stay live until audio actually finishes — duration is timeline-progression only.
+      onEnded = () => {
+        if (teardown) return;
+        playsDone += 1;
+        const isLast = totalPlays !== -1 && playsDone >= totalPlays;
+        if (isLast) {
+          teardownAudio();
+          fireComplete();
+          return;
+        }
+        options?.onTweenRepeat?.();
+        try {
+          mediaEl.currentTime = 0;
+          mediaEl.play().catch(() => {
+            log.warn('addTweenToTimeline', 'replay blocked', { targetId: animation.target.id });
+          });
+        } catch {
+          log.warn('addTweenToTimeline', 'media replay error', { targetId: animation.target.id });
+        }
+      };
+
       timeline.call(
         () => {
           options?.onTweenStart?.();
           try {
             mediaEl.currentTime = 0;
             mediaEl.volume = volume;
-            if (effect.loop && effect.loop > 0) mediaEl.loop = true;
+            mediaEl.loop = false;
+            m.__playEndedRef = onEnded;
+            mediaEl.addEventListener('ended', onEnded);
             mediaEl.play().catch(() => {
               log.warn('addTweenToTimeline', 'autoplay blocked', { targetId: animation.target.id });
             });
@@ -111,19 +172,13 @@ export function addTweenToTimeline(
         position as number | string
       );
 
-      // Pause after duration if specified
+      // Extend the timeline by durationSec via a noop call so chained animations respect
+      // user-configured timing. fireComplete is intentionally NOT called here — clearing
+      // sidebar pulse + eLoop counter is driven by the audio's actual end (last 'ended'
+      // → fireComplete in onEnded). For durationSec=0, no extension; PLAY contributes
+      // zero timeline duration and next animation chains immediately.
       if (durationSec > 0) {
-        timeline.call(
-          () => {
-            mediaEl.pause();
-            options?.onTweenComplete?.();
-          },
-          undefined,
-          `>+=${durationSec}`
-        );
-      } else {
-        // No duration — complete immediately after play starts
-        timeline.call(() => { options?.onTweenComplete?.(); });
+        timeline.call(() => {}, undefined, `>+=${durationSec}`);
       }
       break;
     }
@@ -221,6 +276,7 @@ export function addTweenToTimeline(
           delay: delaySec,
           ease: "power1.inOut",
           repeat,
+          onRepeat: options?.onTweenRepeat,
           transformOrigin: "center center",
         },
         position
@@ -270,6 +326,7 @@ export function addTweenToTimeline(
           delay: delaySec,
           yoyo: true,
           repeat: repeatCount,
+          onRepeat: options?.onTweenRepeat,
           ease: "sine.inOut",
           transformOrigin: "center bottom",
         },

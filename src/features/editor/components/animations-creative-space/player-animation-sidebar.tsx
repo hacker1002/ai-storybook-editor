@@ -12,6 +12,7 @@ import {
   useMaxActivatedOrder,
   useCurrentStepIndex,
   useReplayableItems,
+  useEffectLoopRemaining,
   usePlayEdition,
 } from "@/stores/animation-playback-store";
 import type {
@@ -50,6 +51,7 @@ export function PlayerAnimationSidebar({
   const currentStepIndex = useCurrentStepIndex();
   const steps = usePlaybackStore((s) => s.steps);
   const replayableItems = useReplayableItems();
+  const effectLoopRemaining = useEffectLoopRemaining();
   const playEdition = usePlayEdition();
 
   // Classic: only READ_ALONG; Dynamic: exclude on_click chains; Interactive: show all
@@ -132,6 +134,14 @@ export function PlayerAnimationSidebar({
     [remainingClickLoopMap]
   );
 
+  // Resolve displayEffectLoop — store seeds entry only for finite effect.loop > 1.
+  // Absent entry = render static effect.loop value.
+  const getDisplayEffectLoop = useCallback(
+    (anim: ResolvedAnimation): number | undefined =>
+      effectLoopRemaining.get(anim.animation.order),
+    [effectLoopRemaining]
+  );
+
   return (
     <aside
       role="navigation"
@@ -169,6 +179,7 @@ export function PlayerAnimationSidebar({
                 isPendingNext={resolvedAnim.animation.order === pendingNextOrder}
                 disabled={true}
                 displayClickLoop={getDisplayClickLoop(resolvedAnim)}
+                displayEffectLoop={getDisplayEffectLoop(resolvedAnim)}
                 onClick={noop}
                 onDelete={noop}
                 onSelectTarget={noop}

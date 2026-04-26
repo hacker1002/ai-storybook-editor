@@ -26,6 +26,9 @@ interface PlaybackState {
   currentStepIndex: number;  // -1 = not started
   pendingClickTargetId: string | null;
   replayableItems: Map<string, ReplayableItem>;
+  /** Live remaining-play counter per animation order (eLoop sidebar display).
+   *  Seeded only for finite loops > 1; absent entry = render static effect.loop. */
+  effectLoopRemaining: Map<number, number>;
   activeAnimationOrders: number[];
   maxActivatedOrder: number; // highest order ever passed to addActiveAnimationOrder (reset per phase)
   narrationLanguage: string; // language code for narration audio (e.g. 'en_US')
@@ -58,6 +61,10 @@ interface PlaybackActions {
   setActiveAnimationOrders: (orders: number[]) => void;
   addActiveAnimationOrder: (order: number) => void;
   removeActiveAnimationOrder: (order: number) => void;
+  setEffectLoopRemaining: (order: number, count: number) => void;
+  decrementEffectLoopRemaining: (order: number) => void;
+  /** Clear single entry when `order` provided, or wipe map otherwise. */
+  clearEffectLoopRemaining: (order?: number) => void;
 }
 
 // === Initial state ===
@@ -73,6 +80,7 @@ const INITIAL_STATE: PlaybackState = {
   currentStepIndex: -1,
   pendingClickTargetId: null,
   replayableItems: new Map(),
+  effectLoopRemaining: new Map(),
   activeAnimationOrders: [],
   maxActivatedOrder: -1,
   narrationLanguage: 'en_US',
@@ -183,6 +191,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             currentStepIndex: -1,
             pendingClickTargetId: null,
             replayableItems,
+            effectLoopRemaining: new Map(),
             activeAnimationOrders: [],
             maxActivatedOrder: -1,
           });
@@ -198,6 +207,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             currentStepIndex: 0,
             pendingClickTargetId: null,
             replayableItems,
+            effectLoopRemaining: new Map(),
             activeAnimationOrders: [],
             maxActivatedOrder: -1,
           });
@@ -213,6 +223,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             currentStepIndex: -1,
             pendingClickTargetId: steps[0].targetId ?? null,
             replayableItems,
+            effectLoopRemaining: new Map(),
             activeAnimationOrders: [],
             maxActivatedOrder: -1,
           });
@@ -227,6 +238,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           currentStepIndex: -1,
           pendingClickTargetId: null,
           replayableItems,
+          effectLoopRemaining: new Map(),
           activeAnimationOrders: [],
           maxActivatedOrder: -1,
         });
@@ -418,6 +430,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           narrationLanguage,
           quizLanguage,
           replayableItems: new Map(),
+          effectLoopRemaining: new Map(),
           activeAnimationOrders: [],
           maxActivatedOrder: -1,
         });
@@ -446,6 +459,34 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           set({ activeAnimationOrders: filtered });
         }
       },
+
+      setEffectLoopRemaining: (order, count) => {
+        const next = new Map(get().effectLoopRemaining);
+        next.set(order, count);
+        set({ effectLoopRemaining: next });
+      },
+
+      decrementEffectLoopRemaining: (order) => {
+        const current = get().effectLoopRemaining;
+        const v = current.get(order);
+        if (v === undefined) return;
+        const next = new Map(current);
+        next.set(order, Math.max(0, v - 1));
+        set({ effectLoopRemaining: next });
+      },
+
+      clearEffectLoopRemaining: (order) => {
+        if (order === undefined) {
+          if (get().effectLoopRemaining.size === 0) return;
+          set({ effectLoopRemaining: new Map() });
+          return;
+        }
+        const current = get().effectLoopRemaining;
+        if (!current.has(order)) return;
+        const next = new Map(current);
+        next.delete(order);
+        set({ effectLoopRemaining: next });
+      },
     }), {
         name: 'playback-preferences',
         partialize: (state) => ({
@@ -470,6 +511,7 @@ export const usePlayerPhase = () => usePlaybackStore((s) => s.phase);
 export const useCurrentStepIndex = () => usePlaybackStore((s) => s.currentStepIndex);
 export const usePendingClickTargetId = () => usePlaybackStore((s) => s.pendingClickTargetId);
 export const useReplayableItems = () => usePlaybackStore((s) => s.replayableItems);
+export const useEffectLoopRemaining = () => usePlaybackStore((s) => s.effectLoopRemaining);
 
 export const useCurrentStep = () =>
   usePlaybackStore((s) =>

@@ -50,6 +50,8 @@ interface AnimationListItemProps {
   disabled?: boolean;
   /** Override cLoop display value (player uses remaining replays instead of DB value) */
   displayClickLoop?: number;
+  /** Override eLoop display value (player uses remaining plays for finite N>1 loops) */
+  displayEffectLoop?: number;
   /** Read-along conditional visibility — true when target textbox has audio */
   targetHasAudio?: boolean;
 }
@@ -124,6 +126,7 @@ export function AnimationListItem({
   isPendingNext = false,
   disabled = false,
   displayClickLoop,
+  displayEffectLoop,
   targetHasAudio,
 }: AnimationListItemProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -274,7 +277,10 @@ export function AnimationListItem({
             </span>
             <span title="Effect Loop">
               <span className="opacity-60">eLoop:</span>
-              {effect.loop ?? 0}
+              {(() => {
+                const v = displayEffectLoop ?? effect.loop ?? 0;
+                return v === -1 ? "∞" : v;
+              })()}
             </span>
           </div>
         </div>
