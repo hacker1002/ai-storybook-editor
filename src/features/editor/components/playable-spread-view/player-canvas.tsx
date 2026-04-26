@@ -59,6 +59,8 @@ const RAPID_NEXT_THRESHOLD = 150; // ms
 // === Props Interface ===
 export interface PlayerCanvasProps {
   spread: PlayableSpread;
+  /** Optional: linear next spread for read-along audio preload lookahead */
+  nextSpread?: PlayableSpread;
   zoomLevel: number;
   playMode: PlayMode;
   playEdition: PlayEdition;
@@ -101,6 +103,7 @@ const CLICK_HINT_STYLE = `
 
 export function PlayerCanvas({
   spread,
+  nextSpread,
   zoomLevel,
   playMode,
   playEdition,
@@ -181,6 +184,7 @@ export function PlayerCanvas({
     handleQuizComplete,
   } = usePlayerGsapEngine({
     spread,
+    nextSpread,
     filteredAnimations,
     zoomLevel: effectiveZoom,
     narrationLangCode,

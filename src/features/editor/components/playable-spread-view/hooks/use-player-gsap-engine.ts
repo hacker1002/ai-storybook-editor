@@ -48,6 +48,28 @@ function resolveReadAlongAudioData(
   return { wordTimings, audioUrl: media.url };
 }
 
+/**
+ * Collect all read-along audio URLs in a spread (regardless of edition filter).
+ * Edition filters never strip READ_ALONG animations, so we use spread.animations directly.
+ */
+function collectReadAlongAudioUrls(
+  spread: PlayableSpread | undefined,
+  narrationLangCode: string,
+): string[] {
+  if (!spread) return [];
+  const urls = new Set<string>();
+  spread.animations?.forEach((anim) => {
+    if (anim.effect.type !== EFFECT_TYPE.READ_ALONG) return;
+    if (anim.target.type !== 'textbox') return;
+    const textbox = spread.textboxes?.find((tb) => tb.id === anim.target.id);
+    if (!textbox) return;
+    const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, narrationLangCode);
+    const url = result?.content?.audio?.media?.url;
+    if (url) urls.add(url);
+  });
+  return Array.from(urls);
+}
+
 // === Constants ===
 const TRIGGER_DELAY = {
   AFTER_PREVIOUS: 0.5,
@@ -55,6 +77,9 @@ const TRIGGER_DELAY = {
   FIRST_ANIMATION: 0.5,
   AUTO_SPREAD_COMPLETE: 1.0,
 } as const;
+
+/** Defer next-spread audio preload so current spread gets bandwidth priority */
+const NEXT_SPREAD_PRELOAD_DELAY_MS = 1000;
 
 // === Hook Interfaces ===
 
@@ -66,6 +91,8 @@ export interface UsePlayerGsapEngineParams {
   narrationLangCode: string;
   onSpreadComplete: (spreadId: string) => void;
   onQuizPlay?: (quizId: string) => void;
+  /** Optional: linear next spread for read-along audio preload lookahead */
+  nextSpread?: PlayableSpread;
 }
 
 export interface UsePlayerGsapEngineReturn {
@@ -93,6 +120,7 @@ export function usePlayerGsapEngine({
   narrationLangCode,
   onSpreadComplete,
   onQuizPlay,
+  nextSpread,
 }: UsePlayerGsapEngineParams): UsePlayerGsapEngineReturn {
   // === Store Subscriptions ===
   const phase = usePlayerPhase();
@@ -534,6 +562,52 @@ export function usePlayerGsapEngine({
       killReplayTimeline();
     };
   }, [cancelPendingRaf, killTimeline, killReplayTimeline]);
+
+  // === Lifecycle: Preload read-along narration audio ===
+  // Current spread fetched immediately; next spread defers 1s so current gets bandwidth
+  // priority if user plays right away. Browser HTTP cache absorbs back-navigation.
+  // Audio elements are GC'd via src='' on cleanup; pending fetches aborted.
+  useEffect(() => {
+    const currentUrls = collectReadAlongAudioUrls(spread, narrationLangCode);
+    const nextUrls = collectReadAlongAudioUrls(nextSpread, narrationLangCode)
+      .filter((url) => !currentUrls.includes(url));
+    if (currentUrls.length === 0 && nextUrls.length === 0) return;
+
+    const preloadUrls = (urls: string[]): HTMLAudioElement[] =>
+      urls.map((url) => {
+        const a = new Audio();
+        a.preload = 'auto';
+        a.src = url;
+        a.load();
+        return a;
+      });
+
+    log.debug('preloadReadAlongAudio', 'preloading current', {
+      spreadId: spread.id,
+      currentCount: currentUrls.length,
+      deferredNextCount: nextUrls.length,
+    });
+
+    const audios: HTMLAudioElement[] = preloadUrls(currentUrls);
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (nextUrls.length > 0) {
+      timeoutId = setTimeout(() => {
+        log.debug('preloadReadAlongAudio', 'preloading next (deferred)', {
+          spreadId: spread.id,
+          count: nextUrls.length,
+        });
+        audios.push(...preloadUrls(nextUrls));
+      }, NEXT_SPREAD_PRELOAD_DELAY_MS);
+    }
+
+    return () => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      audios.forEach((a) => {
+        a.src = '';
+      });
+    };
+  }, [spread, nextSpread, narrationLangCode]);
 
   // === Lifecycle: Spread or edition change → kill timelines, reset styles, apply initial states ===
   // NOTE: RESET dispatch (store) is NOT done here — it's done by the parent (PlayerCanvas).

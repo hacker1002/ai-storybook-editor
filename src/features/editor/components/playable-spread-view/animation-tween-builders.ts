@@ -318,8 +318,11 @@ export function addTweenToTimeline(
       const baseMs = lastEndMs > 0 ? lastEndMs : (effect.duration ?? 0);
       const durationSec = baseMs > 0 ? (baseMs + READ_ALONG_TAIL_PAD_MS) / 1000 : 0;
 
-      // Create audio element and attach to DOM so pauseAllMedia() can find it on killTimeline
+      // Create audio element and attach to DOM so pauseAllMedia() can find it on killTimeline.
+      // preload='auto' explicit (default 'metadata' on some browsers) so it reuses the HTTP
+      // cache populated by the spread-mount preload effect → playback starts instant on first play.
       const audio = document.createElement('audio');
+      audio.preload = 'auto';
       audio.src = audioUrl;
       audio.style.display = 'none';
       element.appendChild(audio);

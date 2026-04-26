@@ -204,6 +204,12 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const hasPrevious = spreadHistories.length > 1;
   const nextResult = resolveNextSpreadId(selectedSpread, spreads, currentSection);
   const hasNext = nextResult !== null;
+  // Linear next spread for read-along audio preload lookahead. Branch spreads → undefined
+  // (skip prefetch since multiple branches would be ambiguous; YAGNI for now).
+  const nextSpread =
+    nextResult && nextResult.type === 'spread'
+      ? spreads.find((s) => s.id === nextResult.id)
+      : undefined;
 
   // === Canvas Switching Handlers ===
   const handlePlay = useCallback(() => {
@@ -432,6 +438,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         ) : activeCanvas === "player" && selectedSpread ? (
           <PlayerCanvas
             spread={selectedSpread}
+            nextSpread={nextSpread}
             zoomLevel={effectiveZoomLevel}
             playMode={playMode}
             playEdition={playEdition}
