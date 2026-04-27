@@ -51,7 +51,7 @@ import { useContainerFit } from "./hooks/use-container-fit";
 import { MobileFullPageZoomOverlay } from "./mobile-full-page-zoom-overlay";
 
 // === Types ===
-export type FullPageMode = 'spread' | 'left' | 'right';
+export type FullPageMode = "spread" | "left" | "right";
 
 // === Constants ===
 const RAPID_NEXT_THRESHOLD = 150; // ms
@@ -70,7 +70,11 @@ export interface PlayerCanvasProps {
   onSkipSpread: (direction: "next" | "prev") => void;
   onPlayModeChange: (mode: PlayMode) => void;
   onEditionChange: (edition: PlayEdition) => void;
-  availableEditions?: { classic?: boolean; dynamic?: boolean; interactive?: boolean };
+  availableEditions?: {
+    classic?: boolean;
+    dynamic?: boolean;
+    interactive?: boolean;
+  };
   availableLanguages?: { name: string; code: string }[];
   pageNumbering?: PageNumberingSettings | null;
   /** When true, auto-fit spread to container and enable responsive control bar */
@@ -93,7 +97,7 @@ const CLICK_HINT_STYLE = `
 .read-along-word {
   transition: background-color 0.15s ease, color 0.15s ease;
   border-radius: 0.1em;
-  padding: 0 0.05em;
+  padding: 0;
 }
 .read-along-active-word {
   background-color: rgba(59, 130, 246, 0.25);
@@ -134,7 +138,7 @@ export function PlayerCanvas({
   const { width: canvasWidth, height: canvasHeight } = useCanvasSize();
 
   // === Full page zoom state (mobile portrait share preview only) ===
-  const [fullPageMode, setFullPageMode] = useState<FullPageMode>('spread');
+  const [fullPageMode, setFullPageMode] = useState<FullPageMode>("spread");
 
   // === Quiz modal state ===
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
@@ -149,10 +153,12 @@ export function PlayerCanvas({
   // Dynamic: all animations except on_click trigger chains
   // Interactive: all animations
   const filteredAnimations = useMemo(() => {
-    if (playEdition === 'classic') {
-      return spread.animations.filter((a) => a.effect.type === EFFECT_TYPE.READ_ALONG);
+    if (playEdition === "classic") {
+      return spread.animations.filter(
+        (a) => a.effect.type === EFFECT_TYPE.READ_ALONG
+      );
     }
-    if (playEdition === 'dynamic') {
+    if (playEdition === "dynamic") {
       return filterAnimationsForDynamic(spread.animations);
     }
     return spread.animations;
@@ -161,10 +167,15 @@ export function PlayerCanvas({
   // Auto-fit zoom — overrides prop zoomLevel with computed fit
   // In full page mode, useContainerFit fits half the canvas width (one page)
   const fitZoom = useContainerFit(
-    canvasContainerRef, canvasWidth, canvasHeight, orientation, true, fullPageMode,
+    canvasContainerRef,
+    canvasWidth,
+    canvasHeight,
+    orientation,
+    true,
+    fullPageMode
   );
   const effectiveZoom = fitZoom ?? zoomLevel;
-  const isPortrait = isSharePreview && orientation === 'portrait';
+  const isPortrait = isSharePreview && orientation === "portrait";
 
   // Sync effective zoom to global store so child components (EditableTextbox etc.)
   // that read zoomLevel via useZoomLevel() get the correct scale factor
@@ -196,8 +207,11 @@ export function PlayerCanvas({
   // handleQuizComplete() đã sẵn sàng để re-use khi UI mới hoàn thành quiz step.
   void handleQuizComplete;
 
-  const { width: scaledWidth, height: scaledHeight } =
-    getScaledDimensions(canvasWidth, canvasHeight, effectiveZoom);
+  const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(
+    canvasWidth,
+    canvasHeight,
+    effectiveZoom
+  );
 
   // === Store sync effects ===
 
@@ -212,7 +226,11 @@ export function PlayerCanvas({
     // - off→auto: clears stale pendingClickTargetId, phase, replayableItems
     // - auto→off: restarts step-based playback from beginning
     if (prevMode !== playMode) {
-      const newSteps = buildAnimationSteps(filteredAnimations, spread, spread.id);
+      const newSteps = buildAnimationSteps(
+        filteredAnimations,
+        spread,
+        spread.id
+      );
       playbackActions.reset(newSteps);
       playbackActions.play();
     }
@@ -230,7 +248,7 @@ export function PlayerCanvas({
     // Reset page to left only on actual spread change, not on edition switch
     if (prevSpreadIdRef.current !== spread.id) {
       prevSpreadIdRef.current = spread.id;
-      if (fullPageMode !== 'spread') setFullPageMode('left');
+      if (fullPageMode !== "spread") setFullPageMode("left");
     }
     const newSteps = buildAnimationSteps(filteredAnimations, spread, spread.id);
     playbackActions.reset(newSteps);
@@ -245,8 +263,8 @@ export function PlayerCanvas({
 
   // 3b. Reset fullPageMode to 'spread' when orientation switches to landscape
   useEffect(() => {
-    if (orientation === 'landscape' && fullPageMode !== 'spread') {
-      setFullPageMode('spread'); // eslint-disable-line react-hooks/set-state-in-effect
+    if (orientation === "landscape" && fullPageMode !== "spread") {
+      setFullPageMode("spread"); // eslint-disable-line react-hooks/set-state-in-effect
     }
   }, [orientation]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -462,9 +480,9 @@ export function PlayerCanvas({
 
   // === Full page zoom: hidden click target detection ===
   // Determines if the pending on_click target is on the hidden page
-  const hiddenPageClickTarget = useMemo((): 'left' | 'right' | null => {
-    if (fullPageMode === 'spread') return null;
-    if (phase !== 'awaiting_click' || !pendingClickTargetId) return null;
+  const hiddenPageClickTarget = useMemo((): "left" | "right" | null => {
+    if (fullPageMode === "spread") return null;
+    if (phase !== "awaiting_click" || !pendingClickTargetId) return null;
 
     // Find which page side the target item is on via geometry center point
     const allItems = [
@@ -476,11 +494,13 @@ export function PlayerCanvas({
       ...(spread.textboxes ?? []),
       ...(spread.quizzes ?? []),
     ];
-    const targetItem = allItems.find((item) => item.id === pendingClickTargetId);
+    const targetItem = allItems.find(
+      (item) => item.id === pendingClickTargetId
+    );
     if (!targetItem?.geometry) return null;
 
     const geo = targetItem.geometry as Geometry;
-    const targetSide = (geo.x + geo.w / 2) < 50 ? 'left' : 'right';
+    const targetSide = geo.x + geo.w / 2 < 50 ? "left" : "right";
     // Blink only when target is on the HIDDEN page (not the currently viewed page)
     return targetSide !== fullPageMode ? targetSide : null;
   }, [fullPageMode, phase, pendingClickTargetId, spread]);
@@ -489,21 +509,21 @@ export function PlayerCanvas({
   // Pan offset: left page shifts 1px to show divider at right edge; right page divider is naturally at left edge
   const halfScaled = scaledWidth / 2;
   const panOffsetX = useMemo(() => {
-    if (fullPageMode === 'left') return -1; // shift 1px left → divider peeks on right edge
-    if (fullPageMode === 'right') return -halfScaled; // divider already visible at left edge
+    if (fullPageMode === "left") return -1; // shift 1px left → divider peeks on right edge
+    if (fullPageMode === "right") return -halfScaled; // divider already visible at left edge
     return 0;
   }, [fullPageMode, halfScaled]);
 
   // Hidden style for audio/quiz — keep in DOM for GSAP/modal, but invisible + non-interactive
   const hiddenStyle = (item: { player_visible?: boolean }) =>
     isItemPlayerHidden(item)
-      ? ({ visibility: 'hidden', pointerEvents: 'none' } as const)
+      ? ({ visibility: "hidden", pointerEvents: "none" } as const)
       : undefined;
 
   // === Render ===
   // Share preview: no padding around canvas, only reserve space for control bar
   // Editor: original padding for comfortable editing
-  const isFullPage = fullPageMode !== 'spread';
+  const isFullPage = fullPageMode !== "spread";
   const containerClassName = isSharePreview
     ? isPortrait
       ? "relative flex-1 overflow-hidden flex items-center justify-center pb-14 bg-muted/30"
@@ -515,272 +535,291 @@ export function PlayerCanvas({
       <style>{CLICK_HINT_STYLE}</style>
 
       {/* Spread + controls wrapper: flex column so overlay sits right below the spread */}
-      <div className="flex flex-col items-center" style={isPortrait ? { transition: 'all 0.3s ease' } : undefined}>
-      {/* Clip wrapper: in full page mode, clips to half the spread width (one page).
+      <div
+        className="flex flex-col items-center"
+        style={isPortrait ? { transition: "all 0.3s ease" } : undefined}
+      >
+        {/* Clip wrapper: in full page mode, clips to half the spread width (one page).
            In spread mode, matches full spread dimensions (no clipping). */}
-      <div
-        style={{
-          width: isFullPage ? halfScaled : scaledWidth,
-          height: scaledHeight,
-          overflow: 'hidden',
-          ...(isPortrait && {
-            transition: 'width 0.3s ease, height 0.3s ease',
-          }),
-        }}
-      >
-      {/* Spread container */}
-      <div
-        ref={spreadContainerRef}
-        className="relative bg-white shadow-lg"
-        style={{
-          width: scaledWidth,
-          height: scaledHeight,
-          willChange: "transform",
-          ...(isPortrait && {
-            transform: `translateX(${panOffsetX}px)`,
-            transition: 'width 0.3s ease, height 0.3s ease, transform 0.3s ease',
-          }),
-        }}
-      >
-        {/* Pages */}
-        {spread.pages.map((page, pageIndex) => (
-          <PageItem
-            key={pageIndex}
-            page={page}
-            pageIndex={pageIndex}
-            spread={spread}
-            spreadId={spread.id}
-            position={
-              spread.pages.length === 1
-                ? "single"
-                : pageIndex === 0
-                ? "left"
-                : "right"
-            }
-            isSelected={false}
-            onUpdatePage={() => {}}
-            availableLayouts={[]}
-          />
-        ))}
-
-        {/* Page divider — always visible */}
         <div
-          className="absolute top-0 bottom-0 w-px bg-gray-300"
-          style={{ left: "50%", zIndex: Z_INDEX.PAGE_BACKGROUND }}
-        />
-
-        {/* Page Number Overlay */}
-        {pageNumbering && pageNumbering.position !== 'none' && (
-          <PageNumberingOverlay
-            pages={spread.pages}
-            position={pageNumbering.position}
-            color={pageNumbering.color}
-            fontFamily={pageNumbering.font_family}
-            fontSize={pageNumbering.font_size}
-          />
-        )}
-
-        {/* Images — skip empty (no resolved URL) and fully outside staging [-50, 150] */}
-        {spread.images?.map((image, index) => {
-          if (image.player_visible === false) return null;
-          if (!isInStaging(image.geometry)) return null;
-          const hasUrl = image.final_hires_media_url
-            || image.illustrations?.some(i => i.media_url)
-            || image.media_url;
-          if (!hasUrl) return null;
-          return (
-            <div
-              key={image.id}
-              ref={registerRef(image.id)}
-              className={`${getPointerClasses(image.id)} ${getHighlightClass(
-                image.id
-              )}`}
-              onClickCapture={() => handleItemClick(image.id)}
-            >
-              <EditableImage
-                image={image}
-                index={index}
-                zIndex={image["z-index"]}
+          style={{
+            width: isFullPage ? halfScaled : scaledWidth,
+            height: scaledHeight,
+            overflow: "hidden",
+            ...(isPortrait && {
+              transition: "width 0.3s ease, height 0.3s ease",
+            }),
+          }}
+        >
+          {/* Spread container */}
+          <div
+            ref={spreadContainerRef}
+            className="relative bg-white shadow-lg"
+            style={{
+              width: scaledWidth,
+              height: scaledHeight,
+              willChange: "transform",
+              ...(isPortrait && {
+                transform: `translateX(${panOffsetX}px)`,
+                transition:
+                  "width 0.3s ease, height 0.3s ease, transform 0.3s ease",
+              }),
+            }}
+          >
+            {/* Pages */}
+            {spread.pages.map((page, pageIndex) => (
+              <PageItem
+                key={pageIndex}
+                page={page}
+                pageIndex={pageIndex}
+                spread={spread}
+                spreadId={spread.id}
+                position={
+                  spread.pages.length === 1
+                    ? "single"
+                    : pageIndex === 0
+                    ? "left"
+                    : "right"
+                }
                 isSelected={false}
-                isEditable={false}
-                onSelect={() => {}}
+                onUpdatePage={() => {}}
+                availableLayouts={[]}
               />
-            </div>
-          );
-        })}
+            ))}
 
-        {/* Shapes */}
-        {spread.shapes?.map((shape, index) => {
-          if (shape.player_visible === false) return null;
-          if (!isInStaging(shape.geometry)) return null;
-          return (
+            {/* Page divider — always visible */}
             <div
-              key={shape.id}
-              ref={registerRef(shape.id)}
-              className={`${getPointerClasses(shape.id)} ${getHighlightClass(
-                shape.id
-              )}`}
-              onClickCapture={() => handleItemClick(shape.id)}
-            >
-              <EditableShape
-                shape={shape}
-                index={index}
-                zIndex={shape["z-index"]}
-                isSelected={false}
-                isEditable={false}
-                onSelect={() => {}}
-              />
-            </div>
-          );
-        })}
+              className="absolute top-0 bottom-0 w-px bg-gray-300"
+              style={{ left: "50%", zIndex: Z_INDEX.PAGE_BACKGROUND }}
+            />
 
-        {/* Videos — skip empty (no media_url) and fully outside staging [-50, 150] */}
-        {spread.videos?.map((video, index) => {
-          if (video.player_visible === false) return null;
-          if (!isInStaging(video.geometry)) return null;
-          if (!video.media_url) return null;
-          return (
-            <div
-              key={video.id}
-              ref={registerRef(video.id)}
-              className={`${getPointerClasses(video.id)} ${getHighlightClass(
-                video.id
-              )}`}
-              onClickCapture={() => handleItemClick(video.id)}
-            >
-              <EditableVideo
-                video={video}
-                index={index}
-                zIndex={video["z-index"]}
-                isSelected={false}
-                isEditable={false}
-                onSelect={() => {}}
+            {/* Page Number Overlay */}
+            {pageNumbering && pageNumbering.position !== "none" && (
+              <PageNumberingOverlay
+                pages={spread.pages}
+                position={pageNumbering.position}
+                color={pageNumbering.color}
+                fontFamily={pageNumbering.font_family}
+                fontSize={pageNumbering.font_size}
               />
-            </div>
-          );
-        })}
+            )}
 
-        {/* Animated Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150].
+            {/* Images — skip empty (no resolved URL) and fully outside staging [-50, 150] */}
+            {spread.images?.map((image, index) => {
+              if (image.player_visible === false) return null;
+              if (!isInStaging(image.geometry)) return null;
+              const hasUrl =
+                image.final_hires_media_url ||
+                image.illustrations?.some((i) => i.media_url) ||
+                image.media_url;
+              if (!hasUrl) return null;
+              return (
+                <div
+                  key={image.id}
+                  ref={registerRef(image.id)}
+                  className={`${getPointerClasses(
+                    image.id
+                  )} ${getHighlightClass(image.id)}`}
+                  onClickCapture={() => handleItemClick(image.id)}
+                >
+                  <EditableImage
+                    image={image}
+                    index={index}
+                    zIndex={image["z-index"]}
+                    isSelected={false}
+                    isEditable={false}
+                    onSelect={() => {}}
+                  />
+                </div>
+              );
+            })}
+
+            {/* Shapes */}
+            {spread.shapes?.map((shape, index) => {
+              if (shape.player_visible === false) return null;
+              if (!isInStaging(shape.geometry)) return null;
+              return (
+                <div
+                  key={shape.id}
+                  ref={registerRef(shape.id)}
+                  className={`${getPointerClasses(
+                    shape.id
+                  )} ${getHighlightClass(shape.id)}`}
+                  onClickCapture={() => handleItemClick(shape.id)}
+                >
+                  <EditableShape
+                    shape={shape}
+                    index={index}
+                    zIndex={shape["z-index"]}
+                    isSelected={false}
+                    isEditable={false}
+                    onSelect={() => {}}
+                  />
+                </div>
+              );
+            })}
+
+            {/* Videos — skip empty (no media_url) and fully outside staging [-50, 150] */}
+            {spread.videos?.map((video, index) => {
+              if (video.player_visible === false) return null;
+              if (!isInStaging(video.geometry)) return null;
+              if (!video.media_url) return null;
+              return (
+                <div
+                  key={video.id}
+                  ref={registerRef(video.id)}
+                  className={`${getPointerClasses(
+                    video.id
+                  )} ${getHighlightClass(video.id)}`}
+                  onClickCapture={() => handleItemClick(video.id)}
+                >
+                  <EditableVideo
+                    video={video}
+                    index={index}
+                    zIndex={video["z-index"]}
+                    isSelected={false}
+                    isEditable={false}
+                    onSelect={() => {}}
+                  />
+                </div>
+              );
+            })}
+
+            {/* Animated Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150].
             Interactive pics (Rive/Lottie with state_machine set) bypass narration click-loop:
             pointer events route directly to the runtime canvas so state machines receive input. */}
-        {spread.animated_pics?.map((animatedPic, index) => {
-          if (animatedPic.player_visible === false) return null;
-          if (!isInStaging(animatedPic.geometry)) return null;
-          if (!animatedPic.media_url) return null;
-          const interactive = isAnimatedPicInteractive(animatedPic);
-          const pointerClass = interactive
-            ? "pointer-events-auto cursor-pointer"
-            : getPointerClasses(animatedPic.id);
-          const onClickCapture = interactive
-            ? undefined
-            : () => handleItemClick(animatedPic.id);
-          return (
-            <div
-              key={animatedPic.id}
-              ref={registerRef(animatedPic.id)}
-              className={`${pointerClass} ${getHighlightClass(animatedPic.id)}`}
-              onClickCapture={onClickCapture}
-            >
-              <EditableAnimatedPic
-                animatedPic={animatedPic}
-                index={index}
-                zIndex={animatedPic["z-index"]}
-                isSelected={false}
-                isEditable={false}
-                onSelect={() => {}}
-              />
-            </div>
-          );
-        })}
+            {spread.animated_pics?.map((animatedPic, index) => {
+              if (animatedPic.player_visible === false) return null;
+              if (!isInStaging(animatedPic.geometry)) return null;
+              if (!animatedPic.media_url) return null;
+              const interactive = isAnimatedPicInteractive(animatedPic);
+              const pointerClass = interactive
+                ? "pointer-events-auto cursor-pointer"
+                : getPointerClasses(animatedPic.id);
+              const onClickCapture = interactive
+                ? undefined
+                : () => handleItemClick(animatedPic.id);
+              return (
+                <div
+                  key={animatedPic.id}
+                  ref={registerRef(animatedPic.id)}
+                  className={`${pointerClass} ${getHighlightClass(
+                    animatedPic.id
+                  )}`}
+                  onClickCapture={onClickCapture}
+                >
+                  <EditableAnimatedPic
+                    animatedPic={animatedPic}
+                    index={index}
+                    zIndex={animatedPic["z-index"]}
+                    isSelected={false}
+                    isEditable={false}
+                    onSelect={() => {}}
+                  />
+                </div>
+              );
+            })}
 
-        {/* Audios — skip empty (no media_url); player_visible=false → visibility:hidden to keep GSAP .play() working */}
-        {spread.audios?.map((audio, index) => {
-          if (!audio.media_url) return null;
-          return (
-            <div
-              key={audio.id}
-              ref={registerRef(audio.id)}
-              className={`${getPointerClasses(audio.id)} ${getHighlightClass(audio.id)}`}
-              style={hiddenStyle(audio)}
-              onClickCapture={() => !isItemPlayerHidden(audio) && handleItemClick(audio.id)}
-            >
-              <EditableAudio
-                audio={audio}
-                index={index}
-                zIndex={audio["z-index"]}
-                isSelected={false}
-                isEditable={false}
-                onSelect={() => {}}
-              />
-            </div>
-          );
-        })}
+            {/* Audios — skip empty (no media_url); player_visible=false → visibility:hidden to keep GSAP .play() working */}
+            {spread.audios?.map((audio, index) => {
+              if (!audio.media_url) return null;
+              return (
+                <div
+                  key={audio.id}
+                  ref={registerRef(audio.id)}
+                  className={`${getPointerClasses(
+                    audio.id
+                  )} ${getHighlightClass(audio.id)}`}
+                  style={hiddenStyle(audio)}
+                  onClickCapture={() =>
+                    !isItemPlayerHidden(audio) && handleItemClick(audio.id)
+                  }
+                >
+                  <EditableAudio
+                    audio={audio}
+                    index={index}
+                    zIndex={audio["z-index"]}
+                    isSelected={false}
+                    isEditable={false}
+                    onSelect={() => {}}
+                  />
+                </div>
+              );
+            })}
 
-        {/* Quizzes — player_visible=false → visibility:hidden so quiz modal can still trigger via GSAP */}
-        {spread.quizzes?.map((quiz, index) => (
-          <div
-            key={quiz.id}
-            ref={registerRef(quiz.id)}
-            className={`${getPointerClasses(quiz.id)} ${getHighlightClass(quiz.id)}`}
-            style={hiddenStyle(quiz)}
-            onClickCapture={() => !isItemPlayerHidden(quiz) && handleItemClick(quiz.id)}
-          >
-            <EditableQuiz
-              quiz={quiz}
-              index={index}
-              zIndex={quiz["z-index"]}
-              isSelected={false}
-              isEditable={false}
-              onSelect={() => {}}
-            />
+            {/* Quizzes — player_visible=false → visibility:hidden so quiz modal can still trigger via GSAP */}
+            {spread.quizzes?.map((quiz, index) => (
+              <div
+                key={quiz.id}
+                ref={registerRef(quiz.id)}
+                className={`${getPointerClasses(quiz.id)} ${getHighlightClass(
+                  quiz.id
+                )}`}
+                style={hiddenStyle(quiz)}
+                onClickCapture={() =>
+                  !isItemPlayerHidden(quiz) && handleItemClick(quiz.id)
+                }
+              >
+                <EditableQuiz
+                  quiz={quiz}
+                  index={index}
+                  zIndex={quiz["z-index"]}
+                  isSelected={false}
+                  isEditable={false}
+                  onSelect={() => {}}
+                />
+              </div>
+            ))}
+
+            {/* Textboxes */}
+            {textboxesWithLang.map((item, index) => {
+              if (!item) return null;
+              const { textbox, data } = item;
+              if (!isInStaging(data.geometry)) return null;
+              const audioMedia = data.audio?.media;
+              // Flatten word timings across all segments for the editable textbox renderer.
+              const wordTimings = audioMedia?.segments?.flatMap(
+                (seg) => seg.words
+              );
+              return (
+                <div
+                  key={textbox.id}
+                  ref={registerRef(textbox.id)}
+                  className={`${getPointerClasses(
+                    textbox.id
+                  )} ${getHighlightClass(textbox.id)}`}
+                  onClickCapture={() => handleItemClick(textbox.id)}
+                >
+                  <EditableTextbox
+                    textboxContent={data}
+                    index={index}
+                    zIndex={textbox["z-index"] ?? LAYER_CONFIG.TEXT.min + index}
+                    isSelected={false}
+                    isSelectable={false}
+                    isEditable={false}
+                    onSelect={() => {}}
+                    onTextChange={() => {}}
+                    onEditingChange={() => {}}
+                    wordTimings={wordTimings}
+                  />
+                </div>
+              );
+            })}
           </div>
-        ))}
+        </div>
+        {/* end clip wrapper */}
 
-        {/* Textboxes */}
-        {textboxesWithLang.map((item, index) => {
-          if (!item) return null;
-          const { textbox, data } = item;
-          if (!isInStaging(data.geometry)) return null;
-          const audioMedia = data.audio?.media;
-          // Flatten word timings across all segments for the editable textbox renderer.
-          const wordTimings = audioMedia?.segments?.flatMap((seg) => seg.words);
-          return (
-            <div
-              key={textbox.id}
-              ref={registerRef(textbox.id)}
-              className={`${getPointerClasses(textbox.id)} ${getHighlightClass(
-                textbox.id
-              )}`}
-              onClickCapture={() => handleItemClick(textbox.id)}
-            >
-              <EditableTextbox
-                textboxContent={data}
-                index={index}
-                zIndex={textbox["z-index"] ?? LAYER_CONFIG.TEXT.min + index}
-                isSelected={false}
-                isSelectable={false}
-                isEditable={false}
-                onSelect={() => {}}
-                onTextChange={() => {}}
-                onEditingChange={() => {}}
-                wordTimings={wordTimings}
-              />
-            </div>
-          );
-        })}
+        {/* Full page zoom overlay (mobile portrait share preview only) — sits right below spread */}
+        {isPortrait && (
+          <MobileFullPageZoomOverlay
+            fullPageMode={fullPageMode}
+            onModeChange={setFullPageMode}
+            hiddenPageClickTarget={hiddenPageClickTarget}
+            spreadWidth={isFullPage ? halfScaled : scaledWidth}
+          />
+        )}
       </div>
-      </div>{/* end clip wrapper */}
-
-      {/* Full page zoom overlay (mobile portrait share preview only) — sits right below spread */}
-      {isPortrait && (
-        <MobileFullPageZoomOverlay
-          fullPageMode={fullPageMode}
-          onModeChange={setFullPageMode}
-          hiddenPageClickTarget={hiddenPageClickTarget}
-          spreadWidth={isFullPage ? halfScaled : scaledWidth}
-        />
-      )}
-      </div>{/* end spread + controls wrapper */}
+      {/* end spread + controls wrapper */}
 
       {/* Player controls sidebar / bottom bar */}
       <PlayerControlSidebar
@@ -789,7 +828,7 @@ export function PlayerCanvas({
         onBack={handleBack}
         canNext={canGoNext}
         canBack={canGoBack}
-        orientation={isSharePreview ? orientation : 'landscape'}
+        orientation={isSharePreview ? orientation : "landscape"}
         playEdition={playEdition}
         onEditionChange={onEditionChange}
         availableEditions={availableEditions}
