@@ -8,12 +8,10 @@ import { Label } from "@/components/ui/label";
 import {
   Scissors,
   AudioLines,
-  Upload,
   Trash2,
   Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
-import { uploadAudioToStorage } from "@/apis/storage-api";
 import {
   useToolbarPosition,
   type BaseSpread,
@@ -28,17 +26,10 @@ import {
 } from "@/features/editor/components/shared-components";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
-import {
-  GenerateNarrationModal,
-  DEFAULT_SETTINGS,
-  probeAudioDuration,
-  sha256HexOfFile,
-} from "@/features/editor/components/shared-components/generate-narration-modal";
+import { GenerateNarrationModal } from "@/features/editor/components/shared-components/generate-narration-modal";
 import type {
   SpreadTextboxContent,
   TextboxAudio,
-  TextboxAudioMedia,
-  TextboxAudioSettings,
 } from "@/types/spread-types";
 
 const log = createLogger("Editor", "ObjectsTextToolbar");
@@ -60,10 +51,8 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
 }: ObjectsTextToolbarProps<TSpread>) {
   // --- Refs ---
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- State ---
-  const [isUploading, setIsUploading] = useState(false);
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
 
   // --- Context destructuring ---
@@ -96,8 +85,8 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
   const geometry = content?.geometry;
   const audio = content?.audio;
   const hasText = !!content?.text;
-  const audioUrl = audio?.media?.url ?? null;
-  const isStale = audio?.media != null && !audio.media.script_synced;
+  const audioUrl = audio?.combined_audio_url ?? null;
+  const isStale = audio != null && audio.combined_audio_url != null && !audio.script_synced;
 
   log.debug("render", "toolbar state", {
     itemId: item.id,
@@ -140,79 +129,6 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     [geometry, content, langCode, onUpdate]
   );
 
-// --- Upload handler ---
-  const handleUploadClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      e.target.value = "";
-
-      setIsUploading(true);
-      log.info("handleFileChange", "narration upload started", {
-        name: file.name,
-        size: file.size,
-      });
-
-      try {
-        const [{ publicUrl }, durationMs, fileHash] = await Promise.all([
-          uploadAudioToStorage(file, "narration-objects"),
-          probeAudioDuration(file),
-          sha256HexOfFile(file),
-        ]);
-
-        const newMedia: TextboxAudioMedia = {
-          url: publicUrl,
-          duration_ms: durationMs,
-          output_format: "user-uploaded",
-          path_key: `upload:${fileHash}`,
-          script_synced: true, // user takes responsibility for match
-          generated_at: new Date().toISOString(),
-          segments: [],
-          raw_alignment: {
-            characters: [],
-            character_start_times_seconds: [],
-            character_end_times_seconds: [],
-          },
-        };
-
-        const existingAudio = content?.audio;
-        const newAudio: TextboxAudio = {
-          script: existingAudio?.script ?? content?.text ?? "",
-          settings: existingAudio?.settings ?? DEFAULT_SETTINGS,
-          media: newMedia,
-        };
-
-        if (!content) return;
-        // Single atomic onUpdate — no separate text/audio calls
-        onUpdate({
-          [langCode]: {
-            ...content,
-            audio: newAudio,
-          } as SpreadTextboxContent,
-        });
-        toast.success("Narration uploaded");
-        canvasRef.current?.click();
-        log.info("handleFileChange", "narration upload success", {
-          url: publicUrl,
-          durationMs,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Upload failed";
-        toast.error(message);
-        log.error("handleFileChange", "narration upload failed", {
-          error: message,
-        });
-      } finally {
-        setIsUploading(false);
-      }
-    },
-    [content, langCode, onUpdate, canvasRef]
-  );
-
   // --- Footer action handlers ---
   const handleSplit = useCallback(() => {
     if (onSplitTextbox) {
@@ -231,60 +147,22 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     });
   }, [item.id]);
 
-// --- Narration generated handler (persist; keep modal open for further edits) ---
-  const handleNarrationGenerated = useCallback(
+  // --- Narration audio change handler (persist on every modal mutation) ---
+  const handleNarrationAudioChange = useCallback(
     (narrationAudio: TextboxAudio) => {
       if (!content) return;
       onUpdate({
         [langCode]: { ...content, audio: narrationAudio } as SpreadTextboxContent,
       });
-      log.info("handleNarrationGenerated", "narration audio updated", {
+      log.debug("handleNarrationAudioChange", "audio bubble", {
         itemId: item.id,
-        hasMedia: narrationAudio.media != null,
+        chunkCount: narrationAudio.chunks.length,
+        hasCombinedAudio: narrationAudio.combined_audio_url != null,
+        scriptSynced: narrationAudio.script_synced,
       });
     },
     [content, langCode, onUpdate, item.id]
   );
-
-  // --- Draft save handler (persist unfinalized script/settings edits on close) ---
-  const handleDraftSave = useCallback(
-    (draft: { script: string; settings: TextboxAudioSettings }) => {
-      if (!content) return;
-      const prev = content.audio;
-      const nextAudio: TextboxAudio = {
-        script: draft.script,
-        settings: draft.settings,
-        media: prev?.media
-          ? { ...prev.media, script_synced: false }
-          : null,
-      };
-      onUpdate({
-        [langCode]: { ...content, audio: nextAudio } as SpreadTextboxContent,
-      });
-      log.debug("handleDraftSave", "persisted draft edits", {
-        itemId: item.id,
-        hasMedia: nextAudio.media != null,
-      });
-    },
-    [content, langCode, onUpdate, item.id]
-  );
-
-  // --- Mark-stale handler (modal script/settings edits → flip script_synced) ---
-  const handleMarkStale = useCallback(() => {
-    if (!content?.audio?.media) return;
-    if (content.audio.media.script_synced === false) return;
-    const updated: SpreadTextboxContent = {
-      ...content,
-      audio: {
-        ...content.audio,
-        media: { ...content.audio.media, script_synced: false },
-      },
-    };
-    onUpdate({ [langCode]: updated });
-    log.debug("handleMarkStale", "flipped script_synced=false", {
-      itemId: item.id,
-    });
-  }, [content, langCode, onUpdate, item.id]);
 
   // --- Positioning style ---
   const toolbarStyle: React.CSSProperties = position
@@ -367,18 +245,6 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
               onClick={handleGenerateNarration}
               disabled={!hasText}
             />
-            <ToolbarIconButton
-              icon={Upload}
-              label={
-                !hasText
-                  ? "No text for current language"
-                  : isUploading
-                  ? "Uploading..."
-                  : "Upload narration"
-              }
-              onClick={handleUploadClick}
-              disabled={isUploading || !hasText}
-            />
           </div>
           <ToolbarIconButton
             icon={Trash2}
@@ -386,25 +252,17 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
             onClick={onDelete}
             variant="destructive"
           />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/mpeg,audio/wav,audio/ogg,audio/webm,audio/aac"
-            className="hidden"
-            onChange={handleFileChange}
-          />
         </div>
 
         {isGenerateModalOpen && (
           <GenerateNarrationModal
             isOpen={isGenerateModalOpen}
             onClose={() => setIsGenerateModalOpen(false)}
+            textboxTitle={item.title}
             textboxText={content?.text ?? ""}
             existingAudio={audio ?? null}
             currentLanguage={langCode}
-            onGenerated={handleNarrationGenerated}
-            onMarkStale={handleMarkStale}
-            onDraftSave={handleDraftSave}
+            onAudioChange={handleNarrationAudioChange}
           />
         )}
       </div>

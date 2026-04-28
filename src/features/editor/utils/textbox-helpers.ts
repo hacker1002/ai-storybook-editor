@@ -80,17 +80,10 @@ export function getTextboxContentForLanguage(
         geometry: { ...fallback.geometry },
         typography,
         audio: {
-          script: '',
-          settings: {
-            model: 'eleven_v3',
-            stability: 0.5,
-            similarity: 0.75,
-            style_exaggeration: 0,
-            speed: 1.0,
-            speaker_boost: true,
-            seed: null,
-          },
-          media: null,
+          script_synced: false,
+          combined_audio_url: null,
+          word_timings: [],
+          chunks: [],
         },
       },
     };

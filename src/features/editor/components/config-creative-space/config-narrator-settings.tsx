@@ -34,7 +34,7 @@ import { NarratorLanguageSection } from './narrator/narrator-language-section';
 const CONTINUOUS_FIELDS: ReadonlyArray<keyof VoiceInferenceParamsValue> = [
   'stability',
   'similarity',
-  'style_exaggeration',
+  'exaggeration',
 ];
 
 const DEBOUNCE_MS = 300;
@@ -50,7 +50,7 @@ function detectChangedField(
     'speed',
     'stability',
     'similarity',
-    'style_exaggeration',
+    'exaggeration',
     'speaker_boost',
   ];
   for (const k of keys) {

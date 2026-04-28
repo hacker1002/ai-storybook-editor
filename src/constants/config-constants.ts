@@ -137,7 +137,7 @@ export const DEFAULT_INFERENCE_PARAMS: NarratorInferenceParams = {
   speed: 1.0,
   stability: 0.5,
   similarity: 0.75,
-  style_exaggeration: 0,
+  exaggeration: 0,
   speaker_boost: true,
 };
 

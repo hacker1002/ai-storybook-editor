@@ -48,15 +48,6 @@ export interface NarrationWordTiming {
   charEnd: number;
 }
 
-export interface NarrationSegment {
-  index: number;
-  voiceId: string;
-  text: string;
-  startMs: number;
-  endMs: number;
-  words: NarrationWordTiming[];
-}
-
 export interface NarrateScriptMeta {
   processingTimeMs?: number;
   elevenCallMs?: number;
@@ -73,8 +64,10 @@ export interface NarrateScriptSuccess {
   data: {
     audioUrl: string;
     durationMs: number;
-    segments: NarrationSegment[];
-    /** Raw ElevenLabs alignment — persisted verbatim in TextboxAudioMedia. */
+    voiceId: string;
+    text: string;
+    words: NarrationWordTiming[];
+    /** Raw ElevenLabs alignment — persisted verbatim per chunk result. */
     rawAlignment: RawAlignment;
   };
   meta?: NarrateScriptMeta;
@@ -84,6 +77,7 @@ export type NarrateScriptErrorCode =
   | 'VALIDATION_ERROR'
   | 'SCRIPT_PARSE_ERROR'
   | 'SCRIPT_TOO_LONG'
+  | 'MULTI_TURN_NOT_SUPPORTED'
   | 'INVALID_VOICE_ID'
   | 'INVALID_API_KEY'
   | 'ELEVEN_VOICE_NOT_FOUND'
@@ -126,6 +120,7 @@ function mapErrorCode(code: string | undefined): NarrateScriptErrorCode {
     case 'VALIDATION_ERROR':
     case 'SCRIPT_PARSE_ERROR':
     case 'SCRIPT_TOO_LONG':
+    case 'MULTI_TURN_NOT_SUPPORTED':
     case 'INVALID_VOICE_ID':
     case 'INVALID_API_KEY':
     case 'ELEVEN_VOICE_NOT_FOUND':
@@ -190,8 +185,10 @@ export async function callNarrateScript(
   if (!trimmed) {
     return failure('VALIDATION_ERROR', 'Script rỗng');
   }
-  if (trimmed.length > 2000) {
-    return failure('SCRIPT_TOO_LONG', 'Script vượt quá 2000 ký tự');
+  // Note: server cap is 3000 chars (per spec). Keep client cap aligned to avoid
+  // false UX rejection when chunk-script-textarea + validate-chunk allow 3000.
+  if (trimmed.length > 3000) {
+    return failure('SCRIPT_TOO_LONG', 'Script vượt quá 3000 ký tự');
   }
   if (params.modelId !== 'eleven_v3') {
     return failure('VALIDATION_ERROR', 'modelId phải là eleven_v3');
@@ -282,7 +279,7 @@ export async function callNarrateScript(
 
     log.info('callNarrateScript', 'success', {
       durationMs: data.durationMs,
-      segmentCount: Array.isArray(data.segments) ? data.segments.length : 0,
+      wordCount: Array.isArray(data.words) ? data.words.length : 0,
       processingTimeMs: body.meta?.processingTimeMs,
       pathKey: body.meta?.pathKey,
       alignmentFallback: body.meta?.alignmentFallback,

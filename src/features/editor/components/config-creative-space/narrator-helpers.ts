@@ -36,10 +36,10 @@ export function extractInference(
       typeof narrator.similarity === 'number'
         ? narrator.similarity
         : DEFAULT_INFERENCE_PARAMS.similarity,
-    style_exaggeration:
-      typeof narrator.style_exaggeration === 'number'
-        ? narrator.style_exaggeration
-        : DEFAULT_INFERENCE_PARAMS.style_exaggeration,
+    exaggeration:
+      typeof narrator.exaggeration === 'number'
+        ? narrator.exaggeration
+        : DEFAULT_INFERENCE_PARAMS.exaggeration,
     speaker_boost:
       typeof narrator.speaker_boost === 'boolean'
         ? narrator.speaker_boost
@@ -113,10 +113,10 @@ export function splitNarrator(
       typeof narrator.similarity === 'number'
         ? narrator.similarity
         : DEFAULT_INFERENCE_PARAMS.similarity,
-    style_exaggeration:
-      typeof narrator.style_exaggeration === 'number'
-        ? narrator.style_exaggeration
-        : DEFAULT_INFERENCE_PARAMS.style_exaggeration,
+    exaggeration:
+      typeof narrator.exaggeration === 'number'
+        ? narrator.exaggeration
+        : DEFAULT_INFERENCE_PARAMS.exaggeration,
     speaker_boost:
       typeof narrator.speaker_boost === 'boolean'
         ? narrator.speaker_boost
@@ -130,7 +130,7 @@ export function splitNarrator(
 }
 
 /**
- * Set a single inference param (speed/stability/similarity/style_exaggeration/speaker_boost).
+ * Set a single inference param (speed/stability/similarity/exaggeration/speaker_boost).
  * Per Validation Session 1: does NOT wipe any language media_url — preview invalidation
  * happens only on explicit user Preview click (Phase 02 always-call strategy).
  */

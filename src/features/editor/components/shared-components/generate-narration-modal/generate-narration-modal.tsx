@@ -1,52 +1,40 @@
-// generate-narration-modal.tsx — Root shell for the narration generation modal.
-// Composes Phase 2 helpers + Phase 3 sub-components + the shared
-// VoiceInferenceParams. Owns editableScript/settings state + inline audio
-// playback state; delegates the async generate flow to `useNarrationGenerate`.
-//
-// Interaction Layer: registers a `modal` slot (ADR-019) with captureClickOutside
-// so Escape/outside-click close the modal without leaking to the item slot.
+// generate-narration-modal.tsx — Per-textbox narration modal (chunks shape).
+// Spec: ai-storybook-design/component/editor-page/objects-creative-space/07-generate-narration-modal.md
+// Phase 04 rewrite: orchestrates the chunks list + combined preview, delegates
+// per-chunk render to NarrationChunkCard, drives Generate / Combine flows via
+// useNarrationModalState. Bubbles full TextboxAudio to parent on every state
+// change; flush on close gives parent a final draft to persist.
 
-"use client";
+'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { Sparkles, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
+
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { createLogger } from '@/utils/logger';
-import { cn } from '@/utils/utils';
 import { useInteractionLayer } from '@/features/editor/contexts';
-import { VoiceInferenceParams } from '@/features/voices/components/voice-inference-params/voice-inference-params';
-import { useVoices } from '@/stores/voices-store';
+import { createLogger } from '@/utils/logger';
 import { useBookNarrator, useCurrentBook } from '@/stores/book-store';
-import { useCharacters } from '@/stores/snapshot-store';
-import type {
-  TextboxAudio,
-  TextboxAudioSettings,
-} from '@/types/spread-types';
-import { InlineAudioPlayer } from '@/features/voices/components/voice-preview/inline-audio-player';
-import { ScriptEditor } from './components/script-editor/script-editor';
-import { ScriptMeta } from './components/script-meta';
-import { parseTurns } from './helpers/script-parser';
-import { resolveScriptKeys } from './helpers/script-resolver';
-import {
-  DEFAULT_SETTINGS,
-  MAX_SCRIPT_LENGTH,
-} from './helpers/settings-mapper';
-import { signatureOf } from './helpers/signature';
-import { useNarrationGenerate } from './use-narration-generate';
+import { useVoices } from '@/stores/voices-store';
+import { useCharacters } from '@/stores/snapshot-store/selectors';
+import type { TextboxAudio } from '@/types/spread-types';
 
-const log = createLogger('GenerateNarrationModal', 'Component');
+import { NarrationChunkCard } from './components/narration-chunk-card';
+import { CombinedFallback } from './components/combined-fallback';
+import { CombinedPlayerRow } from './components/combined-player-row';
+import { useNarrationModalState } from './use-narration-modal-state';
+import {
+  buildVoiceOptions,
+  resolveNarratorVoiceId,
+} from './helpers/build-voice-options';
+
+const log = createLogger('Editor', 'GenerateNarrationModal');
+
+// ── Props ───────────────────────────────────────────────────────────────────
 
 export interface GenerateNarrationModalProps {
   isOpen: boolean;
@@ -55,14 +43,10 @@ export interface GenerateNarrationModalProps {
   textboxText: string;
   existingAudio: TextboxAudio | null;
   currentLanguage: string;
-  onGenerated: (audio: TextboxAudio) => void;
-  /** Called once when local edits (script/settings) first diverge from the last
-   *  generated media, so the parent can flip `audio.media.script_synced = false`. */
-  onMarkStale?: () => void;
-  /** Called on close with latest local script/settings if they diverge from the
-   *  persisted audio — so unfinalized edits survive modal close/reopen. */
-  onDraftSave?: (draft: { script: string; settings: TextboxAudioSettings }) => void;
+  onAudioChange: (audio: TextboxAudio) => void;
 }
+
+// ── Component ───────────────────────────────────────────────────────────────
 
 export function GenerateNarrationModal({
   isOpen,
@@ -71,197 +55,81 @@ export function GenerateNarrationModal({
   textboxText,
   existingAudio,
   currentLanguage,
-  onGenerated,
-  onMarkStale,
-  onDraftSave,
+  onAudioChange,
 }: GenerateNarrationModalProps) {
-  // ── Local state ───────────────────────────────────────────────────────────
-  const [editableScript, setEditableScript] = useState('');
-  const [settings, setSettings] =
-    useState<TextboxAudioSettings>(DEFAULT_SETTINGS);
-
   const dialogContentRef = useRef<HTMLDivElement>(null);
 
-  // ── Store selectors ───────────────────────────────────────────────────────
+  // ── Store data ──
+  const book = useCurrentBook();
+  const narrator = useBookNarrator();
   const voices = useVoices();
+  const characters = useCharacters();
+
   const voicesById = useMemo(
     () => new Map(voices.map((v) => [v.id, v])),
     [voices],
   );
-  const narrator = useBookNarrator();
-  const currentBook = useCurrentBook();
-  const originalLanguage = currentBook?.original_language ?? currentLanguage;
-  const characters = useCharacters();
-  const charactersByKey = useMemo(
-    () => new Map(characters.map((c) => [c.key, c])),
-    [characters],
+
+  const defaultNarratorVoiceId = useMemo(
+    () =>
+      resolveNarratorVoiceId(
+        narrator,
+        currentLanguage,
+        book?.original_language ?? null,
+      ),
+    [narrator, currentLanguage, book?.original_language],
   );
 
-  // ── Derived (sync) ────────────────────────────────────────────────────────
-  const resolveResult = useMemo(
+  const voiceOptions = useMemo(
     () =>
-      resolveScriptKeys(editableScript, {
+      buildVoiceOptions({
         narrator,
-        charactersByKey,
+        characters,
         voicesById,
         currentLanguage,
-        originalLanguage,
+        originalLanguage: book?.original_language ?? null,
       }),
-    [
-      editableScript,
-      narrator,
-      charactersByKey,
-      voicesById,
-      currentLanguage,
-      originalLanguage,
-    ],
+    [narrator, characters, voicesById, currentLanguage, book?.original_language],
   );
-  const resolvedLength = resolveResult.ok ? resolveResult.value.length : 0;
-  const resolveErrors = resolveResult.ok ? [] : resolveResult.errors;
-  const turnCount = useMemo(
-    () => parseTurns(editableScript).length,
-    [editableScript],
-  );
-  // Staleness is a stored flag on the media (source of truth per product spec):
-  // flipped false by any text/script/settings change, true on successful generate.
-  const isStoredStale = existingAudio?.media?.script_synced === false;
-  const currentSignature = useMemo(
-    () => signatureOf(editableScript, settings),
-    [editableScript, settings],
-  );
-  const isValid =
-    turnCount >= 1 &&
-    resolvedLength <= MAX_SCRIPT_LENGTH &&
-    resolveErrors.length === 0;
 
-  // ── Generate flow (media + signature + async) ─────────────────────────────
-  const {
-    media,
-    setMedia,
-    isGenerating,
-    previewError,
-    setPreviewError,
-    lastGeneratedSignature,
-    setLastGeneratedSignature,
-    handleGenerate,
-    abortInFlight,
-  } = useNarrationGenerate({
-    isValid,
-    resolveResult,
-    editableScript,
-    settings,
-    currentSignature,
-    onGenerated,
+  // ── State hook (owns chunks + combined + handlers) ──
+  const state = useNarrationModalState({
+    isOpen,
+    textboxText,
+    existingAudio,
+    defaultNarratorVoiceId,
+    voicesById,
+    onAudioChange,
   });
 
-  const isDirty =
-    media != null &&
-    lastGeneratedSignature != null &&
-    currentSignature !== lastGeneratedSignature;
-
-  // ── Auto-play after generate ──────────────────────────────────────────────
-  // Mirror VoicePreviewCard behavior: when generation completes with media,
-  // increment a one-shot token so InlineAudioPlayer plays immediately.
-  const prevGeneratingRef = useRef(isGenerating);
-  const [autoPlayKey, setAutoPlayKey] = useState(0);
-  useEffect(() => {
-    const wasGenerating = prevGeneratingRef.current;
-    prevGeneratingRef.current = isGenerating;
-    if (wasGenerating && !isGenerating && media?.url) {
-      log.info('generation:complete', 'auto-play narration', {});
-      setAutoPlayKey((k) => k + 1);
-    }
-  }, [isGenerating, media?.url]);
-
-  // ── Propagate stale flag to parent ────────────────────────────────────────
-  // Fire `onMarkStale` once when the local signature first diverges from the
-  // last-generated one AND the stored media still claims synced. Parent flips
-  // `audio.media.script_synced = false` so the flag persists across closes.
-  useEffect(() => {
-    if (!isDirty) return;
-    if (existingAudio?.media?.script_synced === false) return;
-    onMarkStale?.();
-    log.debug('markStale', 'signature diverged — flagged parent', {});
-    // deps intentionally narrow: we only want the edge trigger, not re-fires
-    // on every keystroke once parent has already flipped the flag.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty, existingAudio?.media?.script_synced]);
-
-  // ── Pre-fill on open ──────────────────────────────────────────────────────
-  // Run only on the open transition — not on every prop-reference change.
-  // Parent re-renders during editing (e.g., onScriptEdited → onUpdate) create a
-  // new `existingAudio` reference which would otherwise clobber `editableScript`
-  // back to the stored value mid-edit. Latest props are captured via refs so the
-  // one-shot prefill sees current data without re-subscribing.
-  const prefillPropsRef = useRef({ existingAudio, textboxText });
-  prefillPropsRef.current = { existingAudio, textboxText };
+  // ── Open/close logging ──
   useEffect(() => {
     if (!isOpen) return;
-    const { existingAudio, textboxText } = prefillPropsRef.current;
-    const trimmedText = textboxText.trim();
-    const wrappedFromText = trimmedText ? `@narrator: ${trimmedText}` : '';
-    if (existingAudio) {
-      // If the stored audio row has no script yet (brand-new audio record on a
-      // textbox that already has text), seed it from textboxText so the user
-      // isn't staring at an empty editor.
-      const script = existingAudio.script?.trim()
-        ? existingAudio.script
-        : wrappedFromText;
-      const mergedSettings = { ...DEFAULT_SETTINGS, ...existingAudio.settings };
-      setEditableScript(script);
-      setSettings(mergedSettings);
-      setMedia(existingAudio.media);
-      setLastGeneratedSignature(
-        existingAudio.media ? signatureOf(script, mergedSettings) : null,
-      );
-      log.debug('prefill', 'restored from existingAudio', {
-        hasMedia: existingAudio.media != null,
-        scriptSeededFromText: !existingAudio.script?.trim() && trimmedText.length > 0,
-      });
-    } else {
-      setEditableScript(wrappedFromText);
-      setSettings(DEFAULT_SETTINGS);
-      setMedia(null);
-      setLastGeneratedSignature(null);
-      log.debug('prefill', 'fresh wrap from textboxText', {
-        hasText: trimmedText.length > 0,
-      });
-    }
-    setPreviewError(null);
     log.info('open', 'modal opened', {
+      currentLanguage,
       hasExistingAudio: existingAudio != null,
+      // Optional chain on chunks too — legacy shape may have no `chunks` field;
+      // adapter coerces inside the state hook, but this log runs on raw props.
+      chunkCount: existingAudio?.chunks?.length ?? 0,
+      textLength: textboxText.length,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+    return () => {
+      log.info('close', 'modal closed');
+    };
+  }, [isOpen, currentLanguage, existingAudio, textboxText.length]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // ── Close handler ──
+  // Draft state already bubbles via onAudioChange on every mutation — no extra
+  // flush-on-close is needed.
   const handleClose = useCallback(() => {
-    if (isGenerating) {
-      log.debug('handleClose', 'blocked: generating', {});
+    if (state.anyGenerating) {
+      log.debug('handleClose', 'blocked while generating');
+      toast.warning('Đang generate, vui lòng đợi…');
       return;
     }
-    // Persist unfinalized edits so they survive close/reopen. Compare against
-    // the stored audio to avoid a no-op update when nothing changed.
-    const storedScript = existingAudio?.script ?? '';
-    const storedSettings = existingAudio?.settings;
-    const scriptChanged = editableScript !== storedScript;
-    const settingsChanged =
-      !storedSettings ||
-      signatureOf('', settings) !== signatureOf('', storedSettings);
-    if (onDraftSave && (scriptChanged || settingsChanged)) {
-      onDraftSave({ script: editableScript, settings });
-      log.info('close', 'draft saved', { scriptChanged, settingsChanged });
-    }
-    log.info('close', 'modal closed', {});
+    state.abortInFlight();
     onClose();
-  }, [
-    isGenerating,
-    onClose,
-    existingAudio,
-    editableScript,
-    settings,
-    onDraftSave,
-  ]);
+  }, [state, onClose]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -270,26 +138,7 @@ export function GenerateNarrationModal({
     [handleClose],
   );
 
-  const handleSettingsChange = useCallback(
-    (next: TextboxAudioSettings) => {
-      setSettings((prev) => ({ ...prev, ...next }));
-    },
-    [],
-  );
-
-  const handleResetSettings = useCallback(() => {
-    setSettings((prev) => ({ ...DEFAULT_SETTINGS, seed: prev.seed }));
-  }, []);
-
-  const handleScriptChange = useCallback((next: string) => {
-    setEditableScript(next);
-  }, []);
-
-  // No-op commit hook (kept for ScriptEditor contract; staleness propagation
-  // flows through the `onMarkStale` effect above on signature divergence).
-  const handleScriptCommit = useCallback(() => {}, []);
-
-// ── Interaction layer registration ────────────────────────────────────────
+  // ── Interaction Layer registration ──
   useInteractionLayer(
     'modal',
     isOpen
@@ -298,153 +147,112 @@ export function GenerateNarrationModal({
           ref: dialogContentRef,
           hotkeys: ['Escape'],
           onHotkey: (key) => {
-            if (key === 'Escape' && !isGenerating) handleClose();
+            if (key === 'Escape' && !state.anyGenerating) handleClose();
           },
           onClickOutside: () => {
-            if (!isGenerating) handleClose();
+            if (!state.anyGenerating) handleClose();
           },
           captureClickOutside: true,
-          portalSelectors: [
-            '[data-radix-popper-content-wrapper]',
-            '[data-radix-select-content]',
-            '[role="listbox"]',
-          ],
-          dropdownSelectors: [
-            '[data-radix-popper-content-wrapper]',
-            '[data-radix-select-content]',
-          ],
+          // Radix Select / Popover portals — guard against closing the modal
+          // when a popover inside a chunk card opens.
+          portalSelectors: ['[data-radix-popper-content-wrapper]'],
+          // Force-pop bypasses anyGenerating guard intentionally: when a
+          // higher-priority slot replaces us, the contract is to close —
+          // AbortController stops the in-flight network call cleanly.
           onForcePop: () => {
-            abortInFlight();
+            state.abortInFlight();
             onClose();
           },
         }
       : null,
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  // Map TextboxAudioSettings → VoiceInferenceParamsValue (NarratorInferenceParams shape).
-  const inferenceValue = useMemo(
-    () => ({
-      speed: settings.speed,
-      stability: settings.stability,
-      similarity: settings.similarity,
-      style_exaggeration: settings.style_exaggeration,
-      speaker_boost: settings.speaker_boost,
-    }),
-    [
-      settings.speed,
-      settings.stability,
-      settings.similarity,
-      settings.style_exaggeration,
-      settings.speaker_boost,
-    ],
+  // ── Generate wrapper: surface overlap rejection as toast ──
+  const onGenerate = useCallback(
+    async (clientId: string) => {
+      log.info('onGenerate', 'request', { clientId });
+      const result = await state.handleGenerateChunk(clientId);
+      if (!result.ok && result.reason === 'overlap') {
+        toast.warning('Đợi chunk hiện tại generate xong rồi thử lại.');
+      }
+    },
+    [state],
   );
 
+  // ── Refresh combined wrapper: surface error as toast ──
+  const onRefresh = useCallback(async () => {
+    log.info('onRefresh', 'request', { chunkCount: state.chunks.length });
+    await state.handleRefreshCombined();
+  }, [state]);
+
+  // Surface combine errors via toast after they appear (one-shot per code).
+  const lastErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!state.combinedError) {
+      lastErrorRef.current = null;
+      return;
+    }
+    if (lastErrorRef.current === state.combinedError) return;
+    lastErrorRef.current = state.combinedError;
+    toast.error('Combine audio thất bại — kiểm tra chi tiết bên dưới.');
+  }, [state.combinedError]);
+
+  // ── Render ──
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         ref={dialogContentRef}
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
-        className="sm:max-w-xl max-h-[90vh] overflow-y-auto"
+        className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto"
       >
         <DialogHeader>
-          <DialogTitle>
-            {textboxTitle ?? 'Textbox'} - Narration
-          </DialogTitle>
+          <DialogTitle>{textboxTitle ?? 'Textbox'} - Narration</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-5">
-          {media?.url ? (
-            <InlineAudioPlayer
-              key={`${media.url}#${media.generated_at}`}
-              src={media.url}
-              isActive
-              onPlayStart={() => {}}
-              autoPlayKey={autoPlayKey}
+        <div className="flex flex-col gap-5 py-2">
+          {/* Combined preview — player when URL exists, fallback otherwise. */}
+          {state.combinedAudioUrl ? (
+            <CombinedPlayerRow
+              audioUrl={state.combinedAudioUrl}
+              chunkCount={state.chunks.length}
+              isMerging={state.isMergingCombined}
+              refreshDisabled={!state.canCombine}
+              onRefresh={onRefresh}
             />
           ) : (
-            <div className="flex h-12 items-center justify-center rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              No audio yet — click Generate to synthesize
-            </div>
+            <CombinedFallback
+              canCombine={state.canCombine}
+              isMerging={state.isMergingCombined}
+              error={state.combinedError}
+              onRefresh={onRefresh}
+            />
           )}
 
-          <div className="flex flex-col items-center gap-2">
-            <Button
-              type="button"
-              onClick={handleGenerate}
-              disabled={!isValid || isGenerating}
-              className="gap-2"
-            >
-              <Sparkles className="h-4 w-4" />
-              {isGenerating ? 'Generating…' : 'Generate'}
-            </Button>
-            {previewError && (
-              <p className={cn('text-center text-xs font-medium text-destructive')}>
-                {previewError}
-              </p>
-            )}
+          {/* Chunk list */}
+          <div className="flex flex-col gap-3">
+            {state.chunks.map((chunk, idx) => (
+              <NarrationChunkCard
+                key={chunk.client_id}
+                chunk={chunk}
+                index={idx}
+                totalChunks={state.chunks.length}
+                voiceOptions={voiceOptions}
+                voicesById={voicesById}
+                currentLanguage={currentLanguage}
+                onScriptChange={(s) => state.handleScriptChange(chunk.client_id, s)}
+                onVoiceChange={(v) => state.handleVoiceChange(chunk.client_id, v)}
+                onParamChange={(p) => state.handleParamChange(chunk.client_id, p)}
+                onResetParams={() => state.handleResetParams(chunk.client_id)}
+                onSelectResult={(i) => state.handleSelectResult(chunk.client_id, i)}
+                onToggleExpanded={() => state.handleToggleExpanded(chunk.client_id)}
+                onToggleAdvance={() => state.handleToggleAdvance(chunk.client_id)}
+                onGenerate={() => {
+                  void onGenerate(chunk.client_id);
+                }}
+              />
+            ))}
           </div>
-
-          <VoiceInferenceParams
-            title="Voice settings"
-            value={inferenceValue}
-            onChange={(next) =>
-              handleSettingsChange({
-                ...settings,
-                speed: next.speed,
-                stability: next.stability,
-                similarity: next.similarity,
-                style_exaggeration: next.style_exaggeration,
-                speaker_boost: next.speaker_boost,
-              })
-            }
-            onReset={handleResetSettings}
-            disabled={isGenerating}
-          />
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Textbox text
-              </p>
-              {isStoredStale && (
-                <span
-                  role="status"
-                  className="flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
-                >
-                  <TriangleAlert className="h-3 w-3" aria-hidden="true" />
-                  Out of sync — regenerate audio
-                </span>
-              )}
-            </div>
-            <div className="whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground min-h-[2.5rem]">
-              {textboxText?.trim() ? textboxText : (
-                <span className="italic opacity-70">(empty)</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-bold uppercase tracking-wider">Script</p>
-            <ScriptEditor
-              value={editableScript}
-              onChange={handleScriptChange}
-              onCommit={handleScriptCommit}
-              narrator={narrator}
-              characters={characters}
-              currentLanguage={currentLanguage}
-              placeholder="Type narration. Use @narrator or @{character_key} for multi-turn dialog."
-            />
-            <ScriptMeta
-              resolvedLength={resolvedLength}
-              maxLength={MAX_SCRIPT_LENGTH}
-              turnCount={turnCount}
-              resolveErrors={resolveErrors}
-              isDirty={isDirty}
-            />
-          </div>
-
         </div>
       </DialogContent>
     </Dialog>

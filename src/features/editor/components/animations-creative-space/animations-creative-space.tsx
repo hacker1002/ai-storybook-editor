@@ -96,8 +96,9 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
     const textbox = currentSpread?.textboxes?.find((t) => t.id === selectedItem.id);
     if (!textbox) { log.debug('selectedItemHasAudio', 'textbox not found', { id: selectedItem.id, spreadHasTextboxes: !!currentSpread?.textboxes, textboxCount: currentSpread?.textboxes?.length }); return false; }
     const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
-    log.debug('selectedItemHasAudio', 'check', { id: selectedItem.id, hasAudio: !!result?.content?.audio, hasMedia: result?.content?.audio?.media != null });
-    return Boolean(result?.content?.audio?.media);
+    const hasCombined = result?.content?.audio?.combined_audio_url != null;
+    log.debug('selectedItemHasAudio', 'check', { id: selectedItem.id, hasAudio: !!result?.content?.audio, hasCombined });
+    return hasCombined;
   }, [selectedItem, currentSpread, languageCode]);
 
   // Check if the expanded animation's target textbox has audio (for effect-type grid)
@@ -110,7 +111,7 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
     const textbox = currentSpread?.textboxes?.find((t) => t.id === target.id);
     if (!textbox) return false;
     const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
-    return Boolean(result?.content?.audio?.media);
+    return result?.content?.audio?.combined_audio_url != null;
   }, [expandedAnimIndex, filteredAnimations, currentSpread, languageCode, selectedItemHasAudio]);
 
   const availableEffects = useMemo(
@@ -177,9 +178,9 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
         const textbox = currentSpread?.textboxes?.find((tb) => tb.id === selectedItem.id);
         if (textbox) {
           const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
-          const media = result?.content?.audio?.media;
-          if (media?.url) {
-            const durationMs = await fetchMediaDurationMs(media.url);
+          const url = result?.content?.audio?.combined_audio_url;
+          if (url) {
+            const durationMs = await fetchMediaDurationMs(url);
             if (durationMs) {
               effect.duration = durationMs;
               log.debug("handleAddAnimation", "auto-set read-along duration from narration audio", { durationMs });

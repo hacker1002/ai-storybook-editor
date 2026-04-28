@@ -54,10 +54,9 @@ function resolveReadAlongAudioData(
   const textbox = textboxes?.find((tb) => (tb as { id: string }).id === anim.target.id);
   if (!textbox) return {};
   const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, narrationLangCode);
-  const media = result?.content?.audio?.media;
-  if (!media) return {};
-  const wordTimings = media.segments?.flatMap((seg) => seg.words);
-  return { wordTimings, audioUrl: media.url };
+  const audio = result?.content?.audio;
+  if (!audio?.combined_audio_url) return {};
+  return { wordTimings: audio.word_timings, audioUrl: audio.combined_audio_url };
 }
 
 /**
@@ -76,7 +75,7 @@ function collectReadAlongAudioUrls(
     const textbox = spread.textboxes?.find((tb) => tb.id === anim.target.id);
     if (!textbox) return;
     const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, narrationLangCode);
-    const url = result?.content?.audio?.media?.url;
+    const url = result?.content?.audio?.combined_audio_url;
     if (url) urls.add(url);
   });
   return Array.from(urls);
@@ -427,11 +426,11 @@ export function usePlayerGsapEngine({
         const textbox = spread.textboxes?.find((tb) => tb.id === anim.target.id);
         if (textbox) {
           const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, narrationLangCode);
-          const media = result?.content?.audio?.media;
-          if (media) {
+          const audio = result?.content?.audio;
+          if (audio?.combined_audio_url) {
             readAlongExtras = {
-              wordTimings: media.segments.flatMap((seg) => seg.words),
-              audioUrl: media.url,
+              wordTimings: audio.word_timings,
+              audioUrl: audio.combined_audio_url,
             };
           }
         }

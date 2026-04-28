@@ -1,34 +1,14 @@
-// narration-error-messages.ts — User-facing Vietnamese strings for both client
-// resolve errors (ResolveError) and server-returned narrate-script error codes
-// (NarrateScriptErrorCode).
+// narration-error-messages.ts — User-facing Vietnamese strings for
+// narrate-script API error codes. Resolve-error mapping removed with the
+// legacy @key script flow (DB-CHANGELOG §4 2026-04-28).
 
 import type { NarrateScriptErrorCode } from '@/apis/narrate-script-api';
-import type { ResolveError, ResolveReason } from './script-resolver';
-
-/** Union accepted by `errorMessageFor`. */
-export type NarrationErrorInput =
-  | ResolveError
-  | { errorCode: NarrateScriptErrorCode; speakerKey?: never };
-
-function isResolveError(err: NarrationErrorInput): err is ResolveError {
-  return 'reason' in err && typeof err.reason === 'string';
-}
-
-const RESOLVE_MESSAGES: Record<ResolveReason, (speakerKey: string) => string> = {
-  unknown_key: (key) =>
-    `Speaker '@${key}' không tồn tại. Dùng @narrator hoặc một character key.`,
-  narrator_no_voice_for_lang: () =>
-    `Narrator chưa gán giọng cho ngôn ngữ hiện tại. Vào Narrator Settings để cấu hình.`,
-  character_no_voice_setting: (key) =>
-    `Character '@${key}' chưa có giọng. Mở character để set voice.`,
-  voice_deleted: (key) =>
-    `Giọng của '@${key}' đã bị xóa. Gán lại voice.`,
-};
 
 const API_MESSAGES: Record<NarrateScriptErrorCode, string> = {
   VALIDATION_ERROR: 'Dữ liệu không hợp lệ, vui lòng kiểm tra lại.',
   SCRIPT_PARSE_ERROR: 'Không đọc được script, vui lòng thử lại.',
-  SCRIPT_TOO_LONG: 'Script vượt quá 2000 ký tự sau khi resolve.',
+  SCRIPT_TOO_LONG: 'Script vượt quá giới hạn ký tự.',
+  MULTI_TURN_NOT_SUPPORTED: 'Script chỉ được chứa 1 voice.',
   INVALID_VOICE_ID: 'Mã giọng đọc không hợp lệ.',
   INVALID_API_KEY: 'Sai cấu hình API key, liên hệ hỗ trợ.',
   ELEVEN_VOICE_NOT_FOUND: 'Giọng đọc không tồn tại, vui lòng chọn giọng khác.',
@@ -45,11 +25,9 @@ const API_MESSAGES: Record<NarrateScriptErrorCode, string> = {
   UNKNOWN: 'Generate thất bại. Thử lại hoặc kiểm tra kết nối.',
 };
 
-/** Map either a resolve error or an API error code to a Vietnamese message. */
-export function errorMessageFor(err: NarrationErrorInput): string {
-  if (isResolveError(err)) {
-    const builder = RESOLVE_MESSAGES[err.reason];
-    return builder(err.speakerKey);
-  }
-  return API_MESSAGES[err.errorCode] ?? API_MESSAGES.UNKNOWN;
+/** Map an API error code to a Vietnamese message. */
+export function errorMessageFor(input: {
+  errorCode: NarrateScriptErrorCode;
+}): string {
+  return API_MESSAGES[input.errorCode] ?? API_MESSAGES.UNKNOWN;
 }

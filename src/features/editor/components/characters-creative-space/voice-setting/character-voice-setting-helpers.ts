@@ -48,10 +48,10 @@ export function extractInference(
       typeof vs.similarity === 'number'
         ? vs.similarity
         : DEFAULT_INFERENCE_PARAMS.similarity,
-    style_exaggeration:
-      typeof vs.style_exaggeration === 'number'
-        ? vs.style_exaggeration
-        : DEFAULT_INFERENCE_PARAMS.style_exaggeration,
+    exaggeration:
+      typeof vs.exaggeration === 'number'
+        ? vs.exaggeration
+        : DEFAULT_INFERENCE_PARAMS.exaggeration,
     speaker_boost:
       typeof vs.speaker_boost === 'boolean'
         ? vs.speaker_boost

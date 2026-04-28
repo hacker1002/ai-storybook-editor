@@ -44,7 +44,7 @@ function detectChangedField(
     'speed',
     'stability',
     'similarity',
-    'style_exaggeration',
+    'exaggeration',
     'speaker_boost',
   ];
   for (const k of keys) {

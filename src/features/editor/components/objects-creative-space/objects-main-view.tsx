@@ -298,14 +298,11 @@ export function ObjectsMainView({
               // separate updates would hit a stale-closure overwrite.
               const audio = content.audio;
               const nextContent: SpreadTextboxContent =
-                audio?.media
+                audio?.combined_audio_url
                   ? {
                       ...content,
                       text: newText,
-                      audio: {
-                        ...audio,
-                        media: { ...audio.media, script_synced: false },
-                      },
+                      audio: { ...audio, script_synced: false },
                     }
                   : { ...content, text: newText };
               context.onUpdate({

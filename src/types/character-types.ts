@@ -52,7 +52,7 @@ export interface CharacterVoicePreviewEntry {
 
 /**
  * Hybrid shape mirroring `NarratorSettings`:
- * - Literal inference keys: voice_id / model / stability / similarity / speed / style_exaggeration / speaker_boost
+ * - Literal inference keys: voice_id / model / stability / similarity / speed / exaggeration / speaker_boost
  * - Language keys match `^[a-z]{2}_[A-Z]{2}$` → `CharacterVoicePreviewEntry`
  */
 export type CharacterVoiceSetting = {
@@ -61,7 +61,7 @@ export type CharacterVoiceSetting = {
   stability: number;
   similarity: number;
   speed: number;
-  style_exaggeration: number;
+  exaggeration: number;
   speaker_boost: boolean;
 } & {
   [languageKey: string]:

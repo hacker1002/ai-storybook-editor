@@ -343,10 +343,10 @@ export const useNarratorInferenceParams = (): NarratorInferenceParams =>
         typeof n.stability === "number" ? n.stability : DEFAULT_INFERENCE_PARAMS.stability,
       similarity:
         typeof n.similarity === "number" ? n.similarity : DEFAULT_INFERENCE_PARAMS.similarity,
-      style_exaggeration:
-        typeof n.style_exaggeration === "number"
-          ? n.style_exaggeration
-          : DEFAULT_INFERENCE_PARAMS.style_exaggeration,
+      exaggeration:
+        typeof n.exaggeration === "number"
+          ? n.exaggeration
+          : DEFAULT_INFERENCE_PARAMS.exaggeration,
       speaker_boost:
         typeof n.speaker_boost === "boolean"
           ? n.speaker_boost

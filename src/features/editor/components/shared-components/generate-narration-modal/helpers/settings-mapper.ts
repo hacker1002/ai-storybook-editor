@@ -1,47 +1,45 @@
-// settings-mapper.ts — TextboxAudioSettings defaults + mapping to the
-// narrate-script API payload (ElevenLabs v3). Key renames happen here; callers
-// should not need to know server field names.
+// settings-mapper.ts — Per-chunk inference defaults + mapping to the
+// narrate-script API payload (ElevenLabs v3). Per DB-CHANGELOG §4
+// (2026-04-28): `model`/`seed`/`speaker_boost` dropped; `style_exaggeration`
+// renamed `exaggeration`.
 
-import type { TextboxAudioSettings } from '@/types/spread-types';
 import type { NarrateScriptSettings } from '@/apis/narrate-script-api';
+import {
+  DEFAULT_CHUNK_INFERENCE_PARAMS,
+  NARRATION_OUTPUT_FORMAT,
+} from '@/types/textbox-audio-adapter';
 
-export const DEFAULT_SETTINGS: TextboxAudioSettings = {
-  model: 'eleven_v3',
-  stability: 0.5,
-  similarity: 0.75,
-  style_exaggeration: 0,
-  speed: 1.0,
-  speaker_boost: true,
-  seed: null,
-};
+/** Backward-compat alias used by upload flow + modal seed. */
+export const DEFAULT_SETTINGS = DEFAULT_CHUNK_INFERENCE_PARAMS;
 
 /** Speed buttons shown in the modal. Spec drops 1.5x. */
 export const SPEED_OPTIONS = [0.75, 1.0, 1.25] as const;
 
-/** Only output format supported by the modal (spec §4.3). */
-export const OUTPUT_FORMAT = 'mp3_44100_128' as const;
+/** Only output format supported by the modal generate flow. */
+export const OUTPUT_FORMAT = NARRATION_OUTPUT_FORMAT;
 
-/** Server enforces 2000 characters post-resolve; client surfaces early. */
-export const MAX_SCRIPT_LENGTH = 2000;
+/** Server enforces script length post-resolve; client surfaces early. */
+export const MAX_SCRIPT_LENGTH = 3000;
+
+export interface ChunkInferenceParams {
+  stability: number;
+  similarity: number;
+  exaggeration: number;
+  speed: number;
+}
 
 /**
- * Map TextboxAudioSettings → NarrateScriptSettings.
+ * Map per-chunk inference params → NarrateScriptSettings (ElevenLabs API).
  * - `similarity` → `similarityBoost`
- * - `style_exaggeration` → `style`
- * - `speaker_boost` omitted (ElevenLabs v3 does not support it)
- * - `seed` null → omit the field entirely
+ * - `exaggeration` → `style`
  */
 export function mapSettingsToApiPayload(
-  settings: TextboxAudioSettings,
+  settings: ChunkInferenceParams,
 ): NarrateScriptSettings {
-  const payload: NarrateScriptSettings = {
+  return {
     stability: settings.stability,
     similarityBoost: settings.similarity,
-    style: settings.style_exaggeration,
+    style: settings.exaggeration,
     speed: settings.speed,
   };
-  if (settings.seed != null) {
-    payload.seed = settings.seed;
-  }
-  return payload;
 }

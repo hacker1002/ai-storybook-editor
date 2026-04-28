@@ -1,0 +1,529 @@
+// use-narration-modal-state.ts — Owns the GenerateNarrationModal working state
+// (chunks + combined fields) and exposes a single API surface to the modal
+// component. API orchestration delegated to runGenerateChunk / runCombineChunks
+// so this file stays under the 500-LOC budget.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { createLogger } from '@/utils/logger';
+import {
+  DEFAULT_CHUNK_INFERENCE_PARAMS,
+  coerceTextboxAudio,
+} from '@/types/textbox-audio-adapter';
+import type {
+  TextboxAudio,
+  WordTiming,
+} from '@/types/spread-types';
+import type { Voice } from '@/types/voice';
+
+import type {
+  ChunkDraft,
+  InferenceParams,
+} from './components/chunk-types';
+import { buildTextboxAudio } from './helpers/build-textbox-audio';
+import { runGenerateChunk } from './helpers/run-generate-chunk';
+import { runCombineChunks } from './helpers/run-combine-chunks';
+
+const log = createLogger('Editor', 'useNarrationModalState');
+
+// ── Types ───────────────────────────────────────────────────────────────────
+
+export type GenerateOverlapResult =
+  | { ok: true }
+  | { ok: false; reason: 'overlap' | 'invalid' };
+
+export interface UseNarrationModalStateParams {
+  isOpen: boolean;
+  textboxText: string;
+  existingAudio: TextboxAudio | null;
+  defaultNarratorVoiceId: string | null;
+  voicesById: Map<string, Voice>;
+  onAudioChange: (audio: TextboxAudio) => void;
+}
+
+export interface UseNarrationModalStateReturn {
+  chunks: ChunkDraft[];
+  combinedAudioUrl: string | null;
+  combinedWordTimings: WordTiming[];
+  audioScriptSynced: boolean;
+  isMergingCombined: boolean;
+  combinedError: string | null;
+  anyGenerating: boolean;
+  canCombine: boolean;
+  handleScriptChange: (clientId: string, next: string) => void;
+  handleVoiceChange: (clientId: string, voiceId: string) => void;
+  handleParamChange: (clientId: string, partial: Partial<InferenceParams>) => void;
+  handleResetParams: (clientId: string) => void;
+  handleSelectResult: (clientId: string, originalIdx: number) => void;
+  handleToggleExpanded: (clientId: string) => void;
+  handleToggleAdvance: (clientId: string) => void;
+  handleGenerateChunk: (clientId: string) => Promise<GenerateOverlapResult>;
+  handleRefreshCombined: () => Promise<void>;
+  abortInFlight: () => void;
+}
+
+// ── Local helpers ───────────────────────────────────────────────────────────
+
+function makeClientId(): string {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return crypto.randomUUID();
+  }
+  return `chunk-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+}
+
+function buildSeedDraft(voiceId: string | null, scriptSeed: string): ChunkDraft {
+  return {
+    voice_id: voiceId ?? '',
+    script: scriptSeed,
+    ...DEFAULT_CHUNK_INFERENCE_PARAMS,
+    script_synced: false,
+    results: [],
+    client_id: makeClientId(),
+    ui: {
+      isExpanded: true,
+      isAdvanceOpen: false,
+      isGenerating: false,
+      error: null,
+    },
+  };
+}
+
+function draftFromPersisted(
+  chunk: TextboxAudio['chunks'][number],
+  index: number,
+): ChunkDraft {
+  return {
+    voice_id: chunk.voice_id,
+    script: chunk.script,
+    stability: chunk.stability,
+    similarity: chunk.similarity,
+    exaggeration: chunk.exaggeration,
+    speed: chunk.speed,
+    script_synced: chunk.script_synced,
+    results: chunk.results,
+    client_id: makeClientId(),
+    ui: {
+      isExpanded: index === 0,
+      isAdvanceOpen: false,
+      isGenerating: false,
+      error: null,
+    },
+  };
+}
+
+// ── Hook ────────────────────────────────────────────────────────────────────
+
+export function useNarrationModalState(
+  params: UseNarrationModalStateParams,
+): UseNarrationModalStateReturn {
+  const {
+    isOpen,
+    textboxText,
+    existingAudio,
+    defaultNarratorVoiceId,
+    voicesById,
+    onAudioChange,
+  } = params;
+
+  const [chunks, setChunks] = useState<ChunkDraft[]>([]);
+  const [combinedAudioUrl, setCombinedAudioUrl] = useState<string | null>(null);
+  const [combinedWordTimings, setCombinedWordTimings] = useState<WordTiming[]>(
+    [],
+  );
+  const [audioScriptSynced, setAudioScriptSynced] = useState(false);
+  const [isMergingCombined, setIsMergingCombined] = useState(false);
+  const [combinedError, setCombinedError] = useState<string | null>(null);
+
+  const abortRef = useRef<AbortController | null>(null);
+  /** Latest snapshot mirror — read inside async handlers without stale closure. */
+  const chunksRef = useRef<ChunkDraft[]>(chunks);
+  chunksRef.current = chunks;
+  /** Skip bubble effect on the very first reset commit. */
+  const initRef = useRef(false);
+  /**
+   * Latest `onAudioChange` mirror. Parent recreates this callback on every
+   * render (see ObjectsTextToolbar → buildTextToolbarContext), so depending on
+   * it directly in the bubble effect produces "Maximum update depth exceeded":
+   *   chunks change → bubble → parent setState → new onAudioChange ref →
+   *   bubble re-fires → setState → … (infinite).
+   * Mirror via ref so the bubble effect depends only on real state.
+   */
+  const onAudioChangeRef = useRef(onAudioChange);
+  onAudioChangeRef.current = onAudioChange;
+  /** Skip bubble when the produced TextboxAudio is value-equal to the previous one. */
+  const lastBubbledRef = useRef<string | null>(null);
+
+  // ── Pre-fill on open ──
+  useEffect(() => {
+    if (!isOpen) return;
+    initRef.current = false;
+
+    const audio = coerceTextboxAudio(existingAudio);
+    if (audio && Array.isArray(audio.chunks) && audio.chunks.length > 0) {
+      const drafts = audio.chunks.map((c, i) => draftFromPersisted(c, i));
+      setChunks(drafts);
+      setCombinedAudioUrl(audio.combined_audio_url ?? null);
+      setCombinedWordTimings(audio.word_timings ?? []);
+      setAudioScriptSynced(Boolean(audio.script_synced));
+      log.info('open', 'pre-fill from existing audio', {
+        chunkCount: drafts.length,
+        hasCombined: audio.combined_audio_url != null,
+      });
+    } else {
+      const seed = buildSeedDraft(defaultNarratorVoiceId, textboxText.trim());
+      setChunks([seed]);
+      setCombinedAudioUrl(null);
+      setCombinedWordTimings([]);
+      setAudioScriptSynced(false);
+      log.info('open', 'seed default chunk', {
+        hasNarratorVoice: defaultNarratorVoiceId != null,
+        scriptLength: textboxText.trim().length,
+      });
+    }
+    setCombinedError(null);
+
+    const handle = setTimeout(() => {
+      initRef.current = true;
+    }, 0);
+    return () => clearTimeout(handle);
+    // Re-prefill only on open flip — external prop changes should not clobber edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // ── Bubble lên parent ──
+  // NOTE: `onAudioChange` deliberately NOT in deps — it's accessed via ref to
+  // avoid an infinite update loop when the parent recreates the callback on
+  // every render. See onAudioChangeRef declaration above.
+  useEffect(() => {
+    if (!isOpen || !initRef.current) return;
+    const next = buildTextboxAudio(
+      chunks,
+      combinedAudioUrl,
+      combinedWordTimings,
+      audioScriptSynced,
+    );
+    const serialized = JSON.stringify(next);
+    if (serialized === lastBubbledRef.current) return;
+    lastBubbledRef.current = serialized;
+    onAudioChangeRef.current(next);
+  }, [
+    isOpen,
+    chunks,
+    combinedAudioUrl,
+    combinedWordTimings,
+    audioScriptSynced,
+  ]);
+
+  // Reset the dedupe key when the modal closes so the next open re-bubbles.
+  useEffect(() => {
+    if (!isOpen) lastBubbledRef.current = null;
+  }, [isOpen]);
+
+  // ── Cleanup on unmount ──
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
+
+  // ── Helpers ──
+  const updateChunk = useCallback(
+    (clientId: string, fn: (c: ChunkDraft) => ChunkDraft) => {
+      setChunks((prev) =>
+        prev.map((c) => (c.client_id === clientId ? fn(c) : c)),
+      );
+    },
+    [],
+  );
+
+  const invalidateAudioSynced = useCallback(() => {
+    setAudioScriptSynced(false);
+  }, []);
+
+  const abortInFlight = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+      log.debug('abortInFlight', 'aborted pending request');
+    }
+  }, []);
+
+  // ── Mutators ──
+  const handleScriptChange = useCallback(
+    (clientId: string, next: string) => {
+      log.debug('handleScriptChange', 'mutate', {
+        clientId,
+        length: next.length,
+      });
+      updateChunk(clientId, (c) => ({
+        ...c,
+        script: next,
+        script_synced: false,
+      }));
+      invalidateAudioSynced();
+    },
+    [updateChunk, invalidateAudioSynced],
+  );
+
+  const handleVoiceChange = useCallback(
+    (clientId: string, voiceId: string) => {
+      log.debug('handleVoiceChange', 'mutate', { clientId, voiceId });
+      updateChunk(clientId, (c) => ({
+        ...c,
+        voice_id: voiceId,
+        script_synced: false,
+      }));
+      invalidateAudioSynced();
+    },
+    [updateChunk, invalidateAudioSynced],
+  );
+
+  const handleParamChange = useCallback(
+    (clientId: string, partial: Partial<InferenceParams>) => {
+      log.debug('handleParamChange', 'mutate', {
+        clientId,
+        keys: Object.keys(partial),
+      });
+      updateChunk(clientId, (c) => ({
+        ...c,
+        ...partial,
+        script_synced: false,
+      }));
+      invalidateAudioSynced();
+    },
+    [updateChunk, invalidateAudioSynced],
+  );
+
+  const handleResetParams = useCallback(
+    (clientId: string) => {
+      log.debug('handleResetParams', 'mutate', { clientId });
+      updateChunk(clientId, (c) => ({
+        ...c,
+        ...DEFAULT_CHUNK_INFERENCE_PARAMS,
+        script_synced: false,
+      }));
+      invalidateAudioSynced();
+    },
+    [updateChunk, invalidateAudioSynced],
+  );
+
+  const handleSelectResult = useCallback(
+    (clientId: string, originalIdx: number) => {
+      // Skip when re-clicking the already-selected result — avoids spurious
+      // combined invalidation + Stale badge flash.
+      const chunk = chunksRef.current.find((c) => c.client_id === clientId);
+      if (chunk?.results[originalIdx]?.is_selected) return;
+      log.debug('handleSelectResult', 'mutate', { clientId, originalIdx });
+      updateChunk(clientId, (c) => ({
+        ...c,
+        results: c.results.map((r, i) => ({
+          ...r,
+          is_selected: i === originalIdx,
+        })),
+        ui: {
+          ...c.ui,
+          autoPlayToken: (c.ui.autoPlayToken ?? 0) + 1,
+        },
+      }));
+      setCombinedAudioUrl(null);
+      setCombinedWordTimings([]);
+      invalidateAudioSynced();
+    },
+    [updateChunk, invalidateAudioSynced],
+  );
+
+  const handleToggleExpanded = useCallback(
+    (clientId: string) => {
+      updateChunk(clientId, (c) => ({
+        ...c,
+        ui: { ...c.ui, isExpanded: !c.ui.isExpanded },
+      }));
+    },
+    [updateChunk],
+  );
+
+  const handleToggleAdvance = useCallback(
+    (clientId: string) => {
+      updateChunk(clientId, (c) => ({
+        ...c,
+        ui: { ...c.ui, isAdvanceOpen: !c.ui.isAdvanceOpen },
+      }));
+    },
+    [updateChunk],
+  );
+
+  // ── Generate ──
+  const handleGenerateChunk = useCallback(
+    async (clientId: string): Promise<GenerateOverlapResult> => {
+      const snapshot = chunksRef.current;
+      if (snapshot.some((c) => c.ui.isGenerating)) {
+        log.warn('handleGenerateChunk', 'overlap rejected', { clientId });
+        return { ok: false, reason: 'overlap' };
+      }
+      const target = snapshot.find((c) => c.client_id === clientId);
+      if (!target) return { ok: false, reason: 'invalid' };
+
+      // Mark generating + clear prior error.
+      updateChunk(clientId, (c) => ({
+        ...c,
+        ui: { ...c.ui, isGenerating: true, error: null },
+      }));
+
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      log.info('handleGenerateChunk', 'start', {
+        clientId,
+        scriptLength: target.script.length,
+      });
+
+      const outcome = await runGenerateChunk({
+        chunk: target,
+        voicesById,
+        signal: controller.signal,
+      });
+
+      if (abortRef.current === controller) abortRef.current = null;
+
+      if (!outcome.ok) {
+        log.warn('handleGenerateChunk', 'failed', {
+          clientId,
+          reason: outcome.reason,
+          errorCode: outcome.errorCode,
+        });
+        updateChunk(clientId, (c) => ({
+          ...c,
+          ui: {
+            ...c.ui,
+            isGenerating: false,
+            error: outcome.errorCode
+              ? { errorCode: outcome.errorCode }
+              : null,
+          },
+        }));
+        return { ok: false, reason: 'invalid' };
+      }
+
+      log.info('handleGenerateChunk', 'success', { clientId });
+      updateChunk(clientId, (c) => ({
+        ...c,
+        script_synced: true,
+        results: [
+          ...c.results.map((r) => ({ ...r, is_selected: false })),
+          outcome.result,
+        ],
+        ui: {
+          ...c.ui,
+          isGenerating: false,
+          error: null,
+          autoPlayToken: (c.ui.autoPlayToken ?? 0) + 1,
+        },
+      }));
+      setCombinedAudioUrl(null);
+      setCombinedWordTimings([]);
+      setAudioScriptSynced(false);
+      setCombinedError(null);
+      return { ok: true };
+    },
+    [voicesById, updateChunk],
+  );
+
+  // ── Refresh combined ──
+  const handleRefreshCombined = useCallback(async () => {
+    const snapshot = chunksRef.current;
+    const ready =
+      snapshot.length > 0 &&
+      snapshot.every((c) => c.script_synced && c.results.length > 0);
+    if (!ready || isMergingCombined) {
+      log.debug('handleRefreshCombined', 'guard', {
+        ready,
+        isMergingCombined,
+      });
+      return;
+    }
+
+    const selected = snapshot.map(
+      (c) => c.results.find((r) => r.is_selected) ?? null,
+    );
+    if (selected.some((r) => r == null)) {
+      setCombinedError('CHUNKS_NOT_READY');
+      log.warn('handleRefreshCombined', 'invariant: missing selection');
+      return;
+    }
+    setCombinedError(null);
+
+    // 1-chunk shortcut
+    if (snapshot.length === 1) {
+      const only = selected[0]!;
+      log.info('handleRefreshCombined', 'shortcut single chunk');
+      setCombinedAudioUrl(only.url);
+      setCombinedWordTimings(only.word_timings);
+      setAudioScriptSynced(true);
+      return;
+    }
+
+    setIsMergingCombined(true);
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    log.info('handleRefreshCombined', 'combine api start', {
+      chunkCount: snapshot.length,
+    });
+
+    const outcome = await runCombineChunks({
+      chunks: snapshot,
+      signal: controller.signal,
+    });
+    if (abortRef.current === controller) abortRef.current = null;
+    setIsMergingCombined(false);
+
+    if (!outcome.ok) {
+      if (outcome.reason === 'aborted') {
+        log.info('handleRefreshCombined', 'aborted');
+        return;
+      }
+      log.warn('handleRefreshCombined', 'api failure', {
+        errorCode: outcome.errorCode,
+      });
+      setCombinedError(outcome.errorCode ?? 'UNKNOWN');
+      return;
+    }
+
+    log.info('handleRefreshCombined', 'combine api success');
+    setCombinedAudioUrl(outcome.audioUrl);
+    setCombinedWordTimings(outcome.words);
+    setAudioScriptSynced(true);
+  }, [isMergingCombined]);
+
+  // ── Derived ──
+  const anyGenerating = chunks.some((c) => c.ui.isGenerating);
+  const canCombine =
+    chunks.length > 0 &&
+    chunks.every((c) => c.script_synced && c.results.length > 0);
+
+  return {
+    chunks,
+    combinedAudioUrl,
+    combinedWordTimings,
+    audioScriptSynced,
+    isMergingCombined,
+    combinedError,
+    anyGenerating,
+    canCombine,
+    handleScriptChange,
+    handleVoiceChange,
+    handleParamChange,
+    handleResetParams,
+    handleSelectResult,
+    handleToggleExpanded,
+    handleToggleAdvance,
+    handleGenerateChunk,
+    handleRefreshCombined,
+    abortInFlight,
+  };
+}

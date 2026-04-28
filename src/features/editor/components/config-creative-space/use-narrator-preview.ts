@@ -70,7 +70,7 @@ function buildApiSettings(
   return {
     stability: inference.stability,
     similarityBoost: inference.similarity,
-    style: inference.style_exaggeration,
+    style: inference.exaggeration,
     speed: inference.speed,
     // seed: not exposed in UI yet → omit
     // speaker_boost: intentionally omitted (UI-only)
@@ -98,10 +98,10 @@ function resolveInferenceParams(
       typeof narrator.similarity === 'number'
         ? narrator.similarity
         : DEFAULT_INFERENCE_PARAMS.similarity,
-    style_exaggeration:
-      typeof narrator.style_exaggeration === 'number'
-        ? narrator.style_exaggeration
-        : DEFAULT_INFERENCE_PARAMS.style_exaggeration,
+    exaggeration:
+      typeof narrator.exaggeration === 'number'
+        ? narrator.exaggeration
+        : DEFAULT_INFERENCE_PARAMS.exaggeration,
     speaker_boost:
       typeof narrator.speaker_boost === 'boolean'
         ? narrator.speaker_boost

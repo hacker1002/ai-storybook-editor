@@ -19,7 +19,7 @@ import {
 
 const log = createLogger('Shared', 'VoiceInferenceParams');
 
-type SliderField = 'stability' | 'similarity' | 'style_exaggeration';
+type SliderField = 'stability' | 'similarity' | 'exaggeration';
 
 interface LabeledSliderProps {
   label: string;
@@ -82,6 +82,7 @@ export function VoiceInferenceParams({
   disabled = false,
   title,
   className,
+  omitSpeakerBoost = false,
 }: VoiceInferenceParamsProps) {
   // Single emit helper — records a DEBUG log with field + from/to then forwards to parent.
   const emit = React.useCallback(
@@ -182,23 +183,31 @@ export function VoiceInferenceParams({
         label="Style exaggeration"
         leftLabel="None"
         rightLabel="Exaggerated"
-        field="style_exaggeration"
-        value={value.style_exaggeration}
+        field="exaggeration"
+        value={value.exaggeration}
         disabled={disabled}
         onChange={handleSliderChange}
       />
 
-      {/* Speaker boost + reset row */}
-      <div className="flex items-center justify-between gap-3">
-        <label className="flex items-center gap-2">
-          <Switch
-            checked={value.speaker_boost}
-            disabled={disabled}
-            onCheckedChange={handleSpeakerBoost}
-            aria-label="Speaker boost"
-          />
-          <span className="text-sm">Speaker boost</span>
-        </label>
+      {/* Speaker boost + reset row.
+          When `omitSpeakerBoost` is true, switch is hidden but Reset stays right-aligned. */}
+      <div
+        className={cn(
+          'flex items-center gap-3',
+          omitSpeakerBoost ? 'justify-end' : 'justify-between',
+        )}
+      >
+        {omitSpeakerBoost ? null : (
+          <label className="flex items-center gap-2">
+            <Switch
+              checked={value.speaker_boost}
+              disabled={disabled}
+              onCheckedChange={handleSpeakerBoost}
+              aria-label="Speaker boost"
+            />
+            <span className="text-sm">Speaker boost</span>
+          </label>
+        )}
 
         {showReset ? (
           <Button

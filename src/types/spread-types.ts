@@ -330,30 +330,21 @@ export interface SpreadTextbox {
   editor_visible?: boolean;
 }
 
-// === Textbox Audio (retouch phase TTS) ===
+// === Textbox Audio (retouch phase TTS) — chunks-based shape ===
 // Shape: ai-storybook-design/snapshot/illustration-structure.md#textboxes
-// API contract: ai-storybook-design/api/text-generation/02-narrate-script.md
+// DB Changelog: ai-storybook-design/DB-CHANGELOG.md §4 (2026-04-28) — BREAKING.
+// Old `script`/`settings`/`media` shape dropped; `style_exaggeration`
+// renamed `exaggeration`; `speaker_boost`/`seed`/`model` removed;
+// per-chunk `voice_id` + `results[]`.
 
-/** Per-word timing within a NarrationSegment. `text` = the word glyph,
- *  charStart/charEnd = offset into segment.text so UI can highlight ranges. */
+/** Per-word timing within a chunk result. `text` = word glyph,
+ *  charStart/charEnd = offset into chunk.script so UI can highlight ranges. */
 export interface WordTiming {
   text: string;
   startMs: number;
   endMs: number;
   charStart: number;
   charEnd: number;
-}
-
-/** Turn-level segment: one line per speaker with resolved voice_id.
- *  Persisted form of API `NarrationSegment` — camelCase `voiceId` renamed to
- *  snake_case `voice_id` via `mapApiSegmentToSnapshot`. */
-export interface NarrationSegment {
-  index: number;
-  voice_id: string;
-  text: string;
-  startMs: number;
-  endMs: number;
-  words: WordTiming[];
 }
 
 /** Raw ElevenLabs alignment. Persisted verbatim for forward compat. */
@@ -364,34 +355,35 @@ export interface RawAlignment {
   [key: string]: unknown;
 }
 
-/** Generated audio + timing metadata for a textbox. Single object; null when
- *  not generated yet. */
-export interface TextboxAudioMedia {
+/** A generated audio version for a chunk. Append-only — exactly one with
+ *  `is_selected: true` when results[] is non-empty. */
+export interface TextboxAudioResult {
   url: string;
-  duration_ms: number;
-  output_format: string;
-  path_key: string;
-  script_synced: boolean;
-  generated_at: string;
-  segments: NarrationSegment[];
+  word_timings: WordTiming[];
   raw_alignment: RawAlignment;
+  created_time: string;
+  is_selected: boolean;
 }
 
-/** User-tunable ElevenLabs v3 settings persisted with each textbox. */
-export interface TextboxAudioSettings {
-  model: string;
-  stability: number;
-  similarity: number;
-  style_exaggeration: number;
-  speed: number;
-  speaker_boost: boolean;
-  seed: number | null;
-}
-
-export interface TextboxAudio {
+/** Single voice + script chunk inside a textbox. Multi-speaker dialog uses
+ *  multiple chunks (one voice per chunk). */
+export interface TextboxAudioChunk {
+  voice_id: string;
   script: string;
-  settings: TextboxAudioSettings;
-  media: TextboxAudioMedia | null;
+  stability: number;        // 0..1
+  similarity: number;       // 0..1
+  exaggeration: number;     // 0..1 (maps to API `style`; renamed from style_exaggeration per DB-CHANGELOG §4 2026-04-28)
+  speed: number;            // 0.7..1.2
+  script_synced: boolean;
+  results: TextboxAudioResult[];
+}
+
+/** Top-level textbox audio: rollups + ordered chunks. */
+export interface TextboxAudio {
+  script_synced: boolean;
+  combined_audio_url: string | null;
+  word_timings: WordTiming[];
+  chunks: TextboxAudioChunk[];
 }
 
 export interface SpreadTextboxContent {

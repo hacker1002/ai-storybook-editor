@@ -10,6 +10,7 @@ const MESSAGES: Record<NarrateScriptErrorCode, string> = {
   VALIDATION_ERROR: 'Dữ liệu không hợp lệ, vui lòng kiểm tra lại.',
   SCRIPT_PARSE_ERROR: 'Không đọc được script, vui lòng thử lại.',
   SCRIPT_TOO_LONG: 'Nội dung preview quá dài, vui lòng rút gọn.',
+  MULTI_TURN_NOT_SUPPORTED: 'Preview chỉ được dùng 1 voice.',
   INVALID_VOICE_ID: 'Mã giọng đọc không hợp lệ.',
   INVALID_API_KEY: 'Sai cấu hình API key, liên hệ hỗ trợ.',
   ELEVEN_VOICE_NOT_FOUND: 'Giọng đọc không tồn tại, vui lòng chọn giọng khác.',

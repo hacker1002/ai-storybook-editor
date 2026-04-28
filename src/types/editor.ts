@@ -151,7 +151,7 @@ export interface NarratorInferenceParams {
   speed: number;              // UI options: 0.75 | 1.0 | 1.25 (API range [0.7, 1.2])
   stability: number;          // 0..1
   similarity: number;         // 0..1 (maps to API `similarityBoost`)
-  style_exaggeration: number; // 0..1 (maps to API `style`)
+  exaggeration: number;       // 0..1 (maps to API `style`) — renamed from `style_exaggeration` (DB-CHANGELOG §4 2026-04-28)
   speaker_boost: boolean;     // UI-persisted, NOT sent to API (v3 unsupported)
 }
 

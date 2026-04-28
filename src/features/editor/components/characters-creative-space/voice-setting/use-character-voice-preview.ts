@@ -44,7 +44,7 @@ function buildApiSettings(vs: CharacterVoiceSetting | null): NarrateScriptSettin
   return {
     stability: inference.stability,
     similarityBoost: inference.similarity,
-    style: inference.style_exaggeration,
+    style: inference.exaggeration,
     speed: inference.speed,
     // speaker_boost intentionally omitted (ElevenLabs v3 doesn't accept it via this endpoint).
   };
