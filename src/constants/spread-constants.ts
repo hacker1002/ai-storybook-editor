@@ -12,7 +12,7 @@ export const COLORS = {
   ITEM_BORDER_IMAGE: "rgba(234, 179, 8, 0.75)",    // yellow, solid
   ITEM_BORDER_TEXTBOX: "rgba(180, 185, 195, 0.85)", // light gray, dashed
   ITEM_BORDER_VIDEO: "rgba(0, 0, 0, 0.22)",         // black muted, solid
-  ITEM_BORDER_ANIMATED_PIC: "rgba(139, 92, 246, 0.5)", // purple, animated pic layer
+  ITEM_BORDER_AUTO_PIC: "rgba(139, 92, 246, 0.5)", // purple, animated pic layer
   ITEM_BORDER_HOVER: "rgba(33, 150, 243, 0.5)",     // light blue hover (lighter than SELECTION)
 } as const;
 
@@ -40,7 +40,7 @@ export const LAYER_CONFIG = {
     min: 1,
     max: 500,
     label: "Pictorial",
-    types: ["image", "video", "animated_pic"] as const,
+    types: ["image", "video", "auto_pic"] as const,
   },
   OBJECTS: {
     min: 501,

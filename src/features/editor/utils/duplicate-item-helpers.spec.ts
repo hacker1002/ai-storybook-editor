@@ -103,10 +103,10 @@ describe("nextTopZInTier", () => {
     expect(nextTopZInTier(spread, "text")).toBe(651);
   });
 
-  it("pictorial tier: includes animated_pics in max scan", () => {
+  it("pictorial tier: includes auto_pics in max scan", () => {
     const spread = {
       images: [{ id: "img", "z-index": 10 }],
-      animated_pics: [{ id: "ap", "z-index": 20 }],
+      auto_pics: [{ id: "ap", "z-index": 20 }],
     };
     expect(nextTopZInTier(spread, "pictorial")).toBe(21);
   });

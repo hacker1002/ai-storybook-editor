@@ -28,8 +28,8 @@ import type {
   PageToolbarContext,
   ShapeToolbarContext,
   VideoToolbarContext,
-  AnimatedPicItemContext,
-  AnimatedPicToolbarContext,
+  AutoPicItemContext,
+  AutoPicToolbarContext,
   AudioToolbarContext,
   LayoutOption,
   OnUpdateSpreadItemFn,
@@ -63,7 +63,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
-  renderAnimatedPicItem?: (context: AnimatedPicItemContext<TSpread>) => ReactNode;
+  renderAutoPicItem?: (context: AutoPicItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
   renderImageToolbar?: (context: ImageToolbarContext<TSpread>) => ReactNode;
@@ -72,7 +72,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   renderShapeToolbar?: (context: ShapeToolbarContext<TSpread>) => ReactNode;
   renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
   renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
-  renderAnimatedPicToolbar?: (context: AnimatedPicToolbarContext<TSpread>) => ReactNode;
+  renderAutoPicToolbar?: (context: AutoPicToolbarContext<TSpread>) => ReactNode;
 
   // Raw item render functions (illustration layer)
   renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
@@ -145,8 +145,8 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   renderShapeToolbar,
   renderVideoToolbar,
   renderAudioToolbar,
-  renderAnimatedPicItem,
-  renderAnimatedPicToolbar,
+  renderAutoPicItem,
+  renderAutoPicToolbar,
   renderRawImage,
   renderRawTextbox,
   renderRawImageToolbar,
@@ -402,14 +402,14 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderVideoItem={renderVideoItem}
                 renderAudioItem={renderAudioItem}
                 renderQuizItem={renderQuizItem}
-                renderAnimatedPicItem={renderAnimatedPicItem}
+                renderAutoPicItem={renderAutoPicItem}
                 renderImageToolbar={renderImageToolbar}
                 renderTextToolbar={renderTextToolbar}
                 renderPageToolbar={renderPageToolbar}
                 renderShapeToolbar={renderShapeToolbar}
                 renderVideoToolbar={renderVideoToolbar}
                 renderAudioToolbar={renderAudioToolbar}
-                renderAnimatedPicToolbar={renderAnimatedPicToolbar}
+                renderAutoPicToolbar={renderAutoPicToolbar}
                 renderRawImage={renderRawImage}
                 renderRawTextbox={renderRawTextbox}
                 renderRawImageToolbar={renderRawImageToolbar}
@@ -440,7 +440,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 renderShapeItem={renderShapeItem}
                 renderVideoItem={renderVideoItem}
                 renderAudioItem={renderAudioItem}
-                renderAnimatedPicItem={renderAnimatedPicItem}
+                renderAutoPicItem={renderAutoPicItem}
                 renderQuizItem={renderQuizItem}
                 renderRawImage={renderRawImage}
                 renderRawTextbox={renderRawTextbox}
@@ -469,7 +469,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             renderShapeItem={renderShapeItem}
             renderVideoItem={renderVideoItem}
             renderAudioItem={renderAudioItem}
-            renderAnimatedPicItem={renderAnimatedPicItem}
+            renderAutoPicItem={renderAutoPicItem}
             renderQuizItem={renderQuizItem}
             renderRawImage={renderRawImage}
             renderRawTextbox={renderRawTextbox}

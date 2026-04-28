@@ -203,8 +203,8 @@ export function buildItemsMap(
   for (const aud of spread.audios ?? []) {
     map.set(aud.id, { title: (aud as { title?: string }).title ?? aud.id, type: 'audio' });
   }
-  for (const ap of spread.animated_pics ?? []) {
-    map.set(ap.id, { title: (ap as { title?: string }).title ?? ap.id, type: 'animated_pic' });
+  for (const ap of spread.auto_pics ?? []) {
+    map.set(ap.id, { title: (ap as { title?: string }).title ?? ap.id, type: 'auto_pic' });
   }
   for (const quiz of spread.quizzes ?? []) {
     let quizTitle = quiz.title ?? quiz.id;

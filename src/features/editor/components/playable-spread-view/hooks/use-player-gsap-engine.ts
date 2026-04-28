@@ -278,13 +278,13 @@ export function usePlayerGsapEngine({
         ...(spread.images || []),
         ...(spread.shapes || []),
         ...(spread.videos || []),
-        ...(spread.animated_pics || []),
+        ...(spread.auto_pics || []),
         ...(spread.audios || []),
         ...(spread.quizzes || []),
       ];
       return items.find((i) => i.id === targetId)?.geometry;
     },
-    [spread.images, spread.shapes, spread.videos, spread.animated_pics, spread.audios, spread.quizzes]
+    [spread.images, spread.shapes, spread.videos, spread.auto_pics, spread.audios, spread.quizzes]
   );
 
   // === Timeline Builders ===

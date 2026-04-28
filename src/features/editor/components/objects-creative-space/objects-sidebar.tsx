@@ -49,7 +49,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
 } from "@/types/canvas-types";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -61,7 +61,7 @@ const ALL_ELEMENT_TYPES: ObjectElementType[] = [
   "shape",
   "video",
   "audio",
-  "animated_pic",
+  "auto_pic",
 ];
 const ALL_ASSET_TYPES: SpreadItemMediaType[] = [
   "raw",
@@ -300,8 +300,8 @@ export function ObjectsSidebar({
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
           break;
-        case "animated_pic":
-          actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, updates);
+        case "auto_pic":
+          actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
           break;
         case "raw_image":
           actions.updateRawImage(selectedSpreadId, entry.id, updates);
@@ -355,8 +355,8 @@ export function ObjectsSidebar({
           case "audio":
             actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
             break;
-          case "animated_pic":
-            actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, updates);
+          case "auto_pic":
+            actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
             break;
           case "raw_image":
             actions.updateRawImage(selectedSpreadId, entry.id, updates);
@@ -404,8 +404,8 @@ export function ObjectsSidebar({
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
           break;
-        case "animated_pic":
-          actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, updates);
+        case "auto_pic":
+          actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
           break;
         case "raw_image":
           actions.updateRawImage(selectedSpreadId, entry.id, updates);
@@ -462,8 +462,8 @@ export function ObjectsSidebar({
           titleUpdate as Partial<SpreadShape>
         );
         break;
-      case "animated_pic":
-        actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, titleUpdate);
+      case "auto_pic":
+        actions.updateRetouchAutoPic(selectedSpreadId, entry.id, titleUpdate);
         break;
     }
     setEditingItemId(null);
@@ -539,8 +539,8 @@ export function ObjectsSidebar({
               "z-index": newZIndex,
             } as Partial<SpreadTextbox>);
             break;
-          case "animated_pic":
-            actions.updateRetouchAnimatedPic(selectedSpreadId, entry.id, {
+          case "auto_pic":
+            actions.updateRetouchAutoPic(selectedSpreadId, entry.id, {
               "z-index": newZIndex,
             });
             break;
@@ -643,8 +643,8 @@ export function ObjectsSidebar({
             type: "raw",
           } as SpreadAudio);
           break;
-        case "animated_pic":
-          actions.addRetouchAnimatedPic(selectedSpreadId, {
+        case "auto_pic":
+          actions.addRetouchAutoPic(selectedSpreadId, {
             id: newId,
             name: "New Animated Pic",
             title: "New Animated Pic",
@@ -653,7 +653,7 @@ export function ObjectsSidebar({
             editor_visible: true,
             player_visible: true,
             type: "raw",
-          } as SpreadAnimatedPic);
+          } as SpreadAutoPic);
           break;
       }
 

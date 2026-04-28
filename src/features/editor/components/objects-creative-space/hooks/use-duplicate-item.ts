@@ -14,7 +14,7 @@ import type { SelectedItem } from "../objects-creative-space";
 const log = createLogger("Editor", "useDuplicateItem");
 
 type SnapshotActions = ReturnType<typeof useSnapshotActions>;
-type DupItemType = 'image' | 'text' | 'shape' | 'video' | 'audio' | 'animated_pic';
+type DupItemType = 'image' | 'text' | 'shape' | 'video' | 'audio' | 'auto_pic';
 type TierType = Parameters<typeof nextTopZInTier>[1];
 
 interface DupConfig {
@@ -32,7 +32,7 @@ const DUP_CONFIG: Record<DupItemType, DupConfig> = {
   shape:        { getCollection: s => s.shapes,        tier: 'mix',       addFn: 'addRetouchShape',       selectType: 'shape' },
   video:        { getCollection: s => s.videos,        tier: 'pictorial', addFn: 'addRetouchVideo',       selectType: 'video' },
   audio:        { getCollection: s => s.audios,        tier: 'mix',       addFn: 'addRetouchAudio',       selectType: 'audio' },
-  animated_pic: { getCollection: s => s.animated_pics, tier: 'pictorial', addFn: 'addRetouchAnimatedPic', selectType: 'animated_pic' },
+  auto_pic: { getCollection: s => s.auto_pics, tier: 'pictorial', addFn: 'addRetouchAutoPic', selectType: 'auto_pic' },
 };
 
 interface UseDuplicateItemReturn {

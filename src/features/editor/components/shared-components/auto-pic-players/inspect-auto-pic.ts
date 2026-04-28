@@ -1,4 +1,4 @@
-// inspect-animated-pic.ts — off-screen probe to read intrinsic dimensions AND
+// inspect-auto-pic.ts — off-screen probe to read intrinsic dimensions AND
 // metadata (state machines, artboards, animations, themes) from .lottie/.riv files.
 // Powers: (a) geometry re-ratio on upload, (b) dropdown options in toolbar for
 // configuring interactive playback, (c) auto-derive interactivity flag.
@@ -6,9 +6,9 @@
 // Uses dynamic imports so WASM/runtime stays out of main bundle.
 
 import { createLogger } from "@/utils/logger";
-import type { SpreadAnimatedPic } from "@/types/spread-types";
+import type { SpreadAutoPic } from "@/types/spread-types";
 
-const log = createLogger("Editor", "InspectAnimatedPic");
+const log = createLogger("Editor", "InspectAutoPic");
 const PROBE_TIMEOUT_MS = 10000;
 
 // === Interactivity derivation ===
@@ -18,8 +18,8 @@ const PROBE_TIMEOUT_MS = 10000;
  * per product rule. Used by player-canvas to route pointer events directly to
  * the Rive/Lottie runtime canvas (bypassing narration click-loop).
  */
-export function isAnimatedPicInteractive(
-  pic: SpreadAnimatedPic,
+export function isAutoPicInteractive(
+  pic: SpreadAutoPic,
   opts: { isThumbnail?: boolean } = {},
 ): boolean {
   if (opts.isThumbnail) return false;

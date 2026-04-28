@@ -13,7 +13,7 @@ import type {
   SpreadTextbox,
   SpreadShape,
   SpreadVideo,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
   SpreadAudio,
   SpreadQuiz,
   SpreadAnimation,
@@ -128,8 +128,8 @@ export const useRetouchShapeById = (spreadId: string, shapeId: string): SpreadSh
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.shapes?.find((sh) => sh.id === shapeId));
 export const useRetouchVideoById = (spreadId: string, videoId: string): SpreadVideo | undefined =>
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.videos?.find((v) => v.id === videoId));
-export const useRetouchAnimatedPicById = (spreadId: string, animatedPicId: string): SpreadAnimatedPic | undefined =>
-  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.animated_pics?.find((p) => p.id === animatedPicId));
+export const useRetouchAutoPicById = (spreadId: string, autoPicId: string): SpreadAutoPic | undefined =>
+  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.auto_pics?.find((p) => p.id === autoPicId));
 export const useRetouchAudioById = (spreadId: string, audioId: string): SpreadAudio | undefined =>
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.audios?.find((a) => a.id === audioId));
 export const useRetouchAnimations = (spreadId: string): SpreadAnimation[] =>
@@ -233,19 +233,19 @@ export const useHasBlockingQuizErrors = (): boolean =>
 export const useAllQuizValidationErrors = (): Record<string, QuizValidationIssue[]> =>
   useSnapshotStore((s) => s.quizValidationErrors ?? EMPTY_QUIZ_ERRORS_MAP);
 
-// Computed: find all images/videos/animated_pics derived from a specific original illustration image
+// Computed: find all images/videos/auto_pics derived from a specific original illustration image
 export const useRetouchObjectsByImageId = (
   spreadId: string,
   originalImageId: string,
-): (SpreadImage | SpreadVideo | SpreadAnimatedPic)[] =>
+): (SpreadImage | SpreadVideo | SpreadAutoPic)[] =>
   useSnapshotStore(
     useShallow((s) => {
       const spread = s.illustration.spreads.find((sp) => sp.id === spreadId);
       if (!spread) return [];
       const images = (spread.images ?? []).filter((i) => i.original_image_id === originalImageId);
       const videos = (spread.videos ?? []).filter((v) => v.original_image_id === originalImageId);
-      const animatedPics = (spread.animated_pics ?? []).filter((p) => p.original_image_id === originalImageId);
-      return [...images, ...videos, ...animatedPics];
+      const autoPics = (spread.auto_pics ?? []).filter((p) => p.original_image_id === originalImageId);
+      return [...images, ...videos, ...autoPics];
     }),
   );
 
@@ -379,9 +379,9 @@ export const useSnapshotActions = () =>
       addRetouchVideo: s.addRetouchVideo,
       updateRetouchVideo: s.updateRetouchVideo,
       deleteRetouchVideo: s.deleteRetouchVideo,
-      addRetouchAnimatedPic: s.addRetouchAnimatedPic,
-      updateRetouchAnimatedPic: s.updateRetouchAnimatedPic,
-      deleteRetouchAnimatedPic: s.deleteRetouchAnimatedPic,
+      addRetouchAutoPic: s.addRetouchAutoPic,
+      updateRetouchAutoPic: s.updateRetouchAutoPic,
+      deleteRetouchAutoPic: s.deleteRetouchAutoPic,
       addRetouchAudio: s.addRetouchAudio,
       updateRetouchAudio: s.updateRetouchAudio,
       deleteRetouchAudio: s.deleteRetouchAudio,

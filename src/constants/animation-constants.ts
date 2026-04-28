@@ -60,7 +60,7 @@ export const TARGET_ICON_MAP: Record<string, TargetItemIcon> = {
   textbox: "textbox",
   shape: "shape",
   video: "video",
-  animated_pic: "animated_pic",
+  auto_pic: "auto_pic",
   audio: "audio",
   quiz: "quiz",
 };
@@ -85,13 +85,13 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategory, string> = {
 export const ALLOWED_EFFECTS_BY_TARGET: Record<string, number[]> = {
   audio: [1, 2, 12],
   video: [1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
-  // animated_pic: same effect matrix as videos[] minus Play (1).
+  // auto_pic: same effect matrix as videos[] minus Play (1).
   // EXCLUDED: 1 (Play — auto-loop, play/pause meaningless),
   //           6 (entrance variant — not supported for media),
   //           7-10 (Emphasis — conflicts with auto-loop animation),
   //           11 (Read-along — textbox-only).
-  // DO NOT add these effects without updating EditableAnimatedPic loop handling.
-  animated_pic: [2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
+  // DO NOT add these effects without updating EditableAutoPic loop handling.
+  auto_pic: [2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
   textbox: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
   image: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17],
   shape: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15],

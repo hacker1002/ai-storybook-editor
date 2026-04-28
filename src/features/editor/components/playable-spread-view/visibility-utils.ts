@@ -32,8 +32,8 @@ export function findSpreadItem(
       return spread.shapes?.find((s) => s.id === targetId) ?? null;
     case 'video':
       return spread.videos?.find((v) => v.id === targetId) ?? null;
-    case 'animated_pic':
-      return spread.animated_pics?.find((p) => p.id === targetId) ?? null;
+    case 'auto_pic':
+      return spread.auto_pics?.find((p) => p.id === targetId) ?? null;
     case 'textbox':
       return spread.textboxes?.find((t) => t.id === targetId) ?? null;
     case 'audio':

@@ -65,7 +65,7 @@ function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
       return <Volume2 className={cls} />;
     case "video":
       return <Film className={cls} />;
-    case "animated_pic":
+    case "auto_pic":
       return <ImagePlay className={cls} />;
     case "textbox":
       return (

@@ -9,7 +9,7 @@ import {
   EditableVideo,
   EditableAudio,
   EditableQuiz,
-  EditableAnimatedPic,
+  EditableAutoPic,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
@@ -113,9 +113,9 @@ export function AnimationEditorCanvas({
     } else if (externalItemType === "video") {
       geometry =
         spread.videos?.find((v) => v.id === externalItemId)?.geometry ?? null;
-    } else if (externalItemType === "animated_pic") {
+    } else if (externalItemType === "auto_pic") {
       geometry =
-        spread.animated_pics?.find((p) => p.id === externalItemId)?.geometry ?? null;
+        spread.auto_pics?.find((p) => p.id === externalItemId)?.geometry ?? null;
     } else if (externalItemType === "audio" || externalItemType === "quiz") {
       // Audio/quiz use fixed-size icons — selection handled by the component itself
       geometry = null;
@@ -235,17 +235,17 @@ export function AnimationEditorCanvas({
   );
 
   // Animated pic selection handler
-  const handleAnimatedPicSelect = useCallback(
-    (animatedPicId: string) => {
-      log.info("handleAnimatedPicSelect", "animated_pic selected", { animatedPicId });
-      const animatedPic = spread.animated_pics?.find((p) => p.id === animatedPicId);
-      if (!animatedPic) return;
-      setSelectedItemId(animatedPicId);
-      setSelectedItemType("animated_pic");
-      setSelectedGeometry(animatedPic.geometry);
-      onItemSelect("animated_pic", animatedPicId);
+  const handleAutoPicSelect = useCallback(
+    (autoPicId: string) => {
+      log.info("handleAutoPicSelect", "auto_pic selected", { autoPicId });
+      const autoPic = spread.auto_pics?.find((p) => p.id === autoPicId);
+      if (!autoPic) return;
+      setSelectedItemId(autoPicId);
+      setSelectedItemType("auto_pic");
+      setSelectedGeometry(autoPic.geometry);
+      onItemSelect("auto_pic", autoPicId);
     },
-    [spread.animated_pics, onItemSelect]
+    [spread.auto_pics, onItemSelect]
   );
 
   // Audio selection handler (no SelectionOverlay — component handles its own selection border)
@@ -387,16 +387,16 @@ export function AnimationEditorCanvas({
         ))}
 
         {/* Animated Pics (selectable, showItemBorder for animation target visibility) — skip player_visible=false */}
-        {spread.animated_pics?.filter(isItemPlayerVisible).map((animatedPic, index) => (
-          <EditableAnimatedPic
-            key={animatedPic.id}
-            animatedPic={animatedPic}
+        {spread.auto_pics?.filter(isItemPlayerVisible).map((autoPic, index) => (
+          <EditableAutoPic
+            key={autoPic.id}
+            autoPic={autoPic}
             index={index}
-            zIndex={animatedPic["z-index"]}
-            isSelected={selectedItemId === animatedPic.id && selectedItemType === "animated_pic"}
+            zIndex={autoPic["z-index"]}
+            isSelected={selectedItemId === autoPic.id && selectedItemType === "auto_pic"}
             isEditable={true}
             showItemBorder={true}
-            onSelect={() => handleAnimatedPicSelect(animatedPic.id)}
+            onSelect={() => handleAutoPicSelect(autoPic.id)}
           />
         ))}
 

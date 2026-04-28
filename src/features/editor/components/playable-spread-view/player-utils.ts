@@ -20,7 +20,7 @@ export interface SpreadItemsForVisibility {
   images?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
   shapes?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
   videos?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
-  animated_pics?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
+  auto_pics?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
   textboxes?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
   audios?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
   quizzes?: Array<{ id: string; player_visible?: boolean; geometry?: Geometry }>;
@@ -62,7 +62,7 @@ function preFilterHiddenTargets(
   markHidden(items.images, true);
   markHidden(items.shapes, true);
   markHidden(items.videos, true);
-  markHidden(items.animated_pics, true);
+  markHidden(items.auto_pics, true);
   markHidden(items.textboxes, true);
   markHidden(items.audios, false);
   markHidden(items.quizzes, false);

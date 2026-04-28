@@ -21,8 +21,8 @@ const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const AUDIO_MAX_SIZE = 20 * 1024 * 1024; // 20MB
 const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac'];
 
-const ANIMATED_PIC_MAX_SIZE = 50 * 1024 * 1024; // 50MB — webm HD; .gif blocked (validation session 1)
-const ANIMATED_PIC_TYPES = ['image/webp', 'video/webm'];
+const AUTO_PIC_MAX_SIZE = 50 * 1024 * 1024; // 50MB — webm HD; .gif blocked (validation session 1)
+const AUTO_PIC_TYPES = ['image/webp', 'video/webm'];
 
 export interface UploadResult {
   publicUrl: string;
@@ -84,14 +84,14 @@ export async function uploadAudioToStorage(file: File, pathPrefix = 'audios'): P
   return uploadToStorage(file, AUDIO_TYPES, AUDIO_MAX_SIZE, pathPrefix, 'uploadAudioToStorage');
 }
 
-export async function uploadAnimatedPicToStorage(file: File, pathPrefix = 'animated-pics'): Promise<UploadResult> {
+export async function uploadAutoPicToStorage(file: File, pathPrefix = 'auto-pics'): Promise<UploadResult> {
   const lowerName = file.name.toLowerCase();
   // .lottie/.riv have no standard MIME type — browsers report empty string or application/octet-stream.
   // Validate by extension here; pass validatedContentType to skip MIME check in uploadToStorage.
   if (lowerName.endsWith('.lottie') || lowerName.endsWith('.riv')) {
-    return uploadToStorage(file, ANIMATED_PIC_TYPES, ANIMATED_PIC_MAX_SIZE, pathPrefix, 'uploadAnimatedPicToStorage', 'application/octet-stream');
+    return uploadToStorage(file, AUTO_PIC_TYPES, AUTO_PIC_MAX_SIZE, pathPrefix, 'uploadAutoPicToStorage', 'application/octet-stream');
   }
-  return uploadToStorage(file, ANIMATED_PIC_TYPES, ANIMATED_PIC_MAX_SIZE, pathPrefix, 'uploadAnimatedPicToStorage');
+  return uploadToStorage(file, AUTO_PIC_TYPES, AUTO_PIC_MAX_SIZE, pathPrefix, 'uploadAutoPicToStorage');
 }
 
 // --- Normalize-ratio upload flow ---

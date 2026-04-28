@@ -26,12 +26,12 @@ RuntimeLoader.setWasmUrl(riveWasmUrl);
 
 const RivePlayer = lazy(() =>
   import(
-    "@/features/editor/components/shared-components/animated-pic-players/rive-player"
+    "@/features/editor/components/shared-components/auto-pic-players/rive-player"
   ).then((m) => ({ default: m.RivePlayer }))
 );
 
 const DEFAULT_SRC =
-  "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/animated-pics/1776517008713-24876-46460-interactive-bunny-character.riv";
+  "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/auto-pics/1776517008713-24876-46460-interactive-bunny-character.riv";
 
 type LogEntry = {
   ts: number;

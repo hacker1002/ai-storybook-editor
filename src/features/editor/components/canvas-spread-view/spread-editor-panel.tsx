@@ -14,7 +14,7 @@ import {
   buildTextToolbarContext,
   buildShapeContext,
   buildVideoContext,
-  buildAnimatedPicContext,
+  buildAutoPicContext,
   buildAudioContext,
   buildQuizContext,
 } from "./utils/context-builders";
@@ -37,8 +37,8 @@ import type {
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
-  AnimatedPicItemContext,
-  AnimatedPicToolbarContext,
+  AutoPicItemContext,
+  AutoPicToolbarContext,
   AudioItemContext,
   QuizItemContext,
   ImageToolbarContext,
@@ -82,7 +82,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderTextItem?: (context: TextItemContext<TSpread>) => ReactNode;
   renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
-  renderAnimatedPicItem?: (context: AnimatedPicItemContext<TSpread>) => ReactNode;
+  renderAutoPicItem?: (context: AutoPicItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
@@ -92,7 +92,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderPageToolbar?: (context: PageToolbarContext<TSpread>) => ReactNode;
   renderShapeToolbar?: (context: ShapeToolbarContext<TSpread>) => ReactNode;
   renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
-  renderAnimatedPicToolbar?: (context: AnimatedPicToolbarContext<TSpread>) => ReactNode;
+  renderAutoPicToolbar?: (context: AutoPicToolbarContext<TSpread>) => ReactNode;
   renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
 
   // Raw item render functions (illustration layer)
@@ -154,7 +154,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderTextItem,
   renderShapeItem,
   renderVideoItem,
-  renderAnimatedPicItem,
+  renderAutoPicItem,
   renderAudioItem,
   renderQuizItem,
   renderImageToolbar,
@@ -162,7 +162,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderPageToolbar,
   renderShapeToolbar,
   renderVideoToolbar,
-  renderAnimatedPicToolbar,
+  renderAutoPicToolbar,
   renderAudioToolbar,
   renderRawImage,
   renderRawTextbox,
@@ -299,8 +299,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case "video":
         itemId = spread.videos?.[selectedElement.index]?.id;
         break;
-      case "animated_pic":
-        itemId = spread.animated_pics?.[selectedElement.index]?.id;
+      case "auto_pic":
+        itemId = spread.auto_pics?.[selectedElement.index]?.id;
         break;
       case "audio":
         itemId = spread.audios?.[selectedElement.index]?.id;
@@ -316,7 +316,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       | "textbox"
       | "shape"
       | "video"
-      | "animated_pic"
+      | "auto_pic"
       | "audio"
       | "quiz" =
       selectedElement.type === "raw_image"
@@ -328,7 +328,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             | "textbox"
             | "shape"
             | "video"
-            | "animated_pic"
+            | "auto_pic"
             | "audio"
             | "quiz");
 
@@ -398,8 +398,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case "video":
         itemId = spread.videos?.[selectedElement.index]?.id;
         break;
-      case "animated_pic":
-        itemId = spread.animated_pics?.[selectedElement.index]?.id;
+      case "auto_pic":
+        itemId = spread.auto_pics?.[selectedElement.index]?.id;
         break;
       case "audio":
         itemId = spread.audios?.[selectedElement.index]?.id;
@@ -678,21 +678,21 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           })}
 
         {/* Animated Pics */}
-        {renderItems.includes("animated_pic") &&
-          renderAnimatedPicItem &&
-          spread.animated_pics?.map((animatedPic, index) => {
-            const context = buildAnimatedPicContext(
-              animatedPic,
+        {renderItems.includes("auto_pic") &&
+          renderAutoPicItem &&
+          spread.auto_pics?.map((autoPic, index) => {
+            const context = buildAutoPicContext(
+              autoPic,
               index,
               spread,
               state.selectedElement,
               handleElementSelect,
               handleSpreadItemAction
             );
-            context.zIndex = resolveItemZIndex("animated_pic", index, spread);
+            context.zIndex = resolveItemZIndex("auto_pic", index, spread);
             return (
-              <Fragment key={animatedPic.id ?? `anim-${index}`}>
-                {renderAnimatedPicItem(context)}
+              <Fragment key={autoPic.id ?? `anim-${index}`}>
+                {renderAutoPicItem(context)}
               </Fragment>
             );
           })}
@@ -1004,22 +1004,22 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               });
             }
 
-            if (selectedElement.type === "animated_pic" && renderAnimatedPicToolbar) {
-              const animatedPic = spread.animated_pics?.[selectedElement.index];
-              if (!animatedPic) return null;
-              const context = buildAnimatedPicContext(
-                animatedPic,
+            if (selectedElement.type === "auto_pic" && renderAutoPicToolbar) {
+              const autoPic = spread.auto_pics?.[selectedElement.index];
+              if (!autoPic) return null;
+              const context = buildAutoPicContext(
+                autoPic,
                 selectedElement.index,
                 spread,
                 selectedElement,
                 handleElementSelect,
                 handleSpreadItemAction
               );
-              return renderAnimatedPicToolbar({
+              return renderAutoPicToolbar({
                 ...context,
                 selectedGeometry: state.selectedGeometry,
                 canvasRef,
-                onReplaceAnimatedPic: () => {},
+                onReplaceAutoPic: () => {},
               });
             }
 

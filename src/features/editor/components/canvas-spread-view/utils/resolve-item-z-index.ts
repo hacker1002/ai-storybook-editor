@@ -11,7 +11,7 @@ import type {
   ItemType,
   SpreadImage,
   SpreadVideo,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
   SpreadAudio,
   SpreadQuiz,
 } from "@/types/canvas-types";
@@ -62,10 +62,10 @@ export function resolveItemZIndex(
       return shape?.["z-index"] ?? LAYER_CONFIG.OBJECTS.min + index;
     }
 
-    case "animated_pic": {
-      const animatedPic = spread.animated_pics?.[index] as SpreadAnimatedPic | undefined;
+    case "auto_pic": {
+      const autoPic = spread.auto_pics?.[index] as SpreadAutoPic | undefined;
       return (
-        animatedPic?.["z-index"] ?? LAYER_CONFIG.MEDIA.min + totalImageCount + totalVideoCount + index
+        autoPic?.["z-index"] ?? LAYER_CONFIG.MEDIA.min + totalImageCount + totalVideoCount + index
       );
     }
 

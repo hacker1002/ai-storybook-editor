@@ -1,21 +1,21 @@
-// editable-animated-pic.tsx - Canvas component for animated_pic items (WebP/WebM auto-loop)
+// editable-auto-pic.tsx - Canvas component for auto_pic items (WebP/WebM auto-loop)
 "use client";
 
 import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/utils/utils";
-import type { SpreadAnimatedPic } from "@/types/spread-types";
+import type { SpreadAutoPic } from "@/types/spread-types";
 import { COLORS } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
 import { useZoomLevel } from "@/stores/editor-settings-store";
 
-const log = createLogger("Editor", "EditableAnimatedPic");
+const log = createLogger("Editor", "EditableAutoPic");
 
 const DotLottiePlayer = lazy(() =>
-  import("./animated-pic-players/dot-lottie-player").then((m) => ({ default: m.DotLottiePlayer })),
+  import("./auto-pic-players/dot-lottie-player").then((m) => ({ default: m.DotLottiePlayer })),
 );
 const RivePlayer = lazy(() =>
-  import("./animated-pic-players/rive-player").then((m) => ({ default: m.RivePlayer })),
+  import("./auto-pic-players/rive-player").then((m) => ({ default: m.RivePlayer })),
 );
 
 const lazyFallback = (
@@ -36,12 +36,12 @@ function detectMediaKind(url: string | undefined): MediaKind {
   return "unknown";
 }
 
-interface AnimatedPicPlaceholderProps {
+interface AutoPicPlaceholderProps {
   name: string;
   type: string;
 }
 
-function AnimatedPicPlaceholder({ name, type }: AnimatedPicPlaceholderProps) {
+function AutoPicPlaceholder({ name, type }: AutoPicPlaceholderProps) {
   const zoomFactor = useZoomLevel() / 100;
   return (
     <div
@@ -73,8 +73,8 @@ function AnimatedPicPlaceholder({ name, type }: AnimatedPicPlaceholderProps) {
   );
 }
 
-interface EditableAnimatedPicProps {
-  animatedPic: SpreadAnimatedPic;
+interface EditableAutoPicProps {
+  autoPic: SpreadAutoPic;
   index: number;
   zIndex?: number;
   isSelected: boolean;
@@ -85,8 +85,8 @@ interface EditableAnimatedPicProps {
   onSelect: () => void;
 }
 
-export function EditableAnimatedPic({
-  animatedPic,
+export function EditableAutoPic({
+  autoPic,
   index,
   zIndex,
   isSelected,
@@ -94,42 +94,42 @@ export function EditableAnimatedPic({
   isThumbnail = false,
   showItemBorder,
   onSelect,
-}: EditableAnimatedPicProps) {
+}: EditableAutoPicProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isLoading, setIsLoading] = useState(!!animatedPic.media_url);
+  const [isLoading, setIsLoading] = useState(!!autoPic.media_url);
   const [hasError, setHasError] = useState(false);
 
-  const mediaKind = detectMediaKind(animatedPic.media_url);
-  const showMedia = !!animatedPic.media_url && !hasError && mediaKind !== "unknown";
+  const mediaKind = detectMediaKind(autoPic.media_url);
+  const showMedia = !!autoPic.media_url && !hasError && mediaKind !== "unknown";
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       if (isEditable && !isThumbnail) {
-        log.info("handleClick", "animated_pic selected", { index, id: animatedPic.id });
+        log.info("handleClick", "auto_pic selected", { index, id: autoPic.id });
         onSelect();
       }
     },
-    [isEditable, isThumbnail, onSelect, index, animatedPic.id]
+    [isEditable, isThumbnail, onSelect, index, autoPic.id]
   );
 
   const handleLoaded = useCallback(() => setIsLoading(false), []);
   const handleError = useCallback(() => {
     setIsLoading(false);
     setHasError(true);
-    log.warn("handleError", "animated_pic media load failed", { id: animatedPic.id, url: animatedPic.media_url, mediaKind });
-  }, [animatedPic.id, animatedPic.media_url, mediaKind]);
+    log.warn("handleError", "auto_pic media load failed", { id: autoPic.id, url: autoPic.media_url, mediaKind });
+  }, [autoPic.id, autoPic.media_url, mediaKind]);
 
   useEffect(() => {
     if (mediaKind === "lottie" || mediaKind === "riv") {
-      log.debug("render", `${mediaKind} player dispatched`, { isThumbnail, id: animatedPic.id });
+      log.debug("render", `${mediaKind} player dispatched`, { isThumbnail, id: autoPic.id });
     }
-  }, [mediaKind, isThumbnail, animatedPic.id]);
+  }, [mediaKind, isThumbnail, autoPic.id]);
 
   return (
     <div
       role="img"
-      aria-label={animatedPic.title || animatedPic.name || `Animated Pic ${index + 1}`}
+      aria-label={autoPic.title || autoPic.name || `Animated Pic ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
       onKeyDown={(e) => e.key === "Enter" && isEditable && !isThumbnail && onSelect()}
@@ -141,15 +141,15 @@ export function EditableAnimatedPic({
         !isSelected && (showItemBorder || isHovered) && "outline outline-1"
       )}
       style={{
-        left: `${animatedPic.geometry.x}%`,
-        top: `${animatedPic.geometry.y}%`,
-        width: `${animatedPic.geometry.w}%`,
-        height: `${animatedPic.geometry.h}%`,
+        left: `${autoPic.geometry.x}%`,
+        top: `${autoPic.geometry.y}%`,
+        width: `${autoPic.geometry.w}%`,
+        height: `${autoPic.geometry.h}%`,
         zIndex,
         outlineColor: !isSelected
           ? isHovered
             ? COLORS.ITEM_BORDER_HOVER
-            : COLORS.ITEM_BORDER_ANIMATED_PIC
+            : COLORS.ITEM_BORDER_AUTO_PIC
           : undefined,
       }}
     >
@@ -163,8 +163,8 @@ export function EditableAnimatedPic({
           {mediaKind === "webp" ? (
             // Animated WebP loops natively — same element for full and thumbnail modes
             <img
-              src={animatedPic.media_url}
-              alt={animatedPic.title || animatedPic.name || ""}
+              src={autoPic.media_url}
+              alt={autoPic.title || autoPic.name || ""}
               className="w-full h-full object-contain"
               onLoad={handleLoaded}
               onError={handleError}
@@ -172,9 +172,9 @@ export function EditableAnimatedPic({
           ) : mediaKind === "lottie" ? (
             <Suspense fallback={lazyFallback}>
               <DotLottiePlayer
-                src={animatedPic.media_url!}
+                src={autoPic.media_url!}
                 isThumbnail={isThumbnail}
-                options={animatedPic.lottie}
+                options={autoPic.lottie}
                 onLoad={handleLoaded}
                 onError={handleError}
               />
@@ -182,9 +182,9 @@ export function EditableAnimatedPic({
           ) : mediaKind === "riv" ? (
             <Suspense fallback={lazyFallback}>
               <RivePlayer
-                src={animatedPic.media_url!}
+                src={autoPic.media_url!}
                 isThumbnail={isThumbnail}
-                options={animatedPic.rive}
+                options={autoPic.rive}
                 onLoad={handleLoaded}
                 onError={handleError}
               />
@@ -195,7 +195,7 @@ export function EditableAnimatedPic({
             // onLoadedData may not fire when the browser stops after metadata.
             isThumbnail ? (
               <video
-                src={animatedPic.media_url}
+                src={autoPic.media_url}
                 className="w-full h-full object-contain"
                 preload="metadata"
                 muted
@@ -205,7 +205,7 @@ export function EditableAnimatedPic({
               />
             ) : (
               <video
-                src={animatedPic.media_url}
+                src={autoPic.media_url}
                 className="w-full h-full object-contain"
                 autoPlay
                 muted
@@ -218,13 +218,13 @@ export function EditableAnimatedPic({
           )}
         </>
       ) : (
-        <AnimatedPicPlaceholder
-          name={animatedPic.name || animatedPic.title || ""}
-          type={animatedPic.type}
+        <AutoPicPlaceholder
+          name={autoPic.name || autoPic.title || ""}
+          type={autoPic.type}
         />
       )}
     </div>
   );
 }
 
-export default EditableAnimatedPic;
+export default EditableAutoPic;

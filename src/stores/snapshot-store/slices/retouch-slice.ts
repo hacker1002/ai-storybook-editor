@@ -158,36 +158,36 @@ export const createRetouchSlice: StateCreator<
 
   // --- Animated Pics ---
 
-  addRetouchAnimatedPic: (spreadId, animatedPic) =>
+  addRetouchAutoPic: (spreadId, autoPic) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
-        if (!spread.animated_pics) spread.animated_pics = [];
-        log.debug('addRetouchAnimatedPic', 'add', { spreadId, animatedPicId: animatedPic.id });
-        spread.animated_pics.push(animatedPic);
+        if (!spread.auto_pics) spread.auto_pics = [];
+        log.debug('addRetouchAutoPic', 'add', { spreadId, autoPicId: autoPic.id });
+        spread.auto_pics.push(autoPic);
         state.sync.isDirty = true;
       }
     }),
 
-  updateRetouchAnimatedPic: (spreadId, animatedPicId, updates) =>
+  updateRetouchAutoPic: (spreadId, autoPicId, updates) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread?.animated_pics) {
-        const idx = spread.animated_pics.findIndex((p) => p.id === animatedPicId);
+      if (spread?.auto_pics) {
+        const idx = spread.auto_pics.findIndex((p) => p.id === autoPicId);
         if (idx !== -1) {
-          log.debug('updateRetouchAnimatedPic', 'update', { spreadId, animatedPicId, keys: Object.keys(updates) });
-          Object.assign(spread.animated_pics[idx], updates);
+          log.debug('updateRetouchAutoPic', 'update', { spreadId, autoPicId, keys: Object.keys(updates) });
+          Object.assign(spread.auto_pics[idx], updates);
           state.sync.isDirty = true;
         }
       }
     }),
 
-  deleteRetouchAnimatedPic: (spreadId, animatedPicId) =>
+  deleteRetouchAutoPic: (spreadId, autoPicId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
-      if (spread?.animated_pics) {
-        log.debug('deleteRetouchAnimatedPic', 'delete', { spreadId, animatedPicId });
-        spread.animated_pics = spread.animated_pics.filter((p) => p.id !== animatedPicId);
+      if (spread?.auto_pics) {
+        log.debug('deleteRetouchAutoPic', 'delete', { spreadId, autoPicId });
+        spread.auto_pics = spread.auto_pics.filter((p) => p.id !== autoPicId);
         state.sync.isDirty = true;
       }
     }),

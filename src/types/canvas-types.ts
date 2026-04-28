@@ -25,7 +25,7 @@ import type {
   ShapeOutline,
   SpreadShape,
   SpreadVideo,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
   SpreadAudio,
   SpreadQuiz,
   PageData,
@@ -44,7 +44,7 @@ export type SelectedElementType =
   | "raw_textbox"
   | "shape"
   | "video"
-  | "animated_pic"
+  | "auto_pic"
   | "audio"
   | "quiz"
   | "page";
@@ -66,7 +66,7 @@ export interface SelectedElement {
 }
 
 // === Spread Item Action Types ===
-export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'animated_pic' | 'audio' | 'quiz';
+export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'auto_pic' | 'audio' | 'quiz';
 export type SpreadItemActionType = 'add' | 'update' | 'delete';
 
 export interface SpreadItemActionParams<TData = unknown> {
@@ -157,21 +157,21 @@ export type VideoDeleteAction = SpreadItemActionParams<null> & {
   data: null;
 };
 
-// AnimatedPic actions (itemId: string = UUID)
-export type AnimatedPicAddAction = SpreadItemActionParams<SpreadAnimatedPic> & {
-  itemType: 'animated_pic';
+// AutoPic actions (itemId: string = UUID)
+export type AutoPicAddAction = SpreadItemActionParams<SpreadAutoPic> & {
+  itemType: 'auto_pic';
   action: 'add';
   itemId: null;
 };
 
-export type AnimatedPicUpdateAction = SpreadItemActionParams<Partial<SpreadAnimatedPic>> & {
-  itemType: 'animated_pic';
+export type AutoPicUpdateAction = SpreadItemActionParams<Partial<SpreadAutoPic>> & {
+  itemType: 'auto_pic';
   action: 'update';
   itemId: string;
 };
 
-export type AnimatedPicDeleteAction = SpreadItemActionParams<null> & {
-  itemType: 'animated_pic';
+export type AutoPicDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'auto_pic';
   action: 'delete';
   itemId: string;
   data: null;
@@ -238,9 +238,9 @@ export type SpreadItemActionUnion =
   | VideoAddAction
   | VideoUpdateAction
   | VideoDeleteAction
-  | AnimatedPicAddAction
-  | AnimatedPicUpdateAction
-  | AnimatedPicDeleteAction
+  | AutoPicAddAction
+  | AutoPicUpdateAction
+  | AutoPicDeleteAction
   | AudioAddAction
   | AudioUpdateAction
   | AudioDeleteAction
@@ -261,7 +261,7 @@ export type {
   ShapeOutline,
   SpreadShape,
   SpreadVideo,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
   SpreadAudio,
   SpreadQuiz,
   PageData,
@@ -325,12 +325,12 @@ export interface VideoItemContext<TSpread extends BaseSpread>
   onDelete: () => void;
 }
 
-export interface AnimatedPicItemContext<TSpread extends BaseSpread>
+export interface AutoPicItemContext<TSpread extends BaseSpread>
   extends BaseItemContext<TSpread> {
-  item: SpreadAnimatedPic;
+  item: SpreadAutoPic;
   isThumbnail?: boolean;
   onSelect: () => void;
-  onUpdate: (updates: Partial<SpreadAnimatedPic>) => void;
+  onUpdate: (updates: Partial<SpreadAutoPic>) => void;
   onDelete: () => void;
 }
 
@@ -410,10 +410,10 @@ export interface VideoToolbarContext<TSpread extends BaseSpread>
   onReplaceVideo: () => void;
 }
 
-export interface AnimatedPicToolbarContext<TSpread extends BaseSpread>
-  extends AnimatedPicItemContext<TSpread>,
+export interface AutoPicToolbarContext<TSpread extends BaseSpread>
+  extends AutoPicItemContext<TSpread>,
     BaseToolbarContext {
-  onReplaceAnimatedPic: () => void;
+  onReplaceAutoPic: () => void;
 }
 
 export interface AudioToolbarContext<TSpread extends BaseSpread>

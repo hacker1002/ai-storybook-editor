@@ -11,7 +11,7 @@ export type ItemType =
   | "raw_textbox"
   | "shape"
   | "video"
-  | "animated_pic"
+  | "auto_pic"
   | "audio"
   | "quiz";
 
@@ -95,8 +95,8 @@ export interface SpreadVideo {
 
 /** Infinite-loop animated media layer. Shape identical to SpreadVideo — differentiated by
  *  runtime rendering contract (no play/pause UI, auto-loop forever).
- *  See snapshot/illustration-structure.md#animated_pics */
-export interface SpreadAnimatedPic {
+ *  See snapshot/illustration-structure.md#auto_pics */
+export interface SpreadAutoPic {
   id: string;
   title?: string;
   geometry: Geometry;
@@ -407,7 +407,7 @@ export interface SpreadAnimation {
   group?: string;
   target: {
     id: string;
-    type: "textbox" | "image" | "video" | "animated_pic" | "audio" | "shape" | "quiz";
+    type: "textbox" | "image" | "video" | "auto_pic" | "audio" | "shape" | "quiz";
   };
   trigger_type: "on_click" | "on_next" | "with_previous" | "after_previous";
   click_loop?: number;
@@ -437,7 +437,7 @@ export interface BaseSpread {
   textboxes: SpreadTextbox[];
   shapes?: SpreadShape[];
   videos?: SpreadVideo[];
-  animated_pics?: SpreadAnimatedPic[];
+  auto_pics?: SpreadAutoPic[];
   audios?: SpreadAudio[];
   quizzes?: SpreadQuiz[];
   animations?: SpreadAnimation[];

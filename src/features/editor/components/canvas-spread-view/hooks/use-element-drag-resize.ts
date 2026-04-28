@@ -156,13 +156,13 @@ export function useElementDragResize<TSpread extends BaseSpread>({
           });
           break;
         }
-        case "animated_pic": {
-          const animatedPic = spread.animated_pics?.[element.index];
-          if (!animatedPic?.id) return;
+        case "auto_pic": {
+          const autoPic = spread.auto_pics?.[element.index];
+          if (!autoPic?.id) return;
           onSpreadItemAction({
-            itemType: "animated_pic",
+            itemType: "auto_pic",
             action: "update",
-            itemId: animatedPic.id,
+            itemId: autoPic.id,
             data: { geometry },
           });
           break;
@@ -198,7 +198,7 @@ export function useElementDragResize<TSpread extends BaseSpread>({
       spread.textboxes,
       spread.shapes,
       spread.videos,
-      spread.animated_pics,
+      spread.auto_pics,
       spread.audios,
       spread.quizzes,
       onSpreadItemAction,
@@ -265,12 +265,12 @@ export function useElementDragResize<TSpread extends BaseSpread>({
 
       let newGeometry: Geometry;
 
-      // Image/Video/AnimatedPic: aspect-ratio-locked resize with proper anchor handling
+      // Image/Video/AutoPic: aspect-ratio-locked resize with proper anchor handling
       if (
         selectedElement.type === "raw_image" ||
         selectedElement.type === "image" ||
         selectedElement.type === "video" ||
-        selectedElement.type === "animated_pic"
+        selectedElement.type === "auto_pic"
       ) {
         const aspect = originalGeometry.w / originalGeometry.h;
         newGeometry = applyAspectLockedResize(

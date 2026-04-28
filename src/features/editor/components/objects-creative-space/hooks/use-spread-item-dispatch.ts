@@ -11,7 +11,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
   PageData,
 } from "@/types/canvas-types";
 
@@ -83,14 +83,14 @@ export function useSpreadItemDispatch(
             actions.deleteRetouchAudio(spreadId, itemId as string);
           }
           break;
-        case "animated_pic":
+        case "auto_pic":
           if (action === "add")
-            actions.addRetouchAnimatedPic(spreadId, data as SpreadAnimatedPic);
+            actions.addRetouchAutoPic(spreadId, data as SpreadAutoPic);
           else if (action === "update")
-            actions.updateRetouchAnimatedPic(spreadId, itemId as string, data as Partial<SpreadAnimatedPic>);
+            actions.updateRetouchAutoPic(spreadId, itemId as string, data as Partial<SpreadAutoPic>);
           else if (action === "delete") {
             actions.deleteRetouchAnimationsByTargetId(spreadId, itemId as string);
-            actions.deleteRetouchAnimatedPic(spreadId, itemId as string);
+            actions.deleteRetouchAutoPic(spreadId, itemId as string);
           }
           break;
         case "page":

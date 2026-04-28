@@ -6,14 +6,14 @@ import type {
   SpreadTextbox,
   SpreadShape,
   SpreadVideo,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
   SpreadAudio,
   SpreadQuiz,
   ImageItemContext,
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
-  AnimatedPicItemContext,
+  AutoPicItemContext,
   AudioItemContext,
   QuizItemContext,
   TextToolbarContext,
@@ -445,37 +445,37 @@ export function buildViewOnlyAudioContext<TSpread extends BaseSpread>(
 /**
  * Build animated pic item context for render props
  */
-export function buildAnimatedPicContext<TSpread extends BaseSpread>(
-  animatedPic: SpreadAnimatedPic,
+export function buildAutoPicContext<TSpread extends BaseSpread>(
+  autoPic: SpreadAutoPic,
   index: number,
   spread: TSpread,
   selectedElement: SelectedElement | null,
   onSelect: SelectFn,
   onAction: SpreadItemActionHandler,
   isThumbnail = false
-): AnimatedPicItemContext<TSpread> {
+): AutoPicItemContext<TSpread> {
   return {
-    item: animatedPic,
+    item: autoPic,
     itemIndex: index,
     spreadId: spread.id,
     spread,
     isSelected:
-      selectedElement?.type === "animated_pic" && selectedElement.index === index,
+      selectedElement?.type === "auto_pic" && selectedElement.index === index,
     isSpreadSelected: true,
     isThumbnail,
-    onSelect: () => onSelect({ type: "animated_pic", index }),
+    onSelect: () => onSelect({ type: "auto_pic", index }),
     onUpdate: (updates) =>
       onAction({
-        itemType: "animated_pic",
+        itemType: "auto_pic",
         action: "update",
-        itemId: animatedPic.id,
+        itemId: autoPic.id,
         data: updates,
       }),
     onDelete: () =>
       onAction({
-        itemType: "animated_pic",
+        itemType: "auto_pic",
         action: "delete",
-        itemId: animatedPic.id,
+        itemId: autoPic.id,
         data: null,
       }),
   };
@@ -484,13 +484,13 @@ export function buildAnimatedPicContext<TSpread extends BaseSpread>(
 /**
  * Build view-only animated pic context for thumbnails
  */
-export function buildViewOnlyAnimatedPicContext<TSpread extends BaseSpread>(
-  animatedPic: SpreadAnimatedPic,
+export function buildViewOnlyAutoPicContext<TSpread extends BaseSpread>(
+  autoPic: SpreadAutoPic,
   index: number,
   spread: TSpread
-): AnimatedPicItemContext<TSpread> {
+): AutoPicItemContext<TSpread> {
   return {
-    item: animatedPic,
+    item: autoPic,
     itemIndex: index,
     spreadId: spread.id,
     spread,

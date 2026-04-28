@@ -9,7 +9,7 @@ import {
   EditableVideo,
   EditableAudio,
   EditableQuiz,
-  EditableAnimatedPic,
+  EditableAutoPic,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { useCanvasSize, useSetZoomLevel } from "@/stores/editor-settings-store";
@@ -45,7 +45,7 @@ import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
 import { isItemPlayerHidden } from "./visibility-utils";
-import { isAnimatedPicInteractive } from "../shared-components/animated-pic-players/inspect-animated-pic";
+import { isAutoPicInteractive } from "../shared-components/auto-pic-players/inspect-auto-pic";
 import { usePlayerOrientation } from "./hooks/use-player-orientation";
 import { useContainerFit } from "./hooks/use-container-fit";
 import { MobileFullPageZoomOverlay } from "./mobile-full-page-zoom-overlay";
@@ -489,7 +489,7 @@ export function PlayerCanvas({
       ...(spread.images ?? []),
       ...(spread.shapes ?? []),
       ...(spread.videos ?? []),
-      ...(spread.animated_pics ?? []),
+      ...(spread.auto_pics ?? []),
       ...(spread.audios ?? []),
       ...(spread.textboxes ?? []),
       ...(spread.quizzes ?? []),
@@ -688,30 +688,30 @@ export function PlayerCanvas({
             {/* Animated Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150].
             Interactive pics (Rive/Lottie with state_machine set) bypass narration click-loop:
             pointer events route directly to the runtime canvas so state machines receive input. */}
-            {spread.animated_pics?.map((animatedPic, index) => {
-              if (animatedPic.player_visible === false) return null;
-              if (!isInStaging(animatedPic.geometry)) return null;
-              if (!animatedPic.media_url) return null;
-              const interactive = isAnimatedPicInteractive(animatedPic);
+            {spread.auto_pics?.map((autoPic, index) => {
+              if (autoPic.player_visible === false) return null;
+              if (!isInStaging(autoPic.geometry)) return null;
+              if (!autoPic.media_url) return null;
+              const interactive = isAutoPicInteractive(autoPic);
               const pointerClass = interactive
                 ? "pointer-events-auto cursor-pointer"
-                : getPointerClasses(animatedPic.id);
+                : getPointerClasses(autoPic.id);
               const onClickCapture = interactive
                 ? undefined
-                : () => handleItemClick(animatedPic.id);
+                : () => handleItemClick(autoPic.id);
               return (
                 <div
-                  key={animatedPic.id}
-                  ref={registerRef(animatedPic.id)}
+                  key={autoPic.id}
+                  ref={registerRef(autoPic.id)}
                   className={`${pointerClass} ${getHighlightClass(
-                    animatedPic.id
+                    autoPic.id
                   )}`}
                   onClickCapture={onClickCapture}
                 >
-                  <EditableAnimatedPic
-                    animatedPic={animatedPic}
+                  <EditableAutoPic
+                    autoPic={autoPic}
                     index={index}
-                    zIndex={animatedPic["z-index"]}
+                    zIndex={autoPic["z-index"]}
                     isSelected={false}
                     isEditable={false}
                     onSelect={() => {}}

@@ -1,4 +1,4 @@
-// objects-animated-pic-toolbar.tsx - Floating toolbar for animated_pic items in Objects Creative Space
+// objects-auto-pic-toolbar.tsx - Floating toolbar for auto_pic items in Objects Creative Space
 // Differences from video toolbar: no playback, aspect-locked W/H post-upload, W/H disabled pre-upload,
 // variant as free-text, upload accept webp+webm+lottie+riv (.gif blocked — validation session 1)
 "use client";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, Trash2, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { uploadAnimatedPicToStorage } from "@/apis/storage-api";
+import { uploadAutoPicToStorage } from "@/apis/storage-api";
 import {
   inspectLottie,
   inspectRive,
@@ -29,11 +29,11 @@ import {
   inspectRiveFromUrl,
   type LottieInspection,
   type RiveInspection,
-} from "@/features/editor/components/shared-components/animated-pic-players/inspect-animated-pic";
+} from "@/features/editor/components/shared-components/auto-pic-players/inspect-auto-pic";
 import {
   useToolbarPosition,
   type BaseSpread,
-  type AnimatedPicToolbarContext,
+  type AutoPicToolbarContext,
 } from "@/features/editor/components/canvas-spread-view";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
@@ -46,14 +46,14 @@ import {
   MEDIA_TYPE_OPTIONS,
 } from "@/features/editor/components/shared-components";
 
-const log = createLogger("Editor", "ObjectsAnimatedPicToolbar");
+const log = createLogger("Editor", "ObjectsAutoPicToolbar");
 
 // .gif blocked client-side — validation session 1
 // .lottie/.riv validated by extension only (MIME unreliable — browser returns application/octet-stream)
-const ANIMATED_PIC_ACCEPT = "image/webp,video/webm,.lottie,.riv";
+const AUTO_PIC_ACCEPT = "image/webp,video/webm,.lottie,.riv";
 const VALID_MIME_TYPES = ["image/webp", "video/webm"];
 
-function isValidAnimatedPicFile(file: File): boolean {
+function isValidAutoPicFile(file: File): boolean {
   if (VALID_MIME_TYPES.includes(file.type)) return true;
   const name = file.name.toLowerCase();
   return name.endsWith(".lottie") || name.endsWith(".riv");
@@ -111,13 +111,13 @@ function deriveMediaKind(mediaUrl: string | undefined): DerivedMediaKind {
 // "__none__" used as Select sentinel since SelectItem cannot have empty-string value
 const NONE_VALUE = "__none__";
 
-interface ObjectsAnimatedPicToolbarProps<TSpread extends BaseSpread> {
-  context: AnimatedPicToolbarContext<TSpread>;
+interface ObjectsAutoPicToolbarProps<TSpread extends BaseSpread> {
+  context: AutoPicToolbarContext<TSpread>;
 }
 
-export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
+export function ObjectsAutoPicToolbar<TSpread extends BaseSpread>({
   context,
-}: ObjectsAnimatedPicToolbarProps<TSpread>) {
+}: ObjectsAutoPicToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -248,7 +248,7 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
       if (!file) return;
       e.target.value = "";
 
-      if (!isValidAnimatedPicFile(file)) {
+      if (!isValidAutoPicFile(file)) {
         toast.error(
           "Please use .webp, .webm, .lottie, or .riv format. .gif is not supported."
         );
@@ -293,7 +293,7 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
             : Promise.resolve(null);
 
         const [{ publicUrl }, probe] = await Promise.all([
-          uploadAnimatedPicToStorage(file, "animated-pics"),
+          uploadAutoPicToStorage(file, "auto-pics"),
           probePromise,
         ]);
 
@@ -387,7 +387,7 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
     <TooltipProvider delayDuration={300}>
       <div
         ref={toolbarRef}
-        data-toolbar="animated_pic"
+        data-toolbar="auto_pic"
         role="toolbar"
         aria-label="Animated pic formatting toolbar"
         className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
@@ -599,7 +599,7 @@ export function ObjectsAnimatedPicToolbar<TSpread extends BaseSpread>({
           <input
             ref={fileInputRef}
             type="file"
-            accept={ANIMATED_PIC_ACCEPT}
+            accept={AUTO_PIC_ACCEPT}
             className="hidden"
             onChange={handleFileChange}
           />

@@ -15,7 +15,7 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
-  EditableAnimatedPic,
+  EditableAutoPic,
   EditImageModal,
   SplitImageModal,
   CropImageModal,
@@ -34,7 +34,7 @@ import { ObjectsShapeToolbar } from "./objects-shape-toolbar";
 import { ObjectsTextToolbar } from "./objects-text-toolbar";
 import { ObjectsRawImageToolbar } from "./objects-raw-image-toolbar";
 import { ObjectsRawTextboxToolbar } from "./objects-raw-textbox-toolbar";
-import { ObjectsAnimatedPicToolbar } from "./objects-animated-pic-toolbar";
+import { ObjectsAutoPicToolbar } from "./objects-auto-pic-toolbar";
 import { PlayerHiddenBadge } from "./player-hidden-badge";
 import {
   useRetouchSpreads,
@@ -67,8 +67,8 @@ import type {
   ShapeToolbarContext,
   VideoToolbarContext,
   AudioToolbarContext,
-  AnimatedPicItemContext,
-  AnimatedPicToolbarContext,
+  AutoPicItemContext,
+  AutoPicToolbarContext,
   TextItemContext,
   ShapeItemContext,
   VideoItemContext,
@@ -78,7 +78,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
 } from "@/types/canvas-types";
 
 const log = createLogger("UI", "ObjectsMainView");
@@ -416,14 +416,14 @@ export function ObjectsMainView({
     [onItemSelect]
   );
 
-  const renderRetouchAnimatedPic = useCallback(
-    (context: AnimatedPicItemContext<BaseSpread>) => {
-      const ap = context.item as SpreadAnimatedPic;
+  const renderRetouchAutoPic = useCallback(
+    (context: AutoPicItemContext<BaseSpread>) => {
+      const ap = context.item as SpreadAutoPic;
       if (ap.editor_visible === false) return null;
       return (
         <>
-          <EditableAnimatedPic
-            animatedPic={context.item}
+          <EditableAutoPic
+            autoPic={context.item}
             index={context.itemIndex}
             zIndex={context.zIndex}
             isSelected={context.isSelected}
@@ -432,7 +432,7 @@ export function ObjectsMainView({
             showItemBorder={true}
             onSelect={() => {
               context.onSelect();
-              onItemSelect({ type: 'animated_pic', id: context.item.id });
+              onItemSelect({ type: 'auto_pic', id: context.item.id });
             }}
           />
           {ap.player_visible === false && (
@@ -577,10 +577,10 @@ export function ObjectsMainView({
     []
   );
 
-  // === AnimatedPic toolbar render prop ===
-  const renderRetouchAnimatedPicToolbar = useCallback(
-    (context: AnimatedPicToolbarContext<BaseSpread>) => (
-      <ObjectsAnimatedPicToolbar context={context} />
+  // === AutoPic toolbar render prop ===
+  const renderRetouchAutoPicToolbar = useCallback(
+    (context: AutoPicToolbarContext<BaseSpread>) => (
+      <ObjectsAutoPicToolbar context={context} />
     ),
     []
   );
@@ -616,14 +616,14 @@ export function ObjectsMainView({
           "textbox",
           "shape",
           "video",
-          "animated_pic",
+          "auto_pic",
           "audio",
         ]}
         renderImageItem={renderRetouchImage}
         renderTextItem={renderRetouchTextbox}
         renderShapeItem={renderRetouchShape}
         renderVideoItem={renderRetouchVideo}
-        renderAnimatedPicItem={renderRetouchAnimatedPic}
+        renderAutoPicItem={renderRetouchAutoPic}
         renderAudioItem={renderRetouchAudio}
         renderRawImage={renderRawImage}
         renderRawTextbox={renderRawTextbox}
@@ -631,7 +631,7 @@ export function ObjectsMainView({
         renderTextToolbar={renderRetouchTextToolbar}
         renderShapeToolbar={renderRetouchShapeToolbar}
         renderVideoToolbar={renderRetouchVideoToolbar}
-        renderAnimatedPicToolbar={renderRetouchAnimatedPicToolbar}
+        renderAutoPicToolbar={renderRetouchAutoPicToolbar}
         renderAudioToolbar={renderRetouchAudioToolbar}
         renderRawImageToolbar={renderRawImageToolbar}
         renderRawTextboxToolbar={renderRawTextboxToolbar}

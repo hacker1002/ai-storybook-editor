@@ -11,7 +11,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
-  SpreadAnimatedPic,
+  SpreadAutoPic,
 } from "@/types/canvas-types";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -165,18 +165,18 @@ export function buildObjectList(
     });
   });
 
-  spread.animated_pics?.forEach((ap, i) => {
+  spread.auto_pics?.forEach((ap, i) => {
     entries.push({
       id: ap.id,
-      type: "animated_pic",
+      type: "auto_pic",
       title:
-        (ap as SpreadAnimatedPic).title ||
-        (ap as SpreadAnimatedPic).name ||
+        (ap as SpreadAutoPic).title ||
+        (ap as SpreadAutoPic).name ||
         `Animated Pic ${i + 1}`,
-      zIndex: resolveZIndex((ap as SpreadAnimatedPic)["z-index"], i, mediaLayer),
-      editorVisible: (ap as SpreadAnimatedPic).editor_visible !== false,
-      playerVisible: (ap as SpreadAnimatedPic).player_visible !== false,
-      assetType: (ap as SpreadAnimatedPic).type,
+      zIndex: resolveZIndex((ap as SpreadAutoPic)["z-index"], i, mediaLayer),
+      editorVisible: (ap as SpreadAutoPic).editor_visible !== false,
+      playerVisible: (ap as SpreadAutoPic).player_visible !== false,
+      assetType: (ap as SpreadAutoPic).type,
     });
   });
 

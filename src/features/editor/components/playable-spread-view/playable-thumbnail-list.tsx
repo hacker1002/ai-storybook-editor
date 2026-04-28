@@ -9,7 +9,7 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
-  EditableAnimatedPic,
+  EditableAutoPic,
 } from "../shared-components";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
@@ -197,14 +197,14 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
           })}
 
           {/* Animated Pics (thumbnail - auto-loop) */}
-          {spread.animated_pics?.map((animatedPic, idx) => {
-            if (animatedPic.player_visible === false) return null;
+          {spread.auto_pics?.map((autoPic, idx) => {
+            if (autoPic.player_visible === false) return null;
             return (
-              <EditableAnimatedPic
-                key={animatedPic.id || idx}
-                animatedPic={animatedPic}
+              <EditableAutoPic
+                key={autoPic.id || idx}
+                autoPic={autoPic}
                 index={idx}
-                zIndex={animatedPic["z-index"]}
+                zIndex={autoPic["z-index"]}
                 isSelected={false}
                 isEditable={false}
                 isThumbnail={true}

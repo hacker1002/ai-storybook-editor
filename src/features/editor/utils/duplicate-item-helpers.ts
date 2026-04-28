@@ -24,7 +24,7 @@ export type DuplicateZTier = "pictorial" | "mix" | "text";
 export interface SpreadForCascade {
   images?: Array<{ id: string; "z-index"?: number }>;
   videos?: Array<{ id: string; "z-index": number }>;
-  animated_pics?: Array<{ id: string; "z-index"?: number }>;
+  auto_pics?: Array<{ id: string; "z-index"?: number }>;
   shapes?: Array<{ id: string; "z-index"?: number }>;
   audios?: Array<{ id: string; "z-index": number }>;
   quizzes?: Array<{ id: string; "z-index": number }>;
@@ -73,7 +73,7 @@ export function nextTopZInTier(
   if (tier === "pictorial") {
     for (const img of spread.images ?? []) pushZ(img.id, img["z-index"], zValues);
     for (const vid of spread.videos ?? []) pushZ(vid.id, vid["z-index"], zValues);
-    for (const ap of spread.animated_pics ?? []) pushZ(ap.id, ap["z-index"], zValues);
+    for (const ap of spread.auto_pics ?? []) pushZ(ap.id, ap["z-index"], zValues);
   } else if (tier === "mix") {
     for (const shape of spread.shapes ?? []) pushZ(shape.id, shape["z-index"], zValues);
     for (const audio of spread.audios ?? []) pushZ(audio.id, audio["z-index"], zValues);

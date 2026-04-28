@@ -61,8 +61,8 @@ export type {
   TextToolbarContext,
   ShapeToolbarContext,
   VideoToolbarContext,
-  AnimatedPicItemContext,
-  AnimatedPicToolbarContext,
+  AutoPicItemContext,
+  AutoPicToolbarContext,
   AudioToolbarContext,
 
   // Config types

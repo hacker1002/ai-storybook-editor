@@ -25,7 +25,7 @@ import type {
   VideoItemContext,
   AudioItemContext,
   QuizItemContext,
-  AnimatedPicItemContext,
+  AutoPicItemContext,
 } from '@/types/canvas-types';
 import { COLUMNS } from '@/constants/spread-constants';
 
@@ -51,7 +51,7 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
-  renderAnimatedPicItem?: (context: AnimatedPicItemContext<TSpread>) => ReactNode;
+  renderAutoPicItem?: (context: AutoPicItemContext<TSpread>) => ReactNode;
 
   // Raw item render functions (illustration layer)
   renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
@@ -84,7 +84,7 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
   renderVideoItem,
   renderAudioItem,
   renderQuizItem,
-  renderAnimatedPicItem,
+  renderAutoPicItem,
   renderRawImage,
   renderRawTextbox,
   canAdd,
@@ -122,7 +122,7 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
       (spread.videos?.length ?? 0) > 0 ||
       (spread.audios?.length ?? 0) > 0 ||
       (spread.quizzes?.length ?? 0) > 0 ||
-      (spread.animated_pics?.length ?? 0) > 0
+      (spread.auto_pics?.length ?? 0) > 0
     );
   }, []);
 
@@ -274,7 +274,7 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
               renderVideoItem={renderVideoItem}
               renderAudioItem={renderAudioItem}
               renderQuizItem={renderQuizItem}
-              renderAnimatedPicItem={renderAnimatedPicItem}
+              renderAutoPicItem={renderAutoPicItem}
               renderRawImage={renderRawImage}
               renderRawTextbox={renderRawTextbox}
               isDragEnabled={canReorder}
