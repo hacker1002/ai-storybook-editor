@@ -4,18 +4,31 @@
 import { useState, useCallback } from "react";
 import { createLogger } from "@/utils/logger";
 import { useSnapshotActions } from "@/stores/snapshot-store/selectors";
-import type { SpreadImage, SpreadAudio } from "@/types/canvas-types";
+import type {
+  SpreadImage,
+  SpreadAudio,
+  SpreadAutoAudio,
+} from "@/types/canvas-types";
 
 const log = createLogger("Editor", "useObjectModals");
 
 type SnapshotActions = ReturnType<typeof useSnapshotActions>;
+
+/** Crop-audio modal handles both regular audio and auto_audio items. The `kind`
+ *  field discriminates which slice action to dispatch on completion. */
+export type CropAudioKind = "audio" | "auto_audio";
 
 export interface UseObjectModalsReturn {
   generate: { open: boolean; imageId: string | null; spreadId: string };
   split: { open: boolean; image: SpreadImage | null; spreadId: string };
   crop: { open: boolean; image: SpreadImage | null; spreadId: string };
   segment: { open: boolean; image: SpreadImage | null; spreadId: string };
-  cropAudio: { open: boolean; item: SpreadAudio | null; spreadId: string };
+  cropAudio: {
+    open: boolean;
+    item: SpreadAudio | SpreadAutoAudio | null;
+    spreadId: string;
+    kind: CropAudioKind | null;
+  };
 
   openGenerate: (img: SpreadImage) => void;
   closeGenerate: (open: boolean) => void;
@@ -25,7 +38,10 @@ export interface UseObjectModalsReturn {
   closeCrop: (open: boolean) => void;
   openSegment: (img: SpreadImage) => void;
   closeSegment: (open: boolean) => void;
-  openCropAudio: (audio: SpreadAudio) => void;
+  openCropAudio: (
+    item: SpreadAudio | SpreadAutoAudio,
+    kind: CropAudioKind
+  ) => void;
   closeCropAudio: () => void;
   handleCropAudioComplete: (newMediaUrl: string) => void;
 }
@@ -54,10 +70,15 @@ export function useObjectModals(
   const [segmentImage, setSegmentImage] = useState<SpreadImage | null>(null);
   const [segmentSpreadId, setSegmentSpreadId] = useState<string>("");
 
-  // Crop audio modal
+  // Crop audio modal — covers audio + auto_audio (discriminated via kind)
   const [cropAudioOpen, setCropAudioOpen] = useState(false);
-  const [cropAudioItem, setCropAudioItem] = useState<SpreadAudio | null>(null);
+  const [cropAudioItem, setCropAudioItem] = useState<
+    SpreadAudio | SpreadAutoAudio | null
+  >(null);
   const [cropAudioSpreadId, setCropAudioSpreadId] = useState<string>("");
+  const [cropAudioKind, setCropAudioKind] = useState<CropAudioKind | null>(
+    null
+  );
 
   // CRITICAL: deps include selectedSpreadId to capture it at open time
   const openGenerate = useCallback(
@@ -117,9 +138,10 @@ export function useObjectModals(
   }, []);
 
   const openCropAudio = useCallback(
-    (audio: SpreadAudio) => {
-      setCropAudioItem(audio);
+    (item: SpreadAudio | SpreadAutoAudio, kind: CropAudioKind) => {
+      setCropAudioItem(item);
       setCropAudioSpreadId(selectedSpreadId);
+      setCropAudioKind(kind);
       setCropAudioOpen(true);
     },
     [selectedSpreadId]
@@ -128,23 +150,48 @@ export function useObjectModals(
   const closeCropAudio = useCallback(() => {
     setCropAudioOpen(false);
     setCropAudioItem(null);
+    setCropAudioKind(null);
   }, []);
 
   const handleCropAudioComplete = useCallback(
     (newMediaUrl: string) => {
-      if (!cropAudioItem) return;
-      actions.updateRetouchAudio(cropAudioSpreadId, cropAudioItem.id, {
-        media_url: newMediaUrl,
-      });
-      log.info("handleCropAudioComplete", "audio cropped", {
-        audioId: cropAudioItem.id,
-        spreadId: cropAudioSpreadId,
-        newMediaUrl,
-      });
+      if (!cropAudioItem || !cropAudioSpreadId || !cropAudioKind) {
+        log.warn("handleCropAudioComplete", "missing state, skip", {
+          hasItem: !!cropAudioItem,
+          spreadId: cropAudioSpreadId,
+          kind: cropAudioKind,
+        });
+        return;
+      }
+      switch (cropAudioKind) {
+        case "audio":
+          actions.updateRetouchAudio(cropAudioSpreadId, cropAudioItem.id, {
+            media_url: newMediaUrl,
+          });
+          log.info("handleCropAudioComplete", "audio cropped", {
+            audioId: cropAudioItem.id,
+            spreadId: cropAudioSpreadId,
+            newMediaUrl,
+          });
+          break;
+        case "auto_audio":
+          actions.updateRetouchAutoAudio(
+            cropAudioSpreadId,
+            cropAudioItem.id,
+            { media_url: newMediaUrl }
+          );
+          log.info("handleCropAudioComplete", "auto_audio cropped", {
+            autoAudioId: cropAudioItem.id,
+            spreadId: cropAudioSpreadId,
+            newMediaUrl,
+          });
+          break;
+      }
       setCropAudioOpen(false);
       setCropAudioItem(null);
+      setCropAudioKind(null);
     },
-    [cropAudioItem, cropAudioSpreadId, actions]
+    [cropAudioItem, cropAudioSpreadId, cropAudioKind, actions]
   );
 
   return {
@@ -152,7 +199,12 @@ export function useObjectModals(
     split: { open: splitOpen, image: splitImage, spreadId: splitSpreadId },
     crop: { open: cropOpen, image: cropImage, spreadId: cropSpreadId },
     segment: { open: segmentOpen, image: segmentImage, spreadId: segmentSpreadId },
-    cropAudio: { open: cropAudioOpen, item: cropAudioItem, spreadId: cropAudioSpreadId },
+    cropAudio: {
+      open: cropAudioOpen,
+      item: cropAudioItem,
+      spreadId: cropAudioSpreadId,
+      kind: cropAudioKind,
+    },
     openGenerate,
     closeGenerate,
     openSplit,

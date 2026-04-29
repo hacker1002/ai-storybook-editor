@@ -16,6 +16,7 @@ import {
   buildVideoContext,
   buildAutoPicContext,
   buildAudioContext,
+  buildAutoAudioContext,
   buildQuizContext,
 } from "./utils/context-builders";
 import { getScaledDimensions } from "./utils/coordinate-utils";
@@ -40,6 +41,8 @@ import type {
   AutoPicItemContext,
   AutoPicToolbarContext,
   AudioItemContext,
+  AutoAudioItemContext,
+  AutoAudioToolbarContext,
   QuizItemContext,
   ImageToolbarContext,
   TextToolbarContext,
@@ -84,6 +87,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAutoPicItem?: (context: AutoPicItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
+  renderAutoAudioItem?: (context: AutoAudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
 
   // Toolbar render functions (optional)
@@ -94,6 +98,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   renderVideoToolbar?: (context: VideoToolbarContext<TSpread>) => ReactNode;
   renderAutoPicToolbar?: (context: AutoPicToolbarContext<TSpread>) => ReactNode;
   renderAudioToolbar?: (context: AudioToolbarContext<TSpread>) => ReactNode;
+  renderAutoAudioToolbar?: (context: AutoAudioToolbarContext<TSpread>) => ReactNode;
 
   // Raw item render functions (illustration layer)
   renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
@@ -156,6 +161,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderVideoItem,
   renderAutoPicItem,
   renderAudioItem,
+  renderAutoAudioItem,
   renderQuizItem,
   renderImageToolbar,
   renderTextToolbar,
@@ -164,6 +170,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   renderVideoToolbar,
   renderAutoPicToolbar,
   renderAudioToolbar,
+  renderAutoAudioToolbar,
   renderRawImage,
   renderRawTextbox,
   renderRawImageToolbar,
@@ -305,6 +312,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case "audio":
         itemId = spread.audios?.[selectedElement.index]?.id;
         break;
+      case "auto_audio":
+        itemId = spread.auto_audios?.[selectedElement.index]?.id;
+        break;
       case "quiz":
         itemId = spread.quizzes?.[selectedElement.index]?.id;
         break;
@@ -318,6 +328,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       | "video"
       | "auto_pic"
       | "audio"
+      | "auto_audio"
       | "quiz" =
       selectedElement.type === "raw_image"
         ? "image"
@@ -330,6 +341,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             | "video"
             | "auto_pic"
             | "audio"
+            | "auto_audio"
             | "quiz");
 
     handleSpreadItemAction({
@@ -404,6 +416,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
       case "audio":
         itemId = spread.audios?.[selectedElement.index]?.id;
         break;
+      case "auto_audio":
+        itemId = spread.auto_audios?.[selectedElement.index]?.id;
+        break;
       case "quiz":
         itemId = spread.quizzes?.[selectedElement.index]?.id;
         break;
@@ -457,9 +472,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
   // === Render ===
   const selectedGeometry = getSelectedGeometry();
-  // Audio/Quiz are fixed-size icons — disable resize, only allow drag
+  // Audio/AutoAudio/Quiz are fixed-size icons — disable resize, only allow drag
   const isIconElement =
     state.selectedElement?.type === "audio" ||
+    state.selectedElement?.type === "auto_audio" ||
     state.selectedElement?.type === "quiz";
   // Raw items (raw_image/raw_textbox) cannot drag/resize when preventEditRawItem is enabled
   const isRawElement =
@@ -799,6 +815,26 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
           })}
 
+        {/* Auto Audios */}
+        {renderItems.includes("auto_audio") &&
+          renderAutoAudioItem &&
+          spread.auto_audios?.map((autoAudio, index) => {
+            const context = buildAutoAudioContext(
+              autoAudio,
+              index,
+              spread,
+              state.selectedElement,
+              handleElementSelect,
+              handleSpreadItemAction
+            );
+            context.zIndex = resolveItemZIndex("auto_audio", index, spread);
+            return (
+              <Fragment key={autoAudio.id ?? `aaud-${index}`}>
+                {renderAutoAudioItem(context)}
+              </Fragment>
+            );
+          })}
+
         {/* Quizzes */}
         {renderItems.includes("quiz") &&
           renderQuizItem &&
@@ -1035,6 +1071,26 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 handleSpreadItemAction
               );
               return renderAudioToolbar({
+                ...context,
+                selectedGeometry: state.selectedGeometry,
+                canvasRef,
+                onReplaceAudio: () => {},
+                onCropAudio: undefined,
+              });
+            }
+
+            if (selectedElement.type === "auto_audio" && renderAutoAudioToolbar) {
+              const autoAudio = spread.auto_audios?.[selectedElement.index];
+              if (!autoAudio) return null;
+              const context = buildAutoAudioContext(
+                autoAudio,
+                selectedElement.index,
+                spread,
+                selectedElement,
+                handleElementSelect,
+                handleSpreadItemAction
+              );
+              return renderAutoAudioToolbar({
                 ...context,
                 selectedGeometry: state.selectedGeometry,
                 canvasRef,

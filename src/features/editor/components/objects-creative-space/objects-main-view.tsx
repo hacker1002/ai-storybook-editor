@@ -24,6 +24,7 @@ import {
   EditableShape,
   EditableVideo,
   EditableAudio,
+  EditableAutoAudio,
   EditableAutoPic,
   EditImageModal,
   SplitImageModal,
@@ -77,6 +78,8 @@ import type {
   ShapeToolbarContext,
   VideoToolbarContext,
   AudioToolbarContext,
+  AutoAudioItemContext,
+  AutoAudioToolbarContext,
   AutoPicItemContext,
   AutoPicToolbarContext,
   TextItemContext,
@@ -88,6 +91,7 @@ import type {
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
+  SpreadAutoAudio,
   SpreadAutoPic,
 } from "@/types/canvas-types";
 
@@ -488,6 +492,33 @@ export function ObjectsMainView({
     [onItemSelect]
   );
 
+  const renderRetouchAutoAudio = useCallback(
+    (context: AutoAudioItemContext<BaseSpread>) => {
+      const aa = context.item as SpreadAutoAudio;
+      if (aa.editor_visible === false) return null;
+      // No PlayerHiddenBadge: player_visible locked false is design intent for auto_audio (BGM),
+      // not a divergence to hint at.
+      // In editor (Objects creative space), never trigger the player <audio
+      // autoPlay> branch — toolbar preview is the sound check. Force
+      // isEditable=true so all spreads (selected + thumbnails) render icon-only.
+      return (
+        <EditableAutoAudio
+          autoAudio={aa}
+          index={context.itemIndex}
+          zIndex={context.zIndex}
+          isSelected={context.isSelected}
+          isEditable={true}
+          isThumbnail={context.isThumbnail}
+          onSelect={() => {
+            context.onSelect();
+            onItemSelect({ type: "auto_audio", id: aa.id });
+          }}
+        />
+      );
+    },
+    [onItemSelect]
+  );
+
   const renderRetouchAutoPic = useCallback(
     (context: AutoPicItemContext<BaseSpread>) => {
       const ap = context.item as SpreadAutoPic;
@@ -661,9 +692,26 @@ export function ObjectsMainView({
   const renderRetouchAudioToolbar = useCallback(
     (context: AudioToolbarContext<BaseSpread>) => (
       <ObjectsAudioToolbar
+        variant="audio"
         context={{
           ...context,
-          onCropAudio: () => openCropAudio(context.item as SpreadAudio),
+          onCropAudio: () =>
+            openCropAudio(context.item as SpreadAudio, "audio"),
+        }}
+      />
+    ),
+    [openCropAudio]
+  );
+
+  // === Auto-audio toolbar render prop (variant of ObjectsAudioToolbar) ===
+  const renderRetouchAutoAudioToolbar = useCallback(
+    (context: AutoAudioToolbarContext<BaseSpread>) => (
+      <ObjectsAudioToolbar
+        variant="auto_audio"
+        context={{
+          ...context,
+          onCropAudio: () =>
+            openCropAudio(context.item as SpreadAutoAudio, "auto_audio"),
         }}
       />
     ),
@@ -690,6 +738,7 @@ export function ObjectsMainView({
           "video",
           "auto_pic",
           "audio",
+          "auto_audio",
         ]}
         renderImageItem={renderRetouchImage}
         renderTextItem={renderRetouchTextbox}
@@ -697,6 +746,7 @@ export function ObjectsMainView({
         renderVideoItem={renderRetouchVideo}
         renderAutoPicItem={renderRetouchAutoPic}
         renderAudioItem={renderRetouchAudio}
+        renderAutoAudioItem={renderRetouchAutoAudio}
         renderRawImage={renderRawImage}
         renderRawTextbox={renderRawTextbox}
         renderImageToolbar={renderRetouchImageToolbar}
@@ -705,6 +755,7 @@ export function ObjectsMainView({
         renderVideoToolbar={renderRetouchVideoToolbar}
         renderAutoPicToolbar={renderRetouchAutoPicToolbar}
         renderAudioToolbar={renderRetouchAudioToolbar}
+        renderAutoAudioToolbar={renderRetouchAutoAudioToolbar}
         renderRawImageToolbar={renderRawImageToolbar}
         renderRawTextboxToolbar={renderRawTextboxToolbar}
         onSpreadSelect={onSpreadSelect}

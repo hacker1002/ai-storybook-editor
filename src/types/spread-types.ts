@@ -13,6 +13,7 @@ export type ItemType =
   | "video"
   | "auto_pic"
   | "audio"
+  | "auto_audio"
   | "quiz";
 
 // === Geometry Types ===
@@ -136,6 +137,23 @@ export interface SpreadAudio {
   type: SpreadItemMediaType;
   media_url?: string;
   media_length?: number; // duration in milliseconds, populated on pick/upload
+}
+
+/** Auto-audio: tự phát + loop, hidden trong player UI. Schema mirrors SpreadAudio
+ *  ngoại trừ player_visible locked false và KHÔNG có media_length.
+ *  See snapshot/illustration-structure.md#auto_audios */
+export interface SpreadAutoAudio {
+  id: string;
+  title?: string;
+  geometry: { x: number; y: number };  // 2D — icon position, identical to SpreadAudio
+  "z-index": number;
+  player_visible: false;                // literal false, locked by validator
+  editor_visible: boolean;
+  name: string;
+  variant?: string;
+  type: SpreadItemMediaType;
+  media_url?: string;
+  // KHÔNG có media_length — runtime đo HTMLAudioElement.duration nếu cần sync
 }
 
 // === Quiz v2 — see 11-quiz-slice.md. Breaking change [2026-04-11]. ===
@@ -435,6 +453,7 @@ export interface BaseSpread {
   shapes?: SpreadShape[];
   videos?: SpreadVideo[];
   auto_pics?: SpreadAutoPic[];
+  auto_audios?: SpreadAutoAudio[];
   audios?: SpreadAudio[];
   quizzes?: SpreadQuiz[];
   animations?: SpreadAnimation[];

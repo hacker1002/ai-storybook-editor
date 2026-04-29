@@ -64,6 +64,8 @@ export type {
   AutoPicItemContext,
   AutoPicToolbarContext,
   AudioToolbarContext,
+  AutoAudioItemContext,
+  AutoAudioToolbarContext,
 
   // Config types
   LayoutOption,

@@ -50,6 +50,7 @@ import type {
   SpreadVideo,
   SpreadAudio,
   SpreadAutoPic,
+  SpreadAutoAudio,
 } from "@/types/canvas-types";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -61,6 +62,7 @@ const ALL_ELEMENT_TYPES: ObjectElementType[] = [
   "shape",
   "video",
   "audio",
+  "auto_audio",
   "auto_pic",
 ];
 const ALL_ASSET_TYPES: SpreadItemMediaType[] = [
@@ -300,6 +302,9 @@ export function ObjectsSidebar({
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
           break;
+        case "auto_audio":
+          actions.updateRetouchAutoAudio(selectedSpreadId, entry.id, updates);
+          break;
         case "auto_pic":
           actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
           break;
@@ -355,6 +360,9 @@ export function ObjectsSidebar({
           case "audio":
             actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
             break;
+          case "auto_audio":
+            actions.updateRetouchAutoAudio(selectedSpreadId, entry.id, updates);
+            break;
           case "auto_pic":
             actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
             break;
@@ -403,6 +411,9 @@ export function ObjectsSidebar({
           break;
         case "audio":
           actions.updateRetouchAudio(selectedSpreadId, entry.id, updates);
+          break;
+        case "auto_audio":
+          // player_visible locked false — toggle is no-op
           break;
         case "auto_pic":
           actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
@@ -454,6 +465,9 @@ export function ObjectsSidebar({
         break;
       case "audio":
         actions.updateRetouchAudio(selectedSpreadId, entry.id, titleUpdate);
+        break;
+      case "auto_audio":
+        actions.updateRetouchAutoAudio(selectedSpreadId, entry.id, titleUpdate);
         break;
       case "shape":
         actions.updateRetouchShape(
@@ -526,6 +540,11 @@ export function ObjectsSidebar({
             break;
           case "audio":
             actions.updateRetouchAudio(selectedSpreadId, entry.id, {
+              "z-index": newZIndex,
+            });
+            break;
+          case "auto_audio":
+            actions.updateRetouchAutoAudio(selectedSpreadId, entry.id, {
               "z-index": newZIndex,
             });
             break;
@@ -642,6 +661,18 @@ export function ObjectsSidebar({
             player_visible: true,
             type: "raw",
           } as SpreadAudio);
+          break;
+        case "auto_audio":
+          actions.addRetouchAutoAudio(selectedSpreadId, {
+            id: newId,
+            name: "New Auto Audio",
+            title: "New Auto Audio",
+            geometry: { x: 10, y: 10 },
+            "z-index": newZIndex,
+            editor_visible: true,
+            player_visible: false, // literal locked
+            type: "raw",
+          } as SpreadAutoAudio);
           break;
         case "auto_pic":
           actions.addRetouchAutoPic(selectedSpreadId, {

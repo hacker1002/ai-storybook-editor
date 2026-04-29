@@ -13,7 +13,7 @@ const matchCtrlD = (e: KeyboardEvent): boolean =>
 
 const OBJECTS_FORBIDDEN = ['raw_image', 'raw_textbox'] as const;
 
-type DupItemType = 'image' | 'text' | 'shape' | 'video' | 'audio' | 'auto_pic';
+type DupItemType = 'image' | 'text' | 'shape' | 'video' | 'audio' | 'auto_audio' | 'auto_pic';
 type StackRef = ReturnType<typeof useInteractionLayerContext>['stackRef'];
 
 export function useDuplicateHotkey(

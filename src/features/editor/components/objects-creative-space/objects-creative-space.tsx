@@ -17,6 +17,7 @@ export type ObjectElementType =
   | "shape"
   | "video"
   | "audio"
+  | "auto_audio"
   | "textbox"
   | "auto_pic"
   | "raw_image"

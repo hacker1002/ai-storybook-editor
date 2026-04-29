@@ -13,6 +13,7 @@ import type {
   SpreadVideo,
   SpreadAutoPic,
   SpreadAudio,
+  SpreadAutoAudio,
   SpreadQuiz,
 } from "@/types/canvas-types";
 
@@ -76,11 +77,20 @@ export function resolveItemZIndex(
       );
     }
 
+    case "auto_audio": {
+      const autoAudio = spread.auto_audios?.[index] as SpreadAutoAudio | undefined;
+      // Mirror audio default — share OBJECTS layer with audio icons
+      return (
+        autoAudio?.["z-index"] ?? LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + index
+      );
+    }
+
     case "quiz": {
       const quiz = spread.quizzes?.[index] as SpreadQuiz | undefined;
+      const autoAudiosCount = spread.auto_audios?.length ?? 0;
       return (
         quiz?.["z-index"] ??
-        LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + index
+        LAYER_CONFIG.OBJECTS.min + shapesCount + audiosCount + autoAudiosCount + index
       );
     }
 

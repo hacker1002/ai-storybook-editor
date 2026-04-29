@@ -178,6 +178,18 @@ export function useElementDragResize<TSpread extends BaseSpread>({
           });
           break;
         }
+        case "auto_audio": {
+          const autoAudio = spread.auto_audios?.[element.index];
+          if (!autoAudio?.id) return;
+          // 2D — strip w/h before persisting
+          onSpreadItemAction({
+            itemType: "auto_audio",
+            action: "update",
+            itemId: autoAudio.id,
+            data: { geometry: { x: geometry.x, y: geometry.y } },
+          });
+          break;
+        }
         case "quiz": {
           const quiz = spread.quizzes?.[element.index];
           if (!quiz?.id) return;
@@ -200,6 +212,7 @@ export function useElementDragResize<TSpread extends BaseSpread>({
       spread.videos,
       spread.auto_pics,
       spread.audios,
+      spread.auto_audios,
       spread.quizzes,
       onSpreadItemAction,
       editorLangCode,

@@ -244,6 +244,53 @@ export const createRetouchSlice: StateCreator<
       }
     }),
 
+  // --- Auto Audios ---
+
+  addRetouchAutoAudio: (spreadId, autoAudio) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (spread) {
+        if (!spread.auto_audios) spread.auto_audios = [];
+        // Defense-in-depth: coerce player_visible to literal false
+        const coerced = { ...autoAudio, player_visible: false as const };
+        log.debug('addRetouchAutoAudio', 'add', { spreadId, autoAudioId: autoAudio.id });
+        spread.auto_audios.push(coerced);
+        state.sync.isDirty = true;
+      }
+    }),
+
+  updateRetouchAutoAudio: (spreadId, autoAudioId, updates) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (spread?.auto_audios) {
+        const idx = spread.auto_audios.findIndex((a) => a.id === autoAudioId);
+        if (idx !== -1) {
+          // Coerce player_visible if invalid (cannot be true)
+          const cleanUpdates =
+            (updates as { player_visible?: unknown }).player_visible === true
+              ? { ...updates, player_visible: false as const }
+              : updates;
+          log.debug('updateRetouchAutoAudio', 'update', {
+            spreadId,
+            autoAudioId,
+            keys: Object.keys(cleanUpdates),
+          });
+          Object.assign(spread.auto_audios[idx], cleanUpdates);
+          state.sync.isDirty = true;
+        }
+      }
+    }),
+
+  deleteRetouchAutoAudio: (spreadId, autoAudioId) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (spread?.auto_audios) {
+        log.debug('deleteRetouchAutoAudio', 'delete', { spreadId, autoAudioId });
+        spread.auto_audios = spread.auto_audios.filter((a) => a.id !== autoAudioId);
+        state.sync.isDirty = true;
+      }
+    }),
+
   // --- Animations (index-based) ---
 
   addRetouchAnimation: (spreadId, animation) =>

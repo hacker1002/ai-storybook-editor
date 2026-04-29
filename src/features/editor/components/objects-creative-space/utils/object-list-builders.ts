@@ -12,6 +12,7 @@ import type {
   SpreadVideo,
   SpreadAudio,
   SpreadAutoPic,
+  SpreadAutoAudio,
 } from "@/types/canvas-types";
 import type { SpreadItemMediaType } from "@/types/spread-types";
 
@@ -192,6 +193,23 @@ export function buildObjectList(
       editorVisible: (audio as SpreadAudio).editor_visible !== false,
       playerVisible: (audio as SpreadAudio).player_visible !== false,
       assetType: (audio as SpreadAudio).type,
+    });
+  });
+
+  // Auto Audios — same group as audio; icon (Music note) distinguishes them.
+  spread.auto_audios?.forEach((aa, i) => {
+    const baseName =
+      (aa as SpreadAutoAudio).title ||
+      (aa as SpreadAutoAudio).name ||
+      `Auto Audio ${i + 1}`;
+    entries.push({
+      id: aa.id,
+      type: "auto_audio",
+      title: baseName,
+      zIndex: resolveZIndex((aa as SpreadAutoAudio)["z-index"], i, objectsLayer),
+      editorVisible: (aa as SpreadAutoAudio).editor_visible !== false,
+      playerVisible: false, // locked literal
+      assetType: (aa as SpreadAutoAudio).type,
     });
   });
 

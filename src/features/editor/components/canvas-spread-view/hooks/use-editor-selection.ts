@@ -127,6 +127,9 @@ export function useEditorSelection<TSpread extends BaseSpread>({
     } else if (type === "audio") {
       resolvedType = "audio";
       index = (spread.audios ?? []).findIndex((a) => a.id === id);
+    } else if (type === "auto_audio") {
+      resolvedType = "auto_audio";
+      index = (spread.auto_audios ?? []).findIndex((a) => a.id === id);
     } else if (type === "quiz") {
       resolvedType = "quiz";
       index = (spread.quizzes ?? []).findIndex((q) => q.id === id);
@@ -177,6 +180,10 @@ export function useEditorSelection<TSpread extends BaseSpread>({
         else if (element.type === "audio") {
           const audioGeo = spread.audios?.[element.index]?.geometry;
           geometry = audioGeo ? computeIconGeometry(audioGeo) : null;
+        } else if (element.type === "auto_audio") {
+          const aaGeo = spread.auto_audios?.[element.index]?.geometry;
+          // 2D geometry — wrap with icon w/h via computeIconGeometry (uses x/y only)
+          geometry = aaGeo ? computeIconGeometry({ ...aaGeo, w: 0, h: 0 }) : null;
         } else if (element.type === "quiz") {
           const quizGeo = spread.quizzes?.[element.index]?.geometry;
           geometry = quizGeo ? computeIconGeometry(quizGeo) : null;
@@ -240,6 +247,9 @@ export function useEditorSelection<TSpread extends BaseSpread>({
         } else if (element.type === "audio") {
           const audioGeo = spread.audios?.[element.index]?.geometry;
           geometry = audioGeo ? computeIconGeometry(audioGeo) : null;
+        } else if (element.type === "auto_audio") {
+          const aaGeo = spread.auto_audios?.[element.index]?.geometry;
+          geometry = aaGeo ? computeIconGeometry({ ...aaGeo, w: 0, h: 0 }) : null;
         } else if (element.type === "quiz") {
           const quizGeo = spread.quizzes?.[element.index]?.geometry;
           geometry = quizGeo ? computeIconGeometry(quizGeo) : null;
@@ -301,6 +311,10 @@ export function useEditorSelection<TSpread extends BaseSpread>({
       case "audio": {
         const audioGeo = spread.audios?.[selectedElement.index]?.geometry;
         return audioGeo ? computeIconGeometry(audioGeo) : null;
+      }
+      case "auto_audio": {
+        const aaGeo = spread.auto_audios?.[selectedElement.index]?.geometry;
+        return aaGeo ? computeIconGeometry({ ...aaGeo, w: 0, h: 0 }) : null;
       }
       case "quiz": {
         const quizGeo = spread.quizzes?.[selectedElement.index]?.geometry;

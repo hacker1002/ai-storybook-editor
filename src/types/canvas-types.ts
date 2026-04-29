@@ -27,6 +27,7 @@ import type {
   SpreadVideo,
   SpreadAutoPic,
   SpreadAudio,
+  SpreadAutoAudio,
   SpreadQuiz,
   PageData,
   SpreadImage,
@@ -46,6 +47,7 @@ export type SelectedElementType =
   | "video"
   | "auto_pic"
   | "audio"
+  | "auto_audio"
   | "quiz"
   | "page";
 export type ResizeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
@@ -66,7 +68,7 @@ export interface SelectedElement {
 }
 
 // === Spread Item Action Types ===
-export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'auto_pic' | 'audio' | 'quiz';
+export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'auto_pic' | 'audio' | 'auto_audio' | 'quiz';
 export type SpreadItemActionType = 'add' | 'update' | 'delete';
 
 export interface SpreadItemActionParams<TData = unknown> {
@@ -197,6 +199,26 @@ export type AudioDeleteAction = SpreadItemActionParams<null> & {
   data: null;
 };
 
+// AutoAudio actions (itemId: string = UUID)
+export type AutoAudioAddAction = SpreadItemActionParams<SpreadAutoAudio> & {
+  itemType: 'auto_audio';
+  action: 'add';
+  itemId: null;
+};
+
+export type AutoAudioUpdateAction = SpreadItemActionParams<Partial<SpreadAutoAudio>> & {
+  itemType: 'auto_audio';
+  action: 'update';
+  itemId: string;
+};
+
+export type AutoAudioDeleteAction = SpreadItemActionParams<null> & {
+  itemType: 'auto_audio';
+  action: 'delete';
+  itemId: string;
+  data: null;
+};
+
 // Quiz actions (itemId: string = UUID)
 export type QuizAddAction = SpreadItemActionParams<SpreadQuiz> & {
   itemType: 'quiz';
@@ -244,6 +266,9 @@ export type SpreadItemActionUnion =
   | AudioAddAction
   | AudioUpdateAction
   | AudioDeleteAction
+  | AutoAudioAddAction
+  | AutoAudioUpdateAction
+  | AutoAudioDeleteAction
   | QuizAddAction
   | QuizUpdateAction
   | QuizDeleteAction
@@ -263,6 +288,7 @@ export type {
   SpreadVideo,
   SpreadAutoPic,
   SpreadAudio,
+  SpreadAutoAudio,
   SpreadQuiz,
   PageData,
   SpreadImage,
@@ -343,6 +369,15 @@ export interface AudioItemContext<TSpread extends BaseSpread>
   onDelete: () => void;
 }
 
+export interface AutoAudioItemContext<TSpread extends BaseSpread>
+  extends BaseItemContext<TSpread> {
+  item: SpreadAutoAudio;
+  isThumbnail?: boolean;
+  onSelect: () => void;
+  onUpdate: (updates: Partial<SpreadAutoAudio>) => void;
+  onDelete: () => void;
+}
+
 export interface QuizItemContext<TSpread extends BaseSpread>
   extends BaseItemContext<TSpread> {
   item: SpreadQuiz;
@@ -418,6 +453,13 @@ export interface AutoPicToolbarContext<TSpread extends BaseSpread>
 
 export interface AudioToolbarContext<TSpread extends BaseSpread>
   extends AudioItemContext<TSpread>,
+    BaseToolbarContext {
+  onReplaceAudio: () => void;
+  onCropAudio?: () => void;
+}
+
+export interface AutoAudioToolbarContext<TSpread extends BaseSpread>
+  extends AutoAudioItemContext<TSpread>,
     BaseToolbarContext {
   onReplaceAudio: () => void;
   onCropAudio?: () => void;

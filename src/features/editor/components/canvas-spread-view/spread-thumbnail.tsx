@@ -18,6 +18,7 @@ import {
   buildViewOnlyAudioContext,
   buildViewOnlyQuizContext,
   buildViewOnlyAutoPicContext,
+  buildViewOnlyAutoAudioContext,
 } from "./utils/context-builders";
 import { resolveItemZIndex } from "./utils/resolve-item-z-index";
 import { THUMBNAIL, Z_INDEX } from "@/constants/spread-constants";
@@ -30,6 +31,7 @@ import type {
   ShapeItemContext,
   VideoItemContext,
   AudioItemContext,
+  AutoAudioItemContext,
   QuizItemContext,
   AutoPicItemContext,
 } from "@/types/canvas-types";
@@ -50,6 +52,7 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   renderShapeItem?: (context: ShapeItemContext<TSpread>) => ReactNode;
   renderVideoItem?: (context: VideoItemContext<TSpread>) => ReactNode;
   renderAudioItem?: (context: AudioItemContext<TSpread>) => ReactNode;
+  renderAutoAudioItem?: (context: AutoAudioItemContext<TSpread>) => ReactNode;
   renderQuizItem?: (context: QuizItemContext<TSpread>) => ReactNode;
   renderAutoPicItem?: (context: AutoPicItemContext<TSpread>) => ReactNode;
 
@@ -84,6 +87,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   renderShapeItem,
   renderVideoItem,
   renderAudioItem,
+  renderAutoAudioItem,
   renderQuizItem,
   renderAutoPicItem,
   renderRawImage,
@@ -212,6 +216,16 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
       return { audio, context };
     });
   }, [spread, renderItems, renderAudioItem]);
+
+  const autoAudioContexts = useMemo(() => {
+    if (!renderItems.includes("auto_audio") || !renderAutoAudioItem || !spread.auto_audios)
+      return [];
+    return spread.auto_audios.map((autoAudio, idx) => {
+      const context = buildViewOnlyAutoAudioContext(autoAudio, idx, spread);
+      context.zIndex = resolveItemZIndex("auto_audio", idx, spread);
+      return { autoAudio, context };
+    });
+  }, [spread, renderItems, renderAutoAudioItem]);
 
   const quizContexts = useMemo(() => {
     if (!renderItems.includes("quiz") || !renderQuizItem || !spread.quizzes)
@@ -392,6 +406,14 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
             audioContexts.map(({ audio, context }, index) => (
               <Fragment key={audio.id || `aud-${index}`}>
                 {renderAudioItem(context)}
+              </Fragment>
+            ))}
+
+          {/* Auto Audios (view-only) - skip if renderAutoAudioItem not provided */}
+          {renderAutoAudioItem &&
+            autoAudioContexts.map(({ autoAudio, context }, index) => (
+              <Fragment key={autoAudio.id || `aaud-${index}`}>
+                {renderAutoAudioItem(context)}
               </Fragment>
             ))}
 

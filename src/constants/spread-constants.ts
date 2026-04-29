@@ -46,7 +46,7 @@ export const LAYER_CONFIG = {
     min: 501,
     max: 600,
     label: "Mix",
-    types: ["shape", "audio", "quiz"] as const,
+    types: ["shape", "audio", "auto_audio", "quiz"] as const,
   },
   TEXT: { min: 601, max: 700, label: "Text", types: ["textbox"] as const },
 } as const;

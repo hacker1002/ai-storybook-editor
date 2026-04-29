@@ -9,12 +9,13 @@ const log = createLogger("Util", "DuplicateItemHelpers");
 
 // === Types ===
 
-/** Minimal geometry shape required for offset calculation */
+/** Minimal geometry shape required for offset calculation. w/h optional to
+ *  cover 2D items (auto_audio: {x, y} only). */
 interface Geometry {
   x: number;
   y: number;
-  w: number;
-  h: number;
+  w?: number;
+  h?: number;
 }
 
 /** Z-index tier that a duplicable item belongs to */
@@ -108,10 +109,12 @@ export function nextTopZInTier(
  * Formula: clamp(pos + 2, 0, 100 - dimension)
  */
 export function duplicateGeometry(source: Geometry): Geometry {
+  const w = source.w ?? 0;
+  const h = source.h ?? 0;
   return {
     ...source,
-    x: Math.max(0, Math.min(source.x + 2, 100 - source.w)),
-    y: Math.max(0, Math.min(source.y + 2, 100 - source.h)),
+    x: Math.max(0, Math.min(source.x + 2, 100 - w)),
+    y: Math.max(0, Math.min(source.y + 2, 100 - h)),
   };
 }
 

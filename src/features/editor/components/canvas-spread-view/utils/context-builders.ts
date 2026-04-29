@@ -8,6 +8,7 @@ import type {
   SpreadVideo,
   SpreadAutoPic,
   SpreadAudio,
+  SpreadAutoAudio,
   SpreadQuiz,
   ImageItemContext,
   TextItemContext,
@@ -15,6 +16,7 @@ import type {
   VideoItemContext,
   AutoPicItemContext,
   AudioItemContext,
+  AutoAudioItemContext,
   QuizItemContext,
   TextToolbarContext,
   SelectedElement,
@@ -491,6 +493,68 @@ export function buildViewOnlyAutoPicContext<TSpread extends BaseSpread>(
 ): AutoPicItemContext<TSpread> {
   return {
     item: autoPic,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected: false,
+    isSpreadSelected: false,
+    isThumbnail: true,
+    onSelect: () => {},
+    onUpdate: () => {},
+    onDelete: () => {},
+  };
+}
+
+/**
+ * Build auto-audio item context for render props
+ * Mirrors buildAudioContext — geometry is 2D (icon position only).
+ */
+export function buildAutoAudioContext<TSpread extends BaseSpread>(
+  autoAudio: SpreadAutoAudio,
+  index: number,
+  spread: TSpread,
+  selectedElement: SelectedElement | null,
+  onSelect: SelectFn,
+  onAction: SpreadItemActionHandler,
+  isThumbnail = false
+): AutoAudioItemContext<TSpread> {
+  return {
+    item: autoAudio,
+    itemIndex: index,
+    spreadId: spread.id,
+    spread,
+    isSelected:
+      selectedElement?.type === "auto_audio" && selectedElement.index === index,
+    isSpreadSelected: true,
+    isThumbnail,
+    onSelect: () => onSelect({ type: "auto_audio", index }),
+    onUpdate: (updates) =>
+      onAction({
+        itemType: "auto_audio",
+        action: "update",
+        itemId: autoAudio.id,
+        data: updates,
+      }),
+    onDelete: () =>
+      onAction({
+        itemType: "auto_audio",
+        action: "delete",
+        itemId: autoAudio.id,
+        data: null,
+      }),
+  };
+}
+
+/**
+ * Build view-only auto-audio context for thumbnails
+ */
+export function buildViewOnlyAutoAudioContext<TSpread extends BaseSpread>(
+  autoAudio: SpreadAutoAudio,
+  index: number,
+  spread: TSpread
+): AutoAudioItemContext<TSpread> {
+  return {
+    item: autoAudio,
     itemIndex: index,
     spreadId: spread.id,
     spread,
