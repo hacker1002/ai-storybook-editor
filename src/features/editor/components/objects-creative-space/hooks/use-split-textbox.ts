@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { useSnapshotActions } from "@/stores/snapshot-store/selectors";
-import { measureTextHeightPercent } from "../canvas-utils";
+import { measureTextHeightPercent } from "../utils/canvas-utils";
 import type { SpreadTextbox } from "@/types/canvas-types";
 import type { SelectedItem } from "../objects-creative-space";
 

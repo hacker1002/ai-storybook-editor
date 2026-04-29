@@ -14,7 +14,7 @@ import type {
   TextboxAudio,
   TextboxAudioChunk,
 } from '@/types/spread-types';
-import type { ApplyEnhancementsPayload } from './enhance-spread-narration-modal';
+import type { ApplyEnhancementsPayload } from '../enhance-spread-narration-modal';
 
 const log = createLogger('UI', 'ApplyNarrationEnhancements');
 

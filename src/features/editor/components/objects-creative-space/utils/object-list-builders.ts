@@ -1,9 +1,9 @@
-// utils.ts - Helpers for objects sidebar
+// object-list-builders.ts - Build/group/filter helpers for the objects sidebar list
 
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { LAYER_CONFIG, LAYER_ORDER } from "@/constants/spread-constants";
-import type { ObjectElementType } from "./objects-creative-space";
-import type { ObjectListEntry } from "./objects-sidebar-list-item";
+import type { ObjectElementType } from "../objects-creative-space";
+import type { ObjectListEntry } from "../objects-sidebar-list-item";
 import type {
   BaseSpread,
   SpreadImage,

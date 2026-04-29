@@ -13,9 +13,9 @@ import {
 import {
   buildNarrationReaders,
   buildNarrationReaderToVoice,
-} from "./build-narration-readers";
-import { applySpreadNarrationEnhancements } from "./apply-spread-narration-enhancements";
-import { buildTranslateContext } from "./build-translate-context";
+} from "./utils/build-narration-readers";
+import { applySpreadNarrationEnhancements } from "./utils/apply-spread-narration-enhancements";
+import { buildTranslateContext } from "./utils/build-translate-context";
 import type { SpreadTextboxContent } from "@/types/spread-types";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {

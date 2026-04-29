@@ -41,7 +41,7 @@ import {
   groupEntriesByLayer,
   getLayerForType,
   type LayerGroup,
-} from "./utils";
+} from "./utils/object-list-builders";
 import type { SelectedItem, ObjectElementType } from "./objects-creative-space";
 import type {
   SpreadImage,
