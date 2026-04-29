@@ -80,7 +80,7 @@ export function getTextboxContentForLanguage(
         geometry: { ...fallback.geometry },
         typography,
         audio: {
-          script_synced: false,
+          is_sync: false,
           combined_audio_url: null,
           word_timings: [],
           chunks: [],

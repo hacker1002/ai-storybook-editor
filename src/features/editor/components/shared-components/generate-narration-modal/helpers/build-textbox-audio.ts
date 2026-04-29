@@ -1,6 +1,6 @@
 // build-textbox-audio.ts — Strip UI fields off ChunkDraft[] and assemble the
-// persisted `TextboxAudio` payload. `audioScriptSynced` is the persisted flag
-// owned by the modal — never derived here.
+// persisted `TextboxAudio` payload. Rollup `is_sync` derived from chunks
+// (DB-CHANGELOG 2026-04-29) — single source of truth, no separate state.
 
 import type {
   TextboxAudio,
@@ -19,6 +19,7 @@ function stripChunk(draft: ChunkDraft): TextboxAudioChunk {
     exaggeration: draft.exaggeration,
     speed: draft.speed,
     script_synced: draft.script_synced,
+    params_synced: draft.params_synced,
     results: draft.results,
   };
 }
@@ -27,10 +28,12 @@ export function buildTextboxAudio(
   chunks: ChunkDraft[],
   combinedAudioUrl: string | null,
   combinedWordTimings: WordTiming[],
-  audioScriptSynced: boolean,
 ): TextboxAudio {
+  const is_sync =
+    chunks.length > 0 &&
+    chunks.every((c) => c.script_synced && c.params_synced);
   return {
-    script_synced: audioScriptSynced,
+    is_sync,
     combined_audio_url: combinedAudioUrl,
     word_timings: combinedWordTimings,
     chunks: chunks.map(stripChunk),

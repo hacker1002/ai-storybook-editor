@@ -86,7 +86,14 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
   const audio = content?.audio;
   const hasText = !!content?.text;
   const audioUrl = audio?.combined_audio_url ?? null;
-  const isStale = audio != null && audio.combined_audio_url != null && !audio.script_synced;
+  // Toolbar reads raw snapshot (not adapter-coerced). Legacy data may carry
+  // `script_synced` instead of `is_sync` until the modal opens and bubbles
+  // the migrated shape. Defensive fallback prevents spurious isStale=true.
+  const audioIsSync =
+    audio?.is_sync ??
+    (audio as { script_synced?: boolean } | undefined)?.script_synced ??
+    true;
+  const isStale = audio != null && audio.combined_audio_url != null && !audioIsSync;
 
   log.debug("render", "toolbar state", {
     itemId: item.id,
@@ -158,7 +165,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
         itemId: item.id,
         chunkCount: narrationAudio.chunks.length,
         hasCombinedAudio: narrationAudio.combined_audio_url != null,
-        scriptSynced: narrationAudio.script_synced,
+        isSync: narrationAudio.is_sync,
       });
     },
     [content, langCode, onUpdate, item.id]

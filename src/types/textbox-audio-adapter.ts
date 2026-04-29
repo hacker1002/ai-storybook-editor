@@ -35,24 +35,44 @@ function isObject(v: unknown): v is Record<string, unknown> {
 
 /**
  * Coerce arbitrary persisted snapshot data into a valid `TextboxAudio` or
- * null. New shape passes through (deep clone). Anything else (legacy shape,
- * malformed, null, primitive) → null + warn log.
+ * null. New shape passes through (deep clone). Legacy shape with top-level
+ * `script_synced` is renamed → `is_sync` at read-time + warn log. Per-chunk
+ * `params_synced` defaults to `true` when missing (avoid false-positive badge
+ * on data without history). DB-CHANGELOG 2026-04-29.
  */
 export function coerceTextboxAudio(raw: unknown): TextboxAudio | null {
   if (!isObject(raw)) {
     return null;
   }
   const hasChunksArr = Array.isArray((raw as { chunks?: unknown }).chunks);
-  const hasScriptSyncedBool =
+  const hasIsSyncBool =
+    typeof (raw as { is_sync?: unknown }).is_sync === 'boolean';
+  const hasLegacyScriptSyncedBool =
     typeof (raw as { script_synced?: unknown }).script_synced === 'boolean';
-  if (!hasChunksArr || !hasScriptSyncedBool) {
+  if (!hasChunksArr || (!hasIsSyncBool && !hasLegacyScriptSyncedBool)) {
     log.warn('coerceTextboxAudio', 'legacy or malformed shape — dropping', {
       keys: Object.keys(raw),
     });
     return null;
   }
-  // Defensive deep clone so callers can mutate without touching snapshot.
-  return structuredClone(raw) as unknown as TextboxAudio;
+  const cloned = structuredClone(raw) as unknown as TextboxAudio &
+    Partial<{ script_synced: boolean }>;
+  if (!hasIsSyncBool && hasLegacyScriptSyncedBool) {
+    cloned.is_sync = cloned.script_synced as boolean;
+    delete cloned.script_synced;
+    log.warn('coerceTextboxAudio', 'legacy script_synced → is_sync rename applied', {
+      is_sync: cloned.is_sync,
+    });
+  }
+  for (const chunk of cloned.chunks) {
+    if (typeof (chunk as Partial<TextboxAudioChunk>).params_synced !== 'boolean') {
+      chunk.params_synced = true;
+      log.debug('coerceTextboxAudio', 'legacy chunk: default params_synced=true', {
+        voice_id: chunk.voice_id,
+      });
+    }
+  }
+  return cloned;
 }
 
 /** Build an empty chunk seeded with default inference + the given script. */
@@ -65,6 +85,7 @@ export function buildEmptyChunk(
     script,
     ...DEFAULT_CHUNK_INFERENCE_PARAMS,
     script_synced: false,
+    params_synced: false,
     results: [],
   };
 }
@@ -75,7 +96,7 @@ export function buildEmptyTextboxAudio(
   script: string,
 ): TextboxAudio {
   return {
-    script_synced: false,
+    is_sync: false,
     combined_audio_url: null,
     word_timings: [],
     chunks: [buildEmptyChunk(voiceId, script)],

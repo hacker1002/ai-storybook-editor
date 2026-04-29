@@ -45,7 +45,8 @@ export interface UseNarrationModalStateReturn {
   chunks: ChunkDraft[];
   combinedAudioUrl: string | null;
   combinedWordTimings: WordTiming[];
-  audioScriptSynced: boolean;
+  /** Rollup sync flag — derived from chunks (every chunk script_synced && params_synced). */
+  audioIsSync: boolean;
   isMergingCombined: boolean;
   combinedError: string | null;
   anyGenerating: boolean;
@@ -80,6 +81,7 @@ function buildSeedDraft(voiceId: string | null, scriptSeed: string): ChunkDraft 
     script: scriptSeed,
     ...DEFAULT_CHUNK_INFERENCE_PARAMS,
     script_synced: false,
+    params_synced: false,
     results: [],
     client_id: makeClientId(),
     ui: {
@@ -103,6 +105,7 @@ function draftFromPersisted(
     exaggeration: chunk.exaggeration,
     speed: chunk.speed,
     script_synced: chunk.script_synced,
+    params_synced: chunk.params_synced,
     results: chunk.results,
     client_id: makeClientId(),
     ui: {
@@ -133,7 +136,6 @@ export function useNarrationModalState(
   const [combinedWordTimings, setCombinedWordTimings] = useState<WordTiming[]>(
     [],
   );
-  const [audioScriptSynced, setAudioScriptSynced] = useState(false);
   const [isMergingCombined, setIsMergingCombined] = useState(false);
   const [combinedError, setCombinedError] = useState<string | null>(null);
 
@@ -167,17 +169,16 @@ export function useNarrationModalState(
       setChunks(drafts);
       setCombinedAudioUrl(audio.combined_audio_url ?? null);
       setCombinedWordTimings(audio.word_timings ?? []);
-      setAudioScriptSynced(Boolean(audio.script_synced));
       log.info('open', 'pre-fill from existing audio', {
         chunkCount: drafts.length,
         hasCombined: audio.combined_audio_url != null,
+        isSync: audio.is_sync,
       });
     } else {
       const seed = buildSeedDraft(defaultNarratorVoiceId, textboxText.trim());
       setChunks([seed]);
       setCombinedAudioUrl(null);
       setCombinedWordTimings([]);
-      setAudioScriptSynced(false);
       log.info('open', 'seed default chunk', {
         hasNarratorVoice: defaultNarratorVoiceId != null,
         scriptLength: textboxText.trim().length,
@@ -203,7 +204,6 @@ export function useNarrationModalState(
       chunks,
       combinedAudioUrl,
       combinedWordTimings,
-      audioScriptSynced,
     );
     const serialized = JSON.stringify(next);
     if (serialized === lastBubbledRef.current) return;
@@ -214,7 +214,6 @@ export function useNarrationModalState(
     chunks,
     combinedAudioUrl,
     combinedWordTimings,
-    audioScriptSynced,
   ]);
 
   // Reset the dedupe key when the modal closes so the next open re-bubbles.
@@ -239,10 +238,6 @@ export function useNarrationModalState(
     [],
   );
 
-  const invalidateAudioSynced = useCallback(() => {
-    setAudioScriptSynced(false);
-  }, []);
-
   const abortInFlight = useCallback(() => {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -252,6 +247,10 @@ export function useNarrationModalState(
   }, []);
 
   // ── Mutators ──
+  // Sync flag matrix (DB-CHANGELOG 2026-04-29):
+  //   script/voice change → flip script_synced=false only
+  //   inference param/reset → flip params_synced=false only
+  //   select result → no per-chunk flag change; clear combined only
   const handleScriptChange = useCallback(
     (clientId: string, next: string) => {
       log.debug('handleScriptChange', 'mutate', {
@@ -263,9 +262,8 @@ export function useNarrationModalState(
         script: next,
         script_synced: false,
       }));
-      invalidateAudioSynced();
     },
-    [updateChunk, invalidateAudioSynced],
+    [updateChunk],
   );
 
   const handleVoiceChange = useCallback(
@@ -276,9 +274,8 @@ export function useNarrationModalState(
         voice_id: voiceId,
         script_synced: false,
       }));
-      invalidateAudioSynced();
     },
-    [updateChunk, invalidateAudioSynced],
+    [updateChunk],
   );
 
   const handleParamChange = useCallback(
@@ -290,11 +287,10 @@ export function useNarrationModalState(
       updateChunk(clientId, (c) => ({
         ...c,
         ...partial,
-        script_synced: false,
+        params_synced: false,
       }));
-      invalidateAudioSynced();
     },
-    [updateChunk, invalidateAudioSynced],
+    [updateChunk],
   );
 
   const handleResetParams = useCallback(
@@ -303,11 +299,10 @@ export function useNarrationModalState(
       updateChunk(clientId, (c) => ({
         ...c,
         ...DEFAULT_CHUNK_INFERENCE_PARAMS,
-        script_synced: false,
+        params_synced: false,
       }));
-      invalidateAudioSynced();
     },
-    [updateChunk, invalidateAudioSynced],
+    [updateChunk],
   );
 
   const handleSelectResult = useCallback(
@@ -330,9 +325,8 @@ export function useNarrationModalState(
       }));
       setCombinedAudioUrl(null);
       setCombinedWordTimings([]);
-      invalidateAudioSynced();
     },
-    [updateChunk, invalidateAudioSynced],
+    [updateChunk],
   );
 
   const handleToggleExpanded = useCallback(
@@ -408,10 +402,14 @@ export function useNarrationModalState(
         return { ok: false, reason: 'invalid' };
       }
 
-      log.info('handleGenerateChunk', 'success', { clientId });
+      log.info('handleGenerateChunk', 'success', {
+        clientId,
+        resetSyncFlags: true,
+      });
       updateChunk(clientId, (c) => ({
         ...c,
         script_synced: true,
+        params_synced: true,
         results: [
           ...c.results.map((r) => ({ ...r, is_selected: false })),
           outcome.result,
@@ -425,7 +423,6 @@ export function useNarrationModalState(
       }));
       setCombinedAudioUrl(null);
       setCombinedWordTimings([]);
-      setAudioScriptSynced(false);
       setCombinedError(null);
       return { ok: true };
     },
@@ -462,7 +459,6 @@ export function useNarrationModalState(
       log.info('handleRefreshCombined', 'shortcut single chunk');
       setCombinedAudioUrl(only.url);
       setCombinedWordTimings(only.word_timings);
-      setAudioScriptSynced(true);
       return;
     }
 
@@ -497,7 +493,6 @@ export function useNarrationModalState(
     log.info('handleRefreshCombined', 'combine api success');
     setCombinedAudioUrl(outcome.audioUrl);
     setCombinedWordTimings(outcome.words);
-    setAudioScriptSynced(true);
   }, [isMergingCombined]);
 
   // ── Derived ──
@@ -505,12 +500,15 @@ export function useNarrationModalState(
   const canCombine =
     chunks.length > 0 &&
     chunks.every((c) => c.script_synced && c.results.length > 0);
+  const audioIsSync =
+    chunks.length > 0 &&
+    chunks.every((c) => c.script_synced && c.params_synced);
 
   return {
     chunks,
     combinedAudioUrl,
     combinedWordTimings,
-    audioScriptSynced,
+    audioIsSync,
     isMergingCombined,
     combinedError,
     anyGenerating,

@@ -366,7 +366,9 @@ export interface TextboxAudioResult {
 }
 
 /** Single voice + script chunk inside a textbox. Multi-speaker dialog uses
- *  multiple chunks (one voice per chunk). */
+ *  multiple chunks (one voice per chunk).
+ *  DB-CHANGELOG 2026-04-29: split sync flag → `script_synced` (script/voice
+ *  changes) + `params_synced` (inference param changes). */
 export interface TextboxAudioChunk {
   voice_id: string;
   script: string;
@@ -374,13 +376,16 @@ export interface TextboxAudioChunk {
   similarity: number;       // 0..1
   exaggeration: number;     // 0..1 (maps to API `style`; renamed from style_exaggeration per DB-CHANGELOG §4 2026-04-28)
   speed: number;            // 0.7..1.2
-  script_synced: boolean;
+  script_synced: boolean;   // narrowed: flips false on script/voice change
+  params_synced: boolean;   // flips false on inference param change (speed/stability/similarity/exaggeration)
   results: TextboxAudioResult[];
 }
 
-/** Top-level textbox audio: rollups + ordered chunks. */
+/** Top-level textbox audio: rollups + ordered chunks.
+ *  DB-CHANGELOG 2026-04-29: rollup `script_synced` → `is_sync`
+ *  (BREAKING). Derived as `chunks.every(c => c.script_synced && c.params_synced)`. */
 export interface TextboxAudio {
-  script_synced: boolean;
+  is_sync: boolean;
   combined_audio_url: string | null;
   word_timings: WordTiming[];
   chunks: TextboxAudioChunk[];

@@ -294,15 +294,16 @@ export function ObjectsMainView({
             }}
             onTextChange={(newText) => {
               // Atomic single onUpdate per spec §4.3: when media exists, flip
-              // script_synced=false in the SAME call as the text change. Two
+              // is_sync=false in the SAME call as the text change. Two
               // separate updates would hit a stale-closure overwrite.
+              // DB-CHANGELOG 2026-04-29: rollup `script_synced` → `is_sync`.
               const audio = content.audio;
               const nextContent: SpreadTextboxContent =
                 audio?.combined_audio_url
                   ? {
                       ...content,
                       text: newText,
-                      audio: { ...audio, script_synced: false },
+                      audio: { ...audio, is_sync: false },
                     }
                   : { ...content, text: newText };
               context.onUpdate({

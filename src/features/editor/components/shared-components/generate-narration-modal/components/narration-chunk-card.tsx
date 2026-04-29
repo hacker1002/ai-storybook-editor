@@ -120,7 +120,12 @@ function CollapsedRow({
       />
       <span className="min-w-0 flex-1 truncate text-sm">{preview}</span>
       {showWarn ? (
-        <span role="status" aria-live="polite" className="shrink-0 text-amber-500">
+        <span
+          role="status"
+          aria-live="polite"
+          aria-label="Out of sync"
+          className="shrink-0 text-amber-500"
+        >
           <AlertTriangle className="h-3.5 w-3.5" />
         </span>
       ) : null}
@@ -176,7 +181,17 @@ export function NarrationChunkCard({
   const selected = selectedEntry?.result ?? null;
 
   const scriptPreview = buildScriptPreview(chunk.script);
-  const showSyncBadge = !chunk.script_synced && chunk.results.length > 0;
+  // 3 derived sync flags (DB-CHANGELOG 2026-04-29 — split script_synced/params_synced)
+  const hasResults = chunk.results.length > 0;
+  const isScriptSyncStale = !chunk.script_synced && hasResults;
+  const isParamsSyncStale = !chunk.params_synced && hasResults;
+  const isAnySyncStale = isScriptSyncStale || isParamsSyncStale;
+
+  log.debug('render', 'sync flags', {
+    client_id: chunk.client_id,
+    isScriptSyncStale,
+    isParamsSyncStale,
+  });
 
   // Voice display label (for collapsed icon tooltip).
   const voiceLabel = chunk.voice_id
@@ -253,7 +268,7 @@ export function NarrationChunkCard({
         total={totalChunks}
         preview={scriptPreview}
         voiceLabel={voiceLabel}
-        showWarn={showSyncBadge || chunk.ui.error != null}
+        showWarn={isAnySyncStale || chunk.ui.error != null}
         onToggle={() => {
           log.debug('toggleExpanded', 'click → expand', {
             client_id: chunk.client_id,
@@ -326,10 +341,11 @@ export function NarrationChunkCard({
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Script
           </span>
-          {showSyncBadge ? (
+          {isScriptSyncStale ? (
             <span
               role="status"
               aria-live="polite"
+              aria-label="Script or voice changed since last generation"
               className="inline-flex items-center gap-1 text-xs text-amber-600"
             >
               <AlertTriangle className="h-3 w-3" />
@@ -405,7 +421,18 @@ export function NarrationChunkCard({
           ) : (
             <ChevronRight className="h-3.5 w-3.5" />
           )}
-          Advance
+          <span>Advance</span>
+          {isParamsSyncStale ? (
+            <span
+              role="status"
+              aria-live="polite"
+              aria-label="Inference parameters changed since last generation"
+              className="ml-2 inline-flex items-center gap-1 text-xs text-amber-600 normal-case tracking-normal"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Out of sync
+            </span>
+          ) : null}
         </button>
 
         {chunk.ui.isAdvanceOpen ? (
