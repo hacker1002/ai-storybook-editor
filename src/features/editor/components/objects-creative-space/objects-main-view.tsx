@@ -3,9 +3,18 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Languages } from "lucide-react";
+import { Languages, Mic } from "lucide-react";
 import { createLogger } from "@/utils/logger";
 import { TranslateSpreadModal, type ApplyTranslationsPayload } from "./translate-spread-modal";
+import {
+  EnhanceSpreadNarrationModal,
+  type ApplyEnhancementsPayload,
+} from "./enhance-spread-narration-modal";
+import {
+  buildNarrationReaders,
+  buildNarrationReaderToVoice,
+} from "./build-narration-readers";
+import { applySpreadNarrationEnhancements } from "./apply-spread-narration-enhancements";
 import { buildTranslateContext } from "./build-translate-context";
 import type { SpreadTextboxContent } from "@/types/spread-types";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
@@ -39,6 +48,7 @@ import { PlayerHiddenBadge } from "./player-hidden-badge";
 import {
   useRetouchSpreads,
   useSnapshotActions,
+  useCharacters,
 } from "@/stores/snapshot-store/selectors";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
@@ -109,6 +119,9 @@ export function ObjectsMainView({
   const book = useCurrentBook();
 
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
+  const [narrationSpreadModalOpen, setNarrationSpreadModalOpen] = useState(false);
+
+  const characters = useCharacters();
 
   const selectedSpread = useMemo(
     () => retouchSpreads.find(s => s.id === selectedSpreadId),
@@ -116,6 +129,15 @@ export function ObjectsMainView({
   );
 
   const originalLanguage = book?.original_language ?? "en_US";
+
+  const enhanceReaders = useMemo(
+    () => buildNarrationReaders(book ?? null, characters),
+    [book, characters]
+  );
+  const enhanceReaderToVoice = useMemo(
+    () => buildNarrationReaderToVoice(book ?? null, characters, langCode),
+    [book, characters, langCode]
+  );
 
   const translateContext = useMemo(
     () => buildTranslateContext(book, selectedSpread),
@@ -169,6 +191,29 @@ export function ObjectsMainView({
     [retouchSpreads, actions, originalLanguage]
   );
 
+  const handleApplyEnhancements = useCallback(
+    (payload: ApplyEnhancementsPayload) => {
+      log.info("handleApplyEnhancements", "start", {
+        spreadId: payload.spreadId,
+        lang: payload.language,
+        count: payload.results.length,
+      });
+      const spread = retouchSpreads.find(s => s.id === payload.spreadId);
+      if (!spread) {
+        log.warn("handleApplyEnhancements", "spread not found", {
+          spreadId: payload.spreadId,
+        });
+        return;
+      }
+      applySpreadNarrationEnhancements({
+        spread,
+        payload,
+        updateRetouchTextbox: actions.updateRetouchTextbox,
+      });
+    },
+    [retouchSpreads, actions]
+  );
+
   const translateLeftAction = useMemo(
     () => (
       <Button
@@ -186,6 +231,35 @@ export function ObjectsMainView({
       </Button>
     ),
     [selectedSpreadId, selectedSpread]
+  );
+
+  const narrationLeftAction = useMemo(
+    () => (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          log.info("narrationButton", "click", { spreadId: selectedSpreadId });
+          setNarrationSpreadModalOpen(true);
+        }}
+        disabled={!selectedSpreadId || !selectedSpread}
+        aria-label="Enhance narration"
+      >
+        <Mic className="h-4 w-4 mr-1.5" />
+        Narration
+      </Button>
+    ),
+    [selectedSpreadId, selectedSpread]
+  );
+
+  const combinedLeftActions = useMemo(
+    () => (
+      <>
+        {translateLeftAction}
+        {narrationLeftAction}
+      </>
+    ),
+    [translateLeftAction, narrationLeftAction]
   );
 
   const handleDeselect = useCallback(() => onItemSelect(null), [onItemSelect]);
@@ -643,7 +717,7 @@ export function ObjectsMainView({
         canReorderSpread={false}
         canDeleteSpread={false}
         showViewToggle={false}
-        leftActions={translateLeftAction}
+        leftActions={combinedLeftActions}
         canResizeItem={true}
         canDragItem={true}
         externalSelectedItemId={selectedItemId}
@@ -697,6 +771,20 @@ export function ObjectsMainView({
           editorLang={langCode}
           context={translateContext}
           onApplyTranslations={handleApplyTranslations}
+        />
+      )}
+
+      {selectedSpread && (
+        <EnhanceSpreadNarrationModal
+          isOpen={narrationSpreadModalOpen}
+          onClose={() => setNarrationSpreadModalOpen(false)}
+          spreadId={selectedSpreadId}
+          textboxes={selectedSpread.textboxes ?? []}
+          editorLang={langCode}
+          readers={enhanceReaders}
+          readerToVoice={enhanceReaderToVoice}
+          context={translateContext}
+          onApplyEnhancements={handleApplyEnhancements}
         />
       )}
 
