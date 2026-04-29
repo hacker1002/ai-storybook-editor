@@ -460,21 +460,25 @@ export function useNarrationModalState(
           autoPlayToken: (c.ui.autoPlayToken ?? 0) + 1,
         },
       }));
-      setCombinedAudioUrl(null);
-      setCombinedWordTimings([]);
-      setCombinedSelectionDirty(false);
+      // Preserve combined_audio_url — same rationale as handleSelectResult.
+      // Newly generated result auto-selects, so combined diverges from the
+      // current selection until user re-runs Combine. Mark dirty (no-op when
+      // no combined exists yet — guarded by checking current url).
+      setCombinedSelectionDirty((prev) => prev || combinedAudioUrl != null);
       setCombinedError(null);
       return { ok: true };
     },
-    [voicesById, updateChunk],
+    [voicesById, updateChunk, combinedAudioUrl],
   );
 
   // ── Refresh combined ──
   const handleRefreshCombined = useCallback(async () => {
     const snapshot = chunksRef.current;
+    // Allow combine whenever every chunk has at least one selected result —
+    // even if script_synced is false. Stale state already surfaces via the
+    // "Out of sync" badge; user explicitly opts in by clicking Combine.
     const ready =
-      snapshot.length > 0 &&
-      snapshot.every((c) => c.script_synced && c.results.length > 0);
+      snapshot.length > 0 && snapshot.every((c) => c.results.length > 0);
     if (!ready || isMergingCombined) {
       log.debug('handleRefreshCombined', 'guard', {
         ready,
@@ -541,9 +545,10 @@ export function useNarrationModalState(
 
   // ── Derived ──
   const anyGenerating = chunks.some((c) => c.ui.isGenerating);
+  // canCombine intentionally does NOT require script_synced — Stale state is
+  // surfaced via the badge; combining stale chunks is a valid user choice.
   const canCombine =
-    chunks.length > 0 &&
-    chunks.every((c) => c.script_synced && c.results.length > 0);
+    chunks.length > 0 && chunks.every((c) => c.results.length > 0);
   const audioIsSync =
     chunks.length > 0 &&
     chunks.every((c) => c.script_synced && c.params_synced) &&

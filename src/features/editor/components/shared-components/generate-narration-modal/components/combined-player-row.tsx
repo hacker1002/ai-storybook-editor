@@ -51,7 +51,11 @@ export function CombinedPlayerRow({
   // InlineAudioPlayer is NOT keyed by audioUrl (its [src] effect already
   // recreates the underlying Audio); avoiding the remount lets the autoPlay
   // effect see a stable component lifecycle and play() lands cleanly.
-  const lastTokenRef = useRef<number>(autoPlayToken);
+  // Init ref to 0 (sentinel "never seen") so the first mount with a positive
+  // token — which happens after the very first Combine, when this component
+  // first appears in place of <CombinedFallback /> — still triggers autoplay.
+  // Persisted-combined reopen path arrives with token=0 → ref=0 → skip.
+  const lastTokenRef = useRef<number>(0);
   const [autoPlayKey, setAutoPlayKey] = useState(0);
   useEffect(() => {
     if (autoPlayToken === lastTokenRef.current) return;

@@ -219,6 +219,14 @@ export function NarrationChunkCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chunk.ui.autoPlayToken]);
 
+  // Reset autoPlayKey when the chunk collapses. Without this, the local key
+  // state survives the InlineAudioPlayer unmount; on re-expand the player
+  // mounts with a non-zero key and its mount-time effect fires play().
+  // Re-mount with key=0 → mount effect short-circuits → no spurious autoplay.
+  useEffect(() => {
+    if (!chunk.ui.isExpanded) setAutoPlayKey(0);
+  }, [chunk.ui.isExpanded]);
+
   // ── Playback bus consumer: mark this player active/inactive for InlineAudioPlayer ──
   const activePlayerId = useActivePlayerId();
   const isActive = activePlayerId === myPlayerId;
