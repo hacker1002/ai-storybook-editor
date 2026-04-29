@@ -28,10 +28,15 @@ export function buildTextboxAudio(
   chunks: ChunkDraft[],
   combinedAudioUrl: string | null,
   combinedWordTimings: WordTiming[],
+  combinedSelectionDirty: boolean,
 ): TextboxAudio {
-  const is_sync =
+  // is_sync rolls up chunk flags AND a "selection diverged from combined" bit.
+  // Re-selecting a prior result does not flip chunk flags (regen not needed)
+  // but does invalidate the cached combined URL until user re-runs Combine.
+  const chunksSynced =
     chunks.length > 0 &&
     chunks.every((c) => c.script_synced && c.params_synced);
+  const is_sync = chunksSynced && !combinedSelectionDirty;
   return {
     is_sync,
     combined_audio_url: combinedAudioUrl,

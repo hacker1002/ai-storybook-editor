@@ -19,6 +19,12 @@ export interface CombinedPlayerRowProps {
   isMerging: boolean;
   /** Disables the refresh button (e.g. !canCombine). */
   refreshDisabled: boolean;
+  /**
+   * True when the cached combined audio diverges from current chunk state
+   * (script/voice/param edit, or selection changed since last Combine).
+   * Renders a Stale pill next to the title.
+   */
+  isStale: boolean;
   onRefresh: () => void;
 }
 
@@ -27,6 +33,7 @@ export function CombinedPlayerRow({
   chunkCount,
   isMerging,
   refreshDisabled,
+  isStale,
   onRefresh,
 }: CombinedPlayerRowProps) {
   const activePlayerId = useActivePlayerId();
@@ -39,7 +46,17 @@ export function CombinedPlayerRow({
   return (
     <div className="flex flex-col gap-2 rounded-md border bg-background p-3">
       <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        <span>Combined ({chunkCount} narration{chunkCount === 1 ? '' : 's'})</span>
+        <div className="flex items-center gap-2">
+          <span>Combined ({chunkCount} narration{chunkCount === 1 ? '' : 's'})</span>
+          {isStale && (
+            <span
+              className="text-[10px] uppercase font-semibold rounded px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+              title="Combined audio out of sync with current chunks — click Combine to refresh"
+            >
+              Stale
+            </span>
+          )}
+        </div>
         <Button
           type="button"
           variant="ghost"

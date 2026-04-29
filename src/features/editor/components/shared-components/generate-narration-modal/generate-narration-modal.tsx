@@ -230,6 +230,7 @@ export function GenerateNarrationModal({
               chunkCount={state.chunks.length}
               isMerging={state.isMergingCombined}
               refreshDisabled={!state.canCombine}
+              isStale={!state.audioIsSync}
               onRefresh={onRefresh}
             />
           ) : (

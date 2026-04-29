@@ -138,6 +138,14 @@ export function useNarrationModalState(
   );
   const [isMergingCombined, setIsMergingCombined] = useState(false);
   const [combinedError, setCombinedError] = useState<string | null>(null);
+  /**
+   * True when the current chunk selection diverges from the cached
+   * `combinedAudioUrl` — set by `handleSelectResult` when re-picking a prior
+   * result, cleared by `handleRefreshCombined` / `handleGenerateChunk` /
+   * modal reopen. Used to compute rollup `is_sync` without flipping per-chunk
+   * sync flags (which would imply "regen needed" and gate the Combine button).
+   */
+  const [combinedSelectionDirty, setCombinedSelectionDirty] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   /** Latest snapshot mirror — read inside async handlers without stale closure. */
@@ -169,16 +177,29 @@ export function useNarrationModalState(
       setChunks(drafts);
       setCombinedAudioUrl(audio.combined_audio_url ?? null);
       setCombinedWordTimings(audio.word_timings ?? []);
+      // Reconcile dirty bit: persisted `is_sync=false` while chunks all synced
+      // ⇒ the gap is the combined-selection-dirty marker. Preserve it so the
+      // Stale badge survives modal reopen.
+      const chunksSynced = drafts.every(
+        (c) => c.script_synced && c.params_synced,
+      );
+      const dirty =
+        chunksSynced &&
+        audio.combined_audio_url != null &&
+        audio.is_sync === false;
+      setCombinedSelectionDirty(dirty);
       log.info('open', 'pre-fill from existing audio', {
         chunkCount: drafts.length,
         hasCombined: audio.combined_audio_url != null,
         isSync: audio.is_sync,
+        rehydratedSelectionDirty: dirty,
       });
     } else {
       const seed = buildSeedDraft(defaultNarratorVoiceId, textboxText.trim());
       setChunks([seed]);
       setCombinedAudioUrl(null);
       setCombinedWordTimings([]);
+      setCombinedSelectionDirty(false);
       log.info('open', 'seed default chunk', {
         hasNarratorVoice: defaultNarratorVoiceId != null,
         scriptLength: textboxText.trim().length,
@@ -204,6 +225,7 @@ export function useNarrationModalState(
       chunks,
       combinedAudioUrl,
       combinedWordTimings,
+      combinedSelectionDirty,
     );
     const serialized = JSON.stringify(next);
     if (serialized === lastBubbledRef.current) return;
@@ -214,6 +236,7 @@ export function useNarrationModalState(
     chunks,
     combinedAudioUrl,
     combinedWordTimings,
+    combinedSelectionDirty,
   ]);
 
   // Reset the dedupe key when the modal closes so the next open re-bubbles.
@@ -250,7 +273,10 @@ export function useNarrationModalState(
   // Sync flag matrix (DB-CHANGELOG 2026-04-29):
   //   script/voice change → flip script_synced=false only
   //   inference param/reset → flip params_synced=false only
-  //   select result → no per-chunk flag change; clear combined only
+  //   select result → no per-chunk flag change; preserve combined URL but
+  //     mark `combinedSelectionDirty=true` so rollup is_sync goes false until
+  //     user re-runs Combine. User may just want to A/B-listen without
+  //     forcing a recombine.
   const handleScriptChange = useCallback(
     (clientId: string, next: string) => {
       log.debug('handleScriptChange', 'mutate', {
@@ -323,8 +349,10 @@ export function useNarrationModalState(
           autoPlayToken: (c.ui.autoPlayToken ?? 0) + 1,
         },
       }));
-      setCombinedAudioUrl(null);
-      setCombinedWordTimings([]);
+      // Preserve combinedAudioUrl/word_timings — user may just want to listen
+      // to the prior result. Mark dirty so rollup is_sync flips to false until
+      // a fresh Combine run replaces the cached URL.
+      setCombinedSelectionDirty(true);
     },
     [updateChunk],
   );
@@ -423,6 +451,7 @@ export function useNarrationModalState(
       }));
       setCombinedAudioUrl(null);
       setCombinedWordTimings([]);
+      setCombinedSelectionDirty(false);
       setCombinedError(null);
       return { ok: true };
     },
@@ -459,6 +488,7 @@ export function useNarrationModalState(
       log.info('handleRefreshCombined', 'shortcut single chunk');
       setCombinedAudioUrl(only.url);
       setCombinedWordTimings(only.word_timings);
+      setCombinedSelectionDirty(false);
       return;
     }
 
@@ -493,6 +523,7 @@ export function useNarrationModalState(
     log.info('handleRefreshCombined', 'combine api success');
     setCombinedAudioUrl(outcome.audioUrl);
     setCombinedWordTimings(outcome.words);
+    setCombinedSelectionDirty(false);
   }, [isMergingCombined]);
 
   // ── Derived ──
@@ -502,7 +533,8 @@ export function useNarrationModalState(
     chunks.every((c) => c.script_synced && c.results.length > 0);
   const audioIsSync =
     chunks.length > 0 &&
-    chunks.every((c) => c.script_synced && c.params_synced);
+    chunks.every((c) => c.script_synced && c.params_synced) &&
+    !combinedSelectionDirty;
 
   return {
     chunks,
