@@ -172,7 +172,7 @@ export function buildObjectList(
       title:
         (ap as SpreadAutoPic).title ||
         (ap as SpreadAutoPic).name ||
-        `Animated Pic ${i + 1}`,
+        `Auto Pic ${i + 1}`,
       zIndex: resolveZIndex((ap as SpreadAutoPic)["z-index"], i, mediaLayer),
       editorVisible: (ap as SpreadAutoPic).editor_visible !== false,
       playerVisible: (ap as SpreadAutoPic).player_visible !== false,

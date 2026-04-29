@@ -685,7 +685,7 @@ export function PlayerCanvas({
               );
             })}
 
-            {/* Animated Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150].
+            {/* Auto Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150].
             Interactive pics (Rive/Lottie with state_machine set) bypass narration click-loop:
             pointer events route directly to the runtime canvas so state machines receive input. */}
             {spread.auto_pics?.map((autoPic, index) => {

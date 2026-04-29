@@ -47,7 +47,7 @@ export const ELEMENT_TYPE_CONFIG: Record<
   shape: { icon: Hexagon, label: "Shape" },
   video: { icon: Video, label: "Video" },
   audio: { icon: Volume2, label: "Audio" },
-  auto_pic: { icon: ImagePlay, label: "Animated Pic" },
+  auto_pic: { icon: ImagePlay, label: "Auto Pic" },
   raw_image: { icon: ImageOff, label: "Raw Image" },
   raw_textbox: { icon: TypeOutline, label: "Raw Text" },
 };

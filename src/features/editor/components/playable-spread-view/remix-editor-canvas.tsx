@@ -358,7 +358,7 @@ export function RemixEditorCanvas({
           />
         ))}
 
-        {/* Animated Pics (render-only, auto-loop) */}
+        {/* Auto Pics (render-only, auto-loop) */}
         {spread.auto_pics?.map((autoPic, index) => (
           <EditableAutoPic
             key={autoPic.id}

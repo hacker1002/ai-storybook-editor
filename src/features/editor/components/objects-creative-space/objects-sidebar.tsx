@@ -646,8 +646,8 @@ export function ObjectsSidebar({
         case "auto_pic":
           actions.addRetouchAutoPic(selectedSpreadId, {
             id: newId,
-            name: "New Animated Pic",
-            title: "New Animated Pic",
+            name: "New Auto Pic",
+            title: "New Auto Pic",
             geometry: { x: 10, y: 10, w: 30, h: 20 },
             "z-index": newZIndex,
             editor_visible: true,

@@ -677,7 +677,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
           })}
 
-        {/* Animated Pics */}
+        {/* Auto Pics */}
         {renderItems.includes("auto_pic") &&
           renderAutoPicItem &&
           spread.auto_pics?.map((autoPic, index) => {

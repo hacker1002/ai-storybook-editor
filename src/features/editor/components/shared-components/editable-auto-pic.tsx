@@ -129,7 +129,7 @@ export function EditableAutoPic({
   return (
     <div
       role="img"
-      aria-label={autoPic.title || autoPic.name || `Animated Pic ${index + 1}`}
+      aria-label={autoPic.title || autoPic.name || `Auto Pic ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
       onKeyDown={(e) => e.key === "Enter" && isEditable && !isThumbnail && onSelect()}

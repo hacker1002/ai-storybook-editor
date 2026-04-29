@@ -196,7 +196,7 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
             );
           })}
 
-          {/* Animated Pics (thumbnail - auto-loop) */}
+          {/* Auto Pics (thumbnail - auto-loop) */}
           {spread.auto_pics?.map((autoPic, idx) => {
             if (autoPic.player_visible === false) return null;
             return (

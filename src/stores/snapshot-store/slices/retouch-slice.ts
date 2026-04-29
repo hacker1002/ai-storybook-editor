@@ -156,7 +156,7 @@ export const createRetouchSlice: StateCreator<
       }
     }),
 
-  // --- Animated Pics ---
+  // --- Auto Pics ---
 
   addRetouchAutoPic: (spreadId, autoPic) =>
     set((state) => {

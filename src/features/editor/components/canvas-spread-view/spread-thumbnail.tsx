@@ -355,7 +355,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
               </Fragment>
             ))}
 
-          {/* Animated Pics (view-only) - skip if renderAutoPicItem not provided */}
+          {/* Auto Pics (view-only) - skip if renderAutoPicItem not provided */}
           {renderAutoPicItem &&
             autoPicContexts.map(({ autoPic, context }, index) => (
               <Fragment key={autoPic.id || `anim-${index}`}>

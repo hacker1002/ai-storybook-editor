@@ -386,7 +386,7 @@ export function AnimationEditorCanvas({
           />
         ))}
 
-        {/* Animated Pics (selectable, showItemBorder for animation target visibility) — skip player_visible=false */}
+        {/* Auto Pics (selectable, showItemBorder for animation target visibility) — skip player_visible=false */}
         {spread.auto_pics?.filter(isItemPlayerVisible).map((autoPic, index) => (
           <EditableAutoPic
             key={autoPic.id}
