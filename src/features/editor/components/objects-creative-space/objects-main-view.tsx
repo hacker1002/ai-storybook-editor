@@ -15,7 +15,7 @@ import {
   buildNarrationReaderToVoice,
 } from "./utils/build-narration-readers";
 import { applySpreadNarrationEnhancements } from "./utils/apply-spread-narration-enhancements";
-import { buildTranslateContext } from "./utils/build-translate-context";
+import { buildBookContext } from "./utils/build-book-context";
 import type { SpreadTextboxContent } from "@/types/spread-types";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
@@ -139,9 +139,9 @@ export function ObjectsMainView({
     [book, characters, langCode]
   );
 
-  const translateContext = useMemo(
-    () => buildTranslateContext(book, selectedSpread),
-    [book, selectedSpread]
+  const bookContext = useMemo(
+    () => buildBookContext(book, retouchSpreads, selectedSpread),
+    [book, retouchSpreads, selectedSpread]
   );
 
   const handleApplyTranslations = useCallback(
@@ -769,7 +769,7 @@ export function ObjectsMainView({
           textboxes={selectedSpread.textboxes ?? []}
           originalLang={originalLanguage}
           editorLang={langCode}
-          context={translateContext}
+          context={bookContext}
           onApplyTranslations={handleApplyTranslations}
         />
       )}
@@ -783,7 +783,7 @@ export function ObjectsMainView({
           editorLang={langCode}
           readers={enhanceReaders}
           readerToVoice={enhanceReaderToVoice}
-          context={translateContext}
+          context={bookContext}
           onApplyEnhancements={handleApplyEnhancements}
         />
       )}
