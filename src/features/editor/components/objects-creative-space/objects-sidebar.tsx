@@ -662,18 +662,20 @@ export function ObjectsSidebar({
             type: "raw",
           } as SpreadAudio);
           break;
-        case "auto_audio":
+        case "auto_audio": {
+          const autoAudioCount = allEntries.filter((e) => e.type === "auto_audio").length;
           actions.addRetouchAutoAudio(selectedSpreadId, {
             id: newId,
             name: "New Auto Audio",
             title: "New Auto Audio",
-            geometry: { x: 10, y: 10 },
+            geometry: { x: 1 + autoAudioCount * 2, y: 90 },
             "z-index": newZIndex,
             editor_visible: true,
             player_visible: false, // literal locked
             type: "raw",
           } as SpreadAutoAudio);
           break;
+        }
         case "auto_pic":
           actions.addRetouchAutoPic(selectedSpreadId, {
             id: newId,
