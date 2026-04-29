@@ -216,7 +216,7 @@ export function GenerateNarrationModal({
         ref={dialogContentRef}
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
-        className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto"
+        className="sm:max-w-[640px] max-h-[80vh] overflow-y-auto"
       >
         <DialogHeader>
           <DialogTitle>{textboxTitle ?? 'Textbox'} - Narration</DialogTitle>
@@ -231,6 +231,7 @@ export function GenerateNarrationModal({
               isMerging={state.isMergingCombined}
               refreshDisabled={!state.canCombine}
               isStale={!state.audioIsSync}
+              autoPlayToken={state.combinedAutoPlayToken}
               onRefresh={onRefresh}
             />
           ) : (

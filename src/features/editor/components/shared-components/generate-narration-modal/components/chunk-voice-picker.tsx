@@ -68,7 +68,8 @@ export function ChunkVoicePicker({
   // Trigger label states:
   //  - !value           → "⚠ Choose a voice" (red)
   //  - value && !matched → "⚠ Voice unavailable" (red) — use fallbackName tooltip if any
-  //  - value && matched  → "{name} ({source_label})"
+  //  - value && matched  → "{source_label}" (Narrator | character name)
+  // voice_name kept in tooltip only — picker is character-centric per UX spec.
   const triggerInvalid = !value || !matchedOption;
 
   return (
@@ -80,7 +81,11 @@ export function ChunkVoicePicker({
       <SelectTrigger
         aria-label={`Voice for chunk ${chunkIndex + 1}`}
         aria-invalid={triggerInvalid}
-        title={fallbackName ? `Last voice id ${value} (deleted)` : undefined}
+        title={
+          fallbackName
+            ? `Last voice id ${value} (deleted)`
+            : matchedOption?.voice_name
+        }
         className={cn(
           'h-9 w-auto min-w-[200px]',
           triggerInvalid && 'border-destructive text-destructive',
@@ -95,9 +100,7 @@ export function ChunkVoicePicker({
           }
         >
           {matchedOption ? (
-            <span className="truncate">
-              {matchedOption.voice_name} ({matchedOption.source_label})
-            </span>
+            <span className="truncate">{matchedOption.source_label}</span>
           ) : value ? (
             <span className="flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />
@@ -108,8 +111,12 @@ export function ChunkVoicePicker({
       </SelectTrigger>
       <SelectContent>
         {options.map((opt) => (
-          <SelectItem key={opt.voice_id} value={opt.voice_id}>
-            {opt.voice_name} ({opt.source_label})
+          <SelectItem
+            key={opt.voice_id}
+            value={opt.voice_id}
+            title={opt.voice_name}
+          >
+            {opt.source_label}
           </SelectItem>
         ))}
       </SelectContent>

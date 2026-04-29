@@ -2,6 +2,7 @@
 // player + label + Refresh button. Shown only when `combined_audio_url`
 // is non-null (otherwise the modal renders <CombinedFallback /> instead).
 
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, RefreshCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,8 @@ export interface CombinedPlayerRowProps {
    * Renders a Stale pill next to the title.
    */
   isStale: boolean;
+  /** Bumped after a successful Combine — triggers autoplay on the inline player. */
+  autoPlayToken: number;
   onRefresh: () => void;
 }
 
@@ -34,6 +37,7 @@ export function CombinedPlayerRow({
   isMerging,
   refreshDisabled,
   isStale,
+  autoPlayToken,
   onRefresh,
 }: CombinedPlayerRowProps) {
   const activePlayerId = useActivePlayerId();
@@ -42,6 +46,19 @@ export function CombinedPlayerRow({
   const handlePlayStart = () => {
     getPlaybackBusActions().requestPlay(PLAYER_ID);
   };
+
+  // Mirror chunk-card pattern: parent token → local autoPlayKey + bus claim.
+  // InlineAudioPlayer is NOT keyed by audioUrl (its [src] effect already
+  // recreates the underlying Audio); avoiding the remount lets the autoPlay
+  // effect see a stable component lifecycle and play() lands cleanly.
+  const lastTokenRef = useRef<number>(autoPlayToken);
+  const [autoPlayKey, setAutoPlayKey] = useState(0);
+  useEffect(() => {
+    if (autoPlayToken === lastTokenRef.current) return;
+    lastTokenRef.current = autoPlayToken;
+    setAutoPlayKey((k) => k + 1);
+    getPlaybackBusActions().requestPlay(PLAYER_ID);
+  }, [autoPlayToken]);
 
   return (
     <div className="flex flex-col gap-2 rounded-md border bg-background p-3">
@@ -77,9 +94,9 @@ export function CombinedPlayerRow({
       </div>
 
       <InlineAudioPlayer
-        key={audioUrl}
         src={audioUrl}
         isActive={isActive}
+        autoPlayKey={autoPlayKey}
         onPlayStart={handlePlayStart}
         className="border-0 bg-transparent px-0 py-0"
       />

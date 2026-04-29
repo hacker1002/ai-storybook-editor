@@ -45,6 +45,8 @@ export interface UseNarrationModalStateReturn {
   chunks: ChunkDraft[];
   combinedAudioUrl: string | null;
   combinedWordTimings: WordTiming[];
+  /** Monotonic token bumped after each successful Combine — feeds player autoplay. */
+  combinedAutoPlayToken: number;
   /** Rollup sync flag — derived from chunks (every chunk script_synced && params_synced). */
   audioIsSync: boolean;
   isMergingCombined: boolean;
@@ -146,6 +148,8 @@ export function useNarrationModalState(
    * sync flags (which would imply "regen needed" and gate the Combine button).
    */
   const [combinedSelectionDirty, setCombinedSelectionDirty] = useState(false);
+  /** Bumped after a successful Combine to trigger autoplay on the player. */
+  const [combinedAutoPlayToken, setCombinedAutoPlayToken] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
   /** Latest snapshot mirror — read inside async handlers without stale closure. */
@@ -357,15 +361,22 @@ export function useNarrationModalState(
     [updateChunk],
   );
 
-  const handleToggleExpanded = useCallback(
-    (clientId: string) => {
-      updateChunk(clientId, (c) => ({
+  // Accordion behaviour — opening a chunk collapses every other chunk.
+  // Toggling the already-open chunk still closes it (no chunk expanded).
+  const handleToggleExpanded = useCallback((clientId: string) => {
+    setChunks((prev) => {
+      const target = prev.find((c) => c.client_id === clientId);
+      if (!target) return prev;
+      const willOpen = !target.ui.isExpanded;
+      return prev.map((c) => ({
         ...c,
-        ui: { ...c.ui, isExpanded: !c.ui.isExpanded },
+        ui: {
+          ...c.ui,
+          isExpanded: c.client_id === clientId ? willOpen : false,
+        },
       }));
-    },
-    [updateChunk],
-  );
+    });
+  }, []);
 
   const handleToggleAdvance = useCallback(
     (clientId: string) => {
@@ -489,6 +500,7 @@ export function useNarrationModalState(
       setCombinedAudioUrl(only.url);
       setCombinedWordTimings(only.word_timings);
       setCombinedSelectionDirty(false);
+      setCombinedAutoPlayToken((t) => t + 1);
       return;
     }
 
@@ -524,6 +536,7 @@ export function useNarrationModalState(
     setCombinedAudioUrl(outcome.audioUrl);
     setCombinedWordTimings(outcome.words);
     setCombinedSelectionDirty(false);
+    setCombinedAutoPlayToken((t) => t + 1);
   }, [isMergingCombined]);
 
   // ── Derived ──
@@ -540,6 +553,7 @@ export function useNarrationModalState(
     chunks,
     combinedAudioUrl,
     combinedWordTimings,
+    combinedAutoPlayToken,
     audioIsSync,
     isMergingCombined,
     combinedError,
