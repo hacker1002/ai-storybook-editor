@@ -154,8 +154,20 @@ export function GenerateNarrationModal({
           },
           captureClickOutside: true,
           // Radix Select / Popover portals — guard against closing the modal
-          // when a popover inside a chunk card opens.
-          portalSelectors: ['[data-radix-popper-content-wrapper]'],
+          // when a popover inside a chunk card opens. Re-selecting the same
+          // value unmounts the portal synchronously, so pointerup lands on a
+          // detached node — without dropdownSelectors snapshot the resolver
+          // would mis-classify it as outside and close the modal.
+          portalSelectors: [
+            '[data-radix-popper-content-wrapper]',
+            '[data-radix-select-content]',
+            '[role="listbox"]',
+          ],
+          dropdownSelectors: [
+            '[data-radix-select-content]',
+            '[data-radix-popover-content]',
+            '[data-radix-popper-content-wrapper]',
+          ],
           // Force-pop bypasses anyGenerating guard intentionally: when a
           // higher-priority slot replaces us, the contract is to close —
           // AbortController stops the in-flight network call cleanly.
