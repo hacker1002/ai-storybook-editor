@@ -211,7 +211,7 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
                 className="text-[10px] uppercase font-semibold rounded px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
                 title="Script changed — re-generate to refresh narration"
               >
-                Stale
+                Out of sync
               </span>
             )}
           </div>

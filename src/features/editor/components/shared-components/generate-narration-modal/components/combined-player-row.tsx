@@ -70,7 +70,7 @@ export function CombinedPlayerRow({
               className="text-[10px] uppercase font-semibold rounded px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
               title="Combined audio out of sync with current chunks — click Combine to refresh"
             >
-              Stale
+              Out of sync
             </span>
           )}
         </div>
