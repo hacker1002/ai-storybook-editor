@@ -28,6 +28,7 @@ import { AnimationEditorCanvas } from "./animation-editor-canvas";
 import { RemixEditorCanvas } from "./remix-editor-canvas";
 import { PlayerCanvas } from "./player-canvas";
 import { BranchPathModal } from "./branch-path-modal";
+import { FirstGestureGate } from "./first-gesture-gate";
 
 // === Types ===
 
@@ -140,11 +141,22 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
 
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
+  // First-gesture gate: required to unlock browser autoplay before PlayerCanvas mounts.
+  // Reset whenever activeCanvas leaves 'player' so re-entry re-prompts (consistent UX).
+  const [playerGestureCaptured, setPlayerGestureCaptured] = useState(false);
 
   // Sync activeCanvas when mode prop changes (unless in player mode from play action)
   useEffect(() => {
     if (activeCanvas !== 'player') setActiveCanvas(mode); // eslint-disable-line react-hooks/set-state-in-effect
   }, [mode]); // eslint-disable-line
+
+  // Reset first-gesture capture whenever leaving player canvas → re-entry re-prompts.
+  useEffect(() => {
+    if (activeCanvas !== 'player' && playerGestureCaptured) {
+      log.debug('gestureReset', 'activeCanvas left player, resetting capture');
+      setPlayerGestureCaptured(false); // eslint-disable-line react-hooks/set-state-in-effect
+    }
+  }, [activeCanvas, playerGestureCaptured]);
 
   const [playMode, setPlayMode] = useState<PlayMode>("off");
   const defaultEdition = useMemo<PlayEdition>(() => {
@@ -436,23 +448,27 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             pageNumbering={pageNumbering}
           />
         ) : activeCanvas === "player" && selectedSpread ? (
-          <PlayerCanvas
-            spread={selectedSpread}
-            nextSpread={nextSpread}
-            zoomLevel={effectiveZoomLevel}
-            playMode={playMode}
-            playEdition={playEdition}
-            hasNext={hasNext}
-            hasPrevious={hasPrevious}
-            onSpreadComplete={handleSpreadComplete}
-            onSkipSpread={handleSkipSpread}
-            onPlayModeChange={setPlayMode}
-            onEditionChange={handleEditionChange}
-            availableEditions={availableEditions}
-            availableLanguages={availableLanguages}
-            pageNumbering={pageNumbering}
-            isSharePreview={isSharePreview}
-          />
+          playerGestureCaptured ? (
+            <PlayerCanvas
+              spread={selectedSpread}
+              nextSpread={nextSpread}
+              zoomLevel={effectiveZoomLevel}
+              playMode={playMode}
+              playEdition={playEdition}
+              hasNext={hasNext}
+              hasPrevious={hasPrevious}
+              onSpreadComplete={handleSpreadComplete}
+              onSkipSpread={handleSkipSpread}
+              onPlayModeChange={setPlayMode}
+              onEditionChange={handleEditionChange}
+              availableEditions={availableEditions}
+              availableLanguages={availableLanguages}
+              pageNumbering={pageNumbering}
+              isSharePreview={isSharePreview}
+            />
+          ) : (
+            <FirstGestureGate onCapture={() => setPlayerGestureCaptured(true)} />
+          )
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             No spread selected

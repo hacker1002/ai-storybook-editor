@@ -32,6 +32,7 @@ export { SelectionOverlay } from './selection-overlay';
 export { PlayerCanvas } from './player-canvas';
 export { PlayerControlSidebar } from './player-control-sidebar';
 export { BranchPathModal } from './branch-path-modal';
+export { FirstGestureGate } from './first-gesture-gate';
 
 // === Store selectors ===
 export {
