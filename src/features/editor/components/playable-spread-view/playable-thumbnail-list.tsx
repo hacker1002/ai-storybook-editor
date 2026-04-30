@@ -10,6 +10,7 @@ import {
   EditableVideo,
   EditableAudio,
   EditableAutoPic,
+  EditableAutoAudio,
 } from "../shared-components";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
@@ -244,6 +245,22 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
               />
             );
           })}
+
+          {/* Auto Audios (thumbnail - Music icon, no playback) */}
+          {(spread.auto_audios ?? [])
+            .filter((a) => a.editor_visible !== false)
+            .map((autoAudio, idx) => (
+              <EditableAutoAudio
+                key={autoAudio.id || idx}
+                autoAudio={autoAudio}
+                index={idx}
+                zIndex={autoAudio["z-index"]}
+                isSelected={false}
+                isEditable={true}
+                isThumbnail={true}
+                onSelect={() => {}}
+              />
+            ))}
 
           {/* Textboxes (using EditableTextbox component) */}
           {textboxesWithLang.map((item, idx) => {

@@ -163,16 +163,20 @@ export function usePlayerGsapEngine({
 
   // === Helpers ===
 
+  // BGM auto-audio (data-auto-audio="true") owns its own lifecycle per
+  // playable-spread-view spec — never pause/resume it from the GSAP engine.
   const pauseAllMedia = useCallback(() => {
     const container = spreadContainerRef.current;
     if (!container) return;
     pausedMediaRef.current.clear();
-    container.querySelectorAll<HTMLMediaElement>('audio, video').forEach((el) => {
-      if (!el.paused) {
-        pausedMediaRef.current.add(el);
-        el.pause();
-      }
-    });
+    container
+      .querySelectorAll<HTMLMediaElement>('audio:not([data-auto-audio]), video')
+      .forEach((el) => {
+        if (!el.paused) {
+          pausedMediaRef.current.add(el);
+          el.pause();
+        }
+      });
   }, []);
 
   /** Resume media elements that were playing before the last pauseAllMedia() call */

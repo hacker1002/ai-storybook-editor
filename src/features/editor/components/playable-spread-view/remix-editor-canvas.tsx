@@ -10,6 +10,7 @@ import {
   EditableVideo,
   EditableAudio,
   EditableAutoPic,
+  EditableAutoAudio,
 } from "../shared-components";
 import { useToolbarPosition } from "../../hooks/use-toolbar-position";
 import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
@@ -383,6 +384,21 @@ export function RemixEditorCanvas({
             onSelect={() => {}}
           />
         ))}
+
+        {/* Auto Audios (Phase 1: render-only Music icon) */}
+        {(spread.auto_audios ?? [])
+          .filter((a) => a.editor_visible !== false)
+          .map((autoAudio, index) => (
+            <EditableAutoAudio
+              key={autoAudio.id}
+              autoAudio={autoAudio}
+              index={index}
+              zIndex={autoAudio["z-index"]}
+              isSelected={false}
+              isEditable={true}
+              onSelect={() => {}}
+            />
+          ))}
 
         {/* Textboxes (selectable and editable) */}
         {textboxesWithLang.map((item, index) => {

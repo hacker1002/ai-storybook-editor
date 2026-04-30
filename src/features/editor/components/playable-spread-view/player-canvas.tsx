@@ -10,6 +10,7 @@ import {
   EditableAudio,
   EditableQuiz,
   EditableAutoPic,
+  EditableAutoAudio,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { useCanvasSize, useSetZoomLevel } from "@/stores/editor-settings-store";
@@ -32,6 +33,7 @@ import {
   isInStaging,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
+import { useAutoAudioPreload } from "./hooks/use-auto-audio-preload";
 import {
   usePlaybackStore,
   usePlaybackActions,
@@ -202,6 +204,10 @@ export function PlayerCanvas({
     onSpreadComplete,
     onQuizPlay: handleQuizPlay,
   });
+
+  // Auto-audio (BGM) lookahead preload: next-spread media_url fetched ~1s after mount
+  // so current spread BGM (component-owned) gets bandwidth priority. End-of-book → no-op.
+  useAutoAudioPreload({ spread, nextSpread });
 
   // TODO(quiz-v2): wire back a quiz player UI for 5 quiz types — previously PlayQuizModal.
   // handleQuizComplete() đã sẵn sàng để re-use khi UI mới hoàn thành quiz step.
@@ -800,6 +806,27 @@ export function PlayerCanvas({
                     wordTimings={wordTimings}
                   />
                 </div>
+              );
+            })}
+
+            {/* Auto Audios — branch (C): BGM-style hidden looping <audio> (imperative play()).
+             *  - player_visible locked false; component owns playback lifecycle.
+             *  - NO ref registration (not animation target).
+             *  - NO geometry wrapper, NO pointer events, NO click handler.
+             *  - Tagged `data-auto-audio="true"` → excluded from GSAP engine's
+             *    pauseAllMedia/resumePausedMedia (BGM continues across step pauses).
+             *  - Volume sync still applies (spreadContainerRef.querySelectorAll('audio,video')). */}
+            {(spread.auto_audios ?? []).map((autoAudio, index) => {
+              if (!autoAudio.media_url) return null;
+              return (
+                <EditableAutoAudio
+                  key={autoAudio.id}
+                  autoAudio={autoAudio}
+                  index={index}
+                  isSelected={false}
+                  isEditable={false}
+                  onSelect={() => {}}
+                />
               );
             })}
           </div>

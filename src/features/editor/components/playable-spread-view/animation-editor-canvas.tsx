@@ -10,6 +10,7 @@ import {
   EditableAudio,
   EditableQuiz,
   EditableAutoPic,
+  EditableAutoAudio,
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
@@ -414,6 +415,21 @@ export function AnimationEditorCanvas({
             onSelect={() => handleAudioSelect(audio.id)}
           />
         ))}
+
+        {/* Auto Audios (Phase 1: NOT selectable, render-only Music icon) */}
+        {(spread.auto_audios ?? [])
+          .filter((a) => a.editor_visible !== false)
+          .map((autoAudio, index) => (
+            <EditableAutoAudio
+              key={autoAudio.id}
+              autoAudio={autoAudio}
+              index={index}
+              zIndex={autoAudio["z-index"]}
+              isSelected={false}
+              isEditable={true}
+              onSelect={() => {}}
+            />
+          ))}
 
         {/* Quizzes (selectable) */}
         {spread.quizzes?.map((quiz, index) => (

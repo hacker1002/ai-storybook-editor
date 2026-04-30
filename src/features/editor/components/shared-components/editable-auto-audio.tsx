@@ -1,4 +1,4 @@
-// editable-auto-audio.tsx - Auto-audio item: editor icon (no playback) + player hidden <audio autoPlay loop>
+// editable-auto-audio.tsx - Auto-audio item: editor icon (no playback) + player hidden looping <audio> (imperative play() on mount, data-auto-audio sentinel)
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -33,27 +33,35 @@ export function EditableAutoAudio({
   // Component owns playback lifecycle; React unmount on spread change → cleanup useEffect releases MediaSource.
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  // src lives on the JSX prop (React-owned). Cleanup only pauses — must NOT
+  // call removeAttribute('src') + load(): in Strict-Mode dev, cleanup runs
+  // between dual-mounts; mutating src directly bypasses React's prop tracking,
+  // and the remounted element ends up with empty src (silent BGM bug). The
+  // network-abort-on-unmount optimization is sacrificed for correctness.
   useEffect(() => {
     if (isEditable) return;
     const a = audioRef.current;
-    if (!a) return;
+    if (!a || !autoAudio.media_url) return;
 
-    a.play().catch((err: unknown) => {
-      const errorName = err instanceof Error ? err.name : 'Unknown';
-      log.warn('autoplay', 'Browser blocked autoplay', {
-        autoAudioId: autoAudio.id,
-        mediaUrl: autoAudio.media_url,
-        errorName,
+    const playPromise = a.play();
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise.catch((err: unknown) => {
+        const errorName = err instanceof Error ? err.name : 'Unknown';
+        // AbortError is benign (Strict-Mode cleanup pauses an in-flight play).
+        if (errorName === 'AbortError') return;
+        log.warn('auto_audio_autoplay_blocked', 'Browser blocked autoplay', {
+          autoAudioId: autoAudio.id,
+          mediaUrl: autoAudio.media_url,
+          errorName,
+        });
       });
-    });
+    }
 
     return () => {
       try {
         a.pause();
-        a.removeAttribute('src');
-        a.load();
       } catch (err) {
-        log.debug('cleanup', 'audio cleanup failed (benign)', {
+        log.debug('cleanup', 'audio pause failed (benign)', {
           autoAudioId: autoAudio.id,
           err: err instanceof Error ? err.message : String(err),
         });
@@ -63,7 +71,7 @@ export function EditableAutoAudio({
 
   const handleAudioError = useCallback(
     (e: React.SyntheticEvent<HTMLAudioElement>) => {
-      log.error('mediaLoad', 'Audio element error', {
+      log.error('auto_audio_load_error', 'Audio element error', {
         autoAudioId: autoAudio.id,
         mediaUrl: autoAudio.media_url,
         errorCode: e.currentTarget.error?.code,
@@ -96,6 +104,7 @@ export function EditableAutoAudio({
         src={autoAudio.media_url}
         loop
         aria-hidden="true"
+        data-auto-audio="true"
         onError={handleAudioError}
       />
     );
