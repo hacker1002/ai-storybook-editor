@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/utils/utils';
 import type { PreviewCandidate } from '@/apis/voice-api';
 import { createLogger } from '@/utils/logger';
-import { formatDuration } from '@/features/voices/utils/format-duration';
+import { formatDuration } from '@/utils/format-duration';
 
 const log = createLogger('Voices', 'PromptVoiceAudition');
 

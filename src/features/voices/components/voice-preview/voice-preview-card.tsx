@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { PREVIEW_TEXTS } from '@/constants/config-constants';
 import { createLogger } from '@/utils/logger';
 
-import { InlineAudioPlayer } from './inline-audio-player';
+import { InlineAudioPlayer } from '@/components/audio/inline-audio-player';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VoicePreviewCard — 3-state preview widget (pure controlled component).

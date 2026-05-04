@@ -4,16 +4,11 @@ import { Pause, Play, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Slider } from '@/components/ui/slider';
-import { formatDuration } from '@/features/voices/utils/format-duration';
+import { formatDuration } from '@/utils/format-duration';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// InlineAudioPlayer — custom-UI audio player for voice previews.
-// Single-active-player rule enforced by parent via `isActive` prop.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const log = createLogger('VoicePreview', 'InlineAudioPlayer');
+const log = createLogger('Audio', 'InlineAudioPlayer');
 
 export interface InlineAudioPlayerProps {
   src: string;

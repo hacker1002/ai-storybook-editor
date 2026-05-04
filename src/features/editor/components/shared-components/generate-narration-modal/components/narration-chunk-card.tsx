@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
-import { InlineAudioPlayer } from '@/features/voices/components/voice-preview/inline-audio-player';
+import { InlineAudioPlayer } from '@/components/audio/inline-audio-player';
 import { VoiceInferenceParams } from '@/features/voices/components/voice-inference-params/voice-inference-params';
 import { DEFAULT_INFERENCE_PARAMS } from '@/constants/config-constants';
 import type { NarratorInferenceParams } from '@/types/editor';

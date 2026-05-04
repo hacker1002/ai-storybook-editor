@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, RefreshCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { InlineAudioPlayer } from '@/features/voices/components/voice-preview/inline-audio-player';
+import { InlineAudioPlayer } from '@/components/audio/inline-audio-player';
 import {
   useActivePlayerId,
   getPlaybackBusActions,

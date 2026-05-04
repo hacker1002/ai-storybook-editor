@@ -27,7 +27,7 @@ import {
   MediaIdentitySection,
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
-import { InlineAudioPlayer } from "@/features/voices/components/voice-preview/inline-audio-player";
+import { InlineAudioPlayer } from "@/components/audio/inline-audio-player";
 import { loadAudioMetadata } from "@/features/editor/utils/load-audio-metadata";
 
 const log = createLogger("Editor", "ObjectsAudioToolbar");

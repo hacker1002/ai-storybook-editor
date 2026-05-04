@@ -1,0 +1,364 @@
+// Upload Sound modal — pick file → decode duration → upload Storage → INSERT DB row.
+//
+// SPEC DEVIATION (Phase 04 Validation S1):
+// - File size cap: 20MB (helper `uploadAudioToStorage` AUDIO_MAX_SIZE) instead of
+//   spec's 25MB. Sounds in practice are well below 20MB. KISS: don't bump helper
+//   (shared with voices).
+// - Filename scheme: `${Date.now()}-${sanitizedName}` (helper-imposed) instead of
+//   spec's UUID. Per-userId path prefix prevents cross-user collisions; same-user
+//   same-millisecond collision is acceptable.
+// Path scheme: `sounds-uploaded/{userId}/{Date.now()}-{name}.{ext}` (RLS-friendly
+// scoping; user can't be inferred from public URL beyond their own uploads).
+
+import { useCallback, useState } from 'react';
+import { Loader2, Upload as UploadIcon } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/utils/utils';
+import { supabase } from '@/apis/supabase';
+import { uploadAudioToStorage } from '@/apis/storage-api';
+import { useAuthStore } from '@/stores/auth-store';
+import { mapSoundRow } from '@/features/sounds/utils/sound-mapper';
+import { normalizeTags } from '@/features/sounds/utils/sound-filters';
+import type { Sound, SoundRow } from '@/types/sound';
+import { createLogger } from '@/utils/logger';
+import { FileDropzone } from './file-dropzone';
+import {
+  ALLOWED_AUDIO_MIME,
+  DEFAULT_UPLOAD_FORM,
+  MAX_FILE_BYTES,
+  NAME_MAX,
+  type UploadSoundFormState,
+  type UploadStep,
+} from './upload-sound-modal-types';
+
+const log = createLogger('Sounds', 'UploadSoundModal');
+
+const STORAGE_BUCKET = 'storybook-assets';
+const ACCEPT_ATTR = ALLOWED_AUDIO_MIME.join(', ');
+
+export interface UploadSoundModalProps {
+  onClose: () => void;
+  onSaved: (sound: Sound) => void;
+}
+
+export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const [form, setForm] = useState<UploadSoundFormState>(DEFAULT_UPLOAD_FORM);
+  const [step, setStep] = useState<UploadStep>('form');
+  const [error, setError] = useState<string | null>(null);
+
+  const trimmedName = form.name.trim();
+  const isValid =
+    trimmedName.length >= 1 &&
+    trimmedName.length <= NAME_MAX &&
+    form.file !== null &&
+    form.fileError === null &&
+    form.durationMs !== null;
+  const isUploading = step === 'uploading';
+
+  const handleFilePick = useCallback((file: File) => {
+    log.info('handleFilePick', 'validating file', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    });
+
+    if (!ALLOWED_AUDIO_MIME.includes(file.type as typeof ALLOWED_AUDIO_MIME[number])) {
+      log.warn('handleFilePick', 'unsupported MIME', { type: file.type });
+      setForm((prev) => ({
+        ...prev,
+        file: null,
+        durationMs: null,
+        fileError: 'Only MP3, WAV, or OGG files are supported.',
+      }));
+      return;
+    }
+
+    if (file.size > MAX_FILE_BYTES) {
+      log.warn('handleFilePick', 'file too large', { size: file.size });
+      setForm((prev) => ({
+        ...prev,
+        file: null,
+        durationMs: null,
+        fileError: `File too large. Max ${MAX_FILE_BYTES / 1024 / 1024}MB.`,
+      }));
+      return;
+    }
+
+    // Decode duration via temp <audio> element.
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      const durationMs = Math.round((audio.duration || 0) * 1000);
+      URL.revokeObjectURL(url);
+      log.info('handleFilePick', 'decoded duration', { durationMs });
+      if (!Number.isFinite(audio.duration) || durationMs <= 0) {
+        log.warn('handleFilePick', 'invalid duration', { durationMs });
+        setForm((prev) => ({
+          ...prev,
+          file: null,
+          durationMs: null,
+          fileError: 'Unable to read audio duration.',
+        }));
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        file,
+        durationMs,
+        fileError: null,
+      }));
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      log.error('handleFilePick', 'audio decode failed', { name: file.name });
+      setForm((prev) => ({
+        ...prev,
+        file: null,
+        durationMs: null,
+        fileError: 'Unable to read audio file.',
+      }));
+    };
+    audio.src = url;
+  }, []);
+
+  const handleRemoveFile = useCallback(() => {
+    log.debug('handleRemoveFile', 'reset file');
+    setForm((prev) => ({
+      ...prev,
+      file: null,
+      durationMs: null,
+      fileError: null,
+    }));
+  }, []);
+
+  const handleUpload = useCallback(async () => {
+    if (!isValid || !form.file || form.durationMs === null) {
+      log.warn('handleUpload', 'invalid form state', { hasFile: form.file !== null });
+      return;
+    }
+    if (!userId) {
+      log.error('handleUpload', 'no authenticated user');
+      setError('You must be signed in to upload sounds.');
+      return;
+    }
+
+    log.info('handleUpload', 'start', {
+      fileSize: form.file.size,
+      durationMs: form.durationMs,
+    });
+    setStep('uploading');
+    setError(null);
+
+    let uploadedPath: string | null = null;
+    try {
+      const pathPrefix = `sounds-uploaded/${userId}`;
+      const uploadResult = await uploadAudioToStorage(form.file, pathPrefix);
+      uploadedPath = uploadResult.path;
+      log.info('handleUpload', 'storage uploaded', { path: uploadedPath });
+
+      const insertPayload = {
+        name: trimmedName,
+        description: form.description.trim() || null,
+        tags: normalizeTags(form.tags) || null,
+        loop: false,
+        media_url: uploadResult.publicUrl,
+        duration: form.durationMs,
+        influence: null,
+        source: 0,
+      };
+
+      const { data, error: dbErr } = await supabase
+        .from('sounds')
+        .insert(insertPayload)
+        .select('*')
+        .single();
+
+      if (dbErr || !data) {
+        log.warn('handleUpload', 'db insert failed; cleaning up storage', {
+          path: uploadedPath,
+          pgCode: dbErr?.code,
+          pgMessage: dbErr?.message?.slice(0, 120),
+        });
+        // Compensation: remove the uploaded file to avoid storage orphan.
+        try {
+          await supabase.storage.from(STORAGE_BUCKET).remove([uploadedPath]);
+          log.info('handleUpload', 'orphan storage removed', { path: uploadedPath });
+        } catch (cleanupErr) {
+          log.warn('handleUpload', 'orphan cleanup failed', {
+            path: uploadedPath,
+            msg: String(cleanupErr).slice(0, 120),
+          });
+        }
+        throw dbErr ?? new Error('Insert returned no data');
+      }
+
+      const sound = mapSoundRow(data as SoundRow);
+      log.info('handleUpload', 'success', { soundId: sound.id });
+      onSaved(sound);
+      onClose();
+    } catch (e) {
+      log.error('handleUpload', 'failed', { msg: String(e).slice(0, 200) });
+      setError('Failed to upload sound. Please try again.');
+      setStep('form');
+    }
+  }, [
+    isValid,
+    form.file,
+    form.durationMs,
+    form.description,
+    form.tags,
+    trimmedName,
+    userId,
+    onSaved,
+    onClose,
+  ]);
+
+  const handleDismiss = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) return;
+      if (isUploading) {
+        log.warn('handleDismiss', 'blocked while uploading');
+        return;
+      }
+      onClose();
+    },
+    [isUploading, onClose],
+  );
+
+  const durationLabel =
+    form.durationMs !== null ? `${(form.durationMs / 1000).toFixed(1)}s` : undefined;
+
+  return (
+    <Dialog open onOpenChange={handleDismiss}>
+      <DialogContent
+        className={cn(
+          'sm:max-w-[480px] p-0 gap-0',
+          isUploading && '[&>button[aria-label=Close]]:hidden',
+        )}
+        onEscapeKeyDown={(e) => {
+          if (isUploading) e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          if (isUploading) e.preventDefault();
+        }}
+      >
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle className="flex items-center gap-2">
+            <UploadIcon className="h-5 w-5 text-primary" />
+            Upload
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="px-6 pb-4 space-y-5">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="upload-sound-name"
+              className="text-xs font-medium uppercase tracking-wide"
+            >
+              Name *
+            </Label>
+            <Input
+              id="upload-sound-name"
+              value={form.name}
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              placeholder="e.g., Forest Ambience"
+              autoFocus
+              maxLength={NAME_MAX}
+              disabled={isUploading}
+              aria-required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="upload-sound-description"
+              className="text-xs font-medium uppercase tracking-wide"
+            >
+              Description
+            </Label>
+            <Textarea
+              id="upload-sound-description"
+              value={form.description}
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              placeholder="Briefly describe this sound..."
+              rows={3}
+              disabled={isUploading}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="upload-sound-tags"
+              className="text-xs font-medium uppercase tracking-wide"
+            >
+              Tags
+            </Label>
+            <Input
+              id="upload-sound-tags"
+              value={form.tags}
+              onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))}
+              placeholder="e.g., ambient, nature, loop (comma separated)"
+              disabled={isUploading}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium uppercase tracking-wide">
+              Audio File *
+            </Label>
+            <FileDropzone
+              file={form.file}
+              onPick={handleFilePick}
+              onRemove={handleRemoveFile}
+              accept={ACCEPT_ATTR}
+              disabled={isUploading}
+              metaLabel={durationLabel}
+            />
+            {form.fileError ? (
+              <p className="text-xs text-destructive" role="alert" aria-live="polite">
+                {form.fileError}
+              </p>
+            ) : null}
+          </div>
+
+          {error ? (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {error}
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter className="border-t px-6 py-4 flex-row justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={isUploading}>
+            Cancel
+          </Button>
+          <Button
+            variant="default"
+            onClick={handleUpload}
+            disabled={!isValid || isUploading}
+            className="gap-2"
+          >
+            {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {isUploading ? 'Uploading...' : 'Upload'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -18,7 +18,7 @@ import {
   type TextToolbarContext,
 } from "@/features/editor/components/canvas-spread-view";
 import { createLogger } from "@/utils/logger";
-import { InlineAudioPlayer } from "@/features/voices/components/voice-preview/inline-audio-player";
+import { InlineAudioPlayer } from "@/components/audio/inline-audio-player";
 import {
   clampGeometry,
   GeometrySection,
