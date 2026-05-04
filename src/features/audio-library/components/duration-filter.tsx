@@ -7,28 +7,32 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Slider } from '@/components/ui/slider';
-import { formatDurationMs } from '@/features/sounds/utils/sound-labels';
+import { formatDurationMs } from '../utils/audio-labels';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Sounds', 'DurationFilter');
+const log = createLogger('AudioLibrary', 'DurationFilter');
 
-interface DurationFilterProps {
-  /** Inclusive [lo, hi] bounds (in ms) of the available data set. */
+export interface DurationFilterProps {
+  /** Inclusive [lo, hi] bounds (ms) of the available data set. */
   bounds: [number, number];
-  /** Current selected range (in ms). */
+  /** Current selected range (ms). */
   value: [number, number];
   onChange: (next: [number, number]) => void;
+  /** Slider step in ms. Default 1000 (1s). Use 5000 for music. */
+  stepMs?: number;
 }
 
-export function DurationFilter({ bounds, value, onChange }: DurationFilterProps) {
+export function DurationFilter({
+  bounds,
+  value,
+  onChange,
+  stepMs = 1000,
+}: DurationFilterProps) {
   const [open, setOpen] = useState(false);
-  // Local mirror so dragging stays smooth — emit on commit / change.
-  // Re-sync from prop via render-time key derived from value bounds.
   const [draft, setDraft] = useState<[number, number]>(value);
   const [lastValueKey, setLastValueKey] = useState<string>(`${value[0]}:${value[1]}`);
   const incomingKey = `${value[0]}:${value[1]}`;
   if (incomingKey !== lastValueKey) {
-    // External value changed (e.g. filter reset) — adopt.
     setLastValueKey(incomingKey);
     setDraft(value);
   }
@@ -77,7 +81,7 @@ export function DurationFilter({ bounds, value, onChange }: DurationFilterProps)
         <Slider
           min={minBound}
           max={maxBound}
-          step={1000}
+          step={stepMs}
           value={[lo, hi]}
           onValueChange={handleSliderChange}
           onValueCommit={handleCommit}

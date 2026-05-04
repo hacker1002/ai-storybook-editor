@@ -7,6 +7,7 @@ import { LoginPage } from '@/features/auth';
 import { EditorPage } from '@/features/editor';
 import { VoicesPage } from '@/features/voices';
 import { SoundsPage } from '@/features/sounds';
+import { MusicsPage } from '@/features/musics';
 import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVoicesActions } from '@/stores/voices-store';
@@ -21,7 +22,6 @@ const SIDEBAR_PLACEHOLDER_ROUTES: Array<{ path: string; title: string }> = [
   { path: '/assets',     title: 'Assets' },
   { path: '/concepts',   title: 'Concepts' },
   { path: '/styles',     title: 'Styles' },
-  { path: '/musics',     title: 'Musics' },
   { path: '/categories', title: 'Categories' },
   { path: '/eras',       title: 'Eras' },
   { path: '/locations',  title: 'Locations' },
@@ -85,6 +85,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/voices" element={<VoicesPage />} />
           <Route path="/sounds" element={<SoundsPage />} />
+          <Route path="/musics" element={<MusicsPage />} />
           {SIDEBAR_PLACEHOLDER_ROUTES.map(({ path, title }) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}

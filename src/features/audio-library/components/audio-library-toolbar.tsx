@@ -12,10 +12,10 @@ import { TagsFilter } from './tags-filter';
 import { DurationFilter } from './duration-filter';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import type {
-  SoundSource,
-  SoundType,
-  SoundsFilterState,
-} from '@/types/sound';
+  AudioFilterState,
+  AudioSource,
+  AudioType,
+} from '../types';
 
 const SENTINEL_ALL = '__all__';
 
@@ -69,22 +69,32 @@ function FilterSelect<V extends string | number>({
   );
 }
 
-interface SoundsToolbarProps {
-  filters: SoundsFilterState;
+export interface AudioLibraryToolbarProps {
+  filters: AudioFilterState;
   count: number;
   availableTags: string[];
-  /** [lo, hi] from sounds dataset; if [0,0], duration filter is disabled. */
+  /** [lo, hi] from items dataset; if [0,0], duration filter is disabled. */
   durationBounds: [number, number];
-  onChange: (next: SoundsFilterState) => void;
+  searchPlaceholder: string;
+  searchAriaLabel: string;
+  countLabelSingular: string;
+  countLabelPlural: string;
+  durationStepMs?: number;
+  onChange: (next: AudioFilterState) => void;
 }
 
-export function SoundsToolbar({
+export function AudioLibraryToolbar({
   filters,
   count,
   availableTags,
   durationBounds,
+  searchPlaceholder,
+  searchAriaLabel,
+  countLabelSingular,
+  countLabelPlural,
+  durationStepMs,
   onChange,
-}: SoundsToolbarProps) {
+}: AudioLibraryToolbarProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
   const debouncedSearch = useDebouncedValue(searchInput, 200);
 
@@ -95,7 +105,6 @@ export function SoundsToolbar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
-  // Resync local input on external reset.
   useEffect(() => {
     if (filters.search !== searchInput && filters.search === '') {
       setSearchInput('');
@@ -103,22 +112,20 @@ export function SoundsToolbar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.search]);
 
-  const update = (patch: Partial<SoundsFilterState>) =>
+  const update = (patch: Partial<AudioFilterState>) =>
     onChange({ ...filters, ...patch });
 
-  const sourceOptions: FilterOption<SoundSource>[] = [
+  const sourceOptions: FilterOption<AudioSource>[] = [
     { value: 0, label: 'Uploaded' },
     { value: 1, label: 'Generated' },
   ];
 
-  const typeOptions: FilterOption<SoundType>[] = [
+  const typeOptions: FilterOption<AudioType>[] = [
     { value: 'loop', label: 'Loop' },
     { value: 'one_shot', label: 'One-shot' },
   ];
 
-  const handleTagsChange = (tags: string[]) => {
-    update({ tags });
-  };
+  const handleTagsChange = (tags: string[]) => update({ tags });
 
   const handleDurationChange = (range: [number, number]) => {
     const [lo, hi] = range;
@@ -135,8 +142,8 @@ export function SoundsToolbar({
         <Input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search sounds..."
-          aria-label="Search sounds"
+          placeholder={searchPlaceholder}
+          aria-label={searchAriaLabel}
           className="pl-10"
         />
       </div>
@@ -164,13 +171,11 @@ export function SoundsToolbar({
         bounds={durationBounds}
         value={durationValue}
         onChange={handleDurationChange}
+        stepMs={durationStepMs}
       />
 
-      <span
-        className="ml-auto text-sm text-muted-foreground"
-        aria-live="polite"
-      >
-        {count} {count === 1 ? 'sound' : 'sounds'}
+      <span className="ml-auto text-sm text-muted-foreground" aria-live="polite">
+        {count} {count === 1 ? countLabelSingular : countLabelPlural}
       </span>
     </div>
   );

@@ -1,22 +1,20 @@
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Sounds', 'StoragePathParser');
+const log = createLogger('AudioLibrary', 'StoragePathParser');
 
-// Strict bucket parser per plan §Validation S1: only `storybook-assets`.
-// Mismatch (legacy/external URL) → returns null and caller skips storage cleanup.
+// Match `/storage/v1/object/public/storybook-assets/<path>` URLs and capture the path.
 const STORAGE_PUBLIC_PATTERN =
   /\/storage\/v1\/object\/public\/storybook-assets\/(.+)$/;
 
 /**
  * Parse the object path of a `storybook-assets` Supabase Storage public URL.
- * Returns the decoded path (relative to bucket root) on match, otherwise null.
- *
- * Examples:
- *   https://x.supabase.co/storage/v1/object/public/storybook-assets/sounds-uploaded/u/1.mp3
- *     → 'sounds-uploaded/u/1.mp3'
- *   https://cdn.example.com/whatever.mp3 → null
+ * Returns the decoded path on match if it starts with one of the allowed
+ * `prefixes`, else null. Caller skips Storage cleanup when null is returned.
  */
-export function parseStoragePathFromUrl(url: string | null | undefined): string | null {
+export function parseStoragePathFromUrl(
+  url: string | null | undefined,
+  prefixes: string[],
+): string | null {
   if (!url) {
     log.debug('parseStoragePathFromUrl', 'empty url', {});
     return null;
@@ -30,7 +28,15 @@ export function parseStoragePathFromUrl(url: string | null | undefined): string 
       });
       return null;
     }
-    return decodeURIComponent(match[1]);
+    const path = decodeURIComponent(match[1]);
+    if (prefixes.length > 0 && !prefixes.some((p) => path.startsWith(p + '/') || path === p)) {
+      log.debug('parseStoragePathFromUrl', 'prefix mismatch', {
+        path: path.slice(0, 60),
+        prefixes,
+      });
+      return null;
+    }
+    return path;
   } catch (err) {
     log.warn('parseStoragePathFromUrl', 'invalid URL', {
       err: err instanceof Error ? err.message : String(err),

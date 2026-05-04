@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/utils';
 import { supabase } from '@/apis/supabase';
-import { callGenerateSoundEffect } from '@/apis/sound-api';
+import { callGenerateMusic } from '@/apis/music-api';
 import {
   mapAudioRow,
   normalizeTags,
@@ -19,57 +19,60 @@ import {
   type GenerateOutcome,
 } from '@/features/audio-library';
 import { createLogger } from '@/utils/logger';
-import { GenerateSoundForm } from './generate-sound-form';
-import { GenerateSoundAudition } from './generate-sound-audition';
-import { validateGenerateSoundForm } from './generate-sound-form-validation';
-import { mapGenerateSoundErrorMessage } from './generate-sound-error-mapping';
+import { GenerateMusicForm } from './generate-music-form';
+import { GenerateMusicAudition } from './generate-music-audition';
+import { ProgressHint } from './progress-hint';
 import {
-  DEFAULT_GENERATE_SOUND_FORM,
-  type GenerateSoundFormState,
-  type SoundGenerationResult,
-} from './generate-sound-modal-types';
+  validateGenerateMusicForm,
+  validateGenerateMusicFormForSave,
+} from './generate-music-form-validation';
+import { mapGenerateMusicErrorMessage } from './generate-music-error-mapping';
+import {
+  INITIAL_GENERATE_MUSIC_FORM,
+  type GenerateMusicFormState,
+  type MusicGenerationResult,
+} from './generate-music-modal-types';
 
-const log = createLogger('Sounds', 'GenerateSoundModal');
+const log = createLogger('Musics', 'GenerateMusicModal');
 
-export interface GenerateSoundModalProps {
+export interface GenerateMusicModalProps {
   onClose: () => void;
-  onSaved: (sound: AudioResource) => void;
+  onSaved: (music: AudioResource) => void;
 }
 
-export function GenerateSoundModal({ onClose, onSaved }: GenerateSoundModalProps) {
-  const flow = useGenerateModalFlow<GenerateSoundFormState, SoundGenerationResult>({
-    initialForm: DEFAULT_GENERATE_SOUND_FORM,
+export function GenerateMusicModal({ onClose, onSaved }: GenerateMusicModalProps) {
+  const flow = useGenerateModalFlow<GenerateMusicFormState, MusicGenerationResult>({
+    initialForm: INITIAL_GENERATE_MUSIC_FORM,
     validate: (form) => {
-      const v = validateGenerateSoundForm(form);
+      const v = validateGenerateMusicForm(form);
       return { isValid: v.isValid, errors: v.errors as Record<string, string> };
     },
-    generate: async (form, { seed }): Promise<GenerateOutcome<SoundGenerationResult>> => {
+    generate: async (form, { seed }): Promise<GenerateOutcome<MusicGenerationResult>> => {
       log.info('generate', 'start', {
         descLen: form.description.trim().length,
-        loop: form.loop,
+        finetuneId: form.finetuneId,
         durationAuto: form.durationAuto,
+        loop: form.loop,
         hasSeed: typeof seed === 'number',
       });
-      const r = await callGenerateSoundEffect({
-        description: form.description.trim(),
+      const r = await callGenerateMusic({
+        prompt: form.description.trim(),
+        finetuneId: form.finetuneId,
+        durationMs: form.durationAuto
+          ? null
+          : Math.round((form.durationSecs ?? 0) * 1000),
         loop: form.loop,
-        durationSecs: form.durationAuto ? null : form.durationSecs,
-        promptInfluence: form.promptInfluence,
+        name: form.name.trim() || 'Untitled',
+        tags: normalizeTags(form.tags),
+        forceInstrumental: true,
         seed,
       });
       if (r.success) {
         log.info('generate', 'success', {
-          durationSecs: r.data.durationSecs,
+          durationMs: r.data.durationMs,
           mediaType: r.data.mediaType,
         });
-        return {
-          success: true,
-          data: {
-            soundUrl: r.data.soundUrl,
-            durationSecs: r.data.durationSecs,
-            mediaType: r.data.mediaType,
-          },
-        };
+        return { success: true, data: r.data };
       }
       log.error('generate', 'failure', {
         errorCode: r.errorCode,
@@ -79,7 +82,7 @@ export function GenerateSoundModal({ onClose, onSaved }: GenerateSoundModalProps
         success: false,
         error: {
           code: r.errorCode,
-          message: mapGenerateSoundErrorMessage(r.errorCode, r.error),
+          message: mapGenerateMusicErrorMessage(r.errorCode, r.error),
         },
       };
     },
@@ -96,15 +99,15 @@ export function GenerateSoundModal({ onClose, onSaved }: GenerateSoundModalProps
         description: trimmedDesc.length > 0 ? trimmedDesc : null,
         tags: tagsNorm.length > 0 ? tagsNorm : null,
         loop: form.loop,
-        media_url: result.soundUrl,
-        duration: Math.round(result.durationSecs * 1000),
-        influence: form.promptInfluence,
+        media_url: result.musicUrl,
+        duration: result.durationMs,
+        influence: null,
         source: 1,
       };
 
       log.info('save', 'insert', { durationMs: insertPayload.duration });
       const { data, error } = await supabase
-        .from('sounds')
+        .from('musics')
         .insert(insertPayload)
         .select('*')
         .single();
@@ -113,23 +116,26 @@ export function GenerateSoundModal({ onClose, onSaved }: GenerateSoundModalProps
           code: error?.code,
           message: error?.message,
         });
-        throw new Error('Failed to save sound. Please try again.');
+        throw new Error('Failed to save music. Please try again.');
       }
-      const sound = mapAudioRow(data as AudioRow);
-      log.info('save', 'success', { id: sound.id });
-      return sound;
+      const music = mapAudioRow(data as AudioRow);
+      log.info('save', 'success', { id: music.id });
+      return music;
     },
-    onSaved: (sound) => {
-      onSaved(sound);
+    onSaved: (music) => {
+      onSaved(music);
       onClose();
     },
   });
 
-  const isFormValid = validateGenerateSoundForm(flow.form).isValid;
+  const isFormValid = validateGenerateMusicForm(flow.form).isValid;
+  const isSaveValid = validateGenerateMusicFormForSave(flow.form).isValid;
   const generateLabel = flow.step === 'generating' ? 'Generating...' : 'Generate';
   const saveLabel = flow.step === 'saving' ? 'Saving...' : 'Save';
-  const canSave = flow.hasResult && flow.form.name.trim().length > 0 && !flow.isWorking;
+  const canSave = flow.hasResult && isSaveValid && !flow.isWorking;
 
+  // Hard-block dismiss while generating: parent flow.handleDismiss already
+  // blocks `generating` and `saving` — we just preserve onEscape/onInteract.
   return (
     <Dialog open onOpenChange={(open) => flow.handleDismiss(open, onClose)}>
       <DialogContent
@@ -137,24 +143,37 @@ export function GenerateSoundModal({ onClose, onSaved }: GenerateSoundModalProps
           'sm:max-w-[480px] max-h-[85vh] flex flex-col p-0 gap-0',
           flow.isWorking && '[&>button[aria-label=Close]]:hidden',
         )}
+        onEscapeKeyDown={(e) => {
+          if (flow.isWorking) e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          if (flow.isWorking) e.preventDefault();
+        }}
       >
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Generate
+            Generate Music
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-5">
-          <GenerateSoundForm
+          <GenerateMusicForm
             value={flow.form}
             onChange={flow.setForm}
             disabled={flow.isWorking}
             showValidation={flow.showValidation}
           />
 
+          {flow.step === 'generating' ? (
+            <ProgressHint
+              visibleAfterMs={30000}
+              message="Music generation can take up to 90 seconds — please wait."
+            />
+          ) : null}
+
           {flow.result ? (
-            <GenerateSoundAudition result={flow.result} disabled={flow.isWorking} />
+            <GenerateMusicAudition result={flow.result} disabled={flow.isWorking} />
           ) : null}
 
           {flow.error ? (

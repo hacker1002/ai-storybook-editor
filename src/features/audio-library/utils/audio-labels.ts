@@ -1,15 +1,13 @@
-import type { SoundSource } from '@/types/sound';
+import type { AudioSource } from '../types';
 
 export { formatDuration } from '@/utils/format-duration';
 
-export const SOURCE_BADGE: Record<SoundSource, { label: string; iconName: 'Upload' | 'Sparkles' }> = {
+export const SOURCE_BADGE: Record<AudioSource, { label: string; iconName: 'Upload' | 'Sparkles' }> = {
   0: { label: 'UPLOAD', iconName: 'Upload' },
   1: { label: 'GENERATE', iconName: 'Sparkles' },
 };
 
-/**
- * Format ms duration → "M:SS" string. Mirrors voices' formatDuration but accepts ms (sounds DB unit).
- */
+/** Format ms duration → "M:SS". */
 export function formatDurationMs(ms: number): string {
   const safe = Number.isFinite(ms) ? ms : 0;
   const totalSecs = Math.max(0, Math.round(safe / 1000));

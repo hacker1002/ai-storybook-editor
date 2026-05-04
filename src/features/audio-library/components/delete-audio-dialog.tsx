@@ -10,69 +10,58 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { supabase } from '@/apis/supabase';
-import { parseStoragePathFromUrl } from '@/features/sounds/utils/storage-path-parser';
-import { useSoundsActions } from '@/stores/sounds-store';
-import type { Sound } from '@/types/sound';
 import { createLogger } from '@/utils/logger';
+import { deleteAudioRowAndCleanup } from '../utils/delete-audio-row-and-cleanup';
+import type { AudioResource, AudioTableName } from '../types';
 
-const log = createLogger('Sounds', 'DeleteSoundDialog');
+const log = createLogger('AudioLibrary', 'DeleteAudioDialog');
 
-const STORAGE_BUCKET = 'storybook-assets';
-
-interface DeleteSoundDialogProps {
-  sound: Sound;
+export interface DeleteAudioDialogProps {
+  tableName: AudioTableName;
+  storageBucket: string;
+  pathPrefixes: string[];
+  resourceLabel: string;
+  item: AudioResource;
   onClose: () => void;
-  onDeleted?: (soundId: string) => void;
+  onDeleted?: (id: string) => void;
 }
 
 type Step = 'confirm' | 'deleting';
 
-export function DeleteSoundDialog({
-  sound,
+export function DeleteAudioDialog({
+  tableName,
+  storageBucket,
+  pathPrefixes,
+  resourceLabel,
+  item,
   onClose,
   onDeleted,
-}: DeleteSoundDialogProps) {
-  const { deleteSound } = useSoundsActions();
+}: DeleteAudioDialogProps) {
   const [step, setStep] = useState<Step>('confirm');
   const [error, setError] = useState<string | null>(null);
 
   const handleConfirm = async () => {
-    log.info('handleConfirm', 'start', { soundId: sound.id, name: sound.name });
+    log.info('handleConfirm', 'start', { id: item.id, tableName });
     setStep('deleting');
     setError(null);
 
-    const ok = await deleteSound(sound.id);
-    if (!ok) {
-      log.warn('handleConfirm', 'db delete failed', { soundId: sound.id });
-      setError('Failed to delete sound. Please try again.');
+    const res = await deleteAudioRowAndCleanup({
+      tableName,
+      storageBucket,
+      pathPrefixes,
+      item,
+    });
+
+    if (!res.ok) {
+      log.warn('handleConfirm', 'failed', { id: item.id });
+      setError(`Failed to delete ${resourceLabel}. Please try again.`);
       setStep('confirm');
       return;
     }
 
-    // Best-effort Storage cleanup. DB row is already gone — never throw here.
-    const path = parseStoragePathFromUrl(sound.mediaUrl);
-    if (path) {
-      const { error: rmErr } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .remove([path]);
-      if (rmErr) {
-        log.warn('handleConfirm', 'storage cleanup failed', {
-          path,
-          err: rmErr.message,
-        });
-      } else {
-        log.debug('handleConfirm', 'storage cleanup ok', { path });
-      }
-    } else {
-      log.warn('handleConfirm', 'cannot parse storage path, skipping cleanup', {
-        url: (sound.mediaUrl ?? '').slice(0, 60),
-      });
-    }
-
-    log.info('handleConfirm', 'success', { soundId: sound.id });
-    toast.success('Sound deleted');
-    onDeleted?.(sound.id);
+    log.info('handleConfirm', 'success', { id: item.id });
+    toast.success(`${resourceLabel.charAt(0).toUpperCase() + resourceLabel.slice(1)} deleted`);
+    onDeleted?.(item.id);
     onClose();
   };
 
@@ -85,10 +74,10 @@ export function DeleteSoundDialog({
     <AlertDialog open onOpenChange={handleOpenChange}>
       <AlertDialogContent className="sm:max-w-[440px]">
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete sound?</AlertDialogTitle>
+          <AlertDialogTitle>Delete {resourceLabel}?</AlertDialogTitle>
           <AlertDialogDescription>
             <strong className="font-medium text-foreground">
-              &ldquo;{sound.name}&rdquo;
+              &ldquo;{item.name}&rdquo;
             </strong>{' '}
             will be permanently deleted. This action cannot be undone.
           </AlertDialogDescription>

@@ -9,9 +9,9 @@ import {
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Sounds', 'TagsFilter');
+const log = createLogger('AudioLibrary', 'TagsFilter');
 
-interface TagsFilterProps {
+export interface TagsFilterProps {
   availableTags: string[];
   selectedTags: string[];
   onChange: (next: string[]) => void;
@@ -64,7 +64,7 @@ export function TagsFilter({
                     'text-xs rounded px-2 py-0.5 transition-colors',
                     active
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-foreground hover:bg-muted/80'
+                      : 'bg-muted text-foreground hover:bg-muted/80',
                   )}
                 >
                   #{tag}

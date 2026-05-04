@@ -1,5 +1,4 @@
 // Reusable file drop zone — click to pick or drag-drop a single file.
-// Renders a "picked file" card with remove button when a file is selected.
 
 import { useRef, useState, type DragEvent, type ChangeEvent } from 'react';
 import { Music, Upload, X } from 'lucide-react';
@@ -7,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Sounds', 'FileDropzone');
+const log = createLogger('AudioLibrary', 'FileDropzone');
 
 export interface FileDropzoneProps {
   file: File | null;
@@ -20,9 +19,7 @@ export interface FileDropzoneProps {
 }
 
 function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  }
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   return `${(bytes / 1024).toFixed(0)} KB`;
 }
 
@@ -48,17 +45,13 @@ export function FileDropzone({
       log.debug('handleChange', 'file picked via input', { name: f.name, size: f.size });
       onPick(f);
     }
-    // Reset input so same file can be re-picked after remove.
     e.target.value = '';
   };
 
   const handleDrop = (e: DragEvent<HTMLButtonElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    if (disabled) {
-      log.debug('handleDrop', 'drop ignored (disabled)');
-      return;
-    }
+    if (disabled) return;
     const f = e.dataTransfer.files?.[0];
     if (f) {
       log.debug('handleDrop', 'file picked via drop', { name: f.name, size: f.size });
@@ -71,9 +64,7 @@ export function FileDropzone({
     if (!disabled) setIsDragging(true);
   };
 
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
+  const handleDragLeave = () => setIsDragging(false);
 
   if (file) {
     const sizeLabel = formatSize(file.size);

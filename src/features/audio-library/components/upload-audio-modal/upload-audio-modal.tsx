@@ -1,14 +1,7 @@
-// Upload Sound modal — pick file → decode duration → upload Storage → INSERT DB row.
-//
-// SPEC DEVIATION (Phase 04 Validation S1):
-// - File size cap: 20MB (helper `uploadAudioToStorage` AUDIO_MAX_SIZE) instead of
-//   spec's 25MB. Sounds in practice are well below 20MB. KISS: don't bump helper
-//   (shared with voices).
-// - Filename scheme: `${Date.now()}-${sanitizedName}` (helper-imposed) instead of
-//   spec's UUID. Per-userId path prefix prevents cross-user collisions; same-user
-//   same-millisecond collision is acceptable.
-// Path scheme: `sounds-uploaded/{userId}/{Date.now()}-{name}.{ext}` (RLS-friendly
-// scoping; user can't be inferred from public URL beyond their own uploads).
+// Upload Audio modal — generic across sounds and musics.
+// Caller passes `tableName`, `uploadPathPrefix`, `mimeWhitelist`, `maxSizeMb`,
+// `influenceValue` to specialize for the resource. File size cap is enforced
+// FE-side before delegating to the storage helper (which has its own caps).
 
 import { useCallback, useState } from 'react';
 import { Loader2, Upload as UploadIcon } from 'lucide-react';
@@ -27,37 +20,62 @@ import { cn } from '@/utils/utils';
 import { supabase } from '@/apis/supabase';
 import { uploadAudioToStorage } from '@/apis/storage-api';
 import { useAuthStore } from '@/stores/auth-store';
-import { mapSoundRow } from '@/features/sounds/utils/sound-mapper';
-import { normalizeTags } from '@/features/sounds/utils/sound-filters';
-import type { Sound, SoundRow } from '@/types/sound';
 import { createLogger } from '@/utils/logger';
+import { mapAudioRow } from '../../utils/audio-mapper';
+import { normalizeTags } from '../../utils/audio-filters';
+import type { AudioResource, AudioRow, AudioTableName } from '../../types';
 import { FileDropzone } from './file-dropzone';
 import {
-  ALLOWED_AUDIO_MIME,
   DEFAULT_UPLOAD_FORM,
-  MAX_FILE_BYTES,
   NAME_MAX,
-  type UploadSoundFormState,
+  type UploadAudioFormState,
   type UploadStep,
-} from './upload-sound-modal-types';
+} from './upload-audio-modal-types';
 
-const log = createLogger('Sounds', 'UploadSoundModal');
+const log = createLogger('AudioLibrary', 'UploadAudioModal');
 
 const STORAGE_BUCKET = 'storybook-assets';
-const ACCEPT_ATTR = ALLOWED_AUDIO_MIME.join(', ');
 
-export interface UploadSoundModalProps {
+export interface UploadAudioModalProps {
+  tableName: AudioTableName;
+  resourceTitle: string;
+  /** Upload prefix; userId is appended automatically (`<prefix>/<userId>/...`). */
+  uploadPathPrefix: string;
+  maxSizeMb: number;
+  mimeWhitelist: ReadonlyArray<string>;
+  /** Stored on the row's `influence` column. Pass null for upload (no influence). */
+  influenceValue: number | null;
+  namePlaceholder?: string;
+  descriptionPlaceholder?: string;
+  tagsPlaceholder?: string;
+  defaultLoop?: boolean;
   onClose: () => void;
-  onSaved: (sound: Sound) => void;
+  onSaved: (item: AudioResource) => void;
 }
 
-export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
+export function UploadAudioModal({
+  tableName,
+  resourceTitle,
+  uploadPathPrefix,
+  maxSizeMb,
+  mimeWhitelist,
+  influenceValue,
+  namePlaceholder = 'e.g., Forest Ambience',
+  descriptionPlaceholder = 'Briefly describe this audio...',
+  tagsPlaceholder = 'e.g., ambient, nature, loop (comma separated)',
+  defaultLoop = false,
+  onClose,
+  onSaved,
+}: UploadAudioModalProps) {
   const userId = useAuthStore((s) => s.user?.id ?? null);
-  const [form, setForm] = useState<UploadSoundFormState>(DEFAULT_UPLOAD_FORM);
+  const [form, setForm] = useState<UploadAudioFormState>(DEFAULT_UPLOAD_FORM);
   const [step, setStep] = useState<UploadStep>('form');
   const [error, setError] = useState<string | null>(null);
 
   const trimmedName = form.name.trim();
+  const maxFileBytes = maxSizeMb * 1024 * 1024;
+  const acceptAttr = mimeWhitelist.join(', ');
+
   const isValid =
     trimmedName.length >= 1 &&
     trimmedName.length <= NAME_MAX &&
@@ -66,72 +84,74 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
     form.durationMs !== null;
   const isUploading = step === 'uploading';
 
-  const handleFilePick = useCallback((file: File) => {
-    log.info('handleFilePick', 'validating file', {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    });
+  const handleFilePick = useCallback(
+    (file: File) => {
+      log.info('handleFilePick', 'validating file', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      });
 
-    if (!ALLOWED_AUDIO_MIME.includes(file.type as typeof ALLOWED_AUDIO_MIME[number])) {
-      log.warn('handleFilePick', 'unsupported MIME', { type: file.type });
-      setForm((prev) => ({
-        ...prev,
-        file: null,
-        durationMs: null,
-        fileError: 'Only MP3, WAV, or OGG files are supported.',
-      }));
-      return;
-    }
-
-    if (file.size > MAX_FILE_BYTES) {
-      log.warn('handleFilePick', 'file too large', { size: file.size });
-      setForm((prev) => ({
-        ...prev,
-        file: null,
-        durationMs: null,
-        fileError: `File too large. Max ${MAX_FILE_BYTES / 1024 / 1024}MB.`,
-      }));
-      return;
-    }
-
-    // Decode duration via temp <audio> element.
-    const url = URL.createObjectURL(file);
-    const audio = new Audio();
-    audio.preload = 'metadata';
-    audio.onloadedmetadata = () => {
-      const durationMs = Math.round((audio.duration || 0) * 1000);
-      URL.revokeObjectURL(url);
-      log.info('handleFilePick', 'decoded duration', { durationMs });
-      if (!Number.isFinite(audio.duration) || durationMs <= 0) {
-        log.warn('handleFilePick', 'invalid duration', { durationMs });
+      if (!mimeWhitelist.includes(file.type)) {
+        log.warn('handleFilePick', 'unsupported MIME', { type: file.type });
         setForm((prev) => ({
           ...prev,
           file: null,
           durationMs: null,
-          fileError: 'Unable to read audio duration.',
+          fileError: `Unsupported file type. Allowed: ${mimeWhitelist.join(', ')}`,
         }));
         return;
       }
-      setForm((prev) => ({
-        ...prev,
-        file,
-        durationMs,
-        fileError: null,
-      }));
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      log.error('handleFilePick', 'audio decode failed', { name: file.name });
-      setForm((prev) => ({
-        ...prev,
-        file: null,
-        durationMs: null,
-        fileError: 'Unable to read audio file.',
-      }));
-    };
-    audio.src = url;
-  }, []);
+
+      if (file.size > maxFileBytes) {
+        log.warn('handleFilePick', 'file too large', { size: file.size });
+        setForm((prev) => ({
+          ...prev,
+          file: null,
+          durationMs: null,
+          fileError: `File too large. Max ${maxSizeMb}MB.`,
+        }));
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      const audio = new Audio();
+      audio.preload = 'metadata';
+      audio.onloadedmetadata = () => {
+        const durationMs = Math.round((audio.duration || 0) * 1000);
+        URL.revokeObjectURL(url);
+        log.info('handleFilePick', 'decoded duration', { durationMs });
+        if (!Number.isFinite(audio.duration) || durationMs <= 0) {
+          log.warn('handleFilePick', 'invalid duration', { durationMs });
+          setForm((prev) => ({
+            ...prev,
+            file: null,
+            durationMs: null,
+            fileError: 'Unable to read audio duration.',
+          }));
+          return;
+        }
+        setForm((prev) => ({
+          ...prev,
+          file,
+          durationMs,
+          fileError: null,
+        }));
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        log.error('handleFilePick', 'audio decode failed', { name: file.name });
+        setForm((prev) => ({
+          ...prev,
+          file: null,
+          durationMs: null,
+          fileError: 'Unable to read audio file.',
+        }));
+      };
+      audio.src = url;
+    },
+    [mimeWhitelist, maxFileBytes, maxSizeMb],
+  );
 
   const handleRemoveFile = useCallback(() => {
     log.debug('handleRemoveFile', 'reset file');
@@ -150,11 +170,12 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
     }
     if (!userId) {
       log.error('handleUpload', 'no authenticated user');
-      setError('You must be signed in to upload sounds.');
+      setError('You must be signed in to upload.');
       return;
     }
 
     log.info('handleUpload', 'start', {
+      tableName,
       fileSize: form.file.size,
       durationMs: form.durationMs,
     });
@@ -163,7 +184,7 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
 
     let uploadedPath: string | null = null;
     try {
-      const pathPrefix = `sounds-uploaded/${userId}`;
+      const pathPrefix = `${uploadPathPrefix}/${userId}`;
       const uploadResult = await uploadAudioToStorage(form.file, pathPrefix);
       uploadedPath = uploadResult.path;
       log.info('handleUpload', 'storage uploaded', { path: uploadedPath });
@@ -172,15 +193,15 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
         name: trimmedName,
         description: form.description.trim() || null,
         tags: normalizeTags(form.tags) || null,
-        loop: false,
+        loop: defaultLoop,
         media_url: uploadResult.publicUrl,
         duration: form.durationMs,
-        influence: null,
+        influence: influenceValue,
         source: 0,
       };
 
       const { data, error: dbErr } = await supabase
-        .from('sounds')
+        .from(tableName)
         .insert(insertPayload)
         .select('*')
         .single();
@@ -191,7 +212,6 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
           pgCode: dbErr?.code,
           pgMessage: dbErr?.message?.slice(0, 120),
         });
-        // Compensation: remove the uploaded file to avoid storage orphan.
         try {
           await supabase.storage.from(STORAGE_BUCKET).remove([uploadedPath]);
           log.info('handleUpload', 'orphan storage removed', { path: uploadedPath });
@@ -204,13 +224,13 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
         throw dbErr ?? new Error('Insert returned no data');
       }
 
-      const sound = mapSoundRow(data as SoundRow);
-      log.info('handleUpload', 'success', { soundId: sound.id });
-      onSaved(sound);
+      const item = mapAudioRow(data as AudioRow);
+      log.info('handleUpload', 'success', { id: item.id });
+      onSaved(item);
       onClose();
     } catch (e) {
       log.error('handleUpload', 'failed', { msg: String(e).slice(0, 200) });
-      setError('Failed to upload sound. Please try again.');
+      setError(`Failed to upload ${resourceTitle.toLowerCase()}. Please try again.`);
       setStep('form');
     }
   }, [
@@ -223,6 +243,11 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
     userId,
     onSaved,
     onClose,
+    tableName,
+    uploadPathPrefix,
+    defaultLoop,
+    influenceValue,
+    resourceTitle,
   ]);
 
   const handleDismiss = useCallback(
@@ -264,16 +289,16 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
         <div className="px-6 pb-4 space-y-5">
           <div className="space-y-1.5">
             <Label
-              htmlFor="upload-sound-name"
+              htmlFor="upload-audio-name"
               className="text-xs font-medium uppercase tracking-wide"
             >
               Name *
             </Label>
             <Input
-              id="upload-sound-name"
+              id="upload-audio-name"
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="e.g., Forest Ambience"
+              placeholder={namePlaceholder}
               autoFocus
               maxLength={NAME_MAX}
               disabled={isUploading}
@@ -283,16 +308,16 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
 
           <div className="space-y-1.5">
             <Label
-              htmlFor="upload-sound-description"
+              htmlFor="upload-audio-description"
               className="text-xs font-medium uppercase tracking-wide"
             >
               Description
             </Label>
             <Textarea
-              id="upload-sound-description"
+              id="upload-audio-description"
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              placeholder="Briefly describe this sound..."
+              placeholder={descriptionPlaceholder}
               rows={3}
               disabled={isUploading}
             />
@@ -300,16 +325,16 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
 
           <div className="space-y-1.5">
             <Label
-              htmlFor="upload-sound-tags"
+              htmlFor="upload-audio-tags"
               className="text-xs font-medium uppercase tracking-wide"
             >
               Tags
             </Label>
             <Input
-              id="upload-sound-tags"
+              id="upload-audio-tags"
               value={form.tags}
               onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))}
-              placeholder="e.g., ambient, nature, loop (comma separated)"
+              placeholder={tagsPlaceholder}
               disabled={isUploading}
             />
           </div>
@@ -322,7 +347,7 @@ export function UploadSoundModal({ onClose, onSaved }: UploadSoundModalProps) {
               file={form.file}
               onPick={handleFilePick}
               onRemove={handleRemoveFile}
-              accept={ACCEPT_ATTR}
+              accept={acceptAttr}
               disabled={isUploading}
               metaLabel={durationLabel}
             />

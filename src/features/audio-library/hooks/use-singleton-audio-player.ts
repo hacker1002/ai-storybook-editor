@@ -1,25 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Sounds', 'AudioPlayer');
+const log = createLogger('AudioLibrary', 'AudioPlayer');
 
-export interface SoundAudioPlayer {
+export interface SingletonAudioPlayer {
   playingId: string | null;
   /**
-   * Play given sound. Singleton — playing a new sound replaces the previous.
-   * `loop=true` mirrors the source `Sound.loop` flag so ambient/loop sounds
-   * keep cycling until `stop()` is called.
+   * Play given audio. Singleton — playing a new item replaces the previous.
+   * `loop=true` makes the underlying <audio> element loop until `stop()` is called.
    */
-  play: (soundId: string, url: string | null, loop: boolean) => void;
+  play: (itemId: string, url: string | null, loop: boolean) => void;
   stop: () => void;
 }
 
-/**
- * Page-level singleton audio player for the Sounds feature.
- * Forks `useVoiceAudioPlayer` to add a `loop` flag without mutating the
- * voices hook (kept stable for unrelated callers).
- */
-export function useSoundAudioPlayer(): SoundAudioPlayer {
+export function useSingletonAudioPlayer(): SingletonAudioPlayer {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
 
@@ -49,14 +43,14 @@ export function useSoundAudioPlayer(): SoundAudioPlayer {
     };
   }, []);
 
-  const play = useCallback((soundId: string, url: string | null, loop: boolean) => {
+  const play = useCallback((itemId: string, url: string | null, loop: boolean) => {
     if (!url) {
-      log.warn('play', 'no url', { soundId });
+      log.warn('play', 'no url', { itemId });
       return;
     }
     const audio = audioRef.current;
     if (!audio) {
-      log.debug('play', 'audio ref not ready', { soundId });
+      log.debug('play', 'audio ref not ready', { itemId });
       return;
     }
     if (audio.src !== url) {
@@ -65,10 +59,10 @@ export function useSoundAudioPlayer(): SoundAudioPlayer {
     audio.loop = loop;
     audio.currentTime = 0;
     audio.play().catch((err) => {
-      log.error('play', 'failed', { soundId, err: String(err) });
+      log.error('play', 'failed', { itemId, err: String(err) });
       setPlayingId(null);
     });
-    setPlayingId(soundId);
+    setPlayingId(itemId);
   }, []);
 
   const stop = useCallback(() => {

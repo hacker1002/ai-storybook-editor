@@ -11,28 +11,37 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { normalizeTags } from '@/features/sounds/utils/sound-filters';
-import { useSoundsActions } from '@/stores/sounds-store';
-import type { Sound } from '@/types/sound';
+import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
+import { normalizeTags } from '../utils/audio-filters';
+import { mapAudioRow } from '../utils/audio-mapper';
+import type { AudioResource, AudioRow, AudioTableName } from '../types';
 
-const log = createLogger('Sounds', 'EditSoundModal');
+const log = createLogger('AudioLibrary', 'EditAudioModal');
 
-interface EditSoundModalProps {
-  sound: Sound;
+export interface EditAudioModalProps {
+  tableName: AudioTableName;
+  resourceTitle: string;
+  item: AudioResource;
+  tagsPlaceholder?: string;
   onClose: () => void;
-  onSaved?: (sound: Sound) => void;
+  onSaved?: (item: AudioResource) => void;
 }
 
 type Step = 'form' | 'saving';
 
-export function EditSoundModal({ sound, onClose, onSaved }: EditSoundModalProps) {
-  const { updateSound } = useSoundsActions();
-
+export function EditAudioModal({
+  tableName,
+  resourceTitle,
+  item,
+  tagsPlaceholder = 'ambient, nature, forest',
+  onClose,
+  onSaved,
+}: EditAudioModalProps) {
   const initForm = {
-    name: sound.name,
-    tags: sound.tags ?? '',
-    description: sound.description ?? '',
+    name: item.name,
+    tags: item.tags ?? '',
+    description: item.description ?? '',
   };
   const [form, setForm] = useState(initForm);
   const [step, setStep] = useState<Step>('form');
@@ -55,28 +64,36 @@ export function EditSoundModal({ sound, onClose, onSaved }: EditSoundModalProps)
       return;
     }
 
-    log.info('handleSave', 'start', { soundId: sound.id });
+    log.info('handleSave', 'start', { id: item.id, tableName });
     setStep('saving');
     setError(null);
 
-    const patch = {
+    const tagsNorm = normalizeTags(form.tags);
+    const dbPatch: Record<string, unknown> = {
       name: trimmedName,
-      tags: normalizeTags(form.tags) || null,
+      tags: tagsNorm.length > 0 ? tagsNorm : null,
       description: form.description.trim() || null,
     };
 
-    const updated = await updateSound(sound.id, patch);
-    if (updated) {
-      log.info('handleSave', 'success', { soundId: sound.id });
-      toast.success('Sound updated');
-      onSaved?.(updated);
-      onClose();
+    const { data, error: dbErr } = await supabase
+      .from(tableName)
+      .update(dbPatch)
+      .eq('id', item.id)
+      .select('*')
+      .single();
+
+    if (dbErr || !data) {
+      log.warn('handleSave', 'failed', { id: item.id, code: dbErr?.code });
+      setError('Failed to save. Please try again.');
+      setStep('form');
       return;
     }
 
-    log.warn('handleSave', 'failed', { soundId: sound.id });
-    setError('Failed to save. Please try again.');
-    setStep('form');
+    const updated = mapAudioRow(data as AudioRow);
+    log.info('handleSave', 'success', { id: item.id });
+    toast.success(`${resourceTitle} updated`);
+    onSaved?.(updated);
+    onClose();
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -87,44 +104,41 @@ export function EditSoundModal({ sound, onClose, onSaved }: EditSoundModalProps)
     <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Sound</DialogTitle>
+          <DialogTitle>Edit {resourceTitle}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
-            <Label htmlFor="sound-name">NAME</Label>
+            <Label htmlFor="audio-name">NAME</Label>
             <Input
-              id="sound-name"
+              id="audio-name"
               autoFocus
               value={form.name}
               onChange={(e) => handleFieldChange('name', e.target.value)}
               aria-invalid={!isValid}
-              aria-describedby={!isValid ? 'sound-name-error' : undefined}
+              aria-describedby={!isValid ? 'audio-name-error' : undefined}
             />
             {!isValid ? (
-              <p
-                id="sound-name-error"
-                className="text-xs text-destructive mt-1"
-              >
+              <p id="audio-name-error" className="text-xs text-destructive mt-1">
                 Name is required (1-255 characters).
               </p>
             ) : null}
           </div>
 
           <div>
-            <Label htmlFor="sound-tags">TAGS (COMMA-SEPARATED)</Label>
+            <Label htmlFor="audio-tags">TAGS (COMMA-SEPARATED)</Label>
             <Input
-              id="sound-tags"
-              placeholder="ambient, nature, forest"
+              id="audio-tags"
+              placeholder={tagsPlaceholder}
               value={form.tags}
               onChange={(e) => handleFieldChange('tags', e.target.value)}
             />
           </div>
 
           <div>
-            <Label htmlFor="sound-description">DESCRIPTION</Label>
+            <Label htmlFor="audio-description">DESCRIPTION</Label>
             <Textarea
-              id="sound-description"
+              id="audio-description"
               rows={3}
               value={form.description}
               onChange={(e) => handleFieldChange('description', e.target.value)}
@@ -139,11 +153,7 @@ export function EditSoundModal({ sound, onClose, onSaved }: EditSoundModalProps)
         </div>
 
         <DialogFooter>
-          <Button
-            variant="ghost"
-            onClick={onClose}
-            disabled={step === 'saving'}
-          >
+          <Button variant="ghost" onClick={onClose} disabled={step === 'saving'}>
             Cancel
           </Button>
           <Button

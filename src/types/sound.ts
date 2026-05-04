@@ -1,38 +1,12 @@
-export type SoundSource = 0 | 1; // 0=upload, 1=generate
-export type SoundType = 'loop' | 'one_shot';
+// Public type aliases for the legacy `Sound` API. The canonical types live in
+// `@/features/audio-library/types`; this file re-exports for zero-call-site
+// break in unrelated consumers (e.g. editor feature).
 
-export interface Sound {
-  id: string;
-  name: string;
-  description: string | null;
-  mediaUrl: string;
-  loop: boolean;
-  duration: number; // ms
-  influence: number | null; // [0,1]; null cho upload
-  tags: string | null; // CSV lowercase
-  source: SoundSource;
-  createdAt: string;
-}
-
-export interface SoundsFilterState {
-  search: string;
-  source: SoundSource | null;
-  type: SoundType | null;
-  tags: string[];
-  durationRange: [number, number] | null; // [lo, hi] in ms
-}
-
-export type SoundsActiveModal = 'upload' | 'generate' | null;
-
-export interface SoundRow {
-  id: string;
-  name: string;
-  description: string | null;
-  media_url: string;
-  loop: boolean;
-  duration: number;
-  influence: number | null;
-  tags: string | null;
-  source: number;
-  created_at: string;
-}
+export type {
+  AudioResource as Sound,
+  AudioRow as SoundRow,
+  AudioSource as SoundSource,
+  AudioType as SoundType,
+  AudioFilterState as SoundsFilterState,
+  AudioActiveModal as SoundsActiveModal,
+} from '@/features/audio-library/types';
