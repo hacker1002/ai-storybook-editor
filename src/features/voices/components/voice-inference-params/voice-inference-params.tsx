@@ -1,11 +1,10 @@
 // voice-inference-params.tsx
-// Stateless shared component for ElevenLabs inference params (speed + 3 sliders + speaker boost + reset).
+// Stateless shared component for ElevenLabs inference params (speed + 3 sliders + reset).
 // Parent owns state; parent also decides debounce strategy before persisting changes.
 
 import * as React from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { createLogger } from '@/utils/logger';
@@ -56,19 +55,19 @@ function LabeledSlider({
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <div className="flex items-center gap-3">
-        <span className="shrink-0 text-xs text-muted-foreground">{leftLabel}</span>
-        <Slider
-          value={[value]}
-          min={0}
-          max={1}
-          step={0.01}
-          disabled={disabled}
-          onValueChange={handleChange}
-          aria-label={label}
-          className="flex-1"
-        />
-        <span className="shrink-0 text-xs text-muted-foreground">{rightLabel}</span>
+      <Slider
+        value={[value]}
+        min={0}
+        max={1}
+        step={0.01}
+        disabled={disabled}
+        onValueChange={handleChange}
+        aria-label={label}
+        className="w-full"
+      />
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{leftLabel}</span>
+        <span>{rightLabel}</span>
       </div>
     </div>
   );
@@ -82,7 +81,6 @@ export function VoiceInferenceParams({
   disabled = false,
   title,
   className,
-  omitSpeakerBoost = false,
 }: VoiceInferenceParamsProps) {
   // Single emit helper — records a DEBUG log with field + from/to then forwards to parent.
   const emit = React.useCallback(
@@ -116,13 +114,6 @@ export function VoiceInferenceParams({
     [emit]
   );
 
-  const handleSpeakerBoost = React.useCallback(
-    (checked: boolean) => {
-      emit('speaker_boost', checked);
-    },
-    [emit]
-  );
-
   const handleReset = React.useCallback(() => {
     log.info('handleReset', 'reset clicked', { hasCustomReset: Boolean(onReset) });
     if (onReset) {
@@ -138,78 +129,64 @@ export function VoiceInferenceParams({
         <p className="text-xs font-bold uppercase tracking-wider">{title}</p>
       ) : null}
 
-      {/* SPEED chips */}
-      <div className="flex flex-col gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Speed
-        </p>
-        <ToggleGroup
-          type="single"
-          value={String(value.speed)}
-          onValueChange={handleSpeedChange}
-        >
-          {SPEED_OPTIONS.map((opt) => (
-            <ToggleGroupItem
-              key={opt}
-              value={String(opt)}
-              className={cn(disabled && 'pointer-events-none opacity-50')}
-            >
-              {opt}x
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+      {/* 2-column grid: Speed | Style exaggeration / Stability | Similarity */}
+      <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+        {/* SPEED chips */}
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Speed
+          </p>
+          <ToggleGroup
+            type="single"
+            value={String(value.speed)}
+            onValueChange={handleSpeedChange}
+            className="grid grid-cols-3 gap-1"
+          >
+            {SPEED_OPTIONS.map((opt) => (
+              <ToggleGroupItem
+                key={opt}
+                value={String(opt)}
+                className={cn('w-full', disabled && 'pointer-events-none opacity-50')}
+              >
+                {opt}x
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+
+        <LabeledSlider
+          label="Style exaggeration"
+          leftLabel="None"
+          rightLabel="Exaggerated"
+          field="exaggeration"
+          value={value.exaggeration}
+          disabled={disabled}
+          onChange={handleSliderChange}
+        />
+
+        <LabeledSlider
+          label="Stability"
+          leftLabel="More variable"
+          rightLabel="More stable"
+          field="stability"
+          value={value.stability}
+          disabled={disabled}
+          onChange={handleSliderChange}
+        />
+
+        <LabeledSlider
+          label="Similarity"
+          leftLabel="Low"
+          rightLabel="High"
+          field="similarity"
+          value={value.similarity}
+          disabled={disabled}
+          onChange={handleSliderChange}
+        />
       </div>
 
-      {/* Sliders */}
-      <LabeledSlider
-        label="Stability"
-        leftLabel="More variable"
-        rightLabel="More stable"
-        field="stability"
-        value={value.stability}
-        disabled={disabled}
-        onChange={handleSliderChange}
-      />
-      <LabeledSlider
-        label="Similarity"
-        leftLabel="Low"
-        rightLabel="High"
-        field="similarity"
-        value={value.similarity}
-        disabled={disabled}
-        onChange={handleSliderChange}
-      />
-      <LabeledSlider
-        label="Style exaggeration"
-        leftLabel="None"
-        rightLabel="Exaggerated"
-        field="exaggeration"
-        value={value.exaggeration}
-        disabled={disabled}
-        onChange={handleSliderChange}
-      />
-
-      {/* Speaker boost + reset row.
-          When `omitSpeakerBoost` is true, switch is hidden but Reset stays right-aligned. */}
-      <div
-        className={cn(
-          'flex items-center gap-3',
-          omitSpeakerBoost ? 'justify-end' : 'justify-between',
-        )}
-      >
-        {omitSpeakerBoost ? null : (
-          <label className="flex items-center gap-2">
-            <Switch
-              checked={value.speaker_boost}
-              disabled={disabled}
-              onCheckedChange={handleSpeakerBoost}
-              aria-label="Speaker boost"
-            />
-            <span className="text-sm">Speaker boost</span>
-          </label>
-        )}
-
-        {showReset ? (
+      {showReset ? (
+        <div className="flex justify-end">
           <Button
             type="button"
             variant="link"
@@ -221,8 +198,8 @@ export function VoiceInferenceParams({
             <RotateCcw className="h-3.5 w-3.5" />
             Reset values
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

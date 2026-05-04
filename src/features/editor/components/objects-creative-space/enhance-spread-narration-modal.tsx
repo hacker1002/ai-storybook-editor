@@ -37,7 +37,8 @@ const CHECKBOX_CLASS =
 export interface EnhanceRow {
   id: string;
   original: string;
-  enhanced: string; // session-only
+  enhanced: string; // session-only; pre-seeded with existingPreview so textarea is directly editable
+  initialEnhanced: string; // snapshot of `enhanced` at row build / after Enhance — used to detect user edits
   existingPreview: string; // display-only fallback
   checked: boolean;
 }
@@ -120,11 +121,13 @@ function buildRows(
     const content = getContent(tb, editorLang);
     const text = content?.text?.trim() ?? "";
     if (text === "") continue;
+    const existingPreview = buildExistingPreview(content?.audio, voiceToReader);
     rows.push({
       id: tb.id,
       original: text,
-      enhanced: "",
-      existingPreview: buildExistingPreview(content?.audio, voiceToReader),
+      enhanced: existingPreview,
+      initialEnhanced: existingPreview,
+      existingPreview,
       checked: true,
     });
   }
@@ -194,7 +197,10 @@ export function EnhanceSpreadNarrationModal({
     [rows]
   );
   const savableRows = useMemo(
-    () => rows.filter(r => r.enhanced.trim() !== ""),
+    () =>
+      rows.filter(
+        r => r.enhanced.trim() !== "" && r.enhanced !== r.initialEnhanced
+      ),
     [rows]
   );
   const hasNarrator = useMemo(
@@ -228,6 +234,12 @@ export function EnhanceSpreadNarrationModal({
     },
     []
   );
+
+  const handleEnhancedChange = useCallback((id: string, text: string) => {
+    setRows(prev =>
+      prev.map(r => (r.id === id ? { ...r, enhanced: text } : r))
+    );
+  }, []);
 
   const handleToggleAll = useCallback(() => {
     setRows(prev => {
@@ -476,10 +488,7 @@ export function EnhanceSpreadNarrationModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(row => {
-                    const enhancedDisplay =
-                      row.enhanced || row.existingPreview || row.original;
-                    return (
+                  {rows.map(row => (
                       <tr
                         key={row.id}
                         onClick={() => handleToggleRow(row.id)}
@@ -488,8 +497,20 @@ export function EnhanceSpreadNarrationModal({
                         <td className="px-3 py-4 align-top whitespace-pre-wrap break-words">
                           {row.original}
                         </td>
-                        <td className="px-3 py-4 align-top whitespace-pre-wrap break-words text-muted-foreground">
-                          {enhancedDisplay}
+                        <td className="px-3 py-4 align-top">
+                          <textarea
+                            value={row.enhanced}
+                            onChange={e =>
+                              handleEnhancedChange(row.id, e.target.value)
+                            }
+                            onClick={e => e.stopPropagation()}
+                            onKeyDown={e => e.stopPropagation()}
+                            disabled={isEnhancing || isSaving}
+                            placeholder={row.original}
+                            aria-label={`Edit narration for row ${row.id}`}
+                            className="w-full min-h-[3.5rem] resize-none rounded border border-input bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground disabled:opacity-60"
+                            style={{ fieldSizing: "content" } as React.CSSProperties}
+                          />
                         </td>
                         <td className="px-3 py-4 text-center align-top">
                           <input
@@ -507,8 +528,7 @@ export function EnhanceSpreadNarrationModal({
                           />
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))}
                 </tbody>
               </table>
             </div>

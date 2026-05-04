@@ -128,7 +128,7 @@ export const NARRATOR_LANGUAGES = TEXT_LANGUAGES;
 export const VOICE_LANGUAGES = TEXT_LANGUAGES;
 
 // UI speed options (API accepts continuous [0.7, 1.2]; UI is coarse).
-export const SPEED_OPTIONS = [0.75, 1.0, 1.25] as const;
+export const SPEED_OPTIONS = [0.7, 1.0, 1.2] as const;
 
 // Language keys inside `books.narrator` JSONB match this regex; anything else is a literal setting key.
 export const NARRATOR_LANGUAGE_KEY_REGEX = /^[a-z]{2}_[A-Z]{2}$/;

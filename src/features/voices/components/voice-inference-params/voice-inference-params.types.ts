@@ -23,9 +23,4 @@ export interface VoiceInferenceParamsProps {
   title?: string;
   /** Layout override. */
   className?: string;
-  /**
-   * Hide the `speaker_boost` switch. Default `false` (BC: narrator/character preview keep switch).
-   * The narration modal (per-chunk) uses `true` because the new schema dropped speaker_boost.
-   */
-  omitSpeakerBoost?: boolean;
 }

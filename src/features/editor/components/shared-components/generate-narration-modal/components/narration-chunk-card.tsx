@@ -455,7 +455,6 @@ export function NarrationChunkCard({
               value={inferenceValue}
               onChange={handleInferenceChange}
               onReset={handleResetParams}
-              omitSpeakerBoost
               disabled={chunk.ui.isGenerating}
             />
           </div>
