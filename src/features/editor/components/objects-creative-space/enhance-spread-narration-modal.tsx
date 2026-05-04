@@ -25,6 +25,7 @@ import type {
   SpreadTextboxContent,
   TextboxAudio,
 } from "@/types/spread-types";
+import { EnhancedScriptTextarea } from "./enhanced-script-textarea";
 
 const log = createLogger("UI", "EnhanceSpreadNarrationModal");
 
@@ -103,7 +104,7 @@ function buildExistingPreview(
 ): string {
   if (!audio || !audio.chunks || audio.chunks.length === 0) return "";
   return audio.chunks
-    .map(c => {
+    .map((c) => {
       const readerKey = voiceToReader[c.voice_id] ?? NARRATOR_KEY;
       return `@${readerKey}: ${c.script}`;
     })
@@ -190,70 +191,71 @@ export function EnhanceSpreadNarrationModal({
     }
   }, [isOpen, spreadId, editorLang, textboxes, readerToVoice]);
 
-  const allChecked = rows.length > 0 && rows.every(r => r.checked);
-  const someChecked = rows.some(r => r.checked) && !allChecked;
+  const allChecked = rows.length > 0 && rows.every((r) => r.checked);
+  const someChecked = rows.some((r) => r.checked) && !allChecked;
   const selectedCount = useMemo(
-    () => rows.filter(r => r.checked).length,
+    () => rows.filter((r) => r.checked).length,
     [rows]
   );
   const savableRows = useMemo(
     () =>
       rows.filter(
-        r => r.enhanced.trim() !== "" && r.enhanced !== r.initialEnhanced
+        (r) => r.enhanced.trim() !== "" && r.enhanced !== r.initialEnhanced
       ),
     [rows]
   );
   const hasNarrator = useMemo(
-    () => readers.some(r => r.key === NARRATOR_KEY),
+    () => readers.some((r) => r.key === NARRATOR_KEY),
     [readers]
+  );
+  // Suggestion list = readers whose key resolves to a voice_id. Mirrors voice
+  // picker rule (build-voice-options.ts): characters without `voice_setting.voice_id`
+  // are skipped. `readerToVoice` is built from exactly that source upstream.
+  const suggestableReaders = useMemo(
+    () => readers.filter((r) => Boolean(readerToVoice[r.key])),
+    [readers, readerToVoice]
   );
   const canEnhance =
     selectedCount > 0 && !isEnhancing && !isSaving && hasNarrator;
   const canSave =
     savableRows.length > 0 && !isEnhancing && !isSaving && hasNarrator;
 
-  const handleToggleRow = useCallback(
-    (id: string) => {
-      setRows(prev => {
-        const target = prev.find(r => r.id === id);
-        if (!target) return prev;
-        const willCheck = !target.checked;
-        if (willCheck) {
-          const currentSelected = prev.filter(r => r.checked).length;
-          if (currentSelected >= MAX_NARRATIONS_PER_BATCH) {
-            toast.error(
-              `Cannot select more than ${MAX_NARRATIONS_PER_BATCH} rows.`
-            );
-            return prev;
-          }
+  const handleToggleRow = useCallback((id: string) => {
+    setRows((prev) => {
+      const target = prev.find((r) => r.id === id);
+      if (!target) return prev;
+      const willCheck = !target.checked;
+      if (willCheck) {
+        const currentSelected = prev.filter((r) => r.checked).length;
+        if (currentSelected >= MAX_NARRATIONS_PER_BATCH) {
+          toast.error(
+            `Cannot select more than ${MAX_NARRATIONS_PER_BATCH} rows.`
+          );
+          return prev;
         }
-        return prev.map(r =>
-          r.id === id ? { ...r, checked: willCheck } : r
-        );
-      });
-    },
-    []
-  );
+      }
+      return prev.map((r) => (r.id === id ? { ...r, checked: willCheck } : r));
+    });
+  }, []);
 
   const handleEnhancedChange = useCallback((id: string, text: string) => {
-    setRows(prev =>
-      prev.map(r => (r.id === id ? { ...r, enhanced: text } : r))
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, enhanced: text } : r))
     );
   }, []);
 
   const handleToggleAll = useCallback(() => {
-    setRows(prev => {
-      const wasAllChecked =
-        prev.length > 0 && prev.every(r => r.checked);
+    setRows((prev) => {
+      const wasAllChecked = prev.length > 0 && prev.every((r) => r.checked);
       if (wasAllChecked) {
-        return prev.map(r => ({ ...r, checked: false }));
+        return prev.map((r) => ({ ...r, checked: false }));
       }
       if (prev.length <= MAX_NARRATIONS_PER_BATCH) {
-        return prev.map(r => ({ ...r, checked: true }));
+        return prev.map((r) => ({ ...r, checked: true }));
       }
       toast.message(`Selected first ${MAX_NARRATIONS_PER_BATCH} rows.`);
       let count = 0;
-      return prev.map(r => {
+      return prev.map((r) => {
         if (count < MAX_NARRATIONS_PER_BATCH) {
           count++;
           return { ...r, checked: true };
@@ -277,21 +279,19 @@ export function EnhanceSpreadNarrationModal({
 
   const handleEnhance = useCallback(async () => {
     if (!canEnhance) return;
-    const selected = rows.filter(r => r.checked);
+    const selected = rows.filter((r) => r.checked);
     if (selected.length > MAX_NARRATIONS_PER_BATCH) {
-      toast.error(
-        `Cannot enhance more than ${MAX_NARRATIONS_PER_BATCH} rows.`
-      );
+      toast.error(`Cannot enhance more than ${MAX_NARRATIONS_PER_BATCH} rows.`);
       return;
     }
-    if (selected.some(r => r.original.length > MAX_NARRATION_CHARS)) {
+    if (selected.some((r) => r.original.length > MAX_NARRATION_CHARS)) {
       toast.error(
         `One or more textboxes exceed ${MAX_NARRATION_CHARS} characters.`
       );
       return;
     }
-    const indexToId = selected.map(r => r.id);
-    const narrations = selected.map(r => r.original);
+    const indexToId = selected.map((r) => r.id);
+    const narrations = selected.map((r) => r.original);
 
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -338,12 +338,10 @@ export function EnhanceSpreadNarrationModal({
         return;
       }
 
-      const enhancedMap = new Map(
-        indexToId.map((id, i) => [id, scripts[i]])
-      );
+      const enhancedMap = new Map(indexToId.map((id, i) => [id, scripts[i]]));
 
-      setRows(prev =>
-        prev.map(r => {
+      setRows((prev) =>
+        prev.map((r) => {
           const hit = enhancedMap.get(r.id);
           return hit !== undefined
             ? { ...r, enhanced: hit, checked: false }
@@ -361,7 +359,7 @@ export function EnhanceSpreadNarrationModal({
   const handleSaveAll = useCallback(() => {
     if (!canSave) return;
     const toSave = savableRows;
-    const results: EnhancementResult[] = toSave.map(r => ({
+    const results: EnhancementResult[] = toSave.map((r) => ({
       id: r.id,
       enhanced_script: r.enhanced,
     }));
@@ -406,8 +404,17 @@ export function EnhanceSpreadNarrationModal({
           ref: dialogContentRef,
           captureClickOutside: true,
           hotkeys: ["Escape"],
-          portalSelectors: ["[data-radix-popper-content-wrapper]"],
-          onHotkey: key => {
+          portalSelectors: [
+            "[data-radix-popper-content-wrapper]",
+            "[data-radix-select-content]",
+            '[role="listbox"]',
+          ],
+          dropdownSelectors: [
+            "[data-radix-select-content]",
+            "[data-radix-popover-content]",
+            "[data-radix-popper-content-wrapper]",
+          ],
+          onHotkey: (key) => {
             if (key === "Escape" && !isEnhancing && !isSaving) onClose();
           },
           onClickOutside: () => {
@@ -431,9 +438,9 @@ export function EnhanceSpreadNarrationModal({
       <DialogContent
         ref={dialogContentRef}
         className="sm:max-w-[720px]"
-        onPointerDownOutside={e => e.preventDefault()}
-        onInteractOutside={e => e.preventDefault()}
-        onEscapeKeyDown={e => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -473,7 +480,7 @@ export function EnhanceSpreadNarrationModal({
                         type="checkbox"
                         aria-label="Select all"
                         checked={allChecked}
-                        ref={el => {
+                        ref={(el) => {
                           if (el) el.indeterminate = someChecked;
                         }}
                         onChange={handleToggleAll}
@@ -488,47 +495,44 @@ export function EnhanceSpreadNarrationModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(row => (
-                      <tr
-                        key={row.id}
-                        onClick={() => handleToggleRow(row.id)}
-                        className="border-b last:border-b-0 border-border/40 hover:bg-muted/50 cursor-pointer"
-                      >
-                        <td className="px-3 py-4 align-top whitespace-pre-wrap break-words">
-                          {row.original}
-                        </td>
-                        <td className="px-3 py-4 align-top">
-                          <textarea
-                            value={row.enhanced}
-                            onChange={e =>
-                              handleEnhancedChange(row.id, e.target.value)
-                            }
-                            onClick={e => e.stopPropagation()}
-                            onKeyDown={e => e.stopPropagation()}
-                            disabled={isEnhancing || isSaving}
-                            placeholder={row.original}
-                            aria-label={`Edit narration for row ${row.id}`}
-                            className="w-full min-h-[3.5rem] resize-none rounded border border-input bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground disabled:opacity-60"
-                            style={{ fieldSizing: "content" } as React.CSSProperties}
-                          />
-                        </td>
-                        <td className="px-3 py-4 text-center align-top">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select row ${row.id}`}
-                            checked={row.checked}
-                            onChange={() => handleToggleRow(row.id)}
-                            onClick={e => e.stopPropagation()}
-                            className={CHECKBOX_CLASS}
-                            style={
-                              row.checked
-                                ? { backgroundImage: CHECK_ICON_URL }
-                                : undefined
-                            }
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                  {rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      onClick={() => handleToggleRow(row.id)}
+                      className="border-b last:border-b-0 border-border/40 hover:bg-muted/50 cursor-pointer"
+                    >
+                      <td className="px-3 py-4 align-top whitespace-pre-wrap break-words">
+                        {row.original}
+                      </td>
+                      <td className="px-3 py-4 align-top">
+                        <EnhancedScriptTextarea
+                          value={row.enhanced}
+                          onChange={(next) =>
+                            handleEnhancedChange(row.id, next)
+                          }
+                          readers={suggestableReaders}
+                          disabled={isEnhancing || isSaving}
+                          placeholder={row.original}
+                          ariaLabel={`Edit narration for row ${row.id}`}
+                        />
+                      </td>
+                      <td className="px-3 py-4 text-center align-top">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select row ${row.id}`}
+                          checked={row.checked}
+                          onChange={() => handleToggleRow(row.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className={CHECKBOX_CLASS}
+                          style={
+                            row.checked
+                              ? { backgroundImage: CHECK_ICON_URL }
+                              : undefined
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
