@@ -1,6 +1,6 @@
 // config-general-settings.tsx - General settings panel for book configuration.
 // Handles readonly fields (format, dimension, audience, art style) and editable
-// fields (theme, genre, era, location, original language, background music).
+// fields (theme, genre, era, location, original language).
 
 import * as React from "react";
 import { useCurrentBook, useBookActions } from "@/stores/book-store";
@@ -288,18 +288,6 @@ export function ConfigGeneralSettings() {
             value={book.original_language}
             onChange={() => {}}
             placeholder="Select language..."
-            disabled
-          />
-        </div>
-
-        {/* BACKGROUND MUSIC — disabled placeholder (TBD) */}
-        <div>
-          <FieldLabel>Background Music</FieldLabel>
-          <SearchableDropdown
-            options={[]}
-            value={null}
-            onChange={() => {}}
-            placeholder="Coming soon..."
             disabled
           />
         </div>
