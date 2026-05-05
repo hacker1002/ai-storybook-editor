@@ -6,6 +6,8 @@ import type {
   BranchTypographySettings,
   NarratorInferenceParams,
   NarratorSettings,
+  BookMusicSettings,
+  BookSoundSettings,
 } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 
@@ -18,6 +20,7 @@ export type ConfigSection =
   | 'objects'
   | 'text'
   | 'narrator'
+  | 'musics-sounds'
   | 'quiz'
   | 'branch'
   | 'layout'
@@ -33,17 +36,18 @@ export interface ConfigSectionItem {
 }
 
 export const CONFIG_SECTIONS: ConfigSectionItem[] = [
-  { key: 'general',  label: 'General',  icon: 'Settings'       },
-  { key: 'objects',  label: 'Objects',  icon: 'Box'            },
-  { key: 'text',     label: 'Text',     icon: 'Type'           },
-  { key: 'narrator', label: 'Narrator', icon: 'AudioLines'     },
-  { key: 'quiz',     label: 'Quiz',     icon: 'HelpCircle'     },
-  { key: 'branch',   label: 'Branch',   icon: 'GitBranch'      },
-  { key: 'layout',   label: 'Layout',   icon: 'LayoutGrid'     },
-  { key: 'remix',    label: 'Remix',    icon: 'RefreshCw'      },
-  { key: 'preview',  label: 'Preview',  icon: 'Eye'            },
-  { key: 'export',   label: 'Export',   icon: 'Download'       },
-  { key: 'print',    label: 'Print',    icon: 'Printer'        },
+  { key: 'general',        label: 'General',          icon: 'Settings'       },
+  { key: 'objects',        label: 'Objects',          icon: 'Box'            },
+  { key: 'text',           label: 'Text',             icon: 'Type'           },
+  { key: 'narrator',       label: 'Narrator',         icon: 'AudioLines'     },
+  { key: 'musics-sounds',  label: 'Musics & Sounds',  icon: 'Music'          },
+  { key: 'quiz',           label: 'Quiz',             icon: 'HelpCircle'     },
+  { key: 'branch',         label: 'Branch',           icon: 'GitBranch'      },
+  { key: 'layout',         label: 'Layout',           icon: 'LayoutGrid'     },
+  { key: 'remix',          label: 'Remix',            icon: 'RefreshCw'      },
+  { key: 'preview',        label: 'Preview',          icon: 'Eye'            },
+  { key: 'export',         label: 'Export',           icon: 'Download'       },
+  { key: 'print',          label: 'Print',            icon: 'Printer'        },
 ];
 
 // ── Object settings ───────────────────────────────────────────────────────────
@@ -145,6 +149,32 @@ export const DEFAULT_NARRATOR: NarratorSettings = {
   model: 'eleven_v3',
   ...DEFAULT_INFERENCE_PARAMS,
 };
+
+// ── Musics & Sounds settings ──────────────────────────────────────────────────
+
+// Volume scale shared across music / sound / narrator panels (DB stores 0..2 float).
+export const VOLUME_MIN = 0;     // 0%
+export const VOLUME_MAX = 2;     // 200%
+export const VOLUME_DEFAULT = 1; // 100%
+export const VOLUME_STEP = 0.01; // 1% step
+
+export const DEFAULT_BOOK_MUSIC: BookMusicSettings = {
+  background_id: null,
+  volume_scale: VOLUME_DEFAULT,
+};
+
+export const DEFAULT_BOOK_SOUND: BookSoundSettings = {
+  transition_id: null,
+  true_id: null,
+  wrong_id: null,
+  volume_scale: VOLUME_DEFAULT,
+};
+
+export const DEFAULT_NARRATOR_VOLUME = VOLUME_DEFAULT;
+
+// Tab keys for ConfigMusicsSoundsSettings (local UI state, not persisted).
+export type MusicsSoundsTab = 'music' | 'sound' | 'narrator';
+export const MUSICS_SOUNDS_DEFAULT_TAB: MusicsSoundsTab = 'music';
 
 /**
  * Preview texts per language (used by narrator voice preview cards).

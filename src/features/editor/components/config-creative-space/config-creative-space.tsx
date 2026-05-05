@@ -9,6 +9,7 @@ import { ConfigTextSettings } from './config-text-settings';
 import { ConfigNarratorSettings } from './config-narrator-settings';
 import { ConfigBranchSettings } from './config-branch-settings';
 import { ConfigLayoutSettings } from './config-layout-settings';
+import { ConfigMusicsSoundsSettings } from './musics-sounds/config-musics-sounds-settings';
 import type { ConfigSection } from '@/constants/config-constants';
 import { createLogger } from '@/utils/logger';
 
@@ -36,6 +37,7 @@ export function ConfigCreativeSpace() {
       case 'objects': return <ConfigObjectSettings />;
       case 'text':    return <ConfigTextSettings />;
       case 'narrator': return <ConfigNarratorSettings />;
+      case 'musics-sounds': return <ConfigMusicsSoundsSettings />;
       case 'branch':  return <ConfigBranchSettings />;
       case 'layout':  return <ConfigLayoutSettings />;
       default:        return <PlaceholderPanel section={activeSection} />;

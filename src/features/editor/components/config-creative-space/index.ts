@@ -6,5 +6,6 @@ export { ConfigTextSettings } from './config-text-settings';
 export { TextLanguageSection } from './text-language-section';
 export { ConfigBranchSettings } from './config-branch-settings';
 export { ConfigLayoutSettings } from './config-layout-settings';
+export { ConfigMusicsSoundsSettings } from './musics-sounds/config-musics-sounds-settings';
 export { LayoutThumbnail } from './layout-thumbnail';
 export { LayoutSelectionModal } from './layout-selection-modal';

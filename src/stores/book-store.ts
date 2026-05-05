@@ -5,6 +5,8 @@ import { supabase } from "@/apis/supabase";
 import type {
   Book,
   BookListItem,
+  BookMusicSettings,
+  BookSoundSettings,
   BranchTypographySettings,
   NarratorSettings,
   NarratorInferenceParams,
@@ -14,6 +16,7 @@ import {
   DEFAULT_BRANCH_TYPOGRAPHY,
   DEFAULT_INFERENCE_PARAMS,
   NARRATOR_LANGUAGE_KEY_REGEX,
+  VOLUME_DEFAULT,
 } from "@/constants/config-constants";
 import { createLogger } from "@/utils/logger";
 
@@ -320,6 +323,28 @@ export const useBookBranchTypography = (languageCode: string): BranchTypographyS
   });
 export const useBookTemplateLayout = () =>
   useBookStore((s) => s.currentBook?.template_layout ?? null);
+
+// ── Music & Sound selectors ──────────────────────────────────────────────────
+
+export const useBookMusic = (): BookMusicSettings | null =>
+  useBookStore((s) => s.currentBook?.music ?? null);
+
+export const useBookSound = (): BookSoundSettings | null =>
+  useBookStore((s) => s.currentBook?.sound ?? null);
+
+/**
+ * Narrator volume scale (0..2). Falls back to VOLUME_DEFAULT (1.0) when unset.
+ */
+export const useBookNarratorVolume = (): number =>
+  useBookStore((s) => {
+    const n = s.currentBook?.narrator;
+    const v = n?.volume_scale;
+    if (typeof v === "number") return v;
+    log.debug("useBookNarratorVolume", "fallback default", {
+      hasNarrator: !!n,
+    });
+    return VOLUME_DEFAULT;
+  });
 
 // ── Narrator selectors ──────────────────────────────────────────────────────
 

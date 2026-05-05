@@ -79,6 +79,20 @@ export interface BookBranch {
   typography: Record<string, BranchTypographySettings>;
 }
 
+// Book-level music mixer + background track (book.music JSONB)
+export interface BookMusicSettings {
+  background_id: string | null; // soft FK → musics.id
+  volume_scale: number;          // 0..2, default 1.0
+}
+
+// Book-level SFX selectors + mixer volume (book.sound JSONB)
+export interface BookSoundSettings {
+  transition_id: string | null;  // soft FK → sounds.id
+  true_id: string | null;        // soft FK → sounds.id (quiz right answer)
+  wrong_id: string | null;       // soft FK → sounds.id (quiz wrong answer)
+  volume_scale: number;          // 0..2, default 1.0
+}
+
 // Page numbering display settings
 export type PageNumberingPosition = 'bottom_center' | 'bottom_corner' | 'top_corner' | 'none';
 
@@ -188,11 +202,12 @@ export interface Book {
   era_id: string | null;
   location_id: string | null;
   artstyle_id: string | null;
-  background_music: { title: string; media_url: string } | null;
   typography: Record<string, TypographySettings> | null;
   narrator: NarratorSettings | null;
   shape: BookShape | null;
   branch: BookBranch | null;
+  music: BookMusicSettings | null;
+  sound: BookSoundSettings | null;
   template_layout: BookTemplateLayout | null;
   created_at: string;
   updated_at: string;

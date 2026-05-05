@@ -21,6 +21,8 @@ export interface InlineAudioPlayerProps {
   autoPlayKey?: number;
   /** Extra classes merged onto the outer container (e.g. `border-0`, `px-0`). */
   className?: string;
+  /** Hide the trailing volume popover (e.g. when host UI owns volume mixing). */
+  hideVolume?: boolean;
 }
 
 function getUrlHost(url: string): string {
@@ -31,7 +33,7 @@ function getUrlHost(url: string): string {
   }
 }
 
-export function InlineAudioPlayer({ src, isActive, onPlayStart, autoPlayKey, className }: InlineAudioPlayerProps) {
+export function InlineAudioPlayer({ src, isActive, onPlayStart, autoPlayKey, className, hideVolume = false }: InlineAudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -186,36 +188,38 @@ export function InlineAudioPlayer({ src, isActive, onPlayStart, autoPlayKey, cla
         {formatDuration(currentTime)} / {formatDuration(duration)}
       </span>
 
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            aria-label="Volume"
-          >
-            <Volume2 className="h-4 w-4" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent side="top" align="end" className="w-48 p-3">
-          <div className="flex items-center gap-2">
-            <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
-            <Slider
-              value={[volume]}
-              min={0}
-              max={1}
-              step={0.05}
-              onValueChange={handleVolumeChange}
-              aria-label="Volume level"
-              className="flex-1"
-            />
-            <span className="text-xs tabular-nums w-8 text-right text-muted-foreground">
-              {Math.round(volume * 100)}
-            </span>
-          </div>
-        </PopoverContent>
-      </Popover>
+      {!hideVolume && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              aria-label="Volume"
+            >
+              <Volume2 className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="end" className="w-48 p-3">
+            <div className="flex items-center gap-2">
+              <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <Slider
+                value={[volume]}
+                min={0}
+                max={1}
+                step={0.05}
+                onValueChange={handleVolumeChange}
+                aria-label="Volume level"
+                className="flex-1"
+              />
+              <span className="text-xs tabular-nums w-8 text-right text-muted-foreground">
+                {Math.round(volume * 100)}
+              </span>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }
