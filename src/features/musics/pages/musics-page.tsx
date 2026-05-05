@@ -120,6 +120,7 @@ export function MusicsPage() {
           namePlaceholder="e.g., Forest Adventure"
           descriptionPlaceholder="Briefly describe this music..."
           tagsPlaceholder="e.g., cinematic, calm, intro (comma separated)"
+          defaultLoop
           onClose={() => setActiveModal(null)}
           onSaved={(music) => {
             log.info('renderActiveModal', 'upload saved', { id: music.id });

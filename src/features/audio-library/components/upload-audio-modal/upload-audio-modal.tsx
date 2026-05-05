@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/utils/utils';
 import { supabase } from '@/apis/supabase';
 import { uploadAudioToStorage } from '@/apis/storage-api';
@@ -68,7 +69,10 @@ export function UploadAudioModal({
   onSaved,
 }: UploadAudioModalProps) {
   const userId = useAuthStore((s) => s.user?.id ?? null);
-  const [form, setForm] = useState<UploadAudioFormState>(DEFAULT_UPLOAD_FORM);
+  const [form, setForm] = useState<UploadAudioFormState>(() => ({
+    ...DEFAULT_UPLOAD_FORM,
+    loop: defaultLoop,
+  }));
   const [step, setStep] = useState<UploadStep>('form');
   const [error, setError] = useState<string | null>(null);
 
@@ -193,7 +197,7 @@ export function UploadAudioModal({
         name: trimmedName,
         description: form.description.trim() || null,
         tags: normalizeTags(form.tags) || null,
-        loop: defaultLoop,
+        loop: form.loop,
         media_url: uploadResult.publicUrl,
         duration: form.durationMs,
         influence: influenceValue,
@@ -239,13 +243,13 @@ export function UploadAudioModal({
     form.durationMs,
     form.description,
     form.tags,
+    form.loop,
     trimmedName,
     userId,
     onSaved,
     onClose,
     tableName,
     uploadPathPrefix,
-    defaultLoop,
     influenceValue,
     resourceTitle,
   ]);
@@ -336,6 +340,30 @@ export function UploadAudioModal({
               onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))}
               placeholder={tagsPlaceholder}
               disabled={isUploading}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="upload-audio-loop"
+                className="text-xs font-medium uppercase tracking-wide"
+              >
+                Loop
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Plays continuously when used in a book.
+              </p>
+            </div>
+            <Switch
+              id="upload-audio-loop"
+              checked={form.loop}
+              onCheckedChange={(checked) => {
+                log.debug('handleLoopToggle', 'loop changed', { loop: checked });
+                setForm((p) => ({ ...p, loop: checked }));
+              }}
+              disabled={isUploading}
+              aria-label="Loop audio"
             />
           </div>
 
