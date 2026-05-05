@@ -19,7 +19,6 @@ const DEFAULT_EXIT_DURATION = 0.5;
 const DEFAULT_MOTION_DURATION = 1.0;
 
 interface TweenOptions {
-  volume?: number;
   spreadContainer?: HTMLElement | null;
   /** Pre-computed container dimensions to avoid repeated getBoundingClientRect calls */
   containerWidth?: number;
@@ -95,7 +94,6 @@ export function addTweenToTimeline(
         log.warn('addTweenToTimeline', 'media element not found', { targetId: animation.target.id, effectType });
         return;
       }
-      const volume = options?.volume ?? 1;
       // Runtime fallback: when effect.duration is missing/0 but media_length is known,
       // derive timeline-progression duration from media_length × loop. Snapshot is not
       // healed here — Phase 2/3 own the write path.
@@ -185,7 +183,6 @@ export function addTweenToTimeline(
           options?.onTweenStart?.();
           try {
             mediaEl.currentTime = 0;
-            mediaEl.volume = volume;
             mediaEl.loop = false;
             m.__playEndedRef = onEnded;
             mediaEl.addEventListener('ended', onEnded);
@@ -391,7 +388,6 @@ export function addTweenToTimeline(
         break;
       }
 
-      const volume = options?.volume ?? 1;
       const wordTimings = options?.wordTimings;
       // Derive duration from wordTimings[last].endMs (TTS metadata).
       // Fallback to effect.duration only when wordTimings empty (backward-compat for legacy spreads).
@@ -410,6 +406,8 @@ export function addTweenToTimeline(
       audio.preload = 'auto';
       audio.src = audioUrl;
       audio.style.display = 'none';
+      audio.crossOrigin = 'anonymous';
+      audio.dataset.audioChannel = 'narration';
       element.appendChild(audio);
 
       // Use a unique label for absolute positioning of word timings
@@ -420,7 +418,6 @@ export function addTweenToTimeline(
       timeline.call(
         () => {
           options?.onTweenStart?.();
-          audio.volume = volume;
           audio.currentTime = 0;
           audio.play().catch(() => {
             log.warn('addTweenToTimeline', 'read-along autoplay blocked', { targetId });

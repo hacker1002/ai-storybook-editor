@@ -11,6 +11,7 @@ import type { BranchSetting, Branch, Section, BranchLocalizedContent } from '@/t
 import { useNarrationLanguage } from '@/stores/animation-playback-store';
 import { useBookBranchTypography } from '@/stores/book-store';
 import { createLogger } from '@/utils/logger';
+import { createMixedAudio } from './audio/create-mixed-audio';
 
 const log = createLogger('Editor', 'BranchPathModal');
 
@@ -67,10 +68,12 @@ export function BranchPathModal({ branchSetting, sections, onSelect, onDismiss }
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Auto-play title audio on mount; pause on unmount to avoid leak
+  // Auto-play title audio on mount; pause + remove on unmount to avoid leak.
+  // Routed through the player audio mixer (narration channel) so master volume /
+  // mute / narrator volume_scale apply.
   useEffect(() => {
     if (!audioUrl) return;
-    const audio = new Audio(audioUrl);
+    const audio = createMixedAudio(audioUrl, 'narration');
     audio.onplay = () => setIsAudioPlaying(true);
     audio.onended = () => setIsAudioPlaying(false);
     audioRef.current = audio;
@@ -78,7 +81,14 @@ export function BranchPathModal({ branchSetting, sections, onSelect, onDismiss }
       log.warn('autoplay', 'play rejected by browser', { err: String(err) });
     });
     return () => {
-      audioRef.current?.pause();
+      // Stop-mid-play cleanup: pause + remove. The shared helper's 'ended'
+      // auto-remove only handles natural completion; explicit close needs this.
+      const el = audioRef.current;
+      if (el) {
+        el.pause();
+        el.remove();
+        audioRef.current = null;
+      }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

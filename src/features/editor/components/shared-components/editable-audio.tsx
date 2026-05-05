@@ -85,6 +85,8 @@ export function EditableAudio({
           src={audio.media_url}
           className="hidden"
           preload="metadata"
+          crossOrigin="anonymous"
+          data-audio-channel="sfx"
           onLoadedData={handleLoadedData}
           onError={handleError}
         />

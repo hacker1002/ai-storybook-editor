@@ -1,6 +1,8 @@
 // use-quiz-audio.ts - Manages exclusive audio playback for quiz modal + parallel SFX
+// Audio elements are DOM-attached + explicitly routed through PlayerAudioMixer (narration | sfx).
 import { useRef, useCallback, useEffect } from 'react';
 import { createLogger } from '@/utils/logger';
+import { createMixedAudio } from '../audio/create-mixed-audio';
 
 const log = createLogger('Editor', 'useQuizAudio');
 
@@ -14,17 +16,20 @@ export function useQuizAudio() {
 
   // Cleanup on unmount
   useEffect(() => {
+    const sfxRefs = sfxRefsRef.current;
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.remove();
         audioRef.current = null;
       }
       currentUrlRef.current = null;
-      // Stop all SFX instances
-      sfxRefsRef.current.forEach((sfx) => {
+      // Stop + remove all SFX instances
+      sfxRefs.forEach((sfx) => {
         sfx.pause();
+        sfx.remove();
       });
-      sfxRefsRef.current.clear();
+      sfxRefs.clear();
     };
   }, []);
 
@@ -32,11 +37,14 @@ export function useQuizAudio() {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
+      audioRef.current.remove();
+      audioRef.current = null;
     }
     currentUrlRef.current = null;
-    // Stop all SFX instances
+    // Stop + remove all SFX instances
     sfxRefsRef.current.forEach((sfx) => {
       sfx.pause();
+      sfx.remove();
     });
     sfxRefsRef.current.clear();
   }, []);
@@ -46,12 +54,18 @@ export function useQuizAudio() {
     // Stop current if different or replay if same
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.remove();
+      audioRef.current = null;
     }
 
-    const audio = new Audio(url);
+    const audio = createMixedAudio(url, 'narration');
     audio.addEventListener('ended', () => {
       if (currentUrlRef.current === url) {
         currentUrlRef.current = null;
+      }
+      audio.remove();
+      if (audioRef.current === audio) {
+        audioRef.current = null;
       }
     });
     audioRef.current = audio;
@@ -59,19 +73,25 @@ export function useQuizAudio() {
     audio.play().catch((err) => {
       log.error('playAudio', 'playback failed', { error: err, url });
       currentUrlRef.current = null;
+      audio.remove();
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
     });
   }, []);
 
   // SFX plays independently (doesn't stop main audio), tracked for cleanup
   const playSfx = useCallback((type: 'correct' | 'wrong') => {
     const url = type === 'correct' ? SFX_CORRECT_URL : SFX_WRONG_URL;
-    const sfx = new Audio(url);
+    const sfx = createMixedAudio(url, 'sfx');
     sfxRefsRef.current.add(sfx);
     sfx.addEventListener('ended', () => {
       sfxRefsRef.current.delete(sfx);
+      sfx.remove();
     });
     sfx.play().catch(() => {
       sfxRefsRef.current.delete(sfx);
+      sfx.remove();
     });
   }, []);
 

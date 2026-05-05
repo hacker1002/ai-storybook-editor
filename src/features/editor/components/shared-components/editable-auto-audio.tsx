@@ -7,6 +7,10 @@ import { cn } from '@/utils/utils';
 import type { SpreadAutoAudio } from '@/types/spread-types';
 import { COLORS } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
+import {
+  useContextCreated,
+  usePlayerAudioActions,
+} from '@/stores/player-audio-store';
 
 const log = createLogger('Editor', 'EditableAutoAudio');
 
@@ -32,42 +36,27 @@ export function EditableAutoAudio({
   // ─────────────────────── PLAYER MODE branch ───────────────────────
   // Component owns playback lifecycle; React unmount on spread change → cleanup useEffect releases MediaSource.
   const audioRef = useRef<HTMLAudioElement>(null);
+  const actions = usePlayerAudioActions();
+  const contextCreated = useContextCreated();
 
-  // src lives on the JSX prop (React-owned). Cleanup only pauses — must NOT
-  // call removeAttribute('src') + load(): in Strict-Mode dev, cleanup runs
-  // between dual-mounts; mutating src directly bypasses React's prop tracking,
-  // and the remounted element ends up with empty src (silent BGM bug). The
-  // network-abort-on-unmount optimization is sacrificed for correctness.
+  // Route playback through playerAudioStore so the audio queues while the
+  // AudioContext is suspended (pre-gesture) and flushes only after the
+  // FirstGestureGate's resumeContext call. Calling el.play() directly here
+  // would bypass the gate via transient user activation from the "enter
+  // preview" click. src lives on the JSX prop (React-owned); cleanup uses
+  // cancelPlay so we never mutate el.src (Strict-Mode double-mount safety).
   useEffect(() => {
     if (isEditable) return;
-    const a = audioRef.current;
-    if (!a || !autoAudio.media_url) return;
+    const el = audioRef.current;
+    if (!el || !autoAudio.media_url || !contextCreated) return;
 
-    const playPromise = a.play();
-    if (playPromise && typeof playPromise.then === 'function') {
-      playPromise.catch((err: unknown) => {
-        const errorName = err instanceof Error ? err.name : 'Unknown';
-        // AbortError is benign (Strict-Mode cleanup pauses an in-flight play).
-        if (errorName === 'AbortError') return;
-        log.warn('auto_audio_autoplay_blocked', 'Browser blocked autoplay', {
-          autoAudioId: autoAudio.id,
-          mediaUrl: autoAudio.media_url,
-          errorName,
-        });
-      });
-    }
+    actions.attachAudio(el);
+    actions.requestPlay(el);
 
     return () => {
-      try {
-        a.pause();
-      } catch (err) {
-        log.debug('cleanup', 'audio pause failed (benign)', {
-          autoAudioId: autoAudio.id,
-          err: err instanceof Error ? err.message : String(err),
-        });
-      }
+      actions.cancelPlay(el);
     };
-  }, [isEditable, autoAudio.id, autoAudio.media_url]);
+  }, [isEditable, autoAudio.id, autoAudio.media_url, contextCreated, actions]);
 
   const handleAudioError = useCallback(
     (e: React.SyntheticEvent<HTMLAudioElement>) => {
@@ -103,6 +92,8 @@ export function EditableAutoAudio({
         ref={audioRef}
         src={autoAudio.media_url}
         loop
+        crossOrigin="anonymous"
+        data-audio-channel="sfx"
         aria-hidden="true"
         data-auto-audio="true"
         onError={handleAudioError}

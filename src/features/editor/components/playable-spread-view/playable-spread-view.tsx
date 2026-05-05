@@ -1,5 +1,5 @@
 // playable-spread-view.tsx - Root container component for playable spread view
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { PageNumberingSettings } from "@/types/editor";
 import { createLogger } from '@/utils/logger';
 
@@ -21,7 +21,15 @@ import {
   useSpreadHistories,
   useCurrentSection,
   usePlaybackActions,
+  useVolume,
+  useIsMuted,
 } from '@/stores/animation-playback-store';
+import {
+  useBookMusic,
+  useBookSound,
+  useBookNarratorVolume,
+} from '@/stores/book-store';
+import { usePlayerAudioStore } from '@/stores/player-audio-store';
 import { PlayableEditorHeader } from "./playable-editor-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
@@ -29,6 +37,10 @@ import { RemixEditorCanvas } from "./remix-editor-canvas";
 import { PlayerCanvas } from "./player-canvas";
 import { BranchPathModal } from "./branch-path-modal";
 import { FirstGestureGate } from "./first-gesture-gate";
+import { PlayerAudioMixerHost } from "./audio/player-audio-mixer-host";
+import { BookBackgroundMusicPlayer } from "./audio/book-background-music-player";
+import { useMusicMediaUrl } from "./audio/use-music-media-url";
+import type { BookAudioSettings } from "./audio/audio-mixer-types";
 
 // === Types ===
 
@@ -144,6 +156,44 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // First-gesture gate: required to unlock browser autoplay before PlayerCanvas mounts.
   // Reset whenever activeCanvas leaves 'player' so re-entry re-prompts (consistent UX).
   const [playerGestureCaptured, setPlayerGestureCaptured] = useState(false);
+
+  // Outer wrapper ref — passed to PlayerAudioMixerHost so the MutationObserver
+  // installed by useAudioMixerLifecycle can scan the entire player subtree
+  // (BookBackgroundMusicPlayer + PlayerCanvas) for declarative <audio> nodes.
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // === Audio mixer inputs ===
+  const masterVolume = useVolume();
+  const isMuted = useIsMuted();
+  const music = useBookMusic();
+  const sound = useBookSound();
+  const narratorVolumeScale = useBookNarratorVolume();
+
+  const bookAudio: BookAudioSettings = useMemo(() => ({
+    music: music ?? { background_id: null, volume_scale: 1.0 },
+    sound: sound ?? {
+      transition_id: null,
+      true_id: null,
+      wrong_id: null,
+      volume_scale: 1.0,
+    },
+    narratorVolumeScale,
+  }), [music, sound, narratorVolumeScale]);
+
+  const bgmMediaUrl = useMusicMediaUrl(music?.background_id ?? null);
+
+  // Centralized first-gesture handler: resume the AudioContext (flushing the
+  // autoStartQueue inside playerAudioStore) BEFORE flipping the gate state.
+  // This ensures any pre-mounted <audio data-audio-channel> nodes that were
+  // queued for autoplay start the moment the gate dismisses.
+  const handleGestureCapture = useCallback(async () => {
+    try {
+      await usePlayerAudioStore.getState().resumeContext();
+    } catch (e) {
+      log.warn('handleGestureCapture', 'resume_failed', { error: String(e) });
+    }
+    setPlayerGestureCaptured(true);
+  }, []);
 
   // Sync activeCanvas when mode prop changes (unless in player mode from play action)
   useEffect(() => {
@@ -408,7 +458,19 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
 
   // === Render ===
   return (
-    <div className="relative flex flex-col h-full">
+    <div ref={rootRef} className="relative flex flex-col h-full">
+      {/* Player audio mixer host — mounts only while player canvas is active.
+          React mount/unmount drives initContext/teardown via useAudioMixerLifecycle,
+          keeping AudioContext scoped to player mode without violating rules of hooks. */}
+      {activeCanvas === 'player' && (
+        <PlayerAudioMixerHost
+          rootRef={rootRef}
+          masterVolume={masterVolume}
+          isMuted={isMuted}
+          bookAudio={bookAudio}
+        />
+      )}
+
       {/* Header: editor modes only (player mode has no header — controls in sidebar) */}
       {mode !== "player" && (
         <PlayableEditorHeader
@@ -448,7 +510,12 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             pageNumbering={pageNumbering}
           />
         ) : activeCanvas === "player" && selectedSpread ? (
-          playerGestureCaptured ? (
+          <>
+            {/* PRE-MOUNT: BookBGM + PlayerCanvas mount immediately when entering
+                player mode (no longer gated by playerGestureCaptured). This wires
+                per-spread auto_audios into the suspended AudioContext + binary
+                preload BEFORE the user clicks the gesture gate. */}
+            <BookBackgroundMusicPlayer mediaUrl={bgmMediaUrl} />
             <PlayerCanvas
               spread={selectedSpread}
               nextSpread={nextSpread}
@@ -466,9 +533,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
               pageNumbering={pageNumbering}
               isSharePreview={isSharePreview}
             />
-          ) : (
-            <FirstGestureGate onCapture={() => setPlayerGestureCaptured(true)} />
-          )
+            {/* Gate overlay (z-100) covers the canvas until the user gesture is
+                captured. handleGestureCapture awaits resumeContext() to flush
+                queued autoplays, then flips the flag to unmount the gate. */}
+            {!playerGestureCaptured && (
+              <FirstGestureGate onCapture={handleGestureCapture} />
+            )}
+          </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             No spread selected

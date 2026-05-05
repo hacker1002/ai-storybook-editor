@@ -12,8 +12,6 @@ import {
   useCurrentStepIndex,
   usePlayMode,
   useIsPlaying,
-  useVolume,
-  useIsMuted,
   usePlaybackActions,
 } from '@/stores/animation-playback-store';
 import { addTweenToTimeline } from '../animation-tween-builders';
@@ -138,13 +136,10 @@ export function usePlayerGsapEngine({
   const currentStepIndex = useCurrentStepIndex();
   const playMode = usePlayMode();
   const isPlaying = useIsPlaying();
-  const volume = useVolume();
-  const isMuted = useIsMuted();
   const playbackActions = usePlaybackActions();
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
 
-  const effectiveVolume = isMuted ? 0 : volume;
   // Access steps directly from store for effects that need them
   const steps = usePlaybackStore((s) => s.steps);
 
@@ -357,7 +352,6 @@ export function usePlayerGsapEngine({
         }
 
         addTweenToTimeline(tl, anim, el, position, {
-          volume: effectiveVolume / 100,
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           canvasWidth,
@@ -372,7 +366,7 @@ export function usePlayerGsapEngine({
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, effectiveVolume, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
+    [killTimeline, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -441,7 +435,6 @@ export function usePlayerGsapEngine({
       }
 
       addTweenToTimeline(tl, anim, el, position, {
-        volume: effectiveVolume / 100,
         spreadContainer: spreadContainerRef.current,
         itemGeometry: findItemGeometry(anim.target.id),
         canvasWidth,
@@ -455,7 +448,7 @@ export function usePlayerGsapEngine({
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, effectiveVolume, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]);
+  }, [killTimeline, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -506,7 +499,6 @@ export function usePlayerGsapEngine({
         else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
 
         addTweenToTimeline(replayTl, anim, el, position, {
-          volume: effectiveVolume / 100,
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(anim.target.id),
           canvasWidth,
@@ -521,7 +513,7 @@ export function usePlayerGsapEngine({
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, effectiveVolume, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
+    [killReplayTimeline, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
   );
 
   // === Returned utility functions ===
@@ -791,16 +783,6 @@ export function usePlayerGsapEngine({
       pauseAllMedia();
     }
   }, [isPlaying, playMode, pauseAllMedia, resumePausedMedia]);
-
-  // === Lifecycle: Volume sync ===
-  useEffect(() => {
-    const container = spreadContainerRef.current;
-    if (!container) return;
-    const mediaEls = container.querySelectorAll('audio, video');
-    mediaEls.forEach((el) => {
-      (el as HTMLMediaElement).volume = effectiveVolume / 100;
-    });
-  }, [effectiveVolume]);
 
   // === Lifecycle: Clear active animation orders when playback stops ===
   useEffect(() => {
