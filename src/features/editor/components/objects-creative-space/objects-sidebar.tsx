@@ -28,6 +28,7 @@ import {
 import { useBookShape, useBookTypography } from "@/stores/book-store";
 import { FALLBACK_SHAPE, mapTypographyToTextbox } from "@/constants/book-defaults";
 import { DEFAULT_TYPOGRAPHY } from "@/constants/config-constants";
+import { AUDIO_DEFAULTS } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import {
@@ -653,8 +654,8 @@ export function ObjectsSidebar({
         case "audio":
           actions.addRetouchAudio(selectedSpreadId, {
             id: newId,
-            name: "New Audio",
-            title: "New Audio",
+            name: AUDIO_DEFAULTS.AUDIO_TITLE,
+            title: AUDIO_DEFAULTS.AUDIO_TITLE,
             geometry: { x: 10, y: 10, w: 0, h: 0 },
             "z-index": newZIndex,
             editor_visible: true,
@@ -666,8 +667,8 @@ export function ObjectsSidebar({
           const autoAudioCount = allEntries.filter((e) => e.type === "auto_audio").length;
           actions.addRetouchAutoAudio(selectedSpreadId, {
             id: newId,
-            name: "New Auto Audio",
-            title: "New Auto Audio",
+            name: AUDIO_DEFAULTS.AUTO_AUDIO_TITLE,
+            title: AUDIO_DEFAULTS.AUTO_AUDIO_TITLE,
             geometry: { x: 1 + autoAudioCount * 2, y: 90 },
             "z-index": newZIndex,
             editor_visible: true,

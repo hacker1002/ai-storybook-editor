@@ -454,15 +454,15 @@ export interface AutoPicToolbarContext<TSpread extends BaseSpread>
 export interface AudioToolbarContext<TSpread extends BaseSpread>
   extends AudioItemContext<TSpread>,
     BaseToolbarContext {
-  onReplaceAudio: () => void;
-  onCropAudio?: () => void;
+  onBrowseSound: () => void;
+  onEditAudio?: () => void;
 }
 
 export interface AutoAudioToolbarContext<TSpread extends BaseSpread>
   extends AutoAudioItemContext<TSpread>,
     BaseToolbarContext {
-  onReplaceAudio: () => void;
-  onCropAudio?: () => void;
+  onBrowseSound: () => void;
+  onEditAudio?: () => void;
 }
 
 export interface QuizToolbarContext<TSpread extends BaseSpread>

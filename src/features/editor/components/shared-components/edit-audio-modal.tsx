@@ -10,12 +10,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Scissors, Play, Pause, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createLogger } from "@/utils/logger";
 import { uploadAudioToStorage } from "@/apis/storage-api";
 
-const log = createLogger("Editor", "CropAudioModal");
+const log = createLogger("Editor", "EditAudioModal");
 
 // Layout constants
 const MIN_DURATION = 0.5;
@@ -24,13 +25,20 @@ const WAVEFORM_HEIGHT = 120;
 const HANDLE_WIDTH = 12;
 const HANDLE_HIT_ZONE = 16;
 const DIMMED_OPACITY = 0.3;
+const DESCRIPTION_MAX = 500;
 
-export interface CropAudioModalProps {
+export interface EditAudioSaveResult {
+  mediaUrl: string;
+  description: string;
+}
+
+export interface EditAudioModalProps {
   isOpen: boolean;
   onClose: () => void;
   audioName: string;
   mediaUrl: string;
-  onCropComplete: (newMediaUrl: string) => void;
+  description?: string;
+  onSave: (result: EditAudioSaveResult) => void;
 }
 
 // === Helpers ===
@@ -93,13 +101,14 @@ function encodeWAV(samples: Float32Array, sampleRate: number): ArrayBuffer {
 
 // === Main Component ===
 
-export function CropAudioModal({
+export function EditAudioModal({
   isOpen,
   onClose,
   audioName,
   mediaUrl,
-  onCropComplete,
-}: CropAudioModalProps) {
+  description: initialDescription,
+  onSave,
+}: EditAudioModalProps) {
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -111,6 +120,7 @@ export function CropAudioModal({
   const [isCropping, setIsCropping] = useState(false);
   const [startInput, setStartInput] = useState("00:00");
   const [endInput, setEndInput] = useState("00:00");
+  const [description, setDescription] = useState(initialDescription ?? "");
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -158,6 +168,7 @@ export function CropAudioModal({
     setCurrentTime(0);
     setStartInput("00:00");
     setEndInput("00:00");
+    setDescription(initialDescription ?? "");
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -192,6 +203,7 @@ export function CropAudioModal({
     })();
 
     return () => abortController.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, mediaUrl]);
 
   // Downsample channel 0 to WAVEFORM_BARS amplitude values [0..1]
@@ -409,15 +421,27 @@ export function CropAudioModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startTime, endTime]);
 
-  // === Crop flow ===
+  // === Save flow (trim+upload conditional on rangeChanged) ===
 
-  const handleCrop = useCallback(async () => {
+  const handleSave = useCallback(async () => {
     if (!audioBuffer || isCropping) return;
-    log.info("handleCrop", "start", { startTime, endTime, duration: endTime - startTime });
+    const trimmedDescription = description.trim();
+    const rangeChanged = startTime !== 0 || endTime !== duration;
+    log.info("handleSave", "save start", {
+      rangeChanged,
+      descLen: trimmedDescription.length,
+    });
 
     if (isPlaying) {
       stopPlayback();
       setIsPlaying(false);
+    }
+
+    if (!rangeChanged) {
+      log.debug("handleSave", "skip trim, description-only", { audioName });
+      onSave({ mediaUrl, description: trimmedDescription });
+      onClose();
+      return;
     }
 
     setIsCropping(true);
@@ -445,23 +469,36 @@ export function CropAudioModal({
       const blob = new Blob([wavBuffer], { type: "audio/wav" });
       const file = new File([blob], "cropped.wav", { type: "audio/wav" });
 
-      log.info("handleCrop", "uploading", { size: file.size });
+      log.debug("handleSave", "trim+upload", { startTime, endTime, size: file.size });
       const { publicUrl } = await uploadAudioToStorage(file, "audio-objects");
 
       if (!mountedRef.current) return;
 
-      log.info("handleCrop", "complete", { publicUrl });
-      onCropComplete(publicUrl);
+      log.info("handleSave", "complete", { publicUrl });
+      onSave({ mediaUrl: publicUrl, description: trimmedDescription });
       onClose();
     } catch (err) {
       if (!mountedRef.current) return;
       if (err instanceof Error && err.name === "AbortError") return;
-      log.error("handleCrop", "failed", { error: String(err) });
-      toast.error("Failed to upload cropped audio");
+      log.error("handleSave", "upload failed", { audioName, error: String(err) });
+      toast.error("Failed to upload edited audio");
     } finally {
       if (mountedRef.current) setIsCropping(false);
     }
-  }, [audioBuffer, startTime, endTime, isPlaying, isCropping, stopPlayback, onCropComplete, onClose]);
+  }, [
+    audioBuffer,
+    startTime,
+    endTime,
+    duration,
+    isPlaying,
+    isCropping,
+    stopPlayback,
+    onSave,
+    onClose,
+    description,
+    mediaUrl,
+    audioName,
+  ]);
 
   const handleClose = useCallback(() => {
     if (isPlaying) { stopPlayback(); setIsPlaying(false); }
@@ -475,7 +512,7 @@ export function CropAudioModal({
     "modal",
     isOpen
       ? {
-          id: "crop-audio-modal",
+          id: "edit-audio-modal",
           ref: dialogContentRef,
           hotkeys: ["Escape"],
           onHotkey: (key) => {
@@ -494,7 +531,14 @@ export function CropAudioModal({
   );
 
   const selectedDuration = endTime - startTime;
-  const canCrop = audioBuffer !== null && !loadError && selectedDuration >= MIN_DURATION && !isCropping;
+  const descriptionTooLong = description.length > DESCRIPTION_MAX;
+  const canSave =
+    audioBuffer !== null &&
+    !loadError &&
+    selectedDuration >= MIN_DURATION &&
+    !isCropping &&
+    !isLoading &&
+    !descriptionTooLong;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
@@ -508,7 +552,7 @@ export function CropAudioModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Scissors className="h-5 w-5" />
-            Crop Audio: {audioName}
+            Edit Audio: {audioName}
           </DialogTitle>
         </DialogHeader>
 
@@ -588,23 +632,59 @@ export function CropAudioModal({
             </p>
           )}
 
-          {/* Crop button */}
+          {/* Description section */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="edit-audio-description"
+                className="text-sm font-medium"
+              >
+                Description
+              </label>
+              <span
+                id="desc-counter"
+                role="status"
+                aria-live="polite"
+                className={
+                  description.length >= DESCRIPTION_MAX
+                    ? "text-xs text-destructive"
+                    : "text-xs text-muted-foreground"
+                }
+              >
+                {description.length} / {DESCRIPTION_MAX}
+              </span>
+            </div>
+            <Textarea
+              id="edit-audio-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={DESCRIPTION_MAX}
+              rows={3}
+              className="resize-y"
+              placeholder="Describe this audio (optional)..."
+              aria-label="Audio description"
+              aria-describedby="desc-counter"
+              disabled={isCropping}
+            />
+          </div>
+
+          {/* Save button */}
           <Button
-            onClick={handleCrop}
-            disabled={!canCrop}
+            onClick={handleSave}
+            disabled={!canSave}
             className="w-full"
             size="lg"
-            aria-label="Crop audio"
+            aria-label="Save audio"
           >
             {isCropping ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Cropping...
+                Saving...
               </>
             ) : (
               <>
                 <Scissors className="h-4 w-4 mr-2" />
-                Crop Audio
+                Save
               </>
             )}
           </Button>

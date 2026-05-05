@@ -77,3 +77,22 @@ export const THUMBNAIL = {
   SMALL_WIDTH: 100,
   GAP: 8,
 } as const;
+
+/**
+ * Default title strings for newly-created audio / auto_audio items.
+ * Shared by item-creation paths and sound-library overwrite logic so that
+ * picking a sound from the library can safely replace the auto-generated
+ * placeholder title without clobbering a user-edited one.
+ *
+ * NOTE: `name` field on SpreadAudio/SpreadAutoAudio is a separate identifier
+ * (not user-facing display) and is not touched by the sound-pick flow.
+ */
+export const AUDIO_DEFAULTS = {
+  AUDIO_TITLE: "New Audio",
+  AUTO_AUDIO_TITLE: "New Auto Audio",
+} as const;
+
+export const DEFAULT_AUDIO_TITLES: ReadonlySet<string> = new Set([
+  AUDIO_DEFAULTS.AUDIO_TITLE,
+  AUDIO_DEFAULTS.AUTO_AUDIO_TITLE,
+]);

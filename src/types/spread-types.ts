@@ -128,6 +128,7 @@ export interface SpreadAutoPic {
 export interface SpreadAudio {
   id: string;
   title?: string;
+  description?: string;
   geometry: Geometry;
   "z-index": number;
   player_visible: boolean;
@@ -145,6 +146,7 @@ export interface SpreadAudio {
 export interface SpreadAutoAudio {
   id: string;
   title?: string;
+  description?: string;
   geometry: { x: number; y: number };  // 2D — icon position, identical to SpreadAudio
   "z-index": number;
   player_visible: false;                // literal false, locked by validator

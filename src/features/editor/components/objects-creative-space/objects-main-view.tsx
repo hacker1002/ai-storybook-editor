@@ -29,14 +29,17 @@ import {
   EditImageModal,
   SplitImageModal,
   CropImageModal,
-  CropAudioModal,
+  EditAudioModal,
   SegmentLayerModal,
+  SoundLibraryModal,
 } from "@/features/editor/components/shared-components";
 import type {
   SplitLayerResult,
   CropCreateResult,
   SegmentResult,
+  LibrarySound,
 } from "@/features/editor/components/shared-components";
+import { useSounds } from "@/stores/sounds-store";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import { ObjectsVideoToolbar } from "./objects-video-toolbar";
 import { ObjectsAudioToolbar } from "./objects-audio-toolbar";
@@ -56,7 +59,7 @@ import { useLanguageCode } from "@/stores/editor-settings-store";
 import { useBookTemplateLayout, useCurrentBook } from "@/stores/book-store";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { useInteractionLayerContext } from "@/features/editor/contexts/interaction-layer-provider";
-import { COLUMNS } from "@/constants/spread-constants";
+import { COLUMNS, DEFAULT_AUDIO_TITLES } from "@/constants/spread-constants";
 import {
   useSpreadHandlers,
   useSpreadItemDispatch,
@@ -124,6 +127,12 @@ export function ObjectsMainView({
 
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [narrationSpreadModalOpen, setNarrationSpreadModalOpen] = useState(false);
+  const [browseOpen, setBrowseOpen] = useState<{
+    itemId: string;
+    spreadId: string;
+    kind: "audio" | "auto_audio";
+  } | null>(null);
+  const sounds = useSounds();
 
   const characters = useCharacters();
 
@@ -271,7 +280,7 @@ export function ObjectsMainView({
   const { splitTextbox } = useSplitTextbox(actions, onItemSelect, langCode, canvasWidth, canvasHeight);
 
   const modals = useObjectModals(selectedSpreadId, actions);
-  const { openGenerate, openSplit, openCrop, openSegment, openCropAudio } = modals;
+  const { openGenerate, openSplit, openCrop, openSegment, openEditAudio } = modals;
 
   const handleCropCreateImages = useCallback(
     (result: CropCreateResult) => {
@@ -695,12 +704,23 @@ export function ObjectsMainView({
         variant="audio"
         context={{
           ...context,
-          onCropAudio: () =>
-            openCropAudio(context.item as SpreadAudio, "audio"),
+          onBrowseSound: () => {
+            log.info("renderRetouchAudioToolbar", "open library", {
+              itemId: context.item.id,
+              kind: "audio",
+            });
+            setBrowseOpen({
+              itemId: context.item.id,
+              spreadId: selectedSpreadId,
+              kind: "audio",
+            });
+          },
+          onEditAudio: () =>
+            openEditAudio(context.item as SpreadAudio, "audio"),
         }}
       />
     ),
-    [openCropAudio]
+    [openEditAudio, selectedSpreadId]
   );
 
   // === Auto-audio toolbar render prop (variant of ObjectsAudioToolbar) ===
@@ -710,12 +730,23 @@ export function ObjectsMainView({
         variant="auto_audio"
         context={{
           ...context,
-          onCropAudio: () =>
-            openCropAudio(context.item as SpreadAutoAudio, "auto_audio"),
+          onBrowseSound: () => {
+            log.info("renderRetouchAutoAudioToolbar", "open library", {
+              itemId: context.item.id,
+              kind: "auto_audio",
+            });
+            setBrowseOpen({
+              itemId: context.item.id,
+              spreadId: selectedSpreadId,
+              kind: "auto_audio",
+            });
+          },
+          onEditAudio: () =>
+            openEditAudio(context.item as SpreadAutoAudio, "auto_audio"),
         }}
       />
     ),
-    [openCropAudio]
+    [openEditAudio, selectedSpreadId]
   );
 
   return (
@@ -839,13 +870,96 @@ export function ObjectsMainView({
         />
       )}
 
-      {modals.cropAudio.item?.media_url && (
-        <CropAudioModal
-          isOpen={modals.cropAudio.open}
-          onClose={modals.closeCropAudio}
-          audioName={modals.cropAudio.item.name}
-          mediaUrl={modals.cropAudio.item.media_url}
-          onCropComplete={modals.handleCropAudioComplete}
+      {modals.editAudio.item?.media_url && (
+        <EditAudioModal
+          isOpen={modals.editAudio.open}
+          onClose={modals.closeEditAudio}
+          audioName={modals.editAudio.item.title ?? modals.editAudio.item.name}
+          mediaUrl={modals.editAudio.item.media_url}
+          description={modals.editAudio.item.description ?? ""}
+          onSave={modals.handleEditAudioComplete}
+        />
+      )}
+
+      {browseOpen && (
+        <SoundLibraryModal
+          isOpen
+          onClose={() => setBrowseOpen(null)}
+          initialSoundId={(() => {
+            const spread = retouchSpreads.find(
+              s => s.id === browseOpen.spreadId
+            );
+            if (!spread) return null;
+            const item =
+              browseOpen.kind === "audio"
+                ? spread.audios?.find(a => a.id === browseOpen.itemId)
+                : spread.auto_audios?.find(a => a.id === browseOpen.itemId);
+            const url = item?.media_url;
+            if (!url) return null;
+            return sounds.find(s => s.mediaUrl === url)?.id ?? null;
+          })()}
+          onSelect={(sound: LibrarySound) => {
+            const spread = retouchSpreads.find(
+              s => s.id === browseOpen.spreadId
+            );
+            if (!spread) {
+              log.warn("handleSoundSelect", "spread not found", {
+                spreadId: browseOpen.spreadId,
+              });
+              setBrowseOpen(null);
+              return;
+            }
+            const item =
+              browseOpen.kind === "audio"
+                ? spread.audios?.find(a => a.id === browseOpen.itemId)
+                : spread.auto_audios?.find(a => a.id === browseOpen.itemId);
+            if (!item) {
+              log.warn("handleSoundSelect", "item not found", {
+                itemId: browseOpen.itemId,
+              });
+              setBrowseOpen(null);
+              return;
+            }
+            const shouldOverwriteTitle =
+              !item.title?.trim() || DEFAULT_AUDIO_TITLES.has(item.title);
+            const shouldOverwriteDescription = !item.description?.trim();
+            const patch: Partial<SpreadAudio> = {
+              media_url: sound.media_url,
+              ...(shouldOverwriteTitle ? { title: sound.name } : {}),
+              ...(shouldOverwriteDescription
+                ? { description: sound.description }
+                : {}),
+            };
+            log.info("handleSoundSelect", "sound selected", {
+              soundId: sound.id,
+              soundName: sound.name,
+              itemId: browseOpen.itemId,
+              kind: browseOpen.kind,
+              overwriteTitle: shouldOverwriteTitle,
+              overwriteDescription: shouldOverwriteDescription,
+            });
+            try {
+              if (browseOpen.kind === "audio") {
+                actions.updateRetouchAudio(
+                  browseOpen.spreadId,
+                  browseOpen.itemId,
+                  patch
+                );
+              } else {
+                actions.updateRetouchAutoAudio(
+                  browseOpen.spreadId,
+                  browseOpen.itemId,
+                  patch as Partial<SpreadAutoAudio>
+                );
+              }
+            } catch (err) {
+              log.error("handleSoundSelect", "patch failed", {
+                itemId: browseOpen.itemId,
+                error: String(err),
+              });
+            }
+            setBrowseOpen(null);
+          }}
         />
       )}
     </>

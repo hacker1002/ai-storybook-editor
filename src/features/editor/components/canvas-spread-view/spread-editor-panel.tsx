@@ -1074,8 +1074,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 ...context,
                 selectedGeometry: state.selectedGeometry,
                 canvasRef,
-                onReplaceAudio: () => {},
-                onCropAudio: undefined,
+                onBrowseSound: () => {},
+                onEditAudio: undefined,
               });
             }
 
@@ -1094,8 +1094,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                 ...context,
                 selectedGeometry: state.selectedGeometry,
                 canvasRef,
-                onReplaceAudio: () => {},
-                onCropAudio: undefined,
+                onBrowseSound: () => {},
+                onEditAudio: undefined,
               });
             }
 

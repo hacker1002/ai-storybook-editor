@@ -16,7 +16,7 @@ export { SplitImageModal } from './split-image-modal';
 export type { SplitLayerResult } from './split-image-modal';
 export { CropImageModal } from './crop-image-modal';
 export type { CropCreateResult } from './crop-image-modal-parts';
-export { CropAudioModal } from './crop-audio-modal';
+export { EditAudioModal } from './edit-audio-modal';
 export { PromptPanel } from './prompt-panel';
 export { GenerateNarrationModal } from './generate-narration-modal';
 export { SoundLibraryModal } from './sound-library-modal';
