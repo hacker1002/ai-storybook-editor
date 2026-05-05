@@ -79,6 +79,16 @@ export interface BookBranch {
   typography: Record<string, BranchTypographySettings>;
 }
 
+// Reading effects (book.effects JSONB) — page transition + gyroscope toggle.
+// transition_type enum is forward-compatible: player falls back to 'turn' on unknown values.
+// gyroscope: persistence-only this phase; player runtime hook deferred to a later phase.
+export type TransitionType = 'parallax' | 'turn' | 'slide' | 'fade' | 'flip' | 'zoom';
+
+export interface BookEffectsSettings {
+  transition_type: TransitionType;
+  gyroscope: boolean;
+}
+
 // Book-level music mixer + background track (book.music JSONB)
 export interface BookMusicSettings {
   background_id: string | null; // soft FK → musics.id
@@ -208,6 +218,7 @@ export interface Book {
   branch: BookBranch | null;
   music: BookMusicSettings | null;
   sound: BookSoundSettings | null;
+  effects: BookEffectsSettings | null;
   template_layout: BookTemplateLayout | null;
   created_at: string;
   updated_at: string;

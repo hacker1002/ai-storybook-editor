@@ -8,6 +8,8 @@ import type {
   NarratorSettings,
   BookMusicSettings,
   BookSoundSettings,
+  BookEffectsSettings,
+  TransitionType,
 } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 
@@ -24,6 +26,7 @@ export type ConfigSection =
   | 'quiz'
   | 'branch'
   | 'layout'
+  | 'effect'
   | 'remix'
   | 'preview'
   | 'export'
@@ -44,6 +47,7 @@ export const CONFIG_SECTIONS: ConfigSectionItem[] = [
   { key: 'quiz',           label: 'Quiz',             icon: 'HelpCircle'     },
   { key: 'branch',         label: 'Branch',           icon: 'GitBranch'      },
   { key: 'layout',         label: 'Layout',           icon: 'LayoutGrid'     },
+  { key: 'effect',         label: 'Effect',           icon: 'Sparkles'       },
   { key: 'remix',          label: 'Remix',            icon: 'RefreshCw'      },
   { key: 'preview',        label: 'Preview',          icon: 'Eye'            },
   { key: 'export',         label: 'Export',           icon: 'Download'       },
@@ -181,6 +185,26 @@ export const MUSICS_SOUNDS_DEFAULT_TAB: MusicsSoundsTab = 'music';
  * MUST match backend `PREVIEW_TEXT_BY_LANGUAGE` byte-exact so SHA256 cache paths align.
  * Reference: ai-storybook-design/component/editor-page/config-creative-space/05-config-narrator-settings.md §3.4
  */
+// ── Effect settings ──────────────────────────────────────────────────────────
+
+// Display order matches design spec; default is 'turn'. UI lists shipped values only —
+// player tolerates future enum extensions (falls back to 'turn' on unknown).
+export const TRANSITION_OPTIONS: ReadonlyArray<{ value: TransitionType; label: string }> = [
+  { value: 'parallax', label: 'Parallax' },
+  { value: 'turn',     label: 'Turn'     },
+  { value: 'slide',    label: 'Slide'    },
+  { value: 'fade',     label: 'Fade'     },
+  { value: 'flip',     label: 'Flip'     },
+  { value: 'zoom',     label: 'Zoom'     },
+] as const;
+
+export const DEFAULT_EFFECTS: BookEffectsSettings = {
+  transition_type: 'turn',
+  gyroscope: false,
+};
+
+// ── Preview texts ────────────────────────────────────────────────────────────
+
 export const PREVIEW_TEXTS: Record<string, string> = {
   en_US: 'Once upon a time, in a land far away, a small dragon discovered a hidden secret that would change everything.',
   vi_VN: 'Ngày xửa ngày xưa, ở một vùng đất xa xôi, một chú rồng nhỏ đã phát hiện ra một bí mật ẩn giấu có thể thay đổi tất cả.',

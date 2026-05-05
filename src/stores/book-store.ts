@@ -7,6 +7,7 @@ import type {
   BookListItem,
   BookMusicSettings,
   BookSoundSettings,
+  BookEffectsSettings,
   BranchTypographySettings,
   NarratorSettings,
   NarratorInferenceParams,
@@ -331,6 +332,11 @@ export const useBookMusic = (): BookMusicSettings | null =>
 
 export const useBookSound = (): BookSoundSettings | null =>
   useBookStore((s) => s.currentBook?.sound ?? null);
+
+// ── Effects selector ─────────────────────────────────────────────────────────
+
+export const useBookEffects = (): BookEffectsSettings | null =>
+  useBookStore((s) => s.currentBook?.effects ?? null);
 
 /**
  * Narrator volume scale (0..2). Falls back to VOLUME_DEFAULT (1.0) when unset.
