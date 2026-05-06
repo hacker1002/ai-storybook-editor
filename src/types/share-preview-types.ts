@@ -16,6 +16,44 @@ export interface ShareConfig {
   languages: { name: string; code: string }[];
 }
 
+// === Playback Settings (denormalized by FastAPI for player no-roundtrip) ===
+export interface ShareMediaRef {
+  id: string;
+  media_url: string;
+  name?: string;
+}
+
+export interface ShareVoiceMinimal {
+  id: string;
+  name?: string;
+  preview_audio_url?: string;
+}
+
+export interface ShareSoundSetting {
+  transition?: ShareMediaRef | null;
+  true?: ShareMediaRef | null;
+  wrong?: ShareMediaRef | null;
+  volume_scale: number;
+}
+
+export interface ShareMusicSetting {
+  background?: ShareMediaRef | null;
+  volume_scale: number;
+}
+
+// Narrator JSONB: per-language voice entries + top-level volume_scale.
+export interface ShareNarratorLanguageEntry {
+  voice_id?: string | null;
+  media_url?: string;
+  voice?: ShareVoiceMinimal | null;
+}
+
+export type ShareNarratorSetting = {
+  volume_scale?: number;
+} & {
+  [languageCode: string]: ShareNarratorLanguageEntry | number | undefined;
+};
+
 // === Book Preview Data ===
 export interface BookPreviewData {
   id: string;
@@ -27,7 +65,12 @@ export interface BookPreviewData {
   typography: Record<string, unknown>;
   branch: Record<string, unknown>;
   shape: Record<string, unknown>;
-  template_layout?: { page_numbering?: PageNumberingSettings };
+  template_layout?: { page_numbering?: PageNumberingSettings } | null;
+  // Denormalized playback settings — added by FastAPI port (2026-05-06).
+  narrator?: ShareNarratorSetting;
+  effects?: Record<string, unknown>;
+  sound?: ShareSoundSetting;
+  music?: ShareMusicSetting;
 }
 
 // === Snapshot Preview Data ===

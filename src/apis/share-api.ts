@@ -1,15 +1,14 @@
-// share-api.ts - API client for share preview edge function (raw fetch, non-standard response)
+// share-api.ts - API client for share preview FastAPI endpoint (raw fetch, non-standard response)
 import { createLogger } from '@/utils/logger';
 import type { SharePreviewResult } from '@/types/share-preview-types';
 
 const log = createLogger('API', 'ShareApi');
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseApiKey = import.meta.env.VITE_SUPABASE_API_ANON_KEY;
+const imageApiBaseUrl = import.meta.env.VITE_IMAGE_API_BASE_URL;
 
 /**
- * Fetch share preview data from edge function.
- * Uses raw fetch (not callEdgeFunction) because response schema is non-standard.
+ * Fetch share preview data from the FastAPI image-api.
+ * Public endpoint — no Authorization header. Slug-based access.
  * @param slug - Share link slug
  * @param passcode - Optional passcode for private links
  */
@@ -17,7 +16,7 @@ export async function fetchSharePreview(
   slug: string,
   passcode?: string
 ): Promise<SharePreviewResult> {
-  const url = `${supabaseUrl}/functions/v1/share-get-book-preview`;
+  const url = `${imageApiBaseUrl}/api/share/get-book-preview`;
   const body: Record<string, unknown> = { slug };
   if (passcode) body.passcode = passcode;
 
@@ -28,7 +27,6 @@ export async function fetchSharePreview(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseApiKey}`,
       },
       body: JSON.stringify(body),
     });
