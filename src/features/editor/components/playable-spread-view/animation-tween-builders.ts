@@ -9,6 +9,7 @@ import {
 } from "./player-initial-states";
 import { createLogger } from "@/utils/logger";
 import { computePlayEffectDuration } from "@/features/editor/utils/compute-play-effect-duration";
+import { usePlayerAudioStore } from "@/stores/player-audio-store";
 
 const log = createLogger('Editor', 'AnimationTweenBuilders');
 
@@ -399,28 +400,42 @@ export function addTweenToTimeline(
       const baseMs = lastEndMs > 0 ? lastEndMs : (effect.duration ?? 0);
       const durationSec = baseMs > 0 ? (baseMs + READ_ALONG_TAIL_PAD_MS) / 1000 : 0;
 
-      // Create audio element and attach to DOM so pauseAllMedia() can find it on killTimeline.
-      // preload='auto' explicit (default 'metadata' on some browsers) so it reuses the HTTP
-      // cache populated by the spread-mount preload effect → playback starts instant on first play.
-      const audio = document.createElement('audio');
-      audio.preload = 'auto';
-      audio.src = audioUrl;
-      audio.style.display = 'none';
-      audio.crossOrigin = 'anonymous';
-      audio.dataset.audioChannel = 'narration';
-      element.appendChild(audio);
+      // Acquire warm <audio> from the pool. Pre-attached to narration mixer
+      // channel; survives across tween rebuilds → eliminates per-tween decode
+      // latency. Element is detached from DOM by design (managed by store).
+      const audio = usePlayerAudioStore.getState().acquireAudio(audioUrl, 'narration');
 
       // Use a unique label for absolute positioning of word timings
       const readAlongLabel = `ra_${targetId}_${Date.now()}`;
       timeline.addLabel(readAlongLabel, position as number | string);
 
-      // Start: play audio
+      // Start: pause GSAP timeline at the label, resume only when audio truly
+      // starts emitting samples ('playing' event). Otherwise word-highlight
+      // calls scheduled at label+offsetSec would fire before audio output and
+      // text would race ahead. Fallback timer ensures forward progress if the
+      // event is suppressed (autoplay block, codec error, etc.).
+      const READ_ALONG_PLAY_FALLBACK_MS = 300;
       timeline.call(
         () => {
-          options?.onTweenStart?.();
           audio.currentTime = 0;
+          timeline.pause();
+
+          let resolved = false;
+          const resume = () => {
+            if (resolved) return;
+            resolved = true;
+            window.clearTimeout(fallbackId);
+            audio.removeEventListener('playing', onPlaying);
+            options?.onTweenStart?.();
+            timeline.resume();
+          };
+          const onPlaying = () => resume();
+          const fallbackId = window.setTimeout(resume, READ_ALONG_PLAY_FALLBACK_MS);
+          audio.addEventListener('playing', onPlaying, { once: true });
+
           audio.play().catch(() => {
             log.warn('addTweenToTimeline', 'read-along autoplay blocked', { targetId });
+            resume();
           });
         },
         undefined,
@@ -450,13 +465,13 @@ export function addTweenToTimeline(
         });
       }
 
-      // End: pause audio + cleanup highlights + remove audio element
+      // End: pause audio (pool keeps element alive for next play) + clear
+      // word highlights. NEVER call audio.remove() — element is pool-owned.
       const cleanup = () => {
         audio.pause();
         element.querySelectorAll('.read-along-active-word').forEach((el) => {
           el.classList.remove('read-along-active-word');
         });
-        audio.remove();
         options?.onTweenComplete?.();
       };
 

@@ -33,7 +33,6 @@ import {
   isInStaging,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
-import { useAutoAudioPreload } from "./hooks/use-auto-audio-preload";
 import {
   usePlaybackStore,
   usePlaybackActions,
@@ -61,8 +60,6 @@ const RAPID_NEXT_THRESHOLD = 150; // ms
 // === Props Interface ===
 export interface PlayerCanvasProps {
   spread: PlayableSpread;
-  /** Optional: linear next spread for read-along audio preload lookahead */
-  nextSpread?: PlayableSpread;
   zoomLevel: number;
   playMode: PlayMode;
   playEdition: PlayEdition;
@@ -109,7 +106,6 @@ const CLICK_HINT_STYLE = `
 
 export function PlayerCanvas({
   spread,
-  nextSpread,
   zoomLevel,
   playMode,
   playEdition,
@@ -197,17 +193,12 @@ export function PlayerCanvas({
     handleQuizComplete,
   } = usePlayerGsapEngine({
     spread,
-    nextSpread,
     filteredAnimations,
     zoomLevel: effectiveZoom,
     narrationLangCode,
     onSpreadComplete,
     onQuizPlay: handleQuizPlay,
   });
-
-  // Auto-audio (BGM) lookahead preload: next-spread media_url fetched ~1s after mount
-  // so current spread BGM (component-owned) gets bandwidth priority. End-of-book → no-op.
-  useAutoAudioPreload({ spread, nextSpread });
 
   // TODO(quiz-v2): wire back a quiz player UI for 5 quiz types — previously PlayQuizModal.
   // handleQuizComplete() đã sẵn sàng để re-use khi UI mới hoàn thành quiz step.

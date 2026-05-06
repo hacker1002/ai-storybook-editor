@@ -33,6 +33,10 @@ const log = createLogger('Editor', 'PlayerAudioStore');
 // ── Module-level resources (not serializable, not in Zustand state) ────────────
 let sourceRegistry: WeakMap<HTMLAudioElement, MediaElementAudioSourceNode> = new WeakMap();
 let autoStartQueue: Set<HTMLAudioElement> = new Set();
+/** Warm <audio> pool keyed by URL. Detached from DOM; pre-attached to mixer.
+ *  Survives across spread advances within player session; evicted on language
+ *  change or teardown. Eliminates per-tween element re-decode latency. */
+let audioPool: Map<string, HTMLAudioElement> = new Map();
 
 // ── Public types ────────────────────────────────────────────────────────────────
 export interface ApplyGainsParams {
@@ -56,6 +60,17 @@ export interface PlayerAudioActions {
   requestPlay: (el: HTMLAudioElement) => void;
   cancelPlay: (el: HTMLAudioElement) => void;
   applyGains: (params: ApplyGainsParams) => void;
+  /** Warm an audio element for `url` and attach it to `channel`. Idempotent. */
+  preloadAudio: (url: string, channel: AudioChannel) => void;
+  /** Get pooled element for `url` (creates + warms on miss). Always attached to mixer. */
+  acquireAudio: (url: string, channel: AudioChannel) => HTMLAudioElement;
+  /** Pause + drop one entry from pool. */
+  releaseAudio: (url: string) => void;
+  /** Bulk evict — call on language change. */
+  releaseAllAudio: () => void;
+  /** Pause every currently-playing pooled element; returns list of paused elements
+   *  so the GSAP engine can resume them via its existing pausedMediaRef. */
+  pauseAllPooledAudio: () => HTMLAudioElement[];
   teardown: () => void;
 }
 
@@ -277,6 +292,87 @@ export const usePlayerAudioStore = create<Store>()(
         });
       },
 
+      preloadAudio: (url, channel) => {
+        if (!url) return;
+        if (audioPool.has(url)) return;
+        const el = new Audio();
+        el.crossOrigin = 'anonymous';
+        el.dataset.audioChannel = channel;
+        el.dataset.pooled = 'true';
+        el.preload = 'auto';
+        el.src = url;
+        el.load();
+        audioPool.set(url, el);
+        // Attempt mixer attachment immediately; attachAudio guards on context
+        // readiness internally, so a not-yet-init context simply skips wiring
+        // (rare given player-mode mount order, accepted as graceful degradation).
+        get().attachAudio(el);
+        log.info('preloadAudio', 'audio_pool_primed', {
+          channel,
+          poolSize: audioPool.size,
+          srcShort: truncateSrc(url),
+        });
+      },
+
+      acquireAudio: (url, channel) => {
+        const existing = audioPool.get(url);
+        if (existing) {
+          log.debug('acquireAudio', 'audio_pool_hit', { srcShort: truncateSrc(url) });
+          return existing;
+        }
+        get().preloadAudio(url, channel);
+        const created = audioPool.get(url);
+        // preloadAudio just inserted on cache-miss path → guaranteed present.
+        log.info('acquireAudio', 'audio_pool_miss_primed', { srcShort: truncateSrc(url) });
+        return created!;
+      },
+
+      releaseAudio: (url) => {
+        const el = audioPool.get(url);
+        if (!el) return;
+        try {
+          el.pause();
+        } catch {
+          // detached — ignore
+        }
+        el.src = '';
+        audioPool.delete(url);
+        log.debug('releaseAudio', 'audio_pool_released', {
+          srcShort: truncateSrc(url),
+          poolSize: audioPool.size,
+        });
+      },
+
+      releaseAllAudio: () => {
+        if (audioPool.size === 0) return;
+        const count = audioPool.size;
+        for (const [, el] of audioPool) {
+          try {
+            el.pause();
+          } catch {
+            // ignore
+          }
+          el.src = '';
+        }
+        audioPool.clear();
+        log.info('releaseAllAudio', 'audio_pool_evicted_all', { count });
+      },
+
+      pauseAllPooledAudio: () => {
+        const paused: HTMLAudioElement[] = [];
+        for (const [, el] of audioPool) {
+          if (!el.paused) {
+            try {
+              el.pause();
+              paused.push(el);
+            } catch {
+              // ignore
+            }
+          }
+        }
+        return paused;
+      },
+
       teardown: () => {
         const s = get();
         if (!s.contextCreated) return;
@@ -288,6 +384,8 @@ export const usePlayerAudioStore = create<Store>()(
             // detached — ignore
           }
         }
+        // Evict pool before context close so element src='' lands first.
+        get().releaseAllAudio();
         try {
           if (s.gains) {
             s.gains.bgm.disconnect();
@@ -304,6 +402,7 @@ export const usePlayerAudioStore = create<Store>()(
         }
         sourceRegistry = new WeakMap();
         autoStartQueue = new Set();
+        audioPool = new Map();
         set({ ...INITIAL_STATE });
         log.info('teardown', 'audio_mixer_closed');
       },
@@ -325,6 +424,11 @@ export const usePlayerAudioActions = (): PlayerAudioActions =>
       requestPlay: s.requestPlay,
       cancelPlay: s.cancelPlay,
       applyGains: s.applyGains,
+      preloadAudio: s.preloadAudio,
+      acquireAudio: s.acquireAudio,
+      releaseAudio: s.releaseAudio,
+      releaseAllAudio: s.releaseAllAudio,
+      pauseAllPooledAudio: s.pauseAllPooledAudio,
       teardown: s.teardown,
     })),
   );

@@ -38,6 +38,7 @@ import { PlayerCanvas } from "./player-canvas";
 import { BranchPathModal } from "./branch-path-modal";
 import { FirstGestureGate } from "./first-gesture-gate";
 import { PlayerAudioMixerHost } from "./audio/player-audio-mixer-host";
+import { PlayerSpreadPreloadHost } from "./preload/player-spread-preload-host";
 import { BookBackgroundMusicPlayer } from "./audio/book-background-music-player";
 import { useMusicMediaUrl } from "./audio/use-music-media-url";
 import type { BookAudioSettings } from "./audio/audio-mixer-types";
@@ -266,12 +267,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const hasPrevious = spreadHistories.length > 1;
   const nextResult = resolveNextSpreadId(selectedSpread, spreads, currentSection);
   const hasNext = nextResult !== null;
-  // Linear next spread for read-along audio preload lookahead. Branch spreads → undefined
-  // (skip prefetch since multiple branches would be ambiguous; YAGNI for now).
-  const nextSpread =
-    nextResult && nextResult.type === 'spread'
-      ? spreads.find((s) => s.id === nextResult.id)
-      : undefined;
 
   // === Canvas Switching Handlers ===
   const handlePlay = useCallback(() => {
@@ -471,6 +466,16 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         />
       )}
 
+      {/* Spread media preload host — mounts only while player canvas is active.
+          Sliding window N+1/N+2 across image/audio/video/auto_pic/quiz/read-along.
+          Spec: ai-storybook-design/component/editor-page/shared/playable-spread-view/03-11-spread-media-preload.md §8 */}
+      {activeCanvas === 'player' && effectiveSelectedSpreadId && (
+        <PlayerSpreadPreloadHost
+          spreads={spreads}
+          activeSpreadId={effectiveSelectedSpreadId}
+        />
+      )}
+
       {/* Header: editor modes only (player mode has no header — controls in sidebar) */}
       {mode !== "player" && (
         <PlayableEditorHeader
@@ -518,7 +523,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             <BookBackgroundMusicPlayer mediaUrl={bgmMediaUrl} />
             <PlayerCanvas
               spread={selectedSpread}
-              nextSpread={nextSpread}
               zoomLevel={effectiveZoomLevel}
               playMode={playMode}
               playEdition={playEdition}
