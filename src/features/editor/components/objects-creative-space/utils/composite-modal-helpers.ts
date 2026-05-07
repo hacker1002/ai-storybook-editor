@@ -27,15 +27,21 @@ export const EDITION_PRIORITY: EditionTag[] = ["classic", "dynamic", "interactiv
 /**
  * Build candidate list = image + auto_pic on this spread NOT already in a composite.
  * Sorted by z-index DESC (top-of-layer first, matching sidebar order).
+ *
+ * @param excludingCompositeId — when editing a composite, pass its id so its own
+ *   variants are NOT treated as taken (otherwise the edit form starts blank).
  */
 export function buildCandidates(
-  spread: BaseSpread | undefined
+  spread: BaseSpread | undefined,
+  excludingCompositeId?: string
 ): CompositeCandidate[] {
   if (!spread) return [];
 
-  // Set of variant ids already claimed by an existing composite.
+  // Set of variant ids already claimed by an existing composite (excluding the
+  // one being edited).
   const taken = new Set<string>();
   for (const c of spread.composites ?? []) {
+    if (excludingCompositeId && c.id === excludingCompositeId) continue;
     for (const v of c.variants) taken.add(v.id);
   }
 
@@ -106,6 +112,22 @@ export function suggestInitialEdition(
     if (!taken.has(e)) return e;
   }
   return null;
+}
+
+/**
+ * Inverse of `expandToVariants` — rebuild draft `CompositeSelections` from a
+ * persisted composite's variant array. Used by the edit-mode modal to hydrate
+ * its draft state from the existing composite.
+ */
+export function selectionsFromComposite(
+  composite: Pick<SpreadComposite, 'variants'>
+): CompositeSelections {
+  const sel: CompositeSelections = {};
+  for (const v of composite.variants) {
+    if (!sel[v.id]) sel[v.id] = [];
+    sel[v.id].push(v.edition);
+  }
+  return sel;
 }
 
 /**

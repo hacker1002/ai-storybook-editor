@@ -34,11 +34,12 @@ import {
   expandToVariants,
   nextDefaultName,
   nextZIndex,
+  selectionsFromComposite,
   EDITION_PRIORITY,
   type CompositeCandidate,
   type CompositeSelections,
 } from "./utils/composite-modal-helpers";
-import type { EditionTag } from "@/types/spread-types";
+import type { EditionTag, SpreadComposite } from "@/types/spread-types";
 
 const log = createLogger("Editor", "CreateCompositeModal");
 
@@ -55,6 +56,8 @@ export interface CreateCompositeModalProps {
   spreadId: string;
   onClose: () => void;
   onCreated?: (compositeId: string) => void;
+  /** When provided, the modal opens in EDIT mode pre-filled with this composite. */
+  compositeToEdit?: SpreadComposite;
 }
 
 // === Helpers (UI-only) ===
@@ -171,9 +174,11 @@ export function CreateCompositeModal({
   spreadId,
   onClose,
   onCreated,
+  compositeToEdit,
 }: CreateCompositeModalProps) {
   const spread = useRetouchSpreadById(spreadId);
   const actions = useSnapshotActions();
+  const isEditMode = compositeToEdit !== undefined;
 
   // Local state.
   const [name, setName] = useState("");
@@ -182,13 +187,30 @@ export function CreateCompositeModal({
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Derive candidates fresh each render (cheap; spread changes rarely).
-  const candidates = useMemo(() => buildCandidates(spread), [spread]);
+  // In edit mode, exclude the composite being edited from the "taken" set so
+  // its current variants stay selectable.
+  const candidates = useMemo(
+    () => buildCandidates(spread, compositeToEdit?.id),
+    [spread, compositeToEdit?.id]
+  );
 
-  // Reset draft state every time the modal opens (discard prior draft).
+  // Reset draft state every time the modal opens — hydrate from compositeToEdit
+  // in edit mode, otherwise blank create draft.
   useEffect(() => {
     if (!open) return;
+    if (isEditMode && compositeToEdit) {
+      log.debug("useEffect:open", "hydrate edit draft", {
+        spreadId,
+        compositeId: compositeToEdit.id,
+        variantCount: compositeToEdit.variants.length,
+      });
+      setName(compositeToEdit.title);
+      setSelections(selectionsFromComposite(compositeToEdit));
+      setOpenPopoverFor(null);
+      return;
+    }
     const defaultName = nextDefaultName(spread?.composites);
-    log.debug("useEffect:open", "reset draft", {
+    log.debug("useEffect:open", "reset create draft", {
       spreadId,
       defaultName,
       candidateCount: candidates.length,
@@ -196,7 +218,7 @@ export function CreateCompositeModal({
     setName(defaultName);
     setSelections({});
     setOpenPopoverFor(null);
-  }, [open, spreadId, spread?.composites, candidates.length]);
+  }, [open, spreadId, spread?.composites, candidates.length, isEditMode, compositeToEdit]);
 
   // Validation: name + ≥ 2 selected items + every selected has ≥ 1 edition.
   const canCreate = useMemo(() => {
@@ -284,26 +306,42 @@ export function CreateCompositeModal({
     []
   );
 
-  const handleCreate = useCallback(() => {
+  const handleSubmit = useCallback(() => {
     if (!canCreate) {
-      log.debug("handleCreate", "blocked by validation", {
+      log.debug("handleSubmit", "blocked by validation", {
         nameEmpty: name.trim() === "",
         selectedCount: Object.keys(selections).length,
+        mode: isEditMode ? "edit" : "create",
       });
       return;
     }
-    const newId = crypto.randomUUID();
     const variants = expandToVariants(selections, candidates);
-    const z = nextZIndex(spread);
 
-    log.info("handleCreate", "creating composite", {
+    if (isEditMode && compositeToEdit) {
+      log.info("handleSubmit", "updating composite", {
+        spreadId,
+        compositeId: compositeToEdit.id,
+        title: name.trim(),
+        variantCount: variants.length,
+      });
+      actions.updateRetouchComposite(spreadId, compositeToEdit.id, {
+        title: name.trim(),
+        variants,
+      });
+      onCreated?.(compositeToEdit.id);
+      onClose();
+      return;
+    }
+
+    const newId = crypto.randomUUID();
+    const z = nextZIndex(spread);
+    log.info("handleSubmit", "creating composite", {
       spreadId,
       compositeId: newId,
       title: name.trim(),
       variantCount: variants.length,
       zIndex: z,
     });
-
     actions.addRetouchComposite(spreadId, {
       id: newId,
       title: name.trim(),
@@ -312,10 +350,9 @@ export function CreateCompositeModal({
       player_visible: true,
       editor_visible: true,
     });
-
     onCreated?.(newId);
     onClose();
-  }, [canCreate, name, selections, candidates, spread, spreadId, actions, onCreated, onClose]);
+  }, [canCreate, name, selections, candidates, spread, spreadId, actions, onCreated, onClose, isEditMode, compositeToEdit]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -332,10 +369,10 @@ export function CreateCompositeModal({
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" && canCreate) {
         e.preventDefault();
-        handleCreate();
+        handleSubmit();
       }
     },
-    [canCreate, handleCreate]
+    [canCreate, handleSubmit]
   );
 
   const isEmpty = candidates.length === 0;
@@ -347,7 +384,7 @@ export function CreateCompositeModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers className="h-5 w-5" />
-            Create Composite
+            {isEditMode ? "Edit Composite" : "Create Composite"}
           </DialogTitle>
         </DialogHeader>
 
@@ -422,7 +459,7 @@ export function CreateCompositeModal({
           </Button>
           <Button
             type="button"
-            onClick={handleCreate}
+            onClick={handleSubmit}
             disabled={!canCreate}
             title={
               canCreate
@@ -430,7 +467,7 @@ export function CreateCompositeModal({
                 : "Enter a name and select at least 2 items with editions"
             }
           >
-            Create
+            {isEditMode ? "Save" : "Create"}
           </Button>
         </DialogFooter>
       </DialogContent>

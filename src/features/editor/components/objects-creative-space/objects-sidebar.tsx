@@ -114,6 +114,8 @@ export function ObjectsSidebar({
   );
   // CreateCompositeModal open flag.
   const [isCreateCompositeOpen, setIsCreateCompositeOpen] = useState(false);
+  // When set, the modal opens in edit mode for this composite. Cleared on close.
+  const [editingCompositeId, setEditingCompositeId] = useState<string | null>(null);
 
   // Filter state (all checked by default)
   const [assetFilter, setAssetFilter] = useState<Set<SpreadItemMediaType>>(
@@ -424,6 +426,13 @@ export function ObjectsSidebar({
 
   const handleEditStart = useCallback((entry: ObjectListEntry) => {
     if (entry.type === "textbox") return; // textbox title is auto-derived
+    // Composite groups don't rename inline — pencil opens the edit modal so the
+    // user can also adjust variants/editions, not just the title.
+    if (entry.type === "composite") {
+      setEditingCompositeId(entry.id);
+      setIsCreateCompositeOpen(true);
+      return;
+    }
     setEditingItemId(entry.id);
     setEditValue(entry.title);
   }, []);
@@ -869,8 +878,16 @@ export function ObjectsSidebar({
     <CreateCompositeModal
       open={isCreateCompositeOpen}
       spreadId={selectedSpreadId}
-      onClose={() => setIsCreateCompositeOpen(false)}
+      onClose={() => {
+        setIsCreateCompositeOpen(false);
+        setEditingCompositeId(null);
+      }}
       onCreated={(id) => onItemSelect({ type: "composite", id })}
+      compositeToEdit={
+        editingCompositeId
+          ? spread?.composites?.find((c) => c.id === editingCompositeId)
+          : undefined
+      }
     />
     </>
   );
