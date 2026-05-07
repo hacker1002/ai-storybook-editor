@@ -311,6 +311,12 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     enabled: turnEnabled,
     spreadContainerGetter: () =>
       playerCanvasHandleRef.current?.getSpreadContainer() ?? null,
+    // Lookup is `document.querySelector` rather than a ref because the
+    // thumbnail rail lives in a sibling subtree (footer); a cross-tree ref
+    // bridge would cost more than this synchronous DOM read. Selector matches
+    // the `data-thumbnail-content` attribute set by `PlayableThumbnail`.
+    thumbnailContainerGetter: (id) =>
+      document.querySelector<HTMLElement>(`[data-thumbnail-content="${id}"]`),
     onSwap: (toId) => applySelectedSpreadChange(toId),
   });
 

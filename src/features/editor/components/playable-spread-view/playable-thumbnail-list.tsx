@@ -115,8 +115,13 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
         className="relative bg-white overflow-hidden w-full"
         style={{ aspectRatio: `${canvasAspectRatio}` }}
       >
-        {/* Scaled Content Container */}
+        {/* Scaled Content Container.
+            `data-thumbnail-content` lets `useSpreadTurnTransition` locate this
+            node and clone it into the page-turn BackFace — saves a full
+            re-render + re-decode of the new spread's media, since these
+            <img> elements are already in DOM with decoded bitmaps cached. */}
         <div
+          data-thumbnail-content={spread.id}
           style={{
             position: "absolute",
             top: 0,

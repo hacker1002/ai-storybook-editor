@@ -90,7 +90,21 @@ export interface SpreadTurnTransitionHookAPI {
 export function useSpreadTurnTransition(
   params: UseSpreadTurnTransitionParams,
 ): SpreadTurnTransitionHookAPI {
-  const { enabled, spreadContainerGetter, onSwap, onComplete, duration } = params;
+  const {
+    enabled,
+    spreadContainerGetter,
+    thumbnailContainerGetter,
+    onSwap,
+    onComplete,
+    duration,
+  } = params;
+
+  // Stable ref so the latest getter is visible inside startTurn without
+  // re-creating it (would invalidate the queue-drain microtask).
+  const thumbnailContainerGetterRef = useRef(thumbnailContainerGetter);
+  useEffect(() => {
+    thumbnailContainerGetterRef.current = thumbnailContainerGetter;
+  }, [thumbnailContainerGetter]);
 
   // === State ===
   // The phase / direction / layout / visual state drives re-renders; everything
@@ -312,7 +326,54 @@ export function useSpreadTurnTransition(
       // Suspend BEFORE onSwap so the player engine effects, which re-run when
       // selectedSpread changes, see `autoplaySuspended=true` and short-circuit.
       playbackActionsRef.current.suspendAutoplay();
-      setVisual({ snapshot, containerRect: rect, backNode: null });
+
+      // Thumbnail-first back snapshot (spec §3.3 Phase 2 enhancement —
+      // realised via reuse of already-rendered thumbnail rail). The thumbnail's
+      // <img> elements are live in DOM and have decoded bitmaps cached, so
+      // cloning them avoids the FOUC that comes from cloning a freshly-mounted
+      // PlayerCanvas where img elements are still loading/decoding. Falls back
+      // to the rAF-delayed PlayerCanvas snapshot for:
+      //   - single-page layouts (thumbnail is always DPS — wrong content shape)
+      //   - share-preview / contexts where the rail is hidden / not in DOM
+      const eagerBackNode = (() => {
+        if (layout !== 'spread') return null;
+        const thumb = thumbnailContainerGetterRef.current?.(req.toSpreadId);
+        if (!thumb) return null;
+        try {
+          const cloned = thumb.cloneNode(true) as HTMLElement;
+          // Strip media + script tags (same defensive cleanup as the standard
+          // snapshot helper). Inline event handlers don't need stripping here:
+          // the live thumbnail tree is rendered by React with synthetic events,
+          // not inline `onclick=` attrs.
+          cloned.querySelectorAll('audio, video, script, canvas').forEach((n) => n.remove());
+          // Replace the thumbnail's miniaturising scale with one that fits the
+          // PlayerCanvas spread container (BackFace dimensions = rect.{w,h}).
+          // Items inside have their positions baked at zoomFactor-applied
+          // pixel coords, so the cloned root needs `width: rect.width` for them
+          // to land in the same place as the live PlayerCanvas. transform:none
+          // removes the thumbnail's scale-down — content renders at native
+          // (unzoomed-by-thumbnail) pixels, which is exactly where PlayerCanvas
+          // also renders them.
+          cloned.style.transform = 'none';
+          cloned.style.width = `${rect.width}px`;
+          cloned.style.height = `${rect.height}px`;
+          cloned.style.position = 'absolute';
+          cloned.style.top = '0';
+          cloned.style.left = '0';
+          log.debug('startTurn', 'thumbnail back-clone ready (eager)', {
+            toSpreadId: req.toSpreadId,
+          });
+          return cloned;
+        } catch (err) {
+          log.warn('startTurn', 'thumbnail clone failed — fall back to rAF snapshot', {
+            error: String(err),
+            toSpreadId: req.toSpreadId,
+          });
+          return null;
+        }
+      })();
+
+      setVisual({ snapshot, containerRect: rect, backNode: eagerBackNode });
       setState({
         phase: 'flipping',
         direction: req.direction,
@@ -335,8 +396,13 @@ export function useSpreadTurnTransition(
         });
       }
 
-      // Schedule NEW-content snapshot for the BackFace so the user sees NEW
-      // content rotate in past midpoint. Wait 2 rAFs:
+      // Skip the 2-rAF PlayerCanvas snapshot when the thumbnail clone path
+      // already supplied a back node — the back face is fully decoded and
+      // ready synchronously, no need to pay for a second snapshot.
+      if (eagerBackNode) return;
+
+      // Fallback: 2-rAF NEW-content snapshot for the BackFace so the user sees
+      // NEW content rotate in past midpoint. Wait 2 rAFs:
       //   rAF #1: React commits the post-onSwap render
       //   rAF #2: browser paints; container DOM now reflects NEW spread
       // First-half tween is duration/2 (~450ms at default 900ms) — plenty of
