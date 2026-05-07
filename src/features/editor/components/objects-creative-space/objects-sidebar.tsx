@@ -561,6 +561,12 @@ export function ObjectsSidebar({
               "z-index": newZIndex,
             });
             break;
+          case "composite":
+            // Slice cascades z-index to variant children (image/auto_pic).
+            actions.updateRetouchComposite(selectedSpreadId, entry.id, {
+              "z-index": newZIndex,
+            });
+            break;
         }
       });
 

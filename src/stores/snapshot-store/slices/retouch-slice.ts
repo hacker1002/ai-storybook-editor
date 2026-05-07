@@ -414,14 +414,18 @@ export const createRetouchSlice: StateCreator<
       });
       Object.assign(composite, updates);
 
-      // ⚡ WRITE-THROUGH visibility cascade (Session 1 D5):
-      // Propagate editor_visible / player_visible to all variant items in same spread.
+      // ⚡ WRITE-THROUGH cascade (Session 1 D5 + reorder bugfix):
+      // Propagate editor_visible / player_visible / z-index to all variant
+      // items. Variants render at their own z-index, so the composite layer
+      // would drift if children were not kept in sync on reorder.
       const hasEditorVis = Object.prototype.hasOwnProperty.call(updates, 'editor_visible');
       const hasPlayerVis = Object.prototype.hasOwnProperty.call(updates, 'player_visible');
+      const hasZIndex = Object.prototype.hasOwnProperty.call(updates, 'z-index');
 
-      if (hasEditorVis || hasPlayerVis) {
+      if (hasEditorVis || hasPlayerVis || hasZIndex) {
         const editorVis = updates.editor_visible;
         const playerVis = updates.player_visible;
+        const zIndex = updates['z-index'];
         for (const variant of composite.variants) {
           if (variant.type === 'image') {
             const img = spread.images.find((i) => i.id === variant.id);
@@ -431,20 +435,23 @@ export const createRetouchSlice: StateCreator<
               // we must NOT clear the cascaded field.
               if (hasEditorVis && editorVis !== undefined) img.editor_visible = editorVis;
               if (hasPlayerVis && playerVis !== undefined) img.player_visible = playerVis;
+              if (hasZIndex && zIndex !== undefined) img['z-index'] = zIndex;
             }
           } else if (variant.type === 'auto_pic') {
             const ap = spread.auto_pics?.find((a) => a.id === variant.id);
             if (ap) {
               if (hasEditorVis && editorVis !== undefined) ap.editor_visible = editorVis;
               if (hasPlayerVis && playerVis !== undefined) ap.player_visible = playerVis;
+              if (hasZIndex && zIndex !== undefined) ap['z-index'] = zIndex;
             }
           }
         }
-        log.debug('updateRetouchComposite', 'cascade visibility', {
+        log.debug('updateRetouchComposite', 'cascade', {
           spreadId,
           compositeId,
           editorVis: hasEditorVis ? editorVis : undefined,
           playerVis: hasPlayerVis ? playerVis : undefined,
+          zIndex: hasZIndex ? zIndex : undefined,
           variantCount: composite.variants.length,
         });
       }
