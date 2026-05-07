@@ -28,20 +28,27 @@ import {
   useBookMusic,
   useBookSound,
   useBookNarratorVolume,
+  useBookEffects,
 } from '@/stores/book-store';
 import { usePlayerAudioStore } from '@/stores/player-audio-store';
 import { PlayableEditorHeader } from "./playable-editor-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
 import { AnimationEditorCanvas } from "./animation-editor-canvas";
 import { RemixEditorCanvas } from "./remix-editor-canvas";
-import { PlayerCanvas } from "./player-canvas";
+import { PlayerCanvas, type PlayerCanvasHandle } from "./player-canvas";
 import { BranchPathModal } from "./branch-path-modal";
 import { FirstGestureGate } from "./first-gesture-gate";
 import { PlayerAudioMixerHost } from "./audio/player-audio-mixer-host";
 import { PlayerSpreadPreloadHost } from "./preload/player-spread-preload-host";
 import { BookBackgroundMusicPlayer } from "./audio/book-background-music-player";
 import { useMusicMediaUrl } from "./audio/use-music-media-url";
+import { useSoundMediaUrl } from "./audio/use-sound-media-url";
+import { createMixedAudio } from "./audio/create-mixed-audio";
 import type { BookAudioSettings } from "./audio/audio-mixer-types";
+import { useSpreadTurnTransition } from "./hooks/use-spread-turn-transition";
+import { resolveTransitionStrategy } from "./transition/spread-turn-strategy";
+import { SpreadTurnOverlay } from "./transition/spread-turn-overlay";
+import type { TurnDirection } from "./transition/spread-turn-types";
 
 // === Types ===
 
@@ -163,6 +170,10 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // (BookBackgroundMusicPlayer + PlayerCanvas) for declarative <audio> nodes.
   const rootRef = useRef<HTMLDivElement>(null);
 
+  // Imperative handle to PlayerCanvas — exposes `getSpreadContainer()` for the
+  // spread-turn transition snapshot. Wired into `useSpreadTurnTransition` below.
+  const playerCanvasHandleRef = useRef<PlayerCanvasHandle>(null);
+
   // === Audio mixer inputs ===
   const masterVolume = useVolume();
   const isMuted = useIsMuted();
@@ -182,6 +193,27 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   }), [music, sound, narratorVolumeScale]);
 
   const bgmMediaUrl = useMusicMediaUrl(music?.background_id ?? null);
+  // Resolved SFX URL for spread transition. Played fire-and-forget at the start
+  // of every `swapWithTurn` (both turn-animation and instant-bypass paths) so
+  // navigation feedback stays consistent regardless of effects strategy.
+  const transitionSfxUrl = useSoundMediaUrl(sound?.transition_id ?? null);
+  const transitionSfxUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    transitionSfxUrlRef.current = transitionSfxUrl;
+  }, [transitionSfxUrl]);
+  const playTransitionSfx = useCallback(() => {
+    const url = transitionSfxUrlRef.current;
+    if (!url) return;
+    try {
+      const sfx = createMixedAudio(url, 'sfx');
+      sfx.play().catch((err) => {
+        log.debug('playTransitionSfx', 'play_rejected', { error: String(err) });
+        sfx.remove();
+      });
+    } catch (err) {
+      log.warn('playTransitionSfx', 'create_failed', { error: String(err) });
+    }
+  }, []);
 
   // Centralized first-gesture handler: resume the AudioContext (flushing the
   // autoStartQueue inside playerAudioStore) BEFORE flipping the gate state.
@@ -262,6 +294,61 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const playbackActions = usePlaybackActions();
   const { pushSpreadHistory, popSpreadHistory, setCurrentSection } = playbackActions;
 
+  // === Spread turn transition ===
+  // `transition_type` lives in book.effects (JSONB). Default to 'turn' for
+  // legacy books with null effects so they pick up the new behavior.
+  const bookEffects = useBookEffects();
+  const transitionStrategy = useMemo(
+    () => resolveTransitionStrategy(bookEffects?.transition_type ?? null),
+    [bookEffects?.transition_type],
+  );
+  // Hook is only "enabled" while the player canvas is visible — editor canvases
+  // don't navigate via spread-turn (instant swap is correct for design / remix).
+  const turnEnabled =
+    activeCanvas === 'player' && transitionStrategy === 'turn';
+
+  const turn = useSpreadTurnTransition({
+    enabled: turnEnabled,
+    spreadContainerGetter: () =>
+      playerCanvasHandleRef.current?.getSpreadContainer() ?? null,
+    onSwap: (toId) => applySelectedSpreadChange(toId),
+  });
+
+  /** Centralized swap helper: dispatch through turn transition when enabled,
+   *  otherwise fall through to instant `applySelectedSpreadChange`. The hook's
+   *  bypass paths (reduced-motion, debug-disable, no container, snapshot fail)
+   *  also call `applySelectedSpreadChange` via `onSwap`, so callers are guaranteed
+   *  exactly-once swap semantics regardless of strategy. */
+  const swapWithTurn = useCallback(
+    (targetId: string, direction: TurnDirection, fromId: string | null) => {
+      // No-op when source === target (re-click on same spread); skip SFX too.
+      if (fromId && fromId === targetId) return;
+      playTransitionSfx();
+      if (turnEnabled) {
+        turn.startTurn({
+          fromSpreadId: fromId ?? '',
+          toSpreadId: targetId,
+          direction,
+        });
+        // Dev-only invariant: hook must commit `onSwap` synchronously inside
+        // `startTurn`, so by the time we return here the caller's pending
+        // selectedSpreadId state should match `targetId`. We can't read state
+        // mid-render, so we re-call applySelectedSpreadChange's logic? No — we
+        // simply assert that `targetId` is non-empty (cheap sanity guard); the
+        // real synchronous-swap proof lives in the hook's startTurn body.
+        if (import.meta.env.DEV) {
+          console.assert(
+            typeof targetId === 'string' && targetId.length > 0,
+            'swapWithTurn invariant: targetId must be a non-empty string',
+          );
+        }
+      } else {
+        applySelectedSpreadChange(targetId);
+      }
+    },
+    [turnEnabled, turn, applySelectedSpreadChange, playTransitionSfx],
+  );
+
   // === Derived State ===
   const selectedSpread = spreads.find((s) => s.id === effectiveSelectedSpreadId);
   const hasPrevious = spreadHistories.length > 1;
@@ -300,7 +387,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       const entry = popSpreadHistory();
       if (entry) {
         log.debug('handleSkipSpread', 'back to prev', { spreadId: entry.spreadId });
-        applySelectedSpreadChange(entry.spreadId);
+        swapWithTurn(entry.spreadId, 'prev', effectiveSelectedSpreadId);
       }
       return;
     }
@@ -320,7 +407,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         if (targetId) {
           log.debug('handleSkipSpread', 'branch auto-resolved', { targetId, playEdition });
           pushSpreadHistory(targetId, currentSection);
-          applySelectedSpreadChange(targetId);
+          swapWithTurn(targetId, 'next', effectiveSelectedSpreadId);
         }
       }
       return;
@@ -328,9 +415,9 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     if (result.type === 'spread') {
       log.debug('handleSkipSpread', 'next spread', { targetId: result.id });
       pushSpreadHistory(result.id, currentSection);
-      applySelectedSpreadChange(result.id);
+      swapWithTurn(result.id, 'next', effectiveSelectedSpreadId);
     }
-  }, [spreadHistories, selectedSpread, spreads, currentSection, playEdition, effectiveSelectedSpreadId, popSpreadHistory, pushSpreadHistory, applySelectedSpreadChange]);
+  }, [spreadHistories, selectedSpread, spreads, sections, currentSection, playEdition, effectiveSelectedSpreadId, popSpreadHistory, pushSpreadHistory, swapWithTurn]);
 
   // === Branch Modal Handlers ===
 
@@ -340,8 +427,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     setPendingBranchSpreadId(null);
     setCurrentSection(section);
     pushSpreadHistory(targetSpreadId, section);
-    applySelectedSpreadChange(targetSpreadId);
-  }, [setCurrentSection, pushSpreadHistory, applySelectedSpreadChange]);
+    swapWithTurn(targetSpreadId, 'next', effectiveSelectedSpreadId);
+  }, [setCurrentSection, pushSpreadHistory, swapWithTurn, effectiveSelectedSpreadId]);
 
   const handleBranchDismiss = useCallback(() => {
     setShowBranchModal(false);
@@ -355,20 +442,25 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       log.info('handleBranchDismiss', 'dismissed, following default branch', { targetId: section.start_spread_id, sectionId: section.id });
       setCurrentSection(section);
       pushSpreadHistory(section.start_spread_id, section);
-      applySelectedSpreadChange(section.start_spread_id);
+      swapWithTurn(section.start_spread_id, 'next', effectiveSelectedSpreadId);
     } else {
       log.debug('handleBranchDismiss', 'dismissed, no default branch section found');
     }
-  }, [selectedSpread, sections, setCurrentSection, pushSpreadHistory, applySelectedSpreadChange]);
+  }, [selectedSpread, sections, setCurrentSection, pushSpreadHistory, swapWithTurn, effectiveSelectedSpreadId]);
 
   // === Spread Selection Handler (thumbnail) ===
   const handleSpreadClick = useCallback(
     (spreadId: string) => {
       log.debug('handleSpreadClick', 'thumbnail clicked', { spreadId });
+      // Compute direction from index delta — forward jump → 'next', back jump → 'prev'.
+      // Same-spread click is a no-op for swapWithTurn (caller upstream).
+      const curIdx = spreads.findIndex((s) => s.id === effectiveSelectedSpreadId);
+      const newIdx = spreads.findIndex((s) => s.id === spreadId);
+      const direction: TurnDirection = newIdx >= curIdx ? 'next' : 'prev';
       pushSpreadHistory(spreadId, currentSection);
-      applySelectedSpreadChange(spreadId);
+      swapWithTurn(spreadId, direction, effectiveSelectedSpreadId);
     },
-    [currentSection, pushSpreadHistory, applySelectedSpreadChange]
+    [currentSection, pushSpreadHistory, swapWithTurn, spreads, effectiveSelectedSpreadId]
   );
 
   // === Spread Complete Handler ===
@@ -381,12 +473,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         playbackActions.pause();
         return;
       }
+      const fromId = effectiveSelectedSpreadId;
       setTimeout(() => {
         pushSpreadHistory(targetId, currentSection);
-        applySelectedSpreadChange(targetId);
+        swapWithTurn(targetId, 'next', fromId);
       }, 1000);
     },
-    [playMode, selectedSpread, spreads, sections, currentSection, playbackActions, pushSpreadHistory, applySelectedSpreadChange]
+    [playMode, selectedSpread, spreads, sections, currentSection, playbackActions, pushSpreadHistory, swapWithTurn, effectiveSelectedSpreadId]
   );
 
   // === Keyboard Shortcuts ===
@@ -522,6 +615,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
                 preload BEFORE the user clicks the gesture gate. */}
             <BookBackgroundMusicPlayer mediaUrl={bgmMediaUrl} />
             <PlayerCanvas
+              ref={playerCanvasHandleRef}
               spread={selectedSpread}
               zoomLevel={effectiveZoomLevel}
               playMode={playMode}
@@ -537,6 +631,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
               pageNumbering={pageNumbering}
               isSharePreview={isSharePreview}
             />
+            {/* Spread-turn overlay — portal'd under document.body, sits above the
+                canvas (z=50) but below FirstGestureGate (z=100). Mounts only
+                while a turn is in flight; the hook returns null overlayProps
+                otherwise. */}
+            {turn.overlayProps && (
+              <SpreadTurnOverlay {...turn.overlayProps} />
+            )}
             {/* Gate overlay (z-100) covers the canvas until the user gesture is
                 captured. handleGestureCapture awaits resumeContext() to flush
                 queued autoplays, then flips the flag to unmount the gate. */}

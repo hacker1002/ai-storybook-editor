@@ -47,6 +47,7 @@ export {
   type AudioStoreState,
   type CreateAudioStoreOptions,
 } from './hooks/create-audio-store';
+export { useAudioMediaUrl, type AudioStoreHook } from './hooks/use-audio-media-url';
 
 export {
   AudioLibraryHeader,

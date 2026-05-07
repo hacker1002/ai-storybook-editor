@@ -1,7 +1,7 @@
 // player-canvas.tsx - Animation playback canvas wired to Zustand store + GSAP engine hook
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
   EditableTextbox,
   EditableImage,
@@ -54,6 +54,13 @@ import { MobileFullPageZoomOverlay } from "./mobile-full-page-zoom-overlay";
 // === Types ===
 export type FullPageMode = "spread" | "left" | "right";
 
+/** Imperative handle exposed via `forwardRef`. Currently exposes a read-only
+ *  getter for the spread container DOM — consumed by `useSpreadTurnTransition`
+ *  (Phase 5/6) to snapshot the spread before a turn animation. */
+export interface PlayerCanvasHandle {
+  getSpreadContainer: () => HTMLElement | null;
+}
+
 // === Constants ===
 const RAPID_NEXT_THRESHOLD = 150; // ms
 
@@ -104,22 +111,25 @@ const CLICK_HINT_STYLE = `
 }
 `;
 
-export function PlayerCanvas({
-  spread,
-  zoomLevel,
-  playMode,
-  playEdition,
-  hasNext,
-  hasPrevious,
-  onSpreadComplete,
-  onSkipSpread,
-  onPlayModeChange,
-  onEditionChange,
-  availableEditions,
-  availableLanguages,
-  pageNumbering,
-  isSharePreview = false,
-}: PlayerCanvasProps) {
+export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(function PlayerCanvas(
+  {
+    spread,
+    zoomLevel,
+    playMode,
+    playEdition,
+    hasNext,
+    hasPrevious,
+    onSpreadComplete,
+    onSkipSpread,
+    onPlayModeChange,
+    onEditionChange,
+    availableEditions,
+    availableLanguages,
+    pageNumbering,
+    isSharePreview = false,
+  },
+  ref,
+) {
   // === Responsive hooks (share preview only) ===
   const orientation = usePlayerOrientation();
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -203,6 +213,17 @@ export function PlayerCanvas({
   // TODO(quiz-v2): wire back a quiz player UI for 5 quiz types — previously PlayQuizModal.
   // handleQuizComplete() đã sẵn sàng để re-use khi UI mới hoàn thành quiz step.
   void handleQuizComplete;
+
+  // === Imperative handle — exposes the spread container DOM to PlayableSpreadView
+  // for the spread-turn transition (Phase 6). Read-only getter — callers cannot
+  // mutate the underlying ref. `[]` deps + lazy `.current` read avoids stale closure. ===
+  useImperativeHandle(
+    ref,
+    () => ({
+      getSpreadContainer: () => spreadContainerRef.current,
+    }),
+    [spreadContainerRef],
+  );
 
   const { width: scaledWidth, height: scaledHeight } = getScaledDimensions(
     canvasWidth,
@@ -551,6 +572,7 @@ export function PlayerCanvas({
           {/* Spread container */}
           <div
             ref={spreadContainerRef}
+            data-full-page-mode={fullPageMode}
             className="relative bg-white shadow-lg"
             style={{
               width: scaledWidth,
@@ -853,4 +875,5 @@ export function PlayerCanvas({
       {/* Quiz modal: player UI cho 5 quiz types sẽ được design lại sau Quiz v2 migration */}
     </div>
   );
-}
+});
+PlayerCanvas.displayName = "PlayerCanvas";

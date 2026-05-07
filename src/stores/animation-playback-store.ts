@@ -35,6 +35,10 @@ interface PlaybackState {
   quizLanguage: string;      // language code for quiz content (e.g. 'en_US')
   spreadHistories: SpreadHistoryEntry[]; // breadcrumb trail for branching navigation
   currentSection: Section | null;        // active section in current player context
+  /** Spread-turn transition gate — when `true`, autoplay-driven effects in
+   *  `usePlayerGsapEngine` must NOT kick off (spec §7). Cleared by
+   *  `resumeAutoplay()` after the turn finishes. Transient — reset on `resetStore`. */
+  autoplaySuspended: boolean;
 }
 
 interface PlaybackActions {
@@ -65,6 +69,12 @@ interface PlaybackActions {
   decrementEffectLoopRemaining: (order: number) => void;
   /** Clear single entry when `order` provided, or wipe map otherwise. */
   clearEffectLoopRemaining: (order?: number) => void;
+  /** Set `autoplaySuspended = true` — gates autoplay-driven effects during a turn.
+   *  Idempotent; logs at `debug` if already suspended. */
+  suspendAutoplay: () => void;
+  /** Set `autoplaySuspended = false` — releases the gate.
+   *  Idempotent; logs at `debug` if already resumed. */
+  resumeAutoplay: () => void;
 }
 
 // === Initial state ===
@@ -87,6 +97,7 @@ const INITIAL_STATE: PlaybackState = {
   quizLanguage: 'en_US',
   spreadHistories: [],
   currentSection: null,
+  autoplaySuspended: false,
 };
 
 // === Store creation ===
@@ -433,6 +444,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           effectLoopRemaining: new Map(),
           activeAnimationOrders: [],
           maxActivatedOrder: -1,
+          autoplaySuspended: false, // explicit — never persist suspension across remount
         });
       },
 
@@ -487,6 +499,28 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         next.delete(order);
         set({ effectLoopRemaining: next });
       },
+
+      // ── AUTOPLAY SUSPEND / RESUME — used by spread-turn transition (spec §7) ──
+
+      suspendAutoplay: () => {
+        const prev = get().autoplaySuspended;
+        if (prev) {
+          log.debug('suspendAutoplay', 'already suspended — noop');
+          return;
+        }
+        log.info('suspendAutoplay', 'suspending', { previous: prev });
+        set({ autoplaySuspended: true });
+      },
+
+      resumeAutoplay: () => {
+        const prev = get().autoplaySuspended;
+        if (!prev) {
+          log.debug('resumeAutoplay', 'already resumed — noop');
+          return;
+        }
+        log.info('resumeAutoplay', 'resuming', { previous: prev });
+        set({ autoplaySuspended: false });
+      },
     }), {
         name: 'playback-preferences',
         partialize: (state) => ({
@@ -526,6 +560,10 @@ export const useCurrentSection = () => usePlaybackStore((s) => s.currentSection)
 export const useActiveAnimationOrders = () => usePlaybackStore((s) => s.activeAnimationOrders);
 export const useMaxActivatedOrder = () => usePlaybackStore((s) => s.maxActivatedOrder);
 
+/** Spread-turn transition gate — read by `usePlayerGsapEngine` to skip autoplay
+ *  effects while a turn is mid-flight (spec §7). */
+export const useAutoplaySuspended = () => usePlaybackStore((s) => s.autoplaySuspended);
+
 export const usePlaybackActions = () =>
   usePlaybackStore(
     useShallow((s) => ({
@@ -549,5 +587,7 @@ export const usePlaybackActions = () =>
       popSpreadHistory: s.popSpreadHistory,
       clearSpreadHistory: s.clearSpreadHistory,
       setCurrentSection: s.setCurrentSection,
+      suspendAutoplay: s.suspendAutoplay,
+      resumeAutoplay: s.resumeAutoplay,
     }))
   );

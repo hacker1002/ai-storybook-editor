@@ -13,6 +13,7 @@ import {
   usePlayMode,
   useIsPlaying,
   usePlaybackActions,
+  useAutoplaySuspended,
 } from '@/stores/animation-playback-store';
 import { addTweenToTimeline } from '../animation-tween-builders';
 import { getTextboxContentForLanguage } from '../../../utils/textbox-helpers';
@@ -110,6 +111,12 @@ export function usePlayerGsapEngine({
   const playMode = usePlayMode();
   const isPlaying = useIsPlaying();
   const playbackActions = usePlaybackActions();
+  // Autoplay suspended flag — driven by `useSpreadTurnTransition`. While true,
+  // we skip kicking off NEW timelines (rebuild on spread change, manual step
+  // play, auto play resume) so the GSAP timeline for the incoming spread does
+  // not start until the visual page-turn completes. We still allow cleanup +
+  // applyInitialStates so the new spread's DOM is ready underneath the overlay.
+  const autoplaySuspended = useAutoplaySuspended();
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
 
@@ -586,6 +593,16 @@ export function usePlayerGsapEngine({
 
     prevStepIndexRef.current = -1;
 
+    // Spread-turn in flight — overlay is masking the new spread, do NOT kick
+    // off the full timeline yet. Effect #3 (auto play toggle) will re-fire
+    // once `autoplaySuspended` flips back to false at settle and rebuild then.
+    if (autoplaySuspended) {
+      log.debug('effectSpreadChange', 'autoplay suspended — skip rebuild');
+      return () => {
+        cancelPendingRaf();
+      };
+    }
+
     // Auto mode: rebuild full timeline on spread/edition change if already playing
     if (playMode === 'auto' && isPlaying) {
       pendingRafRef.current = requestAnimationFrame(() => {
@@ -598,11 +615,17 @@ export function usePlayerGsapEngine({
       cancelPendingRaf();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spread.id, editionFilteredAnimations]);
+  }, [spread.id, editionFilteredAnimations, autoplaySuspended]);
 
   // === Lifecycle: Phase change → build step timeline (manual/off mode) ===
   useEffect(() => {
     if (playMode !== 'off') return;
+    // Skip step build while a spread-turn is animating; user-driven Next will
+    // re-fire this effect on the next phase tick after settle.
+    if (autoplaySuspended) {
+      log.debug('effectManualPlay', 'autoplay suspended — skip step build');
+      return;
+    }
     if (phase !== 'playing' || currentStepIndex < 0) {
       // Keep ref in sync even when skipped — prevents spurious USER_BACK detection
       // when userBack sets phase=awaiting_next (effect skips) and later userNext plays
@@ -659,7 +682,7 @@ export function usePlayerGsapEngine({
     const step = steps[currentIdx];
     if (step) buildAndPlayStepTimeline(step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, currentStepIndex, playMode]);
+  }, [phase, currentStepIndex, playMode, autoplaySuspended]);
 
   // === Lifecycle: Auto mode — play toggle or mode transition ===
   useEffect(() => {
@@ -677,6 +700,18 @@ export function usePlayerGsapEngine({
     }
 
     if (playMode !== 'auto') return;
+
+    // Spread-turn in flight — pause any running timeline + media so audio /
+    // animations don't bleed into the flip. When `autoplaySuspended` flips
+    // back to false at settle, this effect re-fires and rebuilds normally.
+    if (autoplaySuspended) {
+      log.debug('effectAutoPlay', 'autoplay suspended — pause + skip');
+      timelineRef.current?.pause();
+      pauseAllMedia();
+      return () => {
+        cancelPendingRaf();
+      };
+    }
 
     if (isPlaying) {
       // Rebuild full timeline when: just switched to auto mode (off→auto),
@@ -702,7 +737,7 @@ export function usePlayerGsapEngine({
       cancelPendingRaf();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, playMode]);
+  }, [isPlaying, playMode, autoplaySuspended]);
 
   // === Lifecycle: Manual (off) mode pause/resume ===
   useEffect(() => {
