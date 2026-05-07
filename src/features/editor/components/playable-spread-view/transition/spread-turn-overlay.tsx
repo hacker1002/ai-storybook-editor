@@ -94,7 +94,7 @@ export function SpreadTurnOverlay({
       flippingMountedRef.current = flippingNode;
     }
 
-    if (layout === 'spread' && staticNode) {
+    if (staticNode) {
       if (!staticEl) {
         log.warn('mountSnapshot', 'static layer ref not ready — cannot append staticNode');
       } else {
@@ -165,22 +165,12 @@ export function SpreadTurnOverlay({
   // through to the opposite side. Inverting the clip places the back content on
   // the INCOMING half (where a real page-flip puts the back of the turned page),
   // matching the new spread underneath when the overlay unmounts.
-  const isSpread = layout === 'spread';
-  const flippingClip = !isSpread
-    ? 'none'
-    : direction === 'next'
-      ? 'inset(0 0 0 50%)'
-      : 'inset(0 50% 0 0)';
-  const backFlippingClip = !isSpread
-    ? 'none'
-    : direction === 'next'
-      ? 'inset(0 50% 0 0)'
-      : 'inset(0 0 0 50%)';
-  const staticClip = !isSpread
-    ? 'none'
-    : direction === 'next'
-      ? 'inset(0 50% 0 0)'
-      : 'inset(0 0 0 50%)';
+  // Behavior is identical across layouts (single-* renders the same way as spread);
+  // clip-paths depend only on direction. In fullPageMode the flipping half may be
+  // off-screen — accepted as a deliberate trade-off for behavioral consistency.
+  const flippingClip = direction === 'next' ? 'inset(0 0 0 50%)' : 'inset(0 50% 0 0)';
+  const backFlippingClip = direction === 'next' ? 'inset(0 50% 0 0)' : 'inset(0 0 0 50%)';
+  const staticClip = direction === 'next' ? 'inset(0 50% 0 0)' : 'inset(0 0 0 50%)';
 
   return createPortal(
     <div
@@ -202,17 +192,15 @@ export function SpreadTurnOverlay({
         perspective: '1200px',
       }}
     >
-      {isSpread && (
-        <div
-          ref={staticLayerRef}
-          data-testid="spread-turn-static-layer"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            clipPath: staticClip,
-          }}
-        />
-      )}
+      <div
+        ref={staticLayerRef}
+        data-testid="spread-turn-static-layer"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          clipPath: staticClip,
+        }}
+      />
       <div
         ref={flippingCardRef}
         data-testid="spread-turn-flipping-card"

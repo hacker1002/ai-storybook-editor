@@ -285,29 +285,14 @@ export function useSpreadTurnTransition(
         return;
       }
 
-      // Resolve layout from container's data attribute (set by PlayerCanvas).
-      // 3-way mapping: 'spread' → spread, 'left' → single-left, 'right' → single-right.
-      // Defensive fallback per spec §3.4: missing/unknown → 'single-right' + warn.
+      // Container DOM is ALWAYS the full spread (scaledWidth × scaledHeight),
+      // regardless of fullPageMode (outer wrapper just clips one half off-screen).
+      // → animation behavior is identical across modes; pivot stays at gutter.
+      // If the flipping half is off-screen in fullPageMode, that's accepted —
+      // we don't reshape the animation to chase the visible half.
       const fullPageMode = container.dataset.fullPageMode;
-      let layout: TurnLayout;
-      switch (fullPageMode) {
-        case 'spread':
-          layout = 'spread';
-          break;
-        case 'left':
-          layout = 'single-left';
-          break;
-        case 'right':
-          layout = 'single-right';
-          break;
-        default:
-          log.warn('startTurn', 'turn_unknown_layout — defaulting to single-right', {
-            fullPageMode,
-          });
-          layout = 'single-right';
-          break;
-      }
-      log.debug('startTurn', 'layout resolved', { layout, fullPageMode });
+      const layout: TurnLayout = 'spread';
+      log.debug('startTurn', 'layout resolved (forced spread)', { layout, fullPageMode });
 
       // Capture geometry BEFORE snapshot so the DOM clone cost doesn't skew the rect.
       const rect = container.getBoundingClientRect();
@@ -332,11 +317,9 @@ export function useSpreadTurnTransition(
       // <img> elements are live in DOM and have decoded bitmaps cached, so
       // cloning them avoids the FOUC that comes from cloning a freshly-mounted
       // PlayerCanvas where img elements are still loading/decoding. Falls back
-      // to the rAF-delayed PlayerCanvas snapshot for:
-      //   - single-page layouts (thumbnail is always DPS — wrong content shape)
-      //   - share-preview / contexts where the rail is hidden / not in DOM
+      // to the rAF-delayed PlayerCanvas snapshot for share-preview / contexts
+      // where the rail is hidden / not in DOM.
       const eagerBackNode = (() => {
-        if (layout !== 'spread') return null;
         const thumb = thumbnailContainerGetterRef.current?.(req.toSpreadId);
         if (!thumb) return null;
         try {
@@ -481,10 +464,7 @@ export function useSpreadTurnTransition(
     const baseDuration = duration ?? DEFAULT_TURN_DURATION_MS;
     const effectiveMs = debugSlow ? baseDuration * 4 : baseDuration;
 
-    // Pivot strategy: shared map keeps overlay CSS + GSAP set in sync.
-    //   spread       → 50% 50% (gutter)
-    //   single-left  → 100% 50% (right edge = spine side of left page)
-    //   single-right → 0% 50% (left edge = spine side of right page)
+    // Pivot always at gutter (50% 50% of full spread).
     if (!state.layout) {
       log.warn('buildTimeline', 'phase=flipping but layout=null — abort');
       return;

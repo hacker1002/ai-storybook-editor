@@ -16,7 +16,12 @@ const STRIP_SELECTOR = 'audio, video, script, canvas';
  *  on the cloned tree cannot fire from the overlay. Extend as needed. */
 const STRIP_ATTRS = ['onclick', 'onmouseenter', 'onmouseleave', 'onload', 'onerror'];
 
-/** Deep-clone the container and strip media + inline event handlers. */
+/** Deep-clone the container and strip media + inline event handlers.
+ *  Also resets the root clone's transform/transition: in fullPageMode the live
+ *  container has `translateX(panOffsetX)` baked inline (to pan visible page
+ *  inside the wrapper), but the overlay positions us at the post-transform
+ *  rect already and wants the clone to fill its box without any further pan —
+ *  otherwise the clone's content lands outside the overlay's visible region. */
 function deepCloneAndStrip(container: HTMLElement): HTMLElement {
   const clone = container.cloneNode(true) as HTMLElement;
 
@@ -30,16 +35,23 @@ function deepCloneAndStrip(container: HTMLElement): HTMLElement {
     });
   });
 
+  clone.style.transform = 'none';
+  clone.style.transition = 'none';
+  // Drop the live container's `shadow-lg` — during 3D rotation the box-shadow
+  // rotates with the box and projects as a transient bottom band at non-zero
+  // tilt angles. The live spread underneath still owns the resting shadow.
+  clone.style.boxShadow = 'none';
+
   return clone;
 }
 
 /**
- * Clone the spread container into off-DOM node(s) ready to be appended into the
+ * Clone the spread container into off-DOM nodes ready to be appended into the
  * overlay's layers. Returns `null` if the container is missing — caller should
  * bypass the transition in that case.
  *
- * - `layout === 'spread'`: returns 2 independent clones (`staticNode` + `flippingNode`).
- * - otherwise: 1 clone (`flippingNode`); `staticNode` is `null`.
+ * Always returns 2 independent clones (StaticLayer + FlippingCard each need
+ * their own — a Node cannot have two parents). Layout-uniform behavior.
  */
 export function takeSnapshot(
   container: HTMLElement | null,
@@ -52,7 +64,7 @@ export function takeSnapshot(
   }
 
   const flippingNode = deepCloneAndStrip(container);
-  const staticNode = layout === 'spread' ? deepCloneAndStrip(container) : null;
+  const staticNode = deepCloneAndStrip(container);
 
   const dimensions = {
     width: container.offsetWidth,
@@ -62,7 +74,6 @@ export function takeSnapshot(
   log.debug('takeSnapshot', 'snapshot ready', {
     direction,
     layout,
-    hasStatic: staticNode !== null,
     width: dimensions.width,
     height: dimensions.height,
   });

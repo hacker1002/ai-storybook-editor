@@ -24,14 +24,15 @@ export const EASE_HALF_FIRST = 'power2.in';
 /** Easing for the second half of the rotateY tween (±90° → ±180°). */
 export const EASE_HALF_SECOND = 'power2.out';
 
-/** Single source of truth for the flipping card's pivot origin per layout
- *  (spec §3.4 / §3.6). Consumed by the overlay (CSS initial `transformOrigin`)
- *  and by the hook (`gsap.set` override at timeline build). Keep in sync — both
- *  must read from this map to avoid drift when adding a new layout. */
+/** Pivot origin for the flipping card. Always at the gutter (50% 50% of the full
+ *  spread container). In fullPageMode, the spread container is the same width
+ *  as in spread mode — the outer clip-wrapper just hides one half — so the
+ *  gutter remains at 50% of the overlay regardless of fullPageMode.
+ *  Map kept (instead of constant) so callers / overlay can read by layout key. */
 export const LAYOUT_PIVOT_MAP: Record<TurnLayout, string> = {
   spread: '50% 50%',
-  'single-left': '100% 50%',
-  'single-right': '0% 50%',
+  'single-left': '50% 50%',
+  'single-right': '50% 50%',
 };
 
 // ── Debug flags (read at startTurn time on `window`) ────────────────────────

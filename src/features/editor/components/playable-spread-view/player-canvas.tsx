@@ -259,15 +259,11 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
     playbackActions.setPlayEdition(playEdition);
   }, [playEdition, playbackActions]);
 
-  // 2. Reset steps on spread change or edition change & ensure playback starts
-  const prevSpreadIdRef = useRef(spread.id);
+  // 2. Reset steps on spread change or edition change & ensure playback starts.
+  // fullPageMode is preserved across spread changes — user staying on left/right
+  // page should remain on the same side after page turn.
   useEffect(() => {
     setActiveQuizId(null); // Clear any open quiz modal from previous spread
-    // Reset page to left only on actual spread change, not on edition switch
-    if (prevSpreadIdRef.current !== spread.id) {
-      prevSpreadIdRef.current = spread.id;
-      if (fullPageMode !== "spread") setFullPageMode("left");
-    }
     const newSteps = buildAnimationSteps(filteredAnimations, spread, spread.id);
     playbackActions.reset(newSteps);
     playbackActions.play();
