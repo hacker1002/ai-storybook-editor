@@ -1,7 +1,7 @@
 // playable-thumbnail-list.tsx - Footer thumbnail list for spread navigation
 "use client";
 
-import React, { useRef, useEffect, useMemo, useState } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 import { cn } from "@/utils/utils";
 import {
   EditableTextbox,
@@ -16,17 +16,7 @@ import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { useCanvasWidth, useCanvasAspectRatio } from "@/stores/editor-settings-store";
 import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
-import { createLogger } from "@/utils/logger";
 import type { PlayableSpread } from "@/types/playable-types";
-
-const log = createLogger("Editor", "PlayableThumbnailList");
-
-// Window radius for offscreen render-window strategy.
-// ±2 matches `usePlayerSpreadPreload` lookahead so eager spread-turn clone
-// covers rapid 2-step Forward navigation without remounting thumbnails.
-const OFFSCREEN_WINDOW_RADIUS = 2;
-
-export type ThumbnailRenderMode = "visible" | "offscreen";
 
 // === Layout Constants ===
 const LAYOUT = {
@@ -49,18 +39,6 @@ export interface PlayableThumbnailListProps {
   spreads: PlayableSpread[];
   selectedId: string | null;
   onSpreadClick: (spreadId: string) => void;
-  /**
-   * 'visible'   — full footer strip (default editor behavior).
-   * 'offscreen' — collapse footprint via clip-path; render only ±2 window
-   *               around `selectedId` plus monotonic cache. Keeps decoded
-   *               <img> bitmaps in DOM so `useSpreadTurnTransition` can
-   *               eagerly clone via `[data-thumbnail-content]` selector.
-   *
-   * IMPORTANT: do NOT swap clip-path for `display:none`/`visibility:hidden`/
-   * `content-visibility:hidden` — all three suspend image decode and break
-   * the eager clone path (back face flickers blank during page turn).
-   */
-  renderMode?: ThumbnailRenderMode;
 }
 
 // === PlayableThumbnail Item Component ===
@@ -137,13 +115,8 @@ const PlayableThumbnail = React.memo(function PlayableThumbnail({
         className="relative bg-white overflow-hidden w-full"
         style={{ aspectRatio: `${canvasAspectRatio}` }}
       >
-        {/* Scaled Content Container.
-            `data-thumbnail-content` lets `useSpreadTurnTransition` locate this
-            node and clone it into the page-turn BackFace — saves a full
-            re-render + re-decode of the new spread's media, since these
-            <img> elements are already in DOM with decoded bitmaps cached. */}
+        {/* Scaled Content Container. */}
         <div
-          data-thumbnail-content={spread.id}
           style={{
             position: "absolute",
             top: 0,
@@ -327,53 +300,11 @@ export function PlayableThumbnailList({
   spreads,
   selectedId,
   onSpreadClick,
-  renderMode = "visible",
 }: PlayableThumbnailListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isOffscreen = renderMode === "offscreen";
 
-  // === Window+cache (offscreen only) ===
-  // `renderedIds` is monotonic — every id that ever entered the ±2 window stays
-  // mounted until unmount. Worst case = render-all (baseline editor footprint);
-  // win is when user exits early. Cache must NOT evict — re-mounting drops the
-  // decoded bitmap and reintroduces the FOUC bug this mode was added to fix.
-  const [renderedIds, setRenderedIds] = useState<Set<string>>(
-    () => new Set(selectedId ? [selectedId] : [])
-  );
-
+  // Auto-scroll selected thumbnail into view
   useEffect(() => {
-    if (!isOffscreen) return;
-    const idx = spreads.findIndex((s) => s.id === selectedId);
-    if (idx < 0) return;
-
-    const windowIds: string[] = [];
-    for (let offset = -OFFSCREEN_WINDOW_RADIUS; offset <= OFFSCREEN_WINDOW_RADIUS; offset++) {
-      const id = spreads[idx + offset]?.id;
-      if (id) windowIds.push(id);
-    }
-
-    setRenderedIds((prev) => {
-      const next = new Set(prev);
-      const added: string[] = [];
-      for (const id of windowIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          added.push(id);
-        }
-      }
-      if (added.length === 0) return prev; // ref-stable → avoid spurious re-render
-      log.debug("cacheExtend", "added thumbnails to render cache", {
-        added,
-        totalCachedCount: next.size,
-        selectedId,
-      });
-      return next;
-    });
-  }, [selectedId, spreads, isOffscreen]);
-
-  // Auto-scroll selected thumbnail into view (visible only — offscreen has no scroll)
-  useEffect(() => {
-    if (isOffscreen) return;
     if (!selectedId || !scrollContainerRef.current) return;
 
     const selectedElement = scrollContainerRef.current.querySelector(
@@ -387,45 +318,10 @@ export function PlayableThumbnailList({
         inline: "center",
       });
     }
-  }, [selectedId, isOffscreen]);
+  }, [selectedId]);
 
   // Note: Keyboard navigation (ArrowLeft/Right) is handled by parent PlayableSpreadView
   // to avoid double handling and ensure consistent behavior
-
-  if (isOffscreen) {
-    // Offscreen: collapse footprint to 1px via clip-path so eager clone path
-    // (`[data-thumbnail-content]` selector in useSpreadTurnTransition) finds
-    // the decoded bitmap without affecting layout or a11y tree.
-    return (
-      <div
-        aria-hidden
-        inert
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          overflow: "hidden",
-          clipPath: "inset(50%)",
-          pointerEvents: "none",
-        }}
-      >
-        <div ref={scrollContainerRef}>
-          {spreads.map((spread, index) => {
-            if (!renderedIds.has(spread.id)) return null;
-            return (
-              <PlayableThumbnail
-                key={spread.id}
-                spread={spread}
-                index={index}
-                isSelected={spread.id === selectedId}
-                onClick={() => onSpreadClick(spread.id)}
-              />
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div

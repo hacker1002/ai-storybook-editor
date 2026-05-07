@@ -59,17 +59,11 @@ export interface StartTurnParams {
 export interface UseSpreadTurnTransitionParams {
   /** When false, hook is fully bypassed (caller falls back to instant swap). */
   enabled: boolean;
-  /** Lazy DOM accessor — invoked at startTurn time, not at hook init. */
+  /** Lazy DOM accessor — invoked at startTurn time, not at hook init.
+   *  Hook clones this container into the BackFace via 2-rAF post-paint
+   *  scheduling (after React commit + GSAP applyInitialStates), giving
+   *  pixel-exact handoff at settle. */
   spreadContainerGetter: () => HTMLElement | null;
-  /** Optional resolver: returns the thumbnail's scaled-content container for a
-   *  given spread id (the element marked `data-thumbnail-content="<id>"`).
-   *  When provided AND the layout is `'spread'`, the hook clones this node into
-   *  the BackFace — bypassing the 2-rAF wait for PlayerCanvas to render the new
-   *  spread, and reusing already-decoded image bitmaps from the visible
-   *  thumbnail rail. Falls back to a delayed PlayerCanvas snapshot when this
-   *  returns `null` (e.g. share-preview mode where the rail is hidden) OR for
-   *  single-page layouts where the thumbnail (always DPS) doesn't match. */
-  thumbnailContainerGetter?: (spreadId: string) => HTMLElement | null;
   /** Caller swaps `selectedSpreadId` when this fires (mid-flip, at swap point). */
   onSwap: (toSpreadId: string) => void;
   /** Optional completion notifier — fires after rotateY tween settles. */

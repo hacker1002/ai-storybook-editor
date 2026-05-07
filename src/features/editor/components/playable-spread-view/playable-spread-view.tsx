@@ -115,13 +115,10 @@ interface PlayableSpreadViewProps {
   // Page numbering overlay settings (null/undefined = hidden)
   pageNumbering?: PageNumberingSettings | null;
   /**
-   * Thumbnail list rendering strategy.
-   * - 'visible'   (default) — full footer strip, editor behavior.
-   * - 'offscreen'           — collapsed via clip-path with ±2 window+cache;
-   *                           keeps decoded bitmaps in DOM for eager
-   *                           spread-turn clone. Used by share-preview.
+   * When true: hide the thumbnail rail + show book title overlay (share preview UX).
+   * Navigation in this mode is sidebar-only (Next/Prev). Default `false`.
    */
-  thumbnailListMode?: "visible" | "offscreen";
+  isSharePreview?: boolean;
   // Controlled-or-uncontrolled props (ADR-021)
   selectedSpreadId?: string | null;      // controlled from parent
   zoomLevel?: number;                     // controlled from parent
@@ -157,15 +154,11 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   availableEditions,
   availableLanguages,
   pageNumbering,
-  thumbnailListMode = "visible",
+  isSharePreview = false,
   selectedSpreadId: propSelectedSpreadId,
   zoomLevel: propZoomLevel,
   onZoomChange: propOnZoomChange,
 }) => {
-  // Share preview: player mode with thumbnails rendered offscreen (public /share/:slug page).
-  // Coupling preserved from previous `!showThumbnails` semantics — used to gate book title
-  // overlay + sidebar share-preview affordances.
-  const isSharePreview = mode === 'player' && thumbnailListMode === 'offscreen';
 
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
@@ -319,12 +312,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     enabled: turnEnabled,
     spreadContainerGetter: () =>
       playerCanvasHandleRef.current?.getSpreadContainer() ?? null,
-    // Lookup is `document.querySelector` rather than a ref because the
-    // thumbnail rail lives in a sibling subtree (footer); a cross-tree ref
-    // bridge would cost more than this synchronous DOM read. Selector matches
-    // the `data-thumbnail-content` attribute set by `PlayableThumbnail`.
-    thumbnailContainerGetter: (id) =>
-      document.querySelector<HTMLElement>(`[data-thumbnail-content="${id}"]`),
     onSwap: (toId) => applySelectedSpreadChange(toId),
   });
 
@@ -666,24 +653,15 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         )}
       </div>
 
-      {/* Thumbnail List */}
-      {thumbnailListMode === "visible" ? (
+      {/* Thumbnail List — hidden in share-preview mode (sidebar-only navigation). */}
+      {!isSharePreview && (
         <div className="h-[120px] flex-shrink-0">
           <PlayableThumbnailList
             spreads={spreads}
             selectedId={effectiveSelectedSpreadId}
             onSpreadClick={handleSpreadClick}
-            renderMode="visible"
           />
         </div>
-      ) : (
-        // Offscreen: no wrapper height — list collapses footprint via clip-path itself.
-        <PlayableThumbnailList
-          spreads={spreads}
-          selectedId={effectiveSelectedSpreadId}
-          onSpreadClick={handleSpreadClick}
-          renderMode="offscreen"
-        />
       )}
 
       {/* Branch Path Modal */}

@@ -35,6 +35,17 @@ import type { SpreadTurnOverlayProps } from '../transition/spread-turn-overlay';
 
 const log = createLogger('Editor', 'useSpreadTurnTransition');
 
+/** Delay (ms) before cloning the NEW spread into the BackFace. Held off until
+ *  near the midpoint of the flip (default duration 900ms → midpoint at 450ms)
+ *  so that PlayerCanvas has fully re-mounted, items have laid out, and image
+ *  decode has settled. Earlier 2-rAF strategy raced ahead of mount on heavier
+ *  spreads → BackFace inherited an empty container → cream paper bg leaked
+ *  through. Clamped per-call to `halfDuration - SAFETY_MARGIN_MS` so custom-
+ *  duration callers (debug-slow, short transitions) still snapshot before the
+ *  back face becomes visible. */
+const BACK_SNAPSHOT_DELAY_MS = 400;
+const SAFETY_MARGIN_MS = 50;
+
 const INITIAL_STATE: TurnState = {
   phase: 'idle',
   direction: null,
@@ -93,18 +104,10 @@ export function useSpreadTurnTransition(
   const {
     enabled,
     spreadContainerGetter,
-    thumbnailContainerGetter,
     onSwap,
     onComplete,
     duration,
   } = params;
-
-  // Stable ref so the latest getter is visible inside startTurn without
-  // re-creating it (would invalidate the queue-drain microtask).
-  const thumbnailContainerGetterRef = useRef(thumbnailContainerGetter);
-  useEffect(() => {
-    thumbnailContainerGetterRef.current = thumbnailContainerGetter;
-  }, [thumbnailContainerGetter]);
 
   // === State ===
   // The phase / direction / layout / visual state drives re-renders; everything
@@ -118,6 +121,12 @@ export function useSpreadTurnTransition(
   const swappedRef = useRef<boolean>(false);
   /** Max one queued turn — newer requests overwrite older while in-flight. */
   const queuedTurnRef = useRef<StartTurnParams | null>(null);
+  /** Guard for the deferred back-snapshot — prevents setVisual after unmount.
+   *  Set false in the unmount cleanup effect. */
+  const isMountedRef = useRef<boolean>(true);
+  /** Pending back-snapshot timeout — cleared on unmount + cancel + new turn so
+   *  a deferred snapshot from a stale turn cannot overwrite a fresh BackFace. */
+  const backSnapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Layer refs for the overlay (front face, back face, flipping card). The hook
   // owns these so it can drive GSAP transforms imperatively without the overlay
@@ -223,6 +232,10 @@ export function useSpreadTurnTransition(
       timelineRef.current.kill();
       timelineRef.current = null;
     }
+    if (backSnapshotTimerRef.current) {
+      clearTimeout(backSnapshotTimerRef.current);
+      backSnapshotTimerRef.current = null;
+    }
     // Force-commit swap if not yet done so caller's selectedSpreadId is consistent.
     if (!swappedRef.current && live.toSpreadId) {
       try {
@@ -312,51 +325,12 @@ export function useSpreadTurnTransition(
       // selectedSpread changes, see `autoplaySuspended=true` and short-circuit.
       playbackActionsRef.current.suspendAutoplay();
 
-      // Thumbnail-first back snapshot (spec §3.3 Phase 2 enhancement —
-      // realised via reuse of already-rendered thumbnail rail). The thumbnail's
-      // <img> elements are live in DOM and have decoded bitmaps cached, so
-      // cloning them avoids the FOUC that comes from cloning a freshly-mounted
-      // PlayerCanvas where img elements are still loading/decoding. Falls back
-      // to the rAF-delayed PlayerCanvas snapshot for share-preview / contexts
-      // where the rail is hidden / not in DOM.
-      const eagerBackNode = (() => {
-        const thumb = thumbnailContainerGetterRef.current?.(req.toSpreadId);
-        if (!thumb) return null;
-        try {
-          const cloned = thumb.cloneNode(true) as HTMLElement;
-          // Strip media + script tags (same defensive cleanup as the standard
-          // snapshot helper). Inline event handlers don't need stripping here:
-          // the live thumbnail tree is rendered by React with synthetic events,
-          // not inline `onclick=` attrs.
-          cloned.querySelectorAll('audio, video, script, canvas').forEach((n) => n.remove());
-          // Replace the thumbnail's miniaturising scale with one that fits the
-          // PlayerCanvas spread container (BackFace dimensions = rect.{w,h}).
-          // Items inside have their positions baked at zoomFactor-applied
-          // pixel coords, so the cloned root needs `width: rect.width` for them
-          // to land in the same place as the live PlayerCanvas. transform:none
-          // removes the thumbnail's scale-down — content renders at native
-          // (unzoomed-by-thumbnail) pixels, which is exactly where PlayerCanvas
-          // also renders them.
-          cloned.style.transform = 'none';
-          cloned.style.width = `${rect.width}px`;
-          cloned.style.height = `${rect.height}px`;
-          cloned.style.position = 'absolute';
-          cloned.style.top = '0';
-          cloned.style.left = '0';
-          log.debug('startTurn', 'thumbnail back-clone ready (eager)', {
-            toSpreadId: req.toSpreadId,
-          });
-          return cloned;
-        } catch (err) {
-          log.warn('startTurn', 'thumbnail clone failed — fall back to rAF snapshot', {
-            error: String(err),
-            toSpreadId: req.toSpreadId,
-          });
-          return null;
-        }
-      })();
-
-      setVisual({ snapshot, containerRect: rect, backNode: eagerBackNode });
+      // Initial mount: BackFace gets paper-bg placeholder (backNode=null). The
+      // 2-rAF post-paint clone below replaces it with the live PlayerCanvas
+      // spread container, which by then has been re-rendered + had GSAP
+      // applyInitialStates run on it (fade-in items at autoAlpha=0, fly-in
+      // off-screen). That gives pixel-exact handoff at settle — no flicker.
+      setVisual({ snapshot, containerRect: rect, backNode: null });
       setState({
         phase: 'flipping',
         direction: req.direction,
@@ -379,46 +353,60 @@ export function useSpreadTurnTransition(
         });
       }
 
-      // Skip the 2-rAF PlayerCanvas snapshot when the thumbnail clone path
-      // already supplied a back node — the back face is fully decoded and
-      // ready synchronously, no need to pay for a second snapshot.
-      if (eagerBackNode) return;
+      // Deferred back-snapshot. Wait close to the flip midpoint so PlayerCanvas
+      // has fully re-mounted the new spread, items laid out, image decode
+      // settled. Clamp delay against per-call duration so custom-duration
+      // callers (short transitions, debug-slow inverse) still snapshot before
+      // the back face becomes visible at midpoint.
+      const totalMs = duration ?? DEFAULT_TURN_DURATION_MS;
+      const halfMs = totalMs / 2;
+      const delayMs = Math.max(0, Math.min(BACK_SNAPSHOT_DELAY_MS, halfMs - SAFETY_MARGIN_MS));
+      const turnIdAtStart = req.toSpreadId; // race guard
+      const backStartedAt = performance.now();
 
-      // Fallback: 2-rAF NEW-content snapshot for the BackFace so the user sees
-      // NEW content rotate in past midpoint. Wait 2 rAFs:
-      //   rAF #1: React commits the post-onSwap render
-      //   rAF #2: browser paints; container DOM now reflects NEW spread
-      // First-half tween is duration/2 (~450ms at default 900ms) — plenty of
-      // headroom for the snapshot to land before midpoint. If it doesn't (rare),
-      // overlay's BackFace falls back to the paper bg.
-      const turnIdAtStart = req.toSpreadId; // capture for race guard
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          // Race guard: if a new turn started or hook unmounted, skip.
-          if (stateRef.current.toSpreadId !== turnIdAtStart) {
-            log.debug('startTurn', 'back snapshot stale — skip', {
-              expected: turnIdAtStart,
-              current: stateRef.current.toSpreadId,
-            });
-            return;
-          }
-          const liveContainer = spreadContainerGetter();
-          if (!liveContainer) {
-            log.warn('startTurn', 'back snapshot — container missing post-swap', {
-              toSpreadId: turnIdAtStart,
-            });
-            return;
-          }
-          const backSnap = takeSnapshot(liveContainer, req.direction, layout);
-          if (!backSnap) return;
-          // We only need flippingNode (the BackFace clip-path restricts to the
-          // flipping half). staticNode would be unused on the back path.
-          setVisual((prev) =>
-            prev ? { ...prev, backNode: backSnap.flippingNode } : prev,
-          );
-          log.debug('startTurn', 'back snapshot mounted', { toSpreadId: turnIdAtStart });
+      // Clear any pending timer from a prior turn (cancel/queue may not have
+      // run cleanup if a turn was force-completed). New turn owns the slot.
+      if (backSnapshotTimerRef.current) {
+        clearTimeout(backSnapshotTimerRef.current);
+      }
+      backSnapshotTimerRef.current = setTimeout(() => {
+        backSnapshotTimerRef.current = null;
+        if (!isMountedRef.current) return;
+        if (stateRef.current.toSpreadId !== turnIdAtStart) {
+          log.debug('startTurn', 'back snapshot stale — skip', {
+            expected: turnIdAtStart,
+            current: stateRef.current.toSpreadId,
+          });
+          return;
+        }
+        const liveContainer = spreadContainerGetter();
+        if (!liveContainer || liveContainer.clientWidth === 0) {
+          log.warn('startTurn', 'back snapshot — container missing/zero-width', {
+            toSpreadId: turnIdAtStart,
+          });
+          return;
+        }
+        const backSnap = takeSnapshot(liveContainer, req.direction, layout);
+        if (!backSnap) {
+          log.warn('startTurn', 'back snapshot — takeSnapshot returned null', {
+            toSpreadId: turnIdAtStart,
+          });
+          return;
+        }
+        // BackFace has its own CSS clip-path (INVERSE half) — using
+        // backSnap.flippingNode works because the snapshot-level half-clip
+        // and the layer-level INVERSE clip overlap to the same visible
+        // region. Tech debt: takeSnapshot returns pre-clipped nodes; ideally
+        // we'd want a full clone here. Defer to separate refactor.
+        setVisual((prev) =>
+          prev ? { ...prev, backNode: backSnap.flippingNode } : prev,
+        );
+        log.debug('startTurn', 'back snapshot ready', {
+          latency_ms: Math.round(performance.now() - backStartedAt),
+          delay_ms: delayMs,
+          toSpreadId: turnIdAtStart,
         });
-      });
+      }, delayMs);
     },
     [enabled, spreadContainerGetter],
   );
@@ -523,12 +511,22 @@ export function useSpreadTurnTransition(
   }, [state.phase, state.direction, state.layout, duration, settleHandler, swapPointHandler]);
 
   // === Cleanup on unmount ===
+  // Reset isMountedRef on every mount — under StrictMode (and HMR remount) the
+  // initial useRef(true) fires once, but the cleanup below sets it false on
+  // strict-mode unmount, leaving the second mount with a stuck `false` flag
+  // that suppresses every deferred back-snapshot.
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (timelineRef.current) {
         timelineRef.current.eventCallback('onComplete', null);
         timelineRef.current.kill();
         timelineRef.current = null;
+      }
+      if (backSnapshotTimerRef.current) {
+        clearTimeout(backSnapshotTimerRef.current);
+        backSnapshotTimerRef.current = null;
       }
       queuedTurnRef.current = null;
     };
