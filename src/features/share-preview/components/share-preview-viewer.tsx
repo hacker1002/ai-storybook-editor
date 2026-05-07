@@ -220,7 +220,7 @@ export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreview
         availableEditions={availableEditions}
         availableLanguages={availableLanguages}
         pageNumbering={book.template_layout?.page_numbering}
-        showThumbnails={false}
+        thumbnailListMode="offscreen"
       />
     </div>
   );

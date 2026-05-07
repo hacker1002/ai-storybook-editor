@@ -114,8 +114,14 @@ interface PlayableSpreadViewProps {
   availableLanguages?: { name: string; code: string }[];
   // Page numbering overlay settings (null/undefined = hidden)
   pageNumbering?: PageNumberingSettings | null;
-  // Whether to show the thumbnail strip (default: true; share preview hides it)
-  showThumbnails?: boolean;
+  /**
+   * Thumbnail list rendering strategy.
+   * - 'visible'   (default) — full footer strip, editor behavior.
+   * - 'offscreen'           — collapsed via clip-path with ±2 window+cache;
+   *                           keeps decoded bitmaps in DOM for eager
+   *                           spread-turn clone. Used by share-preview.
+   */
+  thumbnailListMode?: "visible" | "offscreen";
   // Controlled-or-uncontrolled props (ADR-021)
   selectedSpreadId?: string | null;      // controlled from parent
   zoomLevel?: number;                     // controlled from parent
@@ -151,13 +157,15 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   availableEditions,
   availableLanguages,
   pageNumbering,
-  showThumbnails = true,
+  thumbnailListMode = "visible",
   selectedSpreadId: propSelectedSpreadId,
   zoomLevel: propZoomLevel,
   onZoomChange: propOnZoomChange,
 }) => {
-  // Share preview: player mode without thumbnails (public /share/:slug page)
-  const isSharePreview = mode === 'player' && !showThumbnails;
+  // Share preview: player mode with thumbnails rendered offscreen (public /share/:slug page).
+  // Coupling preserved from previous `!showThumbnails` semantics — used to gate book title
+  // overlay + sidebar share-preview affordances.
+  const isSharePreview = mode === 'player' && thumbnailListMode === 'offscreen';
 
   // === Internal State ===
   const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
@@ -659,14 +667,23 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       </div>
 
       {/* Thumbnail List */}
-      {showThumbnails && (
+      {thumbnailListMode === "visible" ? (
         <div className="h-[120px] flex-shrink-0">
           <PlayableThumbnailList
             spreads={spreads}
             selectedId={effectiveSelectedSpreadId}
             onSpreadClick={handleSpreadClick}
+            renderMode="visible"
           />
         </div>
+      ) : (
+        // Offscreen: no wrapper height — list collapses footprint via clip-path itself.
+        <PlayableThumbnailList
+          spreads={spreads}
+          selectedId={effectiveSelectedSpreadId}
+          onSpreadClick={handleSpreadClick}
+          renderMode="offscreen"
+        />
       )}
 
       {/* Branch Path Modal */}
