@@ -9,7 +9,7 @@ import type {
   TargetItemIcon,
   ItemType,
 } from '@/types/animation-types';
-import type { BaseSpread } from '@/types/spread-types';
+import type { BaseSpread, SpreadComposite } from '@/types/spread-types';
 import { findSpreadItem, isItemPlayerHidden } from '../playable-spread-view/visibility-utils';
 import {
   EFFECT_CATEGORY_MAP,
@@ -55,7 +55,26 @@ export function resolveAnimations(
   });
 }
 
-export function buildDefaultEffect(effectType: number): SpreadAnimation['effect'] {
+/**
+ * Infer the most restrictive effect-matrix item type for a composite.
+ * If any variant is `auto_pic` → return `'auto_pic'` (restrictive: no Play/Read-along/Emphasis).
+ * Else `'image'` (full image matrix).
+ *
+ * Rationale: composite is an edition-aware wrapper; effect must be valid for ALL variants
+ * the runtime might resolve to. `auto_pic` matrix ⊂ `image` matrix.
+ */
+export function inferEffectTypeForComposite(composite: SpreadComposite): ItemType {
+  const types = new Set(composite.variants.map((v) => v.type));
+  if (types.has('auto_pic')) return 'auto_pic';
+  if (types.has('image')) return 'image';
+  return 'image'; // safe fallback
+}
+
+export function buildDefaultEffect(
+  effectType: number,
+  _itemType?: ItemType, // reserved for Phase 6 per-type defaults; underscore = intentionally unused
+): SpreadAnimation['effect'] {
+  void _itemType;
   const options = EFFECT_OPTIONS_MAP[effectType] ?? [];
 
   const effect: SpreadAnimation['effect'] = {
@@ -205,6 +224,9 @@ export function buildItemsMap(
   }
   for (const ap of spread.auto_pics ?? []) {
     map.set(ap.id, { title: (ap as { title?: string }).title ?? ap.id, type: 'auto_pic' });
+  }
+  for (const comp of spread.composites ?? []) {
+    map.set(comp.id, { title: comp.title ?? comp.id, type: 'composite' });
   }
   for (const quiz of spread.quizzes ?? []) {
     let quizTitle = quiz.title ?? quiz.id;

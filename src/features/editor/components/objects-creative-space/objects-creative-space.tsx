@@ -20,6 +20,7 @@ export type ObjectElementType =
   | "auto_audio"
   | "textbox"
   | "auto_pic"
+  | "composite"
   | "raw_image"
   | "raw_textbox";
 

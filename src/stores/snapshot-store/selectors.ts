@@ -393,6 +393,12 @@ export const useSnapshotActions = () =>
       deleteRetouchAnimation: s.deleteRetouchAnimation,
       deleteRetouchAnimationsByTargetId: s.deleteRetouchAnimationsByTargetId,
       reorderRetouchAnimations: s.reorderRetouchAnimations,
+      // Composites (edition-aware wrapper)
+      addRetouchComposite: s.addRetouchComposite,
+      updateRetouchComposite: s.updateRetouchComposite,
+      deleteRetouchComposite: s.deleteRetouchComposite,
+      addVariantToComposite: s.addVariantToComposite,
+      removeVariantFromComposite: s.removeVariantFromComposite,
       // Quiz (QuizSlice — type-discriminated quizzes + validation-as-state)
       addQuiz: s.addQuiz,
       updateQuiz: s.updateQuiz,

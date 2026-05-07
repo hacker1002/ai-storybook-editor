@@ -3,18 +3,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import {
-  Plus,
-  Filter,
-  Eye,
-  EyeOff,
-  Globe,
-  Smile,
-  Box,
-  Image as ImageIcon,
-  Square,
-  CircleDot,
-} from "lucide-react";
+import { Plus, Filter } from "lucide-react";
 import { cn } from "@/utils/utils";
 import {
   Popover,
@@ -22,9 +11,15 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import {
+  AddElementPopoverContent,
+  FilterPopoverContent,
+  LayerDivider,
+} from "./objects-sidebar-popovers";
+import {
   useRetouchSpreadById,
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
+import { usePlayEdition } from "@/stores/animation-playback-store";
 import { useBookShape, useBookTypography } from "@/stores/book-store";
 import { FALLBACK_SHAPE, mapTypographyToTextbox } from "@/constants/book-defaults";
 import { DEFAULT_TYPOGRAPHY } from "@/constants/config-constants";
@@ -33,9 +28,9 @@ import { createLogger } from "@/utils/logger";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import {
   ObjectListItem,
-  ELEMENT_TYPE_CONFIG,
   type ObjectListEntry,
 } from "./objects-sidebar-list-item";
+import { CreateCompositeModal } from "./create-composite-modal";
 import {
   buildObjectList,
   filterObjectList,
@@ -66,6 +61,18 @@ const ALL_ELEMENT_TYPES: ObjectElementType[] = [
   "auto_audio",
   "auto_pic",
 ];
+
+/** Element types shown in the AddElement popover (composite is special — opens modal). */
+const ADD_ELEMENT_TYPES: ObjectElementType[] = [
+  "image",
+  "textbox",
+  "shape",
+  "video",
+  "audio",
+  "auto_audio",
+  "auto_pic",
+  "composite",
+];
 const ALL_ASSET_TYPES: SpreadItemMediaType[] = [
   "raw",
   "character",
@@ -83,133 +90,6 @@ interface ObjectsSidebarProps {
   onItemSelect: (item: SelectedItem | null) => void;
 }
 
-// === Asset type icon mapping ===
-
-import type { LucideIcon } from "lucide-react";
-
-const ASSET_TYPE_CONFIG: Record<
-  SpreadItemMediaType,
-  { icon: LucideIcon; label: string }
-> = {
-  raw: { icon: Globe, label: "Raw" },
-  character: { icon: Smile, label: "Character" },
-  prop: { icon: Box, label: "Prop" },
-  background: { icon: ImageIcon, label: "Background" },
-  foreground: { icon: Square, label: "Foreground" },
-  other: { icon: CircleDot, label: "Other" },
-};
-
-// === Inline sub-components ===
-
-/** Filter popover content */
-function FilterPopoverContent({
-  assetFilter,
-  allAssets,
-  onToggleAsset,
-  onToggleAllAssets,
-}: {
-  assetFilter: Set<SpreadItemMediaType>;
-  allAssets: boolean;
-  onToggleAsset: (type: SpreadItemMediaType) => void;
-  onToggleAllAssets: () => void;
-}) {
-  return (
-    <div className="space-y-4 text-sm">
-      <p className="font-semibold text-base">Filter</p>
-
-      {/* BY OBJECT TYPE (asset/media types) */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">
-          By Object Type
-        </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={allAssets}
-            onChange={onToggleAllAssets}
-            className="rounded w-4 h-4 accent-blue-500"
-          />
-          All Types
-        </label>
-        {ALL_ASSET_TYPES.map((type) => {
-          const config = ASSET_TYPE_CONFIG[type];
-          return (
-            <label
-              key={type}
-              className="flex items-center gap-2 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={allAssets || assetFilter.has(type)}
-                onChange={() => onToggleAsset(type)}
-                className="rounded w-4 h-4 accent-blue-500"
-              />
-              <config.icon className="w-4 h-4 text-muted-foreground" />
-              {config.label}
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** Add element popover content */
-function AddElementPopoverContent({
-  onAdd,
-}: {
-  onAdd: (type: ObjectElementType) => void;
-}) {
-  return (
-    <div className="py-1">
-      {ALL_ELEMENT_TYPES.map((type) => {
-        const config = ELEMENT_TYPE_CONFIG[type];
-        return (
-          <button
-            key={type}
-            type="button"
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted transition-colors rounded-sm"
-            onClick={() => onAdd(type)}
-          >
-            <config.icon className="w-4 h-4 text-muted-foreground" />
-            {config.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Visual divider between layer groups */
-function LayerDivider({
-  label,
-  allVisible,
-  onToggleVisibility,
-}: {
-  label: string;
-  allVisible: boolean;
-  onToggleVisibility: () => void;
-}) {
-  const Icon = allVisible ? Eye : EyeOff;
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/60 border-y border-border/50 select-none">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1">
-        {label}
-      </span>
-      <button
-        type="button"
-        onClick={onToggleVisibility}
-        className="p-0.5 rounded hover:bg-muted-foreground/20 transition-colors"
-        aria-label={
-          allVisible ? `Hide all in ${label}` : `Show all in ${label}`
-        }
-      >
-        <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-      </button>
-    </div>
-  );
-}
-
 // === Main Component ===
 
 export function ObjectsSidebar({
@@ -222,11 +102,18 @@ export function ObjectsSidebar({
   const editorLangCode = useLanguageCode();
   const bookShape = useBookShape();
   const bookTypography = useBookTypography();
+  const playEdition = usePlayEdition();
 
   // Local UI state
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  // Composite UX state
+  const [expandedCompositeIds, setExpandedCompositeIds] = useState<Set<string>>(
+    new Set()
+  );
+  // CreateCompositeModal open flag.
+  const [isCreateCompositeOpen, setIsCreateCompositeOpen] = useState(false);
 
   // Filter state (all checked by default)
   const [assetFilter, setAssetFilter] = useState<Set<SpreadItemMediaType>>(
@@ -264,13 +151,104 @@ export function ObjectsSidebar({
 
   const isFilterActive = !allAssets;
 
+  // Composite candidate count: free image/auto_pic NOT yet in any composite.
+  // Used to disable "Composite" entry in AddElement popover (need ≥ 2).
+  const compositeCandidateCount = useMemo(() => {
+    return allEntries.filter(
+      (e) =>
+        (e.type === "image" || e.type === "auto_pic") &&
+        !e.parentCompositeId
+    ).length;
+  }, [allEntries]);
+
   // === Handlers ===
 
   const handleItemClick = useCallback(
     (entry: ObjectListEntry) => {
+      // Composite group row → select composite itself
+      if (entry.isComposite) {
+        log.debug("handleItemClick", "composite group selected", {
+          compositeId: entry.id,
+        });
+        onItemSelect({ type: "composite", id: entry.id });
+        return;
+      }
+      // Composite child → resolve variant active per playEdition (fallback first)
+      if (entry.parentCompositeId) {
+        const composite = spread?.composites?.find(
+          (c) => c.id === entry.parentCompositeId
+        );
+        if (composite) {
+          const active =
+            composite.variants.find((v) => v.edition === playEdition) ??
+            composite.variants[0];
+          if (active) {
+            log.debug("handleItemClick", "composite child resolved variant", {
+              compositeId: entry.parentCompositeId,
+              variantId: active.id,
+              edition: active.edition,
+              playEdition,
+            });
+            onItemSelect({ type: active.type, id: active.id });
+            return;
+          }
+        }
+      }
       onItemSelect({ type: entry.type, id: entry.id });
     },
-    [onItemSelect]
+    [onItemSelect, spread, playEdition]
+  );
+
+  const handleToggleExpand = useCallback((compositeId: string) => {
+    setExpandedCompositeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(compositeId)) next.delete(compositeId);
+      else next.add(compositeId);
+      log.debug("handleToggleExpand", "toggled", {
+        compositeId,
+        expanded: next.has(compositeId),
+      });
+      return next;
+    });
+  }, []);
+
+  const handleRemoveFromComposite = useCallback(
+    (compositeId: string, variantId: string) => {
+      const composite = spread?.composites?.find((c) => c.id === compositeId);
+      if (!composite) {
+        log.warn("handleRemoveFromComposite", "composite not found", {
+          compositeId,
+        });
+        return;
+      }
+      // Will composite be auto-deleted? (Slice removes when < 2 variants.)
+      const remaining = composite.variants.filter((v) => v.id !== variantId);
+      const willAutoDelete = remaining.length < 2;
+      if (willAutoDelete) {
+        // eslint-disable-next-line no-alert
+        const ok = window.confirm(
+          "Removing this variant will delete the composite (needs at least 2 variants). Continue?"
+        );
+        if (!ok) {
+          log.debug("handleRemoveFromComposite", "user cancelled", {
+            compositeId,
+            variantId,
+          });
+          return;
+        }
+      }
+      log.info("handleRemoveFromComposite", "removing variant", {
+        compositeId,
+        variantId,
+        willAutoDelete,
+      });
+      actions.removeVariantFromComposite(
+        selectedSpreadId,
+        compositeId,
+        variantId
+      );
+    },
+    [spread, actions, selectedSpreadId]
   );
 
   const handleVisibilityToggle = useCallback(
@@ -308,6 +286,10 @@ export function ObjectsSidebar({
           break;
         case "auto_pic":
           actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
+          break;
+        case "composite":
+          // Slice cascades visibility to variant items automatically (Phase 1 D5).
+          actions.updateRetouchComposite(selectedSpreadId, entry.id, updates);
           break;
         case "raw_image":
           actions.updateRawImage(selectedSpreadId, entry.id, updates);
@@ -367,6 +349,9 @@ export function ObjectsSidebar({
           case "auto_pic":
             actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
             break;
+          case "composite":
+            actions.updateRetouchComposite(selectedSpreadId, entry.id, updates);
+            break;
           case "raw_image":
             actions.updateRawImage(selectedSpreadId, entry.id, updates);
             break;
@@ -418,6 +403,9 @@ export function ObjectsSidebar({
           break;
         case "auto_pic":
           actions.updateRetouchAutoPic(selectedSpreadId, entry.id, updates);
+          break;
+        case "composite":
+          actions.updateRetouchComposite(selectedSpreadId, entry.id, updates);
           break;
         case "raw_image":
           actions.updateRawImage(selectedSpreadId, entry.id, updates);
@@ -583,6 +571,13 @@ export function ObjectsSidebar({
     (type: ObjectElementType) => {
       log.info("handleAddElement", "adding", { type });
 
+      // Composite is created via dedicated modal (Phase 3) — short-circuit.
+      if (type === "composite") {
+        log.debug("handleAddElement", "open create-composite modal");
+        setIsCreateCompositeOpen(true);
+        return;
+      }
+
       // Determine z-index: top of its layer
       const layer = getLayerForType(type);
       let newZIndex: number = layer ? layer.min : 1;
@@ -720,6 +715,7 @@ export function ObjectsSidebar({
   if (!spread) return null;
 
   return (
+    <>
     <nav
       className="w-[280px] flex flex-col h-full border-r bg-background"
       role="listbox"
@@ -744,6 +740,7 @@ export function ObjectsSidebar({
             <FilterPopoverContent
               assetFilter={assetFilter}
               allAssets={allAssets}
+              allAssetTypes={ALL_ASSET_TYPES}
               onToggleAsset={handleToggleAsset}
               onToggleAllAssets={handleToggleAllAssets}
             />
@@ -764,6 +761,8 @@ export function ObjectsSidebar({
           </PopoverTrigger>
           <PopoverContent align="end" sideOffset={8} className="w-48 p-1">
             <AddElementPopoverContent
+              compositeCandidateCount={compositeCandidateCount}
+              addElementTypes={ADD_ELEMENT_TYPES}
               onAdd={(type) => {
                 handleAddElement(type);
                 setIsAddOpen(false);
@@ -795,39 +794,85 @@ export function ObjectsSidebar({
                   }
                 />
                 {/* Items within this layer */}
-                {group.entries.map((entry, index) => (
-                  <ObjectListItem
-                    key={entry.id}
-                    entry={entry}
-                    index={index}
-                    isSelected={selectedItemId?.id === entry.id}
-                    editingId={editingItemId}
-                    editValue={editValue}
-                    onEditValueChange={setEditValue}
-                    onSelect={() => handleItemClick(entry)}
-                    onVisibilityToggle={() => handleVisibilityToggle(entry)}
-                    onPlayerVisibilityToggle={() =>
-                      handlePlayerVisibilityToggle(entry)
-                    }
-                    onEditStart={() => handleEditStart(entry)}
-                    onRenameConfirm={handleRenameConfirm}
-                    dragIndex={
-                      dragLayerLabel === group.layer.label ? dragIndex : null
-                    }
-                    onDragStart={(idx) =>
-                      handleDragStart(idx, group.layer.label)
-                    }
-                    onDragOver={handleDragOver}
-                    onDrop={(idx) => handleLayerDrop(idx, group)}
-                    onDragEnd={handleDragEnd}
-                  />
-                ))}
+                {group.entries.map((entry, index) => {
+                  const isComposite = entry.isComposite === true;
+                  const isExpanded =
+                    isComposite && expandedCompositeIds.has(entry.id);
+                  return (
+                    <div key={entry.id}>
+                      <ObjectListItem
+                        entry={entry}
+                        index={index}
+                        isSelected={selectedItemId?.id === entry.id}
+                        editingId={editingItemId}
+                        editValue={editValue}
+                        onEditValueChange={setEditValue}
+                        onSelect={() => handleItemClick(entry)}
+                        onVisibilityToggle={() => handleVisibilityToggle(entry)}
+                        onPlayerVisibilityToggle={() =>
+                          handlePlayerVisibilityToggle(entry)
+                        }
+                        onEditStart={() => handleEditStart(entry)}
+                        onRenameConfirm={handleRenameConfirm}
+                        dragIndex={
+                          dragLayerLabel === group.layer.label ? dragIndex : null
+                        }
+                        onDragStart={(idx) =>
+                          handleDragStart(idx, group.layer.label)
+                        }
+                        onDragOver={handleDragOver}
+                        onDrop={(idx) => handleLayerDrop(idx, group)}
+                        onDragEnd={handleDragEnd}
+                        isExpanded={isExpanded}
+                        onToggleExpand={
+                          isComposite
+                            ? () => handleToggleExpand(entry.id)
+                            : undefined
+                        }
+                      />
+                      {/* Composite children render (only when expanded). */}
+                      {isComposite && isExpanded && entry.children?.map((child) => (
+                        <ObjectListItem
+                          key={`${entry.id}::${child.id}`}
+                          entry={child}
+                          index={-1}
+                          isSelected={selectedItemId?.id === child.id}
+                          editingId={editingItemId}
+                          editValue={editValue}
+                          onEditValueChange={setEditValue}
+                          onSelect={() => handleItemClick(child)}
+                          onVisibilityToggle={() => handleVisibilityToggle(child)}
+                          onPlayerVisibilityToggle={() =>
+                            handlePlayerVisibilityToggle(child)
+                          }
+                          onEditStart={() => handleEditStart(child)}
+                          onRenameConfirm={handleRenameConfirm}
+                          dragIndex={null}
+                          onDragStart={() => undefined}
+                          onDragOver={() => undefined}
+                          onDrop={() => undefined}
+                          onDragEnd={() => undefined}
+                          onRemoveFromComposite={() =>
+                            handleRemoveFromComposite(entry.id, child.id)
+                          }
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
         </div>
       )}
     </nav>
+    <CreateCompositeModal
+      open={isCreateCompositeOpen}
+      spreadId={selectedSpreadId}
+      onClose={() => setIsCreateCompositeOpen(false)}
+      onCreated={(id) => onItemSelect({ type: "composite", id })}
+    />
+    </>
   );
 }
 

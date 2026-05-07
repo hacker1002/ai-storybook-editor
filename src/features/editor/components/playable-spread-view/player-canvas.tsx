@@ -46,6 +46,11 @@ import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
 import { isItemPlayerHidden } from "./visibility-utils";
+import {
+  buildPlayerCompositeContextMap,
+  isVariantInAnyComposite,
+  resolveEffectiveZIndex,
+} from "@/features/editor/utils/composite-resolve-helpers";
 import { isAutoPicInteractive } from "../shared-components/auto-pic-players/inspect-auto-pic";
 import { usePlayerOrientation } from "./hooks/use-player-orientation";
 import { useContainerFit } from "./hooks/use-container-fit";
@@ -172,6 +177,15 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
     return spread.animations;
   }, [spread.animations, playEdition]);
 
+  // Phase 6 — composite resolve map for the player.
+  // Variants matching the active edition get a z-index override entry; variants
+  // belonging to a composite that DON'T match the edition are absent here, so
+  // the consumer can detect "skip this variant" via isVariantInAnyComposite.
+  const playerCompositeCtxMap = useMemo(
+    () => buildPlayerCompositeContextMap({ composites: spread.composites }, playEdition),
+    [spread.composites, playEdition]
+  );
+
   // Auto-fit zoom — overrides prop zoomLevel with computed fit
   // In full page mode, useContainerFit fits half the canvas width (one page)
   const fitZoom = useContainerFit(
@@ -204,6 +218,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
   } = usePlayerGsapEngine({
     spread,
     filteredAnimations,
+    playEdition,
     zoomLevel: effectiveZoom,
     narrationLangCode,
     onSpreadComplete,
@@ -623,11 +638,22 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
             {spread.images?.map((image, index) => {
               if (image.player_visible === false) return null;
               if (!isInStaging(image.geometry)) return null;
+              // Phase 6 — composite edition filter: variant in a composite but
+              // off-edition → skip render. On-edition variants take composite
+              // z-index via resolveEffectiveZIndex.
+              const compositeCtx = playerCompositeCtxMap.get(image.id);
+              if (!compositeCtx && isVariantInAnyComposite({ composites: spread.composites }, image.id)) {
+                return null;
+              }
               const hasUrl =
                 image.final_hires_media_url ||
                 image.illustrations?.some((i) => i.media_url) ||
                 image.media_url;
               if (!hasUrl) return null;
+              const effectiveZ = resolveEffectiveZIndex(
+                { id: image.id, 'z-index': image['z-index'] },
+                playerCompositeCtxMap
+              );
               return (
                 <div
                   key={image.id}
@@ -640,7 +666,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
                   <EditableImage
                     image={image}
                     index={index}
-                    zIndex={image["z-index"]}
+                    zIndex={effectiveZ}
                     isSelected={false}
                     isEditable={false}
                     onSelect={() => {}}
@@ -707,6 +733,15 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
               if (autoPic.player_visible === false) return null;
               if (!isInStaging(autoPic.geometry)) return null;
               if (!autoPic.media_url) return null;
+              // Phase 6 — composite edition filter for auto_pic variants.
+              const compositeCtx = playerCompositeCtxMap.get(autoPic.id);
+              if (!compositeCtx && isVariantInAnyComposite({ composites: spread.composites }, autoPic.id)) {
+                return null;
+              }
+              const effectiveZ = resolveEffectiveZIndex(
+                { id: autoPic.id, 'z-index': autoPic['z-index'] },
+                playerCompositeCtxMap
+              );
               const interactive = isAutoPicInteractive(autoPic);
               const pointerClass = interactive
                 ? "pointer-events-auto cursor-pointer"
@@ -726,7 +761,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
                   <EditableAutoPic
                     autoPic={autoPic}
                     index={index}
-                    zIndex={autoPic["z-index"]}
+                    zIndex={effectiveZ}
                     isSelected={false}
                     isEditable={false}
                     onSelect={() => {}}

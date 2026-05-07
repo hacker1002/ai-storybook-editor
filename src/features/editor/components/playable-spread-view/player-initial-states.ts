@@ -1,9 +1,11 @@
 // player-initial-states.ts - Pre-playback initial state setup and reset utilities for GSAP
 
 import gsap from 'gsap';
-import type { SpreadAnimation } from '@/types/spread-types';
+import type { BaseSpread, SpreadAnimation } from '@/types/spread-types';
 import type { CanvasSize } from '@/types/canvas-types';
+import type { PlayEdition } from '@/types/playable-types';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
+import { resolveAnimationTarget } from '@/features/editor/utils/composite-resolve-helpers';
 
 // === Base Opacity ===
 
@@ -214,35 +216,64 @@ export function resetElementStyles(elementRefsMap: Map<string, HTMLElement>): vo
 
 /**
  * Apply initial GSAP states to all animated items before playback.
- * Groups animations by target, uses the first animation (lowest order) to determine initial state.
+ * Groups animations by RESOLVED target (variant id for composite targets),
+ * uses the first animation (lowest order) to determine initial state.
+ *
+ * Composite-aware: when `target.type === 'composite'`, the actual element is
+ * registered under the active variant id (resolved via `playEdition`), not the
+ * composite id. Without resolution, entrance animations (FLY_IN/FLOAT_IN/ZOOM)
+ * silently no-op and elements "pop in" at the start instead of starting from
+ * the offscreen anchor.
+ *
+ * @param spread Optional — required for composite target resolution. Pass undefined for legacy callers.
+ * @param playEdition Optional — required for composite target resolution. Defaults to 'dynamic'.
  */
 export function applyInitialStates(
   animations: SpreadAnimation[],
   elementRefsMap: Map<string, HTMLElement>,
   spreadContainer: HTMLElement | null,
-  canvasSize?: CanvasSize
+  canvasSize?: CanvasSize,
+  spread?: Pick<BaseSpread, 'composites'>,
+  playEdition: PlayEdition = 'dynamic',
 ): void {
   if (!animations || animations.length === 0) return;
 
-  // Group by target.id, pick animation with lowest order per target
-  const firstAnimByTarget = new Map<string, SpreadAnimation>();
+  // Group by RESOLVED target id (variant id when composite), pick animation with lowest order per target.
+  // Map value carries both anim + resolved id so the second pass doesn't repeat resolution.
+  const firstAnimByTarget = new Map<string, { anim: SpreadAnimation; bypassMotion: boolean }>();
   const sorted = [...animations].sort((a, b) => a.order - b.order);
 
   for (const anim of sorted) {
-    const tid = anim.target.id;
-    if (!firstAnimByTarget.has(tid)) {
-      firstAnimByTarget.set(tid, anim);
+    // Resolve composite targets to active variant id. For non-composite targets,
+    // resolveAnimationTarget passes through unchanged (variantId === target.id).
+    // When `spread` is undefined (legacy callers) we fall back to raw target.id —
+    // composite resolution simply does not happen, matching pre-Phase-6 behavior.
+    let resolvedId = anim.target.id;
+    let bypassMotion = false;
+    if (spread && anim.target.type === 'composite') {
+      const r = resolveAnimationTarget(anim.target, spread, playEdition);
+      if (!r.variantId) continue; // composite has no slot for this edition → skip
+      resolvedId = r.variantId;
+      bypassMotion = r.bypassMotion;
+    }
+    if (!firstAnimByTarget.has(resolvedId)) {
+      firstAnimByTarget.set(resolvedId, { anim, bypassMotion });
     }
   }
 
-  // Apply initial state per target
-  firstAnimByTarget.forEach((anim, targetId) => {
+  // Apply initial state per resolved target
+  firstAnimByTarget.forEach(({ anim, bypassMotion }, targetId) => {
     const element = elementRefsMap.get(targetId);
     if (!element) return;
 
-    const initialProps = resolveInitialState(anim, spreadContainer, canvasSize, getBaseOpacity(element));
-    if (Object.keys(initialProps).length > 0) {
-      gsap.set(element, initialProps);
+    // Classic edition / bypassMotion: tween builder skips motion and writes
+    // final state directly — setting an entrance "hidden" initial state would
+    // hide the element forever. Skip initial-state assignment for that branch.
+    if (!bypassMotion) {
+      const initialProps = resolveInitialState(anim, spreadContainer, canvasSize, getBaseOpacity(element));
+      if (Object.keys(initialProps).length > 0) {
+        gsap.set(element, initialProps);
+      }
     }
 
     // Special: media play — pause + reset

@@ -49,6 +49,7 @@ export type SelectedElementType =
   | "audio"
   | "auto_audio"
   | "quiz"
+  | "composite"
   | "page";
 export type ResizeHandle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 export type ThumbnailListLayout = "horizontal" | "grid";
@@ -68,7 +69,7 @@ export interface SelectedElement {
 }
 
 // === Spread Item Action Types ===
-export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'auto_pic' | 'audio' | 'auto_audio' | 'quiz';
+export type SpreadItemType = 'page' | 'image' | 'textbox' | 'shape' | 'video' | 'auto_pic' | 'audio' | 'auto_audio' | 'quiz' | 'composite';
 export type SpreadItemActionType = 'add' | 'update' | 'delete';
 
 export interface SpreadItemActionParams<TData = unknown> {

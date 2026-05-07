@@ -63,6 +63,7 @@ export const TARGET_ICON_MAP: Record<string, TargetItemIcon> = {
   auto_pic: "auto_pic",
   audio: "audio",
   quiz: "quiz",
+  composite: "composite",
 };
 
 export const TRIGGER_TYPE_LABELS: Record<string, string> = {

@@ -139,4 +139,52 @@ describe('buildAnimationSteps pre-filter (player_visible)', () => {
       }),
     );
   });
+
+  // Phase 6 — composite-targeted animations are passed through buildAnimationSteps
+  // unchanged. Edition-aware target resolution happens at the engine layer
+  // (use-player-gsap-engine.ts) via resolveAnimationTarget — see helper tests
+  // in composite-resolve-helpers.test.ts. These cases verify that the pre-filter
+  // does not regress when target.type === 'composite'.
+  it('9. composite target on_next → step created (no visibility filter on composite)', () => {
+    const anims = [makeAnim(1, 'on_next', 'comp1', 'composite', 3)]; // FADE_IN
+    // No items entry for `composite` — pre-filter has no notion of composite
+    // visibility (variant.player_visible already cascaded by store).
+    const items: SpreadItemsForVisibility = {};
+    const steps = buildAnimationSteps(anims, items, 'spread1');
+    expect(steps).toHaveLength(1);
+    expect(steps[0].animations[0].target.type).toBe('composite');
+    expect(steps[0].animations[0].target.id).toBe('comp1');
+    expect(warnMock).not.toHaveBeenCalled();
+  });
+
+  it('10. composite target on_click + chained follower → step preserved (no false cascade)', () => {
+    const anims = [
+      makeAnim(1, 'on_click', 'comp1', 'composite', 3),
+      makeAnim(2, 'with_previous', 'tb1', 'textbox', 11), // read-along follower
+    ];
+    const items: SpreadItemsForVisibility = {
+      textboxes: [{ id: 'tb1', player_visible: true }],
+    };
+    const steps = buildAnimationSteps(anims, items, 'spread1');
+    // Composite is unknown to pre-filter → not treated as hidden → step survives.
+    expect(steps).toHaveLength(1);
+    expect(steps[0].animations).toHaveLength(2);
+  });
+
+  it('11. mixed: composite on_click + standalone hidden image on_click follower → composite kept, follower dropped via on_click own-id filter', () => {
+    const anims = [
+      makeAnim(1, 'on_click', 'comp1', 'composite', 3),
+      makeAnim(2, 'on_click', 'img-hidden', 'image', 1),
+    ];
+    const items: SpreadItemsForVisibility = {
+      images: [{ id: 'img-hidden', player_visible: false }], // hidden — on_click own-id filter drops it
+    };
+    const steps = buildAnimationSteps(anims, items, 'spread1');
+    // Composite (on_click boundary) is unknown to pre-filter → step 1 survives.
+    // Follower's own image is hidden + trigger=on_click → dropped by own-id filter (Case 3).
+    expect(steps).toHaveLength(1);
+    expect(steps[0].animations).toHaveLength(1);
+    expect(steps[0].animations[0].target.type).toBe('composite');
+    expect(warnMock).toHaveBeenCalledTimes(1);
+  });
 });

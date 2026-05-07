@@ -18,6 +18,10 @@ import {
   ImageOff,
   TypeOutline,
   ImagePlay,
+  Layers,
+  ChevronDown,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/utils/utils";
@@ -27,7 +31,8 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import type { ObjectElementType } from "./objects-creative-space";
-import type { SpreadItemMediaType } from "@/types/spread-types";
+import type { EditionTag, SpreadItemMediaType } from "@/types/spread-types";
+import { EDITION_LABEL } from "./utils/composite-list-helpers";
 
 export interface ObjectListEntry {
   id: string;
@@ -37,6 +42,14 @@ export interface ObjectListEntry {
   editorVisible: boolean;
   playerVisible: boolean;
   assetType?: SpreadItemMediaType;
+  /** Parent composite id when this entry is a variant child (image/auto_pic). */
+  parentCompositeId?: string;
+  /** Edition slots this variant occupies (only when parentCompositeId is set). */
+  variantEditions?: EditionTag[];
+  /** True for composite group rows themselves. */
+  isComposite?: boolean;
+  /** Variant children attached to a composite group (populated post group-by-layer). */
+  children?: ObjectListEntry[];
 }
 
 export const ELEMENT_TYPE_CONFIG: Record<
@@ -50,6 +63,7 @@ export const ELEMENT_TYPE_CONFIG: Record<
   audio: { icon: Volume2, label: "Audio" },
   auto_audio: { icon: Music, label: "Auto Audio" },
   auto_pic: { icon: ImagePlay, label: "Auto Pic" },
+  composite: { icon: Layers, label: "Composite" },
   raw_image: { icon: ImageOff, label: "Raw Image" },
   raw_textbox: { icon: TypeOutline, label: "Raw Text" },
 };
@@ -71,6 +85,10 @@ interface ObjectListItemProps {
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (index: number) => void;
   onDragEnd: () => void;
+  /** Composite-aware extras (optional) */
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+  onRemoveFromComposite?: () => void;
 }
 
 export function ObjectListItem({
@@ -90,11 +108,17 @@ export function ObjectListItem({
   onDragOver,
   onDrop,
   onDragEnd,
+  isExpanded,
+  onToggleExpand,
+  onRemoveFromComposite,
 }: ObjectListItemProps) {
   const isEditing = editingId === entry.id;
   const isRaw = entry.type === "raw_image" || entry.type === "raw_textbox";
-  const isRenameable = entry.type !== "textbox" && !isRaw;
-  const isDraggable = !isRaw;
+  const isComposite = entry.isComposite === true;
+  const isCompositeChild = entry.parentCompositeId !== undefined;
+  const isRenameable =
+    entry.type !== "textbox" && !isRaw && !isCompositeChild;
+  const isDraggable = !isRaw && !isCompositeChild;
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
 
@@ -104,7 +128,8 @@ export function ObjectListItem({
         "group flex items-center h-12 px-2 gap-1.5 cursor-pointer transition-colors text-sm",
         isSelected ? "bg-accent/80" : "hover:bg-muted/50",
         !entry.editorVisible && "opacity-50",
-        dragIndex === index && "opacity-40"
+        dragIndex === index && "opacity-40",
+        isCompositeChild && "pl-6"
       )}
       onClick={onSelect}
       draggable={isDraggable}
@@ -129,17 +154,36 @@ export function ObjectListItem({
       role="option"
       aria-selected={isSelected}
     >
-      {/* Drag handle (hidden for raw items) */}
+      {/* Drag handle / indent spacer */}
       {isDraggable ? (
         <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100" />
       ) : (
         <div className="w-3.5 flex-shrink-0" />
       )}
 
+      {/* Composite expand/collapse caret (composite group row only) */}
+      {isComposite && onToggleExpand && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpand();
+          }}
+          className="p-0.5 rounded hover:bg-muted flex-shrink-0"
+          aria-label={isExpanded ? "Collapse composite" : "Expand composite"}
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
+
       {/* Type icon */}
       <Icon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
 
-      {/* Name / Edit (rename disabled for textbox) */}
+      {/* Name / Edit */}
       {isEditing && isRenameable ? (
         <div className="flex-1 flex items-center gap-1 min-w-0">
           <input
@@ -169,76 +213,114 @@ export function ObjectListItem({
         <span className="flex-1 truncate min-w-0">{entry.title}</span>
       )}
 
-      {/* Hover actions with tooltips */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
-        {/* Editor visibility toggle */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onVisibilityToggle();
-              }}
-              className="p-0.5 rounded hover:bg-muted"
+      {/* Edition tag chips (composite child only) */}
+      {isCompositeChild && entry.variantEditions && entry.variantEditions.length > 0 && (
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {entry.variantEditions.map((ed) => (
+            <span
+              key={ed}
+              className="px-1.5 py-0.5 text-[10px] rounded bg-muted text-muted-foreground uppercase tracking-wider"
             >
-              {entry.editorVisible ? (
-                <Eye className="w-3.5 h-3.5" />
-              ) : (
-                <EyeOff className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            {entry.editorVisible ? "Hide in editor" : "Show in editor"}
-          </TooltipContent>
-        </Tooltip>
+              {EDITION_LABEL[ed]}
+            </span>
+          ))}
+        </div>
+      )}
 
-        {/* Player visibility toggle (not applicable for raw items) */}
-        {!isRaw && (
+      {/* Hover actions */}
+      {isCompositeChild ? (
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+          {onRemoveFromComposite && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveFromComposite();
+                  }}
+                  className="p-0.5 rounded hover:bg-muted"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Remove from composite
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+          {/* Editor visibility */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onPlayerVisibilityToggle();
+                  onVisibilityToggle();
                 }}
                 className="p-0.5 rounded hover:bg-muted"
               >
-                {entry.playerVisible ? (
-                  <Unlock className="w-3.5 h-3.5" />
+                {entry.editorVisible ? (
+                  <Eye className="w-3.5 h-3.5" />
                 ) : (
-                  <Lock className="w-3.5 h-3.5" />
+                  <EyeOff className="w-3.5 h-3.5" />
                 )}
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
-              {entry.playerVisible ? "Hide in player" : "Show in player"}
+              {entry.editorVisible ? "Hide in editor" : "Show in editor"}
             </TooltipContent>
           </Tooltip>
-        )}
 
-        {isRenameable && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEditStart();
-                }}
-                className="p-0.5 rounded hover:bg-muted"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              Rename
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
+          {/* Player visibility (skip for raw items) */}
+          {!isRaw && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPlayerVisibilityToggle();
+                  }}
+                  className="p-0.5 rounded hover:bg-muted"
+                >
+                  {entry.playerVisible ? (
+                    <Unlock className="w-3.5 h-3.5" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                {entry.playerVisible ? "Hide in player" : "Show in player"}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {isRenameable && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditStart();
+                  }}
+                  className="p-0.5 rounded hover:bg-muted"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Rename
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      )}
     </div>
   );
 }

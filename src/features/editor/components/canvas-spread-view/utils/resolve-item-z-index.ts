@@ -16,6 +16,7 @@ import type {
   SpreadAutoAudio,
   SpreadQuiz,
 } from "@/types/canvas-types";
+import type { SpreadComposite } from "@/types/spread-types";
 
 export function resolveItemZIndex(
   type: ItemType,
@@ -99,6 +100,14 @@ export function resolveItemZIndex(
         | { "z-index"?: number }
         | undefined;
       return textbox?.["z-index"] ?? LAYER_CONFIG.TEXT.min + index;
+    }
+
+    case "composite": {
+      // Composite is a logical wrapper, not a render layer. Resolution to active
+      // variant happens at runtime (Phase 6). Use composite's stored z-index as
+      // a stable virtual sort key in MEDIA layer.
+      const composite = spread.composites?.[index] as SpreadComposite | undefined;
+      return composite?.["z-index"] ?? LAYER_CONFIG.MEDIA.min + index;
     }
 
     default: {

@@ -1,7 +1,7 @@
 // animation-editor-canvas.tsx - Main canvas for animation editor mode
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, Fragment } from "react";
 import {
   EditableTextbox,
   EditableImage,
@@ -29,6 +29,11 @@ import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
 import { isItemPlayerVisible } from "./visibility-utils";
+import { CompositeMemberBadge } from "../objects-creative-space/composite-member-badge";
+import {
+  buildCompositeNumberMap,
+  findCompositeIdForVariant,
+} from "../../utils/composite-resolve-helpers";
 
 const log = createLogger("Editor", "AnimationEditorCanvas");
 
@@ -68,6 +73,25 @@ export function AnimationEditorCanvas({
     canvasWidth,
     canvasHeight,
     zoomLevel
+  );
+
+  // Composite membership lookup — variant id → 1-based composite ordinal.
+  // Drives the numeric badge so users can see which canvas items belong to the
+  // same group at a glance. Click on badge selects the composite as a target.
+  const compositeNumberByVariantId = useMemo(
+    () => buildCompositeNumberMap(spread.composites ?? []),
+    [spread.composites]
+  );
+  const handleSelectComposite = useCallback(
+    (variantId: string) => {
+      const compositeId = findCompositeIdForVariant(spread.composites ?? [], variantId);
+      if (!compositeId) {
+        log.warn("handleSelectComposite", "no composite for variant", { variantId });
+        return;
+      }
+      onItemSelect("composite", compositeId);
+    },
+    [spread.composites, onItemSelect]
   );
 
   // Reset selection when spread changes
@@ -341,20 +365,32 @@ export function AnimationEditorCanvas({
         )}
 
         {/* Images (selectable) — skip player_visible=false */}
-        {spread.images?.filter(isItemPlayerVisible).map((image, index) => (
-          <EditableImage
-            key={image.id}
-            image={image}
-            index={index}
-            zIndex={image["z-index"]}
-            isSelected={
-              selectedItemId === image.id && selectedItemType === "image"
-            }
-            isEditable={true}
-            showItemBorder={true}
-            onSelect={() => handleImageSelect(image.id)}
-          />
-        ))}
+        {spread.images?.filter(isItemPlayerVisible).map((image, index) => {
+          const compositeNumber = compositeNumberByVariantId.get(image.id);
+          return (
+            <Fragment key={image.id}>
+              <EditableImage
+                image={image}
+                index={index}
+                zIndex={image["z-index"]}
+                isSelected={
+                  selectedItemId === image.id && selectedItemType === "image"
+                }
+                isEditable={true}
+                showItemBorder={true}
+                onSelect={() => handleImageSelect(image.id)}
+              />
+              {compositeNumber !== undefined && (
+                <CompositeMemberBadge
+                  compositeNumber={compositeNumber}
+                  geometry={image.geometry}
+                  zIndex={image["z-index"]}
+                  onClick={() => handleSelectComposite(image.id)}
+                />
+              )}
+            </Fragment>
+          );
+        })}
 
         {/* Shapes (selectable) — skip player_visible=false */}
         {spread.shapes?.filter(isItemPlayerVisible).map((shape, index) => (
@@ -388,18 +424,30 @@ export function AnimationEditorCanvas({
         ))}
 
         {/* Auto Pics (selectable, showItemBorder for animation target visibility) — skip player_visible=false */}
-        {spread.auto_pics?.filter(isItemPlayerVisible).map((autoPic, index) => (
-          <EditableAutoPic
-            key={autoPic.id}
-            autoPic={autoPic}
-            index={index}
-            zIndex={autoPic["z-index"]}
-            isSelected={selectedItemId === autoPic.id && selectedItemType === "auto_pic"}
-            isEditable={true}
-            showItemBorder={true}
-            onSelect={() => handleAutoPicSelect(autoPic.id)}
-          />
-        ))}
+        {spread.auto_pics?.filter(isItemPlayerVisible).map((autoPic, index) => {
+          const compositeNumber = compositeNumberByVariantId.get(autoPic.id);
+          return (
+            <Fragment key={autoPic.id}>
+              <EditableAutoPic
+                autoPic={autoPic}
+                index={index}
+                zIndex={autoPic["z-index"]}
+                isSelected={selectedItemId === autoPic.id && selectedItemType === "auto_pic"}
+                isEditable={true}
+                showItemBorder={true}
+                onSelect={() => handleAutoPicSelect(autoPic.id)}
+              />
+              {compositeNumber !== undefined && (
+                <CompositeMemberBadge
+                  compositeNumber={compositeNumber}
+                  geometry={autoPic.geometry}
+                  zIndex={autoPic["z-index"]}
+                  onClick={() => handleSelectComposite(autoPic.id)}
+                />
+              )}
+            </Fragment>
+          );
+        })}
 
         {/* Audios (selectable) */}
         {spread.audios?.map((audio, index) => (

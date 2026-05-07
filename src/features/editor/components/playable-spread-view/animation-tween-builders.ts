@@ -43,6 +43,11 @@ interface TweenOptions {
   audioUrl?: string;
   /** Audio item media_length (ms) for PLAY runtime fallback duration */
   media_length?: number;
+  /** Phase 6 — when true (composite target × playEdition='classic'), the
+   *  builder skips motion timeline contribution and instead `set()`s the
+   *  element to its final visible state immediately. Non-composite targets
+   *  always pass false. */
+  bypassMotion?: boolean;
 }
 
 /**
@@ -70,6 +75,29 @@ export function addTweenToTimeline(
   // Element's natural opacity (e.g. shape fill.opacity) — entrance animations
   // should end at this value instead of forcing to 1.
   const baseOpacity = getBaseOpacity(element);
+
+  // Phase 6 — composite × classic edition bypass: render variant at final
+  // visible state without motion. Skip media-driven effects (PLAY/READ_ALONG)
+  // since their "final state" is just "audio finished" — no visual collapse.
+  if (
+    options?.bypassMotion &&
+    effectType !== EFFECT_TYPE.PLAY &&
+    effectType !== EFFECT_TYPE.READ_ALONG
+  ) {
+    log.debug('addTweenToTimeline', 'bypass motion (composite × classic)', {
+      targetId,
+      effectType,
+      effectName,
+    });
+    // Set to visible/final state instantly. autoAlpha=baseOpacity covers the
+    // common entrance case (FADE_IN, FLY_IN, FLOAT_IN, ZOOM, APPEAR). Exit
+    // effects (FADE_OUT, FLY_OUT, FLOAT_OUT, DISAPPEAR) are no-ops in classic
+    // bypass — variant remains visible at composite z-index.
+    timeline.set(element, { autoAlpha: baseOpacity, x: 0, y: 0, scale: 1 }, position);
+    options?.onTweenStart?.();
+    options?.onTweenComplete?.();
+    return;
+  }
 
   // Capture child count before adding tweens — used for attaching start/end logs
   const childCountBefore = timeline.getChildren().length;

@@ -1,13 +1,15 @@
 // effect-type-grid.tsx - Grid of selectable animation effect type buttons grouped by category
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Star } from 'lucide-react';
-import type { ResolvedAnimation, AvailableEffect, EffectCategory } from '@/types/animation-types';
+import type { ResolvedAnimation, AvailableEffect, EffectCategory, ItemType } from '@/types/animation-types';
 import {
   STAR_COLOR_MAP,
   EFFECT_CATEGORY_LABELS,
 } from '@/constants/animation-constants';
-import { getAvailableEffects } from './utils';
+import { getAvailableEffects, inferEffectTypeForComposite } from './utils';
+import { useRetouchSpreadIds, useRetouchSpreads } from '@/stores/snapshot-store/selectors';
+import { useSpaceViewState, useEffectiveSpreadId } from '@/features/editor/hooks/use-space-view-state';
 
 interface EffectTypeGridProps {
   animation: ResolvedAnimation;
@@ -102,7 +104,22 @@ function CategorySection({
 export function EffectTypeGrid({ animation, onEffectTypeChange, targetHasAudio }: EffectTypeGridProps) {
   const [showMore, setShowMore] = useState(false);
 
-  const availableEffects = getAvailableEffects(animation.animation.target.type, targetHasAudio);
+  // Resolve composite matrix when target.type === 'composite'.
+  // We need the spread to look up the composite definition (its variants determine matrix).
+  const retouchSpreadIds = useRetouchSpreadIds();
+  const retouchSpreads = useRetouchSpreads();
+  const { activeSpreadId } = useSpaceViewState('animation');
+  const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
+
+  const selectedTargetType = useMemo<ItemType>(() => {
+    const targetType = animation.animation.target.type;
+    if (targetType !== 'composite') return targetType;
+    const spread = retouchSpreads.find((s) => s.id === effectiveSpreadId);
+    const composite = spread?.composites?.find((c) => c.id === animation.animation.target.id);
+    return composite ? inferEffectTypeForComposite(composite) : 'image';
+  }, [animation.animation.target, retouchSpreads, effectiveSpreadId]);
+
+  const availableEffects = getAvailableEffects(selectedTargetType, targetHasAudio);
   const allGroups = groupEffectsByCategory(availableEffects);
   const selectedEffectType = animation.animation.effect.type;
 

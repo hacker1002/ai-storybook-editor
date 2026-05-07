@@ -14,7 +14,8 @@ import type {
   SpreadAutoPic,
   SpreadAutoAudio,
 } from "@/types/canvas-types";
-import type { SpreadItemMediaType } from "@/types/spread-types";
+import type { SpreadComposite, SpreadItemMediaType } from "@/types/spread-types";
+import { buildVariantOwnerMap, minEditionOrder } from "./composite-list-helpers";
 
 // === Layer helpers ===
 
@@ -89,6 +90,41 @@ export function groupEntriesByLayer(entries: ObjectListEntry[]): LayerGroup[] {
     }
   }
 
+  // MEDIA layer: collapse variant children into composite parents.
+  // Composite group rows render at top-level alongside non-grouped image/auto_pic;
+  // variant children are nested under composite.children[] (sorted by edition order).
+  for (const group of groups) {
+    if (group.layer.label !== LAYER_CONFIG.MEDIA.label) continue;
+
+    const compositeMap = new Map<string, ObjectListEntry>();
+    for (const e of group.entries) {
+      if (e.isComposite) {
+        compositeMap.set(e.id, { ...e, children: [] });
+      }
+    }
+    if (compositeMap.size === 0) continue; // No composites in this layer
+
+    const flatTop: ObjectListEntry[] = [];
+    for (const e of group.entries) {
+      if (e.isComposite) {
+        const wrapped = compositeMap.get(e.id);
+        if (wrapped) flatTop.push(wrapped);
+      } else if (e.parentCompositeId && compositeMap.has(e.parentCompositeId)) {
+        const parent = compositeMap.get(e.parentCompositeId);
+        parent?.children?.push(e);
+      } else {
+        flatTop.push(e);
+      }
+    }
+    // Sort children inside each composite by min(edition order)
+    for (const comp of compositeMap.values()) {
+      comp.children?.sort(
+        (a, b) => minEditionOrder(a.variantEditions) - minEditionOrder(b.variantEditions)
+      );
+    }
+    group.entries = flatTop;
+  }
+
   // Remove empty groups
   return groups.filter((g) => g.entries.length > 0);
 }
@@ -114,7 +150,12 @@ export function buildObjectList(
   const objectsLayer = LAYER_CONFIG.OBJECTS;
   const textLayer = LAYER_CONFIG.TEXT;
 
+  // Build variant ownership map up front so image/auto_pic entries can be
+  // tagged with their parentCompositeId + edition slots.
+  const variantOwner = buildVariantOwnerMap(spread);
+
   (spread.images ?? []).forEach((img, i) => {
+    const owner = variantOwner.get(img.id);
     entries.push({
       id: img.id,
       type: "image",
@@ -126,6 +167,8 @@ export function buildObjectList(
       editorVisible: (img as SpreadImage).editor_visible !== false,
       playerVisible: (img as SpreadImage).player_visible !== false,
       assetType: (img as SpreadImage).type,
+      parentCompositeId: owner?.compositeId,
+      variantEditions: owner?.editions,
     });
   });
 
@@ -167,6 +210,7 @@ export function buildObjectList(
   });
 
   spread.auto_pics?.forEach((ap, i) => {
+    const owner = variantOwner.get(ap.id);
     entries.push({
       id: ap.id,
       type: "auto_pic",
@@ -178,6 +222,22 @@ export function buildObjectList(
       editorVisible: (ap as SpreadAutoPic).editor_visible !== false,
       playerVisible: (ap as SpreadAutoPic).player_visible !== false,
       assetType: (ap as SpreadAutoPic).type,
+      parentCompositeId: owner?.compositeId,
+      variantEditions: owner?.editions,
+    });
+  });
+
+  // Composite group entries (no asset type, render in MEDIA layer).
+  spread.composites?.forEach((comp, i) => {
+    const c = comp as SpreadComposite;
+    entries.push({
+      id: c.id,
+      type: "composite",
+      title: c.title || `Composite ${i + 1}`,
+      zIndex: resolveZIndex(c["z-index"], i, mediaLayer),
+      editorVisible: c.editor_visible !== false,
+      playerVisible: c.player_visible !== false,
+      isComposite: true,
     });
   });
 

@@ -32,6 +32,7 @@ import {
   buildDefaultEffect,
   createDefaultFilterState,
   buildItemsMap,
+  inferEffectTypeForComposite,
 } from "./utils";
 import { createLogger } from "@/utils/logger";
 import { EFFECT_TYPE } from "@/constants/animation-constants";
@@ -114,9 +115,27 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
     return result?.content?.audio?.combined_audio_url != null;
   }, [expandedAnimIndex, filteredAnimations, currentSpread, languageCode, selectedItemHasAudio]);
 
+  // Resolve effect-grid matrix type considering composite re-target rule:
+  // - If selectedItem is a variant of a composite → use restrictive composite matrix.
+  // - If selectedItem.type === 'composite' (composite group selection) → infer matrix.
+  // - Else → variant type as-is.
+  const effectMatrixType = useMemo<ItemType | null>(() => {
+    if (!selectedItem) return null;
+    const parent = currentSpread?.composites?.find((c) =>
+      c.variants.some((v) => v.id === selectedItem.id),
+    );
+    if (parent) return inferEffectTypeForComposite(parent);
+    if (selectedItem.type === 'composite') {
+      const composite = currentSpread?.composites?.find((c) => c.id === selectedItem.id);
+      if (composite) return inferEffectTypeForComposite(composite);
+      return 'image';
+    }
+    return selectedItem.type;
+  }, [selectedItem, currentSpread]);
+
   const availableEffects = useMemo(
-    () => (selectedItem ? getAvailableEffects(selectedItem.type, selectedItemHasAudio) : []),
-    [selectedItem, selectedItemHasAudio],
+    () => (effectMatrixType ? getAvailableEffects(effectMatrixType, selectedItemHasAudio) : []),
+    [effectMatrixType, selectedItemHasAudio],
   );
 
   // Build PlayableSpread[] from retouch spreads
@@ -152,50 +171,76 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
   const handleAddAnimation = useCallback(
     async (effectType: number) => {
       if (!selectedItem || !effectiveSpreadId) return;
+
+      // Composite re-target rule: if selectedItem is a variant of a composite,
+      // route the animation target to the composite instead of the variant.
+      const parentComposite = currentSpread?.composites?.find((c) =>
+        c.variants.some((v) => v.id === selectedItem.id),
+      );
+      const resolvedTarget: SpreadAnimation["target"] = parentComposite
+        ? { id: parentComposite.id, type: 'composite' }
+        : { id: selectedItem.id, type: selectedItem.type as SpreadAnimation["target"]["type"] };
+
+      const effectItemType: ItemType = parentComposite
+        ? inferEffectTypeForComposite(parentComposite)
+        : selectedItem.type;
+
       log.info("handleAddAnimation", "adding animation", {
         effectType,
-        targetId: selectedItem.id,
-        targetType: selectedItem.type,
+        targetId: resolvedTarget.id,
+        targetType: resolvedTarget.type,
+        rerouted: !!parentComposite,
       });
-
-      const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
-      const effect = buildDefaultEffect(effectType);
-
-      // Auto-set duration for Play effect on video/audio targets
-      if (effectType === EFFECT_TYPE.PLAY && (selectedItem.type === 'video' || selectedItem.type === 'audio')) {
-        const mediaUrl = findMediaUrlFromSpread(currentSpread, selectedItem.id, selectedItem.type);
-        if (mediaUrl) {
-          const durationMs = await fetchMediaDurationMs(mediaUrl);
-          if (durationMs) {
-            effect.duration = durationMs;
-            log.debug("handleAddAnimation", "auto-set play duration from media", { durationMs });
-          }
-        }
+      if (parentComposite) {
+        log.debug("handleAddAnimation", "re-target to composite", {
+          variantId: selectedItem.id,
+          compositeId: parentComposite.id,
+          effectItemType,
+        });
       }
 
-      // Auto-set duration for Read-Along effect on textbox targets
-      if (effectType === EFFECT_TYPE.READ_ALONG && selectedItem.type === 'textbox') {
-        const textbox = currentSpread?.textboxes?.find((tb) => tb.id === selectedItem.id);
-        if (textbox) {
-          const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
-          const url = result?.content?.audio?.combined_audio_url;
-          if (url) {
-            const durationMs = await fetchMediaDurationMs(url);
+      const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
+      const effect = buildDefaultEffect(effectType, effectItemType);
+
+      // Skip auto-fetch media duration for composite: composite has no direct media_url.
+      if (resolvedTarget.type !== 'composite') {
+        // Auto-set duration for Play effect on video/audio targets
+        if (effectType === EFFECT_TYPE.PLAY && (selectedItem.type === 'video' || selectedItem.type === 'audio')) {
+          const mediaUrl = findMediaUrlFromSpread(currentSpread, selectedItem.id, selectedItem.type);
+          if (mediaUrl) {
+            const durationMs = await fetchMediaDurationMs(mediaUrl);
             if (durationMs) {
               effect.duration = durationMs;
-              log.debug("handleAddAnimation", "auto-set read-along duration from narration audio", { durationMs });
+              log.debug("handleAddAnimation", "auto-set play duration from media", { durationMs });
             }
           }
         }
+
+        // Auto-set duration for Read-Along effect on textbox targets
+        if (effectType === EFFECT_TYPE.READ_ALONG && selectedItem.type === 'textbox') {
+          const textbox = currentSpread?.textboxes?.find((tb) => tb.id === selectedItem.id);
+          if (textbox) {
+            const result = getTextboxContentForLanguage(textbox as Record<string, unknown>, languageCode);
+            const url = result?.content?.audio?.combined_audio_url;
+            if (url) {
+              const durationMs = await fetchMediaDurationMs(url);
+              if (durationMs) {
+                effect.duration = durationMs;
+                log.debug("handleAddAnimation", "auto-set read-along duration from narration audio", { durationMs });
+              }
+            }
+          }
+        }
+      } else {
+        log.debug("handleAddAnimation", "skip media duration auto-fetch for composite target", {
+          compositeId: resolvedTarget.id,
+        });
       }
 
       const newAnimation: SpreadAnimation = {
         order: maxOrder + 1,
         type: 0,
-        target: {
-          id: selectedItem.id,
-          type: selectedItem.type as SpreadAnimation["target"]["type"],
-        },
+        target: resolvedTarget,
         trigger_type: "on_next",
         effect,
       };

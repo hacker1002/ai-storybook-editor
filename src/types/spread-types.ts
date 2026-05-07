@@ -14,7 +14,34 @@ export type ItemType =
   | "auto_pic"
   | "audio"
   | "auto_audio"
-  | "quiz";
+  | "quiz"
+  | "composite";
+
+// === Composite (edition-aware wrapper) ===
+// See snapshot/illustration-structure.md#composites
+export type EditionTag = 'classic' | 'dynamic' | 'interactive';
+export type CompositeVariantSourceType = 'image' | 'auto_pic';
+
+/** Reference to a sub-item (image | auto_pic) within the same spread.
+ *  `id` is FK → `spread.images[].id` or `spread.auto_pics[].id` (discriminator: `type`).
+ *  Per composite: 1 edition slot → exactly 1 variant entry. */
+export interface CompositeVariant {
+  id: string;
+  type: CompositeVariantSourceType;
+  edition: EditionTag;
+}
+
+/** Edition-aware wrapper grouping 2..3 sub-items. Player runtime resolves the
+ *  active variant by `book.edition`. Composite itself is NOT a render layer —
+ *  it's purely logical state living in `spread.composites[]`. */
+export interface SpreadComposite {
+  id: string;
+  title: string;
+  'z-index': number;
+  editor_visible?: boolean;  // default true
+  player_visible?: boolean;  // default true
+  variants: CompositeVariant[];  // 2..3 entries (1 per edition slot)
+}
 
 // === Geometry Types ===
 export interface Point {
@@ -424,7 +451,7 @@ export interface SpreadAnimation {
   group?: string;
   target: {
     id: string;
-    type: "textbox" | "image" | "video" | "auto_pic" | "audio" | "shape" | "quiz";
+    type: "textbox" | "image" | "video" | "auto_pic" | "audio" | "shape" | "quiz" | "composite";
   };
   trigger_type: "on_click" | "on_next" | "with_previous" | "after_previous";
   click_loop?: number;
@@ -458,6 +485,7 @@ export interface BaseSpread {
   auto_audios?: SpreadAutoAudio[];
   audios?: SpreadAudio[];
   quizzes?: SpreadQuiz[];
+  composites?: SpreadComposite[];
   animations?: SpreadAnimation[];
 
   manuscript?: string;

@@ -21,6 +21,10 @@ import {
 } from "./utils/context-builders";
 import { getScaledDimensions } from "./utils/coordinate-utils";
 import { resolveItemZIndex } from "./utils/resolve-item-z-index";
+import {
+  buildEditorCompositeContextMap,
+  resolveEffectiveZIndex,
+} from "../../utils/composite-resolve-helpers";
 import { Z_INDEX } from "@/constants/spread-constants";
 import {
   useCanvasWidth,
@@ -518,15 +522,31 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // with a higher z-index than the selected element stay clickable. Items
   // below the selected one become unreachable — intentional, matches the
   // "active item is front-most" mental model.
-  const calcSelectedZIndex =
-    state.selectedElement && state.selectedElement.type !== "page"
-      ? resolveItemZIndex(
-          state.selectedElement.type,
-          state.selectedElement.index,
-          spread,
-          isRawElement && !preventEditRawItem
-        )
-      : 0;
+  // Composite override: variants render at composite['z-index'] (see
+  // objects-main-view renderRetouchImage). Frame must mirror that or the
+  // item layers in front of the drag border and swallows pointer events.
+  const editorCompositeCtxMap = useMemo(
+    () => buildEditorCompositeContextMap(spread),
+    [spread]
+  );
+  const calcSelectedZIndex = (() => {
+    const sel = state.selectedElement;
+    if (!sel || sel.type === "page") return 0;
+    const baseZ = resolveItemZIndex(
+      sel.type,
+      sel.index,
+      spread,
+      isRawElement && !preventEditRawItem
+    );
+    if (sel.type === "image") {
+      const img = (spread.images ?? [])[sel.index];
+      if (img) return resolveEffectiveZIndex({ id: img.id, "z-index": baseZ }, editorCompositeCtxMap);
+    } else if (sel.type === "auto_pic") {
+      const ap = (spread.auto_pics ?? [])[sel.index];
+      if (ap) return resolveEffectiveZIndex({ id: ap.id, "z-index": baseZ }, editorCompositeCtxMap);
+    }
+    return baseZ;
+  })();
 
   return (
     <div

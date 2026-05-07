@@ -21,6 +21,7 @@ import {
   Timer,
   Hourglass,
   Lock,
+  Layers,
 } from "lucide-react";
 
 interface AnimationListItemProps {
@@ -77,6 +78,8 @@ function TargetIcon({ icon }: { icon: ResolvedAnimation["targetItemIcon"] }) {
       return <Square className={cls} />;
     case "quiz":
       return <CircleHelp className={cls} />;
+    case "composite":
+      return <Layers className={cls} />;
   }
 }
 

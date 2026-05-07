@@ -16,6 +16,9 @@ import type {
   SpreadQuiz,
   SpreadQuizLocalized,
   SpreadAnimation,
+  SpreadComposite,
+  CompositeVariant,
+  EditionTag,
   QuizAnswerSetting,
   QuizContainer,
   ItemContainerRole,
@@ -299,6 +302,17 @@ export interface RetouchSlice {
   deleteRetouchAnimation: (spreadId: string, animationIndex: number) => void;
   deleteRetouchAnimationsByTargetId: (spreadId: string, targetId: string) => void;
   reorderRetouchAnimations: (spreadId: string, fromIndex: number, toIndex: number) => void;
+
+  // Composites (edition-aware wrapper, no own asset)
+  addRetouchComposite: (spreadId: string, composite: SpreadComposite) => void;
+  /** WRITE-THROUGH visibility cascade: when `editor_visible` or `player_visible`
+   *  is in updates, propagate to all variant items (image | auto_pic) within
+   *  the same spread. See plan Session 1 D5. */
+  updateRetouchComposite: (spreadId: string, compositeId: string, updates: Partial<SpreadComposite>) => void;
+  deleteRetouchComposite: (spreadId: string, compositeId: string) => void;
+  addVariantToComposite: (spreadId: string, compositeId: string, variant: CompositeVariant) => void;
+  /** When `edition` omitted, removes ALL entries with matching `variantId`. */
+  removeVariantFromComposite: (spreadId: string, compositeId: string, variantId: string, edition?: EditionTag) => void;
 }
 
 export interface PropsSlice {

@@ -14,6 +14,8 @@ import type {
 } from '@/types/animation-types';
 import { STAR_COLOR_MAP, EFFECT_CATEGORY_LABELS } from '@/constants/animation-constants';
 import { buildDefaultEffect, computeStepNumbers } from './utils';
+import { useRetouchSpreadIds, useRetouchSpreads } from '@/stores/snapshot-store/selectors';
+import { useSpaceViewState, useEffectiveSpreadId } from '@/features/editor/hooks/use-space-view-state';
 import { AnimationFilterPopover } from './animation-filter-popover';
 import { AnimationListItem } from './animation-list-item';
 import { Button } from '@/components/ui/button';
@@ -91,6 +93,32 @@ export function AnimationEditorSidebar({
   const categoryOrder: EffectCategory[] = ['play', 'read-along', 'entrance', 'emphasis', 'exit', 'motion-paths'];
 
   const stepNumbers = useMemo(() => computeStepNumbers(animations), [animations]);
+
+  // ---- Composite cross-link highlight ----
+  // Resolve current spread to know composites; highlights an animation when:
+  //  (a) its target.id === selectedItem.id (direct), OR
+  //  (b) selectedItem is a variant of a composite AND animation.target.id === parentComposite.id, OR
+  //  (c) selectedItem.type === 'composite' AND animation.target.id === selectedItem.id.
+  const retouchSpreadIds = useRetouchSpreadIds();
+  const retouchSpreads = useRetouchSpreads();
+  const { activeSpreadId } = useSpaceViewState('animation');
+  const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
+
+  const matchingIndexSet = useMemo(() => {
+    const set = new Set<number>();
+    if (!selectedItem) return set;
+    const spread = retouchSpreads.find((s) => s.id === effectiveSpreadId);
+    const parentComposite = spread?.composites?.find((c) =>
+      c.variants.some((v) => v.id === selectedItem.id),
+    );
+    animations.forEach((resolved, i) => {
+      const tid = resolved.animation.target.id;
+      if (tid === selectedItem.id) set.add(i);
+      else if (parentComposite && tid === parentComposite.id) set.add(i);
+      else if (selectedItem.type === 'composite' && tid === selectedItem.id) set.add(i);
+    });
+    return set;
+  }, [selectedItem, animations, retouchSpreads, effectiveSpreadId]);
 
   // ---------- Drag reorder handlers ----------
 
@@ -275,7 +303,7 @@ export function AnimationEditorSidebar({
               index={index}
               stepNumber={stepNumbers[index]}
               isExpanded={index === expandedAnimationIndex}
-              isHighlighted={selectedItem?.id === resolvedAnim.animation.target.id}
+              isHighlighted={matchingIndexSet.has(index)}
               isDragOver={index === dragOverIndex}
               onClick={() =>
                 onExpandChange(index === expandedAnimationIndex ? null : index)

@@ -3,7 +3,7 @@
 
 import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import gsap from 'gsap';
-import type { AnimationStep, PlayableSpread } from '@/types/playable-types';
+import type { AnimationStep, PlayableSpread, PlayEdition } from '@/types/playable-types';
 import type { SpreadAnimation } from '@/types/spread-types';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
 import {
@@ -16,6 +16,7 @@ import {
   useAutoplaySuspended,
 } from '@/stores/animation-playback-store';
 import { addTweenToTimeline } from '../animation-tween-builders';
+import { resolveAnimationTarget } from '@/features/editor/utils/composite-resolve-helpers';
 import { getTextboxContentForLanguage } from '../../../utils/textbox-helpers';
 import {
   applyInitialStates,
@@ -73,6 +74,11 @@ export interface UsePlayerGsapEngineParams {
   spread: PlayableSpread;
   /** Pre-filtered animations by playEdition (from PlayerCanvas prop, not store) */
   filteredAnimations: PlayableSpread['animations'];
+  /** Active edition — sourced from PlayerCanvas prop to stay in sync with
+   *  filteredAnimations. Reading via `usePlayEdition()` here would lag the prop
+   *  by one tick (store sync runs in a separate effect), causing initial-state
+   *  for composite targets to resolve against the wrong variant on mount. */
+  playEdition: PlayEdition;
   zoomLevel: number;
   narrationLangCode: string;
   onSpreadComplete: (spreadId: string) => void;
@@ -100,6 +106,7 @@ export interface UsePlayerGsapEngineReturn {
 export function usePlayerGsapEngine({
   spread,
   filteredAnimations: editionFilteredAnimations,
+  playEdition,
   zoomLevel,
   narrationLangCode,
   onSpreadComplete,
@@ -117,6 +124,9 @@ export function usePlayerGsapEngine({
   // not start until the visual page-turn completes. We still allow cleanup +
   // applyInitialStates so the new spread's DOM is ready underneath the overlay.
   const autoplaySuspended = useAutoplaySuspended();
+  // playEdition is now received as a hook param (see UsePlayerGsapEngineParams).
+  // Reading from the store would lag the parent's prop by one tick — composite
+  // targets would resolve against the previous edition's variant on mount.
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
 
@@ -320,9 +330,22 @@ export function usePlayerGsapEngine({
           return;
         }
 
-        const el = elementRefsMap.current.get(anim.target.id);
+        // Phase 6 — composite target → resolve to active variant id under
+        // current playEdition. Non-composite targets pass through unchanged.
+        // Pass narrow `{ composites }` shape so the callback's effect deps stay
+        // narrow (re-create only when composites change, not on any spread edit).
+        const resolved = resolveAnimationTarget(anim.target, { composites: spread.composites }, playEdition);
+        if (!resolved.variantId) {
+          log.debug('buildAndPlayStepTimeline', 'composite target unresolved — skipping', {
+            targetId: anim.target.id,
+            targetType: anim.target.type,
+            playEdition,
+          });
+          return;
+        }
+        const el = elementRefsMap.current.get(resolved.variantId);
         if (!el) {
-          log.warn('buildAndPlayStepTimeline', 'element not found', { targetId: anim.target.id });
+          log.warn('buildAndPlayStepTimeline', 'element not found', { targetId: resolved.variantId });
           return;
         }
 
@@ -338,20 +361,26 @@ export function usePlayerGsapEngine({
 
         addTweenToTimeline(tl, anim, el, position, {
           spreadContainer: spreadContainerRef.current,
-          itemGeometry: findItemGeometry(anim.target.id),
+          itemGeometry: findItemGeometry(resolved.variantId),
           canvasWidth,
           canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
           ...resolveAudioMediaLength(anim, spread.audios),
           ...buildAnimCallbacks(anim),
+          bypassMotion: resolved.bypassMotion,
         });
       });
 
       timelineRef.current = tl;
       tl.play();
     },
-    [killTimeline, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
+    // Narrow deps: only the spread fields the callback actually reads —
+    // resolveAnimationTarget needs `composites`; READ_ALONG/audio fallback need
+    // `textboxes`/`audios`. Whole-spread dep would re-create the callback on
+    // unrelated field changes (e.g. a stages edit) and re-trigger downstream
+    // memos.
+    [killTimeline, playbackActions, getContainerDims, findItemGeometry, onQuizPlay, spread.composites, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks, playEdition]
   );
 
   const buildAndPlayFullTimeline = useCallback(() => {
@@ -385,9 +414,19 @@ export function usePlayerGsapEngine({
         return;
       }
 
-      const el = elementRefsMap.current.get(anim.target.id);
+      // Phase 6 — composite target resolution. Narrow shape — see step-timeline note.
+      const resolved = resolveAnimationTarget(anim.target, { composites: spread.composites }, playEdition);
+      if (!resolved.variantId) {
+        log.debug('buildAndPlayFullTimeline', 'composite target unresolved — skipping', {
+          targetId: anim.target.id,
+          targetType: anim.target.type,
+          playEdition,
+        });
+        return;
+      }
+      const el = elementRefsMap.current.get(resolved.variantId);
       if (!el) {
-        log.warn('buildAndPlayFullTimeline', 'element not found', { targetId: anim.target.id });
+        log.warn('buildAndPlayFullTimeline', 'element not found', { targetId: resolved.variantId });
         return;
       }
 
@@ -421,19 +460,23 @@ export function usePlayerGsapEngine({
 
       addTweenToTimeline(tl, anim, el, position, {
         spreadContainer: spreadContainerRef.current,
-        itemGeometry: findItemGeometry(anim.target.id),
+        itemGeometry: findItemGeometry(resolved.variantId),
         canvasWidth,
         canvasHeight,
         ...dims,
         ...readAlongExtras,
         ...resolveAudioMediaLength(anim, spread.audios),
         ...buildAnimCallbacks(anim),
+        bypassMotion: resolved.bypassMotion,
       });
     });
 
     timelineRef.current = tl;
     tl.play();
-  }, [killTimeline, editionFilteredAnimations, spread.id, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]);
+    // Narrow deps: only the spread fields the callback reads — `id` for the
+    // onSpreadComplete callback, `composites` for resolveAnimationTarget,
+    // `textboxes` for READ_ALONG, `audios` for PLAY runtime fallback.
+  }, [killTimeline, editionFilteredAnimations, spread.id, spread.composites, spread.textboxes, spread.audios, onSpreadComplete, getContainerDims, findItemGeometry, onQuizPlay, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks, playEdition]);
 
   // === Click Loop Replay (independent timeline) ===
 
@@ -466,7 +509,10 @@ export function usePlayerGsapEngine({
           return;
         }
 
-        const el = elementRefsMap.current.get(anim.target.id);
+        // Phase 6 — composite resolution for click-loop replay. Narrow shape.
+        const resolved = resolveAnimationTarget(anim.target, { composites: spread.composites }, playEdition);
+        if (!resolved.variantId) return;
+        const el = elementRefsMap.current.get(resolved.variantId);
         if (!el) return;
 
         // Clear transforms from previous play, then reset to initial state.
@@ -485,20 +531,22 @@ export function usePlayerGsapEngine({
 
         addTweenToTimeline(replayTl, anim, el, position, {
           spreadContainer: spreadContainerRef.current,
-          itemGeometry: findItemGeometry(anim.target.id),
+          itemGeometry: findItemGeometry(resolved.variantId),
           canvasWidth,
           canvasHeight,
           ...dims,
           ...resolveReadAlongAudioData(anim, spread.textboxes, narrationLangCode),
           ...resolveAudioMediaLength(anim, spread.audios),
           ...buildAnimCallbacks(anim),
+          bypassMotion: resolved.bypassMotion,
         });
       });
 
       replayTimelineRef.current = replayTl;
       replayTl.play();
     },
-    [killReplayTimeline, getContainerDims, findItemGeometry, onQuizPlay, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks]
+    // Narrow deps — see buildAndPlayStepTimeline note.
+    [killReplayTimeline, getContainerDims, findItemGeometry, onQuizPlay, spread.composites, spread.textboxes, spread.audios, narrationLangCode, canvasWidth, canvasHeight, buildAnimCallbacks, playEdition]
   );
 
   // === Returned utility functions ===
@@ -549,7 +597,9 @@ export function usePlayerGsapEngine({
         editionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
         spreadContainerRef.current,
-        { width: canvasWidth, height: canvasHeight }
+        { width: canvasWidth, height: canvasHeight },
+        { composites: spread.composites },
+        playEdition,
       );
 
       // Re-apply end states for steps 0..fromStepIndex-1
@@ -568,7 +618,7 @@ export function usePlayerGsapEngine({
         });
       }
     },
-    [steps, editionFilteredAnimations, findItemGeometry, canvasWidth, canvasHeight]
+    [steps, editionFilteredAnimations, findItemGeometry, canvasWidth, canvasHeight, spread.composites, playEdition]
   );
 
   // === Lifecycle: Cleanup on unmount ===
@@ -589,7 +639,14 @@ export function usePlayerGsapEngine({
     killTimeline();
     killReplayTimeline();
     resetElementStyles(elementRefsMap.current);
-    applyInitialStates(editionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
+    applyInitialStates(
+      editionFilteredAnimations,
+      elementRefsMap.current,
+      spreadContainerRef.current,
+      { width: canvasWidth, height: canvasHeight },
+      { composites: spread.composites },
+      playEdition,
+    );
 
     prevStepIndexRef.current = -1;
 
@@ -658,7 +715,9 @@ export function usePlayerGsapEngine({
         editionFilteredAnimations.filter((a) => affectedTargets.has(a.target.id)),
         elementRefsMap.current,
         spreadContainerRef.current,
-        { width: canvasWidth, height: canvasHeight }
+        { width: canvasWidth, height: canvasHeight },
+        { composites: spread.composites },
+        playEdition,
       );
 
       // Re-apply end states for steps 0..currentIdx-1
@@ -695,7 +754,14 @@ export function usePlayerGsapEngine({
       cancelPendingRaf();
       killTimeline();
       resetElementStyles(elementRefsMap.current);
-      applyInitialStates(editionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
+      applyInitialStates(
+        editionFilteredAnimations,
+        elementRefsMap.current,
+        spreadContainerRef.current,
+        { width: canvasWidth, height: canvasHeight },
+        { composites: spread.composites },
+        playEdition,
+      );
       return;
     }
 
@@ -721,7 +787,14 @@ export function usePlayerGsapEngine({
         pendingRafRef.current = requestAnimationFrame(() => {
           pendingRafRef.current = null;
           resetElementStyles(elementRefsMap.current);
-          applyInitialStates(editionFilteredAnimations, elementRefsMap.current, spreadContainerRef.current);
+          applyInitialStates(
+            editionFilteredAnimations,
+            elementRefsMap.current,
+            spreadContainerRef.current,
+            { width: canvasWidth, height: canvasHeight },
+            { composites: spread.composites },
+            playEdition,
+          );
           buildAndPlayFullTimeline();
         });
       } else {

@@ -49,6 +49,7 @@ import { ObjectsRawImageToolbar } from "./objects-raw-image-toolbar";
 import { ObjectsRawTextboxToolbar } from "./objects-raw-textbox-toolbar";
 import { ObjectsAutoPicToolbar } from "./objects-auto-pic-toolbar";
 import { PlayerHiddenBadge } from "./player-hidden-badge";
+import { CompositeMemberBadge } from "./composite-member-badge";
 import {
   useRetouchSpreads,
   useSnapshotActions,
@@ -97,6 +98,13 @@ import type {
   SpreadAutoAudio,
   SpreadAutoPic,
 } from "@/types/canvas-types";
+import type { SpreadComposite } from "@/types/spread-types";
+import {
+  buildEditorCompositeContextMap,
+  resolveEffectiveZIndex,
+  buildCompositeNumberMap,
+  findCompositeIdForVariant,
+} from "@/features/editor/utils/composite-resolve-helpers";
 
 const log = createLogger("UI", "ObjectsMainView");
 
@@ -139,6 +147,41 @@ export function ObjectsMainView({
   const selectedSpread = useMemo(
     () => retouchSpreads.find(s => s.id === selectedSpreadId),
     [retouchSpreads, selectedSpreadId]
+  );
+
+  // Composite membership lookup: variantId → 1-based composite ordinal.
+  // Memoized on the active spread's composites — rebuilds only when group
+  // membership changes, not on unrelated item edits.
+  const composites = useMemo<SpreadComposite[]>(
+    () => selectedSpread?.composites ?? [],
+    [selectedSpread?.composites]
+  );
+  const compositeNumberByVariantId = useMemo(
+    () => buildCompositeNumberMap(composites),
+    [composites]
+  );
+  // Phase 6 — runtime z-index override for variants belonging to a composite.
+  // Editor map covers ALL variants regardless of edition (editor renders every
+  // variant for inspection/editing). Visibility is NOT in this map — Phase 1
+  // store cascade already mutates variant.editor_visible directly.
+  const editorCompositeCtxMap = useMemo(
+    () => buildEditorCompositeContextMap({ composites }),
+    [composites]
+  );
+  const handleSelectComposite = useCallback(
+    (variantId: string) => {
+      const compositeId = findCompositeIdForVariant(composites, variantId);
+      if (!compositeId) {
+        log.warn("handleSelectComposite", "no composite for variant", { variantId });
+        return;
+      }
+      log.debug("handleSelectComposite", "select composite", {
+        variantId,
+        compositeId,
+      });
+      onItemSelect({ type: "composite", id: compositeId });
+    },
+    [composites, onItemSelect]
   );
 
   const originalLanguage = book?.original_language ?? "en_US";
@@ -326,12 +369,19 @@ export function ObjectsMainView({
     (context: ImageItemContext<BaseSpread>) => {
       const img = context.item as SpreadImage;
       if (img.editor_visible === false) return null;
+      const compositeNumber = compositeNumberByVariantId.get(img.id);
+      // Phase 6 — apply composite z-index override when variant belongs to a
+      // composite; standalone items keep their own z-index (context.zIndex).
+      const effectiveZ = resolveEffectiveZIndex(
+        { id: img.id, 'z-index': context.zIndex },
+        editorCompositeCtxMap
+      );
       return (
         <>
           <EditableImage
             image={context.item}
             index={context.itemIndex}
-            zIndex={context.zIndex}
+            zIndex={effectiveZ}
             isSelected={context.isSelected}
             isEditable={context.isSpreadSelected}
             showItemBorder={true}
@@ -347,13 +397,21 @@ export function ObjectsMainView({
           {img.player_visible === false && (
             <PlayerHiddenBadge
               geometry={img.geometry}
-              zIndex={context.zIndex}
+              zIndex={effectiveZ}
+            />
+          )}
+          {compositeNumber !== undefined && (
+            <CompositeMemberBadge
+              compositeNumber={compositeNumber}
+              geometry={img.geometry}
+              zIndex={effectiveZ}
+              onClick={() => handleSelectComposite(img.id)}
             />
           )}
         </>
       );
     },
-    [onItemSelect]
+    [onItemSelect, compositeNumberByVariantId, handleSelectComposite, editorCompositeCtxMap]
   );
 
   const renderRetouchTextbox = useCallback(
@@ -532,12 +590,18 @@ export function ObjectsMainView({
     (context: AutoPicItemContext<BaseSpread>) => {
       const ap = context.item as SpreadAutoPic;
       if (ap.editor_visible === false) return null;
+      const compositeNumber = compositeNumberByVariantId.get(ap.id);
+      // Phase 6 — composite z-index override for auto_pic variants.
+      const effectiveZ = resolveEffectiveZIndex(
+        { id: ap.id, 'z-index': context.zIndex },
+        editorCompositeCtxMap
+      );
       return (
         <>
           <EditableAutoPic
             autoPic={context.item}
             index={context.itemIndex}
-            zIndex={context.zIndex}
+            zIndex={effectiveZ}
             isSelected={context.isSelected}
             isEditable={context.isSpreadSelected}
             isThumbnail={context.isThumbnail}
@@ -550,13 +614,21 @@ export function ObjectsMainView({
           {ap.player_visible === false && (
             <PlayerHiddenBadge
               geometry={ap.geometry}
-              zIndex={context.zIndex}
+              zIndex={effectiveZ}
+            />
+          )}
+          {compositeNumber !== undefined && (
+            <CompositeMemberBadge
+              compositeNumber={compositeNumber}
+              geometry={ap.geometry}
+              zIndex={effectiveZ}
+              onClick={() => handleSelectComposite(ap.id)}
             />
           )}
         </>
       );
     },
-    [onItemSelect]
+    [onItemSelect, compositeNumberByVariantId, handleSelectComposite, editorCompositeCtxMap]
   );
 
   // === Raw item render props (illustration layer — read-only on canvas) ===
