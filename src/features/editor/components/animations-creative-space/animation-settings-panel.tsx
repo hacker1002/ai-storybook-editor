@@ -209,7 +209,7 @@ function EffectOptionsForm({
   }
 
   function handleEaseTimeChange(seconds: number) {
-    const ms = Math.max(100, Math.round(seconds * 1000));
+    const ms = Math.max(0, Math.round(seconds * 1000));
     log.info('handleEaseTimeChange', 'update ease_time', { ms, animationIndex: animation.originalIndex });
     onEffectOptionChange('payload.ease_time', ms);
   }
@@ -295,7 +295,7 @@ function EffectOptionsForm({
             field="payload.ease_time"
             value={(effect.payload?.ease_time ?? 500) / 1000}
             step={0.1}
-            min={0.1}
+            min={0}
             unit="s"
             onChange={(_field, val) => handleEaseTimeChange(Number(val))}
           />
