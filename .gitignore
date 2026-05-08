@@ -61,3 +61,7 @@ Thumbs.db
 *.local
 .vercel
 .netlify
+
+# understand-anything plugin artifacts (graph snapshots; commit only the scope config)
+.understand-anything/*
+!.understand-anything/.understandignore
