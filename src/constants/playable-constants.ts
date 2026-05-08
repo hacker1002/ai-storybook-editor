@@ -24,35 +24,34 @@ export const EFFECT_TYPE = {
 } as const;
 
 export const EFFECT_TYPE_NAMES: Record<number, string> = {
-  1: 'Play',
-  2: 'Appear',
-  3: 'Fade In',
-  4: 'Fly In',
-  5: 'Float In',
-  6: 'Zoom',
-  7: 'Spin',
-  8: 'Grow/Shrink',
-  9: 'Teeter',
-  10: 'Transparency',
-  11: 'Read-along',
-  12: 'Disappear',
-  13: 'Fade Out',
-  14: 'Fly Out',
-  15: 'Float Out',
-  16: 'Lines',
-  17: 'Arcs',
-  18: 'Focus',
-  19: 'Zoom In',
+  1: "Play",
+  2: "Appear",
+  3: "Fade In",
+  4: "Fly In",
+  5: "Float In",
+  6: "Zoom",
+  7: "Spin",
+  8: "Grow/Shrink",
+  9: "Teeter",
+  10: "Transparency",
+  11: "Read-along",
+  12: "Disappear",
+  13: "Fade Out",
+  14: "Fly Out",
+  15: "Float Out",
+  16: "Lines",
+  17: "Arcs",
+  18: "Focus",
+  19: "Zoom In",
 };
 
 // === Camera Animation Defaults (effect types 18, 19) ===
 export const CAMERA_DEFAULTS = {
-  EASE: 'power2.inOut',
+  EASE: "power2.inOut",
   EASE_TIME_MS: 500,
   DURATION_MS: 3000,
-  FOCUS_BLUR_PX: 8,
-  FOCUS_DIM_OPACITY: 0.3,
-  ZOOM_TRANSFORM_ORIGIN: '0 0',
+  FOCUS_BLUR_PX: 3,
+  ZOOM_TRANSFORM_ORIGIN: "0 0",
   ZOOM_DEFAULT_GEOMETRY_W_PCT: 50,
 } as const;
 
@@ -69,13 +68,41 @@ export const ANIMATION_PRESETS = {
   // Entrance effects (2-6)
   appear: { type: EFFECT_TYPE.APPEAR, duration: 0 },
   fadeIn: { type: EFFECT_TYPE.FADE_IN, duration: 500 },
-  flyInLeft: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'left' as const },
-  flyInRight: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'right' as const },
-  flyInTop: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'up' as const },
-  flyInBottom: { type: EFFECT_TYPE.FLY_IN, duration: 600, direction: 'down' as const },
-  floatInUp: { type: EFFECT_TYPE.FLOAT_IN, duration: 500, direction: 'up' as const },
-  floatInDown: { type: EFFECT_TYPE.FLOAT_IN, duration: 500, direction: 'down' as const },
-  floatInLeft: { type: EFFECT_TYPE.FLOAT_IN, duration: 500, direction: 'left' as const },
+  flyInLeft: {
+    type: EFFECT_TYPE.FLY_IN,
+    duration: 600,
+    direction: "left" as const,
+  },
+  flyInRight: {
+    type: EFFECT_TYPE.FLY_IN,
+    duration: 600,
+    direction: "right" as const,
+  },
+  flyInTop: {
+    type: EFFECT_TYPE.FLY_IN,
+    duration: 600,
+    direction: "up" as const,
+  },
+  flyInBottom: {
+    type: EFFECT_TYPE.FLY_IN,
+    duration: 600,
+    direction: "down" as const,
+  },
+  floatInUp: {
+    type: EFFECT_TYPE.FLOAT_IN,
+    duration: 500,
+    direction: "up" as const,
+  },
+  floatInDown: {
+    type: EFFECT_TYPE.FLOAT_IN,
+    duration: 500,
+    direction: "down" as const,
+  },
+  floatInLeft: {
+    type: EFFECT_TYPE.FLOAT_IN,
+    duration: 500,
+    direction: "left" as const,
+  },
   zoomIn: { type: EFFECT_TYPE.ZOOM, duration: 500, amount: 1 },
   // Emphasis effects (7-10)
   spin: { type: EFFECT_TYPE.SPIN, duration: 800, amount: 1, loop: 0 },
@@ -87,11 +114,31 @@ export const ANIMATION_PRESETS = {
   // Exit effects (12-15)
   disappear: { type: EFFECT_TYPE.DISAPPEAR, duration: 0 },
   fadeOut: { type: EFFECT_TYPE.FADE_OUT, duration: 500 },
-  flyOutRight: { type: EFFECT_TYPE.FLY_OUT, duration: 600, direction: 'right' as const },
-  flyOutLeft: { type: EFFECT_TYPE.FLY_OUT, duration: 600, direction: 'left' as const },
-  flyOutTop: { type: EFFECT_TYPE.FLY_OUT, duration: 600, direction: 'up' as const },
-  floatOutUp: { type: EFFECT_TYPE.FLOAT_OUT, duration: 500, direction: 'up' as const },
-  floatOutDown: { type: EFFECT_TYPE.FLOAT_OUT, duration: 500, direction: 'down' as const },
+  flyOutRight: {
+    type: EFFECT_TYPE.FLY_OUT,
+    duration: 600,
+    direction: "right" as const,
+  },
+  flyOutLeft: {
+    type: EFFECT_TYPE.FLY_OUT,
+    duration: 600,
+    direction: "left" as const,
+  },
+  flyOutTop: {
+    type: EFFECT_TYPE.FLY_OUT,
+    duration: 600,
+    direction: "up" as const,
+  },
+  floatOutUp: {
+    type: EFFECT_TYPE.FLOAT_OUT,
+    duration: 500,
+    direction: "up" as const,
+  },
+  floatOutDown: {
+    type: EFFECT_TYPE.FLOAT_OUT,
+    duration: 500,
+    direction: "down" as const,
+  },
   // Motion effects (16-17) — geometry set per-animation
   lineMove: { type: EFFECT_TYPE.LINES, duration: 800 },
   arcMove: { type: EFFECT_TYPE.ARCS, duration: 1000 },

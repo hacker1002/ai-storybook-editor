@@ -120,7 +120,6 @@ export function addCameraTweenToTimeline(
       visualEls,
       {
         filter: `blur(${CAMERA_DEFAULTS.FOCUS_BLUR_PX}px)`,
-        opacity: CAMERA_DEFAULTS.FOCUS_DIM_OPACITY,
         duration: easeTimeS,
         delay: delayS,
         ease: CAMERA_DEFAULTS.EASE,
@@ -132,7 +131,7 @@ export function addCameraTweenToTimeline(
     // via vars reliably, while post-hoc eventCallback can be unset on next tween reset.
     tl.set(
       visualEls,
-      { filter: 'none', opacity: 1, onComplete: options?.onComplete },
+      { filter: 'none', onComplete: options?.onComplete },
       `>+=${holdS}`,
     );
     return;
@@ -219,7 +218,7 @@ export function applyCameraEndState(
     const siblings = getVisualSiblings(spreadEl, new Set([targetId]));
     const visualEls = mapToVisualChildren(siblings);
     if (visualEls.length === 0) return;
-    gsap.set(visualEls, { filter: 'none', opacity: 1 });
+    gsap.set(visualEls, { filter: 'none' });
   } else if (anim.effect.type === 19) {
     gsap.set(spreadEl, {
       scale: 1,

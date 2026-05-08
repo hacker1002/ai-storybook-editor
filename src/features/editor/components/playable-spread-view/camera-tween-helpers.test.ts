@@ -104,12 +104,12 @@ describe('addCameraTweenToTimeline — Focus (18)', () => {
     expect(after - before).toBe(2);
   });
 
-  it('Phase 1 ease-in props match (filter blur, opacity dim, ease time)', () => {
+  it('Phase 1 ease-in props match (filter blur only, ease time)', () => {
     const anim = makeAnim(18, {}, 'item-2');
     addCameraTweenToTimeline(tl, anim, container, 0);
     const phase1 = tl.getChildren()[0];
     expect(phase1.vars.filter).toBe('blur(8px)');
-    expect(phase1.vars.opacity).toBe(0.3);
+    expect(phase1.vars.opacity).toBeUndefined();
     expect(phase1.duration()).toBeCloseTo(0.5, 2);
   });
 
@@ -237,14 +237,14 @@ describe('addCameraTweenToTimeline — Zoom (19)', () => {
 });
 
 describe('applyCameraEndState', () => {
-  it('Focus: resets sibling filter + opacity via gsap.set', () => {
+  it('Focus: resets sibling filter via gsap.set', () => {
     const container = setupContainer(['item-1', 'item-2', 'item-3']);
     const setSpy = vi.spyOn(gsap, 'set');
     const anim = makeAnim(18, {}, 'item-2');
     applyCameraEndState(anim, container);
     expect(setSpy).toHaveBeenCalledWith(
       expect.any(Array),
-      expect.objectContaining({ filter: 'none', opacity: 1 }),
+      expect.objectContaining({ filter: 'none' }),
     );
     setSpy.mockRestore();
     container.remove();
