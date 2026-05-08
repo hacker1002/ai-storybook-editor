@@ -36,10 +36,12 @@ import {
 } from "./utils";
 import { createLogger } from "@/utils/logger";
 import { EFFECT_TYPE } from "@/constants/animation-constants";
-import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
+import { EFFECT_TYPE_NAMES, PLAYABLE_ZOOM } from "@/constants/playable-constants";
 import { fetchMediaDurationMs, findMediaUrlFromSpread } from "@/utils/media-duration-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { computePlayEffectDuration } from "@/features/editor/utils/compute-play-effect-duration";
+import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
+import type { ZoomAreaGeometry } from "@/features/editor/components/playable-spread-view/zoom-area-overlay-utils";
 
 const log = createLogger("Editor", "AnimationsCreativeSpace");
 
@@ -62,6 +64,15 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
   const [expandedAnimIndex, setExpandedAnimIndex] = useState<number | null>(null);
   const [filterState, setFilterState] = useState<AnimationFilterState>(createDefaultFilterState);
+  const [drawZoomAreaMode, setDrawZoomAreaMode] = useState(false);
+
+  // Spread ratio for Camera Zoom default geometry / overlay aspect lock
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
+  const spreadRatio = useMemo(
+    () => (canvasHeight > 0 ? canvasWidth / canvasHeight : 1),
+    [canvasWidth, canvasHeight],
+  );
 
   // Derived: effective spread ID (persisted choice if valid, else first)
   const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
@@ -133,10 +144,32 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
     return selectedItem.type;
   }, [selectedItem, currentSpread]);
 
-  const availableEffects = useMemo(
-    () => (effectMatrixType ? getAvailableEffects(effectMatrixType, selectedItemHasAudio) : []),
-    [effectMatrixType, selectedItemHasAudio],
-  );
+  const availableEffects = useMemo(() => {
+    const base = effectMatrixType ? getAvailableEffects(effectMatrixType, selectedItemHasAudio) : [];
+    // Camera Zoom (19) is spread-level — always offer regardless of selectedItem.
+    const hasZoom = base.some((e) => e.id === 19);
+    if (!hasZoom) {
+      base.push({
+        id: 19,
+        name: EFFECT_TYPE_NAMES[19] ?? 'Zoom In',
+        category: 'camera',
+      });
+    }
+    return base;
+  }, [effectMatrixType, selectedItemHasAudio]);
+
+  // Currently expanded animation (raw, for canvas overlay)
+  const expandedAnimationRaw = useMemo<SpreadAnimation | null>(() => {
+    if (expandedAnimIndex === null) return null;
+    const resolved = filteredAnimations[expandedAnimIndex];
+    return resolved?.animation ?? null;
+  }, [expandedAnimIndex, filteredAnimations]);
+
+  const expandedAnimationOriginalIndex = useMemo<number | null>(() => {
+    if (expandedAnimIndex === null) return null;
+    const resolved = filteredAnimations[expandedAnimIndex];
+    return resolved?.originalIndex ?? null;
+  }, [expandedAnimIndex, filteredAnimations]);
 
   // Build PlayableSpread[] from retouch spreads
   // Language resolution is handled by child components via getTextboxContentForLanguage
@@ -166,11 +199,25 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
     patch({ activeSpreadId: spreadId });
     setSelectedItem(null);
     setExpandedAnimIndex(null);
+    setDrawZoomAreaMode(false);
   }, [patch]);
 
   const handleAddAnimation = useCallback(
     async (effectType: number) => {
-      if (!selectedItem || !effectiveSpreadId) return;
+      if (!effectiveSpreadId) return;
+
+      // Camera Zoom (19) — spread-level: enter draw mode, animation created on draw complete.
+      if (effectType === 19) {
+        log.info("handleAddAnimation", "enable draw zoom area mode", {});
+        setDrawZoomAreaMode(true);
+        return;
+      }
+
+      // Camera Focus (18) — per-item; falls through to existing flow that requires selectedItem.
+      if (!selectedItem) {
+        log.debug("handleAddAnimation", "skip — no selected item for per-item effect", { effectType });
+        return;
+      }
 
       // Composite re-target rule: if selectedItem is a variant of a composite,
       // route the animation target to the composite instead of the variant.
@@ -200,7 +247,7 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
       }
 
       const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
-      const effect = buildDefaultEffect(effectType, effectItemType);
+      const effect = buildDefaultEffect(effectType, effectItemType, spreadRatio);
 
       // Skip auto-fetch media duration for composite: composite has no direct media_url.
       if (resolvedTarget.type !== 'composite') {
@@ -248,7 +295,53 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
       actions.addRetouchAnimation(effectiveSpreadId, newAnimation);
       setExpandedAnimIndex(animations.length);
     },
-    [selectedItem, effectiveSpreadId, animations.length, actions, currentSpread, languageCode],
+    [selectedItem, effectiveSpreadId, animations, actions, currentSpread, languageCode, spreadRatio],
+  );
+
+  const handleDrawZoomAreaComplete = useCallback(
+    (geometry: ZoomAreaGeometry) => {
+      if (!effectiveSpreadId) return;
+      log.info("handleDrawZoomAreaComplete", "create camera zoom animation", { w: geometry.w, h: geometry.h });
+      const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
+      const newAnimation: SpreadAnimation = {
+        order: maxOrder + 1,
+        type: 0,
+        target: { id: 'spread', type: 'spread' },
+        trigger_type: 'on_next',
+        effect: {
+          type: 19,
+          delay: 0,
+          duration: 3000,
+          geometry,
+          payload: { ease_time: 500 },
+        },
+      };
+      actions.addRetouchAnimation(effectiveSpreadId, newAnimation);
+      setExpandedAnimIndex(animations.length);
+      setDrawZoomAreaMode(false);
+    },
+    [effectiveSpreadId, animations, actions],
+  );
+
+  const handleDrawZoomAreaCancel = useCallback(() => {
+    log.debug("handleDrawZoomAreaCancel", "cancel draw mode", {});
+    setDrawZoomAreaMode(false);
+  }, []);
+
+  const handleCameraZoomGeometryChange = useCallback(
+    (animationIndex: number, geometry: ZoomAreaGeometry) => {
+      if (!effectiveSpreadId) return;
+      const current = animations[animationIndex];
+      if (!current) {
+        log.warn("handleCameraZoomGeometryChange", "animation not found", { animationIndex });
+        return;
+      }
+      log.debug("handleCameraZoomGeometryChange", "update geometry", { animationIndex });
+      actions.updateRetouchAnimation(effectiveSpreadId, animationIndex, {
+        effect: { ...current.effect, geometry },
+      });
+    },
+    [effectiveSpreadId, animations, actions],
   );
 
   const handleUpdateAnimation = useCallback(
@@ -382,6 +475,13 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
           onZoomChange={(level) => patch({ zoomLevel: level })}
           onPreview={onNavigateToPreview}
           pageNumbering={templateLayout?.page_numbering}
+          expandedAnimation={expandedAnimationRaw}
+          expandedAnimationIndex={expandedAnimationOriginalIndex}
+          allAnimations={animations}
+          onCameraZoomGeometryChange={handleCameraZoomGeometryChange}
+          drawZoomAreaMode={drawZoomAreaMode}
+          onDrawZoomAreaComplete={handleDrawZoomAreaComplete}
+          onDrawZoomAreaCancel={handleDrawZoomAreaCancel}
         />
       </div>
     </div>

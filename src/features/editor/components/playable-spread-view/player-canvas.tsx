@@ -658,6 +658,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
                 <div
                   key={image.id}
                   ref={registerRef(image.id)}
+                  data-item-id={image.id}
                   className={`${getPointerClasses(
                     image.id
                   )} ${getHighlightClass(image.id)}`}
@@ -683,6 +684,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
                 <div
                   key={shape.id}
                   ref={registerRef(shape.id)}
+                  data-item-id={shape.id}
                   className={`${getPointerClasses(
                     shape.id
                   )} ${getHighlightClass(shape.id)}`}
@@ -709,6 +711,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
                 <div
                   key={video.id}
                   ref={registerRef(video.id)}
+                  data-item-id={video.id}
                   className={`${getPointerClasses(
                     video.id
                   )} ${getHighlightClass(video.id)}`}
@@ -753,6 +756,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
                 <div
                   key={autoPic.id}
                   ref={registerRef(autoPic.id)}
+                  data-item-id={autoPic.id}
                   className={`${pointerClass} ${getHighlightClass(
                     autoPic.id
                   )}`}
@@ -832,6 +836,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
                 <div
                   key={textbox.id}
                   ref={registerRef(textbox.id)}
+                  data-item-id={textbox.id}
                   className={`${getPointerClasses(
                     textbox.id
                   )} ${getHighlightClass(textbox.id)}`}

@@ -14,6 +14,7 @@ import type {
 } from '@/types/animation-types';
 import { STAR_COLOR_MAP, EFFECT_CATEGORY_LABELS } from '@/constants/animation-constants';
 import { buildDefaultEffect, computeStepNumbers } from './utils';
+import { useCanvasWidth, useCanvasHeight } from '@/stores/editor-settings-store';
 import { useRetouchSpreadIds, useRetouchSpreads } from '@/stores/snapshot-store/selectors';
 import { useSpaceViewState, useEffectiveSpreadId } from '@/features/editor/hooks/use-space-view-state';
 import { AnimationFilterPopover } from './animation-filter-popover';
@@ -74,7 +75,14 @@ export function AnimationEditorSidebar({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const isAddEnabled = selectedItem !== null;
+  // Spread ratio used by buildDefaultEffect for Camera Zoom (19) default geometry
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
+  const spreadRatio = canvasHeight > 0 ? canvasWidth / canvasHeight : 1;
+
+  // Camera Zoom (effect 19) is spread-level — always allowed regardless of selectedItem.
+  // Per-item effects (incl. Camera Focus 18) still need a selected item; rendered disabled when not.
+  const isAddEnabled = true;
   const hasActiveFilter =
     filterState.objectFilter !== 'all' ||
     filterState.effectFilter !== 'all' ||
@@ -90,7 +98,7 @@ export function AnimationEditorSidebar({
     return grouped;
   }, [availableEffects]);
 
-  const categoryOrder: EffectCategory[] = ['play', 'read-along', 'entrance', 'emphasis', 'exit', 'motion-paths'];
+  const categoryOrder: EffectCategory[] = ['play', 'read-along', 'entrance', 'emphasis', 'camera', 'exit', 'motion-paths'];
 
   const stepNumbers = useMemo(() => computeStepNumbers(animations), [animations]);
 
@@ -155,23 +163,38 @@ export function AnimationEditorSidebar({
 
   function makeEffectTypeChange(animOriginalIndex: number) {
     return (newEffectType: number) => {
-      const newEffect = buildDefaultEffect(newEffectType);
-      onUpdateAnimation(animOriginalIndex, { effect: newEffect });
+      const newEffect = buildDefaultEffect(newEffectType, undefined, spreadRatio);
+      const updates: Partial<SpreadAnimation> = { effect: newEffect };
+      // Camera animations cannot click_loop — reset alongside type change.
+      if (newEffectType === 18 || newEffectType === 19) {
+        updates.click_loop = 0;
+        log.info('makeEffectTypeChange', 'reset click_loop for camera', { newEffectType });
+      }
+      onUpdateAnimation(animOriginalIndex, updates);
     };
   }
 
-  function makeTriggerTypeChange(animOriginalIndex: number) {
+  function makeTriggerTypeChange(animOriginalIndex: number, animation: ResolvedAnimation) {
     return (trigger: SpreadAnimation['trigger_type']) => {
       const updates: Partial<SpreadAnimation> = { trigger_type: trigger };
-      if (trigger !== 'on_click') {
+      const isCamera = animation.animation.effect.type === 18 || animation.animation.effect.type === 19;
+      if (trigger !== 'on_click' || isCamera) {
         updates.click_loop = 0;
       }
       onUpdateAnimation(animOriginalIndex, updates);
     };
   }
 
-  function makeClickLoopChange(animOriginalIndex: number) {
+  function makeClickLoopChange(animOriginalIndex: number, animation: ResolvedAnimation) {
     return (value: number) => {
+      const effectType = animation.animation.effect.type;
+      if (effectType === 18 || effectType === 19) {
+        log.warn('makeClickLoopChange', 'click_loop not supported for camera', {
+          effectType,
+          attempted: value,
+        });
+        return;
+      }
       onUpdateAnimation(animOriginalIndex, { click_loop: value });
     };
   }
@@ -185,15 +208,27 @@ export function AnimationEditorSidebar({
   function makeEffectOptionChange(animOriginalIndex: number, animation: ResolvedAnimation) {
     return (field: string, value: number | string) => {
       const currentEffect = animation.animation.effect;
-      onUpdateAnimation(animOriginalIndex, {
-        effect: { ...currentEffect, [field]: value },
-      });
+      let nextEffect: SpreadAnimation['effect'];
+      if (field === 'payload.ease_time') {
+        nextEffect = {
+          ...currentEffect,
+          payload: { ...(currentEffect.payload ?? {}), ease_time: Number(value) },
+        };
+      } else {
+        nextEffect = { ...currentEffect, [field]: value };
+      }
+      onUpdateAnimation(animOriginalIndex, { effect: nextEffect });
     };
   }
 
   function makeSelectTarget(animation: ResolvedAnimation) {
     return () => {
       const { target } = animation.animation;
+      // Camera Zoom (target.type='spread') has no underlying item to select
+      if (target.type === 'spread') {
+        onItemSelect?.(null, null);
+        return;
+      }
       onItemSelect?.(target.type, target.id);
     };
   }
@@ -258,25 +293,39 @@ export function AnimationEditorSidebar({
                     <p className="px-2 py-1 text-xs text-muted-foreground font-medium">
                       {EFFECT_CATEGORY_LABELS[category]}
                     </p>
-                    {effects.map((effect) => (
-                      <button
-                        key={effect.id}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
-                        onClick={() => {
-                          onAddAnimation(effect.id);
-                          setAddMenuOpen(false);
-                        }}
-                      >
-                        <Star
-                          className="h-3 w-3 shrink-0"
-                          style={{
-                            fill: STAR_COLOR_MAP[effect.category],
-                            stroke: STAR_COLOR_MAP[effect.category],
+                    {effects.map((effect) => {
+                      // Camera Focus (18) requires a selected item; Zoom (19) does not.
+                      const isDisabled = effect.id === 18 && selectedItem === null;
+                      const tooltip = isDisabled
+                        ? 'Select an item to focus on'
+                        : effect.name;
+                      return (
+                        <button
+                          key={effect.id}
+                          disabled={isDisabled}
+                          title={tooltip}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          onClick={() => {
+                            if (isDisabled) return;
+                            log.info('handleAddDropdownClick', 'effect selected', {
+                              effectType: effect.id,
+                              hasSelectedItem: !!selectedItem,
+                            });
+                            onAddAnimation(effect.id);
+                            setAddMenuOpen(false);
                           }}
-                        />
-                        {effect.name}
-                      </button>
-                    ))}
+                        >
+                          <Star
+                            className="h-3 w-3 shrink-0"
+                            style={{
+                              fill: STAR_COLOR_MAP[effect.category],
+                              stroke: STAR_COLOR_MAP[effect.category],
+                            }}
+                          />
+                          {effect.name}
+                        </button>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -315,8 +364,8 @@ export function AnimationEditorSidebar({
               onDragEnd={handleDragEnd}
               onDrop={handleDrop}
               onEffectTypeChange={makeEffectTypeChange(resolvedAnim.originalIndex)}
-              onTriggerTypeChange={makeTriggerTypeChange(resolvedAnim.originalIndex)}
-              onClickLoopChange={makeClickLoopChange(resolvedAnim.originalIndex)}
+              onTriggerTypeChange={makeTriggerTypeChange(resolvedAnim.originalIndex, resolvedAnim)}
+              onClickLoopChange={makeClickLoopChange(resolvedAnim.originalIndex, resolvedAnim)}
               onEffectOptionChange={makeEffectOptionChange(resolvedAnim.originalIndex, resolvedAnim)}
               onMustCompleteChange={makeMustCompleteChange(resolvedAnim.originalIndex)}
               targetHasAudio={targetHasAudio}

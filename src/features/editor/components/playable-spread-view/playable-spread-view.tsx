@@ -123,6 +123,20 @@ interface PlayableSpreadViewProps {
   selectedSpreadId?: string | null;      // controlled from parent
   zoomLevel?: number;                     // controlled from parent
   onZoomChange?: (level: number) => void; // notify parent of zoom change
+
+  // Camera Zoom (effect 19) wiring — animation-editor mode only
+  expandedAnimation?: import("@/types/spread-types").SpreadAnimation | null;
+  expandedAnimationIndex?: number | null;
+  allAnimations?: import("@/types/spread-types").SpreadAnimation[];
+  onCameraZoomGeometryChange?: (
+    animationIndex: number,
+    geometry: import("./zoom-area-overlay-utils").ZoomAreaGeometry,
+  ) => void;
+  drawZoomAreaMode?: boolean;
+  onDrawZoomAreaComplete?: (
+    geometry: import("./zoom-area-overlay-utils").ZoomAreaGeometry,
+  ) => void;
+  onDrawZoomAreaCancel?: () => void;
 }
 
 const KEYBOARD_SHORTCUTS = {
@@ -158,6 +172,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   selectedSpreadId: propSelectedSpreadId,
   zoomLevel: propZoomLevel,
   onZoomChange: propOnZoomChange,
+  expandedAnimation,
+  expandedAnimationIndex,
+  allAnimations,
+  onCameraZoomGeometryChange,
+  drawZoomAreaMode,
+  onDrawZoomAreaComplete,
+  onDrawZoomAreaCancel,
 }) => {
 
   // === Internal State ===
@@ -595,6 +616,13 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             selectedItemType={externalSelectedItemType}
             onItemSelect={onItemSelect ?? (() => {})}
             pageNumbering={pageNumbering}
+            expandedAnimation={expandedAnimation}
+            expandedAnimationIndex={expandedAnimationIndex}
+            allAnimations={allAnimations}
+            onCameraZoomGeometryChange={onCameraZoomGeometryChange}
+            drawZoomAreaMode={drawZoomAreaMode}
+            onDrawZoomAreaComplete={onDrawZoomAreaComplete}
+            onDrawZoomAreaCancel={onDrawZoomAreaCancel}
           />
         ) : activeCanvas === "remix-editor" &&
           selectedSpread &&

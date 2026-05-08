@@ -450,8 +450,8 @@ export interface SpreadAnimation {
   type: 0 | 1; // 0=story timeline, 1=object interactive
   group?: string;
   target: {
-    id: string;
-    type: "textbox" | "image" | "video" | "auto_pic" | "audio" | "shape" | "quiz" | "composite";
+    id: string; // 'spread' literal when target.type='spread' (Camera Zoom 19 sentinel)
+    type: "textbox" | "image" | "video" | "auto_pic" | "audio" | "shape" | "quiz" | "composite" | "spread";
   };
   trigger_type: "on_click" | "on_next" | "with_previous" | "after_previous";
   click_loop?: number;
@@ -464,6 +464,9 @@ export interface SpreadAnimation {
     loop?: number;
     amount?: number;
     direction?: "left" | "right" | "up" | "down";
+    payload?: {
+      ease_time?: number; // Camera (18, 19) — ms, default 500
+    };
   };
 }
 

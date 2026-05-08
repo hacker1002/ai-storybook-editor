@@ -19,6 +19,8 @@ export const EFFECT_TYPE = {
   FLOAT_OUT: 15,
   LINES: 16,
   ARCS: 17,
+  FOCUS: 18,
+  ZOOM_IN: 19,
 } as const;
 
 export const EFFECT_TYPE_NAMES: Record<number, string> = {
@@ -39,7 +41,20 @@ export const EFFECT_TYPE_NAMES: Record<number, string> = {
   15: 'Float Out',
   16: 'Lines',
   17: 'Arcs',
+  18: 'Focus',
+  19: 'Zoom In',
 };
+
+// === Camera Animation Defaults (effect types 18, 19) ===
+export const CAMERA_DEFAULTS = {
+  EASE: 'power2.inOut',
+  EASE_TIME_MS: 500,
+  DURATION_MS: 3000,
+  FOCUS_BLUR_PX: 8,
+  FOCUS_DIM_OPACITY: 0.3,
+  ZOOM_TRANSFORM_ORIGIN: '0 0',
+  ZOOM_DEFAULT_GEOMETRY_W_PCT: 50,
+} as const;
 
 // === Zoom Constants (playable header + spread view) ===
 export const PLAYABLE_ZOOM = {

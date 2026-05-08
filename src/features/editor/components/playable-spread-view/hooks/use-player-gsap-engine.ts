@@ -16,6 +16,7 @@ import {
   useAutoplaySuspended,
 } from '@/stores/animation-playback-store';
 import { addTweenToTimeline } from '../animation-tween-builders';
+import { addCameraTweenToTimeline, applyCameraEndState } from '../camera-tween-helpers';
 import { resolveAnimationTarget } from '@/features/editor/utils/composite-resolve-helpers';
 import { getTextboxContentForLanguage } from '../../../utils/textbox-helpers';
 import {
@@ -33,6 +34,38 @@ import { createLogger } from '@/utils/logger';
 const log = createLogger('Editor', 'usePlayerGsapEngine');
 
 // === Helpers ===
+
+/** Collect resolved target IDs of animations that share a start time with
+ *  `animations[currentIdx]` — i.e. the contiguous `with_previous` cluster
+ *  bounded on the left by an after_previous/on_next anim and on the right
+ *  by the next non-with_previous anim. Composite targets are resolved to
+ *  their active variantId so the IDs match `[data-item-id]` in the DOM.
+ *  Returns IDs of OTHER cluster members (excluding current). Used by camera
+ *  Focus to keep concurrently-animated items un-blurred. */
+function collectConcurrentTargetIds(
+  animations: ReadonlyArray<SpreadAnimation>,
+  currentIdx: number,
+  composites: PlayableSpread['composites'],
+  playEdition: PlayEdition,
+): string[] {
+  let start = currentIdx;
+  while (start > 0 && animations[start].trigger_type === 'with_previous') start--;
+  let end = currentIdx;
+  while (end + 1 < animations.length && animations[end + 1].trigger_type === 'with_previous') end++;
+
+  const ids: string[] = [];
+  for (let j = start; j <= end; j++) {
+    if (j === currentIdx) continue;
+    const a = animations[j];
+    if (a.target.type === 'composite') {
+      const r = resolveAnimationTarget(a.target, { composites }, playEdition);
+      if (r.variantId) ids.push(r.variantId);
+    } else {
+      ids.push(a.target.id);
+    }
+  }
+  return ids;
+}
 
 /** Resolve audio item media_length for PLAY runtime fallback (animations targeting audio). */
 function resolveAudioMediaLength(
@@ -314,19 +347,83 @@ export function usePlayerGsapEngine({
 
       const dims = getContainerDims();
 
+      // Track each anim's first-tween start time so `with_previous` resolves to
+      // the SAME start as its predecessor — even when the predecessor adds
+      // multiple timeline children (camera adds 2: ease-in + revert set).
+      // Plain GSAP `'<'` references the most recently inserted child, which
+      // for camera is the revert at duration end — wrong anchor for parallel anims.
+      const animStartTimes: number[] = [];
+      const resolveWithPrevious = (idx: number): number | string => {
+        if (idx <= 0) return 0;
+        const prev = animStartTimes[idx - 1];
+        return prev !== undefined ? prev : '<';
+      };
+      const recordAnimStart = (idx: number, childrenBefore: number) => {
+        const all = tl.getChildren();
+        if (all.length > childrenBefore) {
+          animStartTimes[idx] = all[childrenBefore].startTime();
+        } else {
+          animStartTimes[idx] = tl.duration();
+        }
+      };
+
       step.animations.forEach((anim, i) => {
         // Quiz PLAY in a mixed step: pause timeline and invoke callback
         if (anim.effect.type === EFFECT_TYPE.PLAY && anim.target.type === 'quiz') {
           let position: number | string;
           if (i === 0) position = 0;
-          else if (anim.trigger_type === 'with_previous') position = '<';
+          else if (anim.trigger_type === 'with_previous') position = resolveWithPrevious(i);
           else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
+          const childrenBefore = tl.getChildren().length;
           tl.call(() => {
             usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
             onQuizPlay?.(anim.target.id);
           }, undefined, position);
           tl.addPause();
           tl.call(() => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order), undefined, '+=0.01');
+          recordAnimStart(i, childrenBefore);
+          return;
+        }
+
+        // Camera animations (Focus 18, Zoom In 19) — early-branch BEFORE composite resolve.
+        // For Focus on a composite target, resolve to the active variantId so siblings
+        // exclude the visible variant (not the composite group itself).
+        if (anim.effect.type === EFFECT_TYPE.FOCUS || anim.effect.type === EFFECT_TYPE.ZOOM_IN) {
+          let position: number | string;
+          if (i === 0) position = 0;
+          else if (anim.trigger_type === 'with_previous') position = resolveWithPrevious(i);
+          else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
+
+          let resolvedId: string | undefined = anim.target.id;
+          if (anim.effect.type === EFFECT_TYPE.FOCUS && anim.target.type === 'composite') {
+            const r = resolveAnimationTarget(anim.target, { composites: spread.composites }, playEdition);
+            if (!r.variantId) {
+              log.debug('camera.focus.composite', 'no variant for edition — skip', {});
+              return;
+            }
+            resolvedId = r.variantId;
+          }
+          const cbs = buildAnimCallbacks(anim);
+          // Concurrent (with_previous cluster) anims' targets must be excluded from
+          // Focus blur so a parallel Fly In / second Focus doesn't dim its own item.
+          const excludeIds = collectConcurrentTargetIds(
+            step.animations,
+            i,
+            spread.composites,
+            playEdition,
+          );
+          const childrenBefore = tl.getChildren().length;
+          addCameraTweenToTimeline(tl, anim, spreadContainerRef.current, position, resolvedId, {
+            onStart: cbs.onTweenStart,
+            onComplete: cbs.onTweenComplete,
+            excludeIds,
+          });
+          recordAnimStart(i, childrenBefore);
+          log.debug('buildAndPlayStepTimeline', 'camera tween added', {
+            effectType: anim.effect.type,
+            target: anim.target.id,
+            excludeCount: excludeIds.length,
+          });
           return;
         }
 
@@ -353,12 +450,13 @@ export function usePlayerGsapEngine({
         if (i === 0) {
           position = 0;
         } else if (anim.trigger_type === 'with_previous') {
-          position = '<';
+          position = resolveWithPrevious(i);
         } else {
           // after_previous
           position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
         }
 
+        const childrenBefore = tl.getChildren().length;
         addTweenToTimeline(tl, anim, el, position, {
           spreadContainer: spreadContainerRef.current,
           itemGeometry: findItemGeometry(resolved.variantId),
@@ -370,6 +468,7 @@ export function usePlayerGsapEngine({
           ...buildAnimCallbacks(anim),
           bypassMotion: resolved.bypassMotion,
         });
+        recordAnimStart(i, childrenBefore);
       });
 
       timelineRef.current = tl;
@@ -396,14 +495,28 @@ export function usePlayerGsapEngine({
     const dims = getContainerDims();
     const animations = [...editionFilteredAnimations].sort((a, b) => a.order - b.order);
 
+    // See buildAndPlayStepTimeline note — resolve with_previous via recorded
+    // start times so multi-child anims (camera) don't break the "<" anchor.
+    const animStartTimes: number[] = [];
+    const resolveWithPrevious = (idx: number): number | string => {
+      if (idx <= 0) return 0;
+      const prev = animStartTimes[idx - 1];
+      return prev !== undefined ? prev : '<';
+    };
+    const recordAnimStart = (idx: number, childrenBefore: number) => {
+      const all = tl.getChildren();
+      animStartTimes[idx] = all.length > childrenBefore ? all[childrenBefore].startTime() : tl.duration();
+    };
+
     animations.forEach((anim, i) => {
       // Quiz PLAY: pause timeline and invoke callback (auto mode too)
       if (anim.effect.type === EFFECT_TYPE.PLAY && anim.target.type === 'quiz') {
         let position: number | string;
         if (i === 0) position = 0;
-        else if (anim.trigger_type === 'with_previous') position = '<';
+        else if (anim.trigger_type === 'with_previous') position = resolveWithPrevious(i);
         else if (anim.trigger_type === 'after_previous') position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
         else position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
+        const childrenBefore = tl.getChildren().length;
         tl.call(() => {
           usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
           onQuizPlay?.(anim.target.id);
@@ -411,6 +524,41 @@ export function usePlayerGsapEngine({
         tl.addPause();
         // Offset past pause so it only fires after resume
         tl.call(() => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order), undefined, '+=0.01');
+        recordAnimStart(i, childrenBefore);
+        return;
+      }
+
+      // Camera animations — early-branch BEFORE composite resolve.
+      if (anim.effect.type === EFFECT_TYPE.FOCUS || anim.effect.type === EFFECT_TYPE.ZOOM_IN) {
+        let position: number | string;
+        if (i === 0) position = 0;
+        else if (anim.trigger_type === 'with_previous') position = resolveWithPrevious(i);
+        else if (anim.trigger_type === 'after_previous') position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
+        else position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
+
+        let resolvedId: string | undefined = anim.target.id;
+        if (anim.effect.type === EFFECT_TYPE.FOCUS && anim.target.type === 'composite') {
+          const r = resolveAnimationTarget(anim.target, { composites: spread.composites }, playEdition);
+          if (!r.variantId) {
+            log.debug('camera.focus.composite', 'no variant for edition — skip', {});
+            return;
+          }
+          resolvedId = r.variantId;
+        }
+        const cbs = buildAnimCallbacks(anim);
+        const excludeIds = collectConcurrentTargetIds(
+          animations,
+          i,
+          spread.composites,
+          playEdition,
+        );
+        const childrenBefore = tl.getChildren().length;
+        addCameraTweenToTimeline(tl, anim, spreadContainerRef.current, position, resolvedId, {
+          onStart: cbs.onTweenStart,
+          onComplete: cbs.onTweenComplete,
+          excludeIds,
+        });
+        recordAnimStart(i, childrenBefore);
         return;
       }
 
@@ -434,7 +582,7 @@ export function usePlayerGsapEngine({
       if (i === 0) {
         position = 0;
       } else if (anim.trigger_type === 'with_previous') {
-        position = '<';
+        position = resolveWithPrevious(i);
       } else if (anim.trigger_type === 'after_previous') {
         position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
       } else {
@@ -458,6 +606,7 @@ export function usePlayerGsapEngine({
         }
       }
 
+      const childrenBefore = tl.getChildren().length;
       addTweenToTimeline(tl, anim, el, position, {
         spreadContainer: spreadContainerRef.current,
         itemGeometry: findItemGeometry(resolved.variantId),
@@ -469,6 +618,7 @@ export function usePlayerGsapEngine({
         ...buildAnimCallbacks(anim),
         bypassMotion: resolved.bypassMotion,
       });
+      recordAnimStart(i, childrenBefore);
     });
 
     timelineRef.current = tl;
@@ -506,6 +656,15 @@ export function usePlayerGsapEngine({
           }, undefined, position);
           // No addPause in replay — just clear highlight after quiz callback
           replayTl.call(() => usePlaybackStore.getState().removeActiveAnimationOrder(anim.order));
+          return;
+        }
+
+        // Camera animations are excluded from click_loop replay (CRUD validation should reject;
+        // defensive skip in case legacy data slips through).
+        if (anim.effect.type === EFFECT_TYPE.FOCUS || anim.effect.type === EFFECT_TYPE.ZOOM_IN) {
+          log.warn('handleClickLoopReplay', 'camera animation skipped (should not click_loop)', {
+            effectType: anim.effect.type,
+          });
           return;
         }
 
@@ -558,6 +717,16 @@ export function usePlayerGsapEngine({
   const applyStepFinalStates = useCallback(
     (step: AnimationStep) => {
       step.animations.forEach((anim) => {
+        // Camera animations auto-revert — apply spread/sibling reset directly.
+        if (anim.effect.type === EFFECT_TYPE.FOCUS || anim.effect.type === EFFECT_TYPE.ZOOM_IN) {
+          let resolvedId: string | undefined = anim.target.id;
+          if (anim.effect.type === EFFECT_TYPE.FOCUS && anim.target.type === 'composite') {
+            const r = resolveAnimationTarget(anim.target, { composites: spread.composites }, playEdition);
+            resolvedId = r.variantId ?? anim.target.id;
+          }
+          applyCameraEndState(anim, spreadContainerRef.current, resolvedId);
+          return;
+        }
         const el = elementRefsMap.current.get(anim.target.id);
         if (!el) return;
         const endState = resolveAnimationEndState(anim, spreadContainerRef.current, findItemGeometry(anim.target.id), { width: canvasWidth, height: canvasHeight }, getBaseOpacity(el));
@@ -566,7 +735,7 @@ export function usePlayerGsapEngine({
         }
       });
     },
-    [findItemGeometry, canvasWidth, canvasHeight]
+    [findItemGeometry, canvasWidth, canvasHeight, spread.composites, playEdition]
   );
 
   /**
@@ -639,6 +808,17 @@ export function usePlayerGsapEngine({
     killTimeline();
     killReplayTimeline();
     resetElementStyles(elementRefsMap.current);
+
+    // Camera defensive cleanup — handle spread navigation during a Camera hold phase
+    // (transform on spread container or filter/opacity on visual items mid-tween).
+    if (spreadContainerRef.current) {
+      gsap.set(spreadContainerRef.current, { clearProps: 'transform,transformOrigin' });
+      const allVisualItems = spreadContainerRef.current.querySelectorAll<HTMLElement>('[data-item-id]');
+      if (allVisualItems.length > 0) {
+        gsap.set(allVisualItems, { clearProps: 'filter,opacity' });
+      }
+    }
+
     applyInitialStates(
       editionFilteredAnimations,
       elementRefsMap.current,

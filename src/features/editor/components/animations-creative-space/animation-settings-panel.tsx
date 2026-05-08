@@ -190,7 +190,29 @@ function EffectOptionsForm({
 }: EffectOptionsFormProps) {
   const { effect, trigger_type, click_loop, must_complete } = animation.animation;
   const visibleOptions = EFFECT_OPTIONS_MAP[effect.type] ?? [];
-  const showClickLoop = trigger_type === 'on_click';
+  const isCamera = effect.type === 18 || effect.type === 19;
+  // Camera animations cannot click_loop (auto-revert + spread/sibling reset incompatible).
+  const showClickLoop = trigger_type === 'on_click' && !isCamera;
+  const easeTimeMs = effect.payload?.ease_time ?? 500;
+  const durationMinSec = isCamera ? (easeTimeMs + 100) / 1000 : 0;
+
+  function handleDurationChange(field: string, secondsRaw: number) {
+    let ms = Math.round(secondsRaw * 1000);
+    if (isCamera) {
+      const minMs = easeTimeMs + 100;
+      if (ms < minMs) {
+        log.warn('handleDurationChange', 'clamping below ease_time + 100ms', { requested: ms, min: minMs });
+        ms = minMs;
+      }
+    }
+    onEffectOptionChange(field, ms);
+  }
+
+  function handleEaseTimeChange(seconds: number) {
+    const ms = Math.max(100, Math.round(seconds * 1000));
+    log.info('handleEaseTimeChange', 'update ease_time', { ms, animationIndex: animation.originalIndex });
+    onEffectOptionChange('payload.ease_time', ms);
+  }
 
   return (
     <div className="space-y-3">
@@ -262,9 +284,20 @@ function EffectOptionsForm({
             field="duration"
             value={(effect.duration ?? 0) / 1000}
             step={0.1}
-            min={0}
+            min={durationMinSec}
             unit="s"
-            onChange={(field, val) => onEffectOptionChange(field, Math.round(Number(val) * 1000))}
+            onChange={(field, val) => handleDurationChange(field, Number(val))}
+          />
+        )}
+        {visibleOptions.includes('payload.ease_time') && (
+          <NumberField
+            label="Ease Time"
+            field="payload.ease_time"
+            value={(effect.payload?.ease_time ?? 500) / 1000}
+            step={0.1}
+            min={0.1}
+            unit="s"
+            onChange={(_field, val) => handleEaseTimeChange(Number(val))}
           />
         )}
         {visibleOptions.includes('direction') && (
@@ -283,12 +316,19 @@ function EffectOptionsForm({
         {visibleOptions.includes('loop') && (
           <LoopField value={effect.loop} onChange={onEffectOptionChange} />
         )}
-        {visibleOptions.includes('geometry') && effect.geometry && (
+        {visibleOptions.includes('geometry') && effect.type === 19 ? (
+          <div className="col-span-2 space-y-1">
+            <Label className="text-xs">Zoom Area</Label>
+            <p className="text-xs text-muted-foreground">
+              Drag handles on canvas to set zoom area (ratio locked = spread ratio).
+            </p>
+          </div>
+        ) : visibleOptions.includes('geometry') && effect.geometry ? (
           <GeometryInputs
             geometry={effect.geometry}
             onChange={onEffectOptionChange}
           />
-        )}
+        ) : null}
       </div>
     </div>
   );

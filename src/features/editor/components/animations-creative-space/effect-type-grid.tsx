@@ -22,7 +22,7 @@ interface CategoryGroup {
   effects: AvailableEffect[];
 }
 
-const CATEGORY_ORDER: EffectCategory[] = ['play', 'read-along', 'entrance', 'emphasis', 'exit', 'motion-paths'];
+const CATEGORY_ORDER: EffectCategory[] = ['play', 'read-along', 'entrance', 'emphasis', 'camera', 'exit', 'motion-paths'];
 const EXTENDED_CATEGORIES: EffectCategory[] = ['exit', 'motion-paths'];
 
 function groupEffectsByCategory(effects: AvailableEffect[]): CategoryGroup[] {
@@ -111,8 +111,9 @@ export function EffectTypeGrid({ animation, onEffectTypeChange, targetHasAudio }
   const { activeSpreadId } = useSpaceViewState('animation');
   const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
 
-  const selectedTargetType = useMemo<ItemType>(() => {
+  const selectedTargetType = useMemo<ItemType | 'spread'>(() => {
     const targetType = animation.animation.target.type;
+    if (targetType === 'spread') return 'spread';
     if (targetType !== 'composite') return targetType;
     const spread = retouchSpreads.find((s) => s.id === effectiveSpreadId);
     const composite = spread?.composites?.find((c) => c.id === animation.animation.target.id);

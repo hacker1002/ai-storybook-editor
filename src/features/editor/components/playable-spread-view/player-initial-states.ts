@@ -4,7 +4,7 @@ import gsap from 'gsap';
 import type { BaseSpread, SpreadAnimation } from '@/types/spread-types';
 import type { CanvasSize } from '@/types/canvas-types';
 import type { PlayEdition } from '@/types/playable-types';
-import { EFFECT_TYPE } from '@/constants/playable-constants';
+import { CAMERA_DEFAULTS, EFFECT_TYPE } from '@/constants/playable-constants';
 import { resolveAnimationTarget } from '@/features/editor/utils/composite-resolve-helpers';
 
 // === Base Opacity ===
@@ -106,6 +106,11 @@ export function resolveInitialState(
     case EFFECT_TYPE.ARCS:
       return { autoAlpha: baseOpacity };
 
+    // Camera (Focus, Zoom In) — no per-item state; spread-level reset applied in post-loop block
+    case EFFECT_TYPE.FOCUS:
+    case EFFECT_TYPE.ZOOM_IN:
+      return {};
+
     default:
       return { autoAlpha: baseOpacity };
   }
@@ -189,6 +194,11 @@ export function resolveAnimationEndState(
       const deltaY = itemGeometry ? ((geo.y - itemGeometry.y) / 100) * ch : (geo.y / 100) * ch;
       return { x: deltaX, y: deltaY };
     }
+
+    // Camera animations auto-revert — caller must use applyCameraEndState helper instead.
+    case EFFECT_TYPE.FOCUS:
+    case EFFECT_TYPE.ZOOM_IN:
+      return {};
 
     default:
       return {};
@@ -296,4 +306,21 @@ export function applyInitialStates(
       el.remove();
     });
   });
+
+  // Camera defensive reset — covers prior-step transforms/filter/opacity that auto-revert may have missed.
+  const hasCamera = animations.some(
+    (a) => a.effect.type === EFFECT_TYPE.FOCUS || a.effect.type === EFFECT_TYPE.ZOOM_IN,
+  );
+  if (hasCamera && spreadContainer) {
+    gsap.set(spreadContainer, {
+      scale: 1,
+      x: 0,
+      y: 0,
+      transformOrigin: CAMERA_DEFAULTS.ZOOM_TRANSFORM_ORIGIN,
+    });
+    const allVisualItems = spreadContainer.querySelectorAll<HTMLElement>('[data-item-id]');
+    if (allVisualItems.length > 0) {
+      gsap.set(allVisualItems, { filter: 'none', opacity: 1 });
+    }
+  }
 }

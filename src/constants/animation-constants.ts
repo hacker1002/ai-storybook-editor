@@ -24,6 +24,8 @@ export const EFFECT_CATEGORY_MAP: Record<number, EffectCategory> = {
   15: "exit",
   16: "motion-paths",
   17: "motion-paths",
+  18: "camera",
+  19: "camera",
 };
 
 export const STAR_COLOR_MAP: Record<EffectCategory, string> = {
@@ -33,6 +35,7 @@ export const STAR_COLOR_MAP: Record<EffectCategory, string> = {
   emphasis: "#EAB308",
   exit: "#EF4444",
   "motion-paths": "#3B82F6",
+  camera: "#F97316",
 };
 
 export const EFFECT_OPTIONS_MAP: Record<number, string[]> = {
@@ -53,6 +56,8 @@ export const EFFECT_OPTIONS_MAP: Record<number, string[]> = {
   15: ["delay", "duration"],
   16: ["delay", "duration", "geometry"],
   17: ["delay", "duration"],
+  18: ["delay", "duration", "payload.ease_time"],
+  19: ["delay", "duration", "geometry", "payload.ease_time"],
 };
 
 export const TARGET_ICON_MAP: Record<string, TargetItemIcon> = {
@@ -80,21 +85,24 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategory, string> = {
   emphasis: "Emphasis",
   exit: "Exit",
   "motion-paths": "Motion Paths",
+  camera: "Camera",
 };
 
 // Effect grid filtering per target type
 export const ALLOWED_EFFECTS_BY_TARGET: Record<string, number[]> = {
   audio: [1, 2, 12],
-  video: [1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
+  video: [1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 18],
   // auto_pic: same effect matrix as videos[] minus Play (1).
   // EXCLUDED: 1 (Play — auto-loop, play/pause meaningless),
   //           6 (entrance variant — not supported for media),
   //           7-10 (Emphasis — conflicts with auto-loop animation),
   //           11 (Read-along — textbox-only).
   // DO NOT add these effects without updating EditableAutoPic loop handling.
-  auto_pic: [2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
-  textbox: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-  image: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17],
-  shape: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15],
+  auto_pic: [2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 18],
+  textbox: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18],
+  image: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18],
+  shape: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 18],
   quiz: [1],
+  // ⚡ Camera Zoom (19) — sentinel target.type='spread', spread-level effect
+  spread: [19],
 };

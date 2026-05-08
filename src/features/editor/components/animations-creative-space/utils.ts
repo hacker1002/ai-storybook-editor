@@ -11,6 +11,7 @@ import type {
 } from '@/types/animation-types';
 import type { BaseSpread, SpreadComposite } from '@/types/spread-types';
 import { findSpreadItem, isItemPlayerHidden } from '../playable-spread-view/visibility-utils';
+import { buildDefaultZoomGeometry } from '../playable-spread-view/zoom-area-overlay-utils';
 import {
   EFFECT_CATEGORY_MAP,
   TARGET_ICON_MAP,
@@ -28,9 +29,26 @@ export function resolveAnimations(
   spread?: BaseSpread | null,
 ): ResolvedAnimation[] {
   const counterMap = new Map<string, number>();
+  let cameraZoomCounter = 0;
 
   return animations.map((animation, index) => {
     const targetId = animation.target.id;
+
+    // Camera Zoom (target.type='spread', effect 19) — counter scoped per spread, not per item.
+    if (animation.target.type === 'spread' && animation.effect.type === 19) {
+      cameraZoomCounter += 1;
+      return {
+        animation,
+        originalIndex: index,
+        displayTitle: `Camera Zoom #${cameraZoomCounter}`,
+        targetItemName: 'Camera',
+        effectName: EFFECT_TYPE_NAMES[19] ?? 'Zoom In',
+        effectCategory: 'camera',
+        targetItemIcon: 'image' as TargetItemIcon, // placeholder; dedicated 'camera' icon deferred
+        isTargetHidden: false,
+      };
+    }
+
     const count = (counterMap.get(targetId) ?? 0) + 1;
     counterMap.set(targetId, count);
 
@@ -38,9 +56,12 @@ export function resolveAnimations(
     const title = item?.title ?? 'Unknown';
     const itemType = item?.type ?? 'image';
 
-    const isTargetHidden = isItemPlayerHidden(
-      findSpreadItem(spread ?? null, targetId, animation.target.type),
-    );
+    const isTargetHidden =
+      animation.target.type === 'spread'
+        ? false
+        : isItemPlayerHidden(
+            findSpreadItem(spread ?? null, targetId, animation.target.type),
+          );
 
     return {
       animation,
@@ -72,10 +93,12 @@ export function inferEffectTypeForComposite(composite: SpreadComposite): ItemTyp
 
 export function buildDefaultEffect(
   effectType: number,
-  _itemType?: ItemType, // reserved for Phase 6 per-type defaults; underscore = intentionally unused
+  _itemType?: ItemType, // reserved for per-type defaults; underscore = intentionally unused
+  spreadRatio?: number,
 ): SpreadAnimation['effect'] {
   void _itemType;
   const options = EFFECT_OPTIONS_MAP[effectType] ?? [];
+  const isCamera = effectType === 18 || effectType === 19;
 
   const effect: SpreadAnimation['effect'] = {
     type: effectType,
@@ -83,7 +106,7 @@ export function buildDefaultEffect(
   };
 
   if (options.includes('duration')) {
-    effect.duration = 1000; // 1 second in ms
+    effect.duration = isCamera ? 3000 : 1000;
   }
   if (options.includes('direction')) {
     effect.direction = 'left';
@@ -92,10 +115,17 @@ export function buildDefaultEffect(
     effect.amount = 1;
   }
   if (options.includes('loop')) {
-    effect.loop = 1; // play once (no repeat)
+    effect.loop = 1;
+  }
+  if (options.includes('payload.ease_time')) {
+    effect.payload = { ease_time: 500 };
   }
   if (options.includes('geometry')) {
-    effect.geometry = { x: 0, y: 0, w: 100, h: 100 };
+    if (effectType === 19) {
+      effect.geometry = buildDefaultZoomGeometry(spreadRatio ?? 1);
+    } else {
+      effect.geometry = { x: 0, y: 0, w: 100, h: 100 };
+    }
   }
 
   return effect;
@@ -125,9 +155,21 @@ export function buildObjectFilterOptions(
 ): ObjectFilterOption[] {
   const options: ObjectFilterOption[] = [{ id: 'all', label: 'All' }];
   const seen = new Set<string>();
+  let hasCameraZoom = false;
 
   for (const resolved of animations) {
-    const targetId = resolved.animation.target.id;
+    const anim = resolved.animation;
+
+    // Group all Camera Zoom (sentinel target) animations under a single filter option.
+    if (anim.target.type === 'spread' && anim.effect.type === 19) {
+      if (!hasCameraZoom) {
+        options.push({ id: 'spread', label: 'Camera Zoom (Spread)', type: undefined });
+        hasCameraZoom = true;
+      }
+      continue;
+    }
+
+    const targetId = anim.target.id;
     if (seen.has(targetId)) continue;
     seen.add(targetId);
 

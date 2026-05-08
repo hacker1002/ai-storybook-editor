@@ -14,7 +14,7 @@ import {
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
-import type { Geometry, ItemType } from "@/types/spread-types";
+import type { Geometry, ItemType, SpreadAnimation } from "@/types/spread-types";
 import {
   useLanguageCode,
   useCanvasWidth,
@@ -34,6 +34,9 @@ import {
   buildCompositeNumberMap,
   findCompositeIdForVariant,
 } from "../../utils/composite-resolve-helpers";
+import { ZoomAreaOverlay } from "./zoom-area-overlay";
+import { DrawZoomAreaSurface } from "./draw-zoom-area-surface";
+import type { ZoomAreaGeometry } from "./zoom-area-overlay-utils";
 
 const log = createLogger("Editor", "AnimationEditorCanvas");
 
@@ -45,6 +48,29 @@ export interface AnimationEditorCanvasProps {
   selectedItemType?: ItemType | null;
   onItemSelect: (itemType: ItemType | null, itemId: string | null) => void;
   pageNumbering?: PageNumberingSettings | null;
+
+  // Camera Zoom (effect 19) wiring
+  expandedAnimation?: SpreadAnimation | null;
+  expandedAnimationIndex?: number | null;
+  allAnimations?: SpreadAnimation[];
+  onCameraZoomGeometryChange?: (animationIndex: number, geometry: ZoomAreaGeometry) => void;
+  drawZoomAreaMode?: boolean;
+  onDrawZoomAreaComplete?: (geometry: ZoomAreaGeometry) => void;
+  onDrawZoomAreaCancel?: () => void;
+}
+
+function resolveZoomLabel(
+  animation: SpreadAnimation,
+  allAnimations: SpreadAnimation[],
+): string {
+  const zoomList = allAnimations.filter(
+    (a) => a.effect.type === 19 && a.target.type === 'spread',
+  );
+  const idx = zoomList.findIndex(
+    (a) => a.order === animation.order,
+  );
+  if (idx < 0) return 'Camera Zoom #?';
+  return `Camera Zoom #${idx + 1}`;
 }
 
 export function AnimationEditorCanvas({
@@ -54,6 +80,13 @@ export function AnimationEditorCanvas({
   selectedItemType: externalItemType,
   onItemSelect,
   pageNumbering,
+  expandedAnimation,
+  expandedAnimationIndex,
+  allAnimations,
+  onCameraZoomGeometryChange,
+  drawZoomAreaMode,
+  onDrawZoomAreaComplete,
+  onDrawZoomAreaCancel,
 }: AnimationEditorCanvasProps) {
   const editorLangCode = useLanguageCode();
   const canvasWidth = useCanvasWidth();
@@ -100,6 +133,10 @@ export function AnimationEditorCanvas({
     setSelectedItemType(null);
     setSelectedGeometry(null);
     onItemSelect(null, null);
+    if (drawZoomAreaMode && onDrawZoomAreaCancel) {
+      log.info("useEffect[spread.id]", "cancel drawZoomAreaMode on spread switch", {});
+      onDrawZoomAreaCancel();
+    }
   }, [spread.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync from external selection (sidebar click → canvas highlight)
@@ -204,6 +241,10 @@ export function AnimationEditorCanvas({
   // Image selection handler
   const handleImageSelect = useCallback(
     (imageId: string) => {
+      if (drawZoomAreaMode) {
+        log.debug("handleImageSelect", "skip: drawZoomAreaMode active", {});
+        return;
+      }
       log.info("handleImageSelect", "image selected", { imageId });
       const image = spread.images?.find((img) => img.id === imageId);
       if (!image) return;
@@ -213,12 +254,13 @@ export function AnimationEditorCanvas({
       setSelectedGeometry(image.geometry);
       onItemSelect("image", imageId);
     },
-    [spread.images, onItemSelect]
+    [spread.images, onItemSelect, drawZoomAreaMode]
   );
 
   // Textbox selection handler
   const handleTextboxSelect = useCallback(
     (textboxId: string) => {
+      if (drawZoomAreaMode) return;
       const textbox = spread.textboxes?.find((tb) => tb.id === textboxId);
       if (!textbox) return;
 
@@ -230,12 +272,13 @@ export function AnimationEditorCanvas({
       setSelectedGeometry(tbResult.content.geometry);
       onItemSelect("textbox", textboxId);
     },
-    [spread.textboxes, editorLangCode, onItemSelect]
+    [spread.textboxes, editorLangCode, onItemSelect, drawZoomAreaMode]
   );
 
   // Shape selection handler
   const handleShapeSelect = useCallback(
     (shapeId: string) => {
+      if (drawZoomAreaMode) return;
       const shape = spread.shapes?.find((s) => s.id === shapeId);
       if (!shape) return;
       setSelectedItemId(shapeId);
@@ -243,12 +286,13 @@ export function AnimationEditorCanvas({
       setSelectedGeometry(shape.geometry);
       onItemSelect("shape", shapeId);
     },
-    [spread.shapes, onItemSelect]
+    [spread.shapes, onItemSelect, drawZoomAreaMode]
   );
 
   // Video selection handler
   const handleVideoSelect = useCallback(
     (videoId: string) => {
+      if (drawZoomAreaMode) return;
       const video = spread.videos?.find((v) => v.id === videoId);
       if (!video) return;
       setSelectedItemId(videoId);
@@ -256,12 +300,13 @@ export function AnimationEditorCanvas({
       setSelectedGeometry(video.geometry);
       onItemSelect("video", videoId);
     },
-    [spread.videos, onItemSelect]
+    [spread.videos, onItemSelect, drawZoomAreaMode]
   );
 
   // Animated pic selection handler
   const handleAutoPicSelect = useCallback(
     (autoPicId: string) => {
+      if (drawZoomAreaMode) return;
       log.info("handleAutoPicSelect", "auto_pic selected", { autoPicId });
       const autoPic = spread.auto_pics?.find((p) => p.id === autoPicId);
       if (!autoPic) return;
@@ -270,29 +315,31 @@ export function AnimationEditorCanvas({
       setSelectedGeometry(autoPic.geometry);
       onItemSelect("auto_pic", autoPicId);
     },
-    [spread.auto_pics, onItemSelect]
+    [spread.auto_pics, onItemSelect, drawZoomAreaMode]
   );
 
   // Audio selection handler (no SelectionOverlay — component handles its own selection border)
   const handleAudioSelect = useCallback(
     (audioId: string) => {
+      if (drawZoomAreaMode) return;
       setSelectedItemId(audioId);
       setSelectedItemType("audio");
       setSelectedGeometry(null);
       onItemSelect("audio", audioId);
     },
-    [onItemSelect]
+    [onItemSelect, drawZoomAreaMode]
   );
 
   // Quiz selection handler (no SelectionOverlay — component handles its own selection border)
   const handleQuizSelect = useCallback(
     (quizId: string) => {
+      if (drawZoomAreaMode) return;
       setSelectedItemId(quizId);
       setSelectedItemType("quiz");
       setSelectedGeometry(null);
       onItemSelect("quiz", quizId);
     },
-    [onItemSelect]
+    [onItemSelect, drawZoomAreaMode]
   );
 
   // Memoized textboxes with resolved language — skip player_visible=false (not renderable as target)
@@ -519,6 +566,42 @@ export function AnimationEditorCanvas({
 
         {/* Selection overlay */}
         {selectedGeometry && <SelectionOverlay geometry={selectedGeometry} />}
+
+        {/* Camera Zoom area overlay — render only when expanded animation is type 19 with target.type='spread' */}
+        {expandedAnimation?.effect.type === 19 &&
+          expandedAnimation.target.type === "spread" &&
+          expandedAnimation.effect.geometry &&
+          expandedAnimationIndex !== null &&
+          expandedAnimationIndex !== undefined && (
+            <ZoomAreaOverlay
+              geometry={expandedAnimation.effect.geometry as ZoomAreaGeometry}
+              spreadWidthPx={scaledWidth}
+              spreadHeightPx={scaledHeight}
+              spreadRatio={canvasHeight > 0 ? canvasWidth / canvasHeight : 1}
+              label={resolveZoomLabel(expandedAnimation, allAnimations ?? [])}
+              isSelected={true}
+              onChange={(next) => onCameraZoomGeometryChange?.(expandedAnimationIndex, next)}
+              onCommit={(final) => onCameraZoomGeometryChange?.(expandedAnimationIndex, final)}
+              onSelect={() => {}}
+            />
+          )}
+
+        {/* Crosshair drawing surface — when drawZoomAreaMode active */}
+        {drawZoomAreaMode && (
+          <DrawZoomAreaSurface
+            spreadWidthPx={scaledWidth}
+            spreadHeightPx={scaledHeight}
+            spreadRatio={canvasHeight > 0 ? canvasWidth / canvasHeight : 1}
+            onComplete={(geometry) => {
+              log.info("drawSurface.onComplete", "forward to parent", { w: geometry.w, h: geometry.h });
+              onDrawZoomAreaComplete?.(geometry);
+            }}
+            onCancel={() => {
+              log.info("drawSurface.onCancel", "forward cancel", {});
+              onDrawZoomAreaCancel?.();
+            }}
+          />
+        )}
       </div>
     </div>
   );
