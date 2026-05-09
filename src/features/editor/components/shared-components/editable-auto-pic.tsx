@@ -145,6 +145,9 @@ export function EditableAutoPic({
         top: `${autoPic.geometry.y}%`,
         width: `${autoPic.geometry.w}%`,
         height: `${autoPic.geometry.h}%`,
+        transform: `rotate(${Number.isFinite(autoPic.geometry.rotation) ? autoPic.geometry.rotation : 0}deg)`,
+        transformOrigin: "center center",
+        willChange: "transform",
         zIndex,
         outlineColor: !isSelected
           ? isHovered

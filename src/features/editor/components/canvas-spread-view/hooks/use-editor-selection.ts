@@ -76,6 +76,7 @@ export function useEditorSelection<TSpread extends BaseSpread>({
     isImageEditing: false,
     isDragging: false,
     isResizing: false,
+    isRotating: false,
     activeHandle: null,
     originalGeometry: null,
   });
@@ -90,6 +91,7 @@ export function useEditorSelection<TSpread extends BaseSpread>({
       isImageEditing: false,
       isDragging: false,
       isResizing: false,
+      isRotating: false,
       activeHandle: null,
       originalGeometry: null,
     }));
@@ -195,6 +197,7 @@ export function useEditorSelection<TSpread extends BaseSpread>({
           selectedGeometry: geometry,
           isDragging: false,
           isResizing: false,
+          isRotating: false,
           activeHandle: null,
           originalGeometry: null,
         };
@@ -262,6 +265,7 @@ export function useEditorSelection<TSpread extends BaseSpread>({
         selectedGeometry: geometry,
         isDragging: false,
         isResizing: false,
+        isRotating: false,
         activeHandle: null,
         originalGeometry: null,
       }));

@@ -21,6 +21,7 @@ interface SelectionFrameProps {
   // Feature flags
   canDrag?: boolean;
   canResize?: boolean;
+  canRotate?: boolean;
 
   // Double-click forwarding — parent uses this to trigger edit mode
   onDoubleClick?: (e: React.MouseEvent) => void;
@@ -34,6 +35,11 @@ interface SelectionFrameProps {
   onResizeStart: (handle: ResizeHandle) => void;
   onResize: (handle: ResizeHandle, delta: Point) => void;
   onResizeEnd: () => void;
+
+  // Rotate callbacks — `rotation` is cumulative degrees from rotate start.
+  onRotateStart?: () => void;
+  onRotate?: (rotation: number) => void;
+  onRotateEnd?: () => void;
 }
 
 export function SelectionFrame({
@@ -44,6 +50,7 @@ export function SelectionFrame({
   activeHandle,
   canDrag = true,
   canResize = true,
+  canRotate = false,
   onDoubleClick,
   onDragStart,
   onDrag,
@@ -51,6 +58,9 @@ export function SelectionFrame({
   onResizeStart,
   onResize,
   onResizeEnd,
+  onRotateStart,
+  onRotate,
+  onRotateEnd,
 }: SelectionFrameProps) {
   const targetRef = useRef<HTMLDivElement>(null);
   const moveableRef = useRef<Moveable>(null);
@@ -66,7 +76,7 @@ export function SelectionFrame({
   // Update moveable when geometry changes from external source
   useEffect(() => {
     moveableRef.current?.updateRect();
-  }, [geometry.x, geometry.y, geometry.w, geometry.h]);
+  }, [geometry.x, geometry.y, geometry.w, geometry.h, geometry.rotation]);
 
   // Sync activeHandle prop with internal state
   useEffect(() => {
@@ -118,8 +128,10 @@ export function SelectionFrame({
           top: `${geometry.y}%`,
           width: `${geometry.w}%`,
           height: `${geometry.h}%`,
+          transform: `rotate(${geometry.rotation ?? 0}deg)`,
+          transformOrigin: '50% 50%',
           zIndex,
-          pointerEvents: (canDrag || canResize) ? 'auto' : 'none',
+          pointerEvents: (canDrag || canResize || canRotate) ? 'auto' : 'none',
           cursor: canDrag ? 'move' : 'default',
         }}
       >
@@ -136,8 +148,11 @@ export function SelectionFrame({
         target={targetRef}
         draggable={canDrag}
         resizable={canResize && showHandles}
+        rotatable={canRotate && showHandles}
+        rotationPosition="top"
         throttleDrag={0}
         throttleResize={0}
+        throttleRotate={0}
         edge={false}
         keepRatio={false}
         origin={false}
@@ -174,6 +189,20 @@ export function SelectionFrame({
           startGeometryRef.current = null;
           currentHandleRef.current = null;
           onResizeEnd();
+        }}
+        // Rotate events — `rotation` from Moveable is cumulative degrees from start.
+        onRotateStart={() => {
+          log.debug('onRotateStart', 'rotate started', {
+            rotation: geometry.rotation ?? 0,
+          });
+          onRotateStart?.();
+        }}
+        onRotate={({ rotation }) => {
+          onRotate?.(rotation);
+        }}
+        onRotateEnd={() => {
+          log.debug('onRotateEnd', 'rotate ended');
+          onRotateEnd?.();
         }}
       />
     </>

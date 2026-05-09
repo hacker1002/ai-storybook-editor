@@ -874,6 +874,7 @@ export function ObjectsMainView({
         leftActions={combinedLeftActions}
         canResizeItem={true}
         canDragItem={true}
+        canRotateItem={true}
         externalSelectedItemId={selectedItemId}
         onDeselect={handleDeselect}
         pageNumbering={templateLayout?.page_numbering}

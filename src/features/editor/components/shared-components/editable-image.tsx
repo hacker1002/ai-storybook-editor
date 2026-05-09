@@ -176,6 +176,9 @@ export function EditableImage({
         top: `${image.geometry.y}%`,
         width: `${image.geometry.w}%`,
         height: `${image.geometry.h}%`,
+        transform: `rotate(${Number.isFinite(image.geometry.rotation) ? image.geometry.rotation : 0}deg)`,
+        transformOrigin: "center center",
+        willChange: "transform",
         zIndex,
         outlineColor: !isSelected
           ? isHovered

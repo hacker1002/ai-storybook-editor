@@ -23,8 +23,8 @@ import {
   clampGeometry,
   GeometrySection,
   ToolbarIconButton,
+  type GeometrySizeField,
 } from "@/features/editor/components/shared-components/shared-toolbar-components";
-import type { Geometry } from "@/types/canvas-types";
 
 const log = createLogger("Editor", "ShapeToolbar");
 
@@ -123,7 +123,7 @@ export function ShapeToolbar<TSpread extends BaseSpread>({
   );
 
   const handleGeometryChange = useCallback(
-    (field: keyof Geometry, value: string) => {
+    (field: GeometrySizeField, value: string) => {
       const numValue = parseFloat(value);
       if (isNaN(numValue)) return;
       let clamped = clampGeometry(field, numValue);

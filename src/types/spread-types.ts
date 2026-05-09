@@ -54,6 +54,8 @@ export interface Geometry {
   y: number; // percentage 0-100
   w: number; // percentage 0-100
   h: number; // percentage 0-100
+  /** Rotation in degrees clockwise around bbox center. Range raw [-360, 360], UI wraps to [-180, 180]. Default 0. */
+  rotation?: number;
 }
 
 // === Typography ===

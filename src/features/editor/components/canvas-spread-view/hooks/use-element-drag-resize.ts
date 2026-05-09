@@ -47,12 +47,27 @@ interface UseElementDragResizeReturn {
   handleResizeStart: (handle: ResizeHandle) => void;
   handleResize: (handle: ResizeHandle, delta: Point) => void;
   handleResizeEnd: () => void;
+  handleRotateStart: () => void;
+  handleRotate: (cumulativeDeg: number) => void;
+  handleRotateEnd: () => void;
   handleTextboxEditingChange: (isEditing: boolean) => void;
   handleImageEditingChange: (isEditing: boolean) => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   handleUpdatePage: (pageIndex: number, updates: Record<string, unknown>) => void;
   handleSpreadItemAction: (params: Omit<SpreadItemActionUnion, "spreadId">) => void;
   handleNudgeSelectedItem: (direction: 'up' | 'down' | 'left' | 'right') => void;
+}
+
+/**
+ * Wrap a rotation in degrees to the canonical range [-180, 180].
+ * Formula handles negative JS modulo (e.g., -200 % 360 = -200) by adding 540.
+ *   normalizeRotation(720)  → 0
+ *   normalizeRotation(450)  → 90
+ *   normalizeRotation(-200) → 160
+ */
+function normalizeRotation(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return (((value % 360) + 540) % 360) - 180;
 }
 
 // === Hook ===
@@ -73,6 +88,8 @@ export function useElementDragResize<TSpread extends BaseSpread>({
   // capture old state where originalGeometry is null. The ref is mutated
   // synchronously and always reflects the latest value.
   const originalGeometryRef = useRef<Geometry | null>(null);
+  // Snapshot of rotation at rotate-start; cumulative deltas from Moveable are added on top.
+  const startRotationRef = useRef<number>(0);
 
   // === Geometry Update ===
   const updateElementGeometry = useCallback(
@@ -320,6 +337,50 @@ export function useElementDragResize<TSpread extends BaseSpread>({
     }));
   }, [setState]);
 
+  // === Rotate Handlers ===
+  const handleRotateStart = useCallback(() => {
+    const geometry = getSelectedGeometry();
+    originalGeometryRef.current = geometry;
+    startRotationRef.current = geometry?.rotation ?? 0;
+    log.debug("handleRotateStart", "rotate started", {
+      rotation: startRotationRef.current,
+    });
+    setState((prev) => ({
+      ...prev,
+      isRotating: true,
+      originalGeometry: geometry,
+    }));
+  }, [getSelectedGeometry, setState]);
+
+  const handleRotate = useCallback(
+    (cumulativeDeg: number) => {
+      const { selectedElement } = state;
+      const originalGeometry = originalGeometryRef.current;
+      if (!selectedElement || !originalGeometry) return;
+
+      const newRotation = normalizeRotation(
+        startRotationRef.current + cumulativeDeg
+      );
+      const newGeometry: Geometry = { ...originalGeometry, rotation: newRotation };
+      updateElementGeometry(selectedElement, newGeometry);
+
+      // Update selectedGeometry for toolbar live sync
+      setState((prev) => ({ ...prev, selectedGeometry: newGeometry }));
+    },
+    [state, updateElementGeometry, setState]
+  );
+
+  const handleRotateEnd = useCallback(() => {
+    log.debug("handleRotateEnd", "rotate ended");
+    originalGeometryRef.current = null;
+    startRotationRef.current = 0;
+    setState((prev) => ({
+      ...prev,
+      isRotating: false,
+      originalGeometry: null,
+    }));
+  }, [setState]);
+
   // === Editing Handlers ===
   const handleTextboxEditingChange = useCallback(
     (isEditing: boolean) => {
@@ -340,20 +401,22 @@ export function useElementDragResize<TSpread extends BaseSpread>({
   // This handler retains only ESC-cancel-drag state machine logic.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      const { selectedElement, isDragging, isResizing } = state;
+      const { selectedElement, isDragging, isResizing, isRotating } = state;
       if (!selectedElement || !isEditable) return;
 
-      // ESC: cancel in-flight drag/resize and restore original geometry
+      // ESC: cancel in-flight drag/resize/rotate and restore original geometry
       if (e.key === "Escape") {
         e.preventDefault();
         const origGeo = originalGeometryRef.current;
-        if ((isDragging || isResizing) && origGeo) {
+        if ((isDragging || isResizing || isRotating) && origGeo) {
           updateElementGeometry(selectedElement, origGeo);
           originalGeometryRef.current = null;
+          startRotationRef.current = 0;
           setState((prev) => ({
             ...prev,
             isDragging: false,
             isResizing: false,
+            isRotating: false,
             activeHandle: null,
             originalGeometry: null,
             selectedGeometry: origGeo,
@@ -417,6 +480,9 @@ export function useElementDragResize<TSpread extends BaseSpread>({
     handleResizeStart,
     handleResize,
     handleResizeEnd,
+    handleRotateStart,
+    handleRotate,
+    handleRotateEnd,
     handleTextboxEditingChange,
     handleImageEditingChange,
     handleKeyDown,

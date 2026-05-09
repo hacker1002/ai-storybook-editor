@@ -1,5 +1,6 @@
 // shared-toolbar-components.tsx - Reusable toolbar sub-components for objects creative space toolbars
 
+import { RotateCcw } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -41,8 +42,11 @@ export const DEFAULT_STATES = [
 
 // === Helpers ===
 
+/** Geometry fields edited by Position/Size rows in the toolbar. Excludes `rotation` (handled separately). */
+export type GeometrySizeField = "x" | "y" | "w" | "h";
+
 // Matches OVERFLOW_MAX=100 and SIZE_MAX=300 from geometry-utils.ts
-export function clampGeometry(field: keyof Geometry, value: number): number {
+export function clampGeometry(field: GeometrySizeField, value: number): number {
   if (field === "w" || field === "h") return Math.max(1, Math.min(300, value));
   return Math.max(-100, Math.min(200, value));
 }
@@ -122,11 +126,13 @@ export function GeometryInput({
   value,
   onChange,
   ariaLabel,
+  unit = "%",
 }: {
   label: string;
   value: number;
   onChange: (value: string) => void;
   ariaLabel: string;
+  unit?: string;
 }) {
   return (
     <div className="flex items-center border border-border rounded-lg bg-secondary overflow-hidden h-7">
@@ -142,7 +148,7 @@ export function GeometryInput({
         className="w-12 bg-transparent px-1 text-sm text-center focus:outline-none"
       />
       <span className="px-1.5 text-sm text-muted-foreground border-l border-border">
-        %
+        {unit}
       </span>
     </div>
   );
@@ -151,10 +157,21 @@ export function GeometryInput({
 export function GeometrySection({
   geometry,
   onGeometryChange,
+  rotation,
+  onRotationChange,
+  onRotationReset,
 }: {
   geometry: Geometry;
-  onGeometryChange: (field: keyof Geometry, value: string) => void;
+  onGeometryChange: (field: GeometrySizeField, value: string) => void;
+  /** Optional rotation row — renders only when all three rotation props are provided. */
+  rotation?: number;
+  onRotationChange?: (value: string) => void;
+  onRotationReset?: () => void;
 }) {
+  const showRotation =
+    rotation !== undefined &&
+    onRotationChange !== undefined &&
+    onRotationReset !== undefined;
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground uppercase">
@@ -193,6 +210,27 @@ export function GeometrySection({
             ariaLabel="Size H"
           />
         </div>
+        {showRotation && (
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground w-14">Rotation</Label>
+            <GeometryInput
+              label="R"
+              value={rotation ?? 0}
+              onChange={onRotationChange}
+              ariaLabel="Rotation degrees"
+              unit="°"
+            />
+            <button
+              type="button"
+              onClick={onRotationReset}
+              aria-label="Reset rotation to 0"
+              className="h-7 px-2 inline-flex items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors"
+              title="Reset rotation"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

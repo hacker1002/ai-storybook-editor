@@ -1,7 +1,7 @@
 // spread-editor-panel.tsx - Main editor canvas for selected spread
 "use client";
 
-import { useRef, useMemo, useState, useCallback, Fragment, type ReactNode } from "react";
+import { useRef, useMemo, useState, useCallback, useEffect, Fragment, type ReactNode } from "react";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "SpreadEditorPanel");
@@ -118,6 +118,7 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   // Item-level feature flags
   canResizeItem?: boolean;
   canDragItem?: boolean;
+  canRotateItem?: boolean; // Enables rotate handle for image/auto_pic/textbox in Objects creative space
   preventEditRawItem?: boolean; // When true, raw items (raw_image/raw_textbox) cannot drag/resize
 
   // Layout config
@@ -141,6 +142,14 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   forceLanguageCode?: string;
 }
 
+// === Rotation support ===
+type RotationSupportedType = "image" | "auto_pic" | "textbox";
+function rotationSupported(
+  type: SelectedElement["type"]
+): type is RotationSupportedType {
+  return type === "image" || type === "auto_pic" || type === "textbox";
+}
+
 // === Local State Interface ===
 export interface EditorState {
   selectedElement: SelectedElement | null;
@@ -149,6 +158,7 @@ export interface EditorState {
   isImageEditing: boolean;
   isDragging: boolean;
   isResizing: boolean;
+  isRotating: boolean;
   activeHandle: ResizeHandle | null;
   originalGeometry: Geometry | null;
 }
@@ -182,6 +192,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   onSpreadItemAction,
   canResizeItem = true,
   canDragItem = true,
+  canRotateItem = false,
   preventEditRawItem = false,
   availableLayouts = [],
   externalSelectedItemId,
@@ -238,6 +249,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     handleResizeStart,
     handleResize,
     handleResizeEnd,
+    handleRotateStart,
+    handleRotate,
+    handleRotateEnd,
     handleTextboxEditingChange,
     handleImageEditingChange,
     handleKeyDown,
@@ -255,6 +269,20 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     canDragItem,
     editorLangCode,
   });
+
+  // === Cancel in-flight rotate when textbox switches language ===
+  // Prevents committing cumulative rotation against the wrong language slot.
+  useEffect(() => {
+    if (state.isRotating && state.selectedElement?.type === "textbox") {
+      log.debug("rotate.cancel.langSwitch", "abort rotate on language switch", {
+        editorLangCode,
+      });
+      handleRotateEnd();
+    }
+    // We deliberately depend only on editorLangCode — firing on `isRotating`
+    // changes would re-run after we just ended the rotation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorLangCode]);
 
   // === Textbox edit mode (controlled) ===
   // Single source of truth for which textbox is in controlled edit mode.
@@ -517,7 +545,15 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     (isSelectedTextbox && state.isTextboxEditing);
   const canResizeCurrentItem = canResizeItem && !isIconElement && !rawBlocked && !isItemInEditMode;
   const canDragCurrentItem = canDragItem && !rawBlocked && !isItemInEditMode;
-  const showHandles = canResizeCurrentItem && !state.isDragging;
+  const canRotateCurrentItem =
+    canRotateItem &&
+    state.selectedElement !== null &&
+    state.selectedElement.type !== "page" &&
+    rotationSupported(state.selectedElement.type) &&
+    !rawBlocked &&
+    !isItemInEditMode;
+  const showHandles =
+    canResizeCurrentItem && !state.isDragging && !state.isRotating;
   // Mirror selected item's stacking order on the selection frame so items
   // with a higher z-index than the selected element stay clickable. Items
   // below the selected one become unreachable — intentional, matches the
@@ -890,6 +926,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               activeHandle={state.activeHandle}
               canDrag={canDragCurrentItem}
               canResize={canResizeCurrentItem}
+              canRotate={canRotateCurrentItem}
               onDoubleClick={() => {
                 const { selectedElement } = state;
                 if (!selectedElement) return;
@@ -907,6 +944,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               onResizeStart={handleResizeStart}
               onResize={handleResize}
               onResizeEnd={handleResizeEnd}
+              onRotateStart={handleRotateStart}
+              onRotate={handleRotate}
+              onRotateEnd={handleRotateEnd}
             />
           )}
 

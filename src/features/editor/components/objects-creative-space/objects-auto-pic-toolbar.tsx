@@ -19,7 +19,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Upload, Trash2, Lock } from "lucide-react";
+import { Upload, Trash2, Lock, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { uploadAutoPicToStorage } from "@/apis/storage-api";
 import {
@@ -237,6 +237,22 @@ export function ObjectsAutoPicToolbar<TSpread extends BaseSpread>({
     },
     [geometry, hasMedia, aspectRatio, onUpdate]
   );
+
+  const handleRotationChange = useCallback(
+    (value: string) => {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return;
+      const clamped = (((numValue % 360) + 540) % 360) - 180;
+      log.debug("handleRotationChange", "update", { value: numValue, clamped });
+      onUpdate({ geometry: { ...geometry, rotation: clamped } });
+    },
+    [geometry, onUpdate]
+  );
+
+  const handleRotationReset = useCallback(() => {
+    log.debug("handleRotationReset", "reset to 0");
+    onUpdate({ geometry: { ...geometry, rotation: 0 } });
+  }, [geometry, onUpdate]);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -576,6 +592,27 @@ export function ObjectsAutoPicToolbar<TSpread extends BaseSpread>({
                   </TooltipContent>
                 </Tooltip>
               )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground w-14">
+                Rotation
+              </Label>
+              <GeometryInput
+                label="R"
+                value={geometry.rotation ?? 0}
+                onChange={handleRotationChange}
+                ariaLabel="Rotation degrees"
+                unit="°"
+              />
+              <button
+                type="button"
+                onClick={handleRotationReset}
+                aria-label="Reset rotation to 0"
+                title="Reset rotation"
+                className="h-7 px-2 inline-flex items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         </div>

@@ -99,6 +99,7 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   canDeleteSpread?: boolean;
   canResizeItem?: boolean;
   canDragItem?: boolean;
+  canRotateItem?: boolean;
   preventEditRawItem?: boolean;
 
   // Layout config
@@ -167,6 +168,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   canDeleteSpread = false,
   canResizeItem = true,
   canDragItem = true,
+  canRotateItem = false,
   preventEditRawItem = false,
   availableLayouts = [],
   externalSelectedItemId,
@@ -425,6 +427,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 onSpreadItemAction={handleSpreadItemAction}
                 canResizeItem={canResizeItem}
                 canDragItem={canDragItem}
+                canRotateItem={canRotateItem}
                 preventEditRawItem={preventEditRawItem}
                 availableLayouts={availableLayouts}
                 externalSelectedItemId={externalSelectedItemId}

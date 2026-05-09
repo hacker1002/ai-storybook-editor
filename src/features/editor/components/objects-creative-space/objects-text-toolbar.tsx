@@ -136,6 +136,44 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
     [geometry, content, langCode, onUpdate]
   );
 
+  // --- Rotation handlers (per-language) ---
+  const handleRotationChange = useCallback(
+    (value: string) => {
+      if (!geometry || !content) {
+        log.warn("handleRotationChange", "no geometry for current language", {
+          langCode,
+        });
+        return;
+      }
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return;
+      const clamped = (((numValue % 360) + 540) % 360) - 180;
+      log.debug("handleRotationChange", "update", {
+        value: numValue,
+        clamped,
+        langCode,
+      });
+      onUpdate({
+        [langCode]: {
+          ...content,
+          geometry: { ...geometry, rotation: clamped },
+        },
+      });
+    },
+    [geometry, content, langCode, onUpdate]
+  );
+
+  const handleRotationReset = useCallback(() => {
+    if (!geometry || !content) return;
+    log.debug("handleRotationReset", "reset to 0", { langCode });
+    onUpdate({
+      [langCode]: {
+        ...content,
+        geometry: { ...geometry, rotation: 0 },
+      },
+    });
+  }, [geometry, content, langCode, onUpdate]);
+
   // --- Footer action handlers ---
   const handleSplit = useCallback(() => {
     if (onSplitTextbox) {
@@ -198,6 +236,9 @@ export function ObjectsTextToolbar<TSpread extends BaseSpread>({
         <GeometrySection
           geometry={geometry ?? { x: 0, y: 0, w: 0, h: 0 }}
           onGeometryChange={handleGeometryChange}
+          rotation={geometry?.rotation ?? 0}
+          onRotationChange={handleRotationChange}
+          onRotationReset={handleRotationReset}
         />
 
         {/* Narration Section */}

@@ -341,6 +341,9 @@ export function EditableTextbox({
         top: `${geometry.y}%`,
         width: `${geometry.w}%`,
         height: `${geometry.h}%`,
+        transform: `rotate(${Number.isFinite(geometry.rotation) ? geometry.rotation : 0}deg)`,
+        transformOrigin: "center center",
+        willChange: "transform",
         zIndex,
         outlineColor: !isSelected
           ? isHovered

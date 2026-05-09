@@ -149,6 +149,25 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     [geometry, onUpdate]
   );
 
+  const handleRotationChange = useCallback(
+    (value: string) => {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return;
+      const clamped = (((numValue % 360) + 540) % 360) - 180;
+      log.debug("ObjectsImageToolbar", "rotation change", {
+        value: numValue,
+        clamped,
+      });
+      onUpdate({ geometry: { ...geometry, rotation: clamped } });
+    },
+    [geometry, onUpdate]
+  );
+
+  const handleRotationReset = useCallback(() => {
+    log.debug("ObjectsImageToolbar", "rotation reset");
+    onUpdate({ geometry: { ...geometry, rotation: 0 } });
+  }, [geometry, onUpdate]);
+
   const handleSegment = useCallback(() => {
     if (onSegmentImage) {
       onSegmentImage();
@@ -317,6 +336,9 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         <GeometrySection
           geometry={geometry}
           onGeometryChange={handleGeometryChange}
+          rotation={geometry.rotation ?? 0}
+          onRotationChange={handleRotationChange}
+          onRotationReset={handleRotationReset}
         />
 
         {/* === FOOTER === */}
