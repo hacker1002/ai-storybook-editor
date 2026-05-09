@@ -1001,10 +1001,33 @@ export function usePlayerGsapEngine({
    */
   const reApplyInitialStates = useCallback(
     (fromStepIndex: number) => {
-      // Collect targets affected from fromStepIndex forward
+      // Collect targets affected from fromStepIndex forward; also drop any
+      // camera side-effects (FOCUS blurs siblings, ZOOM_IN scales the spread
+      // container — both live OUTSIDE affectedTargets and would otherwise
+      // persist after a back-navigation that interrupts the tween mid-flight.
       const affectedTargets = new Set<string>();
       for (let i = fromStepIndex; i < steps.length; i++) {
-        steps[i]?.animations.forEach((a) => affectedTargets.add(a.target.id));
+        steps[i]?.animations.forEach((a) => {
+          affectedTargets.add(a.target.id);
+          if (
+            a.effect.type === EFFECT_TYPE.FOCUS ||
+            a.effect.type === EFFECT_TYPE.ZOOM_IN
+          ) {
+            let resolvedId: string | undefined = a.target.id;
+            if (
+              a.effect.type === EFFECT_TYPE.FOCUS &&
+              a.target.type === "composite"
+            ) {
+              const r = resolveAnimationTarget(
+                a.target,
+                { composites: spread.composites },
+                playEdition
+              );
+              resolvedId = r.variantId ?? a.target.id;
+            }
+            applyCameraEndState(a, spreadContainerRef.current, resolvedId);
+          }
+        });
       }
 
       // Clear GSAP props + read-along highlights for affected elements
