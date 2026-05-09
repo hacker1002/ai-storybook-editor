@@ -108,7 +108,7 @@ describe('addCameraTweenToTimeline — Focus (18)', () => {
     const anim = makeAnim(18, {}, 'item-2');
     addCameraTweenToTimeline(tl, anim, container, 0);
     const phase1 = tl.getChildren()[0];
-    expect(phase1.vars.filter).toBe('blur(8px)');
+    expect(phase1.vars.filter).toBe('blur(3px)'); // CAMERA_DEFAULTS.FOCUS_BLUR_PX = 3
     expect(phase1.vars.opacity).toBeUndefined();
     expect(phase1.duration()).toBeCloseTo(0.5, 2);
   });

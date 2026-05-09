@@ -33,10 +33,13 @@ import { CompositeMemberBadge } from "../objects-creative-space/composite-member
 import {
   buildCompositeNumberMap,
   findCompositeIdForVariant,
+  resolveTargetItemGeometry,
 } from "../../utils/composite-resolve-helpers";
 import { ZoomAreaOverlay } from "./zoom-area-overlay";
 import { DrawZoomAreaSurface } from "./draw-zoom-area-surface";
+import { MotionLineOverlay } from "./motion-line-overlay";
 import type { ZoomAreaGeometry } from "./zoom-area-overlay-utils";
+import type { MotionLineGeometry } from "./motion-line-overlay-utils";
 
 const log = createLogger("Editor", "AnimationEditorCanvas");
 
@@ -57,6 +60,8 @@ export interface AnimationEditorCanvasProps {
   drawZoomAreaMode?: boolean;
   onDrawZoomAreaComplete?: (geometry: ZoomAreaGeometry) => void;
   onDrawZoomAreaCancel?: () => void;
+  // Lines (effect 16) wiring
+  onMotionLineGeometryChange?: (animationIndex: number, geometry: MotionLineGeometry) => void;
 }
 
 function resolveZoomLabel(
@@ -73,6 +78,16 @@ function resolveZoomLabel(
   return `Camera Zoom #${idx + 1}`;
 }
 
+function resolveMotionLineLabel(
+  animation: SpreadAnimation,
+  allAnimations: SpreadAnimation[],
+): string {
+  const linesList = allAnimations.filter((a) => a.effect.type === 16);
+  const idx = linesList.findIndex((a) => a.order === animation.order);
+  if (idx < 0) return 'Motion Line #?';
+  return `Motion Line #${idx + 1}`;
+}
+
 export function AnimationEditorCanvas({
   spread,
   zoomLevel,
@@ -87,6 +102,7 @@ export function AnimationEditorCanvas({
   drawZoomAreaMode,
   onDrawZoomAreaComplete,
   onDrawZoomAreaCancel,
+  onMotionLineGeometryChange,
 }: AnimationEditorCanvasProps) {
   const editorLangCode = useLanguageCode();
   const canvasWidth = useCanvasWidth();
@@ -585,6 +601,39 @@ export function AnimationEditorCanvas({
               onSelect={() => {}}
             />
           )}
+
+        {/* Motion Line overlay — render when expanded animation is type 16 (Lines) */}
+        {expandedAnimation?.effect.type === 16 &&
+          expandedAnimation.effect.geometry &&
+          expandedAnimationIndex !== null &&
+          expandedAnimationIndex !== undefined &&
+          (() => {
+            const itemGeometry = resolveTargetItemGeometry(
+              expandedAnimation.target,
+              spread,
+            );
+            if (!itemGeometry) {
+              log.debug("render", "motion-line orphan target — skip overlay", {
+                targetId: expandedAnimation.target.id,
+                targetType: expandedAnimation.target.type,
+              });
+              return null;
+            }
+            const label = resolveMotionLineLabel(expandedAnimation, allAnimations ?? []);
+            return (
+              <MotionLineOverlay
+                geometry={expandedAnimation.effect.geometry as MotionLineGeometry}
+                itemGeometry={itemGeometry}
+                spreadWidthPx={scaledWidth}
+                spreadHeightPx={scaledHeight}
+                label={label}
+                isSelected={true}
+                onChange={(next) => onMotionLineGeometryChange?.(expandedAnimationIndex, next)}
+                onCommit={(final) => onMotionLineGeometryChange?.(expandedAnimationIndex, final)}
+                onSelect={() => {}}
+              />
+            );
+          })()}
 
         {/* Crosshair drawing surface — when drawZoomAreaMode active */}
         {drawZoomAreaMode && (

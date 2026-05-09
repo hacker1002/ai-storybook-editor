@@ -91,12 +91,20 @@ export function inferEffectTypeForComposite(composite: SpreadComposite): ItemTyp
   return 'image'; // safe fallback
 }
 
+/**
+ * Build a default `effect` for a new animation.
+ *
+ * @param effectType   Numeric effect id (1..19).
+ * @param spreadRatio  Spread aspect (W/H). Used by Camera Zoom (19) default geometry.
+ * @param itemGeometry Target item geometry — used by Lines (16) to mirror item w/h
+ *                     and place the destination tip at spread center. When omitted
+ *                     (e.g. demo mocks), Lines falls back to `{x:40,y:40,w:20,h:20}`.
+ */
 export function buildDefaultEffect(
   effectType: number,
-  _itemType?: ItemType, // reserved for per-type defaults; underscore = intentionally unused
   spreadRatio?: number,
+  itemGeometry?: { x: number; y: number; w: number; h: number },
 ): SpreadAnimation['effect'] {
-  void _itemType;
   const options = EFFECT_OPTIONS_MAP[effectType] ?? [];
   const isCamera = effectType === 18 || effectType === 19;
 
@@ -123,6 +131,18 @@ export function buildDefaultEffect(
   if (options.includes('geometry')) {
     if (effectType === 19) {
       effect.geometry = buildDefaultZoomGeometry(spreadRatio ?? 1);
+    } else if (effectType === 16) {
+      // Lines: tip @ spread center, w/h mirror item dims so delta math is symmetric.
+      if (itemGeometry) {
+        effect.geometry = {
+          x: 50 - itemGeometry.w / 2,
+          y: 50 - itemGeometry.h / 2,
+          w: itemGeometry.w,
+          h: itemGeometry.h,
+        };
+      } else {
+        effect.geometry = { x: 40, y: 40, w: 20, h: 20 };
+      }
     } else {
       effect.geometry = { x: 0, y: 0, w: 100, h: 100 };
     }

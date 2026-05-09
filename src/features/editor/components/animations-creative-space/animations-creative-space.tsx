@@ -42,6 +42,8 @@ import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { computePlayEffectDuration } from "@/features/editor/utils/compute-play-effect-duration";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import type { ZoomAreaGeometry } from "@/features/editor/components/playable-spread-view/zoom-area-overlay-utils";
+import type { MotionLineGeometry } from "@/features/editor/components/playable-spread-view/motion-line-overlay-utils";
+import { resolveTargetItemGeometry } from "@/features/editor/utils/composite-resolve-helpers";
 
 const log = createLogger("Editor", "AnimationsCreativeSpace");
 
@@ -247,7 +249,12 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
       }
 
       const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
-      const effect = buildDefaultEffect(effectType, effectItemType, spreadRatio);
+      const itemGeometryForEffect = resolveTargetItemGeometry(resolvedTarget, currentSpread);
+      const effect = buildDefaultEffect(
+        effectType,
+        spreadRatio,
+        itemGeometryForEffect ?? undefined,
+      );
 
       // Skip auto-fetch media duration for composite: composite has no direct media_url.
       if (resolvedTarget.type !== 'composite') {
@@ -337,6 +344,33 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
         return;
       }
       log.debug("handleCameraZoomGeometryChange", "update geometry", { animationIndex });
+      actions.updateRetouchAnimation(effectiveSpreadId, animationIndex, {
+        effect: { ...current.effect, geometry },
+      });
+    },
+    [effectiveSpreadId, animations, actions],
+  );
+
+  const handleMotionLineGeometryChange = useCallback(
+    (animationIndex: number, geometry: MotionLineGeometry) => {
+      if (!effectiveSpreadId) return;
+      const current = animations[animationIndex];
+      if (!current) {
+        log.warn("handleMotionLineGeometryChange", "animation not found", { animationIndex });
+        return;
+      }
+      if (current.effect.type !== 16) {
+        log.warn("handleMotionLineGeometryChange", "animation type mismatch", {
+          animationIndex,
+          type: current.effect.type,
+        });
+        return;
+      }
+      log.info("handleMotionLineGeometryChange", "update geometry", {
+        animationIndex,
+        x: geometry.x,
+        y: geometry.y,
+      });
       actions.updateRetouchAnimation(effectiveSpreadId, animationIndex, {
         effect: { ...current.effect, geometry },
       });
@@ -482,6 +516,7 @@ export function AnimationsCreativeSpace({ onNavigateToPreview }: AnimationsCreat
           drawZoomAreaMode={drawZoomAreaMode}
           onDrawZoomAreaComplete={handleDrawZoomAreaComplete}
           onDrawZoomAreaCancel={handleDrawZoomAreaCancel}
+          onMotionLineGeometryChange={handleMotionLineGeometryChange}
         />
       </div>
     </div>

@@ -50,6 +50,53 @@ interface TweenOptions {
   bypassMotion?: boolean;
 }
 
+// Linear motion path tween shared by Lines (16) + legacy Arcs (17).
+// Skip when delta < 1px both axes (degenerate — perceptually no-op).
+function addLinesTween(
+  timeline: ReturnType<typeof import("gsap").default.timeline>,
+  element: HTMLElement,
+  animation: SpreadAnimation,
+  effect: SpreadAnimation['effect'],
+  options: TweenOptions | undefined,
+  position: number | string,
+  delaySec: number,
+  cw: number,
+  ch: number,
+): void {
+  const dur = (effect.duration ?? DEFAULT_MOTION_DURATION * 1000) / 1000;
+  const geo = effect.geometry;
+  if (!geo) {
+    log.warn('addLinesTween', 'effect missing geometry', { targetId: animation.target.id });
+    return;
+  }
+  const itemGeo = options?.itemGeometry;
+  const deltaX = itemGeo
+    ? ((geo.x - itemGeo.x) / 100) * cw
+    : (geo.x / 100) * cw;
+  const deltaY = itemGeo
+    ? ((geo.y - itemGeo.y) / 100) * ch
+    : (geo.y / 100) * ch;
+  if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+    log.debug('addLinesTween', 'degenerate delta — skip tween', {
+      targetId: animation.target.id,
+      deltaX,
+      deltaY,
+    });
+    return;
+  }
+  timeline.to(
+    element,
+    {
+      x: deltaX,
+      y: deltaY,
+      duration: dur,
+      delay: delaySec,
+      ease: "power1.inOut",
+    },
+    position,
+  );
+}
+
 /**
  * Add a GSAP tween to a timeline for one SpreadAnimation.
  *
@@ -571,63 +618,18 @@ export function addTweenToTimeline(
     }
 
     // ── Lines (16) ───────────────────────────────────────────────
+    // effect.geometry = TOP-LEFT destination (%), mirrors item.geometry.w/h.
+    // Delta math: (effect.x - item.x) / 100 * cw — works for both top-left and
+    // center interpretation since w/h mirror item dims (delta cancels offsets).
     case EFFECT_TYPE.LINES: {
-      const dur = (effect.duration ?? DEFAULT_MOTION_DURATION * 1000) / 1000;
-      const geo = effect.geometry;
-      if (!geo) {
-        log.warn('addTweenToTimeline', 'lines effect missing geometry', { targetId: animation.target.id });
-        return;
-      }
-      // effect.geometry = absolute target position (%), delta = target - item origin
-      const itemGeo = options?.itemGeometry;
-      const deltaX = itemGeo
-        ? ((geo.x - itemGeo.x) / 100) * cw
-        : (geo.x / 100) * cw;
-      const deltaY = itemGeo
-        ? ((geo.y - itemGeo.y) / 100) * ch
-        : (geo.y / 100) * ch;
-      timeline.to(
-        element,
-        {
-          x: deltaX,
-          y: deltaY,
-          duration: dur,
-          delay: delaySec,
-          ease: "power1.inOut",
-        },
-        position
-      );
+      addLinesTween(timeline, element, animation, effect, options, position, delaySec, cw, ch);
       break;
     }
 
-    // ── Arcs (17) — simplified v1 (linear, no bezier) ────────────
+    // ── Arcs (17) — DEPRECATED 2026-05; runtime fallback to Lines (16) ─────
     case EFFECT_TYPE.ARCS: {
-      const dur = (effect.duration ?? DEFAULT_MOTION_DURATION * 1000) / 1000;
-      const geo = effect.geometry;
-      if (!geo) {
-        log.warn('addTweenToTimeline', 'arcs effect missing geometry', { targetId: animation.target.id });
-        return;
-      }
-      // effect.geometry = absolute target position (%), delta = target - item origin
-      const itemGeo = options?.itemGeometry;
-      const deltaX = itemGeo
-        ? ((geo.x - itemGeo.x) / 100) * cw
-        : (geo.x / 100) * cw;
-      const deltaY = itemGeo
-        ? ((geo.y - itemGeo.y) / 100) * ch
-        : (geo.y / 100) * ch;
-      // v1: linear path, enhance to bezier later if needed
-      timeline.to(
-        element,
-        {
-          x: deltaX,
-          y: deltaY,
-          duration: dur,
-          delay: delaySec,
-          ease: "power1.inOut",
-        },
-        position
-      );
+      log.debug('addTweenToTimeline', 'arcs legacy fallback to lines', { targetId: animation.target.id });
+      addLinesTween(timeline, element, animation, effect, options, position, delaySec, cw, ch);
       break;
     }
 

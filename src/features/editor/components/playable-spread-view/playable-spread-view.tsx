@@ -137,6 +137,12 @@ interface PlayableSpreadViewProps {
     geometry: import("./zoom-area-overlay-utils").ZoomAreaGeometry,
   ) => void;
   onDrawZoomAreaCancel?: () => void;
+
+  // Motion Line (effect 16) wiring — animation-editor mode only
+  onMotionLineGeometryChange?: (
+    animationIndex: number,
+    geometry: import("./motion-line-overlay-utils").MotionLineGeometry,
+  ) => void;
 }
 
 const KEYBOARD_SHORTCUTS = {
@@ -179,6 +185,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   drawZoomAreaMode,
   onDrawZoomAreaComplete,
   onDrawZoomAreaCancel,
+  onMotionLineGeometryChange,
 }) => {
 
   // === Internal State ===
@@ -623,6 +630,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
             drawZoomAreaMode={drawZoomAreaMode}
             onDrawZoomAreaComplete={onDrawZoomAreaComplete}
             onDrawZoomAreaCancel={onDrawZoomAreaCancel}
+            onMotionLineGeometryChange={onMotionLineGeometryChange}
           />
         ) : activeCanvas === "remix-editor" &&
           selectedSpread &&

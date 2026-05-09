@@ -13,7 +13,13 @@
 // Purity: no React imports, no logger here — callers add `log.debug` at the
 // integration site so payloads can stay component-scoped.
 
-import type { BaseSpread, SpreadComposite, EditionTag } from '@/types/spread-types';
+import type {
+  BaseSpread,
+  SpreadAnimation,
+  SpreadComposite,
+  EditionTag,
+  Geometry,
+} from '@/types/spread-types';
 import type { PlayEdition } from '@/types/playable-types';
 
 /** Per-variant runtime context derived from the composite it belongs to.
@@ -135,6 +141,65 @@ export interface ResolvedAnimationTarget {
   /** When true, the engine should render the variant at its final state and
    *  skip motion (classic edition). Always false for non-composite targets. */
   bypassMotion: boolean;
+}
+
+/**
+ * Resolve the geometry of an animation target item on a spread.
+ *
+ * Returns null when:
+ *   - target.type === 'spread' (Camera Zoom sentinel — not an item)
+ *   - target.type === 'audio' | 'quiz' (no Geometry; uses 2D point or fixed icon)
+ *   - target item not found (orphan — animation references deleted item)
+ *   - target.type === 'composite' but composite missing or has no variants
+ *
+ * Composite resolution: when `playEdition` is supplied, returns the active
+ * variant's geometry; otherwise (editor canvas — edition-agnostic) returns the
+ * first variant's geometry. Underlying image/auto_pic is looked up on the spread.
+ */
+export function resolveTargetItemGeometry(
+  target: SpreadAnimation['target'],
+  spread: BaseSpread | null | undefined,
+  playEdition?: PlayEdition,
+): Geometry | null {
+  if (!spread) return null;
+  if (target.type === 'spread' || target.type === 'audio' || target.type === 'quiz') {
+    return null;
+  }
+  if (target.type === 'composite') {
+    const composite = spread.composites?.find((c) => c.id === target.id);
+    if (!composite || composite.variants.length === 0) return null;
+    const variant = playEdition
+      ? composite.variants.find((v) => v.edition === playEdition) ?? composite.variants[0]
+      : composite.variants[0];
+    if (variant.type === 'image') {
+      return spread.images?.find((i) => i.id === variant.id)?.geometry ?? null;
+    }
+    return spread.auto_pics?.find((p) => p.id === variant.id)?.geometry ?? null;
+  }
+  switch (target.type) {
+    case 'image':
+      return spread.images?.find((i) => i.id === target.id)?.geometry ?? null;
+    case 'shape':
+      return spread.shapes?.find((s) => s.id === target.id)?.geometry ?? null;
+    case 'video':
+      return spread.videos?.find((v) => v.id === target.id)?.geometry ?? null;
+    case 'auto_pic':
+      return spread.auto_pics?.find((p) => p.id === target.id)?.geometry ?? null;
+    case 'textbox': {
+      // textboxes use language-specific content geometry; fallback to first lang's geometry.
+      const tb = spread.textboxes?.find((t) => t.id === target.id);
+      if (!tb) return null;
+      // SpreadTextbox.contents is keyed by language code with { geometry, ... } values.
+      // We pull the first content's geometry as a fallback (callers needing
+      // language-correct geometry should resolve via getTextboxContentForLanguage).
+      const contents = (tb as { contents?: Record<string, { geometry?: Geometry }> }).contents;
+      if (!contents) return null;
+      const firstKey = Object.keys(contents)[0];
+      return firstKey ? contents[firstKey]?.geometry ?? null : null;
+    }
+    default:
+      return null;
+  }
 }
 
 /** Resolve `animation.target` to a concrete variant id under the active

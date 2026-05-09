@@ -88,19 +88,23 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategory, string> = {
   camera: "Camera",
 };
 
-// Effect grid filtering per target type
+// Effect grid filtering per target type.
+// Arcs (17) deprecated 2026-05; reserved enum, render fallback to Lines (16).
+// Entries kept in EFFECT_TYPE / EFFECT_TYPE_NAMES / EFFECT_CATEGORY_MAP /
+// EFFECT_OPTIONS_MAP for legacy data parsing (animation list label, settings panel).
 export const ALLOWED_EFFECTS_BY_TARGET: Record<string, number[]> = {
   audio: [1, 2, 12],
-  video: [1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 18],
+  video: [1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 18],
   // auto_pic: same effect matrix as videos[] minus Play (1).
   // EXCLUDED: 1 (Play — auto-loop, play/pause meaningless),
   //           6 (entrance variant — not supported for media),
   //           7-10 (Emphasis — conflicts with auto-loop animation),
-  //           11 (Read-along — textbox-only).
+  //           11 (Read-along — textbox-only),
+  //           17 (Arcs — deprecated; legacy data still plays via Lines fallback).
   // DO NOT add these effects without updating EditableAutoPic loop handling.
-  auto_pic: [2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 18],
+  auto_pic: [2, 3, 4, 5, 12, 13, 14, 15, 16, 18],
   textbox: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18],
-  image: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18],
+  image: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 18],
   shape: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 18],
   quiz: [1],
   // ⚡ Camera Zoom (19) — sentinel target.type='spread', spread-level effect

@@ -14,6 +14,7 @@ import type {
 } from '@/types/animation-types';
 import { STAR_COLOR_MAP, EFFECT_CATEGORY_LABELS } from '@/constants/animation-constants';
 import { buildDefaultEffect, computeStepNumbers } from './utils';
+import { resolveTargetItemGeometry } from '@/features/editor/utils/composite-resolve-helpers';
 import { useCanvasWidth, useCanvasHeight } from '@/stores/editor-settings-store';
 import { useRetouchSpreadIds, useRetouchSpreads } from '@/stores/snapshot-store/selectors';
 import { useSpaceViewState, useEffectiveSpreadId } from '@/features/editor/hooks/use-space-view-state';
@@ -112,11 +113,15 @@ export function AnimationEditorSidebar({
   const { activeSpreadId } = useSpaceViewState('animation');
   const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
 
+  const currentSpread = useMemo(
+    () => retouchSpreads.find((s) => s.id === effectiveSpreadId) ?? null,
+    [retouchSpreads, effectiveSpreadId],
+  );
+
   const matchingIndexSet = useMemo(() => {
     const set = new Set<number>();
     if (!selectedItem) return set;
-    const spread = retouchSpreads.find((s) => s.id === effectiveSpreadId);
-    const parentComposite = spread?.composites?.find((c) =>
+    const parentComposite = currentSpread?.composites?.find((c) =>
       c.variants.some((v) => v.id === selectedItem.id),
     );
     animations.forEach((resolved, i) => {
@@ -126,7 +131,7 @@ export function AnimationEditorSidebar({
       else if (selectedItem.type === 'composite' && tid === selectedItem.id) set.add(i);
     });
     return set;
-  }, [selectedItem, animations, retouchSpreads, effectiveSpreadId]);
+  }, [selectedItem, animations, currentSpread]);
 
   // ---------- Drag reorder handlers ----------
 
@@ -161,9 +166,14 @@ export function AnimationEditorSidebar({
 
   // ---------- Settings callback wrappers ----------
 
-  function makeEffectTypeChange(animOriginalIndex: number) {
+  function makeEffectTypeChange(animOriginalIndex: number, animation: ResolvedAnimation) {
     return (newEffectType: number) => {
-      const newEffect = buildDefaultEffect(newEffectType, undefined, spreadRatio);
+      const itemGeometry = resolveTargetItemGeometry(animation.animation.target, currentSpread);
+      const newEffect = buildDefaultEffect(
+        newEffectType,
+        spreadRatio,
+        itemGeometry ?? undefined,
+      );
       const updates: Partial<SpreadAnimation> = { effect: newEffect };
       // Camera animations cannot click_loop — reset alongside type change.
       if (newEffectType === 18 || newEffectType === 19) {
@@ -363,7 +373,7 @@ export function AnimationEditorSidebar({
               onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
               onDrop={handleDrop}
-              onEffectTypeChange={makeEffectTypeChange(resolvedAnim.originalIndex)}
+              onEffectTypeChange={makeEffectTypeChange(resolvedAnim.originalIndex, resolvedAnim)}
               onTriggerTypeChange={makeTriggerTypeChange(resolvedAnim.originalIndex, resolvedAnim)}
               onClickLoopChange={makeClickLoopChange(resolvedAnim.originalIndex, resolvedAnim)}
               onEffectOptionChange={makeEffectOptionChange(resolvedAnim.originalIndex, resolvedAnim)}

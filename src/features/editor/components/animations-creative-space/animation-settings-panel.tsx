@@ -31,45 +31,6 @@ interface AnimationSettingsPanelProps {
 
 // ---- EffectOptionsForm ----
 
-interface GeometryInputsProps {
-  geometry: NonNullable<SpreadAnimation['effect']['geometry']>;
-  onChange: (field: string, value: number | string) => void;
-}
-
-function GeometryInputs({ geometry, onChange }: GeometryInputsProps) {
-  const fields: { key: 'x' | 'y' | 'w' | 'h'; label: string }[] = [
-    { key: 'x', label: 'X' },
-    { key: 'y', label: 'Y' },
-    { key: 'w', label: 'W' },
-    { key: 'h', label: 'H' },
-  ];
-
-  return (
-    <div className="col-span-2 space-y-1">
-      <Label className="text-xs">Path Geometry (%)</Label>
-      <div className="grid grid-cols-4 gap-1.5">
-        {fields.map(({ key, label }) => (
-          <div key={key} className="space-y-0.5">
-            <span className="text-xs text-muted-foreground">{label}</span>
-            <Input
-              type="number"
-              step={1}
-              min={0}
-              max={100}
-              value={geometry[key]}
-              onChange={(e) => {
-                const next = { ...geometry, [key]: Number(e.target.value) };
-                onChange('geometry', next as unknown as number);
-              }}
-              className="h-7 text-xs"
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 interface NumberFieldProps {
   label: string;
   value: number | undefined;
@@ -316,19 +277,27 @@ function EffectOptionsForm({
         {visibleOptions.includes('loop') && (
           <LoopField value={effect.loop} onChange={onEffectOptionChange} />
         )}
-        {visibleOptions.includes('geometry') && effect.type === 19 ? (
+        {visibleOptions.includes('geometry') && effect.type === 19 && (
           <div className="col-span-2 space-y-1">
             <Label className="text-xs">Zoom Area</Label>
             <p className="text-xs text-muted-foreground">
               Drag handles on canvas to set zoom area (ratio locked = spread ratio).
             </p>
           </div>
-        ) : visibleOptions.includes('geometry') && effect.geometry ? (
-          <GeometryInputs
-            geometry={effect.geometry}
-            onChange={onEffectOptionChange}
-          />
-        ) : null}
+        )}
+        {visibleOptions.includes('geometry') && effect.type === 16 && (() => {
+          log.debug('EffectOptionsForm', 'render motion line helper', {
+            animationOrder: animation.animation.order,
+          });
+          return (
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs">Motion Line</Label>
+              <p className="text-xs text-muted-foreground">
+                Drag arrow tip on canvas to set destination.
+              </p>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
