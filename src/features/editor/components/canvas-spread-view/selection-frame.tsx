@@ -4,6 +4,7 @@
 import { useRef, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { Geometry, Point, ResizeHandle } from '@/types/canvas-types';
+import { useSelectionToolbarPlacementStore } from '@/stores/selection-toolbar-placement-store';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'SelectionFrame');
@@ -118,6 +119,13 @@ export function SelectionFrame({
     ? `moveable-selection active-${activeHandle}`
     : 'moveable-selection';
 
+  // Prefer rotate handle on top; only swing right when the toolbar takes the
+  // top slot (toolbar 'above' → rotate 'right'). Other toolbar placements
+  // (below/left/right/none) leave plenty of room above the selection.
+  const toolbarPlacement = useSelectionToolbarPlacementStore((s) => s.placement);
+  const rotationPosition: 'top' | 'right' =
+    toolbarPlacement === 'above' ? 'right' : 'top';
+
   return (
     <>
       {/* Full-body drag zone — pointer-events controlled by canDrag/canResize */}
@@ -151,7 +159,7 @@ export function SelectionFrame({
         draggable={canDrag}
         resizable={canResize && showHandles}
         rotatable={canRotate && (showRotateHandle ?? showHandles)}
-        rotationPosition="top"
+        rotationPosition={rotationPosition}
         throttleDrag={0}
         throttleResize={0}
         throttleRotate={0}

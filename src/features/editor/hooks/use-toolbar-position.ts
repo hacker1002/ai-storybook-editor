@@ -3,6 +3,7 @@
 import { useState, useLayoutEffect, useEffect, useRef, type RefObject } from "react";
 import type { Geometry } from "@/types/spread-types";
 import { geometryToScreenRect } from "../utils/coordinate-utils";
+import { useSelectionToolbarPlacementStore } from "@/stores/selection-toolbar-placement-store";
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'useToolbarPosition');
@@ -114,6 +115,17 @@ export function useToolbarPosition({
     log.debug('useToolbarPosition', 'placement resolved', { placement, top, left });
     setPosition({ top, left, placement });
   }, [geometry, canvasRect, toolbarRef, gap]);
+
+  // Publish placement so SelectionFrame can flip the rotate handle stem to
+  // the opposite side. Cleared on unmount to avoid stale reads when no
+  // toolbar is active (e.g. between selections).
+  const placement = position?.placement ?? null;
+  useEffect(() => {
+    useSelectionToolbarPlacementStore.getState().setPlacement(placement);
+    return () => {
+      useSelectionToolbarPlacementStore.getState().setPlacement(null);
+    };
+  }, [placement]);
 
   return position;
 }
