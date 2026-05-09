@@ -20,6 +20,7 @@ import {
   useAutoplaySuspended,
 } from "@/stores/animation-playback-store";
 import { addTweenToTimeline } from "../animation-tween-builders";
+import { restoreBaseRotation } from "../restore-base-rotation";
 import {
   addCameraTweenToTimeline,
   applyCameraEndState,
@@ -889,6 +890,7 @@ export function usePlayerGsapEngine({
         // Emphasis effects (Spin, Grow/Shrink, Teeter) leave residual rotation/scale;
         // without clearing, absolute tweens (e.g. rotation: 5) would be a no-op.
         gsap.set(el, { clearProps: "transform,transformOrigin" });
+        restoreBaseRotation(el);
         const initialProps = resolveInitialState(
           anim,
           spreadContainerRef.current,
@@ -1012,6 +1014,7 @@ export function usePlayerGsapEngine({
         gsap.set(el, {
           clearProps: "opacity,visibility,transform,transformOrigin",
         });
+        restoreBaseRotation(el);
         el.querySelectorAll(".read-along-active-word").forEach((w) => {
           w.classList.remove("read-along-active-word");
         });
@@ -1157,6 +1160,7 @@ export function usePlayerGsapEngine({
         gsap.set(el, {
           clearProps: "opacity,visibility,transform,transformOrigin",
         });
+        restoreBaseRotation(el);
         // Clear read-along highlights left by killed timeline
         el.querySelectorAll(".read-along-active-word").forEach((w) => {
           w.classList.remove("read-along-active-word");

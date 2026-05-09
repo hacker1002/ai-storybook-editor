@@ -135,6 +135,7 @@ export function EditableAutoPic({
       onKeyDown={(e) => e.key === "Enter" && isEditable && !isThumbnail && onSelect()}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      data-rotation={Number.isFinite(autoPic.geometry.rotation) ? autoPic.geometry.rotation : 0}
       className={cn(
         "absolute overflow-hidden",
         isEditable && !isThumbnail && "cursor-pointer",

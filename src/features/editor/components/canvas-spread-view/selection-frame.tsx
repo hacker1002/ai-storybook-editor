@@ -16,6 +16,7 @@ interface SelectionFrameProps {
   zIndex: number;
   zoomLevel: number;
   showHandles: boolean;
+  showRotateHandle?: boolean;
   activeHandle: ResizeHandle | null;
 
   // Feature flags
@@ -47,6 +48,7 @@ export function SelectionFrame({
   zIndex,
   zoomLevel,
   showHandles,
+  showRotateHandle,
   activeHandle,
   canDrag = true,
   canResize = true,
@@ -148,7 +150,7 @@ export function SelectionFrame({
         target={targetRef}
         draggable={canDrag}
         resizable={canResize && showHandles}
-        rotatable={canRotate && showHandles}
+        rotatable={canRotate && (showRotateHandle ?? showHandles)}
         rotationPosition="top"
         throttleDrag={0}
         throttleResize={0}

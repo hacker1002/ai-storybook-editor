@@ -165,6 +165,7 @@ export function EditableImage({
       onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      data-rotation={Number.isFinite(image.geometry.rotation) ? image.geometry.rotation : 0}
       className={cn(
         "absolute overflow-hidden transition-opacity",
         dimmed && "opacity-20",

@@ -6,6 +6,7 @@ import type { CanvasSize } from '@/types/canvas-types';
 import type { PlayEdition } from '@/types/playable-types';
 import { CAMERA_DEFAULTS, EFFECT_TYPE } from '@/constants/playable-constants';
 import { resolveAnimationTarget } from '@/features/editor/utils/composite-resolve-helpers';
+import { restoreBaseRotation } from './restore-base-rotation';
 
 // === Base Opacity ===
 
@@ -211,6 +212,10 @@ export function resolveAnimationEndState(
 export function resetElementStyles(elementRefsMap: Map<string, HTMLElement>): void {
   elementRefsMap.forEach((element) => {
     gsap.set(element, { clearProps: 'opacity,visibility,transform,transformOrigin' });
+    // clearProps wipes the React-applied `transform: rotate(...)` and React
+    // doesn't re-render. Re-establish the static geometry rotation via GSAP so
+    // animations compose with it instead of starting from 0deg.
+    restoreBaseRotation(element);
     // clearProps removes ALL inline opacity — restore base opacity for elements that have it
     // (e.g. shapes with fill.opacity). Without this, non-animated items lose their CSS opacity.
     const bo = getBaseOpacity(element);

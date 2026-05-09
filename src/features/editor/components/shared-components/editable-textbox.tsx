@@ -322,6 +322,7 @@ export function EditableTextbox({
         "aria-multiline": "true",
       })}
       data-textbox
+      data-rotation={Number.isFinite(geometry.rotation) ? geometry.rotation : 0}
       tabIndex={isSelectable ? 0 : -1}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}

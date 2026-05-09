@@ -9,6 +9,7 @@ interface SelectionOverlayProps {
 }
 
 export function SelectionOverlay({ geometry }: SelectionOverlayProps) {
+  const rotation = Number.isFinite(geometry.rotation) ? geometry.rotation : 0;
   return (
     <div
       className="absolute pointer-events-none border-2"
@@ -17,6 +18,8 @@ export function SelectionOverlay({ geometry }: SelectionOverlayProps) {
         top: `${geometry.y}%`,
         width: `${geometry.w}%`,
         height: `${geometry.h}%`,
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: "center center",
         borderColor: COLORS.SELECTION,
         zIndex: 900,
       }}

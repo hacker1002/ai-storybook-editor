@@ -554,6 +554,9 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     !isItemInEditMode;
   const showHandles =
     canResizeCurrentItem && !state.isDragging && !state.isRotating;
+  // Rotate handle stays mounted during the rotate gesture; otherwise Moveable
+  // unmounts the active handle mid-gesture and the rotation is cancelled.
+  const showRotateHandle = canRotateCurrentItem && !state.isDragging;
   // Mirror selected item's stacking order on the selection frame so items
   // with a higher z-index than the selected element stay clickable. Items
   // below the selected one become unreachable — intentional, matches the
@@ -923,6 +926,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               zIndex={calcSelectedZIndex}
               zoomLevel={zoomLevel}
               showHandles={showHandles}
+              showRotateHandle={showRotateHandle}
               activeHandle={state.activeHandle}
               canDrag={canDragCurrentItem}
               canResize={canResizeCurrentItem}
