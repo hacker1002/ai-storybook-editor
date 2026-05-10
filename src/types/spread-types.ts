@@ -62,15 +62,18 @@ export interface Geometry {
 // Replaces legacy (type, name, state/variant) triplet on 5 layer types
 // (images, videos, audios, auto_pics, auto_audios).
 // See snapshot/illustration-structure.md#tags-spec
-export type SpreadTagType = 'character' | 'prop' | 'stage';
+export type SpreadTagType = 'character' | 'prop' | 'other';
 
-/** Soft-FK link from a layer to a subject variant.
- *  - object_key → characters[].key | props[].key | stages[].key
- *  - variant_key → entity.variants[].key (or 'default') */
+/** Fixed object_key values when type='other'. UI renders these in the "Others" group. */
+export type SpreadTagOtherKey = 'background' | 'foreground' | 'vfx';
+
+/** Soft-FK link from a layer to a subject (character/prop) or a role tag (other).
+ *  - type='character' | 'prop': object_key → characters[].key | props[].key; variant_key → entity.variants[].key
+ *  - type='other': object_key ∈ SpreadTagOtherKey; variant_key is null (no variants for role tags) */
 export interface SpreadTag {
   type: SpreadTagType;
   object_key: string;
-  variant_key: string;
+  variant_key: string | null;
 }
 
 // === Typography ===

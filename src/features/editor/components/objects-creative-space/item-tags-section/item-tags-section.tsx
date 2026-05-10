@@ -6,7 +6,6 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { createLogger } from '@/utils/logger';
 import { useCharacters } from '@/stores/snapshot-store/selectors';
 import { useProps } from '@/stores/snapshot-store/selectors';
-import { useStages } from '@/stores/snapshot-store/selectors';
 import type { SpreadTag } from '@/types/spread-types';
 import {
   dedupTags,
@@ -39,21 +38,25 @@ export function ItemTagsSection({
 
   const characters = useCharacters();
   const props = useProps();
-  const stages = useStages();
 
   const objectOptions = useMemo(
-    () => buildObjectOptions(characters, props, stages),
-    [characters, props, stages],
+    () => buildObjectOptions(characters, props),
+    [characters, props],
   );
 
-  // Warn once per unique dangling tuple — avoids per-render log flood under strict-mode double-render
+  // Warn once per unique dangling tuple — avoids per-render log flood under strict-mode double-render.
+  // Only character/prop tags can be dangling; type='other' has no entity to resolve.
   const danglingSignature = useMemo(
     () =>
       tags
-        .filter((t) => resolveVariants(t.type, t.object_key, characters, props, stages).length === 0)
+        .filter(
+          (t) =>
+            t.type !== 'other' &&
+            resolveVariants(t.type, t.object_key, characters, props).length === 0,
+        )
         .map((t) => `${t.type}|${t.object_key}`)
         .join(','),
-    [tags, characters, props, stages],
+    [tags, characters, props],
   );
   useEffect(() => {
     if (danglingSignature) {
@@ -69,7 +72,11 @@ export function ItemTagsSection({
   }
 
   function handlePickObjectDraft(draftId: string, opt: ObjectOption) {
-    const newTag: SpreadTag = { type: opt.type, object_key: opt.object_key, variant_key: 'default' };
+    const newTag: SpreadTag = {
+      type: opt.type,
+      object_key: opt.object_key,
+      variant_key: opt.type === 'other' ? null : 'default',
+    };
     const isDuplicate = tags.some(
       (t) => t.type === newTag.type && t.object_key === newTag.object_key && t.variant_key === newTag.variant_key,
     );
@@ -90,7 +97,13 @@ export function ItemTagsSection({
       newKey: opt.object_key,
     });
     const newTags = tags.map((t, i) =>
-      i === index ? { type: opt.type, object_key: opt.object_key, variant_key: 'default' } : t,
+      i === index
+        ? {
+            type: opt.type,
+            object_key: opt.object_key,
+            variant_key: opt.type === 'other' ? null : 'default',
+          }
+        : t,
     );
     onChange(dedupTags(newTags));
   }
@@ -132,8 +145,9 @@ export function ItemTagsSection({
         {(tags.length > 0 || draftRows.length > 0) && (
           <ul role="list" className="flex flex-col gap-1.5">
             {tags.map((tag, index) => {
-              const variants = resolveVariants(tag.type, tag.object_key, characters, props, stages);
-              const isDangling = variants.length === 0;
+              const variants = resolveVariants(tag.type, tag.object_key, characters, props);
+              // 'other' tags intentionally have no variants — not dangling, just a different shape.
+              const isDangling = tag.type !== 'other' && variants.length === 0;
               const takenVariants = getTakenVariants(tags, tag.type, tag.object_key, index);
               return (
                 <CommittedTagRow

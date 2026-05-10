@@ -24,7 +24,14 @@ function normalizeSpread(s: BaseSpread): BaseSpread {
       variant: _variant,
       ...rest
     } = layer as T & { name?: unknown; type?: unknown; state?: unknown; variant?: unknown };
-    const existingTags = Array.isArray(layer.tags) ? layer.tags : [];
+    const rawTags = Array.isArray(layer.tags) ? layer.tags : [];
+    // Drop legacy 'stage' tags from earlier dev data — type now ∈ character|prop|other only.
+    const existingTags = rawTags.filter(
+      (t: unknown) =>
+        t != null &&
+        typeof t === 'object' &&
+        (t as { type?: unknown }).type !== 'stage',
+    );
     return { ...(rest as T), tags: existingTags } as T;
   };
   return {

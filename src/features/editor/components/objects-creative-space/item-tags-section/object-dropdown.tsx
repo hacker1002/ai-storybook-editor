@@ -1,4 +1,4 @@
-// object-dropdown.tsx - Grouped Radix Select for picking a subject entity (character/prop/stage)
+// object-dropdown.tsx - Grouped Radix Select for picking a subject entity (character/prop) or role tag (other)
 
 import {
   Select,
@@ -10,17 +10,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createLogger } from '@/utils/logger';
-import type { ObjectOption } from './tag-utils';
+import type { ObjectOption, TagGroupLabel } from './tag-utils';
 import type { SpreadTagType } from '@/types/spread-types';
 
 const log = createLogger('Editor', 'ObjectDropdown');
 
-const EMPTY_PLACEHOLDER = 'No subjects yet — create characters/props/stages first';
-const GROUP_LABELS: Array<{ groupLabel: ObjectOption['groupLabel']; type: SpreadTagType }> = [
-  { groupLabel: 'Characters', type: 'character' },
-  { groupLabel: 'Props', type: 'prop' },
-  { groupLabel: 'Stages', type: 'stage' },
-];
+// 'Others' group is always present (hardcoded background/foreground/vfx); empty state only fires
+// when characters[] and props[] are both empty AND we somehow exclude the Others group too —
+// in practice options.length === 0 is unreachable because OTHER_OPTIONS contributes 3 entries.
+// Kept for defensive rendering symmetry.
+const EMPTY_PLACEHOLDER = 'No subjects available';
+const GROUP_ORDER: TagGroupLabel[] = ['Characters', 'Props', 'Others'];
 
 interface ObjectDropdownProps {
   options: ObjectOption[];
@@ -92,7 +92,7 @@ export function ObjectDropdown({
         )}
       </SelectTrigger>
       <SelectContent>
-        {GROUP_LABELS.map(({ groupLabel }) => {
+        {GROUP_ORDER.map((groupLabel) => {
           const groupItems = options.filter((o) => o.groupLabel === groupLabel);
           if (groupItems.length === 0) return null;
           return (

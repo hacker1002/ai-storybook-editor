@@ -48,14 +48,16 @@ export function CommittedTagRow({
               disabled={disabled}
               ariaLabel={`Tag ${index + 1} subject`}
             />
-            <VariantDropdown
-              variants={variants}
-              value={tag.variant_key}
-              taken={takenVariants}
-              onChange={(vk) => onPickVariant(index, vk)}
-              disabled={disabled}
-              ariaLabel={`Tag ${index + 1} variant`}
-            />
+            {tag.type !== 'other' && (
+              <VariantDropdown
+                variants={variants}
+                value={tag.variant_key ?? ''}
+                taken={takenVariants}
+                onChange={(vk) => onPickVariant(index, vk)}
+                disabled={disabled}
+                ariaLabel={`Tag ${index + 1} variant`}
+              />
+            )}
           </div>
         </TooltipTrigger>
         {isDangling && (
