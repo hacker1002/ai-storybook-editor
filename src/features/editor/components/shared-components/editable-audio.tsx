@@ -49,7 +49,7 @@ export function EditableAudio({
   return (
     <div
       role="img"
-      aria-label={audio.title || audio.name || `Audio ${index + 1}`}
+      aria-label={audio.title || `Audio ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
       onKeyDown={(e) => e.key === 'Enter' && isEditable && onSelect()}

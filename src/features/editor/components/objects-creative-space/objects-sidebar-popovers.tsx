@@ -5,14 +5,7 @@
 import {
   Eye,
   EyeOff,
-  Globe,
-  Smile,
-  Box,
-  Image as ImageIcon,
-  Square,
-  CircleDot,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { cn } from "@/utils/utils";
 import {
   Tooltip,
@@ -23,72 +16,6 @@ import {
   ELEMENT_TYPE_CONFIG,
 } from "./objects-sidebar-list-item";
 import type { ObjectElementType } from "./objects-creative-space";
-import type { SpreadItemMediaType } from "@/types/spread-types";
-
-const ASSET_TYPE_CONFIG: Record<
-  SpreadItemMediaType,
-  { icon: LucideIcon; label: string }
-> = {
-  raw: { icon: Globe, label: "Raw" },
-  character: { icon: Smile, label: "Character" },
-  prop: { icon: Box, label: "Prop" },
-  background: { icon: ImageIcon, label: "Background" },
-  foreground: { icon: Square, label: "Foreground" },
-  other: { icon: CircleDot, label: "Other" },
-};
-
-/** Filter popover content (asset/media type checkboxes). */
-export function FilterPopoverContent({
-  assetFilter,
-  allAssets,
-  allAssetTypes,
-  onToggleAsset,
-  onToggleAllAssets,
-}: {
-  assetFilter: Set<SpreadItemMediaType>;
-  allAssets: boolean;
-  allAssetTypes: SpreadItemMediaType[];
-  onToggleAsset: (type: SpreadItemMediaType) => void;
-  onToggleAllAssets: () => void;
-}) {
-  return (
-    <div className="space-y-4 text-sm">
-      <p className="font-semibold text-base">Filter</p>
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">
-          By Object Type
-        </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={allAssets}
-            onChange={onToggleAllAssets}
-            className="rounded w-4 h-4 accent-blue-500"
-          />
-          All Types
-        </label>
-        {allAssetTypes.map((type) => {
-          const config = ASSET_TYPE_CONFIG[type];
-          return (
-            <label
-              key={type}
-              className="flex items-center gap-2 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={allAssets || assetFilter.has(type)}
-                onChange={() => onToggleAsset(type)}
-                className="rounded w-4 h-4 accent-blue-500"
-              />
-              <config.icon className="w-4 h-4 text-muted-foreground" />
-              {config.label}
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /** Add element popover content. Composite entry is disabled when fewer than 2
  *  free image/auto_pic candidates exist (cannot form a composite). */

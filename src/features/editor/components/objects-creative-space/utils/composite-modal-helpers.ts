@@ -51,7 +51,7 @@ export function buildCandidates(
     result.push({
       id: img.id,
       type: "image",
-      title: img.title ?? img.name ?? "Untitled image",
+      title: img.title ?? "Untitled image",
       zIndex: img["z-index"] ?? 0,
     });
   }
@@ -60,7 +60,7 @@ export function buildCandidates(
     result.push({
       id: ap.id,
       type: "auto_pic",
-      title: ap.title ?? ap.name ?? "Untitled auto_pic",
+      title: ap.title ?? "Untitled auto_pic",
       zIndex: ap["z-index"] ?? 0,
     });
   }

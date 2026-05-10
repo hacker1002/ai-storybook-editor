@@ -3,7 +3,6 @@
 import type { PlayableSpread } from "@/types/playable-types";
 import type {
   SpreadAnimation,
-  SpreadItemMediaType,
   SpreadShape,
   SpreadVideo,
   SpreadAudio,
@@ -14,6 +13,10 @@ import type {
   Geometry,
   Typography,
 } from "@/types/spread-types";
+
+// Internal placement type — used only by this mock factory for positioning/sizing.
+// NOT stored on SpreadImage; images carry `tags: []` per the new data model.
+type MockPlacement = "background" | "character" | "prop" | "foreground" | "raw" | "other";
 import { ANIMATION_PRESETS } from "@/constants/playable-constants";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
 
@@ -47,7 +50,7 @@ const TEXTBOX_GEOMETRIES: Geometry[] = [
 ];
 
 // Image position templates by type
-const IMAGE_POSITIONS: Record<SpreadItemMediaType, { x: number; y: number }[]> =
+const IMAGE_POSITIONS: Record<MockPlacement, { x: number; y: number }[]> =
   {
     background: [{ x: 0, y: 0 }],
     character: [
@@ -73,7 +76,7 @@ const IMAGE_POSITIONS: Record<SpreadItemMediaType, { x: number; y: number }[]> =
 
 // Size ranges by image type (base width in %)
 const IMAGE_SIZE_RANGES: Record<
-  SpreadItemMediaType,
+  MockPlacement,
   { min: number; max: number }
 > = {
   background: { min: 100, max: 100 },
@@ -121,7 +124,7 @@ const AUDIO_POSITIONS: Geometry[] = [
 const MOCK_AUDIO_DURATION = 12000;
 
 // Z-Index mapping
-const Z_INDEX_BY_TYPE: Record<SpreadItemMediaType, number> = {
+const Z_INDEX_BY_TYPE: Record<MockPlacement, number> = {
   background: 50,
   character: 125,
   prop: 175,
@@ -132,7 +135,7 @@ const Z_INDEX_BY_TYPE: Record<SpreadItemMediaType, number> = {
 
 // Track usage indices
 let textboxGeoIndex = 0;
-const imageGeoIndices: Record<SpreadItemMediaType, number> = {
+const imageGeoIndices: Record<MockPlacement, number> = {
   background: 0,
   character: 0,
   prop: 0,
@@ -143,7 +146,7 @@ const imageGeoIndices: Record<SpreadItemMediaType, number> = {
 
 function resetGeometryIndices(): void {
   textboxGeoIndex = 0;
-  const keys: SpreadItemMediaType[] = [
+  const keys: MockPlacement[] = [
     "background",
     "character",
     "prop",
@@ -340,6 +343,7 @@ function mockDuration(): number {
 function generateSpreadAnimations(
   images: SpreadImage[],
   textboxes: SpreadTextbox[],
+  placements: Map<string, MockPlacement>,
   shapes: SpreadShape[] = [],
   videos: SpreadVideo[] = [],
   audios: SpreadAudio[] = [],
@@ -348,11 +352,11 @@ function generateSpreadAnimations(
   const animations: SpreadAnimation[] = [];
   let order = 0;
 
-  const bgImages = images.filter((img) => img.type === "background");
-  const characterImages = images.filter((img) => img.type === "character");
-  const propImages = images.filter((img) => img.type === "prop");
+  const bgImages = images.filter((img) => placements.get(img.id) === "background");
+  const characterImages = images.filter((img) => placements.get(img.id) === "character");
+  const propImages = images.filter((img) => placements.get(img.id) === "prop");
   const otherImages = images.filter(
-    (img) => !["background", "character", "prop"].includes(img.type ?? "")
+    (img) => !["background", "character", "prop"].includes(placements.get(img.id) ?? "")
   );
 
   // ── Auto: background entrance on spread load ──
@@ -620,7 +624,7 @@ interface ImageWithGeometry {
 }
 
 function getRandomImageGeometry(
-  type: SpreadItemMediaType,
+  type: MockPlacement,
   isDPS = true
 ): ImageWithGeometry {
   const positions = IMAGE_POSITIONS[type] || IMAGE_POSITIONS.other;
@@ -716,14 +720,14 @@ function createMockTextbox(
 }
 
 // Weighted type distribution for images
-const IMAGE_TYPE_WEIGHTS: { type: SpreadItemMediaType; weight: number }[] = [
+const IMAGE_TYPE_WEIGHTS: { type: MockPlacement; weight: number }[] = [
   { type: "character", weight: 40 },
   { type: "prop", weight: 40 },
   { type: "background", weight: 10 },
   { type: "foreground", weight: 10 },
 ];
 
-function getWeightedRandomType(): SpreadItemMediaType {
+function getWeightedRandomType(): MockPlacement {
   const totalWeight = IMAGE_TYPE_WEIGHTS.reduce((sum, t) => sum + t.weight, 0);
   let random = Math.random() * totalWeight;
   for (const item of IMAGE_TYPE_WEIGHTS) {
@@ -733,42 +737,34 @@ function getWeightedRandomType(): SpreadItemMediaType {
   return "prop";
 }
 
-// Type-specific name pools
-const IMAGE_NAMES_BY_TYPE: Record<SpreadItemMediaType, string[]> = {
-  character: ["main_character", "side_character", "character_npc"],
-  prop: ["prop_1", "prop_2", "prop_item"],
-  background: ["background_1", "background_scene", "bg_layer"],
-  foreground: ["foreground_1", "foreground_overlay", "fg_layer"],
-  raw: ["raw_image"],
-  other: ["other_item"],
-};
+interface MockImageResult {
+  image: SpreadImage;
+  placement: MockPlacement;
+}
 
-// Create SpreadImage with retouch fields (z-index, player_visible, editor_visible, name, type)
+// Create SpreadImage with retouch fields; returns image + internal placement for animation grouping.
+// Placement is NOT stored on the image — images carry `tags: []` per the new data model.
 function createMockImage(
   overrides: Partial<SpreadImage> = {},
   isDPS = true
-): SpreadImage {
-  const type: SpreadItemMediaType = getWeightedRandomType();
-  const namesForType = IMAGE_NAMES_BY_TYPE[type] || ["unnamed"];
-  const name = namesForType[randomBetween(0, namesForType.length - 1)];
+): MockImageResult {
+  const placement: MockPlacement = getWeightedRandomType();
+  const { geometry, dimensions } = getRandomImageGeometry(placement, isDPS);
 
-  const { geometry, dimensions } = getRandomImageGeometry(type, isDPS);
-
-  return {
+  const image: SpreadImage = {
     id: generateUUID(),
     title: `Image ${randomBetween(1, 100)}`,
     geometry,
     media_url: `https://picsum.photos/seed/${generateUUID()}/${dimensions.w}/${
       dimensions.h
     }`,
-    // Retouch fields
-    "z-index": Z_INDEX_BY_TYPE[type],
+    "z-index": Z_INDEX_BY_TYPE[placement],
     player_visible: true,
     editor_visible: true,
-    name,
-    type,
+    tags: [],
     ...overrides,
   };
+  return { image, placement };
 }
 
 // === Shape / Video / Audio Mock Creators ===
@@ -803,8 +799,7 @@ function createMockVideo(overrides: Partial<SpreadVideo> = {}): SpreadVideo {
     "z-index": 200,
     player_visible: true,
     editor_visible: true,
-    name: `video_clip_${randomBetween(1, 20)}`,
-    type: "prop",
+    tags: [],
     media_url: "https://www.w3schools.com/tags/mov_bbb.mp4",
     ...overrides,
   };
@@ -819,8 +814,7 @@ function createMockAudio(overrides: Partial<SpreadAudio> = {}): SpreadAudio {
     "z-index": 300,
     player_visible: true,
     editor_visible: true,
-    name: `audio_track_${randomBetween(1, 10)}`,
-    type: "other",
+    tags: [],
     media_url: "https://download.samplelib.com/mp3/sample-12s.mp3",
     ...overrides,
   };
@@ -870,9 +864,18 @@ export function createPlayableSpreads(
       { length: textboxCount },
       () => createMockTextbox(language)
     );
-    const images: SpreadImage[] = Array.from({ length: imageCount }, () =>
+
+    // Build images + a placement map for animation grouping.
+    // Placement (background/character/prop/…) is internal to the mock factory —
+    // it is NOT stored on SpreadImage (images carry `tags: []`).
+    const imageResults = Array.from({ length: imageCount }, () =>
       createMockImage({}, isDPS)
     );
+    const images: SpreadImage[] = imageResults.map((r) => r.image);
+    const placements = new Map<string, MockPlacement>(
+      imageResults.map((r) => [r.image.id, r.placement])
+    );
+
     const shapes: SpreadShape[] = Array.from({ length: shapeCount }, () =>
       createMockShape()
     );
@@ -888,6 +891,7 @@ export function createPlayableSpreads(
     const animations = generateSpreadAnimations(
       images,
       textboxes,
+      placements,
       shapes,
       videos,
       audios,

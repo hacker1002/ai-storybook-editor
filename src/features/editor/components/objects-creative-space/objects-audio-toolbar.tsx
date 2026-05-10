@@ -13,8 +13,9 @@ import {
   type AutoAudioToolbarContext,
 } from "@/features/editor/components/canvas-spread-view";
 import { createLogger } from "@/utils/logger";
-import type { SpreadAudio, SpreadAutoAudio } from "@/types/spread-types";
+import type { SpreadAudio, SpreadAutoAudio, SpreadTag } from "@/types/spread-types";
 import { ToolbarIconButton } from "@/features/editor/components/shared-components";
+import { ItemTagsSection } from "@/features/editor/components/objects-creative-space/item-tags-section";
 import { InlineAudioPlayer } from "@/components/audio/inline-audio-player";
 import { loadAudioMetadata } from "@/features/editor/utils/load-audio-metadata";
 
@@ -104,6 +105,20 @@ export function ObjectsAudioToolbar<TSpread extends BaseSpread>({
     };
   }, [audioUrl, mediaLength, item.id, onUpdate, cfg.captureMediaLength]);
 
+  const handleTagsChange = useCallback(
+    (tags: SpreadTag[]) => {
+      log.info("handleTagsChange", "commit tags", {
+        itemId: item.id,
+        variant,
+        tagsCount: tags.length,
+      });
+      onUpdate({ tags });
+    },
+    [item.id, variant, onUpdate],
+  );
+
+  const ariaLabelTags = variant === "audio" ? "Audio tags" : "Auto-audio tags";
+
   const handleDelete = useCallback(() => {
     onDelete();
   }, [onDelete]);
@@ -124,6 +139,13 @@ export function ObjectsAudioToolbar<TSpread extends BaseSpread>({
         className="min-w-[360px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
         style={toolbarStyle}
       >
+        {/* Tags */}
+        <ItemTagsSection
+          value={item.tags}
+          onChange={handleTagsChange}
+          ariaLabel={ariaLabelTags}
+        />
+
         {/* Audio Playback (no label) */}
         <div>
           {audioUrl ? (

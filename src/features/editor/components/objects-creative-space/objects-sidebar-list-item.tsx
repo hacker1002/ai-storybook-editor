@@ -31,7 +31,7 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import type { ObjectElementType } from "./objects-creative-space";
-import type { EditionTag, SpreadItemMediaType } from "@/types/spread-types";
+import type { EditionTag } from "@/types/spread-types";
 import { EDITION_LABEL } from "./utils/composite-list-helpers";
 
 export interface ObjectListEntry {
@@ -41,7 +41,6 @@ export interface ObjectListEntry {
   zIndex: number;
   editorVisible: boolean;
   playerVisible: boolean;
-  assetType?: SpreadItemMediaType;
   /** Parent composite id when this entry is a variant child (image/auto_pic). */
   parentCompositeId?: string;
   /** Edition slots this variant occupies (only when parentCompositeId is set). */

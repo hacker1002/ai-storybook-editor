@@ -58,6 +58,21 @@ export interface Geometry {
   rotation?: number;
 }
 
+// === Tags (subject identity for layers) ===
+// Replaces legacy (type, name, state/variant) triplet on 5 layer types
+// (images, videos, audios, auto_pics, auto_audios).
+// See snapshot/illustration-structure.md#tags-spec
+export type SpreadTagType = 'character' | 'prop' | 'stage';
+
+/** Soft-FK link from a layer to a subject variant.
+ *  - object_key → characters[].key | props[].key | stages[].key
+ *  - variant_key → entity.variants[].key (or 'default') */
+export interface SpreadTag {
+  type: SpreadTagType;
+  object_key: string;
+  variant_key: string;
+}
+
 // === Typography ===
 export interface Typography {
   size?: number;
@@ -101,14 +116,6 @@ export interface SpreadShape {
 }
 
 // === Spread Video ===
-export type SpreadItemMediaType =
-  | "raw"
-  | "character"
-  | "prop"
-  | "background"
-  | "foreground"
-  | "other";
-
 export interface SpreadVideo {
   id: string;
   title?: string;
@@ -117,9 +124,7 @@ export interface SpreadVideo {
   player_visible: boolean;
   editor_visible: boolean;
   original_image_id?: string;
-  name: string;
-  variant?: string;
-  type: SpreadItemMediaType;
+  tags?: SpreadTag[];
   media_url?: string;
 }
 
@@ -134,9 +139,7 @@ export interface SpreadAutoPic {
   player_visible: boolean;
   editor_visible: boolean;
   original_image_id?: string;
-  name: string;
-  variant?: string;
-  type: SpreadItemMediaType;
+  tags?: SpreadTag[];
   media_url?: string; // .webp (animated) | .webm (loop=true) | .lottie | .riv
   /** dotLottie v2 renderer hints — absent means use library defaults */
   lottie?: {
@@ -162,9 +165,7 @@ export interface SpreadAudio {
   "z-index": number;
   player_visible: boolean;
   editor_visible: boolean;
-  name: string;
-  variant?: string;
-  type: SpreadItemMediaType;
+  tags?: SpreadTag[];
   media_url?: string;
   media_length?: number; // duration in milliseconds, populated on pick/upload
 }
@@ -180,9 +181,7 @@ export interface SpreadAutoAudio {
   "z-index": number;
   player_visible: false;                // literal false, locked by validator
   editor_visible: boolean;
-  name: string;
-  variant?: string;
-  type: SpreadItemMediaType;
+  tags?: SpreadTag[];
   media_url?: string;
   // KHÔNG có media_length — runtime đo HTMLAudioElement.duration nếu cần sync
 }
@@ -364,9 +363,7 @@ export interface SpreadImage {
   editor_visible?: boolean;
   aspect_ratio?: string;
   original_image_id?: string;
-  name?: string;
-  state?: string;
-  type?: SpreadItemMediaType;
+  tags?: SpreadTag[];
 }
 
 export interface SpreadTextbox {

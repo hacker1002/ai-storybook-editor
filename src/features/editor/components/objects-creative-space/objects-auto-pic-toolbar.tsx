@@ -37,14 +37,14 @@ import {
 } from "@/features/editor/components/canvas-spread-view";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
-import type { SpreadItemMediaType } from "@/types/spread-types";
+import type { SpreadTag } from "@/types/spread-types";
 import {
   clampGeometry,
   computeGeometryOnMediaReplace,
   GeometryInput,
   ToolbarIconButton,
-  MEDIA_TYPE_OPTIONS,
 } from "@/features/editor/components/shared-components";
+import { ItemTagsSection } from "@/features/editor/components/objects-creative-space/item-tags-section";
 
 const log = createLogger("Editor", "ObjectsAutoPicToolbar");
 
@@ -175,33 +175,12 @@ export function ObjectsAutoPicToolbar<TSpread extends BaseSpread>({
     [hasMedia, geometry.w, geometry.h]
   );
 
-  const currentType = (item.type ?? "raw") as SpreadItemMediaType;
-  const currentName = item.name ?? "";
-  const currentVariant = item.variant ?? "";
-  const showNameVariant = currentType !== "raw" && currentType !== "other";
-
-  const handleTypeChange = useCallback(
-    (newType: string) => {
-      log.debug("handleTypeChange", "type change", { from: currentType, to: newType });
-      onUpdate({ type: newType as SpreadItemMediaType, name: undefined, variant: undefined });
+  const handleTagsChange = useCallback(
+    (tags: SpreadTag[]) => {
+      log.info("handleTagsChange", "commit tags", { itemId: item.id, tagsCount: tags.length });
+      onUpdate({ tags });
     },
-    [currentType, onUpdate]
-  );
-
-  const handleNameChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      log.debug("handleNameChange", "name change", { name: e.target.value });
-      onUpdate({ name: e.target.value });
-    },
-    [onUpdate]
-  );
-
-  const handleVariantChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      log.debug("handleVariantChange", "variant change", { variant: e.target.value });
-      onUpdate({ variant: e.target.value });
-    },
-    [onUpdate]
+    [item.id, onUpdate]
   );
 
   const handleGeometryChange = useCallback(
@@ -409,56 +388,14 @@ export function ObjectsAutoPicToolbar<TSpread extends BaseSpread>({
         className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
         style={toolbarStyle}
       >
-        {/* Row 1: Type */}
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-14 shrink-0">
-            Type
-          </Label>
-          <Select value={currentType} onValueChange={handleTypeChange}>
-            <SelectTrigger
-              className="h-7 text-sm flex-1"
-              aria-label="Animated pic type"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MEDIA_TYPE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Tags */}
+        <ItemTagsSection
+          value={item.tags}
+          onChange={handleTagsChange}
+          ariaLabel="Animated pic tags"
+        />
 
-        {/* Row 2: Name + Variant (free-text — validation session 1, not dropdown) */}
-        {showNameVariant && (
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground w-14 shrink-0">
-              Name
-            </Label>
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <input
-                type="text"
-                value={currentName}
-                onChange={handleNameChange}
-                placeholder="Enter name..."
-                aria-label="Animated pic name"
-                className="h-7 flex-1 min-w-0 rounded-md border border-input bg-transparent px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <input
-                type="text"
-                value={currentVariant}
-                onChange={handleVariantChange}
-                placeholder="variant"
-                aria-label="Animated pic variant"
-                className="h-7 w-24 shrink-0 rounded-md border border-input bg-transparent px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Row 3: MediaKind badge (read-only, derived from media_url extension) */}
+        {/* MediaKind badge (read-only, derived from media_url extension) */}
         <div className="flex items-center gap-2">
           <Label className="text-xs text-muted-foreground w-14 shrink-0">
             Media

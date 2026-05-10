@@ -1,8 +1,8 @@
 // remix-mock-factory.ts - Mock factory for RemixAsset data
 import type { RemixAsset } from '@/types/playable-types';
 
-// Sample remix assets - target.key MUST match SpreadImage.name for swappability
-// Image names from playable-spread-factory: main_character, side_character, prop_1, background_1
+// target.key MUST match a SpreadTag.object_key on a layer for swappability.
+// Post-2026-05-08 reshape: identity moved from legacy `SpreadImage.name` → `tags[].object_key`.
 const SAMPLE_ASSETS: RemixAsset[] = [
   {
     name: 'Main Character',

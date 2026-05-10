@@ -129,7 +129,7 @@ export function EditableAutoPic({
   return (
     <div
       role="img"
-      aria-label={autoPic.title || autoPic.name || `Auto Pic ${index + 1}`}
+      aria-label={autoPic.title || `Auto Pic ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
       onKeyDown={(e) => e.key === "Enter" && isEditable && !isThumbnail && onSelect()}
@@ -168,7 +168,7 @@ export function EditableAutoPic({
             // Animated WebP loops natively — same element for full and thumbnail modes
             <img
               src={autoPic.media_url}
-              alt={autoPic.title || autoPic.name || ""}
+              alt={autoPic.title || ""}
               className="w-full h-full object-contain"
               onLoad={handleLoaded}
               onError={handleError}
@@ -223,8 +223,8 @@ export function EditableAutoPic({
         </>
       ) : (
         <AutoPicPlaceholder
-          name={autoPic.name || autoPic.title || ""}
-          type={autoPic.type}
+          name={autoPic.title || ""}
+          type={mediaKind}
         />
       )}
     </div>

@@ -49,7 +49,7 @@ export function buildCropImages(
           is_selected: true,
         },
       ],
-      type: "other",
+      tags: [],
       aspect_ratio: obj.aspectRatio,
       player_visible: orig.player_visible,
       editor_visible: orig.editor_visible,
@@ -100,7 +100,7 @@ export function buildSplitImages(
           is_selected: true,
         },
       ],
-      type: splitModalImage.type,
+      tags: [],
       aspect_ratio: splitModalImage.aspect_ratio,
       player_visible: splitModalImage.player_visible,
       editor_visible: splitModalImage.editor_visible,
@@ -135,9 +135,7 @@ export function buildSegmentImage(
     title: `${sourceImage.title ?? "Image"} - Segment`,
     geometry: { ...sourceImage.geometry },
     aspect_ratio: sourceImage.aspect_ratio,
-    type: sourceImage.type,
-    name: sourceImage.name,
-    state: sourceImage.state,
+    tags: [],
     media_url: segment.media_url,
     illustrations: [
       {

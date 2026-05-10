@@ -6,13 +6,36 @@ import { createLogger } from '@/utils/logger';
 import type { SnapshotStore } from './types';
 import type { BaseSpread } from '@/types/spread-types';
 
-/** Ensure every spread has required arrays so consumers never hit undefined */
+/** Ensure every spread has required arrays so consumers never hit undefined.
+ *  Also strips legacy (name/type/state/variant) fields from 5 layer types and
+ *  guarantees `tags: SpreadTag[]` defaults to []. Migration policy per
+ *  DB-CHANGELOG [2026-05-08]: no backfill, no dual-read. */
 function normalizeSpread(s: BaseSpread): BaseSpread {
+  const stripAndTag = <T extends { tags?: unknown }>(layer: T): T => {
+    if (!layer || typeof layer !== 'object') return layer;
+    const {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      name: _name,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      type: _type,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      state: _state,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      variant: _variant,
+      ...rest
+    } = layer as T & { name?: unknown; type?: unknown; state?: unknown; variant?: unknown };
+    const existingTags = Array.isArray(layer.tags) ? layer.tags : [];
+    return { ...(rest as T), tags: existingTags } as T;
+  };
   return {
     ...s,
-    images: s.images ?? [],
+    images: (s.images ?? []).map(stripAndTag),
     textboxes: s.textboxes ?? [],
     pages: s.pages ?? [],
+    videos: s.videos ? s.videos.map(stripAndTag) : s.videos,
+    audios: s.audios ? s.audios.map(stripAndTag) : s.audios,
+    auto_pics: s.auto_pics ? s.auto_pics.map(stripAndTag) : s.auto_pics,
+    auto_audios: s.auto_audios ? s.auto_audios.map(stripAndTag) : s.auto_audios,
   };
 }
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';

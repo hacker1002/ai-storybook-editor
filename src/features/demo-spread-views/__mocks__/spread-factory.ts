@@ -295,9 +295,6 @@ export function createMockShape(overrides: Partial<SpreadShape> = {}): SpreadSha
 
 // === Create Single Video ===
 export function createMockVideo(overrides: Partial<SpreadVideo> = {}): SpreadVideo {
-  const names = ['intro_video', 'scene_transition', 'character_action', 'ambient_clip'];
-  const name = names[randomBetween(0, names.length - 1)];
-
   return {
     id: generateUUID(),
     title: `Video ${randomBetween(1, 100)}`,
@@ -305,8 +302,7 @@ export function createMockVideo(overrides: Partial<SpreadVideo> = {}): SpreadVid
     'z-index': 100 + randomBetween(0, 50),
     player_visible: true,
     editor_visible: true,
-    name,
-    type: 'other',
+    tags: [],
     media_url: undefined, // Placeholder - renders icon
     ...overrides,
   };
@@ -314,9 +310,6 @@ export function createMockVideo(overrides: Partial<SpreadVideo> = {}): SpreadVid
 
 // === Create Single Audio ===
 export function createMockAudio(overrides: Partial<SpreadAudio> = {}): SpreadAudio {
-  const names = ['bgm_track', 'sfx_click', 'narration', 'ambient_sound'];
-  const name = names[randomBetween(0, names.length - 1)];
-
   return {
     id: generateUUID(),
     title: `Audio ${randomBetween(1, 100)}`,
@@ -324,8 +317,7 @@ export function createMockAudio(overrides: Partial<SpreadAudio> = {}): SpreadAud
     'z-index': 50 + randomBetween(0, 25),
     player_visible: true,
     editor_visible: true,
-    name,
-    type: 'other',
+    tags: [],
     media_url: undefined, // Placeholder - renders icon
     ...overrides,
   };

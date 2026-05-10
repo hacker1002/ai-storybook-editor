@@ -20,7 +20,7 @@ import { useLanguageCode, useCanvasWidth, useCanvasHeight } from "@/stores/edito
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Editor", "RemixEditorCanvas");
-import type { Geometry } from "@/types/spread-types";
+import type { Geometry, SpreadTag } from "@/types/spread-types";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { PromptToolbar } from "./prompt-toolbar";
 import { SelectionOverlay } from "./selection-overlay";
@@ -89,16 +89,16 @@ export function RemixEditorCanvas({
     gap: 8,
   });
 
-  // Compute swappable keys from assets (use target.key to match image.name)
+  // Match image to remix asset via tag.object_key (post-migration identity model;
+  // legacy `image.name` was the matcher pre-2026-05-08 reshape).
   const swappableKeys = useMemo(() => {
-    return assets.map((a) => a.target.key);
+    return new Set(assets.map((a) => a.target.key));
   }, [assets]);
 
-  // Check if image is swappable
   const isSwappable = useCallback(
-    (imageName: string | undefined) => {
-      if (!imageName) return false;
-      return swappableKeys.includes(imageName);
+    (imageTags: SpreadTag[] | undefined) => {
+      if (!imageTags || imageTags.length === 0) return false;
+      return imageTags.some((tag) => swappableKeys.has(tag.object_key));
     },
     [swappableKeys]
   );
@@ -185,7 +185,7 @@ export function RemixEditorCanvas({
       if (!image) return;
 
       // Only select if swappable
-      if (!isSwappable(image.name)) return;
+      if (!isSwappable(image.tags)) return;
 
       setSelectedSwappableId(imageId);
       setSelectedSwappableGeometry(image.geometry);
@@ -328,7 +328,7 @@ export function RemixEditorCanvas({
             index={index}
             zIndex={image["z-index"]}
             isSelected={selectedSwappableId === image.id}
-            isEditable={isSwappable(image.name)}
+            isEditable={isSwappable(image.tags)}
             onSelect={() => handleImageSelect(image.id)}
           />
         ))}

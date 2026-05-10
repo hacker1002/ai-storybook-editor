@@ -3,8 +3,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Plus, Filter } from "lucide-react";
-import { cn } from "@/utils/utils";
+import { Plus } from "lucide-react";
 import {
   Popover,
   PopoverTrigger,
@@ -12,7 +11,6 @@ import {
 } from "@/components/ui/popover";
 import {
   AddElementPopoverContent,
-  FilterPopoverContent,
   LayerDivider,
 } from "./objects-sidebar-popovers";
 import {
@@ -48,7 +46,6 @@ import type {
   SpreadAutoPic,
   SpreadAutoAudio,
 } from "@/types/canvas-types";
-import type { SpreadItemMediaType } from "@/types/spread-types";
 
 const log = createLogger("Editor", "ObjectsSidebar");
 
@@ -73,15 +70,6 @@ const ADD_ELEMENT_TYPES: ObjectElementType[] = [
   "auto_pic",
   "composite",
 ];
-const ALL_ASSET_TYPES: SpreadItemMediaType[] = [
-  "raw",
-  "character",
-  "prop",
-  "background",
-  "foreground",
-  "other",
-];
-
 // === Props ===
 
 interface ObjectsSidebarProps {
@@ -117,12 +105,6 @@ export function ObjectsSidebar({
   // When set, the modal opens in edit mode for this composite. Cleared on close.
   const [editingCompositeId, setEditingCompositeId] = useState<string | null>(null);
 
-  // Filter state (all checked by default)
-  const [assetFilter, setAssetFilter] = useState<Set<SpreadItemMediaType>>(
-    new Set(ALL_ASSET_TYPES)
-  );
-  const [allAssets, setAllAssets] = useState(true);
-
   // Drag state: layerLabel tracks which layer the drag started in
   const [dragLayerLabel, setDragLayerLabel] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -134,15 +116,8 @@ export function ObjectsSidebar({
   }, [spread, editorLangCode]);
 
   const filteredEntries = useMemo(
-    () =>
-      filterObjectList(
-        allEntries,
-        new Set(ALL_ELEMENT_TYPES),
-        assetFilter,
-        true,
-        allAssets
-      ),
-    [allEntries, assetFilter, allAssets]
+    () => filterObjectList(allEntries, new Set(ALL_ELEMENT_TYPES), true),
+    [allEntries]
   );
 
   // Group filtered entries by layer (top z-index layer first)
@@ -150,8 +125,6 @@ export function ObjectsSidebar({
     () => groupEntriesByLayer(filteredEntries),
     [filteredEntries]
   );
-
-  const isFilterActive = !allAssets;
 
   // Composite candidate count: free image/auto_pic NOT yet in any composite.
   // Used to disable "Composite" entry in AddElement popover (need ≥ 2).
@@ -227,7 +200,6 @@ export function ObjectsSidebar({
       const remaining = composite.variants.filter((v) => v.id !== variantId);
       const willAutoDelete = remaining.length < 2;
       if (willAutoDelete) {
-        // eslint-disable-next-line no-alert
         const ok = window.confirm(
           "Removing this variant will delete the composite (needs at least 2 variants). Continue?"
         );
@@ -652,51 +624,47 @@ export function ObjectsSidebar({
         case "video":
           actions.addRetouchVideo(selectedSpreadId, {
             id: newId,
-            name: "New Video",
             title: "New Video",
             geometry: { x: 10, y: 10, w: 30, h: 20 },
             "z-index": newZIndex,
             editor_visible: true,
             player_visible: true,
-            type: "raw",
+            tags: [],
           } as SpreadVideo);
           break;
         case "audio":
           actions.addRetouchAudio(selectedSpreadId, {
             id: newId,
-            name: AUDIO_DEFAULTS.AUDIO_TITLE,
             title: AUDIO_DEFAULTS.AUDIO_TITLE,
             geometry: { x: 10, y: 10, w: 0, h: 0 },
             "z-index": newZIndex,
             editor_visible: true,
             player_visible: true,
-            type: "raw",
+            tags: [],
           } as SpreadAudio);
           break;
         case "auto_audio": {
           const autoAudioCount = allEntries.filter((e) => e.type === "auto_audio").length;
           actions.addRetouchAutoAudio(selectedSpreadId, {
             id: newId,
-            name: AUDIO_DEFAULTS.AUTO_AUDIO_TITLE,
             title: AUDIO_DEFAULTS.AUTO_AUDIO_TITLE,
             geometry: { x: 1 + autoAudioCount * 2, y: 90 },
             "z-index": newZIndex,
             editor_visible: true,
             player_visible: false, // literal locked
-            type: "raw",
+            tags: [],
           } as SpreadAutoAudio);
           break;
         }
         case "auto_pic":
           actions.addRetouchAutoPic(selectedSpreadId, {
             id: newId,
-            name: "New Auto Pic",
             title: "New Auto Pic",
             geometry: { x: 10, y: 10, w: 30, h: 20 },
             "z-index": newZIndex,
             editor_visible: true,
             player_visible: true,
-            type: "raw",
+            tags: [],
           } as SpreadAutoPic);
           break;
       }
@@ -707,26 +675,6 @@ export function ObjectsSidebar({
     [actions, selectedSpreadId, allEntries, editorLangCode, bookShape, bookTypography, onItemSelect]
   );
 
-  // Filter toggles
-  const handleToggleAsset = useCallback((type: SpreadItemMediaType) => {
-    setAllAssets(false);
-    setAssetFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      if (next.size === ALL_ASSET_TYPES.length) setAllAssets(true);
-      return next;
-    });
-  }, []);
-
-  const handleToggleAllAssets = useCallback(() => {
-    setAllAssets((prev) => {
-      if (!prev) setAssetFilter(new Set(ALL_ASSET_TYPES));
-      else setAssetFilter(new Set());
-      return !prev;
-    });
-  }, []);
-
   if (!spread) return null;
 
   return (
@@ -736,32 +684,8 @@ export function ObjectsSidebar({
       role="listbox"
       aria-label="Objects list"
     >
-      {/* Header with Popover-based Filter & Add */}
+      {/* Header with Add element popover */}
       <div className="flex items-center h-14 px-3 border-b gap-2">
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                "p-1 rounded hover:bg-muted transition-colors",
-                isFilterActive && "text-blue-500"
-              )}
-              aria-label="Toggle filter"
-            >
-              <Filter className="w-4 h-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" sideOffset={8} className="w-64">
-            <FilterPopoverContent
-              assetFilter={assetFilter}
-              allAssets={allAssets}
-              allAssetTypes={ALL_ASSET_TYPES}
-              onToggleAsset={handleToggleAsset}
-              onToggleAllAssets={handleToggleAllAssets}
-            />
-          </PopoverContent>
-        </Popover>
-
         <span className="flex-1 font-semibold text-sm">Objects</span>
 
         <Popover open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -789,7 +713,7 @@ export function ObjectsSidebar({
 
       {filteredEntries.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-          {allEntries.length === 0 ? "No elements" : "No matching elements"}
+          No elements
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">

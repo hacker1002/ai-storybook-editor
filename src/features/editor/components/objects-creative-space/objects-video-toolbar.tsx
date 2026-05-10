@@ -14,14 +14,14 @@ import {
 } from "@/features/editor/components/canvas-spread-view";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
-import type { SpreadItemMediaType } from "@/types/spread-types";
+import type { SpreadTag } from "@/types/spread-types";
 import {
   clampGeometry,
   computeGeometryOnMediaReplace,
   GeometrySection,
-  MediaIdentitySection,
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
+import { ItemTagsSection } from "@/features/editor/components/objects-creative-space/item-tags-section";
 
 const log = createLogger("Editor", "ObjectsVideoToolbar");
 
@@ -65,40 +65,39 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
     toolbarRef,
   });
 
-  const currentType = (item.type ?? "raw") as SpreadItemMediaType;
-  const currentName = item.name ?? "";
-  const currentState = item.variant ?? "default";
-
-  const handleTypeChange = useCallback(
-    (newType: string) => {
-      log.debug("ObjectsVideoToolbar", "type change", {
-        from: currentType,
-        to: newType,
+  const handleTagsChange = useCallback(
+    (tags: SpreadTag[]) => {
+      log.info("ObjectsVideoToolbar", "tags change", {
+        itemId: item.id,
+        tagsCount: tags.length,
       });
-      onUpdate({
-        type: newType as SpreadItemMediaType,
-        name: undefined,
-        variant: undefined,
-      });
+      onUpdate({ tags });
     },
-    [currentType, onUpdate]
+    [item.id, onUpdate]
   );
 
-  const handleNameChange = useCallback(
-    (newName: string) => {
-      log.debug("ObjectsVideoToolbar", "name change", { name: newName });
-      onUpdate({ name: newName });
+  const handleRotationChange = useCallback(
+    (value: string) => {
+      const num = parseFloat(value);
+      if (isNaN(num)) {
+        log.debug("ObjectsVideoToolbar", "rotation skip: NaN");
+        return;
+      }
+      const clamped = (((num % 360) + 540) % 360) - 180;
+      log.info("ObjectsVideoToolbar", "rotation change", { value: num, clamped });
+      onUpdate({ geometry: { ...geometry, rotation: clamped } });
     },
-    [onUpdate]
+    [geometry, onUpdate]
   );
 
-  const handleStateChange = useCallback(
-    (newState: string) => {
-      log.debug("ObjectsVideoToolbar", "state change", { variant: newState });
-      onUpdate({ variant: newState });
-    },
-    [onUpdate]
-  );
+  const handleRotationReset = useCallback(() => {
+    if (!geometry.rotation) {
+      log.debug("ObjectsVideoToolbar", "rotation reset: no-op (already 0)");
+      return;
+    }
+    log.info("ObjectsVideoToolbar", "rotation reset");
+    onUpdate({ geometry: { ...geometry, rotation: 0 } });
+  }, [geometry, onUpdate]);
 
   const handleGeometryChange = useCallback(
     (field: "x" | "y" | "w" | "h", value: string) => {
@@ -193,21 +192,20 @@ export function ObjectsVideoToolbar<TSpread extends BaseSpread>({
         className="min-w-[280px] rounded-lg border bg-popover p-3 shadow-2xl flex flex-col gap-3"
         style={toolbarStyle}
       >
-        {/* Row 1-2: Type, Name, State */}
-        <MediaIdentitySection
-          type={currentType}
-          name={currentName}
-          state={currentState}
-          onTypeChange={handleTypeChange}
-          onNameChange={handleNameChange}
-          onStateChange={handleStateChange}
-          mediaLabel="Video"
+        {/* Row 1: Tags */}
+        <ItemTagsSection
+          value={item.tags}
+          onChange={handleTagsChange}
+          ariaLabel="Video tags"
         />
 
-        {/* Row 3-4: Geometry */}
+        {/* Row 2-3: Geometry */}
         <GeometrySection
           geometry={geometry}
           onGeometryChange={handleGeometryChange}
+          rotation={geometry.rotation ?? 0}
+          onRotationChange={handleRotationChange}
+          onRotationReset={handleRotationReset}
         />
 
         {/* Footer */}

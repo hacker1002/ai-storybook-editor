@@ -108,7 +108,7 @@ export function EditableAutoAudio({
     <div
       ref={containerRef}
       role="img"
-      aria-label={autoAudio.title || autoAudio.name || `Auto-audio ${index + 1}`}
+      aria-label={autoAudio.title || `Auto-audio ${index + 1}`}
       tabIndex={isThumbnail ? -1 : 0}
       onClick={handleClick}
       onKeyDown={(e) => {

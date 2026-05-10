@@ -57,7 +57,7 @@ export function EditableVideo({
   return (
     <div
       role="img"
-      aria-label={video.title || video.name || `Video ${index + 1}`}
+      aria-label={video.title || `Video ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
       onClick={handleClick}
       onKeyDown={(e) => e.key === "Enter" && isEditable && onSelect()}
@@ -108,7 +108,7 @@ export function EditableVideo({
           )}
         </>
       ) : (
-        <VideoPlaceholder name={video.name || video.title || ""} />
+        <VideoPlaceholder name={video.title || ""} />
       )}
     </div>
   );

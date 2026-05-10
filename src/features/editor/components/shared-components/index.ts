@@ -21,7 +21,7 @@ export { PromptPanel } from './prompt-panel';
 export { GenerateNarrationModal } from './generate-narration-modal';
 export { SoundLibraryModal } from './sound-library-modal';
 export type { LibrarySound } from './sound-library-modal';
-export { clampGeometry, computeGeometryOnMediaReplace, GeometryInput, GeometrySection, ReadOnlyGeometrySection, MediaIdentitySection, MEDIA_TYPE_OPTIONS, DEFAULT_STATES, ToolbarIconButton } from './shared-toolbar-components';
+export { clampGeometry, computeGeometryOnMediaReplace, GeometryInput, GeometrySection, ReadOnlyGeometrySection, ToolbarIconButton } from './shared-toolbar-components';
 export type { GeometryReplaceInput } from './shared-toolbar-components';
 export { ShapeToolbar } from './shape-toolbar';
 export { SegmentLayerModal } from './segment-layer-modal';

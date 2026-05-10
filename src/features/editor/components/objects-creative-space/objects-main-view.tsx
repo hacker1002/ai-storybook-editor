@@ -947,7 +947,7 @@ export function ObjectsMainView({
         <EditAudioModal
           isOpen={modals.editAudio.open}
           onClose={modals.closeEditAudio}
-          audioName={modals.editAudio.item.title ?? modals.editAudio.item.name}
+          audioName={modals.editAudio.item.title ?? "Audio"}
           mediaUrl={modals.editAudio.item.media_url}
           description={modals.editAudio.item.description ?? ""}
           onSave={modals.handleEditAudioComplete}

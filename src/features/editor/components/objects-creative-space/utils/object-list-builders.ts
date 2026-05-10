@@ -14,7 +14,7 @@ import type {
   SpreadAutoPic,
   SpreadAutoAudio,
 } from "@/types/canvas-types";
-import type { SpreadComposite, SpreadItemMediaType } from "@/types/spread-types";
+import type { SpreadComposite } from "@/types/spread-types";
 import { buildVariantOwnerMap, minEditionOrder } from "./composite-list-helpers";
 
 // === Layer helpers ===
@@ -159,14 +159,10 @@ export function buildObjectList(
     entries.push({
       id: img.id,
       type: "image",
-      title:
-        (img as SpreadImage).title ||
-        (img as SpreadImage).name ||
-        `Image ${i + 1}`,
+      title: (img as SpreadImage).title || `Image ${i + 1}`,
       zIndex: resolveZIndex((img as SpreadImage)["z-index"], i, mediaLayer),
       editorVisible: (img as SpreadImage).editor_visible !== false,
       playerVisible: (img as SpreadImage).player_visible !== false,
-      assetType: (img as SpreadImage).type,
       parentCompositeId: owner?.compositeId,
       variantEditions: owner?.editions,
     });
@@ -198,14 +194,10 @@ export function buildObjectList(
     entries.push({
       id: video.id,
       type: "video",
-      title:
-        (video as SpreadVideo).title ||
-        (video as SpreadVideo).name ||
-        `Video ${i + 1}`,
+      title: (video as SpreadVideo).title || `Video ${i + 1}`,
       zIndex: resolveZIndex((video as SpreadVideo)["z-index"], i, mediaLayer),
       editorVisible: (video as SpreadVideo).editor_visible !== false,
       playerVisible: (video as SpreadVideo).player_visible !== false,
-      assetType: (video as SpreadVideo).type,
     });
   });
 
@@ -214,14 +206,10 @@ export function buildObjectList(
     entries.push({
       id: ap.id,
       type: "auto_pic",
-      title:
-        (ap as SpreadAutoPic).title ||
-        (ap as SpreadAutoPic).name ||
-        `Auto Pic ${i + 1}`,
+      title: (ap as SpreadAutoPic).title || `Auto Pic ${i + 1}`,
       zIndex: resolveZIndex((ap as SpreadAutoPic)["z-index"], i, mediaLayer),
       editorVisible: (ap as SpreadAutoPic).editor_visible !== false,
       playerVisible: (ap as SpreadAutoPic).player_visible !== false,
-      assetType: (ap as SpreadAutoPic).type,
       parentCompositeId: owner?.compositeId,
       variantEditions: owner?.editions,
     });
@@ -245,31 +233,22 @@ export function buildObjectList(
     entries.push({
       id: audio.id,
       type: "audio",
-      title:
-        (audio as SpreadAudio).title ||
-        (audio as SpreadAudio).name ||
-        `Audio ${i + 1}`,
+      title: (audio as SpreadAudio).title || `Audio ${i + 1}`,
       zIndex: resolveZIndex((audio as SpreadAudio)["z-index"], i, objectsLayer),
       editorVisible: (audio as SpreadAudio).editor_visible !== false,
       playerVisible: (audio as SpreadAudio).player_visible !== false,
-      assetType: (audio as SpreadAudio).type,
     });
   });
 
   // Auto Audios — same group as audio; icon (Music note) distinguishes them.
   spread.auto_audios?.forEach((aa, i) => {
-    const baseName =
-      (aa as SpreadAutoAudio).title ||
-      (aa as SpreadAutoAudio).name ||
-      `Auto Audio ${i + 1}`;
     entries.push({
       id: aa.id,
       type: "auto_audio",
-      title: baseName,
+      title: (aa as SpreadAutoAudio).title || `Auto Audio ${i + 1}`,
       zIndex: resolveZIndex((aa as SpreadAutoAudio)["z-index"], i, objectsLayer),
       editorVisible: (aa as SpreadAutoAudio).editor_visible !== false,
       playerVisible: false, // locked literal
-      assetType: (aa as SpreadAutoAudio).type,
     });
   });
 
@@ -278,10 +257,7 @@ export function buildObjectList(
     entries.push({
       id: img.id,
       type: "raw_image",
-      title:
-        (img as SpreadImage).title ||
-        (img as SpreadImage).name ||
-        `Raw Image ${i + 1}`,
+      title: (img as SpreadImage).title || `Raw Image ${i + 1}`,
       zIndex: -(spread.raw_images?.length ?? 0) + i, // lower = earlier in array
       editorVisible: (img as SpreadImage).editor_visible !== false,
       playerVisible: (img as SpreadImage).player_visible !== false,
@@ -306,15 +282,8 @@ export function buildObjectList(
 export function filterObjectList(
   entries: ObjectListEntry[],
   elementFilter: Set<ObjectElementType>,
-  assetFilter: Set<SpreadItemMediaType>,
-  allElements: boolean,
-  allAssets: boolean
+  allElements: boolean
 ): ObjectListEntry[] {
-  return entries.filter((entry) => {
-    if (!allElements && !elementFilter.has(entry.type)) return false;
-    // Asset type filter only applies to items that have assetType
-    if (!allAssets && entry.assetType && !assetFilter.has(entry.assetType))
-      return false;
-    return true;
-  });
+  if (allElements) return entries;
+  return entries.filter((entry) => elementFilter.has(entry.type));
 }

@@ -24,13 +24,13 @@ import {
 } from "@/features/editor/components/canvas-spread-view";
 import { useCanvasAspectRatio } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
-import type { SpreadItemMediaType } from "@/types/spread-types";
+import type { SpreadTag } from "@/types/spread-types";
 import {
   clampGeometry,
   GeometrySection,
-  MediaIdentitySection,
   ToolbarIconButton,
 } from "@/features/editor/components/shared-components";
+import { ItemTagsSection } from "@/features/editor/components/objects-creative-space/item-tags-section";
 import {
   ASPECT_RATIOS,
   DEFAULT_ASPECT_RATIO,
@@ -77,10 +77,6 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     toolbarRef,
   });
 
-  const currentType = (item.type ?? "raw") as SpreadItemMediaType;
-  const currentName = item.name ?? "";
-  const currentState = item.state ?? "default";
-
   // Detect current aspect ratio from geometry
   const detectedRatio = useMemo(() => {
     if (item.aspect_ratio) return item.aspect_ratio;
@@ -89,36 +85,12 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
 
   // === Handlers ===
 
-  const handleTypeChange = useCallback(
-    (newType: string) => {
-      log.debug("ObjectsImageToolbar", "type change", {
-        from: currentType,
-        to: newType,
-      });
-      // Reset name & state when type changes to prevent data inconsistency
-      onUpdate({
-        type: newType as SpreadItemMediaType,
-        name: undefined,
-        state: undefined,
-      });
+  const handleTagsChange = useCallback(
+    (tags: SpreadTag[]) => {
+      log.info("handleTagsChange", "commit tags", { itemId: item.id, tagsCount: tags.length });
+      onUpdate({ tags });
     },
-    [currentType, onUpdate]
-  );
-
-  const handleNameChange = useCallback(
-    (newName: string) => {
-      log.debug("ObjectsImageToolbar", "name change", { name: newName });
-      onUpdate({ name: newName });
-    },
-    [onUpdate]
-  );
-
-  const handleStateChange = useCallback(
-    (newState: string) => {
-      log.debug("ObjectsImageToolbar", "state change", { state: newState });
-      onUpdate({ state: newState });
-    },
-    [onUpdate]
+    [item.id, onUpdate]
   );
 
   const handleRatioSelect = useCallback(
@@ -296,15 +268,11 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
       >
         {/* === BODY === */}
 
-        {/* Row 1-2: Type, Name, State */}
-        <MediaIdentitySection
-          type={currentType}
-          name={currentName}
-          state={currentState}
-          onTypeChange={handleTypeChange}
-          onNameChange={handleNameChange}
-          onStateChange={handleStateChange}
-          mediaLabel="Image"
+        {/* Tags section */}
+        <ItemTagsSection
+          value={item.tags}
+          onChange={handleTagsChange}
+          ariaLabel="Image tags"
         />
 
         {/* Row 3: Aspect Ratio */}
