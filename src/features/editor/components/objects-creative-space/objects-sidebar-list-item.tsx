@@ -123,6 +123,7 @@ export function ObjectListItem({
 
   return (
     <div
+      data-objects-sidebar-item
       className={cn(
         "group flex items-center h-12 px-2 gap-1.5 cursor-pointer transition-colors text-sm",
         isSelected ? "bg-accent/80" : "hover:bg-muted/50",

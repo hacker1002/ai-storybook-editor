@@ -31,9 +31,12 @@ interface UseEditorSelectionParams<TSpread extends BaseSpread> {
   canvasRef: RefObject<HTMLDivElement | null>;
   externalSelectedItemId?: { type: string; id: string } | null;
   /**
-   * @deprecated Kept for backward compat with callers; click-outside is now
-   * routed through the InteractionLayerStack (slot 'spread'.onClickOutside).
-   * This hook no longer reads it.
+   * Notifies the parent when canvas-side selection clears (item-layer
+   * clickOutside, Escape hotkey, etc.) so the parent's selectedItemId stays
+   * in sync with internal state.selectedElement. Without this, the two
+   * diverge and the sync effect can't reconcile because the sync deps
+   * (type,id) primitives don't change when the parent already-stale value
+   * is re-set to itself.
    */
   onDeselect?: () => void;
   editorLangCode: string;
@@ -56,6 +59,7 @@ export function useEditorSelection<TSpread extends BaseSpread>({
   spread,
   canvasRef,
   externalSelectedItemId,
+  onDeselect,
   editorLangCode,
 }: UseEditorSelectionParams<TSpread>): UseEditorSelectionReturn {
   // Compute geometry for icon-based elements (audio/quiz) — converts fixed
@@ -97,9 +101,27 @@ export function useEditorSelection<TSpread extends BaseSpread>({
     }));
   }, [spread.id]);
 
-  // Sync external selection (sidebar → canvas): resolve item id to array index
+  // Sync external selection (sidebar → canvas): resolve item id to array index.
+  // When external goes null (e.g. Camera Zoom anim selected, sidebar empty click),
+  // mirror by clearing local state — otherwise the two diverge silently.
   useEffect(() => {
-    if (!externalSelectedItemId) return;
+    if (!externalSelectedItemId) {
+      setState((prev) =>
+        prev.selectedElement === null
+          ? prev
+          : {
+              ...prev,
+              selectedElement: null,
+              selectedGeometry: null,
+              isDragging: false,
+              isResizing: false,
+              isRotating: false,
+              activeHandle: null,
+              originalGeometry: null,
+            }
+      );
+      return;
+    }
     const { type, id } = externalSelectedItemId;
 
     let resolvedType: SelectedElement["type"] | null = null;
@@ -269,8 +291,15 @@ export function useEditorSelection<TSpread extends BaseSpread>({
         activeHandle: null,
         originalGeometry: null,
       }));
+
+      // Propagate clears up so parent selectedItemId mirrors canvas state.
+      // Non-null selects already propagate via the caller's onItemSelect
+      // (see ObjectsMainView context builders) — we only bridge the null case.
+      if (element === null) {
+        onDeselect?.();
+      }
     },
-    [spread, computeIconGeometry]
+    [spread, computeIconGeometry, onDeselect]
   );
 
   const handleCanvasClick = useCallback(

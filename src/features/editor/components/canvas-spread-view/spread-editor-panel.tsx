@@ -572,6 +572,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             "[data-radix-popover-content]",
             // '[role="listbox"]',
             '[role="dialog"]',
+            // Selection-aware sidebar ROWS only (not the sidebar root):
+            // clicking a row owns its own select semantics — must not be
+            // intercepted as click-outside. Empty whitespace inside a
+            // sidebar still triggers deselect (no row → no match).
+            "[data-objects-sidebar-item]",
+            "[data-animation-sidebar-item]",
           ],
           dropdownSelectors: [
             "[data-radix-select-content]",

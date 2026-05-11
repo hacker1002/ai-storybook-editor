@@ -187,6 +187,7 @@ export function AnimationListItem({
 
   return (
     <div
+      data-animation-sidebar-item
       role="button"
       tabIndex={disabled ? -1 : 0}
       onDragOver={handleDragOver}
