@@ -206,7 +206,7 @@ export function AnimationListItem({
           : isExpanded
           ? "border border-blue-500 bg-blue-50/50 dark:bg-blue-950/20"
           : isHighlighted
-          ? "border border-blue-200/60 bg-blue-50/25 dark:border-blue-800/50 dark:bg-blue-950/10"
+          ? "border border-blue-300/70 bg-blue-100/60 dark:border-blue-700/60 dark:bg-blue-950/25"
           : "border bg-card",
         isDragging ? "opacity-50" : "",
       ].join(" ")}

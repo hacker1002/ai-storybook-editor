@@ -249,7 +249,7 @@ export function AnimationEditorSidebar({
     <aside
       role="navigation"
       aria-label="Animation editor sidebar"
-      className="flex h-full w-[280px] flex-col border-r bg-muted/30"
+      className="flex h-full w-[280px] flex-col border-l bg-background"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b px-3 h-14 shrink-0">
