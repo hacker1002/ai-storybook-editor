@@ -624,6 +624,20 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     }
   })();
 
+  // True when an animation editor overlay (Camera Zoom area / Motion Line) is
+  // rendering on top of the canvas. While editing the animation the user is
+  // focused on the overlay handles, so the item toolbar would otherwise sit
+  // on top of (and obscure) the overlay's destination tip / corner handles.
+  // Camera Zoom never sets state.selectedElement (target=spread → no item
+  // selected), so in practice this gate only matters for Motion Line — but
+  // including type 19 keeps the rule symmetric and future-proof.
+  const isAnimationOverlayActive =
+    (expandedAnimation?.effect?.type === 16 &&
+      expandedAnimation?.effect?.geometry != null) ||
+    (expandedAnimation?.effect?.type === 19 &&
+      expandedAnimation?.target?.type === "spread" &&
+      expandedAnimation?.effect?.geometry != null);
+
   // Unified edit-mode flag — single source of truth for disabling drag/resize
   // and making SelectionFrame pointer-events-transparent. Covers textbox AND
   // dummy art-note image editing.
@@ -1124,10 +1138,13 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             />
           )}
 
-        {/* Toolbars (rendered by consumer) — suppressed when drawZoomAreaMode active */}
+        {/* Toolbars (rendered by consumer) — suppressed when drawZoomAreaMode
+            active OR when an animation overlay (Motion Line / Camera Zoom) is
+            showing, to keep the destination tip / area handles clear. */}
         {state.selectedElement &&
           isEditable &&
           !itemInteractionDisabled &&
+          !isAnimationOverlayActive &&
           (() => {
             const { selectedElement } = state;
 
