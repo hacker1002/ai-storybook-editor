@@ -14,6 +14,9 @@ import { useSetZoomLevel } from '@/stores/editor-settings-store';
 import { useInteractionLayer } from '../../contexts';
 import type { PageNumberingSettings } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
+import type { SpreadAnimation } from '@/types/spread-types';
+import type { ZoomAreaGeometry } from './overlays/zoom-area-overlay-utils';
+import type { MotionLineGeometry } from './overlays/motion-line-overlay-utils';
 import type {
   BaseSpread,
   ItemType,
@@ -124,6 +127,19 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Header config
   showViewToggle?: boolean;
   leftActions?: ReactNode;
+
+  // === Animation overlay props (opt-in — all optional; default undefined → no overlay rendered) ===
+  // Used by ObjectsCreativeSpace (phase-04) to surface ZoomArea/MotionLine/DrawZoomArea on canvas.
+  // All other spaces (dummy, sketch, illustration, share) omit these props → zero behavior change.
+  expandedAnimation?: SpreadAnimation | null;
+  expandedAnimationIndex?: number | null;
+  /** All animations of current spread — needed for label resolution (#N counter). */
+  allAnimations?: SpreadAnimation[];
+  onCameraZoomGeometryChange?: (animationIndex: number, geometry: ZoomAreaGeometry) => void;
+  onMotionLineGeometryChange?: (animationIndex: number, geometry: MotionLineGeometry) => void;
+  drawZoomAreaMode?: boolean;
+  onDrawZoomAreaComplete?: (geometry: ZoomAreaGeometry) => void;
+  onDrawZoomAreaCancel?: () => void;
 }
 
 // === Main Component ===
@@ -178,6 +194,14 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   forceLanguageCode,
   showViewToggle = true,
   leftActions,
+  expandedAnimation,
+  expandedAnimationIndex,
+  allAnimations,
+  onCameraZoomGeometryChange,
+  onMotionLineGeometryChange,
+  drawZoomAreaMode,
+  onDrawZoomAreaComplete,
+  onDrawZoomAreaCancel,
 }: CanvasSpreadViewProps<TSpread>) {
 
   // Ref to the currently mounted SpreadThumbnailList (either the edit-mode
@@ -435,6 +459,14 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 onDeselect={onDeselect}
                 pageNumbering={pageNumbering}
                 forceLanguageCode={forceLanguageCode}
+                expandedAnimation={expandedAnimation}
+                expandedAnimationIndex={expandedAnimationIndex}
+                allAnimations={allAnimations}
+                onCameraZoomGeometryChange={onCameraZoomGeometryChange}
+                onMotionLineGeometryChange={onMotionLineGeometryChange}
+                drawZoomAreaMode={drawZoomAreaMode}
+                onDrawZoomAreaComplete={onDrawZoomAreaComplete}
+                onDrawZoomAreaCancel={onDrawZoomAreaCancel}
               />
             )}
 

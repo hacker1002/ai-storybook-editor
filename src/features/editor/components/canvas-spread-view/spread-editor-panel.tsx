@@ -7,6 +7,13 @@ import { createLogger } from "@/utils/logger";
 const log = createLogger("Editor", "SpreadEditorPanel");
 import { useInteractionLayer } from "../../contexts";
 import { SelectionFrame } from "./selection-frame";
+import { ZoomAreaOverlay } from "./overlays/zoom-area-overlay";
+import { MotionLineOverlay } from "./overlays/motion-line-overlay";
+import { DrawZoomAreaSurface } from "./overlays/draw-zoom-area-surface";
+import type { ZoomAreaGeometry } from "./overlays/zoom-area-overlay-utils";
+import type { MotionLineGeometry } from "./overlays/motion-line-overlay-utils";
+import type { SpreadAnimation } from "@/types/spread-types";
+import { resolveTargetItemGeometry } from "../../utils/composite-resolve-helpers";
 import { PageItem } from "./page-item";
 import {
   buildImageContext,
@@ -140,6 +147,45 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   // Used by DummyMainView to lock all textbox reads/writes to the book's
   // original_language — dummies never follow the editor's current language.
   forceLanguageCode?: string;
+
+  // === Animation overlay props (opt-in — all optional; default undefined → no overlay rendered) ===
+  // Forwarded from CanvasSpreadView. Only ObjectsCreativeSpace passes these.
+  expandedAnimation?: SpreadAnimation | null;
+  expandedAnimationIndex?: number | null;
+  /** All animations of current spread — needed for overlay label resolution (#N counter). */
+  allAnimations?: SpreadAnimation[];
+  onCameraZoomGeometryChange?: (animationIndex: number, geometry: ZoomAreaGeometry) => void;
+  onMotionLineGeometryChange?: (animationIndex: number, geometry: MotionLineGeometry) => void;
+  drawZoomAreaMode?: boolean;
+  onDrawZoomAreaComplete?: (geometry: ZoomAreaGeometry) => void;
+  onDrawZoomAreaCancel?: () => void;
+}
+
+// === Animation overlay label helpers ===
+// Ported from animation-editor-canvas.tsx — resolve human-readable label for
+// ZoomArea (#N counter among all Camera Zoom type-19 spread-target animations)
+// and MotionLine (#N counter among all type-16 animations).
+
+function resolveZoomLabel(
+  animation: SpreadAnimation,
+  allAnimations: SpreadAnimation[],
+): string {
+  const zoomList = allAnimations.filter(
+    (a) => a.effect.type === 19 && a.target.type === 'spread',
+  );
+  const idx = zoomList.findIndex((a) => a.order === animation.order);
+  if (idx < 0) return 'Camera Zoom #?';
+  return `Camera Zoom #${idx + 1}`;
+}
+
+function resolveMotionLineLabel(
+  animation: SpreadAnimation,
+  allAnimations: SpreadAnimation[],
+): string {
+  const linesList = allAnimations.filter((a) => a.effect.type === 16);
+  const idx = linesList.findIndex((a) => a.order === animation.order);
+  if (idx < 0) return 'Motion Line #?';
+  return `Motion Line #${idx + 1}`;
 }
 
 // === Rotation support ===
@@ -200,6 +246,14 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   onDeselect,
   pageNumbering,
   forceLanguageCode,
+  expandedAnimation,
+  expandedAnimationIndex,
+  allAnimations,
+  onCameraZoomGeometryChange,
+  onMotionLineGeometryChange,
+  drawZoomAreaMode,
+  onDrawZoomAreaComplete,
+  onDrawZoomAreaCancel,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const currentEditorLangCode = useLanguageCode();
@@ -241,6 +295,24 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   const stagingPadX = Math.round(scaledWidth / 2);
   const stagingPadY = Math.round(scaledHeight / 2);
 
+  // === drawZoomAreaMode interaction gate ===
+  // Declared early (before hooks that depend on it) so the gated selector can be
+  // passed to useElementDragResize and item context builders in the render block.
+  const itemInteractionDisabled = drawZoomAreaMode === true;
+
+  // Gated element select — no-op when drawZoomAreaMode is active so items cannot
+  // be selected while the user is drawing a zoom area rect on the canvas surface.
+  const handleElementSelectGated = useCallback(
+    (...args: Parameters<typeof handleElementSelect>) => {
+      if (itemInteractionDisabled) {
+        log.debug("handleElementSelectGated", "blocked: drawZoomAreaMode active", {});
+        return;
+      }
+      handleElementSelect(...args);
+    },
+    [handleElementSelect, itemInteractionDisabled],
+  );
+
   // === Drag, resize, keyboard, and geometry update handlers (delegated to hook) ===
   const {
     handleDragStart,
@@ -263,7 +335,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     state,
     setState,
     getSelectedGeometry,
-    handleElementSelect,
+    handleElementSelect: handleElementSelectGated,
     onSpreadItemAction,
     isEditable,
     canDragItem,
@@ -283,6 +355,18 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     // changes would re-run after we just ended the rotation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorLangCode]);
+
+  // === Cancel drawZoomAreaMode on spread navigation ===
+  // If user navigates to another spread while draw mode is active, cancel it
+  // so the crosshair surface doesn't linger on the new spread.
+  useEffect(() => {
+    if (drawZoomAreaMode && onDrawZoomAreaCancel) {
+      log.info("useEffect[spread.id]", "cancel drawZoomAreaMode on spread switch", {});
+      onDrawZoomAreaCancel();
+    }
+    // Intentionally only re-runs on spread.id change — not on drawZoomAreaMode/callback changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spread.id]);
 
   // === Textbox edit mode (controlled) ===
   // Single source of truth for which textbox is in controlled edit mode.
@@ -608,6 +692,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           height: scaledHeight,
           willChange: "transform",
           overflow: "visible",
+          // Crosshair cursor when in draw-zoom-area mode to signal draw interaction.
+          cursor: itemInteractionDisabled ? "crosshair" : undefined,
         }}
         onClick={handleCanvasClick}
         onKeyDown={handleKeyDown}
@@ -638,7 +724,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             onSelect={
               renderPageToolbar
                 ? () => {
-                    handleElementSelect({ type: "page", index: pageIndex });
+                    handleElementSelectGated({ type: "page", index: pageIndex });
                     onPageSelect?.(pageIndex);
                   }
                 : undefined
@@ -684,7 +770,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction,
               (isEditing) => {
                 handleImageEditingChange(isEditing);
@@ -716,7 +802,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction,
               (isEditing) => {
                 handleImageEditingChange(isEditing);
@@ -741,7 +827,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("video", index, spread);
@@ -761,7 +847,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("auto_pic", index, spread);
@@ -781,7 +867,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("shape", index, spread);
@@ -801,7 +887,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction,
               (isEditing) => {
                 handleTextboxEditingChange(isEditing);
@@ -835,7 +921,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction,
               (isEditing) => {
                 handleTextboxEditingChange(isEditing);
@@ -863,7 +949,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("audio", index, spread);
@@ -883,7 +969,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("auto_audio", index, spread);
@@ -903,7 +989,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               index,
               spread,
               state.selectedElement,
-              handleElementSelect,
+              handleElementSelectGated,
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("quiz", index, spread);
@@ -916,10 +1002,88 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
         {/* ⚡ ADR-023: Advisory trim guide — dashed rect at [trimPct, 100-trimPct] inside canvas */}
         <TrimGuideOverlay trimPct={trimPct} />
-        {/* Selection Frame - frame border allows drag, center passes through for editing */}
+
+        {/* === Animation overlays — mutual exclusive, z-index 900, opt-in via expandedAnimation props === */}
+        {/* Priority order: DrawZoomAreaSurface > ZoomAreaOverlay (type 19) > MotionLineOverlay (type 16) */}
+        {drawZoomAreaMode ? (
+          // Crosshair drawing surface for initial Camera Zoom area creation
+          (() => {
+            const spreadRatio = canvasHeight > 0 ? canvasWidth / canvasHeight : 1;
+            log.debug("renderOverlay", "draw-zoom-area-mode", {});
+            return (
+              <DrawZoomAreaSurface
+                spreadWidthPx={scaledWidth}
+                spreadHeightPx={scaledHeight}
+                spreadRatio={spreadRatio}
+                onComplete={(geometry) => {
+                  log.info("drawSurface.onComplete", "forward to parent", { w: geometry.w, h: geometry.h });
+                  onDrawZoomAreaComplete?.(geometry);
+                }}
+                onCancel={() => {
+                  log.info("drawSurface.onCancel", "forward cancel", {});
+                  onDrawZoomAreaCancel?.();
+                }}
+              />
+            );
+          })()
+        ) : expandedAnimation?.effect.type === 19 &&
+          expandedAnimation.target.type === "spread" &&
+          expandedAnimation.effect.geometry &&
+          expandedAnimationIndex !== null &&
+          expandedAnimationIndex !== undefined ? (
+          // Camera Zoom overlay — type 19 with target.type='spread'
+          (() => {
+            const spreadRatio = canvasHeight > 0 ? canvasWidth / canvasHeight : 1;
+            const label = resolveZoomLabel(expandedAnimation, allAnimations ?? []);
+            log.debug("renderOverlay", "zoom-area", { animationIndex: expandedAnimationIndex });
+            return (
+              <ZoomAreaOverlay
+                geometry={expandedAnimation.effect.geometry as ZoomAreaGeometry}
+                spreadWidthPx={scaledWidth}
+                spreadHeightPx={scaledHeight}
+                spreadRatio={spreadRatio}
+                label={label}
+                isSelected={true}
+                onChange={(next) => onCameraZoomGeometryChange?.(expandedAnimationIndex, next)}
+                onCommit={(final) => onCameraZoomGeometryChange?.(expandedAnimationIndex, final)}
+                onSelect={() => {}}
+              />
+            );
+          })()
+        ) : expandedAnimation?.effect.type === 16 &&
+          expandedAnimation.effect.geometry &&
+          expandedAnimationIndex !== null &&
+          expandedAnimationIndex !== undefined ? (
+          // Motion Line overlay — type 16 (Lines)
+          (() => {
+            const itemGeom = resolveTargetItemGeometry(expandedAnimation.target, spread);
+            if (!itemGeom) {
+              log.debug("renderOverlay", "motion-line", { animationIndex: expandedAnimationIndex, hasItemGeom: false });
+              return null;
+            }
+            const label = resolveMotionLineLabel(expandedAnimation, allAnimations ?? []);
+            log.debug("renderOverlay", "motion-line", { animationIndex: expandedAnimationIndex, hasItemGeom: true });
+            return (
+              <MotionLineOverlay
+                geometry={expandedAnimation.effect.geometry as MotionLineGeometry}
+                itemGeometry={itemGeom}
+                spreadWidthPx={scaledWidth}
+                spreadHeightPx={scaledHeight}
+                label={label}
+                isSelected={true}
+                onChange={(next) => onMotionLineGeometryChange?.(expandedAnimationIndex, next)}
+                onCommit={(final) => onMotionLineGeometryChange?.(expandedAnimationIndex, final)}
+                onSelect={() => {}}
+              />
+            );
+          })()
+        ) : null}
+
+        {/* Selection Frame — suppressed when drawZoomAreaMode active */}
         {state.selectedElement &&
           selectedGeometry &&
           isEditable &&
+          !itemInteractionDisabled &&
           state.selectedElement.type !== "page" && (
             <SelectionFrame
               geometry={selectedGeometry}
@@ -954,9 +1118,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             />
           )}
 
-        {/* Toolbars (rendered by consumer) */}
+        {/* Toolbars (rendered by consumer) — suppressed when drawZoomAreaMode active */}
         {state.selectedElement &&
           isEditable &&
+          !itemInteractionDisabled &&
           (() => {
             const { selectedElement } = state;
 

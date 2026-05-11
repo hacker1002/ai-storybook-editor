@@ -7,7 +7,7 @@ import {
   STAR_COLOR_MAP,
   EFFECT_CATEGORY_LABELS,
 } from '@/constants/animation-constants';
-import { getAvailableEffects, inferEffectTypeForComposite } from './utils';
+import { getAvailableEffects, inferEffectTypeForComposite } from './animation-utils';
 import { useRetouchSpreadIds, useRetouchSpreads } from '@/stores/snapshot-store/selectors';
 import { useSpaceViewState, useEffectiveSpreadId } from '@/features/editor/hooks/use-space-view-state';
 
@@ -108,7 +108,7 @@ export function EffectTypeGrid({ animation, onEffectTypeChange, targetHasAudio }
   // We need the spread to look up the composite definition (its variants determine matrix).
   const retouchSpreadIds = useRetouchSpreadIds();
   const retouchSpreads = useRetouchSpreads();
-  const { activeSpreadId } = useSpaceViewState('animation');
+  const { activeSpreadId } = useSpaceViewState('object');
   const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
 
   const selectedTargetType = useMemo<ItemType | 'spread'>(() => {

@@ -14,7 +14,6 @@ import type {
   AssetSwapParams,
 } from "@/types/playable-types";
 import type { Section } from "@/types/illustration-types";
-import type { ItemType } from "@/types/spread-types";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
 import { useSetZoomLevel } from '@/stores/editor-settings-store';
 import {
@@ -33,7 +32,6 @@ import {
 import { usePlayerAudioStore } from '@/stores/player-audio-store';
 import { PlayableEditorHeader } from "./playable-editor-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
-import { AnimationEditorCanvas } from "./animation-editor-canvas";
 import { RemixEditorCanvas } from "./remix-editor-canvas";
 import { PlayerCanvas, type PlayerCanvasHandle } from "./player-canvas";
 import { BranchPathModal } from "./branch-path-modal";
@@ -100,9 +98,6 @@ interface PlayableSpreadViewProps {
   spreads: PlayableSpread[];
   sections?: Section[];
   assets?: RemixAsset[];
-  selectedItemId?: string | null;
-  selectedItemType?: ItemType | null;
-  onItemSelect?: (itemType: ItemType | null, itemId: string | null) => void;
   onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
   onTextChange?: (textboxId: string, newText: string) => void;
   onSpreadSelect?: (spreadId: string) => void;
@@ -123,26 +118,6 @@ interface PlayableSpreadViewProps {
   selectedSpreadId?: string | null;      // controlled from parent
   zoomLevel?: number;                     // controlled from parent
   onZoomChange?: (level: number) => void; // notify parent of zoom change
-
-  // Camera Zoom (effect 19) wiring — animation-editor mode only
-  expandedAnimation?: import("@/types/spread-types").SpreadAnimation | null;
-  expandedAnimationIndex?: number | null;
-  allAnimations?: import("@/types/spread-types").SpreadAnimation[];
-  onCameraZoomGeometryChange?: (
-    animationIndex: number,
-    geometry: import("./zoom-area-overlay-utils").ZoomAreaGeometry,
-  ) => void;
-  drawZoomAreaMode?: boolean;
-  onDrawZoomAreaComplete?: (
-    geometry: import("./zoom-area-overlay-utils").ZoomAreaGeometry,
-  ) => void;
-  onDrawZoomAreaCancel?: () => void;
-
-  // Motion Line (effect 16) wiring — animation-editor mode only
-  onMotionLineGeometryChange?: (
-    animationIndex: number,
-    geometry: import("./motion-line-overlay-utils").MotionLineGeometry,
-  ) => void;
 }
 
 const KEYBOARD_SHORTCUTS = {
@@ -162,9 +137,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   spreads,
   sections,
   assets,
-  selectedItemId: externalSelectedItemId,
-  selectedItemType: externalSelectedItemType,
-  onItemSelect,
   onAssetSwap,
   onTextChange,
   onSpreadSelect,
@@ -178,14 +150,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   selectedSpreadId: propSelectedSpreadId,
   zoomLevel: propZoomLevel,
   onZoomChange: propOnZoomChange,
-  expandedAnimation,
-  expandedAnimationIndex,
-  allAnimations,
-  onCameraZoomGeometryChange,
-  drawZoomAreaMode,
-  onDrawZoomAreaComplete,
-  onDrawZoomAreaCancel,
-  onMotionLineGeometryChange,
 }) => {
 
   // === Internal State ===
@@ -615,24 +579,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           </div>
         )}
 
-        {activeCanvas === "animation-editor" && selectedSpread ? (
-          <AnimationEditorCanvas
-            spread={selectedSpread}
-            zoomLevel={effectiveZoomLevel}
-            selectedItemId={externalSelectedItemId}
-            selectedItemType={externalSelectedItemType}
-            onItemSelect={onItemSelect ?? (() => {})}
-            pageNumbering={pageNumbering}
-            expandedAnimation={expandedAnimation}
-            expandedAnimationIndex={expandedAnimationIndex}
-            allAnimations={allAnimations}
-            onCameraZoomGeometryChange={onCameraZoomGeometryChange}
-            drawZoomAreaMode={drawZoomAreaMode}
-            onDrawZoomAreaComplete={onDrawZoomAreaComplete}
-            onDrawZoomAreaCancel={onDrawZoomAreaCancel}
-            onMotionLineGeometryChange={onMotionLineGeometryChange}
-          />
-        ) : activeCanvas === "remix-editor" &&
+        {activeCanvas === "remix-editor" &&
           selectedSpread &&
           assets &&
           onAssetSwap ? (

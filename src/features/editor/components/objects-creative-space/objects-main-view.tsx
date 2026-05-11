@@ -16,7 +16,9 @@ import {
 } from "./utils/build-narration-readers";
 import { applySpreadNarrationEnhancements } from "./utils/apply-spread-narration-enhancements";
 import { buildBookContext } from "./utils/build-book-context";
-import type { SpreadTextboxContent } from "@/types/spread-types";
+import type { SpreadAnimation, SpreadTextboxContent } from "@/types/spread-types";
+import type { ZoomAreaGeometry } from "@/features/editor/components/canvas-spread-view/overlays/zoom-area-overlay-utils";
+import type { MotionLineGeometry } from "@/features/editor/components/canvas-spread-view/overlays/motion-line-overlay-utils";
 import { CanvasSpreadView } from "@/features/editor/components/canvas-spread-view";
 import {
   EditableImage,
@@ -115,6 +117,15 @@ interface ObjectsMainViewProps {
   onItemSelect: (item: SelectedItem | null) => void;
   zoomLevel: number;
   onZoomChange: (level: number) => void;
+  // === Animation overlay props (all optional — forwarded to CanvasSpreadView) ===
+  expandedAnimation?: SpreadAnimation | null;
+  expandedAnimationIndex?: number | null;
+  allAnimations?: SpreadAnimation[];
+  onCameraZoomGeometryChange?: (animationIndex: number, geometry: ZoomAreaGeometry) => void;
+  onMotionLineGeometryChange?: (animationIndex: number, geometry: MotionLineGeometry) => void;
+  drawZoomAreaMode?: boolean;
+  onDrawZoomAreaComplete?: (geometry: ZoomAreaGeometry) => void;
+  onDrawZoomAreaCancel?: () => void;
 }
 
 export function ObjectsMainView({
@@ -124,6 +135,14 @@ export function ObjectsMainView({
   onItemSelect,
   zoomLevel,
   onZoomChange,
+  expandedAnimation,
+  expandedAnimationIndex,
+  allAnimations,
+  onCameraZoomGeometryChange,
+  onMotionLineGeometryChange,
+  drawZoomAreaMode,
+  onDrawZoomAreaComplete,
+  onDrawZoomAreaCancel,
 }: ObjectsMainViewProps) {
   const retouchSpreads = useRetouchSpreads();
   const actions = useSnapshotActions();
@@ -878,6 +897,14 @@ export function ObjectsMainView({
         externalSelectedItemId={selectedItemId}
         onDeselect={handleDeselect}
         pageNumbering={templateLayout?.page_numbering}
+        expandedAnimation={expandedAnimation}
+        expandedAnimationIndex={expandedAnimationIndex}
+        allAnimations={allAnimations}
+        onCameraZoomGeometryChange={onCameraZoomGeometryChange}
+        onMotionLineGeometryChange={onMotionLineGeometryChange}
+        drawZoomAreaMode={drawZoomAreaMode}
+        onDrawZoomAreaComplete={onDrawZoomAreaComplete}
+        onDrawZoomAreaCancel={onDrawZoomAreaCancel}
       />
 
       {modals.generate.imageId && (

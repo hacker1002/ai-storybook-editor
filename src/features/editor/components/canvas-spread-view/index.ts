@@ -109,3 +109,7 @@ export {
 
 // Constants - re-exported from centralized @/constants/ for barrel consumers
 export { CANVAS, ZOOM, COLUMNS, Z_INDEX, THUMBNAIL, COLORS } from '@/constants/spread-constants';
+
+// Animation overlay types — re-exported for ObjectsCreativeSpace (phase-04) handler signatures
+export type { ZoomAreaGeometry } from './overlays/zoom-area-overlay-utils';
+export type { MotionLineGeometry } from './overlays/motion-line-overlay-utils';

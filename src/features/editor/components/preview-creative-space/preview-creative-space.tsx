@@ -4,7 +4,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { PlayerAnimationSidebar } from "@/features/editor/components/animations-creative-space";
+import { PlayerAnimationSidebar } from "./player-animation-sidebar";
 import {
   PlayableSpreadView,
   type PlayableSpread,
@@ -12,7 +12,7 @@ import {
 import {
   resolveAnimations,
   buildItemsMap,
-} from "@/features/editor/components/animations-creative-space";
+} from "@/features/editor/components/objects-creative-space";
 import {
   useRetouchSpreadIds,
   useRetouchSpreads,

@@ -1,66 +1,588 @@
 // objects-creative-space.tsx - Root container for objects creative space
+// Extended (phase-04): merges AnimationsCreativeSpace state + handlers + 3-way selection sync.
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
+import { Zap } from "lucide-react";
 import { ObjectsMainView } from "./objects-main-view";
 import { ObjectsSidebar } from "./objects-sidebar";
-import { useRetouchSpreadIds } from "@/stores/snapshot-store/selectors";
+import { AnimationEditorSidebar } from "./animation-editor-sidebar";
+import {
+  useRetouchSpreadIds,
+  useRetouchSpreadById,
+  useRetouchAnimations,
+  useSnapshotActions,
+} from "@/stores/snapshot-store/selectors";
 import { createLogger } from "@/utils/logger";
-import { useSpaceViewState, useEffectiveSpreadId } from "@/features/editor/hooks/use-space-view-state";
+import {
+  useSpaceViewState,
+  useEffectiveSpreadId,
+} from "@/features/editor/hooks/use-space-view-state";
+import { useCurrentLanguage, useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { ZOOM } from "@/constants/spread-constants";
+import { EFFECT_TYPE } from "@/constants/animation-constants";
+import { EFFECT_TYPE_NAMES } from "@/constants/playable-constants";
+import type { SpreadAnimation } from "@/types/spread-types";
+import type {
+  AnimationFilterState,
+  ItemType,
+} from "@/types/animation-types";
+import {
+  resolveAnimations,
+  filterAnimations,
+  buildObjectFilterOptions,
+  getAvailableEffects,
+  buildDefaultEffect,
+  createDefaultFilterState,
+  buildItemsMap,
+  inferEffectTypeForComposite,
+} from "./animation-utils";
+import {
+  adaptToAnimationSelectedItem,
+  adaptFromAnimationItem,
+} from "./objects-creative-space-adapters";
+// Preserve consumer compat: types remain importable from this module.
+export type { ObjectElementType, SelectedItem } from "./objects-creative-space-adapters";
+import type { SelectedItem } from "./objects-creative-space-adapters";
+import { fetchMediaDurationMs, findMediaUrlFromSpread } from "@/utils/media-duration-utils";
+import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
+import { computePlayEffectDuration } from "@/features/editor/utils/compute-play-effect-duration";
+import { resolveTargetItemGeometry } from "@/features/editor/utils/composite-resolve-helpers";
+import type { ZoomAreaGeometry } from "@/features/editor/components/canvas-spread-view/overlays/zoom-area-overlay-utils";
+import type { MotionLineGeometry } from "@/features/editor/components/canvas-spread-view/overlays/motion-line-overlay-utils";
 
 const log = createLogger("Editor", "ObjectsCreativeSpace");
 
-// Shared types for sidebar ↔ main view selection sync
-export type ObjectElementType =
-  | "image"
-  | "shape"
-  | "video"
-  | "audio"
-  | "auto_audio"
-  | "textbox"
-  | "auto_pic"
-  | "composite"
-  | "raw_image"
-  | "raw_textbox";
-
-export interface SelectedItem {
-  type: ObjectElementType;
-  id: string;
-}
-
 export function ObjectsCreativeSpace() {
+  // --- Store selectors ---
   const retouchSpreadIds = useRetouchSpreadIds();
-  const [selectedItemId, setSelectedItemId] = useState<SelectedItem | null>(
-    null
+  const currentLanguage = useCurrentLanguage();
+  const actions = useSnapshotActions();
+
+  // --- Space view state (persisted — phase-05 added animationSidebarCollapsed) ---
+  const { activeSpreadId, zoomLevel, animationSidebarCollapsed, patch } =
+    useSpaceViewState("object");
+
+  // --- Local state ---
+  const [selectedItemId, setSelectedItemId] = useState<SelectedItem | null>(null);
+  const [expandedAnimIndex, setExpandedAnimIndex] = useState<number | null>(null);
+  const [filterState, setFilterState] = useState<AnimationFilterState>(createDefaultFilterState);
+  const [drawZoomAreaMode, setDrawZoomAreaMode] = useState(false);
+
+  // Spread ratio for Camera Zoom default geometry / overlay aspect lock
+  const canvasWidth = useCanvasWidth();
+  const canvasHeight = useCanvasHeight();
+  const spreadRatio = useMemo(
+    () => (canvasHeight > 0 ? canvasWidth / canvasHeight : 1),
+    [canvasWidth, canvasHeight],
   );
 
-  const { activeSpreadId, zoomLevel, patch } = useSpaceViewState('object');
+  // Derived: effective spread ID (persisted choice if valid, else first)
   const selectedSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
 
-  const handleSpreadSelect = useCallback((spreadId: string) => {
-    log.info("handleSpreadSelect", "spread selected", { spreadId });
-    patch({ activeSpreadId: spreadId });
-    setSelectedItemId(null); // Clear item when spread changes
-  }, [patch]);
+  const currentSpread = useRetouchSpreadById(selectedSpreadId ?? "");
+  const animations = useRetouchAnimations(selectedSpreadId ?? "");
+
+  // --- Derived data (useMemo) ---
+  const languageCode = currentLanguage.code;
+
+  const itemsMap = useMemo(
+    () => buildItemsMap(currentSpread, languageCode),
+    [currentSpread, languageCode],
+  );
+
+  const resolvedAnimations = useMemo(
+    () => resolveAnimations(animations, itemsMap, currentSpread),
+    [animations, itemsMap, currentSpread],
+  );
+
+  const filteredAnimations = useMemo(
+    () => filterAnimations(resolvedAnimations, filterState),
+    [resolvedAnimations, filterState],
+  );
+
+  const objectFilterOptions = useMemo(
+    () => buildObjectFilterOptions(resolvedAnimations, itemsMap),
+    [resolvedAnimations, itemsMap],
+  );
+
+  // Check if the selected item (for "+" add dropdown) is a textbox with audio
+  const selectedItemHasAudio = useMemo(() => {
+    if (!selectedItemId || selectedItemId.type !== "textbox") return false;
+    const textbox = currentSpread?.textboxes?.find((t) => t.id === selectedItemId.id);
+    if (!textbox) {
+      log.debug("selectedItemHasAudio", "textbox not found", {
+        id: selectedItemId.id,
+        textboxCount: currentSpread?.textboxes?.length,
+      });
+      return false;
+    }
+    const result = getTextboxContentForLanguage(
+      textbox as Record<string, unknown>,
+      languageCode,
+    );
+    const hasCombined = result?.content?.audio?.combined_audio_url != null;
+    log.debug("selectedItemHasAudio", "check", {
+      id: selectedItemId.id,
+      hasAudio: !!result?.content?.audio,
+      hasCombined,
+    });
+    return hasCombined;
+  }, [selectedItemId, currentSpread, languageCode]);
+
+  // Check if the expanded animation's target textbox has audio (for effect-type grid)
+  const targetHasAudio = useMemo(() => {
+    if (expandedAnimIndex === null) return selectedItemHasAudio;
+    const expandedAnimation = filteredAnimations[expandedAnimIndex];
+    if (!expandedAnimation) return false;
+    const target = expandedAnimation.animation.target;
+    if (target.type !== "textbox") return false;
+    const textbox = currentSpread?.textboxes?.find((t) => t.id === target.id);
+    if (!textbox) return false;
+    const result = getTextboxContentForLanguage(
+      textbox as Record<string, unknown>,
+      languageCode,
+    );
+    return result?.content?.audio?.combined_audio_url != null;
+  }, [expandedAnimIndex, filteredAnimations, currentSpread, languageCode, selectedItemHasAudio]);
+
+  // Resolve effect-grid matrix type considering composite re-target rule:
+  // - If selectedItem is a variant of a composite → use restrictive composite matrix.
+  // - If selectedItem.type === 'composite' → infer matrix.
+  // - Else → variant type as-is.
+  const animationSelectedItem = useMemo(
+    () => adaptToAnimationSelectedItem(selectedItemId),
+    [selectedItemId],
+  );
+
+  const effectMatrixType = useMemo<ItemType | null>(() => {
+    if (!animationSelectedItem) return null;
+    const parent = currentSpread?.composites?.find((c) =>
+      c.variants.some((v) => v.id === animationSelectedItem.id),
+    );
+    if (parent) return inferEffectTypeForComposite(parent);
+    if (animationSelectedItem.type === "composite") {
+      const composite = currentSpread?.composites?.find(
+        (c) => c.id === animationSelectedItem.id,
+      );
+      if (composite) return inferEffectTypeForComposite(composite);
+      return "image";
+    }
+    return animationSelectedItem.type;
+  }, [animationSelectedItem, currentSpread]);
+
+  const availableEffects = useMemo(() => {
+    const base = effectMatrixType
+      ? getAvailableEffects(effectMatrixType, selectedItemHasAudio)
+      : [];
+    // Camera Zoom (19) is spread-level — always offer regardless of selectedItem.
+    const hasZoom = base.some((e) => e.id === 19);
+    if (!hasZoom) {
+      base.push({
+        id: 19,
+        name: EFFECT_TYPE_NAMES[19] ?? "Zoom In",
+        category: "camera",
+      });
+    }
+    return base;
+  }, [effectMatrixType, selectedItemHasAudio]);
+
+  // Currently expanded animation (raw, for canvas overlay)
+  const expandedAnimationRaw = useMemo<SpreadAnimation | null>(() => {
+    if (expandedAnimIndex === null) return null;
+    const resolved = filteredAnimations[expandedAnimIndex];
+    return resolved?.animation ?? null;
+  }, [expandedAnimIndex, filteredAnimations]);
+
+  const expandedAnimationOriginalIndex = useMemo<number | null>(() => {
+    if (expandedAnimIndex === null) return null;
+    const resolved = filteredAnimations[expandedAnimIndex];
+    return resolved?.originalIndex ?? null;
+  }, [expandedAnimIndex, filteredAnimations]);
+
+  // --- Handlers ---
+
+  const handleZoomChange = useCallback(
+    (level: number) => {
+      patch({ zoomLevel: level });
+    },
+    [patch],
+  );
+
+  const handleSpreadSelect = useCallback(
+    (spreadId: string) => {
+      log.info("handleSpreadSelect", "spread selected", { spreadId });
+      patch({ activeSpreadId: spreadId });
+      setSelectedItemId(null);
+      setExpandedAnimIndex(null);
+      setDrawZoomAreaMode(false);
+    },
+    [patch],
+  );
 
   const handleItemSelect = useCallback((item: SelectedItem | null) => {
     log.debug("handleItemSelect", "item selection changed", { item });
+    setExpandedAnimIndex(null);
     setSelectedItemId(item);
   }, []);
 
-  const handleZoomChange = useCallback((level: number) => {
-    patch({ zoomLevel: level });
-  }, [patch]);
+  // Callback from AnimationEditorSidebar — item type/id in animation space; adapt back to SelectedItem
+  const handleAnimationSidebarItemSelect = useCallback(
+    (itemType: ItemType | null, itemId: string | null) => {
+      log.debug("handleAnimationSidebarItemSelect", "from animation sidebar", {
+        itemType,
+        itemId,
+      });
+      setSelectedItemId(adaptFromAnimationItem(itemType, itemId));
+    },
+    [],
+  );
+
+  const handleAnimationSidebarToggle = useCallback(() => {
+    log.info("handleAnimationSidebarToggle", "toggle", {
+      newState: !animationSidebarCollapsed,
+    });
+    patch({ animationSidebarCollapsed: !animationSidebarCollapsed });
+  }, [animationSidebarCollapsed, patch]);
+
+  const handleAddAnimation = useCallback(
+    async (effectType: number) => {
+      if (!selectedSpreadId) return;
+
+      // Camera Zoom (19) — spread-level: enter draw mode, animation created on draw complete.
+      if (effectType === 19) {
+        log.info("handleAddAnimation", "enable draw zoom area mode", {});
+        setDrawZoomAreaMode(true);
+        return;
+      }
+
+      // Camera Focus (18) — per-item; falls through to existing flow that requires selectedItem.
+      if (!animationSelectedItem) {
+        log.debug("handleAddAnimation", "skip — no selected item for per-item effect", {
+          effectType,
+        });
+        return;
+      }
+
+      // Composite re-target rule: if selectedItem is a variant of a composite,
+      // route the animation target to the composite instead of the variant.
+      const parentComposite = currentSpread?.composites?.find((c) =>
+        c.variants.some((v) => v.id === animationSelectedItem.id),
+      );
+      const resolvedTarget: SpreadAnimation["target"] = parentComposite
+        ? { id: parentComposite.id, type: "composite" }
+        : {
+            id: animationSelectedItem.id,
+            type: animationSelectedItem.type as SpreadAnimation["target"]["type"],
+          };
+
+      const effectItemType: ItemType = parentComposite
+        ? inferEffectTypeForComposite(parentComposite)
+        : animationSelectedItem.type;
+
+      log.info("handleAddAnimation", "adding animation", {
+        effectType,
+        targetId: resolvedTarget.id,
+        targetType: resolvedTarget.type,
+        rerouted: !!parentComposite,
+      });
+      if (parentComposite) {
+        log.debug("handleAddAnimation", "re-target to composite", {
+          variantId: animationSelectedItem.id,
+          compositeId: parentComposite.id,
+          effectItemType,
+        });
+      }
+
+      const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
+      const itemGeometryForEffect = resolveTargetItemGeometry(resolvedTarget, currentSpread);
+      const effect = buildDefaultEffect(
+        effectType,
+        spreadRatio,
+        itemGeometryForEffect ?? undefined,
+      );
+
+      // Skip auto-fetch media duration for composite: composite has no direct media_url.
+      if (resolvedTarget.type !== "composite") {
+        // Auto-set duration for Play effect on video/audio targets
+        if (
+          effectType === EFFECT_TYPE.PLAY &&
+          (animationSelectedItem.type === "video" || animationSelectedItem.type === "audio")
+        ) {
+          const mediaUrl = findMediaUrlFromSpread(
+            currentSpread,
+            animationSelectedItem.id,
+            animationSelectedItem.type,
+          );
+          if (mediaUrl) {
+            const durationMs = await fetchMediaDurationMs(mediaUrl);
+            if (durationMs) {
+              effect.duration = durationMs;
+              log.debug("handleAddAnimation", "auto-set play duration from media", {
+                durationMs,
+              });
+            }
+          }
+        }
+
+        // Auto-set duration for Read-Along effect on textbox targets
+        if (
+          effectType === EFFECT_TYPE.READ_ALONG &&
+          animationSelectedItem.type === "textbox"
+        ) {
+          const textbox = currentSpread?.textboxes?.find(
+            (tb) => tb.id === animationSelectedItem.id,
+          );
+          if (textbox) {
+            const result = getTextboxContentForLanguage(
+              textbox as Record<string, unknown>,
+              languageCode,
+            );
+            const url = result?.content?.audio?.combined_audio_url;
+            if (url) {
+              const durationMs = await fetchMediaDurationMs(url);
+              if (durationMs) {
+                effect.duration = durationMs;
+                log.debug(
+                  "handleAddAnimation",
+                  "auto-set read-along duration from narration audio",
+                  { durationMs },
+                );
+              }
+            }
+          }
+        }
+      } else {
+        log.debug(
+          "handleAddAnimation",
+          "skip media duration auto-fetch for composite target",
+          { compositeId: resolvedTarget.id },
+        );
+      }
+
+      const newAnimation: SpreadAnimation = {
+        order: maxOrder + 1,
+        type: 0,
+        target: resolvedTarget,
+        trigger_type: "on_next",
+        effect,
+      };
+
+      actions.addRetouchAnimation(selectedSpreadId, newAnimation);
+      setExpandedAnimIndex(animations.length);
+    },
+    [
+      animationSelectedItem,
+      selectedSpreadId,
+      animations,
+      actions,
+      currentSpread,
+      languageCode,
+      spreadRatio,
+    ],
+  );
+
+  const handleDrawZoomAreaComplete = useCallback(
+    (geometry: ZoomAreaGeometry) => {
+      if (!selectedSpreadId) return;
+      log.info("handleDrawZoomAreaComplete", "create camera zoom animation", {
+        w: geometry.w,
+        h: geometry.h,
+      });
+      const maxOrder = animations.reduce((max, a) => Math.max(max, a.order), -1);
+      const newAnimation: SpreadAnimation = {
+        order: maxOrder + 1,
+        type: 0,
+        target: { id: "spread", type: "spread" },
+        trigger_type: "on_next",
+        effect: {
+          type: 19,
+          delay: 0,
+          duration: 3000,
+          geometry,
+          payload: { ease_time: 500 },
+        },
+      };
+      actions.addRetouchAnimation(selectedSpreadId, newAnimation);
+      setExpandedAnimIndex(animations.length);
+      setDrawZoomAreaMode(false);
+    },
+    [selectedSpreadId, animations, actions],
+  );
+
+  const handleDrawZoomAreaCancel = useCallback(() => {
+    log.debug("handleDrawZoomAreaCancel", "cancel draw mode", {});
+    setDrawZoomAreaMode(false);
+  }, []);
+
+  const handleCameraZoomGeometryChange = useCallback(
+    (animationIndex: number, geometry: ZoomAreaGeometry) => {
+      if (!selectedSpreadId) return;
+      const current = animations[animationIndex];
+      if (!current) {
+        log.warn("handleCameraZoomGeometryChange", "animation not found", { animationIndex });
+        return;
+      }
+      log.debug("handleCameraZoomGeometryChange", "update geometry", { animationIndex });
+      actions.updateRetouchAnimation(selectedSpreadId, animationIndex, {
+        effect: { ...current.effect, geometry },
+      });
+    },
+    [selectedSpreadId, animations, actions],
+  );
+
+  const handleMotionLineGeometryChange = useCallback(
+    (animationIndex: number, geometry: MotionLineGeometry) => {
+      if (!selectedSpreadId) return;
+      const current = animations[animationIndex];
+      if (!current) {
+        log.warn("handleMotionLineGeometryChange", "animation not found", { animationIndex });
+        return;
+      }
+      if (current.effect.type !== 16) {
+        log.warn("handleMotionLineGeometryChange", "animation type mismatch", {
+          animationIndex,
+          type: current.effect.type,
+        });
+        return;
+      }
+      log.info("handleMotionLineGeometryChange", "update geometry", {
+        animationIndex,
+        x: geometry.x,
+        y: geometry.y,
+      });
+      actions.updateRetouchAnimation(selectedSpreadId, animationIndex, {
+        effect: { ...current.effect, geometry },
+      });
+    },
+    [selectedSpreadId, animations, actions],
+  );
+
+  const handleUpdateAnimation = useCallback(
+    (index: number, updates: Partial<SpreadAnimation>) => {
+      if (!selectedSpreadId) return;
+      log.debug("handleUpdateAnimation", "updating", {
+        index,
+        keys: Object.keys(updates),
+      });
+
+      // Component must merge effect fields before calling store (shallow replace)
+      if (updates.effect && animations[index]) {
+        const current = animations[index];
+        const mergedEffect = { ...current.effect, ...updates.effect };
+
+        // Auto-sync effect.duration for PLAY + audio target on loop/type change.
+        const isPlayAudio =
+          mergedEffect.type === EFFECT_TYPE.PLAY && current.target.type === "audio";
+        const loopChanged = updates.effect.loop !== undefined;
+        const typeChangedToPlay =
+          updates.effect.type === EFFECT_TYPE.PLAY &&
+          current.effect.type !== EFFECT_TYPE.PLAY;
+
+        if (isPlayAudio && (loopChanged || typeChangedToPlay)) {
+          const audio = currentSpread?.audios?.find((a) => a.id === current.target.id);
+          if (audio?.media_length && audio.media_length > 0) {
+            const newDuration = computePlayEffectDuration({
+              loop: mergedEffect.loop,
+              media_length: audio.media_length,
+            });
+            if (newDuration !== undefined) {
+              log.info("handleUpdateAnimation", "auto-sync effect.duration", {
+                animationId: current.target.id,
+                loop: mergedEffect.loop,
+                media_length: audio.media_length,
+                newDuration,
+              });
+              mergedEffect.duration = newDuration;
+            }
+          } else {
+            log.warn("handleUpdateAnimation", "media_length missing — keeping user-set duration", {
+              audioId: current.target.id,
+            });
+          }
+        }
+
+        const merged: Partial<SpreadAnimation> = {
+          ...updates,
+          effect: mergedEffect,
+        };
+        actions.updateRetouchAnimation(selectedSpreadId, index, merged);
+      } else {
+        actions.updateRetouchAnimation(selectedSpreadId, index, updates);
+      }
+    },
+    [selectedSpreadId, animations, actions, currentSpread],
+  );
+
+  const handleDeleteAnimation = useCallback(
+    (index: number) => {
+      if (!selectedSpreadId) return;
+      log.info("handleDeleteAnimation", "deleting", { index });
+      actions.deleteRetouchAnimation(selectedSpreadId, index);
+      if (expandedAnimIndex === index) {
+        setExpandedAnimIndex(null);
+      } else if (expandedAnimIndex !== null && expandedAnimIndex > index) {
+        setExpandedAnimIndex(expandedAnimIndex - 1);
+      }
+    },
+    [selectedSpreadId, actions, expandedAnimIndex],
+  );
+
+  const handleReorderAnimation = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (!selectedSpreadId) return;
+      log.debug("handleReorderAnimation", "reordering", {
+        fromIndex,
+        toIndex,
+        expandedAnimIndex,
+      });
+      actions.reorderRetouchAnimations(selectedSpreadId, fromIndex, toIndex);
+
+      // Keep expanded index tracking the same item after reorder
+      setExpandedAnimIndex((prev) => {
+        if (prev === null) return null;
+        if (prev === fromIndex) return toIndex;
+        if (fromIndex < toIndex && prev > fromIndex && prev <= toIndex) return prev - 1;
+        if (fromIndex > toIndex && prev >= toIndex && prev < fromIndex) return prev + 1;
+        return prev;
+      });
+    },
+    [selectedSpreadId, actions, expandedAnimIndex],
+  );
+
+  const handleFilterChange = useCallback(
+    (updates: Partial<AnimationFilterState>) => {
+      setFilterState((prev) => ({ ...prev, ...updates }));
+    },
+    [],
+  );
+
+  // --- Render ---
+  log.debug("render", "ObjectsCreativeSpace", {
+    spreadCount: retouchSpreadIds.length,
+    animationSidebarCollapsed,
+  });
+
+  if (retouchSpreadIds.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground">No spreads available</p>
+      </div>
+    );
+  }
+
+  // animationSidebarCollapsed === undefined → default OPEN per Validation S1
+  const isSidebarOpen = animationSidebarCollapsed !== true;
 
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full">
       <ObjectsSidebar
         selectedSpreadId={selectedSpreadId ?? ""}
         selectedItemId={selectedItemId}
         onItemSelect={handleItemSelect}
       />
-      <div className="flex-1 min-w-0 overflow-hidden">
+
+      <div className="relative flex-1 min-w-0 overflow-hidden">
         <ObjectsMainView
           selectedSpreadId={selectedSpreadId ?? ""}
           selectedItemId={selectedItemId}
@@ -68,8 +590,51 @@ export function ObjectsCreativeSpace() {
           onItemSelect={handleItemSelect}
           zoomLevel={zoomLevel ?? ZOOM.DEFAULT}
           onZoomChange={handleZoomChange}
+          expandedAnimation={expandedAnimationRaw}
+          expandedAnimationIndex={expandedAnimationOriginalIndex}
+          allAnimations={animations}
+          onCameraZoomGeometryChange={handleCameraZoomGeometryChange}
+          onMotionLineGeometryChange={handleMotionLineGeometryChange}
+          drawZoomAreaMode={drawZoomAreaMode}
+          onDrawZoomAreaComplete={handleDrawZoomAreaComplete}
+          onDrawZoomAreaCancel={handleDrawZoomAreaCancel}
         />
+
+        {/* Floating toggle button — bottom-right of canvas, offset left of AI Assistant FAB */}
+        <button
+          aria-label={
+            isSidebarOpen
+              ? "Close animations sidebar"
+              : "Open animations sidebar"
+          }
+          onClick={handleAnimationSidebarToggle}
+          className="absolute top-16 right-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90"
+          title={isSidebarOpen ? "Hide animations" : "Show animations"}
+        >
+          <Zap className="h-5 w-5" />
+        </button>
       </div>
+
+      {/* Right sidebar — conditional. Default OPEN: animationSidebarCollapsed !== true */}
+      {isSidebarOpen && (
+        <AnimationEditorSidebar
+          animations={filteredAnimations}
+          allAnimations={resolvedAnimations}
+          selectedItem={animationSelectedItem}
+          expandedAnimationIndex={expandedAnimIndex}
+          availableEffects={availableEffects}
+          filterState={filterState}
+          objectFilterOptions={objectFilterOptions}
+          onFilterChange={handleFilterChange}
+          onExpandChange={setExpandedAnimIndex}
+          onAddAnimation={handleAddAnimation}
+          onUpdateAnimation={handleUpdateAnimation}
+          onDeleteAnimation={handleDeleteAnimation}
+          onReorderAnimation={handleReorderAnimation}
+          onItemSelect={handleAnimationSidebarItemSelect}
+          targetHasAudio={targetHasAudio}
+        />
+      )}
     </div>
   );
 }

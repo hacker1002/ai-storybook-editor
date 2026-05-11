@@ -13,7 +13,7 @@ import type {
   EffectCategory,
 } from '@/types/animation-types';
 import { STAR_COLOR_MAP, EFFECT_CATEGORY_LABELS } from '@/constants/animation-constants';
-import { buildDefaultEffect, computeStepNumbers } from './utils';
+import { buildDefaultEffect, computeStepNumbers } from './animation-utils';
 import { resolveTargetItemGeometry } from '@/features/editor/utils/composite-resolve-helpers';
 import { useCanvasWidth, useCanvasHeight } from '@/stores/editor-settings-store';
 import { useRetouchSpreadIds, useRetouchSpreads } from '@/stores/snapshot-store/selectors';
@@ -110,7 +110,7 @@ export function AnimationEditorSidebar({
   //  (c) selectedItem.type === 'composite' AND animation.target.id === selectedItem.id.
   const retouchSpreadIds = useRetouchSpreadIds();
   const retouchSpreads = useRetouchSpreads();
-  const { activeSpreadId } = useSpaceViewState('animation');
+  const { activeSpreadId } = useSpaceViewState('object');
   const effectiveSpreadId = useEffectiveSpreadId(activeSpreadId, retouchSpreadIds);
 
   const currentSpread = useMemo(

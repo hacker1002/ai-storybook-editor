@@ -5,7 +5,7 @@ import {
   buildDefaultEffect,
   resolveAnimations,
   inferEffectTypeForComposite,
-} from './utils';
+} from './animation-utils';
 import type { SpreadAnimation, SpreadComposite } from '@/types/spread-types';
 
 describe('buildDefaultEffect', () => {

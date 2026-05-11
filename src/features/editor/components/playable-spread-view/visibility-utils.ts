@@ -1,5 +1,5 @@
 // visibility-utils.ts - Shared helpers for player_visible split-by-type rendering rule
-// Used by: animation-editor-canvas, player-canvas, player-utils, animations-creative-space
+// Used by: player-canvas, player-utils, objects-creative-space
 
 import type { BaseSpread } from '@/types/spread-types';
 import type { ItemType } from '@/types/spread-types';

@@ -42,8 +42,8 @@ export type PlayerAction =
   | { type: 'CLICK_LOOP_REPLAY'; itemId: string };
 
 // === Core Enums/Types ===
-export type OperationMode = 'animation-editor' | 'remix-editor' | 'player';
-export type ActiveCanvas = 'animation-editor' | 'remix-editor' | 'player';
+export type OperationMode = 'remix-editor' | 'player';
+export type ActiveCanvas = 'remix-editor' | 'player';
 export type PlayEdition = 'classic' | 'dynamic' | 'interactive';
 export type PlayMode = 'off' | 'auto';
 

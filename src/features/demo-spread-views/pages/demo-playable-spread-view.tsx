@@ -9,7 +9,8 @@ import {
   type ItemType,
   type AssetSwapParams,
 } from "@/features/editor/components/playable-spread-view";
-import { AnimationEditorSidebar, PlayerAnimationSidebar } from '@/features/editor/components/animations-creative-space';
+import { AnimationEditorSidebar } from '@/features/editor/components/objects-creative-space';
+import { PlayerAnimationSidebar } from '@/features/editor/components/preview-creative-space';
 import { useDemoAnimationState } from '../hooks/use-demo-animation-state';
 import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
 import { createLogger } from "@/utils/logger";
@@ -70,7 +71,7 @@ export function DemoPlayableSpreadView() {
 
   // Operation mode state
   const [operationMode, setOperationMode] =
-    useState<OperationMode>("animation-editor");
+    useState<OperationMode>("remix-editor");
 
   // Generate spreads from options
   const generateSpreads = useCallback((opts: MockOptions): PlayableSpread[] => {
@@ -196,9 +197,6 @@ export function DemoPlayableSpreadView() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="animation-editor">
-                  Animation Editor
-                </SelectItem>
                 <SelectItem value="remix-editor">Remix Editor</SelectItem>
                 <SelectItem value="player">Player</SelectItem>
               </SelectContent>
@@ -370,8 +368,8 @@ export function DemoPlayableSpreadView() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden flex">
-          {/* Animation Editor Sidebar - editor mode only, not during preview */}
-          {operationMode === 'animation-editor' && !isPreviewing && (
+          {/* Animation Editor Sidebar - available in object/remix mode for demo purposes */}
+          {operationMode === 'remix-editor' && !isPreviewing && (
             <AnimationEditorSidebar
               animations={animState.filteredAnimations}
               allAnimations={animState.allAnimations}
@@ -402,9 +400,6 @@ export function DemoPlayableSpreadView() {
               mode={operationMode}
               spreads={spreads}
               assets={remixAssets}
-              selectedItemId={animState.selectedItem?.id ?? null}
-              selectedItemType={animState.selectedItem?.type ?? null}
-              onItemSelect={handleItemSelect}
               onAssetSwap={handleAssetSwap}
               onTextChange={handleTextChange}
               onSpreadSelect={handleSpreadSelect}

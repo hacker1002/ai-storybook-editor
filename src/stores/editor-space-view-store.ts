@@ -17,6 +17,8 @@ export interface SpaceViewState {
   zoomLevel?: number;
   viewMode?: ViewMode;
   columnsPerRow?: number;
+  /** Object space only (ADR-028). true = sidebar hidden. Consumer defaults to open when undefined. */
+  animationSidebarCollapsed?: boolean;
 }
 
 interface EditorSpaceViewStore {
@@ -29,6 +31,10 @@ interface EditorSpaceViewStore {
 export const EMPTY_SLOT: Readonly<SpaceViewState> = Object.freeze({});
 
 // === Store ===
+//
+// Note: post-ADR-028 the legacy `animation` slot in localStorage is left untouched.
+// `RetouchSpace` no longer includes `'animation'`, so the orphan key is inert (TS prevents
+// read/write). Consumers fall back to `EMPTY_SLOT` for the new `object` slot when needed.
 
 export const useEditorSpaceViewStore = create<EditorSpaceViewStore>()(
   devtools(
@@ -65,9 +71,6 @@ export const useEditorSpaceViewStore = create<EditorSpaceViewStore>()(
         name: 'editor-space-view-v1',
         storage: createJSONStorage(() => localStorage),
         version: 1,
-        // Stub migrate — version 1 is the first, nothing to migrate from.
-        migrate: (state) => state,
-        // Only serialize byBook — actions are recreated each store init.
         partialize: (state) => ({ byBook: (state as EditorSpaceViewStore).byBook }),
       }
     ),

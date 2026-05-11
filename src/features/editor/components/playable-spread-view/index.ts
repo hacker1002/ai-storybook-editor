@@ -25,9 +25,6 @@ export { PLAYABLE_ZOOM, ANIMATION_PRESETS } from '@/constants/playable-constants
 export { PlayableSpreadView } from './playable-spread-view';
 export { PlayableEditorHeader } from './playable-editor-header';
 export { PlayableThumbnailList } from './playable-thumbnail-list';
-export { AnimationEditorCanvas } from './animation-editor-canvas';
-export { MotionLineOverlay } from './motion-line-overlay';
-export type { MotionLineGeometry } from './motion-line-overlay';
 export { RemixEditorCanvas } from './remix-editor-canvas';
 export { PromptToolbar } from './prompt-toolbar';
 export { SelectionOverlay } from './selection-overlay';

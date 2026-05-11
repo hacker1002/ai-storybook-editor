@@ -20,7 +20,7 @@ import {
   getAvailableEffects,
   buildDefaultEffect,
   createDefaultFilterState,
-} from '@/features/editor/components/animations-creative-space';
+} from '@/features/editor/components/objects-creative-space';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Demo', 'useDemoAnimationState');

@@ -11,7 +11,7 @@ import type {
 } from '@/types/animation-types';
 import type { BaseSpread, SpreadComposite } from '@/types/spread-types';
 import { findSpreadItem, isItemPlayerHidden } from '../playable-spread-view/visibility-utils';
-import { buildDefaultZoomGeometry } from '../playable-spread-view/zoom-area-overlay-utils';
+import { buildDefaultZoomGeometry } from '../canvas-spread-view/overlays/zoom-area-overlay-utils';
 import {
   EFFECT_CATEGORY_MAP,
   TARGET_ICON_MAP,

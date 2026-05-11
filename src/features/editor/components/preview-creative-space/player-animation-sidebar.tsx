@@ -22,8 +22,8 @@ import type {
 import type { BranchSetting, BranchLocalizedContent } from "@/types/illustration-types";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
 import { GitFork } from "lucide-react";
-import { AnimationListItem } from "./animation-list-item";
-import { computeStepNumbers } from "./utils";
+import { AnimationListItem } from "@/features/editor/components/objects-creative-space";
+import { computeStepNumbers } from "@/features/editor/components/objects-creative-space";
 import { filterResolvedAnimationsForDynamic } from "../playable-spread-view/player-utils";
 
 interface PlayerAnimationSidebarProps {
