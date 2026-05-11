@@ -207,7 +207,7 @@ export function MotionLineOverlay({
   return (
     <svg
       className="absolute inset-0 pointer-events-none"
-      style={{ width: spreadWidthPx, height: spreadHeightPx, zIndex: 900 }}
+      style={{ width: spreadWidthPx, height: spreadHeightPx, zIndex: 900, overflow: 'visible' }}
       role="application"
       aria-label={`Motion line, destination x=${geometry.x.toFixed(1)}%, y=${geometry.y.toFixed(1)}%`}
     >

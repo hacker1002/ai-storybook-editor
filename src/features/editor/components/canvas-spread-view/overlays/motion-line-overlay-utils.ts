@@ -29,6 +29,12 @@ export interface PointPct {
   y: number;
 }
 
+// Staging zone padding, expressed as a percentage of the spread on each side.
+// Mirrors ADR-023 (`stagingPadX = scaledWidth / 2`, i.e. 50% of spread).
+// Bumping this constant alone is NOT enough — `spread-editor-panel` owns the
+// scroll padding and would need to match.
+export const STAGE_PAD_PCT = 50;
+
 export const MOTION_LINE_OVERLAY = {
   HIT_SLOP_PX: 8,
   SHAFT_WIDTH_SELECTED_PX: 2.5,
@@ -89,15 +95,21 @@ export function pxToPctDelta(
 }
 
 // Convert tip center (%) to top-left geometry, clamped so the mirrored w/h box
-// stays inside [0, 100] on both axes.
+// stays inside the staging zone (spread ± STAGE_PAD_PCT on each side).
+// Animation destination is allowed to extend outside the spread; clipping
+// kicks in at the staging edge so the user can't drop the tip into the void.
 export function tipCenterToTopLeft(
   tipCenter: PointPct,
   w: number,
   h: number,
 ): { x: number; y: number } {
+  const minX = -STAGE_PAD_PCT;
+  const maxX = Math.max(minX, 100 + STAGE_PAD_PCT - w);
+  const minY = -STAGE_PAD_PCT;
+  const maxY = Math.max(minY, 100 + STAGE_PAD_PCT - h);
   return {
-    x: clamp(tipCenter.x - w / 2, 0, Math.max(0, 100 - w)),
-    y: clamp(tipCenter.y - h / 2, 0, Math.max(0, 100 - h)),
+    x: clamp(tipCenter.x - w / 2, minX, maxX),
+    y: clamp(tipCenter.y - h / 2, minY, maxY),
   };
 }
 

@@ -92,43 +92,60 @@ describe('pxToPctDelta', () => {
 });
 
 describe('tipCenterToTopLeft', () => {
-  it('converts tip center to top-left, clamping within bounds', () => {
+  // Bounds: box stays inside spread ± STAGE_PAD_PCT (50%). With w=20: x ∈ [-50, 130].
+  it('converts tip center to top-left, no clamping when in-spread', () => {
     const tipCenter = { x: 50, y: 50 };
     const result = tipCenterToTopLeft(tipCenter, 20, 30);
-    // x: 50 - 20/2 = 40; y: 50 - 30/2 = 35
     expect(result).toEqual({ x: 40, y: 35 });
   });
 
-  it('clamps left edge when tip center too close to origin', () => {
-    const tipCenter = { x: 5, y: 50 };
+  it('allows the box to extend left of the spread into the staging zone', () => {
+    const tipCenter = { x: 5, y: 50 }; // tip in spread; box top-left = -5%
     const result = tipCenterToTopLeft(tipCenter, 20, 30);
-    // x: clamp(5 - 10, 0, 80) = 0; y: clamp(50 - 15, 0, 70) = 35
-    expect(result.x).toBe(0);
+    expect(result.x).toBe(-5);
     expect(result.y).toBe(35);
   });
 
-  it('clamps right edge when tip center too close to 100', () => {
-    const tipCenter = { x: 95, y: 50 };
+  it('allows the box to extend right of the spread into the staging zone', () => {
+    const tipCenter = { x: 110, y: 50 }; // tip in stage; box top-left = 100%
     const result = tipCenterToTopLeft(tipCenter, 20, 30);
-    // x: clamp(95 - 10, 0, 80) = 80; y: clamp(50 - 15, 0, 70) = 35
-    expect(result.x).toBe(80);
+    expect(result.x).toBe(100);
     expect(result.y).toBe(35);
   });
 
-  it('clamps top edge when tip center too close to top', () => {
-    const tipCenter = { x: 50, y: 5 };
-    const result = tipCenterToTopLeft(tipCenter, 30, 20);
-    // x: clamp(50 - 15, 0, 70) = 35; y: clamp(5 - 10, 0, 80) = 0
-    expect(result.x).toBe(35);
-    expect(result.y).toBe(0);
+  it('clamps to staging left edge (-50%) when tip dragged past', () => {
+    const tipCenter = { x: -100, y: 50 };
+    const result = tipCenterToTopLeft(tipCenter, 20, 30);
+    expect(result.x).toBe(-50);
+    expect(result.y).toBe(35);
   });
 
-  it('clamps bottom edge when tip center too close to bottom', () => {
-    const tipCenter = { x: 50, y: 95 };
+  it('clamps to staging right edge (150% - w) when tip dragged past', () => {
+    const tipCenter = { x: 9999, y: 50 };
+    const result = tipCenterToTopLeft(tipCenter, 20, 30);
+    expect(result.x).toBe(130); // 100 + 50 - 20
+    expect(result.y).toBe(35);
+  });
+
+  it('clamps to staging top edge (-50%) when tip dragged past', () => {
+    const tipCenter = { x: 50, y: -100 };
     const result = tipCenterToTopLeft(tipCenter, 30, 20);
-    // x: clamp(50 - 15, 0, 70) = 35; y: clamp(95 - 10, 0, 80) = 80
     expect(result.x).toBe(35);
-    expect(result.y).toBe(80);
+    expect(result.y).toBe(-50);
+  });
+
+  it('clamps to staging bottom edge (150% - h) when tip dragged past', () => {
+    const tipCenter = { x: 50, y: 9999 };
+    const result = tipCenterToTopLeft(tipCenter, 30, 20);
+    expect(result.x).toBe(35);
+    expect(result.y).toBe(130); // 100 + 50 - 20
+  });
+
+  it('collapses min/max safely when w > stage width (degenerate box)', () => {
+    const tipCenter = { x: 50, y: 50 };
+    const result = tipCenterToTopLeft(tipCenter, 250, 30);
+    // 100 + 50 - 250 = -200 → max(-50, -200) = -50 → min=max=-50
+    expect(result.x).toBe(-50);
   });
 });
 
