@@ -79,7 +79,7 @@ export function applyResizeDelta(
     h = clamp(h + deltaY, minSize, SIZE_MAX);
   }
 
-  return { x, y, w, h };
+  return { ...geometry, x, y, w, h };
 }
 
 /**
@@ -180,7 +180,7 @@ export function applyAspectLockedResize(
     if (handle.includes('n')) newY = anchorBottom - newH;
   }
 
-  return { x: newX, y: newY, w: newW, h: newH };
+  return { ...original, x: newX, y: newY, w: newW, h: newH };
 }
 
 /**
