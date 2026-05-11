@@ -5,7 +5,7 @@ import { useState, useCallback, useRef } from "react";
 import { ImageIcon, Loader2 } from "lucide-react";
 import { cn } from "@/utils/utils";
 import type { SpreadImage } from "@/types/spread-types";
-import { COLORS } from "@/constants/spread-constants";
+import { COLORS, DIMMED_BY_OVERLAP_OPACITY } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
 import { useZoomLevel } from "@/stores/editor-settings-store";
 
@@ -27,6 +27,10 @@ interface EditableImageProps {
   dimmed?: boolean;
   /** Show persistent item border (yellow outline) — only in retouch/objects space */
   showItemBorder?: boolean;
+  /** Canvas-level controlled hover (ADR-029 smart hit-test). */
+  isHoveredByCanvas?: boolean;
+  /** ADR-029 dim — set true when this image fully covers a selected item with lower z. */
+  dimmedByOverlap?: boolean;
   onSelect: (rect?: DOMRect) => void;
   onArtNoteChange?: (artNote: string) => void;
   onEditingChange?: (isEditing: boolean) => void;
@@ -42,13 +46,17 @@ export function EditableImage({
   isEditable,
   dimmed,
   showItemBorder,
+  isHoveredByCanvas,
+  dimmedByOverlap = false,
   onSelect,
   onArtNoteChange,
   onEditingChange,
   artNoteTypography,
 }: EditableImageProps) {
   const canSelect = isSelectable ?? isEditable;
-  const [isHovered, setIsHovered] = useState(false);
+  const [isHoveredLocal, setIsHoveredLocal] = useState(false);
+  const isHovered = isHoveredByCanvas ?? isHoveredLocal;
+  const useLocalHover = isHoveredByCanvas === undefined;
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -155,20 +163,23 @@ export function EditableImage({
     setHasError(true);
   }, []);
 
+  const baseOpacity = dimmed ? 0.2 : 1;
+  const effectiveOpacity = dimmedByOverlap ? DIMMED_BY_OVERLAP_OPACITY : baseOpacity;
+
   return (
     <div
       role="img"
       aria-label={artNoteText || `Image ${index + 1}`}
       tabIndex={canSelect ? 0 : -1}
+      data-item-id={image.id}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={useLocalHover ? () => setIsHoveredLocal(true) : undefined}
+      onMouseLeave={useLocalHover ? () => setIsHoveredLocal(false) : undefined}
       data-rotation={Number.isFinite(image.geometry.rotation) ? image.geometry.rotation : 0}
       className={cn(
         "absolute overflow-hidden transition-opacity",
-        dimmed && "opacity-20",
         canSelect && "cursor-pointer",
         !isSelected && (showItemBorder || isHovered) && "outline outline-1"
       )}
@@ -181,6 +192,8 @@ export function EditableImage({
         transformOrigin: "center center",
         willChange: "transform",
         zIndex,
+        opacity: effectiveOpacity,
+        transition: "opacity 150ms ease-out",
         outlineColor: !isSelected
           ? isHovered
             ? COLORS.ITEM_BORDER_HOVER

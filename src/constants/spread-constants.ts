@@ -96,3 +96,22 @@ export const DEFAULT_AUDIO_TITLES: ReadonlySet<string> = new Set([
   AUDIO_DEFAULTS.AUDIO_TITLE,
   AUDIO_DEFAULTS.AUTO_AUDIO_TITLE,
 ]);
+
+// === Smart hit-test constants (ADR-029) ===
+// Objects creative space — containment-aware hit-test + sticky frame z + dim overlapping.
+// Scope: Objects space only; gated by VITE_ENABLE_SMART_HIT_TEST + ObjectsMainView prop.
+
+/** Minimum overlap ratio (small/large) for an item to win containment-override. */
+export const HIT_TEST_CONTAINMENT_THRESHOLD = 0.9;
+
+/** Reserved throttle marker; rAF batching is used in practice. */
+export const HIT_TEST_MOUSEMOVE_THROTTLE_MS = 16;
+
+/** Opacity applied to items that fully cover the currently-selected item. */
+export const DIMMED_BY_OVERLAP_OPACITY = 0.4;
+
+/** Z-index reserved for sticky selection frame + hover preview overlay. */
+export const MAX_INTERACTIVE_Z = 9000;
+
+/** Pixel delta below which a frame mousedown→mouseup is treated as a pure click. */
+export const CLICK_NO_DRAG_THRESHOLD_PX = 3;

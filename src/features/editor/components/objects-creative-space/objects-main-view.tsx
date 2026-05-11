@@ -75,7 +75,7 @@ import {
   useDuplicateItem,
   useDuplicateHotkey,
 } from "./hooks";
-import type { SelectedItem } from "./objects-creative-space";
+import type { SelectedItem, ObjectElementType } from "./objects-creative-space";
 import type {
   BaseSpread,
   ImageItemContext,
@@ -404,6 +404,8 @@ export function ObjectsMainView({
             isSelected={context.isSelected}
             isEditable={context.isSpreadSelected}
             showItemBorder={true}
+            isHoveredByCanvas={context.isHoveredByCanvas}
+            dimmedByOverlap={context.dimmedByOverlap}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: "image", id: context.item.id });
@@ -452,6 +454,9 @@ export function ObjectsMainView({
             isEditable={context.isSpreadSelected}
             isEditing={context.isEditing}
             showItemBorder={true}
+            isHoveredByCanvas={context.isHoveredByCanvas}
+            dimmedByOverlap={context.dimmedByOverlap}
+            itemId={context.item.id}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: "textbox", id: context.item.id });
@@ -500,6 +505,8 @@ export function ObjectsMainView({
             zIndex={context.zIndex}
             isSelected={context.isSelected}
             isEditable={context.isSpreadSelected}
+            isHoveredByCanvas={context.isHoveredByCanvas}
+            dimmedByOverlap={context.dimmedByOverlap}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: "shape", id: context.item.id });
@@ -531,6 +538,8 @@ export function ObjectsMainView({
             isEditable={context.isSpreadSelected}
             isThumbnail={context.isThumbnail}
             showItemBorder={true}
+            isHoveredByCanvas={context.isHoveredByCanvas}
+            dimmedByOverlap={context.dimmedByOverlap}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: "video", id: context.item.id });
@@ -625,6 +634,8 @@ export function ObjectsMainView({
             isEditable={context.isSpreadSelected}
             isThumbnail={context.isThumbnail}
             showItemBorder={true}
+            isHoveredByCanvas={context.isHoveredByCanvas}
+            dimmedByOverlap={context.dimmedByOverlap}
             onSelect={() => {
               context.onSelect();
               onItemSelect({ type: 'auto_pic', id: context.item.id });
@@ -896,6 +907,17 @@ export function ObjectsMainView({
         canRotateItem={true}
         externalSelectedItemId={selectedItemId}
         onDeselect={handleDeselect}
+        onCanvasItemSelect={(sel) => {
+          // ADR-029 bug-fix: smart hit-test bypasses per-item render-prop wrapper,
+          // so we mirror the (type, id) up to ObjectsCreativeSpace for sidebar +
+          // animation list sync. Quiz won't fire here (not in Objects renderItems),
+          // but cast guard rejects it defensively.
+          const t = sel.type as ObjectElementType;
+          if (t === "image" || t === "textbox" || t === "shape" || t === "video"
+              || t === "auto_pic" || t === "audio" || t === "auto_audio") {
+            onItemSelect({ type: t, id: sel.id });
+          }
+        }}
         pageNumbering={templateLayout?.page_numbering}
         expandedAnimation={expandedAnimation}
         expandedAnimationIndex={expandedAnimationIndex}
@@ -905,6 +927,7 @@ export function ObjectsMainView({
         drawZoomAreaMode={drawZoomAreaMode}
         onDrawZoomAreaComplete={onDrawZoomAreaComplete}
         onDrawZoomAreaCancel={onDrawZoomAreaCancel}
+        smartHitTestEnabled={true}
       />
 
       {modals.generate.imageId && (

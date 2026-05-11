@@ -32,7 +32,11 @@ import {
   buildEditorCompositeContextMap,
   resolveEffectiveZIndex,
 } from "../../utils/composite-resolve-helpers";
-import { Z_INDEX } from "@/constants/spread-constants";
+import { Z_INDEX, MAX_INTERACTIVE_Z } from "@/constants/spread-constants";
+import { useCanvasHitTest } from "./hooks/use-canvas-hit-test";
+import { useFrameClickNoDragHijack } from "./hooks/use-frame-click-no-drag-hijack";
+import { HoverPreviewOverlay } from "./hover-preview-overlay";
+import type { HitCandidate } from "./utils/hit-test";
 import {
   useCanvasWidth,
   useCanvasHeight,
@@ -140,6 +144,13 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   // Callback when selection is cleared (click outside canvas)
   onDeselect?: () => void;
 
+  /** ADR-029 — fires when canvas-level smart hit-test (or click-no-drag-hijack)
+   *  switches selection without going through the per-item onClick chain.
+   *  Parent (ObjectsMainView) wires this to its own onItemSelect so the sidebar
+   *  / animation list stay in sync. Without this, sidebar would silently
+   *  diverge from canvas state for any hit-test override. */
+  onCanvasItemSelect?: (selected: { type: string; id: string }) => void;
+
   // Page numbering overlay settings (null/undefined = hidden)
   pageNumbering?: PageNumberingSettings | null;
 
@@ -159,6 +170,12 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   drawZoomAreaMode?: boolean;
   onDrawZoomAreaComplete?: (geometry: ZoomAreaGeometry) => void;
   onDrawZoomAreaCancel?: () => void;
+
+  /** ADR-029 — opt-in for smart hit-test (Objects creative space).
+   *  When true (combined with VITE_ENABLE_SMART_HIT_TEST env flag), enables
+   *  containment-aware click hijack, hover preview overlay, sticky frame z,
+   *  and dim overlapping. Other spaces leave this undefined → false. */
+  smartHitTestEnabled?: boolean;
 }
 
 // === Animation overlay label helpers ===
@@ -244,6 +261,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   externalSelectedItemId,
   onPageSelect,
   onDeselect,
+  onCanvasItemSelect,
   pageNumbering,
   forceLanguageCode,
   expandedAnimation,
@@ -254,6 +272,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   drawZoomAreaMode,
   onDrawZoomAreaComplete,
   onDrawZoomAreaCancel,
+  smartHitTestEnabled: smartHitTestEnabledProp = false,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const currentEditorLangCode = useLanguageCode();
@@ -672,7 +691,74 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
     () => buildEditorCompositeContextMap(spread),
     [spread]
   );
+
+  // ADR-029 — smart hit-test gate. Active only when ObjectsMainView opts in
+  // AND env flag is not explicitly disabled.
+  const featureFlagEnabled = import.meta.env.VITE_ENABLE_SMART_HIT_TEST !== "false";
+  const smartHitTestEnabled = featureFlagEnabled && smartHitTestEnabledProp;
+
+  // Wire hit-test click hijack to existing selection path.
+  // ADR-029 — bug-fix: also propagate to parent (sidebar) via onCanvasItemSelect,
+  // mirroring what ObjectsMainView's per-item render-prop wrapper does (call
+  // context.onSelect() AND onItemSelect(...)). The hijack bypasses that wrapper
+  // by calling handleElementSelectGated directly, so we must dual-fire here or
+  // the Objects sidebar / animation list silently desync from canvas state.
+  const handleHitTestSelect = useCallback(
+    (target: HitCandidate) => {
+      handleElementSelectGated({
+        type: target.type,
+        index: target.index,
+      });
+      onCanvasItemSelect?.({ type: target.type, id: target.id });
+    },
+    [handleElementSelectGated, onCanvasItemSelect],
+  );
+
+  const {
+    hoveredTargetId,
+    hoveredGeometry,
+    dimmedItemIds,
+    handleMouseMove: handleCanvasMouseMove,
+    handleMouseLeave: handleCanvasMouseLeave,
+    handleMouseDownCapture: handleCanvasMouseDownCapture,
+    handleClickCapture: handleCanvasClickCapture,
+  } = useCanvasHitTest({
+    spread,
+    selectedElement: state.selectedElement,
+    editingItemId,
+    isAnimationOverlayActive,
+    itemInteractionDisabled,
+    canvasRef,
+    smartHitTestEnabled,
+    editorCompositeCtxMap,
+    preventEditRawItem,
+    isDragging: state.isDragging,
+    isResizing: state.isResizing,
+    isRotating: state.isRotating,
+    langCode: editorLangCode,
+    onSelect: handleHitTestSelect,
+  });
+
+  const { handleFrameMouseDown } = useFrameClickNoDragHijack({
+    canvasRef,
+    spread,
+    editorCompositeCtxMap,
+    selectedElement: state.selectedElement,
+    selectedItemId,
+    smartHitTestEnabled,
+    preventEditRawItem,
+    editingItemId,
+    isAnimationOverlayActive,
+    langCode: editorLangCode,
+    onSwitchSelection: handleHitTestSelect,
+  });
+
+  // ADR-029 — Sticky selection frame z (Phase 4):
+  // When smart hit-test is enabled, the frame parks at MAX_INTERACTIVE_Z so
+  // drag/resize is never blocked by higher-z items overlapping the selection.
+  // When disabled, fall back to the legacy mirror-z policy below.
   const calcSelectedZIndex = (() => {
+    if (smartHitTestEnabled) return MAX_INTERACTIVE_Z;
     const sel = state.selectedElement;
     if (!sel || sel.type === "page") return 0;
     const baseZ = resolveItemZIndex(
@@ -717,6 +803,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
         }}
         onClick={handleCanvasClick}
         onKeyDown={handleKeyDown}
+        onMouseMove={smartHitTestEnabled ? handleCanvasMouseMove : undefined}
+        onMouseLeave={smartHitTestEnabled ? handleCanvasMouseLeave : undefined}
+        onMouseDownCapture={smartHitTestEnabled ? handleCanvasMouseDownCapture : undefined}
+        onClickCapture={smartHitTestEnabled ? handleCanvasClickCapture : undefined}
         tabIndex={0}
       >
         {/* Layer A: Backgrounds — clipped to trim box, pointer-events:none so clicks pass through to
@@ -831,6 +921,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
             context.zIndex = resolveItemZIndex("image", index, spread);
             context.isEditing = editingItemId === image.id;
+            context.isHoveredByCanvas = hoveredTargetId === image.id;
+            context.dimmedByOverlap = dimmedItemIds.has(image.id);
             return (
               <Fragment key={image.id ?? `img-${index}`}>
                 {renderImageItem(context)}
@@ -851,6 +943,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("video", index, spread);
+            context.isHoveredByCanvas = hoveredTargetId === video.id;
+            context.dimmedByOverlap = dimmedItemIds.has(video.id);
             return (
               <Fragment key={video.id ?? `vid-${index}`}>
                 {renderVideoItem(context)}
@@ -871,6 +965,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("auto_pic", index, spread);
+            context.isHoveredByCanvas = hoveredTargetId === autoPic.id;
+            context.dimmedByOverlap = dimmedItemIds.has(autoPic.id);
             return (
               <Fragment key={autoPic.id ?? `anim-${index}`}>
                 {renderAutoPicItem(context)}
@@ -891,6 +987,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
               handleSpreadItemAction
             );
             context.zIndex = resolveItemZIndex("shape", index, spread);
+            context.isHoveredByCanvas = hoveredTargetId === shape.id;
+            context.dimmedByOverlap = dimmedItemIds.has(shape.id);
             return (
               <Fragment key={shape.id ?? `shp-${index}`}>
                 {renderShapeItem(context)}
@@ -953,6 +1051,8 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
             );
             context.zIndex = resolveItemZIndex("textbox", index, spread);
             context.isEditing = editingItemId === textbox.id;
+            context.isHoveredByCanvas = hoveredTargetId === textbox.id;
+            context.dimmedByOverlap = dimmedItemIds.has(textbox.id);
             return (
               <Fragment key={textbox.id ?? `txt-${index}`}>
                 {renderTextItem(context)}
@@ -1099,6 +1199,21 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
           })()
         ) : null}
 
+        {/* ADR-029 — Hover preview overlay: dashed gray 1px at hovered target.
+            Suppressed when hovered target IS the selected item (avoid double-border). */}
+        {smartHitTestEnabled &&
+          hoveredGeometry &&
+          hoveredTargetId !== null &&
+          hoveredTargetId !== selectedItemId &&
+          !state.isDragging &&
+          !state.isResizing &&
+          !state.isRotating && (
+            <HoverPreviewOverlay
+              geometry={hoveredGeometry}
+              zIndex={MAX_INTERACTIVE_Z - 1}
+            />
+          )}
+
         {/* Selection Frame — suppressed when drawZoomAreaMode active */}
         {state.selectedElement &&
           selectedGeometry &&
@@ -1126,6 +1241,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
                   if (id) handleBeginEdit(id);
                 }
               }}
+              onFrameMouseDown={smartHitTestEnabled ? handleFrameMouseDown : undefined}
               onDragStart={handleDragStart}
               onDrag={handleDrag}
               onDragEnd={handleDragEnd}

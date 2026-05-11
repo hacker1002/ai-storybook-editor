@@ -117,6 +117,11 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Callback when selection is cleared (click outside canvas)
   onDeselect?: () => void;
 
+  /** ADR-029 — canvas → parent sync for smart hit-test driven selections.
+   *  Forwarded to SpreadEditorPanel. ObjectsMainView wires it to its own
+   *  onItemSelect so sidebar / animation list track hit-test overrides. */
+  onCanvasItemSelect?: (selected: { type: string; id: string }) => void;
+
   // Page numbering overlay settings (null/undefined = hidden)
   pageNumbering?: PageNumberingSettings | null;
 
@@ -140,6 +145,9 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   drawZoomAreaMode?: boolean;
   onDrawZoomAreaComplete?: (geometry: ZoomAreaGeometry) => void;
   onDrawZoomAreaCancel?: () => void;
+
+  /** ADR-029 — opt-in for smart hit-test (Objects creative space only). */
+  smartHitTestEnabled?: boolean;
 }
 
 // === Main Component ===
@@ -190,6 +198,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   externalSelectedItemId,
   onPageSelect,
   onDeselect,
+  onCanvasItemSelect,
   pageNumbering,
   forceLanguageCode,
   showViewToggle = true,
@@ -202,6 +211,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   drawZoomAreaMode,
   onDrawZoomAreaComplete,
   onDrawZoomAreaCancel,
+  smartHitTestEnabled,
 }: CanvasSpreadViewProps<TSpread>) {
 
   // Ref to the currently mounted SpreadThumbnailList (either the edit-mode
@@ -457,6 +467,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 externalSelectedItemId={externalSelectedItemId}
                 onPageSelect={onPageSelect}
                 onDeselect={onDeselect}
+                onCanvasItemSelect={onCanvasItemSelect}
                 pageNumbering={pageNumbering}
                 forceLanguageCode={forceLanguageCode}
                 expandedAnimation={expandedAnimation}
@@ -467,6 +478,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 drawZoomAreaMode={drawZoomAreaMode}
                 onDrawZoomAreaComplete={onDrawZoomAreaComplete}
                 onDrawZoomAreaCancel={onDrawZoomAreaCancel}
+                smartHitTestEnabled={smartHitTestEnabled}
               />
             )}
 

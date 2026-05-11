@@ -308,6 +308,10 @@ export interface BaseItemContext<TSpread extends BaseSpread> {
   isSpreadSelected: boolean;
   /** Resolved z-index for rendering order on the canvas */
   zIndex?: number;
+  /** ADR-029 — canvas-level controlled hover (smart hit-test in Objects space). */
+  isHoveredByCanvas?: boolean;
+  /** ADR-029 — item dims when fully covering a lower-z selected item. */
+  dimmedByOverlap?: boolean;
 }
 
 export interface ImageItemContext<TSpread extends BaseSpread>

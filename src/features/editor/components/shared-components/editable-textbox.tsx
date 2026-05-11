@@ -4,7 +4,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { cn } from "@/utils/utils";
 import type { SpreadTextboxContent, WordTiming } from "@/types/spread-types";
-import { COLORS } from "@/constants/spread-constants";
+import { COLORS, DIMMED_BY_OVERLAP_OPACITY } from "@/constants/spread-constants";
 import { useZoomLevel } from "@/stores/editor-settings-store";
 import { createLogger } from "@/utils/logger";
 
@@ -95,6 +95,12 @@ interface EditableTextboxProps {
   dimmed?: boolean;
   /** Show persistent item border (dashed gray outline) — only in retouch/objects space */
   showItemBorder?: boolean;
+  /** Canvas-level controlled hover (ADR-029 smart hit-test). */
+  isHoveredByCanvas?: boolean;
+  /** ADR-029 dim — set true when this textbox fully covers a selected item with lower z. */
+  dimmedByOverlap?: boolean;
+  /** Stable id forwarded onto the rendered element for natural-target resolution. */
+  itemId?: string;
   onSelect: (rect?: DOMRect) => void;
   onTextChange: (text: string) => void;
   onEditingChange: (isEditing: boolean) => void;
@@ -112,6 +118,9 @@ export function EditableTextbox({
   isEditing: controlledIsEditing,
   dimmed,
   showItemBorder,
+  isHoveredByCanvas,
+  dimmedByOverlap = false,
+  itemId,
   onSelect,
   onTextChange,
   onEditingChange,
@@ -120,7 +129,9 @@ export function EditableTextbox({
   const { text, geometry, typography } = textboxContent;
   const zoomLevel = useZoomLevel();
   const [internalIsEditing, setInternalIsEditing] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const [isHoveredLocal, setIsHoveredLocal] = useState(false);
+  const isHovered = isHoveredByCanvas ?? isHoveredLocal;
+  const useLocalHover = isHoveredByCanvas === undefined;
   const editableRef = useRef<HTMLDivElement>(null);
 
   const isControlled = controlledIsEditing !== undefined;
@@ -291,6 +302,8 @@ export function EditableTextbox({
   };
 
   const isEmpty = !text;
+  const baseOpacity = dimmed ? 0.2 : 1;
+  const effectiveOpacity = dimmedByOverlap ? DIMMED_BY_OVERLAP_OPACITY : baseOpacity;
 
   /** Render text with per-word <span> elements for Read-Along highlighting.
    *  Token order/count must match wordTimings emitted by /api/text/narrate-script. */
@@ -322,16 +335,16 @@ export function EditableTextbox({
         "aria-multiline": "true",
       })}
       data-textbox
+      data-item-id={itemId}
       data-rotation={Number.isFinite(geometry.rotation) ? geometry.rotation : 0}
       tabIndex={isSelectable ? 0 : -1}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={useLocalHover ? () => setIsHoveredLocal(true) : undefined}
+      onMouseLeave={useLocalHover ? () => setIsHoveredLocal(false) : undefined}
       className={cn(
         "absolute overflow-hidden transition-opacity",
-        dimmed && "opacity-20",
         isSelectable && "cursor-pointer",
         !isSelected &&
           (showItemBorder || isHovered) &&
@@ -346,6 +359,8 @@ export function EditableTextbox({
         transformOrigin: "center center",
         willChange: "transform",
         zIndex,
+        opacity: effectiveOpacity,
+        transition: "opacity 150ms ease-out",
         outlineColor: !isSelected
           ? isHovered
             ? COLORS.ITEM_BORDER_HOVER

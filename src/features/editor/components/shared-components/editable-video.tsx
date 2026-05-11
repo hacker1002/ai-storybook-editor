@@ -5,7 +5,7 @@ import { useState, useCallback } from "react";
 import { Video, Loader2 } from "lucide-react";
 import { cn } from "@/utils/utils";
 import type { SpreadVideo } from "@/types/spread-types";
-import { COLORS } from "@/constants/spread-constants";
+import { COLORS, DIMMED_BY_OVERLAP_OPACITY } from "@/constants/spread-constants";
 
 interface EditableVideoProps {
   video: SpreadVideo;
@@ -16,6 +16,10 @@ interface EditableVideoProps {
   isThumbnail?: boolean;
   /** Show persistent item border (muted black outline) — only in retouch/objects space */
   showItemBorder?: boolean;
+  /** Canvas-level controlled hover (ADR-029 smart hit-test). */
+  isHoveredByCanvas?: boolean;
+  /** ADR-029 dim — set true when this video fully covers a selected item with lower z. */
+  dimmedByOverlap?: boolean;
   onSelect: () => void;
 }
 
@@ -27,9 +31,13 @@ export function EditableVideo({
   isEditable,
   isThumbnail = false,
   showItemBorder,
+  isHoveredByCanvas,
+  dimmedByOverlap = false,
   onSelect,
 }: EditableVideoProps) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [isHoveredLocal, setIsHoveredLocal] = useState(false);
+  const isHovered = isHoveredByCanvas ?? isHoveredLocal;
+  const useLocalHover = isHoveredByCanvas === undefined;
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
@@ -59,12 +67,13 @@ export function EditableVideo({
       role="img"
       aria-label={video.title || `Video ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
+      data-item-id={video.id}
       onClick={handleClick}
       onKeyDown={(e) => e.key === "Enter" && isEditable && onSelect()}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={useLocalHover ? () => setIsHoveredLocal(true) : undefined}
+      onMouseLeave={useLocalHover ? () => setIsHoveredLocal(false) : undefined}
       className={cn(
-        "absolute overflow-hidden",
+        "absolute overflow-hidden transition-opacity",
         isEditable && "cursor-pointer",
         !isSelected && (showItemBorder || isHovered) && "outline outline-1"
       )}
@@ -74,6 +83,8 @@ export function EditableVideo({
         width: `${video.geometry.w}%`,
         height: `${video.geometry.h}%`,
         zIndex,
+        opacity: dimmedByOverlap ? DIMMED_BY_OVERLAP_OPACITY : 1,
+        transition: "opacity 150ms ease-out",
         outlineColor: !isSelected
           ? isHovered
             ? COLORS.ITEM_BORDER_HOVER

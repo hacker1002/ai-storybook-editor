@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/utils/utils";
 import type { SpreadAutoPic } from "@/types/spread-types";
-import { COLORS } from "@/constants/spread-constants";
+import { COLORS, DIMMED_BY_OVERLAP_OPACITY } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
 import { useZoomLevel } from "@/stores/editor-settings-store";
 
@@ -82,6 +82,10 @@ interface EditableAutoPicProps {
   isThumbnail?: boolean;
   /** Show persistent item border (muted outline) — only in retouch/objects space */
   showItemBorder?: boolean;
+  /** Canvas-level controlled hover (ADR-029 smart hit-test). */
+  isHoveredByCanvas?: boolean;
+  /** ADR-029 dim — set true when this auto_pic fully covers a selected item with lower z. */
+  dimmedByOverlap?: boolean;
   onSelect: () => void;
 }
 
@@ -93,9 +97,13 @@ export function EditableAutoPic({
   isEditable,
   isThumbnail = false,
   showItemBorder,
+  isHoveredByCanvas,
+  dimmedByOverlap = false,
   onSelect,
 }: EditableAutoPicProps) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [isHoveredLocal, setIsHoveredLocal] = useState(false);
+  const isHovered = isHoveredByCanvas ?? isHoveredLocal;
+  const useLocalHover = isHoveredByCanvas === undefined;
   const [isLoading, setIsLoading] = useState(!!autoPic.media_url);
   const [hasError, setHasError] = useState(false);
 
@@ -131,13 +139,14 @@ export function EditableAutoPic({
       role="img"
       aria-label={autoPic.title || `Auto Pic ${index + 1}`}
       tabIndex={isEditable ? 0 : -1}
+      data-item-id={autoPic.id}
       onClick={handleClick}
       onKeyDown={(e) => e.key === "Enter" && isEditable && !isThumbnail && onSelect()}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={useLocalHover ? () => setIsHoveredLocal(true) : undefined}
+      onMouseLeave={useLocalHover ? () => setIsHoveredLocal(false) : undefined}
       data-rotation={Number.isFinite(autoPic.geometry.rotation) ? autoPic.geometry.rotation : 0}
       className={cn(
-        "absolute overflow-hidden",
+        "absolute overflow-hidden transition-opacity",
         isEditable && !isThumbnail && "cursor-pointer",
         !isSelected && (showItemBorder || isHovered) && "outline outline-1"
       )}
@@ -150,6 +159,8 @@ export function EditableAutoPic({
         transformOrigin: "center center",
         willChange: "transform",
         zIndex,
+        opacity: dimmedByOverlap ? DIMMED_BY_OVERLAP_OPACITY : 1,
+        transition: "opacity 150ms ease-out",
         outlineColor: !isSelected
           ? isHovered
             ? COLORS.ITEM_BORDER_HOVER

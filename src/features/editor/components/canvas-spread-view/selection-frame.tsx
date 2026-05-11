@@ -28,6 +28,10 @@ interface SelectionFrameProps {
   // Double-click forwarding — parent uses this to trigger edit mode
   onDoubleClick?: (e: React.MouseEvent) => void;
 
+  // ADR-029 — mousedown on frame body (bubble-phase) for click-no-drag hijack.
+  // Parent decides whether a small-delta click should re-route selection.
+  onFrameMouseDown?: (e: React.MouseEvent<HTMLDivElement>) => void;
+
   // Drag callbacks
   onDragStart: () => void;
   onDrag: (delta: Point) => void;
@@ -55,6 +59,7 @@ export function SelectionFrame({
   canResize = true,
   canRotate = false,
   onDoubleClick,
+  onFrameMouseDown,
   onDragStart,
   onDrag,
   onDragEnd,
@@ -132,7 +137,9 @@ export function SelectionFrame({
       <div
         ref={targetRef}
         className="absolute"
+        data-selection-frame-target="true"
         onDoubleClick={onDoubleClick}
+        onMouseDown={onFrameMouseDown}
         style={{
           left: `${geometry.x}%`,
           top: `${geometry.y}%`,
