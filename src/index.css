@@ -113,13 +113,13 @@
   background: hsl(var(--primary)) !important;
   border: 2px solid white !important;
   border-radius: 50% !important;
-  width: 8px !important;
-  height: 8px !important;
-  margin-top: -4px !important;
-  margin-left: -4px !important;
+  width: 10px !important;
+  height: 10px !important;
+  margin-top: -5px !important;
+  margin-left: -5px !important;
 }
 
-/* Active handle visual feedback - larger size (10px) */
+/* Active handle visual feedback - larger size (12px) */
 .moveable-selection.active-nw .moveable-control[data-direction="nw"],
 .moveable-selection.active-ne .moveable-control[data-direction="ne"],
 .moveable-selection.active-sw .moveable-control[data-direction="sw"],
@@ -128,8 +128,38 @@
 .moveable-selection.active-s .moveable-control[data-direction="s"],
 .moveable-selection.active-w .moveable-control[data-direction="w"],
 .moveable-selection.active-e .moveable-control[data-direction="e"] {
-  width: 10px !important;
-  height: 10px !important;
-  margin-top: -5px !important;
-  margin-left: -5px !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin-top: -6px !important;
+  margin-left: -6px !important;
+}
+
+/* Rotation handle - larger than resize handles for easier grabbing */
+.moveable-selection .moveable-control.moveable-rotation-control {
+  width: 14px !important;
+  height: 14px !important;
+  margin-top: -7px !important;
+  margin-left: -7px !important;
+  cursor: alias;
+}
+/* Invisible 10px hit-area expansion around rotation handle */
+.moveable-selection .moveable-control.moveable-rotation-control::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
+  width: auto;
+  height: auto;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  z-index: -1;
+}
+.moveable-selection.active-rotate .moveable-control.moveable-rotation-control {
+  width: 16px !important;
+  height: 16px !important;
+  margin-top: -8px !important;
+  margin-left: -8px !important;
 }
