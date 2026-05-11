@@ -3,6 +3,7 @@
 import type { SpreadTag, SpreadTagType, SpreadTagOtherKey } from '@/types/spread-types';
 import type { Character } from '@/types/character-types';
 import type { Prop } from '@/types/prop-types';
+import { BASE_VARIANT_KEY, BASE_VARIANT_NAME } from '@/constants/variant-constants';
 
 // === Internal types ===
 
@@ -74,7 +75,7 @@ export function buildObjectOptions(
  * Returns:
  *   - [] for type='other' (no variants by design — caller hides Variant dropdown)
  *   - [] for dangling character/prop refs (caller renders dangling fallback)
- *   - [{key:'default', name:'Default'}] when entity has empty variants[] (defensive fallback)
+ *   - [{key: BASE_VARIANT_KEY, name: BASE_VARIANT_NAME}] when entity has empty variants[] (defensive fallback)
  */
 export function resolveVariants(
   type: SpreadTagType,
@@ -91,7 +92,7 @@ export function resolveVariants(
   if (!entity) return [];
 
   const variants = entity.variants ?? [];
-  if (variants.length === 0) return [{ key: 'default', name: 'Default' }];
+  if (variants.length === 0) return [{ key: BASE_VARIANT_KEY, name: BASE_VARIANT_NAME }];
   return variants.map((v) => ({ key: v.key, name: v.name }));
 }
 

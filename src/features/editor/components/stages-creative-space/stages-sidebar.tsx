@@ -23,6 +23,7 @@ import {
 } from "@/stores/snapshot-store/selectors";
 import { useCurrentBook } from "@/stores/book-store";
 import { useLocations } from "@/stores/location-store";
+import { BASE_VARIANT_KEY, BASE_VARIANT_NAME } from "@/constants/variant-constants";
 import type { Stage } from "@/types/stage-types";
 import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
@@ -44,8 +45,8 @@ function buildNewStage(name: string, key: string, order: number): Stage {
     location_id: "",
     variants: [
       {
-        name: "Base",
-        key: "base",
+        name: BASE_VARIANT_NAME,
+        key: BASE_VARIANT_KEY,
         type: 0,
         visual_description: "",
         temporal: { era: "", season: "", weather: "", time_of_day: "" },

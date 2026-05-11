@@ -27,6 +27,7 @@ import {
   useAssetCategoryActions,
 } from "@/stores/asset-category-store";
 import { CATEGORY_FILTER_OPTIONS } from "@/constants/prop-constants";
+import { BASE_VARIANT_KEY, BASE_VARIANT_NAME } from "@/constants/variant-constants";
 import type { Character } from "@/types/character-types";
 import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
@@ -64,8 +65,8 @@ function buildNewCharacter(name: string, key: string, order: number): Character 
     },
     variants: [
       {
-        name: "Base",
-        key: "base",
+        name: BASE_VARIANT_NAME,
+        key: BASE_VARIANT_KEY,
         type: 0,
         appearance: {
           height: 0,

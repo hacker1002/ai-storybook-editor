@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import { ObjectDropdown } from './object-dropdown';
 import { VariantDropdown } from './variant-dropdown';
+import { BASE_VARIANT_NAME } from '@/constants/variant-constants';
 import type { ObjectOption } from './tag-utils';
 
 interface DraftTagRowProps {
@@ -38,7 +39,7 @@ export function DraftTagRow({
           taken={new Set()}
           onChange={() => undefined}
           disabled
-          placeholder="Default"
+          placeholder={BASE_VARIANT_NAME}
           ariaLabel="New tag variant"
         />
       </div>

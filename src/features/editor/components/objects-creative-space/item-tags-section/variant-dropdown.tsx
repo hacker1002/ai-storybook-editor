@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createLogger } from '@/utils/logger';
+import { BASE_VARIANT_KEY, BASE_VARIANT_NAME } from '@/constants/variant-constants';
 import type { VariantOption } from './tag-utils';
 
 const log = createLogger('Editor', 'VariantDropdown');
@@ -24,8 +25,8 @@ interface VariantDropdownProps {
 
 function sortVariants(variants: VariantOption[]): VariantOption[] {
   return [...variants].sort((a, b) => {
-    if (a.key === 'default') return -1;
-    if (b.key === 'default') return 1;
+    if (a.key === BASE_VARIANT_KEY) return -1;
+    if (b.key === BASE_VARIANT_KEY) return 1;
     return a.name.localeCompare(b.name);
   });
 }
@@ -36,7 +37,7 @@ export function VariantDropdown({
   taken,
   onChange,
   disabled,
-  placeholder = 'Default',
+  placeholder = BASE_VARIANT_NAME,
   ariaLabel = 'Variant',
 }: VariantDropdownProps) {
   // Dangling object or no variants available — render disabled fallback

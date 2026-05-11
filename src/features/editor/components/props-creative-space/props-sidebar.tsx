@@ -27,6 +27,7 @@ import {
   useAssetCategoryActions,
 } from "@/stores/asset-category-store";
 import { CATEGORY_FILTER_OPTIONS } from "@/constants/prop-constants";
+import { BASE_VARIANT_KEY, BASE_VARIANT_NAME } from "@/constants/variant-constants";
 import type { Prop } from "@/types/prop-types";
 import { cn } from "@/utils/utils";
 import { createLogger } from "@/utils/logger";
@@ -49,8 +50,8 @@ function buildNewProp(name: string, key: string, order: number): Prop {
     type: "narrative",
     variants: [
       {
-        name: "Base",
-        key: "base",
+        name: BASE_VARIANT_NAME,
+        key: BASE_VARIANT_KEY,
         type: 0,
         visual_description: "",
         illustrations: [],

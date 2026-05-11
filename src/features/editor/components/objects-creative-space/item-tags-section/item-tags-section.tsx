@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { createLogger } from '@/utils/logger';
 import { useCharacters } from '@/stores/snapshot-store/selectors';
 import { useProps } from '@/stores/snapshot-store/selectors';
+import { BASE_VARIANT_KEY } from '@/constants/variant-constants';
 import type { SpreadTag } from '@/types/spread-types';
 import {
   dedupTags,
@@ -75,7 +76,7 @@ export function ItemTagsSection({
     const newTag: SpreadTag = {
       type: opt.type,
       object_key: opt.object_key,
-      variant_key: opt.type === 'other' ? null : 'default',
+      variant_key: opt.type === 'other' ? null : BASE_VARIANT_KEY,
     };
     const isDuplicate = tags.some(
       (t) => t.type === newTag.type && t.object_key === newTag.object_key && t.variant_key === newTag.variant_key,
@@ -101,7 +102,7 @@ export function ItemTagsSection({
         ? {
             type: opt.type,
             object_key: opt.object_key,
-            variant_key: opt.type === 'other' ? null : 'default',
+            variant_key: opt.type === 'other' ? null : BASE_VARIANT_KEY,
           }
         : t,
     );
