@@ -113,7 +113,7 @@ export function VoicesPage() {
   return (
     <main
       aria-labelledby="voices-heading"
-      className="mx-auto w-full max-w-7xl space-y-4"
+      className="w-full"
     >
       <VoicesHeader
         onPromptClick={() => setIsPromptModalOpen(true)}

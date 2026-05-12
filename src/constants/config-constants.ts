@@ -81,6 +81,33 @@ export function getLanguageName(code: string): string {
   return entry.name;
 }
 
+// ── Humans feature constants ─────────────────────────────────────────────────
+
+export const SUPPORTED_COUNTRIES = [
+  { code: 'US', label: 'United States' },
+  { code: 'VN', label: 'Vietnam'       },
+  { code: 'JP', label: 'Japan'         },
+  { code: 'KR', label: 'South Korea'   },
+  { code: 'CN', label: 'China'         },
+] as const;
+
+export function getCountryName(code: string | null | undefined): string {
+  if (!code) return '';
+  const entry = SUPPORTED_COUNTRIES.find(c => c.code === code);
+  return entry?.label ?? code;
+}
+
+export const GENDER_OPTIONS = [
+  { value: 'null', label: 'Unspecified' },
+  { value: '0',    label: 'Female'      },
+  { value: '1',    label: 'Male'        },
+] as const;
+
+export const VISUAL_PROFILE_TYPES = [
+  { value: 'face',      label: 'Face'      },
+  { value: 'full_body', label: 'Full body' },
+] as const;
+
 export const TARGET_AUDIENCE_LABELS: Record<number, string> = {
   1: 'Kindergarten (ages 2-3)',
   2: 'Preschool (ages 4-5)',

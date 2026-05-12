@@ -27,7 +27,7 @@ export function AudioLibraryHeader({
   };
 
   return (
-    <header className="flex items-center justify-between py-4 px-6">
+    <header className="flex h-16 items-center justify-between border-b border-border px-6">
       <h1 id={titleId} className="text-2xl font-semibold">
         {title}
       </h1>

@@ -51,7 +51,7 @@ export function VoicesHeader({ onPromptClick, onImportClick }: VoicesHeaderProps
 
   return (
     <TooltipProvider delayDuration={200}>
-      <header className="flex items-center justify-between py-4 px-6">
+      <header className="flex h-16 items-center justify-between border-b border-border px-6">
         <h1 id="voices-heading" className="text-2xl font-semibold">
           Voices
         </h1>

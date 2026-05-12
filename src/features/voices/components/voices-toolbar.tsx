@@ -132,7 +132,7 @@ export function VoicesToolbar({
   }));
 
   return (
-    <div className="flex flex-wrap items-center gap-3 py-3 px-6">
+    <div className="flex min-h-16 flex-wrap items-center gap-3 border-b border-border px-6 py-3">
       <div className="relative w-full max-w-xs">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input

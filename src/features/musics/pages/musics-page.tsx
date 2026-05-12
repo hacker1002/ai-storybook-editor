@@ -135,7 +135,7 @@ export function MusicsPage() {
   return (
     <main
       aria-labelledby="musics-heading"
-      className="mx-auto w-full max-w-7xl space-y-4"
+      className="w-full"
     >
       <AudioLibraryHeader
         title="Musics"

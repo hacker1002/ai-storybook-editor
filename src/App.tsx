@@ -8,12 +8,18 @@ import { EditorPage } from '@/features/editor';
 import { VoicesPage } from '@/features/voices';
 import { SoundsPage } from '@/features/sounds';
 import { MusicsPage } from '@/features/musics';
+import { HumansPage } from '@/features/humans';
 import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVoicesActions } from '@/stores/voices-store';
+import { useHumansActions } from '@/stores/humans-store';
 
 const SharePreviewPage = lazy(() =>
   import('@/features/share-preview').then((m) => ({ default: m.SharePreviewPage }))
+);
+
+const HumanDetailPage = lazy(() =>
+  import('@/features/humans').then((m) => ({ default: m.HumanDetailPage }))
 );
 
 const SIDEBAR_PLACEHOLDER_ROUTES: Array<{ path: string; title: string }> = [
@@ -55,6 +61,7 @@ function LoadingScreen() {
 export default function App() {
   const { initialize, isInitialized, isAuthenticated } = useAuthStore();
   const { fetchVoices } = useVoicesActions();
+  const { fetchHumans } = useHumansActions();
 
   useEffect(() => {
     initialize();
@@ -63,8 +70,9 @@ export default function App() {
   useEffect(() => {
     if (isInitialized && isAuthenticated) {
       void fetchVoices();
+      void fetchHumans();
     }
-  }, [isInitialized, isAuthenticated, fetchVoices]);
+  }, [isInitialized, isAuthenticated, fetchVoices, fetchHumans]);
 
   if (!isInitialized) {
     return <LoadingScreen />;
@@ -86,6 +94,11 @@ export default function App() {
           <Route path="/voices" element={<VoicesPage />} />
           <Route path="/sounds" element={<SoundsPage />} />
           <Route path="/musics" element={<MusicsPage />} />
+          <Route path="/humans" element={<HumansPage />} />
+          <Route
+            path="/humans/:id"
+            element={<Suspense fallback={<LoadingScreen />}><HumanDetailPage /></Suspense>}
+          />
           {SIDEBAR_PLACEHOLDER_ROUTES.map(({ path, title }) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}
