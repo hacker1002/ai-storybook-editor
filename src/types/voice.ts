@@ -29,7 +29,7 @@ export interface VoicesFilterState {
   tag: string | null;
 }
 
-export type VoicesActiveModal = 'prompt' | 'import' | null;
+export type VoicesActiveModal = 'prompt' | 'clone' | 'import' | null;
 
 export interface VoiceRow {
   id: string;

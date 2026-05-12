@@ -3,6 +3,7 @@ import { createLogger } from '@/utils/logger';
 const logGenerate = createLogger('VoiceApi', 'callGenerateFromPrompt');
 const logSave = createLogger('VoiceApi', 'callSavePreview');
 const logGet = createLogger('VoiceApi', 'callGetFromElevenId');
+const logClone = createLogger('VoiceApi', 'callCloneFromHuman');
 
 const imageApiBaseUrl = import.meta.env.VITE_IMAGE_API_BASE_URL as string;
 const imageApiKey = import.meta.env.VITE_IMAGE_API_KEY as string;
@@ -627,3 +628,234 @@ export async function callGetFromElevenId(
   }
 }
 
+// ───────────────────────── Clone from human ─────────────────────────
+
+export interface CloneFromHumanParams {
+  recordUrl: string;
+  name: string;
+  gender: 0 | 1;
+  age: 0 | 1 | 2;
+  language: string;
+  accent: string;
+  description?: string;
+  tags?: string;
+  loudness?: number;
+  guidance?: number;
+  source?: {
+    humanId?: string;
+    voiceProfileName?: string;
+  };
+}
+
+export interface CloneFromHumanVoiceDTO {
+  id: string;
+  name: string;
+  gender: 0 | 1;
+  age: 0 | 1 | 2;
+  language: string;
+  accent: string;
+  description: string | null;
+  model: string;
+  elevenId: string;
+  tags: string | null;
+  type: 1;
+  previewAudioUrl: string;
+  sampleAudioUrl: string | null;
+  loudness: number | null;
+  guidance: number | null;
+  createdAt?: string;
+}
+
+export interface CloneFromHumanSuccess {
+  success: true;
+  data: {
+    voiceId: string;
+    elevenId: string;
+    previewAudioUrl: string;
+    voice: CloneFromHumanVoiceDTO;
+  };
+  meta?: Record<string, number>;
+}
+
+export type CloneFromHumanErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'INVALID_RECORD_URL'
+  | 'INVALID_API_KEY'
+  | 'SOURCE_AUDIO_NOT_FOUND'
+  | 'AUDIO_TOO_LARGE'
+  | 'INVALID_AUDIO_FORMAT'
+  | 'UNSUPPORTED_LANGUAGE'
+  | 'ELEVEN_IVC_FAILED'
+  | 'ELEVEN_VOICE_LIMIT'
+  | 'ELEVEN_RATE_LIMITED'
+  | 'ELEVEN_AUTH_FAILED'
+  | 'ELEVEN_TTS_PREVIEW_FAILED'
+  | 'ELEVEN_UPSTREAM_ERROR'
+  | 'STORAGE_UPLOAD_ERROR'
+  | 'DB_INSERT_ERROR'
+  | 'INTERNAL_ERROR'
+  | 'TIMEOUT'
+  | 'CONNECTION_ERROR'
+  | 'ABORT'
+  | 'UNKNOWN';
+
+export interface CloneFromHumanFailure {
+  success: false;
+  error: string;
+  httpStatus: number;
+  errorCode: CloneFromHumanErrorCode;
+}
+
+export type CloneFromHumanResult = CloneFromHumanSuccess | CloneFromHumanFailure;
+
+const CLONE_PATH = '/api/voice/clone-from-human';
+
+function cloneFailure(
+  errorCode: CloneFromHumanErrorCode,
+  error: string,
+  httpStatus = 0
+): CloneFromHumanFailure {
+  return { success: false, error, httpStatus, errorCode };
+}
+
+function mapCloneErrorCode(code: string | undefined): CloneFromHumanErrorCode {
+  switch (code) {
+    case 'VALIDATION_ERROR':
+    case 'INVALID_RECORD_URL':
+    case 'INVALID_API_KEY':
+    case 'SOURCE_AUDIO_NOT_FOUND':
+    case 'AUDIO_TOO_LARGE':
+    case 'INVALID_AUDIO_FORMAT':
+    case 'UNSUPPORTED_LANGUAGE':
+    case 'ELEVEN_IVC_FAILED':
+    case 'ELEVEN_VOICE_LIMIT':
+    case 'ELEVEN_RATE_LIMITED':
+    case 'ELEVEN_AUTH_FAILED':
+    case 'ELEVEN_TTS_PREVIEW_FAILED':
+    case 'ELEVEN_UPSTREAM_ERROR':
+    case 'STORAGE_UPLOAD_ERROR':
+    case 'DB_INSERT_ERROR':
+    case 'INTERNAL_ERROR':
+    case 'TIMEOUT':
+      return code;
+    default:
+      return 'UNKNOWN';
+  }
+}
+
+export async function callCloneFromHuman(
+  params: CloneFromHumanParams,
+  options?: VoiceApiCallOptions
+): Promise<CloneFromHumanResult> {
+  if (!params.recordUrl) {
+    return cloneFailure('VALIDATION_ERROR', 'Missing recordUrl');
+  }
+  const trimmedName = params.name.trim();
+  if (trimmedName.length < 1 || trimmedName.length > 80) {
+    return cloneFailure('VALIDATION_ERROR', 'Name must be 1-80 characters');
+  }
+  if (!params.language || !params.accent) {
+    return cloneFailure('VALIDATION_ERROR', 'Missing language/accent');
+  }
+
+  const url = `${imageApiBaseUrl}${CLONE_PATH}`;
+
+  // PII guard: never log `recordUrl` itself — only its length (API spec § Security).
+  logClone.info('callCloneFromHuman', 'start', {
+    language: params.language,
+    gender: params.gender,
+    age: params.age,
+    humanId: params.source?.humanId,
+    hasDescription: Boolean(params.description),
+    hasTags: Boolean(params.tags),
+    recordUrlLength: params.recordUrl.length,
+  });
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': imageApiKey,
+      },
+      body: JSON.stringify(params),
+      signal: options?.signal,
+    });
+
+    if (options?.signal?.aborted) {
+      return cloneFailure('ABORT', 'Request aborted', 0);
+    }
+
+    if (!response.ok) {
+      const { message, errorCode } = await extractErrorInfo(response);
+      logClone.error('callCloneFromHuman', 'http error', {
+        httpStatus: response.status,
+        errorCode,
+      });
+      return {
+        success: false,
+        error: message,
+        httpStatus: response.status,
+        errorCode: mapCloneErrorCode(errorCode),
+      };
+    }
+
+    const body = (await response.json()) as {
+      success?: boolean;
+      data?: CloneFromHumanSuccess['data'];
+      meta?: Record<string, number>;
+      error?: string;
+    };
+
+    if (body.success === false) {
+      logClone.error('callCloneFromHuman', 'server returned success=false', {
+        error: body.error,
+      });
+      return cloneFailure(
+        'INTERNAL_ERROR',
+        body.error || 'Server returned success=false',
+        response.status
+      );
+    }
+
+    const voice = body.data?.voice;
+    if (!voice || !voice.id) {
+      logClone.error('callCloneFromHuman', 'malformed response', {});
+      return cloneFailure('INTERNAL_ERROR', 'Response missing voice.id', response.status);
+    }
+
+    logClone.info('callCloneFromHuman', 'success', {
+      voiceId: voice.id,
+      elevenId: voice.elevenId,
+      processingTimeMs: body.meta?.processingTimeMs,
+    });
+
+    return {
+      success: true,
+      data: body.data as CloneFromHumanSuccess['data'],
+      meta: body.meta,
+    };
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === 'AbortError' || options?.signal?.aborted) {
+      logClone.info('callCloneFromHuman', 'aborted');
+      return cloneFailure('ABORT', 'Request aborted', 0);
+    }
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    if (err instanceof TypeError) {
+      logClone.error('callCloneFromHuman', 'connection error', {
+        msg: rawMessage.slice(0, 100),
+      });
+      return cloneFailure(
+        'CONNECTION_ERROR',
+        `Could not connect to the server (${rawMessage}).`,
+        0
+      );
+    }
+    logClone.error('callCloneFromHuman', 'unknown error', {
+      name,
+      msg: rawMessage.slice(0, 100),
+    });
+    return cloneFailure('UNKNOWN', rawMessage || 'Unknown error', 0);
+  }
+}

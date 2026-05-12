@@ -36,13 +36,18 @@ function DisabledAction({ icon: Icon, label, variant, tooltip }: DisabledActionP
 
 interface VoicesHeaderProps {
   onPromptClick: () => void;
+  onCloneClick: () => void;
   onImportClick: () => void;
 }
 
-export function VoicesHeader({ onPromptClick, onImportClick }: VoicesHeaderProps) {
+export function VoicesHeader({ onPromptClick, onCloneClick, onImportClick }: VoicesHeaderProps) {
   const handlePromptClick = () => {
     log.info('onPromptClick', 'open prompt modal');
     onPromptClick();
+  };
+  const handleCloneClick = () => {
+    log.info('onCloneClick', 'open clone modal');
+    onCloneClick();
   };
   const handleImportClick = () => {
     log.info('onImportClick', 'open import modal');
@@ -60,7 +65,10 @@ export function VoicesHeader({ onPromptClick, onImportClick }: VoicesHeaderProps
             <Sparkles className="h-4 w-4" />
             Prompt
           </Button>
-          <DisabledAction icon={Copy} label="Clone" variant="ghost" tooltip="Coming soon" />
+          <Button variant="ghost" className="gap-2" onClick={handleCloneClick}>
+            <Copy className="h-4 w-4" />
+            Clone
+          </Button>
           <DisabledAction icon={Shuffle} label="Remix" variant="ghost" tooltip="Coming soon" />
           <Button variant="default" className="gap-2" onClick={handleImportClick}>
             <Download className="h-4 w-4" />

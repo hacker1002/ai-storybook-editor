@@ -7,6 +7,7 @@ import { EditVoiceModal } from '@/features/voices/components/edit-voice-modal';
 import { DeleteVoiceDialog } from '@/features/voices/components/delete-voice-dialog';
 import { PromptVoiceModal } from '@/features/voices/components/prompt-voice-modal/prompt-voice-modal';
 import { ImportVoiceModal } from '@/features/voices/components/import-voice-modal/import-voice-modal';
+import { CloneVoiceModal } from '@/features/voices/components/clone-voice-modal/clone-voice-modal';
 import { useVoiceAudioPlayer } from '@/features/voices/hooks/use-voice-audio-player';
 import {
   applyFilters,
@@ -19,7 +20,7 @@ import {
   useVoicesActions,
   useVoicesLoading,
 } from '@/stores/voices-store';
-import type { Voice, VoicesFilterState } from '@/types/voice';
+import type { Voice, VoicesActiveModal, VoicesFilterState } from '@/types/voice';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Voices', 'VoicesPage');
@@ -47,8 +48,7 @@ export function VoicesPage() {
   const [filters, setFilters] = useState<VoicesFilterState>(DEFAULT_VOICES_FILTERS);
   const [editingVoice, setEditingVoice] = useState<Voice | null>(null);
   const [deletingVoice, setDeletingVoice] = useState<Voice | null>(null);
-  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<VoicesActiveModal>(null);
 
   useEffect(() => {
     log.info('mount', 'fetching voices');
@@ -95,7 +95,17 @@ export function VoicesPage() {
       log.info('handlePromptSaved', 'voice created', { voiceId: voice.id });
       upsertLocal(voice);
       toast.success(`Voice "${voice.name}" đã được tạo`);
-      setIsPromptModalOpen(false);
+      setActiveModal(null);
+    },
+    [upsertLocal]
+  );
+
+  const handleCloneSaved = useCallback(
+    (voice: Voice) => {
+      log.info('handleCloneSaved', 'voice cloned', { voiceId: voice.id });
+      upsertLocal(voice);
+      toast.success(`Voice "${voice.name}" cloned`);
+      setActiveModal(null);
     },
     [upsertLocal]
   );
@@ -105,7 +115,7 @@ export function VoicesPage() {
       log.info('handleImportImported', 'voice imported', { voiceId: voice.id });
       upsertLocal(voice);
       toast.success(`Voice "${voice.name}" imported`);
-      setIsImportModalOpen(false);
+      setActiveModal(null);
     },
     [upsertLocal]
   );
@@ -116,8 +126,9 @@ export function VoicesPage() {
       className="w-full"
     >
       <VoicesHeader
-        onPromptClick={() => setIsPromptModalOpen(true)}
-        onImportClick={() => setIsImportModalOpen(true)}
+        onPromptClick={() => setActiveModal('prompt')}
+        onCloneClick={() => setActiveModal('clone')}
+        onImportClick={() => setActiveModal('import')}
       />
       <VoicesToolbar
         filters={filters}
@@ -155,16 +166,23 @@ export function VoicesPage() {
         />
       ) : null}
 
-      {isPromptModalOpen ? (
+      {activeModal === 'prompt' ? (
         <PromptVoiceModal
-          onClose={() => setIsPromptModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onSaved={handlePromptSaved}
         />
       ) : null}
 
-      {isImportModalOpen ? (
+      {activeModal === 'clone' ? (
+        <CloneVoiceModal
+          onClose={() => setActiveModal(null)}
+          onCloned={handleCloneSaved}
+        />
+      ) : null}
+
+      {activeModal === 'import' ? (
         <ImportVoiceModal
-          onClose={() => setIsImportModalOpen(false)}
+          onClose={() => setActiveModal(null)}
           onImported={handleImportImported}
         />
       ) : null}
