@@ -1,4 +1,5 @@
 import type { VoiceAge, VoiceGender } from '@/types/voice';
+import { DEFAULT_ACCENT_VALUE } from '@/features/voices/constants';
 
 // Modal state machine:
 //   idle       — waiting for user input, form empty
@@ -24,7 +25,7 @@ export const DEFAULT_IMPORT_FORM: ImportVoiceFormState = {
   gender: null,
   age: null,
   language: null,
-  accent: 'neutral',
+  accent: DEFAULT_ACCENT_VALUE,
   description: '',
   tags: '',
   previewAudioUrl: null,

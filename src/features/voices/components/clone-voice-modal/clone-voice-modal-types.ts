@@ -1,4 +1,5 @@
 import type { VoiceAge, VoiceGender } from '@/types/voice';
+import { DEFAULT_ACCENT_VALUE } from '@/features/voices/constants';
 
 // Modal state machine:
 //   idle      — form editable, no clone in flight
@@ -28,12 +29,11 @@ export const DEFAULT_CLONE_VOICE_FORM: CloneVoiceFormState = {
   gender: 0,
   age: 0,
   language: 'en_US',
-  accent: 'neutral',
+  accent: DEFAULT_ACCENT_VALUE,
   description: '',
   tags: '',
 };
 
-// Mirror prompt-voice-form.tsx ACCENT/GENDER/AGE_OPTIONS — keep in sync (extract when Remix modal lands).
 export const GENDER_OPTIONS = [
   { value: 0, label: 'Female' },
   { value: 1, label: 'Male' },
@@ -43,18 +43,4 @@ export const AGE_OPTIONS = [
   { value: 0, label: 'Young' },
   { value: 1, label: 'Middle-aged' },
   { value: 2, label: 'Old' },
-] as const;
-
-export const ACCENT_OPTIONS = [
-  { value: 'neutral', label: 'Neutral' },
-  { value: 'american', label: 'American' },
-  { value: 'british', label: 'British' },
-  { value: 'australian', label: 'Australian' },
-  { value: 'canadian', label: 'Canadian' },
-  { value: 'indian', label: 'Indian' },
-  { value: 'irish', label: 'Irish' },
-  { value: 'scottish', label: 'Scottish' },
-  { value: 'southern_us', label: 'Southern US' },
-  { value: 'northern', label: 'Northern' },
-  { value: 'southern', label: 'Southern' },
 ] as const;

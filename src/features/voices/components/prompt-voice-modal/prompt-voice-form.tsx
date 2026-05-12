@@ -13,6 +13,11 @@ import { Slider } from '@/components/ui/slider';
 import { SUPPORTED_LANGUAGES } from '@/constants/config-constants';
 import type { VoiceAge, VoiceGender } from '@/types/voice';
 import { createLogger } from '@/utils/logger';
+import {
+  DEFAULT_ACCENT_VALUE,
+  getAccentOptions,
+  isValidAccentForLanguage,
+} from '@/features/voices/constants';
 import type { PromptVoiceFormState } from './prompt-voice-modal-types';
 import { validatePromptVoiceForm } from './prompt-voice-form-validation';
 
@@ -27,20 +32,6 @@ const AGE_OPTIONS = [
   { value: 0, label: 'Young' },
   { value: 1, label: 'Middle-aged' },
   { value: 2, label: 'Old' },
-] as const;
-
-const ACCENT_OPTIONS = [
-  { value: 'neutral', label: 'Neutral' },
-  { value: 'american', label: 'American' },
-  { value: 'british', label: 'British' },
-  { value: 'australian', label: 'Australian' },
-  { value: 'canadian', label: 'Canadian' },
-  { value: 'indian', label: 'Indian' },
-  { value: 'irish', label: 'Irish' },
-  { value: 'scottish', label: 'Scottish' },
-  { value: 'southern_us', label: 'Southern US' },
-  { value: 'northern', label: 'Northern' },
-  { value: 'southern', label: 'Southern' },
 ] as const;
 
 interface PromptVoiceFormProps {
@@ -200,7 +191,13 @@ export function PromptVoiceForm({
         <FieldBlock id={languageId} label="Language" required error={errors.language}>
           <Select
             value={value.language}
-            onValueChange={(v) => updateField('language', v)}
+            onValueChange={(v) => {
+              log.debug('updateField', 'change', { field: 'language' });
+              const nextAccent = isValidAccentForLanguage(value.accent, v)
+                ? value.accent
+                : DEFAULT_ACCENT_VALUE;
+              onChange({ ...value, language: v, accent: nextAccent });
+            }}
             disabled={disabled}
           >
             <SelectTrigger id={languageId}>
@@ -226,7 +223,7 @@ export function PromptVoiceForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ACCENT_OPTIONS.map((o) => (
+              {getAccentOptions(value.language).map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>

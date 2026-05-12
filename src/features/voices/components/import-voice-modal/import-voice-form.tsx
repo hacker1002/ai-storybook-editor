@@ -12,6 +12,11 @@ import {
 import { SUPPORTED_LANGUAGES } from '@/constants/config-constants';
 import type { VoiceAge, VoiceGender } from '@/types/voice';
 import { createLogger } from '@/utils/logger';
+import {
+  DEFAULT_ACCENT_VALUE,
+  getAccentOptions,
+  isValidAccentForLanguage,
+} from '@/features/voices/constants';
 import type { ImportVoiceFormState } from './import-voice-modal-types';
 import { validateImportForm } from './import-voice-form-validation';
 
@@ -44,20 +49,6 @@ const AGE_ITEMS: AgeItem[] = [
   { value: '1',   label: 'Middle-aged',  raw: 1 },
   { value: '2',   label: 'Old',          raw: 2 },
 ];
-
-const ACCENT_OPTIONS = [
-  { value: 'neutral',      label: 'Neutral'       },
-  { value: 'american',     label: 'American'      },
-  { value: 'british',      label: 'British'       },
-  { value: 'australian',   label: 'Australian'    },
-  { value: 'canadian',     label: 'Canadian'      },
-  { value: 'indian',       label: 'Indian'        },
-  { value: 'irish',        label: 'Irish'         },
-  { value: 'scottish',     label: 'Scottish'      },
-  { value: 'southern_us',  label: 'Southern US'   },
-  { value: 'northern',     label: 'Northern'      },
-  { value: 'southern',     label: 'Southern'      },
-] as const;
 
 interface ImportVoiceFormProps {
   value: ImportVoiceFormState;
@@ -187,7 +178,14 @@ export function ImportVoiceForm({
         <FieldBlock id={languageId} label="Language" required error={errors.language}>
           <Select
             value={languageValue}
-            onValueChange={(v) => updateField('language', v === UNSET ? null : v)}
+            onValueChange={(v) => {
+              log.debug('updateField', 'change', { field: 'language' });
+              const nextLanguage = v === UNSET ? null : v;
+              const nextAccent = isValidAccentForLanguage(value.accent, nextLanguage)
+                ? value.accent
+                : DEFAULT_ACCENT_VALUE;
+              onChange({ ...value, language: nextLanguage, accent: nextAccent });
+            }}
             disabled={disabled}
           >
             <SelectTrigger
@@ -212,13 +210,13 @@ export function ImportVoiceForm({
           <Select
             value={value.accent}
             onValueChange={(v) => updateField('accent', v)}
-            disabled={disabled}
+            disabled={disabled || value.language === null}
           >
             <SelectTrigger id={accentId}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ACCENT_OPTIONS.map((o) => (
+              {getAccentOptions(value.language).map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>

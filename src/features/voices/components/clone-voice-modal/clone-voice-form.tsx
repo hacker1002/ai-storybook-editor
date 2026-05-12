@@ -13,7 +13,11 @@ import { SUPPORTED_LANGUAGES } from '@/constants/config-constants';
 import type { VoiceAge, VoiceGender } from '@/types/voice';
 import { createLogger } from '@/utils/logger';
 import {
-  ACCENT_OPTIONS,
+  DEFAULT_ACCENT_VALUE,
+  getAccentOptions,
+  isValidAccentForLanguage,
+} from '@/features/voices/constants';
+import {
   AGE_OPTIONS,
   GENDER_OPTIONS,
   type CloneVoiceFormState,
@@ -140,7 +144,13 @@ export function CloneVoiceForm({ value, onChange, disabled, showValidation }: Cl
         <FieldBlock id={languageId} label="Language" required error={errors.language}>
           <Select
             value={value.language}
-            onValueChange={(v) => updateField('language', v)}
+            onValueChange={(v) => {
+              log.debug('updateField', 'change', { field: 'language' });
+              const nextAccent = isValidAccentForLanguage(value.accent, v)
+                ? value.accent
+                : DEFAULT_ACCENT_VALUE;
+              onChange({ ...value, language: v, accent: nextAccent });
+            }}
             disabled={disabled}
           >
             <SelectTrigger id={languageId}>
@@ -166,7 +176,7 @@ export function CloneVoiceForm({ value, onChange, disabled, showValidation }: Cl
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ACCENT_OPTIONS.map((o) => (
+              {getAccentOptions(value.language).map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>

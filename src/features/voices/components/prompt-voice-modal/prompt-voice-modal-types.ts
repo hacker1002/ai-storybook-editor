@@ -1,5 +1,6 @@
 import type { VoiceAge, VoiceGender } from '@/types/voice';
 import type { PreviewCandidate } from '@/apis/voice-api';
+import { DEFAULT_ACCENT_VALUE } from '@/features/voices/constants';
 
 // Modal state machine:
 //   idle       — form only, no previews yet
@@ -25,7 +26,7 @@ export const DEFAULT_PROMPT_VOICE_FORM: PromptVoiceFormState = {
   gender: 0,
   age: 0,
   language: 'en_US',
-  accent: 'neutral',
+  accent: DEFAULT_ACCENT_VALUE,
   description: '',
   tags: '',
   loudness: 0.5,

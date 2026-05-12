@@ -19,6 +19,7 @@ import {
 import type { Voice, VoiceRow } from '@/types/voice';
 import { mapVoiceRow } from '@/features/voices/utils/voice-mapper';
 import { createLogger } from '@/utils/logger';
+import { normalizeAccentForLanguage } from '@/features/voices/constants';
 import {
   DEFAULT_IMPORT_FORM,
   type ImportVoiceFormState,
@@ -111,7 +112,7 @@ function mapApiToFormState(data: GetFromElevenIdData): ImportVoiceFormState {
     gender: data.gender,
     age: data.age,
     language,
-    accent: data.accent,
+    accent: normalizeAccentForLanguage(data.accent, language),
     description: data.description ?? '',
     tags: data.tags ?? '',
     previewAudioUrl: data.previewAudioUrl,
