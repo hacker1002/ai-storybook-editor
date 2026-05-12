@@ -1,7 +1,7 @@
 // add-voice-profile-modal.tsx — Modal: upload or record voice sample → add voice profile.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, Mic, Square, Upload, X } from 'lucide-react';
+import { Circle, Mic, MicOff, Square, Upload, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,7 @@ const ALLOWED_AUDIO_TYPES = [
 ];
 const RECORD_MIN_DURATION_MS = 30_000;
 const RECORD_MAX_DURATION_MS = 3_600_000;
+const MIC_TEST_MAX_DURATION_MS = 10_000;
 
 type Step = 'form' | 'recording' | 'preview' | 'uploading';
 type SourceTab = 'upload' | 'record';
@@ -93,6 +94,8 @@ export function AddVoiceProfileModal({
   const [step, setStep] = useState<Step>('form');
   const [error, setError] = useState<string | null>(null);
   const [scriptLang, setScriptLang] = useState<string>(DEFAULT_RECORDING_SCRIPT_CODE);
+  const [isTestingMic, setIsTestingMic] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -100,6 +103,12 @@ export function AddVoiceProfileModal({
   const startedAtRef = useRef<number>(0);
   const timerIdRef = useRef<number | null>(null);
   const autoStopTimeoutRef = useRef<number | null>(null);
+
+  const testStreamRef = useRef<MediaStream | null>(null);
+  const testAudioCtxRef = useRef<AudioContext | null>(null);
+  const testAnalyserRef = useRef<AnalyserNode | null>(null);
+  const testRafRef = useRef<number | null>(null);
+  const testAutoStopRef = useRef<number | null>(null);
 
   const parsedAge = useMemo(() => {
     if (ageRaw.trim() === '') return null;
@@ -128,6 +137,28 @@ export function AddVoiceProfileModal({
     setRecordingDurationMs(0);
   }, [audioObjectUrl]);
 
+  const stopMicTest = useCallback(() => {
+    if (testRafRef.current !== null) {
+      window.cancelAnimationFrame(testRafRef.current);
+      testRafRef.current = null;
+    }
+    if (testAutoStopRef.current !== null) {
+      window.clearTimeout(testAutoStopRef.current);
+      testAutoStopRef.current = null;
+    }
+    if (testStreamRef.current) {
+      testStreamRef.current.getTracks().forEach((t) => t.stop());
+      testStreamRef.current = null;
+    }
+    if (testAudioCtxRef.current) {
+      void testAudioCtxRef.current.close().catch(() => undefined);
+      testAudioCtxRef.current = null;
+    }
+    testAnalyserRef.current = null;
+    setMicLevel(0);
+    setIsTestingMic(false);
+  }, []);
+
   // Cleanup mic + timers on unmount.
   useEffect(() => {
     return () => {
@@ -141,6 +172,18 @@ export function AddVoiceProfileModal({
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
       if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl);
+      if (testRafRef.current !== null) {
+        window.cancelAnimationFrame(testRafRef.current);
+      }
+      if (testAutoStopRef.current !== null) {
+        window.clearTimeout(testAutoStopRef.current);
+      }
+      if (testStreamRef.current) {
+        testStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      if (testAudioCtxRef.current) {
+        void testAudioCtxRef.current.close().catch(() => undefined);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -169,8 +212,60 @@ export function AddVoiceProfileModal({
     }
   };
 
+  const handleStartMicTest = async () => {
+    if (isTestingMic) {
+      stopMicTest();
+      return;
+    }
+    log.info('handleStartMicTest', 'start');
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      testStreamRef.current = stream;
+      const AudioCtx =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) {
+        log.warn('handleStartMicTest', 'AudioContext unavailable');
+        stream.getTracks().forEach((t) => t.stop());
+        testStreamRef.current = null;
+        setError('Mic test not supported in this browser.');
+        return;
+      }
+      const ctx = new AudioCtx();
+      testAudioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      testAnalyserRef.current = analyser;
+      const buffer = new Uint8Array(analyser.fftSize);
+      setIsTestingMic(true);
+
+      const tick = () => {
+        const a = testAnalyserRef.current;
+        if (!a) return;
+        a.getByteTimeDomainData(buffer);
+        let sumSq = 0;
+        for (let i = 0; i < buffer.length; i++) {
+          const v = (buffer[i] - 128) / 128;
+          sumSq += v * v;
+        }
+        const rms = Math.sqrt(sumSq / buffer.length);
+        setMicLevel(Math.min(1, rms * 2.5));
+        testRafRef.current = window.requestAnimationFrame(tick);
+      };
+      testRafRef.current = window.requestAnimationFrame(tick);
+      testAutoStopRef.current = window.setTimeout(stopMicTest, MIC_TEST_MAX_DURATION_MS);
+    } catch (e) {
+      log.warn('handleStartMicTest', 'getUserMedia failed', { error: String(e) });
+      stopMicTest();
+      setError('Microphone access denied. Check browser permissions.');
+    }
+  };
+
   const handleStartRecording = async () => {
     log.info('handleStartRecording', 'start');
+    if (isTestingMic) stopMicTest();
     setError(null);
     const mime = pickSupportedMimeType();
     try {
@@ -397,30 +492,59 @@ export function AddVoiceProfileModal({
                     {getRecordingScript(scriptLang)}
                   </div>
                   <div className="flex flex-col items-center gap-2">
-                    {step === 'recording' ? (
+                    <div className="flex items-center gap-2">
+                      {step === 'recording' ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="lg"
+                          className="gap-2"
+                          onClick={handleStopRecording}
+                        >
+                          <Square className="h-5 w-5" />
+                          Stop
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="lg"
+                          className="gap-2"
+                          onClick={handleStartRecording}
+                          disabled={step === 'uploading' || isTestingMic}
+                        >
+                          <Circle className="h-5 w-5 text-destructive fill-destructive" />
+                          Record
+                        </Button>
+                      )}
                       <Button
                         type="button"
-                        variant="destructive"
+                        variant={isTestingMic ? 'secondary' : 'outline'}
                         size="lg"
                         className="gap-2"
-                        onClick={handleStopRecording}
+                        onClick={handleStartMicTest}
+                        disabled={step === 'recording' || step === 'uploading'}
+                        aria-pressed={isTestingMic}
                       >
-                        <Square className="h-5 w-5" />
-                        Stop
+                        {isTestingMic ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                        {isTestingMic ? 'Stop Test' : 'Test Mic'}
                       </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="lg"
-                        className="gap-2"
-                        onClick={handleStartRecording}
-                        disabled={step === 'uploading'}
+                    </div>
+                    {isTestingMic ? (
+                      <div
+                        className="h-1.5 w-48 overflow-hidden rounded-full bg-muted"
+                        role="meter"
+                        aria-label="Microphone input level"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(micLevel * 100)}
                       >
-                        <Circle className="h-5 w-5 text-destructive fill-destructive" />
-                        Record
-                      </Button>
-                    )}
+                        <div
+                          className="h-full bg-primary transition-[width] duration-75"
+                          style={{ width: `${Math.round(micLevel * 100)}%` }}
+                        />
+                      </div>
+                    ) : null}
                     <span className="text-sm font-mono text-muted-foreground tabular-nums">
                       {step === 'recording'
                         ? formatDuration(recordingDurationMs)
@@ -430,7 +554,7 @@ export function AddVoiceProfileModal({
                     </span>
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Mic className="h-3 w-3" />
-                      Minimum 30 seconds required
+                      {isTestingMic ? 'Speak to verify your microphone' : 'Minimum 30 seconds required'}
                     </span>
                   </div>
                 </>
