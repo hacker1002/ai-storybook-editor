@@ -90,9 +90,7 @@ function SubSection({
 }) {
   return (
     <div>
-      <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
+      <p className="px-2 pb-1 text-xs text-muted-foreground">{label}</p>
       <div className="space-y-0.5">{children}</div>
     </div>
   );
@@ -108,13 +106,17 @@ function InventoryRow({
   onEyeClick: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-sm px-2 py-1 text-xs hover:bg-accent">
-      <span className="flex-1 truncate">{name}</span>
-      <span className="text-muted-foreground">@{entityKey}</span>
+    <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent">
+      <div className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className="truncate text-sm font-medium">{name}</span>
+        <span className="truncate text-xs text-muted-foreground">
+          @{entityKey}
+        </span>
+      </div>
       <Button
         variant="ghost"
         size="icon"
-        className="h-6 w-6"
+        className="h-7 w-7 shrink-0"
         onClick={(e) => {
           e.stopPropagation();
           onEyeClick();

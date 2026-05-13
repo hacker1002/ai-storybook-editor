@@ -1,6 +1,6 @@
 // inject-button.tsx — 5-visual-state button reactive to inject job status.
 
-import { CheckCircle2, AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, RefreshCw, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/utils';
 import type { InjectJob } from '@/types/remix';
@@ -71,8 +71,13 @@ export function InjectButton({ job, onInject, onCancel }: Props) {
 
   // idle / cancelled / undefined
   return (
-    <Button onClick={onInject} size="sm" className="w-full">
-      <Sparkles className="mr-2 h-3.5 w-3.5" />
+    <Button
+      onClick={onInject}
+      size="sm"
+      variant="secondary"
+      className="w-full"
+    >
+      <Repeat className="mr-2 h-3.5 w-3.5" />
       Inject
     </Button>
   );
