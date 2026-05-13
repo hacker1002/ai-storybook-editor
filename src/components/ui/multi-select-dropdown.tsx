@@ -120,14 +120,27 @@ export function MultiSelectDropdown({
                   >
                     {isPrimary && <Star className="h-3 w-3 fill-current text-primary" />}
                     {item.label}
-                    <button
-                      type="button"
+                    <span
+                      role="button"
+                      tabIndex={0}
                       onClick={(e) => handleRemoveTag(e, item.value)}
-                      className="text-muted-foreground hover:text-foreground"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const next = selectedValues.filter((v) => v !== item.value);
+                          log.info('handleRemoveTag', 'tag removed via keyboard', {
+                            value: item.value,
+                            remaining: next.length,
+                          });
+                          onChange(next);
+                        }
+                      }}
+                      className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring rounded"
                       aria-label={`Remove ${item.label}`}
                     >
                       <X className="h-3 w-3" />
-                    </button>
+                    </span>
                   </span>
                 );
               })
