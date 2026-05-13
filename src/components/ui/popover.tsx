@@ -9,7 +9,7 @@ const PopoverAnchor = PopoverPrimitive.Anchor;
 const PopoverContent = React.forwardRef<
   React.ComponentRef<typeof PopoverPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, align = 'center', sideOffset = 4, ...props }, ref) => (
+>(({ className, align = 'center', sideOffset = 4, onWheel, onTouchMove, ...props }, ref) => (
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Content
       ref={ref}
@@ -24,6 +24,18 @@ const PopoverContent = React.forwardRef<
         'data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
         className
       )}
+      onWheel={(e) => {
+        // Portaled Popover inside Radix Dialog: react-remove-scroll's document
+        // wheel listener prevents default on events outside the Dialog content
+        // boundary, blocking scroll inside popover scrollable regions.
+        // Stop bubbling here so the document listener never sees the event.
+        e.stopPropagation();
+        onWheel?.(e);
+      }}
+      onTouchMove={(e) => {
+        e.stopPropagation();
+        onTouchMove?.(e);
+      }}
       {...props}
     />
   </PopoverPrimitive.Portal>

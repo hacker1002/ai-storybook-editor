@@ -1,0 +1,46 @@
+// supabase-mapping.ts — Convert raw Supabase row → Remix domain type.
+// JSONB columns come back as `unknown`-shaped objects; narrow defensively.
+
+import type {
+  Remix,
+  RemixCharacter,
+  RemixConfig,
+  RemixIllustration,
+  RemixMix,
+  RemixProp,
+} from '@/types/remix';
+
+interface RawRemixRow {
+  id: string;
+  snapshot_id: string;
+  name?: string | null;
+  remix_config?: unknown;
+  illustration?: unknown;
+  characters?: unknown;
+  props?: unknown;
+  mixes?: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+const EMPTY_ILLUSTRATION: RemixIllustration = { spreads: [], sections: [] };
+const EMPTY_CONFIG: RemixConfig = {
+  characters: [],
+  props: [],
+  languages: [],
+};
+
+export function mapRowToRemix(row: RawRemixRow): Remix {
+  return {
+    id: row.id,
+    snapshot_id: row.snapshot_id,
+    name: row.name ?? 'Untitled Remix',
+    remix_config: (row.remix_config as RemixConfig | null) ?? EMPTY_CONFIG,
+    illustration: (row.illustration as RemixIllustration | null) ?? EMPTY_ILLUSTRATION,
+    characters: (row.characters as RemixCharacter[] | null) ?? [],
+    props: (row.props as RemixProp[] | null) ?? [],
+    mixes: (row.mixes as RemixMix[] | null) ?? [],
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}

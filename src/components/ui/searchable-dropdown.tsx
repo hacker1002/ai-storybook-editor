@@ -116,7 +116,7 @@ export function SearchableDropdown({
           />
         </div>
 
-        {/* Options list */}
+        {/* Options list — scroll inside popover handled at PopoverContent root. */}
         <div className="max-h-[200px] overflow-y-auto py-1">
           {filteredOptions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">No results found</p>

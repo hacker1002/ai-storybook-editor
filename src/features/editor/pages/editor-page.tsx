@@ -27,6 +27,7 @@ import { HistoryCreativeSpace } from '../components/history-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
 import { SharesCreativeSpace } from '../components/shares-creative-space';
 import { ConfigCreativeSpace } from '../components/config-creative-space';
+import { RemixCreativeSpace } from '../components/remix-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { InteractionLayerProvider } from '../contexts';
 import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
@@ -214,9 +215,10 @@ export function EditorPage() {
         return <HistoryCreativeSpace />;
       case 'share':
         return <SharesCreativeSpace />;
+      case 'remix':
+        return <RemixCreativeSpace />;
       case 'sketch':
       case 'quiz':
-      case 'remix':
       case 'flag':
       case 'collaborator':
         return <MockCreativeSpace name={activeCreativeSpace} />;
