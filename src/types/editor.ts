@@ -80,6 +80,40 @@ export interface BookBranch {
   typography: Record<string, BranchTypographySettings>;
 }
 
+// ── Remix settings (book.remix JSONB) ─────────────────────────────────────
+export type RemixLanguageCode = 'en_US' | 'vi_VN' | 'ja_JP' | 'ko_KR' | 'zh_CN';
+export type CharacterRemixType = 'body' | 'custom';
+
+export interface RemixLanguageEntry {
+  name: string;
+  code: RemixLanguageCode;
+  is_enabled: boolean;
+}
+
+export interface RemixNarratorEntry {
+  is_enabled: boolean;
+}
+
+export interface RemixCharacterEntry {
+  key: string;
+  name: string;
+  type: CharacterRemixType;
+  is_enabled: boolean;
+}
+
+export interface RemixPropEntry {
+  key: string;
+  name: string;
+  is_enabled: boolean;
+}
+
+export interface BookRemix {
+  languages: RemixLanguageEntry[];
+  narrator: RemixNarratorEntry;
+  characters: RemixCharacterEntry[];
+  props: RemixPropEntry[];
+}
+
 // Reading effects (book.effects JSONB) — page transition + gyroscope toggle.
 // transition_type enum is forward-compatible: player falls back to 'turn' on unknown values.
 // gyroscope: persistence-only this phase; player runtime hook deferred to a later phase.
@@ -220,6 +254,7 @@ export interface Book {
   music: BookMusicSettings | null;
   sound: BookSoundSettings | null;
   effects: BookEffectsSettings | null;
+  remix: BookRemix | null;
   template_layout: BookTemplateLayout | null;
   created_at: string;
   updated_at: string;

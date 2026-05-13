@@ -125,6 +125,7 @@ export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreview
           }
         : null,
       effects: book.effects as unknown as Book['effects'],
+      remix: null,
       template_layout: book.template_layout as unknown as Book['template_layout'],
       created_at: '',
       updated_at: '',

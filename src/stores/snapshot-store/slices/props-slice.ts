@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, PropsSlice } from '../types';
 import { createLogger } from '@/utils/logger';
+import { cascadeRemixName } from '../utils/remix-name-resync';
 
 const log = createLogger('Store', 'PropsSlice');
 
@@ -27,7 +28,7 @@ export const createPropsSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  updateProp: (key, updates) =>
+  updateProp: (key, updates) => {
     set((state) => {
       const idx = state.props.findIndex((p) => p.key === key);
       if (idx !== -1) {
@@ -35,7 +36,11 @@ export const createPropsSlice: StateCreator<
         Object.assign(state.props[idx], updates);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    if (typeof updates.name === 'string') {
+      cascadeRemixName('prop', key, updates.name);
+    }
+  },
 
   deleteProp: (key) =>
     set((state) => {

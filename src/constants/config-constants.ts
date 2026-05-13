@@ -10,6 +10,9 @@ import type {
   BookSoundSettings,
   BookEffectsSettings,
   TransitionType,
+  BookRemix,
+  CharacterRemixType,
+  RemixLanguageCode,
 } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 
@@ -228,6 +231,30 @@ export const TRANSITION_OPTIONS: ReadonlyArray<{ value: TransitionType; label: s
 export const DEFAULT_EFFECTS: BookEffectsSettings = {
   transition_type: 'turn',
   gyroscope: false,
+};
+
+// ── Remix settings ────────────────────────────────────────────────────────
+
+export const REMIX_LANGUAGES: ReadonlyArray<{ code: RemixLanguageCode; name: string; label: string }> = [
+  { code: 'en_US', name: 'English',    label: 'English (en-US)'    },
+  { code: 'vi_VN', name: 'Vietnamese', label: 'Vietnamese (vi-VN)' },
+  { code: 'ja_JP', name: 'Japanese',   label: 'Japanese (ja-JP)'   },
+  { code: 'ko_KR', name: 'Korean',     label: 'Korean (ko-KR)'     },
+  { code: 'zh_CN', name: 'Chinese',    label: 'Chinese (zh-CN)'    },
+] as const;
+
+export const CHARACTER_TYPE_OPTIONS: ReadonlyArray<{ value: CharacterRemixType; label: string }> = [
+  { value: 'body',   label: 'Body'           },
+  { value: 'custom', label: 'Body & Customs' },
+] as const;
+
+export const DEFAULT_CHARACTER_REMIX_TYPE: CharacterRemixType = 'body';
+
+export const DEFAULT_REMIX: BookRemix = {
+  languages: [],
+  narrator:  { is_enabled: false },
+  characters: [],
+  props:      [],
 };
 
 // ── Preview texts ────────────────────────────────────────────────────────────

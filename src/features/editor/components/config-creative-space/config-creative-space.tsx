@@ -10,6 +10,7 @@ import { ConfigNarratorSettings } from './config-narrator-settings';
 import { ConfigBranchSettings } from './config-branch-settings';
 import { ConfigLayoutSettings } from './config-layout-settings';
 import { ConfigEffectSettings } from './config-effect-settings';
+import { ConfigRemixSettings } from './config-remix-settings';
 import { ConfigMusicsSoundsSettings } from './musics-sounds/config-musics-sounds-settings';
 import type { ConfigSection } from '@/constants/config-constants';
 import { createLogger } from '@/utils/logger';
@@ -42,6 +43,7 @@ export function ConfigCreativeSpace() {
       case 'branch':  return <ConfigBranchSettings />;
       case 'layout':  return <ConfigLayoutSettings />;
       case 'effect':  return <ConfigEffectSettings />;
+      case 'remix':   return <ConfigRemixSettings />;
       default:        return <PlaceholderPanel section={activeSection} />;
     }
   };

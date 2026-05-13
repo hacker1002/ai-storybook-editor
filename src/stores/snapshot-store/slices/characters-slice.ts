@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, CharactersSlice } from '../types';
 import { createLogger } from '@/utils/logger';
+import { cascadeRemixName } from '../utils/remix-name-resync';
 
 const log = createLogger('Store', 'CharactersSlice');
 
@@ -27,7 +28,7 @@ export const createCharactersSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  updateCharacter: (key, updates) =>
+  updateCharacter: (key, updates) => {
     set((state) => {
       const idx = state.characters.findIndex((c) => c.key === key);
       if (idx !== -1) {
@@ -35,7 +36,11 @@ export const createCharactersSlice: StateCreator<
         Object.assign(state.characters[idx], updates);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    if (typeof updates.name === 'string') {
+      cascadeRemixName('character', key, updates.name);
+    }
+  },
 
   deleteCharacter: (key) =>
     set((state) => {
