@@ -4,21 +4,14 @@
 import { useState, useCallback } from "react";
 import {
   PlayableSpreadView,
-  type OperationMode,
   type PlayableSpread,
-  type ItemType,
-  type AssetSwapParams,
 } from "@/features/editor/components/playable-spread-view";
-import { AnimationEditorSidebar } from '@/features/editor/components/objects-creative-space';
 import { PlayerAnimationSidebar } from '@/features/editor/components/preview-creative-space';
 import { useDemoAnimationState } from '../hooks/use-demo-animation-state';
-import { getFirstTextboxKey } from "@/features/editor/utils/textbox-helpers";
-import { createLogger } from "@/utils/logger";
 import {
   createPlayableSpreads,
   type CreatePlayableSpreadOptions,
 } from "../__mocks__/playable-spread-factory";
-import { createMockRemixAssets } from "../__mocks__/remix-mock-factory";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -38,8 +31,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Settings, RefreshCw } from "lucide-react";
-
-const log = createLogger('Demo', 'DemoPlayableSpreadView');
 
 // === Mock Options ===
 interface MockOptions {
@@ -69,10 +60,6 @@ export function DemoPlayableSpreadView() {
   const [mockOptions, setMockOptions] =
     useState<MockOptions>(DEFAULT_MOCK_OPTIONS);
 
-  // Operation mode state
-  const [operationMode, setOperationMode] =
-    useState<OperationMode>("remix-editor");
-
   // Generate spreads from options
   const generateSpreads = useCallback((opts: MockOptions): PlayableSpread[] => {
     const factoryOpts: CreatePlayableSpreadOptions = {
@@ -93,26 +80,18 @@ export function DemoPlayableSpreadView() {
     generateSpreads(DEFAULT_MOCK_OPTIONS)
   );
 
-  // Remix assets state
-  const [remixAssets] = useState(() => createMockRemixAssets(3));
-
   // Selected spread tracking
   const [selectedSpreadId, setSelectedSpreadId] = useState<string | null>(
     () => spreads[0]?.id ?? null
   );
   const selectedSpread = spreads.find((s) => s.id === selectedSpreadId) ?? null;
 
-  // Animation state hook (for animation-editor mode)
+  // Animation state hook — feeds PlayerAnimationSidebar (read-only in player demo)
   const animState = useDemoAnimationState({
     spreads,
     selectedSpreadId,
     setSpreads,
   });
-
-  // Preview state (true when player canvas is active — disables sidebar editing)
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const handlePreview = useCallback(() => setIsPreviewing(true), []);
-  const handleStopPreview = useCallback(() => setIsPreviewing(false), []);
 
   // Regenerate mock data
   const handleRegenerate = useCallback(() => {
@@ -128,49 +107,6 @@ export function DemoPlayableSpreadView() {
     },
     []
   );
-
-  // === PlayableSpreadView Handlers ===
-  const handleItemSelect = useCallback((itemType: ItemType | null, itemId: string | null) => {
-    log.debug('handleItemSelect', 'item selected', { itemType, itemId });
-    animState.handleItemSelect(itemType, itemId);
-  }, [animState.handleItemSelect]);
-
-  const handleAssetSwap = useCallback(
-    async (params: AssetSwapParams): Promise<void> => {
-      log.info('handleAssetSwap', 'asset swap started', { targetId: params.targetId, spreadId: params.spreadId });
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      log.info('handleAssetSwap', 'asset swap completed', { targetId: params.targetId });
-    },
-    []
-  );
-
-  const handleTextChange = useCallback((textboxId: string, newText: string) => {
-    setSpreads((prevSpreads) =>
-      prevSpreads.map((spread) => {
-        const textboxIndex = spread.textboxes?.findIndex((tb) => tb.id === textboxId);
-        if (textboxIndex === undefined || textboxIndex === -1) return spread;
-
-        const textbox = spread.textboxes[textboxIndex];
-        const langKey = getFirstTextboxKey(textbox);
-        if (!langKey) return spread;
-
-        const langData = textbox[langKey];
-        if (!langData || typeof langData !== "object") return spread;
-
-        const updatedTextboxes = [...spread.textboxes];
-        updatedTextboxes[textboxIndex] = {
-          ...textbox,
-          [langKey]: {
-            ...langData,
-            text: newText,
-          },
-        };
-
-        return { ...spread, textboxes: updatedTextboxes };
-      })
-    );
-  }, []);
 
   const handleSpreadSelect = useCallback((spreadId: string) => {
     setSelectedSpreadId(spreadId);
@@ -188,20 +124,6 @@ export function DemoPlayableSpreadView() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* Mode Select */}
-            <Select
-              value={operationMode}
-              onValueChange={(v) => setOperationMode(v as OperationMode)}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="remix-editor">Remix Editor</SelectItem>
-                <SelectItem value="player">Player</SelectItem>
-              </SelectContent>
-            </Select>
-
             {/* Settings Popover */}
             <Popover>
               <PopoverTrigger asChild>
@@ -368,43 +290,14 @@ export function DemoPlayableSpreadView() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden flex">
-          {/* Animation Editor Sidebar - available in object/remix mode for demo purposes */}
-          {operationMode === 'remix-editor' && !isPreviewing && (
-            <AnimationEditorSidebar
-              animations={animState.filteredAnimations}
-              allAnimations={animState.allAnimations}
-              selectedItem={animState.selectedItem}
-              expandedAnimationIndex={animState.expandedAnimationIndex}
-              availableEffects={animState.availableEffects}
-              filterState={animState.filterState}
-              objectFilterOptions={animState.objectFilterOptions}
-              onFilterChange={animState.handleFilterChange}
-              onExpandChange={animState.handleExpandChange}
-              onAddAnimation={animState.handleAddAnimation}
-              onUpdateAnimation={animState.handleUpdateAnimation}
-              onDeleteAnimation={animState.handleDeleteAnimation}
-              onReorderAnimation={animState.handleReorderAnimation}
-              onItemSelect={handleItemSelect}
-            />
-          )}
+          {/* Player Animation Sidebar (read-only animation list) */}
+          <PlayerAnimationSidebar animations={animState.allAnimations} />
 
-          {/* Player Animation Sidebar - player mode or preview mode (read-only) */}
-          {(operationMode === 'player' || isPreviewing) && (
-            <PlayerAnimationSidebar
-              animations={animState.allAnimations}
-            />
-          )}
           {/* PlayableSpreadView Component */}
           <div className="flex-1 overflow-hidden">
             <PlayableSpreadView
-              mode={operationMode}
               spreads={spreads}
-              assets={remixAssets}
-              onAssetSwap={handleAssetSwap}
-              onTextChange={handleTextChange}
               onSpreadSelect={handleSpreadSelect}
-              onPreview={handlePreview}
-              onStopPreview={handleStopPreview}
             />
           </div>
 
@@ -430,23 +323,6 @@ export function DemoPlayableSpreadView() {
               )}
             </div>
 
-            {/* Remix Assets Panel - only in remix-editor mode */}
-            {operationMode === "remix-editor" && (
-              <>
-                <Separator />
-                <div className="p-3 border-b bg-background">
-                  <h3 className="text-sm font-medium">Remix Assets</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {remixAssets.length} assets configured
-                  </p>
-                </div>
-                <div className="flex-1 overflow-auto p-3 max-h-64">
-                  <pre className="text-xs font-mono whitespace-pre-wrap break-all">
-                    {JSON.stringify(remixAssets, null, 2)}
-                  </pre>
-                </div>
-              </>
-            )}
           </div>
         </main>
       </div>

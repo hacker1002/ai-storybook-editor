@@ -42,45 +42,12 @@ export type PlayerAction =
   | { type: 'CLICK_LOOP_REPLAY'; itemId: string };
 
 // === Core Enums/Types ===
-export type OperationMode = 'remix-editor' | 'player';
-export type ActiveCanvas = 'remix-editor' | 'player';
 export type PlayEdition = 'classic' | 'dynamic' | 'interactive';
 export type PlayMode = 'off' | 'auto';
 
 // === PlayableSpread ===
 export interface PlayableSpread extends BaseSpread {
   animations: SpreadAnimation[];
-}
-
-// === Remix Asset (align with DB schema) ===
-export interface RemixAsset {
-  name: string;
-  key: string;
-  type: 'character' | 'prop';
-  image_url: string;
-  target: {
-    name: string;
-    key: string;
-  };
-}
-
-// === Remix Editor State ===
-export interface RemixEditorState {
-  selectedItemId: string | null;
-  selectedAssetKey: string | null;
-  toolbarPosition: { x: number; y: number } | null;
-  prompt: string;
-  referenceImage: File | null;
-  isSubmitting: boolean;
-  editingTextboxId: string | null;
-}
-
-// === Action Parameters ===
-export interface AssetSwapParams {
-  prompt: string;
-  referenceImage: File | null;
-  targetId: string;
-  spreadId: string;
 }
 
 // === Spread History Entry (navigation breadcrumb for branching player) ===

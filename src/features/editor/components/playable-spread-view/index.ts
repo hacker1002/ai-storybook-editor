@@ -2,13 +2,8 @@
 
 // === Domain Types (re-export from @/types for barrel consumers) ===
 export type {
-  OperationMode,
-  ActiveCanvas,
   PlayMode,
   PlayableSpread,
-  RemixAsset,
-  RemixEditorState,
-  AssetSwapParams,
   PlayerPhase,
   AnimationStep,
   ReplayableItem,
@@ -23,11 +18,7 @@ export { PLAYABLE_ZOOM, ANIMATION_PRESETS } from '@/constants/playable-constants
 
 // === Components ===
 export { PlayableSpreadView } from './playable-spread-view';
-export { PlayableEditorHeader } from './playable-editor-header';
 export { PlayableThumbnailList } from './playable-thumbnail-list';
-export { RemixEditorCanvas } from './remix-editor-canvas';
-export { PromptToolbar } from './prompt-toolbar';
-export { SelectionOverlay } from './selection-overlay';
 export { PlayerCanvas } from './player-canvas';
 export { PlayerControlSidebar } from './player-control-sidebar';
 export { BranchPathModal } from './branch-path-modal';

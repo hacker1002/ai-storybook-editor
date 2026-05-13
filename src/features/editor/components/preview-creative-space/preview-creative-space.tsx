@@ -1,6 +1,6 @@
 // preview-creative-space.tsx - Dedicated creative space for animation preview/playback
 // Always uses retouch animation data regardless of current pipeline step.
-// Renders PlayerAnimationSidebar + PlayableSpreadView(mode=player).
+// Renders PlayerAnimationSidebar + PlayableSpreadView (pure player).
 "use client";
 
 import { useState, useMemo } from "react";
@@ -91,7 +91,6 @@ export function PreviewCreativeSpace() {
       />
       <div className="flex-1 overflow-hidden">
         <PlayableSpreadView
-          mode="player"
           spreads={playableSpreads}
           sections={sections}
           onSpreadSelect={setUserSelectedSpreadId}

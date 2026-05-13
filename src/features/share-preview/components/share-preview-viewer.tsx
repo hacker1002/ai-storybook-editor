@@ -214,7 +214,6 @@ export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreview
   return (
     <div className="h-full">
       <PlayableSpreadView
-        mode="player"
         spreads={playableSpreads}
         sections={sections}
         bookTitle={book.title}

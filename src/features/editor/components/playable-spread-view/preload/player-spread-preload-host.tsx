@@ -1,11 +1,10 @@
 // player-spread-preload-host.tsx — Host component that owns the spread media
-// preload lifecycle while the player canvas is active.
+// preload lifecycle.
 //
-// Renders nothing. Mounted conditionally by PlayableSpreadView when
-// `activeCanvas === 'player'` so React's mount/unmount drives the sliding
-// window (un)scheduling inside `usePlayerSpreadPreload`. Mirrors
-// PlayerAudioMixerHost to keep player-mode-only side effects scoped via the
-// React tree (no `enabled` flag toggling effect lifecycle).
+// Renders nothing. Always mounted by PlayableSpreadView (pure player) so
+// React's mount/unmount drives the sliding window (un)scheduling inside
+// `usePlayerSpreadPreload`. Kept in a dedicated host (vs inline) to scope
+// the hook's lifecycle owner and mirror PlayerAudioMixerHost.
 //
 // Spec: ai-storybook-design/component/editor-page/shared/playable-spread-view/03-11-spread-media-preload.md §8
 

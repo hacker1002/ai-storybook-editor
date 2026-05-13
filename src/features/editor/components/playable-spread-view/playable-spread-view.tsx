@@ -5,17 +5,12 @@ import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'PlayableSpreadView');
 import type {
-  OperationMode,
-  ActiveCanvas,
   PlayMode,
   PlayEdition,
   PlayableSpread,
-  RemixAsset,
-  AssetSwapParams,
 } from "@/types/playable-types";
 import type { Section } from "@/types/illustration-types";
 import { PLAYABLE_ZOOM } from "@/constants/playable-constants";
-import { useSetZoomLevel } from '@/stores/editor-settings-store';
 import {
   useSpreadHistories,
   useCurrentSection,
@@ -30,9 +25,7 @@ import {
   useBookEffects,
 } from '@/stores/book-store';
 import { usePlayerAudioStore } from '@/stores/player-audio-store';
-import { PlayableEditorHeader } from "./playable-editor-header";
 import { PlayableThumbnailList } from "./playable-thumbnail-list";
-import { RemixEditorCanvas } from "./remix-editor-canvas";
 import { PlayerCanvas, type PlayerCanvasHandle } from "./player-canvas";
 import { BranchPathModal } from "./branch-path-modal";
 import { FirstGestureGate } from "./first-gesture-gate";
@@ -94,15 +87,9 @@ function autoResolveNextSpread(
 // === Props ===
 
 interface PlayableSpreadViewProps {
-  mode: OperationMode;
   spreads: PlayableSpread[];
   sections?: Section[];
-  assets?: RemixAsset[];
-  onAssetSwap?: (params: AssetSwapParams) => Promise<void>;
-  onTextChange?: (textboxId: string, newText: string) => void;
   onSpreadSelect?: (spreadId: string) => void;
-  onPreview?: () => void;
-  onStopPreview?: () => void;
   // Share preview context — optional, undefined = default editor behavior
   bookTitle?: string;
   availableEditions?: { classic?: boolean; dynamic?: boolean; interactive?: boolean };
@@ -116,13 +103,9 @@ interface PlayableSpreadViewProps {
   isSharePreview?: boolean;
   // Controlled-or-uncontrolled props (ADR-021)
   selectedSpreadId?: string | null;      // controlled from parent
-  zoomLevel?: number;                     // controlled from parent
-  onZoomChange?: (level: number) => void; // notify parent of zoom change
 }
 
 const KEYBOARD_SHORTCUTS = {
-  TOGGLE_PLAY: ' ',
-  STOP: 'Escape',
   PREV_SPREAD: 'ArrowLeft',
   NEXT_SPREAD: 'ArrowRight',
   TOGGLE_MUTE: 'm',
@@ -133,29 +116,19 @@ const KEYBOARD_SHORTCUTS = {
 } as const;
 
 export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
-  mode,
   spreads,
   sections,
-  assets,
-  onAssetSwap,
-  onTextChange,
   onSpreadSelect,
-  onPreview,
-  onStopPreview,
   bookTitle,
   availableEditions,
   availableLanguages,
   pageNumbering,
   isSharePreview = false,
   selectedSpreadId: propSelectedSpreadId,
-  zoomLevel: propZoomLevel,
-  onZoomChange: propOnZoomChange,
 }) => {
 
   // === Internal State ===
-  const [activeCanvas, setActiveCanvas] = useState<ActiveCanvas>(mode);
   // First-gesture gate: required to unlock browser autoplay before PlayerCanvas mounts.
-  // Reset whenever activeCanvas leaves 'player' so re-entry re-prompts (consistent UX).
   const [playerGestureCaptured, setPlayerGestureCaptured] = useState(false);
 
   // Outer wrapper ref — passed to PlayerAudioMixerHost so the MutationObserver
@@ -221,19 +194,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     setPlayerGestureCaptured(true);
   }, []);
 
-  // Sync activeCanvas when mode prop changes (unless in player mode from play action)
-  useEffect(() => {
-    if (activeCanvas !== 'player') setActiveCanvas(mode); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [mode]); // eslint-disable-line
-
-  // Reset first-gesture capture whenever leaving player canvas → re-entry re-prompts.
-  useEffect(() => {
-    if (activeCanvas !== 'player' && playerGestureCaptured) {
-      log.debug('gestureReset', 'activeCanvas left player, resetting capture');
-      setPlayerGestureCaptured(false); // eslint-disable-line react-hooks/set-state-in-effect
-    }
-  }, [activeCanvas, playerGestureCaptured]);
-
   const [playMode, setPlayMode] = useState<PlayMode>("off");
   const defaultEdition = useMemo<PlayEdition>(() => {
     // undefined = no constraint (internal editor) → all editions available → pick highest
@@ -242,28 +202,16 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     return 'classic';
   }, [availableEditions]);
   const [playEdition, setPlayEdition] = useState<PlayEdition>(defaultEdition);
-  const [localZoomLevel, setLocalZoomLevel] = useState<number>(PLAYABLE_ZOOM.DEFAULT);
   const [localSelectedSpreadId, setLocalSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [pendingBranchSpreadId, setPendingBranchSpreadId] = useState<string | null>(null);
 
-  // Controlled-or-uncontrolled: use prop if provided, else local state.
-  // IMPORTANT: propZoomLevel must remain stable (parent should not flip between
-  // defined and undefined across renders — ADR-021 convention).
-  const effectiveZoomLevel =
-    propZoomLevel !== undefined ? propZoomLevel : localZoomLevel;
+  // PlayerCanvas manages its own fit-zoom — no controlled zoom from parent.
+  const effectiveZoomLevel = PLAYABLE_ZOOM.DEFAULT;
   const effectiveSelectedSpreadId =
     propSelectedSpreadId !== undefined ? propSelectedSpreadId : localSelectedSpreadId;
-
-  const applyZoomChange = useCallback((n: number) => {
-    if (propZoomLevel !== undefined) {
-      propOnZoomChange?.(n);
-    } else {
-      setLocalZoomLevel(n);
-    }
-  }, [propZoomLevel, propOnZoomChange]);
 
   const applySelectedSpreadChange = useCallback((spreadId: string) => {
     if (propSelectedSpreadId !== undefined) {
@@ -274,12 +222,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     }
   }, [propSelectedSpreadId, onSpreadSelect]);
 
-  // Sync zoom level to global store for shared components
-  // (Skip in player mode — PlayerCanvas manages its own fitZoom → store sync)
-  const setStoreZoomLevel = useSetZoomLevel();
-  useEffect(() => {
-    if (activeCanvas !== 'player') setStoreZoomLevel(effectiveZoomLevel);
-  }, [effectiveZoomLevel, activeCanvas, setStoreZoomLevel]);
+  // Zoom: PlayerCanvas manages its own fitZoom → no global store sync needed
+  // in player-only world (was conditional on non-player canvas, now always skipped).
 
   // === Store ===
   const spreadHistories = useSpreadHistories();
@@ -295,10 +239,8 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     () => resolveTransitionStrategy(bookEffects?.transition_type ?? null),
     [bookEffects?.transition_type],
   );
-  // Hook is only "enabled" while the player canvas is visible — editor canvases
-  // don't navigate via spread-turn (instant swap is correct for design / remix).
-  const turnEnabled =
-    activeCanvas === 'player' && transitionStrategy === 'turn';
+  // Always-player component: turn transition gated solely by strategy choice.
+  const turnEnabled = transitionStrategy === 'turn';
 
   const turn = useSpreadTurnTransition({
     enabled: turnEnabled,
@@ -348,29 +290,11 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const nextResult = resolveNextSpreadId(selectedSpread, spreads, currentSection);
   const hasNext = nextResult !== null;
 
-  // === Canvas Switching Handlers ===
-  const handlePlay = useCallback(() => {
-    log.info('handlePlay', 'play started', { spreadId: effectiveSelectedSpreadId, playMode });
-    setActiveCanvas("player");
-    onPreview?.();
-  }, [onPreview, effectiveSelectedSpreadId, playMode]);
-
-  const handleStop = useCallback(() => {
-    log.info('handleStop', 'playback stopped', { mode });
-    setActiveCanvas(mode); // Return to mode-determined canvas
-    onStopPreview?.();
-  }, [mode, onStopPreview]);
-
-  // Stop playback when switching editions to force step rebuild
-  // In share preview (mode=player), skip canvas remount — PlayerCanvas handles step reset internally
+  // Edition change: PlayerCanvas resets steps internally (no canvas remount needed).
   const handleEditionChange = useCallback((edition: PlayEdition) => {
-    log.info('handleEditionChange', 'edition switching', { edition, activeCanvas });
-    if (activeCanvas === 'player' && mode !== 'player') {
-      setActiveCanvas(mode);
-      onStopPreview?.();
-    }
+    log.info('handleEditionChange', 'edition switching', { edition });
     setPlayEdition(edition);
-  }, [activeCanvas, mode, onStopPreview]);
+  }, []);
 
   // === Navigation Handlers ===
 
@@ -490,17 +414,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
       if (spreads.length === 0) return;
 
       switch (e.key) {
-        case KEYBOARD_SHORTCUTS.TOGGLE_PLAY:
-          e.preventDefault();
-          if (activeCanvas === 'player') {
-            handleStop();
-          } else {
-            handlePlay();
-          }
-          break;
-        case KEYBOARD_SHORTCUTS.STOP:
-          handleStop();
-          break;
         case KEYBOARD_SHORTCUTS.PREV_SPREAD:
           handleSkipSpread('prev');
           break;
@@ -530,9 +443,6 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     spreads,
-    activeCanvas,
-    handlePlay,
-    handleStop,
     handleSkipSpread,
     applySelectedSpreadChange,
   ]);
@@ -540,33 +450,19 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   // === Render ===
   return (
     <div ref={rootRef} className="relative flex flex-col h-full">
-      {/* Player audio mixer host — mounts only while player canvas is active.
-          React mount/unmount drives initContext/teardown via useAudioMixerLifecycle,
-          keeping AudioContext scoped to player mode without violating rules of hooks. */}
-      {activeCanvas === 'player' && (
-        <PlayerAudioMixerHost
-          rootRef={rootRef}
-          masterVolume={masterVolume}
-          isMuted={isMuted}
-          bookAudio={bookAudio}
-        />
-      )}
+      {/* Player audio mixer host — always mounted (pure player component). */}
+      <PlayerAudioMixerHost
+        rootRef={rootRef}
+        masterVolume={masterVolume}
+        isMuted={isMuted}
+        bookAudio={bookAudio}
+      />
 
-      {/* Spread media preload host — mounts only while player canvas is active.
-          Sliding window N+1/N+2 across image/audio/video/auto_pic/quiz/read-along.
-          Spec: ai-storybook-design/component/editor-page/shared/playable-spread-view/03-11-spread-media-preload.md §8 */}
-      {activeCanvas === 'player' && effectiveSelectedSpreadId && (
+      {/* Spread media preload host — sliding window N+1/N+2 across media types. */}
+      {effectiveSelectedSpreadId && (
         <PlayerSpreadPreloadHost
           spreads={spreads}
           activeSpreadId={effectiveSelectedSpreadId}
-        />
-      )}
-
-      {/* Header: editor modes only (player mode has no header — controls in sidebar) */}
-      {mode !== "player" && (
-        <PlayableEditorHeader
-          zoomLevel={effectiveZoomLevel}
-          onZoomChange={applyZoomChange}
         />
       )}
 
@@ -579,24 +475,11 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
           </div>
         )}
 
-        {activeCanvas === "remix-editor" &&
-          selectedSpread &&
-          assets &&
-          onAssetSwap ? (
-          <RemixEditorCanvas
-            spread={selectedSpread}
-            zoomLevel={effectiveZoomLevel}
-            assets={assets}
-            onAssetSwap={onAssetSwap}
-            onTextChange={onTextChange}
-            pageNumbering={pageNumbering}
-          />
-        ) : activeCanvas === "player" && selectedSpread ? (
+        {selectedSpread ? (
           <>
-            {/* PRE-MOUNT: BookBGM + PlayerCanvas mount immediately when entering
-                player mode (no longer gated by playerGestureCaptured). This wires
-                per-spread auto_audios into the suspended AudioContext + binary
-                preload BEFORE the user clicks the gesture gate. */}
+            {/* PRE-MOUNT: BookBGM + PlayerCanvas mount immediately so per-spread
+                auto_audios wire into the suspended AudioContext + binary preload
+                BEFORE the user clicks the gesture gate. */}
             <BookBackgroundMusicPlayer mediaUrl={bgmMediaUrl} />
             <PlayerCanvas
               ref={playerCanvasHandleRef}
@@ -616,15 +499,12 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
               isSharePreview={isSharePreview}
             />
             {/* Spread-turn overlay — portal'd under document.body, sits above the
-                canvas (z=50) but below FirstGestureGate (z=100). Mounts only
-                while a turn is in flight; the hook returns null overlayProps
-                otherwise. */}
+                canvas (z=50) but below FirstGestureGate (z=100). */}
             {turn.overlayProps && (
               <SpreadTurnOverlay {...turn.overlayProps} />
             )}
             {/* Gate overlay (z-100) covers the canvas until the user gesture is
-                captured. handleGestureCapture awaits resumeContext() to flush
-                queued autoplays, then flips the flag to unmount the gate. */}
+                captured. */}
             {!playerGestureCaptured && (
               <FirstGestureGate onCapture={handleGestureCapture} />
             )}

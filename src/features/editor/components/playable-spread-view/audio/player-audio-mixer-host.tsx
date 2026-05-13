@@ -1,11 +1,10 @@
 // player-audio-mixer-host.tsx — Host component that owns the audio mixer
-// lifecycle while the player canvas is active.
+// lifecycle.
 //
-// Renders nothing. Mounted conditionally by PlayableSpreadView when
-// `activeCanvas === 'player'` so React's mount/unmount drives initContext()
-// and teardown() inside `useAudioMixerLifecycle`. This keeps the rules of
-// hooks intact (the lifecycle hook itself is always called once mounted)
-// while still scoping AudioContext creation to player mode only.
+// Renders nothing. Always mounted by PlayableSpreadView (pure player). React's
+// mount/unmount drives initContext() and teardown() inside
+// `useAudioMixerLifecycle` — kept in this host (vs inline in the parent) so
+// the hook is colocated with its dedicated lifecycle owner.
 //
 // Design source: ai-storybook-design/component/editor-page/shared/playable-spread-view/03-10-audio-mixer.md §5.2
 // Phase plan: plans/260505-1455-player-audio-mixer-frontend-impl/phase-05-wire-into-playable-spread-view.md (Bước 4)
