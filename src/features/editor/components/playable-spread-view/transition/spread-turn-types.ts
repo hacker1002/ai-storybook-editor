@@ -7,7 +7,7 @@
 export type TurnDirection = 'next' | 'prev';
 
 /** Lifecycle phase of a single turn. Spec §2.2. */
-export type TurnPhase = 'idle' | 'flipping' | 'swapping' | 'settling';
+export type TurnPhase = 'idle' | 'flipping' | 'swapping';
 
 /** Layout context at the moment startTurn() is invoked. Captured once per turn —
  *  do NOT re-evaluate inside the timeline (spec §3 pivot strategy).
