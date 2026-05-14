@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createLogger } from '@/utils/logger';
-import type { ShareLink, ShareLinkUpdatePayload } from './share-link-types';
+import { cn } from '@/utils/utils';
+import type { RemixOption, ShareLink, ShareLinkUpdatePayload } from './share-link-types';
 import {
   EDITION_OPTIONS,
   LANGUAGE_OPTIONS,
+  ORIGINAL_REMIX_ID_SENTINEL,
   PRIVACY_OPTIONS,
 } from './share-link-types';
 
@@ -19,12 +21,14 @@ const DEBOUNCE_MS = 500;
 
 interface ShareLinkDetailPanelProps {
   link: ShareLink;
+  remixOptions: RemixOption[];
   isSaving: boolean;
   onUpdate: (linkId: string, changes: ShareLinkUpdatePayload) => void;
 }
 
 export function ShareLinkDetailPanel({
   link,
+  remixOptions,
   isSaving,
   onUpdate,
 }: ShareLinkDetailPanelProps) {
@@ -127,6 +131,16 @@ export function ShareLinkDetailPanel({
     onUpdate(link.id, { languages: allSelected ? [] : updated });
   };
 
+  // --- Remix ---
+  // shadcn Select can't bind to null, so we use a sentinel string for Original.
+  const remixSelectValue = link.remix_id ?? ORIGINAL_REMIX_ID_SENTINEL;
+
+  const handleRemixChange = (value: string) => {
+    const remix_id = value === ORIGINAL_REMIX_ID_SENTINEL ? null : value;
+    log.debug('handleRemixChange', 'remix changed', { linkId: link.id, remix_id });
+    onUpdate(link.id, { remix_id });
+  };
+
   // --- Privacy ---
   const handlePrivacyChange = (value: string) => {
     const privacy = parseInt(value, 10) as 1 | 2;
@@ -148,13 +162,17 @@ export function ShareLinkDetailPanel({
   return (
     <div className="h-full overflow-auto p-6">
       <div className="mx-auto max-w-lg space-y-6">
-        {/* Saving indicator */}
-        {isSaving && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Saving...
-          </div>
-        )}
+        {/* Saving indicator — always rendered to prevent layout shift */}
+        <div
+          className={cn(
+            'flex items-center gap-2 text-xs text-muted-foreground transition-opacity',
+            isSaving ? 'opacity-100' : 'opacity-0',
+          )}
+          aria-hidden={!isSaving}
+        >
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Saving...
+        </div>
 
         {/* NAME */}
         <div className="space-y-1.5">
@@ -180,6 +198,28 @@ export function ShareLinkDetailPanel({
               <Copy className="h-4 w-4" />
             </Button>
           </div>
+        </div>
+
+        {/* REMIXES */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Remixes
+          </Label>
+          <Select value={remixSelectValue} onValueChange={handleRemixChange}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {remixOptions.map((opt) => {
+                const value = opt.id ?? ORIGINAL_REMIX_ID_SENTINEL;
+                return (
+                  <SelectItem key={value} value={value}>
+                    {opt.name}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* EDITIONS */}

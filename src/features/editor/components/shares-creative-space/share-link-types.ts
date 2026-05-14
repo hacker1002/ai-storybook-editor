@@ -7,6 +7,7 @@ export interface ShareLink {
   id: string;
   user_id: string;
   book_id: string;
+  remix_id: string | null; // null = share Original (current_version snapshot); UUID = specific remix instance
   name: string;
   url: string;           // slug (e.g., "abc123ef")
   privacy: SharePrivacy;
@@ -16,6 +17,15 @@ export interface ShareLink {
   created_at: string;
   updated_at: string;
 }
+
+// Option populating the REMIXES dropdown. `id: null` is the Original sentinel.
+export interface RemixOption {
+  id: string | null;
+  name: string;
+}
+
+export const ORIGINAL_REMIX_ID_SENTINEL = '__original__';
+export const ORIGINAL_REMIX_OPTION: RemixOption = { id: null, name: 'Original' };
 
 export type SharePrivacy = 1 | 2; // 1: public, 2: private
 
@@ -33,6 +43,7 @@ export interface ShareLanguage {
 // Payload sent from detail panel — plaintext passcode (parent hashes before DB)
 export interface ShareLinkUpdatePayload {
   name?: string;
+  remix_id?: string | null; // null = Original; UUID = specific remix
   editions?: ShareEditions;
   languages?: ShareLanguage[];
   privacy?: SharePrivacy;
@@ -62,6 +73,7 @@ export const LANGUAGE_OPTIONS: ShareLanguage[] = [
 
 export const DEFAULT_SHARE_LINK = {
   name: 'Untitled Link',
+  remix_id: null as string | null, // default Original
   privacy: 1 as SharePrivacy,
   passcode: null,
   editions: {} as ShareEditions,

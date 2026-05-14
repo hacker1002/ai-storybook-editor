@@ -75,6 +75,7 @@ export function useShareLinks(bookId: string): UseShareLinksReturn {
       const newLink = {
         user_id: user.id,
         book_id: bookId,
+        remix_id: DEFAULT_SHARE_LINK.remix_id,
         name: DEFAULT_SHARE_LINK.name,
         url: slug,
         privacy: DEFAULT_SHARE_LINK.privacy,

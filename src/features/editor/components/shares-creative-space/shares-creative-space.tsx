@@ -3,7 +3,7 @@ import { Share2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCurrentBook } from '@/stores/book-store';
 import { createLogger } from '@/utils/logger';
-import { useShareLinks } from './hooks';
+import { useShareLinks, useBookRemixOptions } from './hooks';
 import { SharesSidebar } from './shares-sidebar';
 import { ShareLinkDetailPanel } from './share-link-detail-panel';
 
@@ -31,6 +31,7 @@ export function SharesCreativeSpace() {
 
   const { shareLinks, isLoading, isSaving, createShareLink, updateShareLink, deleteShareLink } =
     useShareLinks(bookId);
+  const { remixOptions } = useBookRemixOptions(bookId);
 
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -93,6 +94,7 @@ export function SharesCreativeSpace() {
         {selectedLink ? (
           <ShareLinkDetailPanel
             link={selectedLink}
+            remixOptions={remixOptions}
             isSaving={isSaving}
             onUpdate={updateShareLink}
           />
