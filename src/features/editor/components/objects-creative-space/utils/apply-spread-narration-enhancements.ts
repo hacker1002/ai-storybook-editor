@@ -22,6 +22,7 @@ const SCRIPT_LINE_REGEX = /^@([a-z][a-z0-9_]{0,39}):\s*(.+)$/;
 
 interface ProposedChunk {
   voice_id: string;
+  reader_key: string;
   script: string;
 }
 
@@ -42,20 +43,22 @@ function parseEnhancedScript(
       });
       continue;
     }
-    const readerKey = match[1];
+    const parsedKey = match[1];
     const content = match[2];
+    const knownReader = Boolean(readerToVoice[parsedKey]);
+    const resolvedKey = knownReader ? parsedKey : NARRATOR_KEY;
     const voiceId =
-      readerToVoice[readerKey] ?? readerToVoice[NARRATOR_KEY];
+      readerToVoice[parsedKey] ?? readerToVoice[NARRATOR_KEY];
     if (!voiceId) {
-      log.warn('parseEnhancedScript', 'no voice for reader', { readerKey });
+      log.warn('parseEnhancedScript', 'no voice for reader', { readerKey: parsedKey });
       continue;
     }
-    if (readerKey !== NARRATOR_KEY && !readerToVoice[readerKey]) {
+    if (!knownReader) {
       log.warn('parseEnhancedScript', 'unknown reader, fallback narrator', {
-        readerKey,
+        readerKey: parsedKey,
       });
     }
-    proposed.push({ voice_id: voiceId, script: content });
+    proposed.push({ voice_id: voiceId, reader_key: resolvedKey, script: content });
   }
   return proposed;
 }
@@ -75,6 +78,7 @@ function chunksLogicallyEqual(
 function buildNewChunk(p: ProposedChunk): TextboxAudioChunk {
   return {
     voice_id: p.voice_id,
+    reader_key: p.reader_key,
     script: p.script,
     stability: DEFAULT_INFERENCE_PARAMS.stability,
     similarity: DEFAULT_INFERENCE_PARAMS.similarity,

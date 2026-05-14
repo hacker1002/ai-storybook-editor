@@ -1,6 +1,7 @@
 // chunk-voice-picker.tsx — Local sub-component used by NarrationChunkCard.
-// Radix Select (modal=false) wired to {voice_id} → {voice_name (source_label)}.
-// Source = narrator + characters voices (NOT full voices catalog) per spec §4.
+// Radix Select reader-centric (2026-05-14): keyed by `reader_key` (narrator
+// vs character.key) so shared voices show one entry per reader. Source =
+// narrator + characters with voice_setting (skip if no voice).
 
 import { AlertTriangle } from 'lucide-react';
 
@@ -18,8 +19,12 @@ import type { Voice, VoiceOption } from './chunk-types';
 const log = createLogger('NarrationChunkCard', 'VoicePicker');
 
 export interface ChunkVoicePickerProps {
-  value: string | null;
-  onChange: (voice_id: string) => void;
+  /** Current reader_key on the chunk; undefined for legacy chunks pre-migration. */
+  readerKey: string | null;
+  /** Current voice_id on the chunk; used only as fallback match when readerKey is null. */
+  voiceId: string | null;
+  /** Caller receives both — chunk must set voice_id + reader_key atomically. */
+  onChange: (readerKey: string, voiceId: string) => void;
   options: VoiceOption[];
   voicesById: Map<string, Voice>;
   disabled?: boolean;
@@ -28,7 +33,8 @@ export interface ChunkVoicePickerProps {
 }
 
 export function ChunkVoicePicker({
-  value,
+  readerKey,
+  voiceId,
   onChange,
   options,
   voicesById,
@@ -50,31 +56,46 @@ export function ChunkVoicePicker({
     );
   }
 
-  const matchedOption = value
-    ? options.find((o) => o.voice_id === value) ?? null
+  // Match priority: exact reader_key → first option sharing voice_id (legacy
+  // chunks without reader_key fall back here, narrator wins by buildVoiceOptions
+  // ordering). Never auto-mutates chunk — user must pick explicitly to commit
+  // reader_key.
+  const matchedByReader = readerKey
+    ? options.find((o) => o.reader_key === readerKey) ?? null
     : null;
-  const fallbackName =
-    !matchedOption && value ? voicesById.get(value)?.name ?? null : null;
+  const matchedByVoice =
+    !matchedByReader && voiceId
+      ? options.find((o) => o.voice_id === voiceId) ?? null
+      : null;
+  const matchedOption = matchedByReader ?? matchedByVoice;
 
-  const handleChange = (next: string) => {
-    log.debug('handleChange', 'voice change', {
+  const fallbackName =
+    !matchedOption && voiceId ? voicesById.get(voiceId)?.name ?? null : null;
+
+  const handleChange = (nextReaderKey: string) => {
+    const picked = options.find((o) => o.reader_key === nextReaderKey);
+    if (!picked) {
+      log.warn('handleChange', 'unknown reader_key from picker', { nextReaderKey });
+      return;
+    }
+    log.debug('handleChange', 'reader change', {
       chunkIndex,
-      from: value,
-      to: next,
+      fromReader: readerKey,
+      toReader: nextReaderKey,
+      voiceId: picked.voice_id,
     });
-    onChange(next);
+    onChange(picked.reader_key, picked.voice_id);
   };
 
   // Trigger label states:
-  //  - !value           → "⚠ Choose a voice" (red)
-  //  - value && !matched → "⚠ Voice unavailable" (red) — use fallbackName tooltip if any
-  //  - value && matched  → "{source_label}" (Narrator | character name)
-  // voice_name kept in tooltip only — picker is character-centric per UX spec.
-  const triggerInvalid = !value || !matchedOption;
+  //  - !voiceId           → "⚠ Choose a voice" (red, no value set)
+  //  - voiceId && !matched → "⚠ Voice unavailable" (red) — fallbackName tooltip if any
+  //  - matched             → "{source_label}" (Narrator | character name)
+  const triggerInvalid = !voiceId || !matchedOption;
 
   return (
     <Select
-      value={value ?? undefined}
+      value={matchedOption?.reader_key ?? undefined}
       onValueChange={handleChange}
       disabled={disabled}
     >
@@ -83,7 +104,7 @@ export function ChunkVoicePicker({
         aria-invalid={triggerInvalid}
         title={
           fallbackName
-            ? `Last voice id ${value} (deleted)`
+            ? `Last voice id ${voiceId} (deleted)`
             : matchedOption?.voice_name
         }
         className={cn(
@@ -101,7 +122,7 @@ export function ChunkVoicePicker({
         >
           {matchedOption ? (
             <span className="truncate">{matchedOption.source_label}</span>
-          ) : value ? (
+          ) : voiceId ? (
             <span className="flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />
               Voice unavailable
@@ -112,8 +133,8 @@ export function ChunkVoicePicker({
       <SelectContent>
         {options.map((opt) => (
           <SelectItem
-            key={opt.voice_id}
-            value={opt.voice_id}
+            key={opt.reader_key}
+            value={opt.reader_key}
             title={opt.voice_name}
           >
             {opt.source_label}

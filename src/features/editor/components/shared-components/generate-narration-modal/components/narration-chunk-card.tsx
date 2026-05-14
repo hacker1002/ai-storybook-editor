@@ -52,7 +52,10 @@ export interface NarrationChunkCardProps {
   currentLanguage: string;
 
   onScriptChange: (next: string) => void;
-  onVoiceChange: (voice_id: string) => void;
+  /** Reader-centric (2026-05-14): both reader_key and voice_id come from the
+   *  picker. Chunk persists both atomically so future displays / round-trip
+   *  preserve reader intent. */
+  onVoiceChange: (reader_key: string, voice_id: string) => void;
   onParamChange: (partial: Partial<InferenceParams>) => void;
   onResetParams: () => void;
   onSelectResult: (originalIdx: number) => void;
@@ -362,7 +365,8 @@ export function NarrationChunkCard({
           ) : null}
           <span className="ml-auto" />
           <ChunkVoicePicker
-            value={chunk.voice_id || null}
+            readerKey={chunk.reader_key ?? null}
+            voiceId={chunk.voice_id || null}
             onChange={onVoiceChange}
             options={voiceOptions}
             voicesById={voicesById}

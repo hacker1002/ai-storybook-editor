@@ -13,6 +13,7 @@ import type { ChunkDraft } from '../components/chunk-types';
 function stripChunk(draft: ChunkDraft): TextboxAudioChunk {
   return {
     voice_id: draft.voice_id,
+    reader_key: draft.reader_key,
     script: draft.script,
     stability: draft.stability,
     similarity: draft.similarity,

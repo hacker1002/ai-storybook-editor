@@ -255,7 +255,9 @@ export function GenerateNarrationModal({
                 voicesById={voicesById}
                 currentLanguage={currentLanguage}
                 onScriptChange={(s) => state.handleScriptChange(chunk.client_id, s)}
-                onVoiceChange={(v) => state.handleVoiceChange(chunk.client_id, v)}
+                onVoiceChange={(rk, v) =>
+                  state.handleVoiceChange(chunk.client_id, rk, v)
+                }
                 onParamChange={(p) => state.handleParamChange(chunk.client_id, p)}
                 onResetParams={() => state.handleResetParams(chunk.client_id)}
                 onSelectResult={(i) => state.handleSelectResult(chunk.client_id, i)}

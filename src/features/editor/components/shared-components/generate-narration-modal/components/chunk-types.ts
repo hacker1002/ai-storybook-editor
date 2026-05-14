@@ -34,13 +34,17 @@ export interface ChunkDraft extends TextboxAudioChunk {
 
 export type { TextboxAudioResult, Voice };
 
-/** Voice picker option — narrator + character entries flattened by the modal. */
+/** Voice picker option — narrator + character entries flattened by the modal.
+ *  Reader-centric (2026-05-14): each reader gets its own entry even when
+ *  voices collide (narrator + character share `voice_id`). Picker keys by
+ *  `reader_key` so user picks WHO reads, not which voice. */
 export interface VoiceOption {
+  /** `narrator` | character.key — stable identity for picker selection. */
+  reader_key: string;
   voice_id: string;
   voice_name: string;
   source_label: string;
   source_kind: 'narrator' | 'character';
-  character_key?: string;
 }
 
 /** Per-chunk inference param shape (subset of NarratorInferenceParams,

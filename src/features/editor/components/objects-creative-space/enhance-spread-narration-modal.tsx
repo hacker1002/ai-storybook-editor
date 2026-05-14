@@ -105,7 +105,8 @@ function buildExistingPreview(
   if (!audio || !audio.chunks || audio.chunks.length === 0) return "";
   return audio.chunks
     .map((c) => {
-      const readerKey = voiceToReader[c.voice_id] ?? NARRATOR_KEY;
+      const readerKey =
+        c.reader_key ?? voiceToReader[c.voice_id] ?? NARRATOR_KEY;
       return `@${readerKey}: ${c.script}`;
     })
     .join("\n");

@@ -1,9 +1,12 @@
 // build-voice-options.ts — Build the voice picker option list shown inside
 // each chunk card. Source = book narrator (per-language) + characters whose
-// voice_setting binds a voice_id. Dedup by voice_id (narrator wins on tie).
-// Voices not present in `voicesById` are skipped silently — picker / generate
-// validation surfaces the broken state per-chunk.
+// voice_setting binds a voice_id. Reader-centric (2026-05-14): emit one entry
+// per reader (narrator + each character with a voice), NO dedup by voice_id —
+// shared voices produce multiple entries so user picks WHO reads, not which
+// voice. Voices not present in `voicesById` are skipped silently — picker /
+// generate validation surfaces the broken state per-chunk.
 
+import { NARRATOR_KEY } from '@/apis/text-api';
 import type { Character, CharacterVoiceSetting } from '@/types/character-types';
 import type { NarratorSettings } from '@/types/editor';
 import type { Voice } from '@/types/voice';
@@ -55,7 +58,7 @@ export function buildVoiceOptions(params: BuildVoiceOptionsParams): VoiceOption[
     params;
 
   const opts: VoiceOption[] = [];
-  const seen = new Set<string>();
+  const seenReaderKeys = new Set<string>();
 
   // ── Narrator entry (per-language, fallback to original_language) ──
   const narratorVoiceId = resolveNarratorVoiceId(
@@ -66,29 +69,33 @@ export function buildVoiceOptions(params: BuildVoiceOptionsParams): VoiceOption[
   if (narratorVoiceId && voicesById.has(narratorVoiceId)) {
     const voice = voicesById.get(narratorVoiceId)!;
     opts.push({
+      reader_key: NARRATOR_KEY,
       voice_id: voice.id,
       voice_name: voice.name,
       source_label: 'Narrator',
       source_kind: 'narrator',
     });
-    seen.add(voice.id);
+    seenReaderKeys.add(NARRATOR_KEY);
   }
 
-  // ── Character entries (skip duplicates so narrator wins on tie) ──
+  // ── Character entries (one per character with a usable voice — NO voice dedup) ──
+  // Reader without voice → skip (preserves prior contract: voice_setting missing =
+  // not eligible as reader). Duplicate character.key (data bug) → skip second.
   for (const ch of characters) {
+    if (!ch.key || seenReaderKeys.has(ch.key)) continue;
     const setting: CharacterVoiceSetting | null = ch.voice_setting ?? null;
     const vid = setting?.voice_id;
-    if (!vid || seen.has(vid)) continue;
+    if (!vid) continue;
     const voice = voicesById.get(vid);
     if (!voice) continue;
     opts.push({
+      reader_key: ch.key,
       voice_id: voice.id,
       voice_name: voice.name,
       source_label: ch.name,
       source_kind: 'character',
-      character_key: ch.key,
     });
-    seen.add(voice.id);
+    seenReaderKeys.add(ch.key);
   }
 
   return opts;

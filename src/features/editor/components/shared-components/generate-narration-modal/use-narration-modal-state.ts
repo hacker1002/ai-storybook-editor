@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { createLogger } from '@/utils/logger';
+import { NARRATOR_KEY } from '@/apis/text-api';
 import {
   DEFAULT_CHUNK_INFERENCE_PARAMS,
   coerceTextboxAudio,
@@ -54,7 +55,7 @@ export interface UseNarrationModalStateReturn {
   anyGenerating: boolean;
   canCombine: boolean;
   handleScriptChange: (clientId: string, next: string) => void;
-  handleVoiceChange: (clientId: string, voiceId: string) => void;
+  handleVoiceChange: (clientId: string, readerKey: string, voiceId: string) => void;
   handleParamChange: (clientId: string, partial: Partial<InferenceParams>) => void;
   handleResetParams: (clientId: string) => void;
   handleSelectResult: (clientId: string, originalIdx: number) => void;
@@ -80,6 +81,9 @@ function makeClientId(): string {
 function buildSeedDraft(voiceId: string | null, scriptSeed: string): ChunkDraft {
   return {
     voice_id: voiceId ?? '',
+    // Seed defaults to narrator since defaultNarratorVoiceId drives the voice.
+    // Keeps picker trigger label coherent with seeded voice on first open.
+    reader_key: voiceId ? NARRATOR_KEY : undefined,
     script: scriptSeed,
     ...DEFAULT_CHUNK_INFERENCE_PARAMS,
     script_synced: false,
@@ -101,6 +105,7 @@ function draftFromPersisted(
 ): ChunkDraft {
   return {
     voice_id: chunk.voice_id,
+    reader_key: chunk.reader_key,
     script: chunk.script,
     stability: chunk.stability,
     similarity: chunk.similarity,
@@ -297,11 +302,12 @@ export function useNarrationModalState(
   );
 
   const handleVoiceChange = useCallback(
-    (clientId: string, voiceId: string) => {
-      log.debug('handleVoiceChange', 'mutate', { clientId, voiceId });
+    (clientId: string, readerKey: string, voiceId: string) => {
+      log.debug('handleVoiceChange', 'mutate', { clientId, readerKey, voiceId });
       updateChunk(clientId, (c) => ({
         ...c,
         voice_id: voiceId,
+        reader_key: readerKey,
         script_synced: false,
       }));
     },

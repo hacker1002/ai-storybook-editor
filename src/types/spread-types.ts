@@ -417,9 +417,16 @@ export interface TextboxAudioResult {
 /** Single voice + script chunk inside a textbox. Multi-speaker dialog uses
  *  multiple chunks (one voice per chunk).
  *  DB-CHANGELOG 2026-04-29: split sync flag → `script_synced` (script/voice
- *  changes) + `params_synced` (inference param changes). */
+ *  changes) + `params_synced` (inference param changes).
+ *  DB-CHANGELOG 2026-05-14: add optional `reader_key` — preserves author
+ *  intent (narrator vs character key) across voice reassignment / lossy
+ *  reverse lookup. `voice_id` remains authoritative for TTS. */
 export interface TextboxAudioChunk {
   voice_id: string;
+  /** Reader key that authored this line (`narrator` | `character_*`). Optional —
+   *  written by enhance-narration flow, cleared when user explicitly reassigns
+   *  voice via picker. Readers fall back to `voiceToReader[voice_id]` when absent. */
+  reader_key?: string;
   script: string;
   stability: number;        // 0..1
   similarity: number;       // 0..1
