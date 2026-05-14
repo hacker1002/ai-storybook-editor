@@ -6,6 +6,7 @@ import type { IllustrationData, Section } from './illustration-types';
 import type { Character } from './character-types';
 import type { Prop, Crop } from './prop-types';
 import type { RemixLanguageCode } from './editor';
+import type { Human } from './human';
 
 // Re-export book-level remix entries so consumers have a single import point.
 export type {
@@ -191,4 +192,41 @@ export interface SwapCropSheetTarget {
 /** Stable dedupe identifier for a mix — sorted keys joined by comma. */
 export function mixSignature(keys: string[]): string {
   return [...keys].sort().join(',');
+}
+
+// ── Text Swap Engine (Phase 1) ───────────────────────────────────────────────
+// Sync client-side swap of `character.name` → `humans.display_name[lang]` over
+// remix illustration textbox text + audio chunk scripts. Pure function, no I/O.
+// Spec: ai-storybook-design/component/stores/remix-store.md §10.
+
+/** Warning kinds emitted during swap-map build / apply. 5 kinds —
+ *  `short_source_name` dropped per Validation Session 1 (CJK 2-char names valid). */
+export type TextSwapWarningKind =
+  | 'no_human_picked'
+  | 'stale_human_fk'
+  | 'missing_display_name'
+  | 'no_op_swap'
+  | 'empty_source_name';
+
+export interface TextSwapWarning {
+  kind: TextSwapWarningKind;
+  characterKey?: string;
+  language?: string;
+  source?: string;
+  target?: string;
+}
+
+export interface TextSwapInput {
+  illustration: RemixIllustration;
+  remixCharacters: RemixCharacter[];
+  configCharacters: RemixCharacterChoice[];
+  enabledLanguages: string[];
+  humans: Record<string, Human>;
+}
+
+export interface TextSwapResult {
+  illustration: RemixIllustration;
+  warnings: TextSwapWarning[];
+  matchCount: number;
+  chunksMarkedUnsynced: number;
 }

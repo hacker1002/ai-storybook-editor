@@ -13,10 +13,13 @@ import type {
   RemixCropSheet,
   RemixSpread,
 } from '@/types/remix';
+import type { Human } from '@/types/human';
 import { buildRemixClonePayload } from './clone-builder';
 import { mapRowToRemix } from './supabase-mapping';
 import { runInjectJob } from './inject-runner';
 import { useSnapshotStore } from '../snapshot-store';
+import { useHumansStore } from '../humans-store';
+import { applyTextSwap } from '@/features/remix/text-swap-engine';
 
 const log = createLogger('Store', 'RemixStore');
 
@@ -104,10 +107,29 @@ export const useRemixStore = create<RemixStore>()(
           name,
         );
 
-        log.info('createRemix', 'insert', { snapshotId, name: payload.name });
+        // ── Phase 1 text swap ────────────────────────────────────────────
+        const humansList = useHumansStore.getState().humans;
+        const humansMap: Record<string, Human> = Object.fromEntries(
+          humansList.map((h) => [h.id, h]),
+        );
+        const enabledLanguages = config.languages
+          .filter((l) => l.is_enabled)
+          .map((l) => l.code);
+
+        const swap = applyTextSwap({
+          illustration: payload.illustration,
+          remixCharacters: payload.characters,
+          configCharacters: config.characters,
+          enabledLanguages,
+          humans: humansMap,
+        });
+
+        const finalPayload = { ...payload, illustration: swap.illustration };
+
+        log.info('createRemix', 'insert', { snapshotId, name: finalPayload.name });
         const { data, error } = await supabase
           .from('remixes')
-          .insert(payload)
+          .insert(finalPayload)
           .select('*')
           .single();
 
@@ -121,6 +143,17 @@ export const useRemixStore = create<RemixStore>()(
           remixes: [...s.remixes, remix],
           activeRemixId: remix.id,
         }));
+
+        if (swap.warnings.length > 0) {
+          log.warn('createRemix', 'text swap warnings', {
+            remixId: remix.id,
+            warningCount: swap.warnings.length,
+            matchCount: swap.matchCount,
+            chunksMarkedUnsynced: swap.chunksMarkedUnsynced,
+            warnings: swap.warnings,
+          });
+        }
+
         return remix;
       },
 
