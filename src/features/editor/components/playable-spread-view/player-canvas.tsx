@@ -40,6 +40,7 @@ import {
   useCurrentStepIndex,
   usePendingClickTargetId,
   useReplayableItems,
+  useLifecycle,
 } from "@/stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
 import type { PageNumberingSettings } from "@/types/editor";
@@ -140,6 +141,7 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
   // === Store selectors ===
+  const lifecycle = useLifecycle();
   const playbackActions = usePlaybackActions();
   const phase = usePlayerPhase();
   const currentStepIndex = useCurrentStepIndex();
@@ -249,8 +251,11 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
   // === Store sync effects ===
 
   // 1. Sync playMode from props into store
+  // Guarded: store actions noop until lifecycle === 'ready'; effect re-runs when
+  // lifecycle flips so playMode + reset/play land on the live session.
   const prevPlayModeRef = useRef<PlayMode>(playMode);
   useEffect(() => {
+    if (lifecycle !== "ready") return;
     const prevMode = prevPlayModeRef.current;
     prevPlayModeRef.current = playMode;
     playbackActions.setPlayMode(playMode);
@@ -267,28 +272,20 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
       playbackActions.reset(newSteps);
       playbackActions.play();
     }
-  }, [playMode, playbackActions, filteredAnimations]);
-
-  // 1b. Sync playEdition from props into store
-  useEffect(() => {
-    playbackActions.setPlayEdition(playEdition);
-  }, [playEdition, playbackActions]);
+  }, [lifecycle, playMode, playbackActions, filteredAnimations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 2. Reset steps on spread change or edition change & ensure playback starts.
   // fullPageMode is preserved across spread changes — user staying on left/right
   // page should remain on the same side after page turn.
   useEffect(() => {
+    if (lifecycle !== "ready") return;
     setActiveQuizId(null); // Clear any open quiz modal from previous spread
     const newSteps = buildAnimationSteps(filteredAnimations, spread, spread.id);
     playbackActions.reset(newSteps);
     playbackActions.play();
-  }, [spread.id, filteredAnimations]); // eslint-disable-line
+  }, [lifecycle, spread.id, filteredAnimations]); // eslint-disable-line
 
-  // 3. Init spread history on mount — push initial spread so Back can return to start
-  useEffect(() => {
-    playbackActions.clearSpreadHistory();
-    playbackActions.pushSpreadHistory(spread.id, null);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 3. (removed) Init spread history on mount — `initialize` seeds history atomically in the container.
 
   // 3b. Reset fullPageMode to 'spread' when orientation switches to landscape
   useEffect(() => {
@@ -297,12 +294,9 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
     }
   }, [orientation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 4. Cleanup on unmount — resetStore() clears spreadHistories via INITIAL_STATE spread
-  useEffect(() => {
-    return () => playbackActions.resetStore();
-  }, []); // eslint-disable-line
+  // 4. (removed) Cleanup on unmount → `teardown()` happens at container (PreviewCreativeSpace).
 
-  // 5. Keyboard shortcuts: volume/mute (moved from root)
+  // 5. Keyboard shortcuts: volume/mute — NOT lifecycle-gated (user-pref only, never guarded).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;

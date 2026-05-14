@@ -14,6 +14,7 @@ import {
   useReplayableItems,
   useEffectLoopRemaining,
   usePlayEdition,
+  useLifecycle,
 } from "@/stores/animation-playback-store";
 import type {
   ResolvedAnimation,
@@ -44,6 +45,8 @@ export function PlayerAnimationSidebar({
   branchSetting,
 }: PlayerAnimationSidebarProps) {
   // Subscribe to playback store for highlight state and language
+  const lifecycle = useLifecycle();
+  const isReady = lifecycle === "ready";
   const narrationLanguage = useNarrationLanguage();
   const activeAnimationOrders = useActiveAnimationOrders();
   const phase = usePlayerPhase();
@@ -156,7 +159,15 @@ export function PlayerAnimationSidebar({
 
       {/* Animation list (read-only, filtered by playEdition) + branch indicator */}
       <div className="flex-1 overflow-auto p-2 space-y-1">
-        {displayAnimations.length === 0 && !branchSetting ? (
+        {!isReady ? (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-sm text-muted-foreground text-center">
+              {lifecycle === "error"
+                ? "Lỗi khi tải playback"
+                : "Đang tải..."}
+            </p>
+          </div>
+        ) : displayAnimations.length === 0 && !branchSetting ? (
           <div className="flex items-center justify-center py-8">
             <p className="text-sm text-muted-foreground text-center">
               No animations on this spread

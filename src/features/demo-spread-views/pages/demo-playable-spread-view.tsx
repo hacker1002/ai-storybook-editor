@@ -1,11 +1,15 @@
 // features/demo-spread-views/pages/demo-playable-spread-view.tsx
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import {
   PlayableSpreadView,
   type PlayableSpread,
 } from "@/features/editor/components/playable-spread-view";
+import {
+  usePlaybackActions,
+  type InitializePayload,
+} from "@/stores/animation-playback-store";
 import { PlayerAnimationSidebar } from '@/features/editor/components/preview-creative-space';
 import { useDemoAnimationState } from '../hooks/use-demo-animation-state';
 import {
@@ -56,6 +60,12 @@ const DEFAULT_MOCK_OPTIONS: MockOptions = {
 };
 
 export function DemoPlayableSpreadView() {
+  const { initialize, teardown } = usePlaybackActions();
+
+  // Monotonic counter — bumped on regenerate to derive a new sessionId so
+  // `initialize` re-applies edition & atomic session reset for the new fixture.
+  const sessionCounterRef = useRef(0);
+
   // Mock options state
   const [mockOptions, setMockOptions] =
     useState<MockOptions>(DEFAULT_MOCK_OPTIONS);
@@ -93,12 +103,40 @@ export function DemoPlayableSpreadView() {
     setSpreads,
   });
 
-  // Regenerate mock data
+  // Regenerate mock data — bump session so playback store re-initializes atomically.
   const handleRegenerate = useCallback(() => {
+    sessionCounterRef.current += 1;
     const newSpreads = generateSpreads(mockOptions);
     setSpreads(newSpreads);
     setSelectedSpreadId(newSpreads[0]?.id ?? null);
   }, [mockOptions, generateSpreads]);
+
+  // === Playback session lifecycle ===
+  // sessionId derives from sessionCounterRef so regenerate triggers `initialize`
+  // with a fresh sessionId → atomic reset including edition. selectedSpreadId is
+  // NOT in deps — it's navigation, not session boundary.
+  const payload: InitializePayload | null = useMemo(() => {
+    if (spreads.length === 0) return null;
+    return {
+      sessionId: `demo:${sessionCounterRef.current}`,
+      language: mockOptions.language,
+      edition: 'interactive',
+      availableEditions: undefined,
+      startSpreadId: spreads[0].id,
+    };
+  }, [spreads, mockOptions.language]);
+
+  // Single lifecycle effect: initialize on mount/session-switch, teardown on
+  // unmount/session-switch. Effective key is `payload.sessionId` (bumped via
+  // sessionCounterRef on regenerate). Same-session re-fires absorbed by the
+  // store's idempotent guard inside `initialize`.
+  useLayoutEffect(() => {
+    if (!payload) return;
+    initialize(payload);
+    return () => {
+      teardown();
+    };
+  }, [payload, initialize, teardown]);
 
   // Option updaters
   const updateMockOption = useCallback(

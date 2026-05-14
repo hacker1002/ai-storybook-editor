@@ -18,6 +18,8 @@ import {
   useIsPlaying,
   usePlaybackActions,
   useAutoplaySuspended,
+  useLifecycle,
+  guardedGetState,
 } from "@/stores/animation-playback-store";
 import { addTweenToTimeline } from "../animation-tween-builders";
 import { restoreBaseRotation } from "../restore-base-rotation";
@@ -178,6 +180,7 @@ export function usePlayerGsapEngine({
   onQuizPlay,
 }: UsePlayerGsapEngineParams): UsePlayerGsapEngineReturn {
   // === Store Subscriptions ===
+  const lifecycle = useLifecycle();
   const phase = usePlayerPhase();
   const currentStepIndex = useCurrentStepIndex();
   const playMode = usePlayMode();
@@ -267,7 +270,7 @@ export function usePlayerGsapEngine({
     }
     pauseAllMedia();
     cleanupReadAlongArtifacts();
-    usePlaybackStore.getState().clearEffectLoopRemaining();
+    guardedGetState()?.clearEffectLoopRemaining();
   }, [pauseAllMedia, cleanupReadAlongArtifacts]);
 
   const killReplayTimeline = useCallback(() => {
@@ -277,7 +280,7 @@ export function usePlayerGsapEngine({
     }
     pauseAllMedia();
     cleanupReadAlongArtifacts();
-    usePlaybackStore.getState().clearEffectLoopRemaining();
+    guardedGetState()?.clearEffectLoopRemaining();
   }, [pauseAllMedia, cleanupReadAlongArtifacts]);
 
   /** Build the per-animation lifecycle callbacks for addTweenToTimeline.
@@ -288,16 +291,17 @@ export function usePlayerGsapEngine({
     const trackable = loopVal > 1;
     return {
       onTweenStart: () => {
-        const s = usePlaybackStore.getState();
+        const s = guardedGetState();
+        if (!s) return;
         s.addActiveAnimationOrder(anim.order);
         if (trackable) s.setEffectLoopRemaining(anim.order, loopVal);
       },
       onTweenRepeat: trackable
-        ? () =>
-            usePlaybackStore.getState().decrementEffectLoopRemaining(anim.order)
+        ? () => guardedGetState()?.decrementEffectLoopRemaining(anim.order)
         : undefined,
       onTweenComplete: () => {
-        const s = usePlaybackStore.getState();
+        const s = guardedGetState();
+        if (!s) return;
         s.removeActiveAnimationOrder(anim.order);
         s.clearEffectLoopRemaining(anim.order);
       },
@@ -362,7 +366,7 @@ export function usePlayerGsapEngine({
   const buildAndPlayStepTimeline = useCallback(
     (step: AnimationStep) => {
       killTimeline();
-      usePlaybackStore.getState().setActiveAnimationOrders([]);
+      guardedGetState()?.setActiveAnimationOrders([]);
 
       // Quiz-only step: bypass GSAP timeline entirely.
       // tl.call() + tl.addPause() with zero-duration timelines is unreliable —
@@ -382,7 +386,7 @@ export function usePlayerGsapEngine({
         );
         timelineRef.current = null;
         step.animations.forEach((anim) => {
-          usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+          guardedGetState()?.addActiveAnimationOrder(anim.order);
           onQuizPlay?.(anim.target.id);
         });
         // stepComplete is called by handleQuizComplete when modal closes
@@ -429,7 +433,7 @@ export function usePlayerGsapEngine({
           const childrenBefore = tl.getChildren().length;
           tl.call(
             () => {
-              usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+              guardedGetState()?.addActiveAnimationOrder(anim.order);
               onQuizPlay?.(anim.target.id);
             },
             undefined,
@@ -437,10 +441,7 @@ export function usePlayerGsapEngine({
           );
           tl.addPause();
           tl.call(
-            () =>
-              usePlaybackStore
-                .getState()
-                .removeActiveAnimationOrder(anim.order),
+            () => guardedGetState()?.removeActiveAnimationOrder(anim.order),
             undefined,
             "+=0.01"
           );
@@ -597,7 +598,7 @@ export function usePlayerGsapEngine({
 
   const buildAndPlayFullTimeline = useCallback(() => {
     killTimeline();
-    usePlaybackStore.getState().setActiveAnimationOrders([]);
+    guardedGetState()?.setActiveAnimationOrders([]);
     const tl = gsap.timeline({
       onComplete: () => {
         // Root component handles auto-advance; we only signal completion
@@ -642,7 +643,7 @@ export function usePlayerGsapEngine({
         const childrenBefore = tl.getChildren().length;
         tl.call(
           () => {
-            usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+            guardedGetState()?.addActiveAnimationOrder(anim.order);
             onQuizPlay?.(anim.target.id);
           },
           undefined,
@@ -651,8 +652,7 @@ export function usePlayerGsapEngine({
         tl.addPause();
         // Offset past pause so it only fires after resume
         tl.call(
-          () =>
-            usePlaybackStore.getState().removeActiveAnimationOrder(anim.order),
+          () => guardedGetState()?.removeActiveAnimationOrder(anim.order),
           undefined,
           "+=0.01"
         );
@@ -825,12 +825,12 @@ export function usePlayerGsapEngine({
   const handleClickLoopReplay = useCallback(
     (step: AnimationStep) => {
       killReplayTimeline();
-      usePlaybackStore.getState().setActiveAnimationOrders([]);
+      guardedGetState()?.setActiveAnimationOrders([]);
 
       const replayTl = gsap.timeline({
         onComplete: () => {
           // Clear active orders when replay finishes
-          usePlaybackStore.getState().setActiveAnimationOrders([]);
+          guardedGetState()?.setActiveAnimationOrders([]);
         },
       });
       const dims = getContainerDims();
@@ -847,7 +847,7 @@ export function usePlayerGsapEngine({
           else position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
           replayTl.call(
             () => {
-              usePlaybackStore.getState().addActiveAnimationOrder(anim.order);
+              guardedGetState()?.addActiveAnimationOrder(anim.order);
               onQuizPlay?.(anim.target.id);
             },
             undefined,
@@ -855,7 +855,7 @@ export function usePlayerGsapEngine({
           );
           // No addPause in replay — just clear highlight after quiz callback
           replayTl.call(() =>
-            usePlaybackStore.getState().removeActiveAnimationOrder(anim.order)
+            guardedGetState()?.removeActiveAnimationOrder(anim.order)
           );
           return;
         }
@@ -1096,6 +1096,7 @@ export function usePlayerGsapEngine({
   // editionFilteredAnimations is included so switching editions re-applies correct initial states
   // (e.g. entrance animations set opacity:0; removing them must restore normal opacity).
   useEffect(() => {
+    if (lifecycle !== 'ready') return;
     cancelPendingRaf();
     killTimeline();
     killReplayTimeline();
@@ -1149,10 +1150,11 @@ export function usePlayerGsapEngine({
       cancelPendingRaf();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spread.id, editionFilteredAnimations, autoplaySuspended]);
+  }, [spread.id, editionFilteredAnimations, autoplaySuspended, lifecycle]);
 
   // === Lifecycle: Phase change → build step timeline (manual/off mode) ===
   useEffect(() => {
+    if (lifecycle !== 'ready') return;
     if (playMode !== "off") return;
     // Skip step build while a spread-turn is animating; user-driven Next will
     // re-fire this effect on the next phase tick after settle.
@@ -1223,10 +1225,11 @@ export function usePlayerGsapEngine({
     const step = steps[currentIdx];
     if (step) buildAndPlayStepTimeline(step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, currentStepIndex, playMode, autoplaySuspended]);
+  }, [phase, currentStepIndex, playMode, autoplaySuspended, lifecycle]);
 
   // === Lifecycle: Auto mode — play toggle or mode transition ===
   useEffect(() => {
+    if (lifecycle !== 'ready') return;
     const justSwitchedToAuto =
       prevPlayModeRef.current !== "auto" && playMode === "auto";
     const justLeftAuto =
@@ -1294,10 +1297,11 @@ export function usePlayerGsapEngine({
       cancelPendingRaf();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, playMode, autoplaySuspended]);
+  }, [isPlaying, playMode, autoplaySuspended, lifecycle]);
 
   // === Lifecycle: Manual (off) mode pause/resume ===
   useEffect(() => {
+    if (lifecycle !== 'ready') return;
     if (playMode !== "off") return;
     if (isPlaying) {
       timelineRef.current?.resume();
@@ -1306,21 +1310,23 @@ export function usePlayerGsapEngine({
       timelineRef.current?.pause();
       pauseAllMedia();
     }
-  }, [isPlaying, playMode, pauseAllMedia, resumePausedMedia]);
+  }, [isPlaying, playMode, pauseAllMedia, resumePausedMedia, lifecycle]);
 
   // === Lifecycle: Clear active animation orders when playback stops ===
   useEffect(() => {
+    if (lifecycle !== 'ready') return;
     if (
       phase === "idle" ||
       phase === "complete" ||
       phase === "awaiting_next" ||
       phase === "awaiting_click"
     ) {
-      const s = usePlaybackStore.getState();
+      const s = guardedGetState();
+      if (!s) return;
       s.setActiveAnimationOrders([]);
       s.clearEffectLoopRemaining();
     }
-  }, [phase]);
+  }, [phase, lifecycle]);
 
   // Resume GSAP timeline after quiz modal closes
   const resumeTimeline = useCallback(() => {
@@ -1336,7 +1342,7 @@ export function usePlayerGsapEngine({
       timelineRef.current.resume();
     } else {
       // Quiz-only step (manual/off mode): no timeline, clear orders and complete step directly.
-      usePlaybackStore.getState().setActiveAnimationOrders([]);
+      guardedGetState()?.setActiveAnimationOrders([]);
       playbackActions.stepComplete();
     }
   }, [playbackActions]);

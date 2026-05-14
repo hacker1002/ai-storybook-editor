@@ -5,7 +5,6 @@ import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'PlayableSpreadView');
 import type {
-  PlayMode,
   PlayEdition,
   PlayableSpread,
 } from "@/types/playable-types";
@@ -17,6 +16,8 @@ import {
   usePlaybackActions,
   useVolume,
   useIsMuted,
+  usePlayEdition,
+  usePlayMode,
 } from '@/stores/animation-playback-store';
 import {
   useBookMusic,
@@ -194,14 +195,20 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
     setPlayerGestureCaptured(true);
   }, []);
 
-  const [playMode, setPlayMode] = useState<PlayMode>("off");
+  // playMode is store-owned — single source of truth across PlayableSpreadView,
+  // PlayerCanvas, control sidebar, and use-player-gsap-engine. Initial value
+  // is `'off'` (see store INITIAL_STATE); not persisted across reloads.
+  const playMode = usePlayMode();
   const defaultEdition = useMemo<PlayEdition>(() => {
     // undefined = no constraint (internal editor) → all editions available → pick highest
     if (!availableEditions || availableEditions.interactive) return 'interactive';
     if (availableEditions.dynamic) return 'dynamic';
     return 'classic';
   }, [availableEditions]);
-  const [playEdition, setPlayEdition] = useState<PlayEdition>(defaultEdition);
+  // Edition lives in the playback store (single source of truth — sidebar +
+  // canvas both read it from there). Default falls back when stored value is
+  // disallowed by availableEditions (see edition-correction effect below).
+  const playEdition = usePlayEdition();
   const [localSelectedSpreadId, setLocalSelectedSpreadId] = useState<string | null>(
     spreads[0]?.id ?? null
   );
@@ -229,7 +236,12 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const spreadHistories = useSpreadHistories();
   const currentSection = useCurrentSection();
   const playbackActions = usePlaybackActions();
-  const { pushSpreadHistory, popSpreadHistory, setCurrentSection } = playbackActions;
+  const { pushSpreadHistory, popSpreadHistory, setCurrentSection, setPlayEdition, setPlayMode } = playbackActions;
+
+  // Edition seeding is now handled by container `initialize(payload)` — removed.
+  // `defaultEdition` still feeds the payload composition upstream (share-preview,
+  // demo, editor). PlayableSpreadView itself no longer writes to the store on mount.
+  void defaultEdition;
 
   // === Spread turn transition ===
   // `transition_type` lives in book.effects (JSONB). Default to 'turn' for
@@ -294,7 +306,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   const handleEditionChange = useCallback((edition: PlayEdition) => {
     log.info('handleEditionChange', 'edition switching', { edition });
     setPlayEdition(edition);
-  }, []);
+  }, [setPlayEdition]);
 
   // === Navigation Handlers ===
 

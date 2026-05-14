@@ -5,7 +5,7 @@
 // does not support the current narrationLanguage.
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useLayoutEffect } from "react";
 import { toast } from "sonner";
 import { PlayerAnimationSidebar } from "./player-animation-sidebar";
 import { PlayerHeader } from "./player-header";
@@ -24,13 +24,16 @@ import {
 } from "@/stores/snapshot-store/selectors";
 import {
   useNarrationLanguage,
-  usePlaybackStore,
+  usePlaybackActions,
+  useLifecycle,
+  type InitializePayload,
 } from "@/stores/animation-playback-store";
 import { useRemixes, useRemixById } from "@/stores/remix-store";
-import { useBookTemplateLayout } from "@/stores/book-store";
+import { useBookTemplateLayout, useCurrentBook } from "@/stores/book-store";
 import { createLogger } from "@/utils/logger";
 import type { BaseSpread } from "@/types/spread-types";
 import type { Section } from "@/types/illustration-types";
+import type { PlayEdition } from "@/types/playable-types";
 
 const log = createLogger("Editor", "PreviewCreativeSpace");
 
@@ -60,6 +63,14 @@ function labelOf(code: string): string {
 export function PreviewCreativeSpace() {
   const narrationLanguage = useNarrationLanguage();
   const templateLayout = useBookTemplateLayout();
+  const currentBook = useCurrentBook();
+  const bookId = currentBook?.id ?? null;
+  const lifecycle = useLifecycle();
+  const { initialize, teardown, setNarrationLanguage } = usePlaybackActions();
+
+  // Retry nonce — bumped by error-banner retry button to force payload memo
+  // recomputation when `lifecycle === 'error'` and inputs haven't changed.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // Local source state — Original by default. Decoupled from RemixStore.activeRemixId
   // (Remix space's selection MUST NOT leak into Preview's source picker).
@@ -137,26 +148,58 @@ export function PreviewCreativeSpace() {
 
   const branchSetting = currentSpread?.branch_setting ?? null;
 
-  // Strategy B: explicit playback reset on source switch. PlayableSpreadView does
-  // not auto-reset on spreads reference change (verified phase-03 Bước 1), so we
-  // drive the reset here to guarantee clean playback when switching Original ↔
-  // remix or remix ↔ remix.
+  // Default edition for this session. Editor has no availableEditions constraint
+  // → always pick `interactive` (full feature). Future per-source overrides land here.
+  const defaultEdition: PlayEdition = "interactive";
+
   const activeRemixId = activeRemix?.id ?? null;
-  useEffect(() => {
-    usePlaybackStore.getState().resetStore();
-    log.info("source.switch", "playback reset", {
-      sourceKind: activeRemixId ? "remix" : "original",
-      remixId: activeRemixId,
-    });
-  }, [activeRemixId]);
+
+  // === Lifecycle: build payload + dispatch initialize ===
+  // useLayoutEffect runs sync after DOM mutation but BEFORE paint and before
+  // child useEffect — guarantees child sees `lifecycle === 'ready'` on first
+  // effect tick, eliminating the parent/child effect-order race that motivated
+  // this refactor (see ADR-030 / plan 260514-1542).
+  //
+  // Deps intentionally exclude:
+  // - `effectiveSpreadId`: spread navigation is in-session — re-`initialize`
+  //   would wipe `steps`/`spreadHistories`/`phase`, clobbering user state. The
+  //   `startSpreadId` is only a seed for FIRST init in a session.
+  // - `effectiveLanguage`: language changes go through `setNarrationLanguage`
+  //   (user-pref action, unguarded). Re-`initialize` on language change would
+  //   also clobber playback state.
+  const firstSpreadId = spreadIds[0] ?? null;
+  const payload: InitializePayload | null = useMemo(() => {
+    if (!bookId || !firstSpreadId) return null;
+    return {
+      sessionId: activeRemixId ? `remix:${activeRemixId}` : `original:${bookId}`,
+      language: effectiveLanguage,
+      edition: defaultEdition,
+      availableEditions: undefined, // editor = no constraint = all editions
+      startSpreadId: firstSpreadId,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId, activeRemixId, firstSpreadId, retryNonce]);
+
+  // Single lifecycle effect: initialize on mount/session-switch, teardown on
+  // unmount/session-switch. Effective key is `payload.sessionId` (changes when
+  // user switches between original/remix or book). Same-session re-fires
+  // absorbed by the store's idempotent guard inside `initialize`.
+  useLayoutEffect(() => {
+    if (!payload) return;
+    initialize(payload);
+    return () => {
+      teardown();
+    };
+  }, [payload, initialize, teardown]);
 
   // Language fallback write-back + toast. Only fires on transition; the guard
   // (effectiveLanguage === narrationLanguage after write-back) prevents looping.
+  // `setNarrationLanguage` is NOT lifecycle-guarded (user preference) — safe pre-init.
   useEffect(() => {
     if (activeRemix === null) return;
     if (effectiveLanguage === narrationLanguage) return;
 
-    usePlaybackStore.getState().setNarrationLanguage(effectiveLanguage);
+    setNarrationLanguage(effectiveLanguage);
 
     log.info("language.fallback", "transition + write-back", {
       remixId: activeRemix.id,
@@ -167,7 +210,7 @@ export function PreviewCreativeSpace() {
     toast.info(
       `Showing in ${labelOf(effectiveLanguage)} — "${activeRemix.name}" doesn't support ${labelOf(narrationLanguage)}`,
     );
-  }, [activeRemix, effectiveLanguage, narrationLanguage]);
+  }, [activeRemix, effectiveLanguage, narrationLanguage, setNarrationLanguage]);
 
   log.debug("render", "derived", {
     source: activeRemix ? "remix" : "original",
@@ -210,6 +253,20 @@ export function PreviewCreativeSpace() {
           selectedRemixId={effectiveSelectedRemixId}
           onSelect={setUserSelectedRemixId}
         />
+        {lifecycle === "error" && (
+          <div className="bg-destructive/10 text-destructive border-b border-destructive/30 px-4 py-2 text-sm flex items-center justify-between">
+            <span>
+              Không thể khởi tạo playback — dữ liệu sách chưa sẵn sàng.
+            </span>
+            <button
+              type="button"
+              onClick={() => setRetryNonce((n) => n + 1)}
+              className="ml-3 px-3 py-1 rounded bg-destructive text-destructive-foreground text-xs font-medium hover:opacity-90"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
         <div className="flex-1 overflow-hidden">
           <PlayableSpreadView
             spreads={playableSpreads}

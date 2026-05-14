@@ -1,8 +1,12 @@
 // share-preview-viewer.tsx - Data conversion layer: API response → PlayableSpreadView props
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useLayoutEffect } from 'react';
 import { PlayableSpreadView } from '@/features/editor/components/playable-spread-view';
-import type { PlayableSpread } from '@/types/playable-types';
+import type { PlayableSpread, PlayEdition } from '@/types/playable-types';
 import type { Section } from '@/types/illustration-types';
+import {
+  usePlaybackActions,
+  type InitializePayload,
+} from '@/stores/animation-playback-store';
 import type {
   BookPreviewData,
   ShareConfig,
@@ -77,6 +81,7 @@ function hydrateNarrator(input: ShareNarratorSetting | undefined): NarratorSetti
 
 export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreviewViewerProps) {
   const setCanvasSize = useSetCanvasSize();
+  const { initialize, teardown } = usePlaybackActions();
 
   // Sync book dimension → canvas size store so PlayerCanvas renders at correct spread dimensions
   useEffect(() => {
@@ -193,6 +198,41 @@ export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreview
     if (!snapshot) return [];
     return (snapshot.illustration.sections ?? []) as Section[];
   }, [snapshot]);
+
+  // === Playback session lifecycle ===
+  // Compute default edition from availableEditions (highest available). Container
+  // dispatches `initialize` BEFORE PlayableSpreadView mounts (useLayoutEffect)
+  // so the child's first render sees `lifecycle === 'ready'`.
+  const payload: InitializePayload | null = useMemo(() => {
+    if (!snapshot) return null;
+    if (playableSpreads.length === 0) return null;
+    const edition: PlayEdition = availableEditions.interactive
+      ? 'interactive'
+      : availableEditions.dynamic
+      ? 'dynamic'
+      : 'classic';
+    const language =
+      shareConfig.languages[0]?.code ?? book.original_language ?? 'en_US';
+    return {
+      sessionId: `share:${book.id}`,
+      language,
+      edition,
+      availableEditions,
+      startSpreadId: playableSpreads[0].id,
+    };
+  }, [snapshot, playableSpreads, availableEditions, shareConfig.languages, book.id, book.original_language]);
+
+  // Single lifecycle effect: initialize on mount/session-switch, teardown on
+  // unmount/session-switch. Effective key is `payload.sessionId` (payload is
+  // useMemo'd over the same upstream inputs). Same-session re-fires are
+  // absorbed by the store's idempotent guard inside `initialize`.
+  useLayoutEffect(() => {
+    if (!payload) return;
+    initialize(payload);
+    return () => {
+      teardown();
+    };
+  }, [payload, initialize, teardown]);
 
   log.info('render', 'share preview viewer', {
     bookId: book.id,
