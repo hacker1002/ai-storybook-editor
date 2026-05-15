@@ -267,6 +267,7 @@ export function AnimationEditorSidebar({
             size="icon"
             className="h-7 w-7"
             aria-label="Filter animations"
+            data-animation-sidebar-item
           >
             <Filter
               className={[
@@ -289,6 +290,7 @@ export function AnimationEditorSidebar({
               className="h-7 w-7"
               disabled={!isAddEnabled}
               aria-label="Add animation"
+              data-animation-sidebar-item
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
