@@ -142,35 +142,107 @@ export interface RemixRow {
   updated_at: string;
 }
 
-// ── Inject job (ephemeral, store-local) ──────────────────────────────────────
+// ── Remix Job (DB row parity — Phase 2 background_jobs) ─────────────────────
+// Aligned 1:1 với public.background_jobs DB enum (queued|running|completed|
+// failed|cancelled). `partial` is a derived UI state (status='completed' AND
+// result.errors.length > 0). Spec: ai-storybook-design/component/stores/remix-store.md §2.
 
-export type InjectJobStatus =
-  | 'pending'
+export type RemixJobPhase = 'audio' | 'image';
+
+export type RemixJobStatus =
+  | 'queued'
   | 'running'
   | 'completed'
-  | 'partial-error'
-  | 'error'
+  | 'failed'
   | 'cancelled';
 
-export type InjectJobStage = 'text-swap' | 'audio-chunk' | 'crop-swap' | 'persist';
-
-export interface InjectJobError {
-  stage: InjectJobStage;
+export interface RemixJobError {
+  // Audio: 'narrate-script' | 'combine-audio-chunks' | 'persist' | 'internal'
+  // Image (Phase 3): 'crop-swap' | 'crop-rasterize' | 'persist' | 'internal'
+  stage: string;
   spreadId?: string;
+  textboxId?: string;
+  languageKey?: string;
+  chunkIndex?: number;
   entityKey?: string;
   message: string;
 }
 
-export interface InjectJob {
+export type RemixJobStepDetail =
+  | 'pending'
+  | 'running'
+  | 'done'
+  | { state: 'failed'; stage: string; message: string; failed_textbox_ids?: string[] };
+
+export interface RemixJobResult {
+  errors: RemixJobError[];
+  updated_spreads?: number;
+  failed_spreads?: number;
+  total_chunks_regenerated?: number;
+  total_textboxes_recombined?: number;
+  [k: string]: unknown;
+}
+
+export interface RemixJob {
   id: string;
   remixId: string;
-  status: InjectJobStatus;
-  progress: number;
-  startedAt: string;
+  phase: RemixJobPhase;
+  triggeredBy: 'auto-create' | 'user';
+  status: RemixJobStatus;
+  currentStep: number;
+  totalSteps: number;
+  stepDetails?: { spreads: Record<string, RemixJobStepDetail> };
+  result?: RemixJobResult;
+  cancelRequested: boolean;
+  createdAt: string;
+  updatedAt: string;
   completedAt?: string;
-  errors: InjectJobError[];
-  cancelFlag: boolean;
 }
+
+/** 3-shape result returned by startAudioJob/startImageJob. Spec: api/jobs/01 §Result. */
+export type EnqueueRemixJobOutcome =
+  | { kind: 'enqueued'; jobId: string; totalSteps: number; chunksToRegen?: number; textboxesToRecombine?: number }
+  | { kind: 'deduped';  jobId: string; status: 'queued' | 'running' }
+  | { kind: 'skipped';  reason: string };
+
+/** 7-state discriminated union driving AudioJobBadge component render. */
+export type AudioJobBadgeState =
+  | { kind: 'hidden' }
+  | { kind: 'queued';     jobId: string }
+  | { kind: 'running';    jobId: string; current: number; total: number }
+  | { kind: 'cancelling'; jobId: string }
+  | { kind: 'cancelled';  jobId: string; completedAt: string }
+  | { kind: 'partial';    jobId: string; errorCount: number; completedAt: string }
+  | { kind: 'failed';     jobId: string; message: string };
+
+/** Raw shape of public.background_jobs row returned by Supabase select + realtime payload. */
+export interface BackgroundJobRow {
+  id: string;
+  type: 'remix_audio_swap' | 'remix_image_swap' | string;
+  user_id: string;
+  book_id: string | null;
+  status: RemixJobStatus;
+  cancel_requested: boolean;
+  total_steps: number;
+  current_step: number;
+  step_details: RemixJob['stepDetails'];
+  params: { remix_id: string; triggered_by?: 'auto-create' | 'user'; [k: string]: unknown };
+  result: RemixJobResult | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Hardcoded chunk-concurrency cap sent to backend on every enqueue.
+ *  Guards ElevenLabs 5 req/s; backend may clamp further. */
+export const CLIENT_AUDIO_CHUNK_CAP = 2 as const;
+
+/** Discriminated union of remote events applied by `applyServerEvent`. */
+export type RemixServerEvent =
+  | { type: 'created'; remix: Remix }
+  | { type: 'updated'; id: string; patch: Partial<Remix> }
+  | { type: 'deleted'; id: string }
+  | { type: 'job_upsert'; row: BackgroundJobRow }
+  | { type: 'job_delete'; id: string };
 
 // ── Filter state (sidebar popover) ───────────────────────────────────────────
 // Empty arrays = no filter (all checked semantic — see Phase 06).

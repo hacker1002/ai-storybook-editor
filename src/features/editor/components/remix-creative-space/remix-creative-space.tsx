@@ -59,7 +59,9 @@ export function RemixCreativeSpace() {
     renameRemix,
     deleteRemix,
     setActiveRemixId,
-    startInjectJob,
+    startAudioJob,
+    cancelJob,
+    dismissJob,
   } = useRemixActions();
 
   const [filter, setFilter] = useState<RemixFilterState>({
@@ -139,9 +141,9 @@ export function RemixCreativeSpace() {
         onDeleteRemix={(id) => setDeleteConfirmId(id)}
         onApplyFilter={setFilter}
         onOpenSwapCropSheet={setSwapTarget}
-        onInject={(id) => {
-          startInjectJob(id);
-        }}
+        onRetryAudio={(id) => startAudioJob(id, { triggeredBy: 'user' })}
+        onCancelAudio={(_id, jobId) => cancelJob(jobId)}
+        onDismissJob={dismissJob}
       />
 
       <div className="flex-1 min-w-0">

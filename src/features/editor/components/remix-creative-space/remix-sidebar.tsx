@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { Filter, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -17,15 +18,19 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/utils/utils';
+import { createLogger } from '@/utils/logger';
 import { RemixAccordionItem } from './remix-accordion-item';
 import { RemixFilterPopover } from './remix-filter-popover';
 import { isBookRemixEmpty } from './default-config-builder';
 import type { BookRemix } from '@/types/editor';
 import type {
+  EnqueueRemixJobOutcome,
   Remix,
   RemixFilterState,
   SwapCropSheetTarget,
 } from '@/types/remix';
+
+const log = createLogger('Editor', 'RemixSidebar');
 
 interface Props {
   remixes: Remix[];
@@ -38,7 +43,9 @@ interface Props {
   onDeleteRemix: (id: string) => void;
   onApplyFilter: (next: RemixFilterState) => void;
   onOpenSwapCropSheet: (target: SwapCropSheetTarget) => void;
-  onInject: (remixId: string) => void;
+  onRetryAudio: (remixId: string) => Promise<EnqueueRemixJobOutcome>;
+  onCancelAudio: (remixId: string, jobId: string) => Promise<void>;
+  onDismissJob: (jobId: string) => void;
 }
 
 export function RemixSidebar({
@@ -52,7 +59,9 @@ export function RemixSidebar({
   onDeleteRemix,
   onApplyFilter,
   onOpenSwapCropSheet,
-  onInject,
+  onRetryAudio,
+  onCancelAudio,
+  onDismissJob,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(() =>
     new Set(activeRemixId ? [activeRemixId] : []),
@@ -158,7 +167,47 @@ export function RemixSidebar({
               onRename={(name) => onRenameRemix(remix.id, name)}
               onDelete={() => onDeleteRemix(remix.id)}
               onOpenSwapCropSheet={onOpenSwapCropSheet}
-              onInject={() => onInject(remix.id)}
+              onRetryAudio={async () => {
+                try {
+                  const outcome = await onRetryAudio(remix.id);
+                  log.info('onRetryAudio', 'outcome', {
+                    remixId: remix.id,
+                    kind: outcome.kind,
+                  });
+                  switch (outcome.kind) {
+                    case 'enqueued':
+                      toast.info('Audio retry started');
+                      break;
+                    case 'deduped':
+                      toast.info('Audio job already running');
+                      break;
+                    case 'skipped':
+                      toast.info('Audio already in sync');
+                      break;
+                  }
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : String(err);
+                  log.error('onRetryAudio', 'failed', {
+                    remixId: remix.id,
+                    error: message,
+                  });
+                  toast.error(`Audio retry failed: ${message}`);
+                }
+              }}
+              onCancelAudio={async (jobId) => {
+                try {
+                  await onCancelAudio(remix.id, jobId);
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : String(err);
+                  log.error('onCancelAudio', 'failed', {
+                    remixId: remix.id,
+                    jobId,
+                    error: message,
+                  });
+                  toast.error(`Cancel failed: ${message}`);
+                }
+              }}
+              onDismissJob={onDismissJob}
             />
           ))
         )}

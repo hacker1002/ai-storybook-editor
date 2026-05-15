@@ -1,15 +1,12 @@
-// derive-badge.ts — Map InjectJob state to a PreviewSourceBadge for the
-// PlayerHeader dropdown.
-//
-// v1 collapses spec's separate audio-* / image-* variants into image-* only,
-// because the current InjectJob model is unified (no `phase` field). A follow-up
-// plan will migrate the store to a `jobs[]` model with explicit audio/image
-// phases — at that point we'll add `useLatestAudioJob` / `useLatestImageJob`
-// selectors and re-enable the audio variants here.
+// derive-badge.ts — Map latest audio RemixJob state to a PreviewSourceBadge
+// for the PlayerHeader dropdown. Updated for Phase 2 store migration:
+// consumes `RemixJob` (DB-row-parity, phase='audio') instead of legacy InjectJob.
+// Image variant is not wired here — Phase 3 will add image-job derive.
 //
 // Reference: plans/260514-1145-preview-space-remix-source-switching/phase-01
+//            plans/260515-1437-remix-phase2-audio-swap-frontend/plan.md
 
-import type { InjectJob } from '@/types/remix';
+import type { RemixJob } from '@/types/remix';
 
 export type PreviewSourceBadge =
   | { kind: 'none' }
@@ -19,23 +16,26 @@ export type PreviewSourceBadge =
   | { kind: 'image-regenerating' }
   | { kind: 'image-error' };
 
-/** Derive badge state from the latest inject job for a remix (v1 collapses audio/image). */
-export function deriveBadge(latestInjectJob: InjectJob | null): PreviewSourceBadge {
-  if (latestInjectJob === null) {
+/** Derive badge state from the latest audio job for a remix.
+ *  Maps DB enum (queued/running/completed/failed/cancelled) + derived partial
+ *  to a v1-collapsed PreviewSourceBadge (audio variants only). */
+export function deriveBadge(latestJob: RemixJob | null): PreviewSourceBadge {
+  if (latestJob === null) {
     return { kind: 'image-not-injected' };
   }
 
-  switch (latestInjectJob.status) {
-    case 'pending':
+  const errorCount = latestJob.result?.errors?.length ?? 0;
+
+  switch (latestJob.status) {
+    case 'queued':
     case 'running':
-      return { kind: 'image-regenerating' };
-    case 'error':
-    case 'partial-error':
-      return { kind: 'image-error' };
+      return { kind: 'audio-regenerating' };
+    case 'failed':
+      return { kind: 'audio-error' };
+    case 'completed':
+      return errorCount > 0 ? { kind: 'audio-error' } : { kind: 'none' };
     case 'cancelled':
       return { kind: 'image-not-injected' };
-    case 'completed':
-      return { kind: 'none' };
     default:
       return { kind: 'image-not-injected' };
   }

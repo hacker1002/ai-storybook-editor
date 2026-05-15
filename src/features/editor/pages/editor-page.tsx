@@ -33,6 +33,7 @@ import { InteractionLayerProvider } from '../contexts';
 import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
+import { useRemixJobNotifications } from '../hooks/use-remix-job-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
 
 const log = createLogger('Editor', 'EditorPage');
@@ -64,6 +65,9 @@ export function EditorPage() {
 
   // Global toast notifications for background image tasks
   useImageTaskNotifications();
+
+  // Global toast notifications for remix audio/image swap jobs
+  useRemixJobNotifications();
 
   // Local UI state
   const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('doc');

@@ -6,11 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useLatestInjectJob } from '@/stores/remix-store';
-import { useRemixActions } from '@/stores/remix-store';
+import { useAudioJobBadgeState } from '@/stores/remix-store';
 import { cn } from '@/utils/utils';
 import { RemixInventorySection } from './remix-inventory-section';
 import { InjectButton } from './inject-button';
+import { AudioJobBadge } from './audio-job-badge';
 import type { Remix, SwapCropSheetTarget } from '@/types/remix';
 
 interface Props {
@@ -21,7 +21,9 @@ interface Props {
   onRename: (name: string) => void;
   onDelete: () => void;
   onOpenSwapCropSheet: (target: SwapCropSheetTarget) => void;
-  onInject: () => void;
+  onRetryAudio: () => Promise<void>;
+  onCancelAudio: (jobId: string) => Promise<void>;
+  onDismissJob: (jobId: string) => void;
 }
 
 export function RemixAccordionItem({
@@ -32,10 +34,11 @@ export function RemixAccordionItem({
   onRename,
   onDelete,
   onOpenSwapCropSheet,
-  onInject,
+  onRetryAudio,
+  onCancelAudio,
+  onDismissJob,
 }: Props) {
-  const job = useLatestInjectJob(remix.id);
-  const { cancelInjectJob } = useRemixActions();
+  const audioJobState = useAudioJobBadgeState(remix.id);
   const [renameMode, setRenameMode] = useState(false);
   const [renameValue, setRenameValue] = useState(remix.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -138,11 +141,14 @@ export function RemixAccordionItem({
               onOpenSwapCropSheet({ ...t, remixId: remix.id })
             }
           />
-          <InjectButton
-            job={job}
-            onInject={onInject}
-            onCancel={job ? () => cancelInjectJob(job.id) : undefined}
+          <AudioJobBadge
+            state={audioJobState}
+            remixName={remix.name}
+            onRetry={onRetryAudio}
+            onCancel={onCancelAudio}
+            onDismiss={onDismissJob}
           />
+          <InjectButton />
         </div>
       )}
     </div>

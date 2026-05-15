@@ -1,5 +1,6 @@
-// remix-store/index.ts — Standalone Zustand store managing remix rows +
-// ephemeral inject jobs. Frontend owns CRUD via supabase-js (RLS-protected).
+// remix-store/index.ts — Standalone Zustand store managing remix rows + remote
+// background_jobs (audio/image swap). Frontend owns remix CRUD via supabase-js
+// (RLS-protected); jobs are read-only via realtime channel + REST enqueue.
 
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
@@ -7,23 +8,45 @@ import { useShallow } from 'zustand/react/shallow';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import type {
-  InjectJob,
+  BackgroundJobRow,
+  CLIENT_AUDIO_CHUNK_CAP as CapType,
+  EnqueueRemixJobOutcome,
   Remix,
   RemixConfig,
   RemixCropSheet,
+  RemixJob,
+  RemixServerEvent,
   RemixSpread,
 } from '@/types/remix';
+import { CLIENT_AUDIO_CHUNK_CAP } from '@/types/remix';
 import type { Human } from '@/types/human';
 import { buildRemixClonePayload } from './clone-builder';
 import { mapRowToRemix } from './supabase-mapping';
-import { runInjectJob } from './inject-runner';
+import { mapRowToJob } from './map-background-job-row';
+import {
+  subscribeBackgroundJobs,
+  unsubscribeBackgroundJobs,
+} from './realtime';
 import { useSnapshotStore } from '../snapshot-store';
 import { useHumansStore } from '../humans-store';
+import { useAuthStore } from '../auth-store';
 import { applyTextSwap } from '@/features/remix/text-swap-engine';
+import {
+  enqueueAudioSwap,
+  enqueueImageSwap,
+  cancelJobRemote,
+  type EnqueueAudioSwapData,
+  type EnqueueAudioSwapEnqueuedData,
+  type EnqueueAudioSwapDedupedData,
+} from '@/apis/jobs-api';
 
 const log = createLogger('Store', 'RemixStore');
 
-// ── Patch shape exposed by inject runner helpers ─────────────────────────────
+// Re-export so callers don't need a separate import for the cap constant.
+export { CLIENT_AUDIO_CHUNK_CAP };
+export type { CapType };
+
+// ── Patch shape exposed by job/runner helpers ────────────────────────────────
 
 export interface RemixCropSheetPatch {
   type: 'character' | 'prop' | 'mix';
@@ -35,10 +58,16 @@ export interface RemixCropSheetPatch {
 
 // ── Store shape ──────────────────────────────────────────────────────────────
 
+interface StartAudioJobOptions {
+  triggeredBy: 'auto-create' | 'user';
+  /** Override default CLIENT_AUDIO_CHUNK_CAP. Backend may clamp further. */
+  maxConcurrentChunksPerTextbox?: number;
+}
+
 interface RemixStore {
   remixes: Remix[];
   activeRemixId: string | null;
-  injectJobs: InjectJob[];
+  jobs: RemixJob[];
 
   syncFromServer: (snapshotId: string) => Promise<void>;
   clearAll: () => void;
@@ -49,10 +78,20 @@ interface RemixStore {
   deleteRemix: (id: string) => Promise<boolean>;
   setActiveRemixId: (id: string | null) => void;
 
-  startInjectJob: (remixId: string) => string | null;
-  cancelInjectJob: (jobId: string) => void;
-  dismissInjectJob: (jobId: string) => void;
-  clearFinishedJobs: () => void;
+  startAudioJob: (
+    remixId: string,
+    opts: StartAudioJobOptions,
+  ) => Promise<EnqueueRemixJobOutcome>;
+  startImageJob: (remixId: string) => Promise<EnqueueRemixJobOutcome>;
+  cancelJob: (jobId: string) => Promise<void>;
+  dismissJob: (jobId: string) => void;
+
+  applyServerEvent: (event: RemixServerEvent) => void;
+  syncJobsFromServer: (userId: string) => Promise<void>;
+  /** Targeted single-remix refetch. Triggered when a background job for
+   *  that remix transitions to a terminal status — DB row may have new
+   *  illustration/audio chunk URLs the local copy doesn't reflect. */
+  refetchRemix: (remixId: string) => Promise<void>;
 
   patchRemixIllustration: (id: string, spreads: RemixSpread[]) => void;
   patchRemixCropSheets: (id: string, updates: RemixCropSheetPatch[]) => void;
@@ -63,7 +102,7 @@ export const useRemixStore = create<RemixStore>()(
     subscribeWithSelector((set, get) => ({
       remixes: [],
       activeRemixId: null,
-      injectJobs: [],
+      jobs: [],
 
       syncFromServer: async (snapshotId) => {
         log.info('syncFromServer', 'start', { snapshotId });
@@ -85,7 +124,7 @@ export const useRemixStore = create<RemixStore>()(
 
       clearAll: () => {
         log.info('clearAll', 'clearing remix store');
-        set({ remixes: [], activeRemixId: null, injectJobs: [] });
+        set({ remixes: [], activeRemixId: null, jobs: [] });
       },
 
       createRemix: async (config, name) => {
@@ -154,6 +193,17 @@ export const useRemixStore = create<RemixStore>()(
           });
         }
 
+        // ── Phase 2 auto-trigger audio swap (fire-and-forget) ───────────
+        log.info('createRemix', 'auto-trigger audio swap', { remixId: remix.id });
+        void get()
+          .startAudioJob(remix.id, { triggeredBy: 'auto-create' })
+          .catch((err) => {
+            log.warn('createRemix', 'audio swap enqueue failed (non-blocking)', {
+              remixId: remix.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+
         return remix;
       },
 
@@ -216,14 +266,28 @@ export const useRemixStore = create<RemixStore>()(
         const prevActiveId = get().activeRemixId;
         const wasActive = prevActiveId === id;
 
+        // Best-effort cancel any active jobs for the deleted remix.
+        const active = get().jobs.filter(
+          (j) =>
+            j.remixId === id &&
+            (j.status === 'queued' || j.status === 'running'),
+        );
+        for (const job of active) {
+          void get()
+            .cancelJob(job.id)
+            .catch((err) => {
+              log.warn('deleteRemix', 'cancel job failed (non-blocking)', {
+                jobId: job.id,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
+        }
+
         set((s) => ({
           remixes: s.remixes.filter((r) => r.id !== id),
           activeRemixId: wasActive
             ? (s.remixes.find((r) => r.id !== id)?.id ?? null)
             : s.activeRemixId,
-          injectJobs: s.injectJobs.map((j) =>
-            j.remixId === id ? { ...j, cancelFlag: true } : j,
-          ),
         }));
 
         const { error } = await supabase.from('remixes').delete().eq('id', id);
@@ -237,54 +301,383 @@ export const useRemixStore = create<RemixStore>()(
 
       setActiveRemixId: (id) => set({ activeRemixId: id }),
 
-      startInjectJob: (remixId) => {
-        const existing = get().injectJobs.find(
-          (j) =>
-            j.remixId === remixId &&
-            (j.status === 'pending' || j.status === 'running'),
-        );
-        if (existing) {
-          log.warn('startInjectJob', 'duplicate prevented', { remixId });
-          return existing.id;
+      // ── Audio swap enqueue ─────────────────────────────────────────────
+      startAudioJob: async (remixId, opts) => {
+        log.info('startAudioJob', 'enqueue', {
+          remixId,
+          triggeredBy: opts.triggeredBy,
+        });
+
+        const params = {
+          triggered_by: opts.triggeredBy,
+          max_concurrent_chunks_per_textbox:
+            opts.maxConcurrentChunksPerTextbox ?? CLIENT_AUDIO_CHUNK_CAP,
+        };
+
+        const result = await enqueueAudioSwap(remixId, params);
+        if (!result.success) {
+          log.error('startAudioJob', 'failed', {
+            remixId,
+            error: result.error,
+            httpStatus: result.httpStatus,
+            errorCode: result.errorCode,
+          });
+          throw new Error(result.error);
         }
 
-        const job: InjectJob = {
-          id: crypto.randomUUID(),
-          remixId,
-          status: 'pending',
-          progress: 0,
-          startedAt: new Date().toISOString(),
-          errors: [],
-          cancelFlag: false,
-        };
-        set((s) => ({ injectJobs: [...s.injectJobs, job] }));
+        const data = result.data;
 
-        // Fire-and-forget — Phase 08 runner performs the actual work.
-        void runInjectJob(job.id, useRemixStore);
-        return job.id;
+        if ('skipped' in data && data.skipped) {
+          log.info('startAudioJob', 'skipped', {
+            remixId,
+            reason: data.reason,
+          });
+          return { kind: 'skipped', reason: data.reason };
+        }
+
+        if ('deduped' in data && data.deduped) {
+          const deduped = data as EnqueueAudioSwapDedupedData;
+          log.info('startAudioJob', 'deduped', {
+            remixId,
+            jobId: deduped.job_id,
+            status: deduped.status,
+          });
+          // Ensure job row is present in store; if missing, top-up by re-fetching.
+          if (!get().jobs.find((j) => j.id === deduped.job_id)) {
+            const userId = useAuthStore.getState().user?.id;
+            if (userId) {
+              void get().syncJobsFromServer(userId).catch(() => undefined);
+            }
+          }
+          return {
+            kind: 'deduped',
+            jobId: deduped.job_id,
+            status: deduped.status,
+          };
+        }
+
+        const enqueued = data as EnqueueAudioSwapEnqueuedData;
+        log.info('startAudioJob', 'enqueued', {
+          remixId,
+          jobId: enqueued.job_id,
+          totalSteps: enqueued.total_steps,
+        });
+
+        // Optimistic merge: synthesize partial RemixJob row so badge appears
+        // immediately. Realtime UPDATE fills current_step/step_details next.
+        const nowIso = new Date().toISOString();
+        const seed: RemixJob = {
+          id: enqueued.job_id,
+          remixId,
+          phase: 'audio',
+          triggeredBy: opts.triggeredBy,
+          status: 'queued',
+          currentStep: 0,
+          totalSteps: enqueued.total_steps,
+          stepDetails: undefined,
+          result: undefined,
+          cancelRequested: false,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          completedAt: undefined,
+        };
+        set((s) => {
+          if (s.jobs.find((j) => j.id === seed.id)) return s;
+          return { jobs: [...s.jobs, seed] };
+        });
+
+        return {
+          kind: 'enqueued',
+          jobId: enqueued.job_id,
+          totalSteps: enqueued.total_steps,
+          chunksToRegen: enqueued.chunks_to_regen,
+          textboxesToRecombine: enqueued.textboxes_to_recombine,
+        };
       },
 
-      cancelInjectJob: (jobId) =>
-        set((s) => ({
-          injectJobs: s.injectJobs.map((j) =>
-            j.id === jobId ? { ...j, cancelFlag: true } : j,
-          ),
-        })),
+      // ── Image swap enqueue (Phase 3 ready — UI gated, endpoint live) ──
+      startImageJob: async (remixId) => {
+        log.info('startImageJob', 'enqueue', { remixId });
+        const result = await enqueueImageSwap(remixId);
+        if (!result.success) {
+          log.error('startImageJob', 'failed', {
+            remixId,
+            error: result.error,
+            httpStatus: result.httpStatus,
+          });
+          throw new Error(result.error);
+        }
 
-      dismissInjectJob: (jobId) =>
-        set((s) => ({
-          injectJobs: s.injectJobs.filter((j) => {
-            if (j.id !== jobId) return true;
-            return j.status === 'pending' || j.status === 'running';
-          }),
-        })),
+        const data: EnqueueAudioSwapData = result.data;
 
-      clearFinishedJobs: () =>
+        if ('skipped' in data && data.skipped) {
+          return { kind: 'skipped', reason: data.reason };
+        }
+        if ('deduped' in data && data.deduped) {
+          const deduped = data as EnqueueAudioSwapDedupedData;
+          return {
+            kind: 'deduped',
+            jobId: deduped.job_id,
+            status: deduped.status,
+          };
+        }
+
+        const enqueued = data as EnqueueAudioSwapEnqueuedData;
+        const nowIso = new Date().toISOString();
+        const seed: RemixJob = {
+          id: enqueued.job_id,
+          remixId,
+          phase: 'image',
+          triggeredBy: 'user',
+          status: 'queued',
+          currentStep: 0,
+          totalSteps: enqueued.total_steps,
+          stepDetails: undefined,
+          result: undefined,
+          cancelRequested: false,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          completedAt: undefined,
+        };
+        set((s) => {
+          if (s.jobs.find((j) => j.id === seed.id)) return s;
+          return { jobs: [...s.jobs, seed] };
+        });
+
+        return {
+          kind: 'enqueued',
+          jobId: enqueued.job_id,
+          totalSteps: enqueued.total_steps,
+          chunksToRegen: enqueued.chunks_to_regen,
+          textboxesToRecombine: enqueued.textboxes_to_recombine,
+        };
+      },
+
+      cancelJob: async (jobId) => {
+        log.info('cancelJob', 'request', { jobId });
+        // Optimistic flip cancelRequested=true. Authoritative cancelled status
+        // arrives via realtime UPDATE.
         set((s) => ({
-          injectJobs: s.injectJobs.filter(
-            (j) => j.status === 'pending' || j.status === 'running',
+          jobs: s.jobs.map((j) =>
+            j.id === jobId ? { ...j, cancelRequested: true } : j,
           ),
-        })),
+        }));
+
+        const result = await cancelJobRemote(jobId);
+        if (!result.success) {
+          log.error('cancelJob', 'failed', {
+            jobId,
+            error: result.error,
+            httpStatus: result.httpStatus,
+          });
+          // Rollback optimistic flag so user can retry.
+          set((s) => ({
+            jobs: s.jobs.map((j) =>
+              j.id === jobId ? { ...j, cancelRequested: false } : j,
+            ),
+          }));
+          throw new Error(result.error);
+        }
+
+        log.debug('cancelJob', 'flag set', {
+          jobId,
+          status: result.data.current_status,
+        });
+      },
+
+      dismissJob: (jobId) => {
+        log.debug('dismissJob', 'remove from store', { jobId });
+        set((s) => ({ jobs: s.jobs.filter((j) => j.id !== jobId) }));
+      },
+
+      applyServerEvent: (event) => {
+        switch (event.type) {
+          case 'job_upsert': {
+            const incoming = mapRowToJob(event.row);
+            // Capture previous job state BEFORE the merge so we can detect
+            // active→terminal transitions (which indicate the remix row may
+            // have been mutated by the backend and needs refetching).
+            const prev = get().jobs.find((j) => j.id === incoming.id) ?? null;
+            const wasActive =
+              prev === null ||
+              prev.status === 'queued' ||
+              prev.status === 'running';
+            const isTerminal =
+              incoming.status === 'completed' ||
+              incoming.status === 'failed' ||
+              incoming.status === 'cancelled';
+
+            set((s) => {
+              const idx = s.jobs.findIndex((j) => j.id === incoming.id);
+              if (idx === -1) {
+                return { jobs: [...s.jobs, incoming] };
+              }
+              const next = [...s.jobs];
+              next[idx] = { ...next[idx], ...incoming };
+              return { jobs: next };
+            });
+            log.debug('applyServerEvent', 'job_upsert', {
+              jobId: incoming.id,
+              status: incoming.status,
+              phase: incoming.phase,
+            });
+
+            // Fire-and-forget remix row refetch on terminal transition.
+            // Skip `cancelled` only when backend wrote nothing (we can't
+            // tell — refetch anyway for safety; 1 row read is cheap).
+            if (wasActive && isTerminal && incoming.remixId) {
+              log.info('applyServerEvent', 'transition → refetch remix', {
+                remixId: incoming.remixId,
+                jobId: incoming.id,
+                status: incoming.status,
+              });
+              void get()
+                .refetchRemix(incoming.remixId)
+                .catch((err) => {
+                  log.warn('applyServerEvent', 'refetch failed', {
+                    remixId: incoming.remixId,
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                });
+            }
+            break;
+          }
+          case 'job_delete': {
+            log.debug('applyServerEvent', 'job_delete', { id: event.id });
+            set((s) => ({ jobs: s.jobs.filter((j) => j.id !== event.id) }));
+            break;
+          }
+          default: {
+            // Other event types (created/updated/deleted for remixes) not
+            // wired in Phase 2 — local CRUD covers those today.
+            log.debug('applyServerEvent', 'ignore event type', { type: event.type });
+            break;
+          }
+        }
+      },
+
+      refetchRemix: async (remixId) => {
+        log.info('refetchRemix', 'fetch', { remixId });
+        const { data, error } = await supabase
+          .from('remixes')
+          .select('*')
+          .eq('id', remixId)
+          .maybeSingle();
+
+        if (error) {
+          log.error('refetchRemix', 'failed', {
+            remixId,
+            error: error.message,
+          });
+          return;
+        }
+        if (!data) {
+          log.warn('refetchRemix', 'row not found', { remixId });
+          return;
+        }
+
+        const remix = mapRowToRemix(data);
+        set((s) => {
+          const idx = s.remixes.findIndex((r) => r.id === remixId);
+          if (idx === -1) {
+            // Remix was deleted locally since the job started; ignore.
+            return s;
+          }
+          const next = [...s.remixes];
+          next[idx] = remix;
+          return { remixes: next };
+        });
+        log.info('refetchRemix', 'done', { remixId });
+      },
+
+      syncJobsFromServer: async (userId) => {
+        log.info('syncJobsFromServer', 'fetch', { userId });
+        const cutoffIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+        // Two parallel queries instead of `.or(and(...))` — PostgREST nested
+        // boolean filters with timestamp values (`:`, `.`) are brittle under
+        // URL serialization. KISS: union locally.
+        const [activeRes, terminalRes] = await Promise.all([
+          supabase
+            .from('background_jobs')
+            .select('*')
+            .eq('user_id', userId)
+            .in('status', ['queued', 'running'])
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('background_jobs')
+            .select('*')
+            .eq('user_id', userId)
+            .in('status', ['completed', 'failed', 'cancelled'])
+            .gte('updated_at', cutoffIso)
+            .order('created_at', { ascending: true }),
+        ]);
+
+        if (activeRes.error) {
+          log.error('syncJobsFromServer', 'active fetch failed', {
+            userId,
+            error: activeRes.error.message,
+          });
+          return;
+        }
+        if (terminalRes.error) {
+          log.error('syncJobsFromServer', 'terminal fetch failed', {
+            userId,
+            error: terminalRes.error.message,
+          });
+          return;
+        }
+
+        const rows = [
+          ...((activeRes.data ?? []) as BackgroundJobRow[]),
+          ...((terminalRes.data ?? []) as BackgroundJobRow[]),
+        ];
+        const jobs = rows.map(mapRowToJob);
+
+        // Detect active→terminal transitions ONLY when we already observed
+        // the prior state in this session. Polling fallback (5s tick) is the
+        // primary consumer: if a job was 'running' last tick and 'completed'
+        // this tick, the remix row likely has fresh audio chunk URLs.
+        //
+        // Skip prev=null: that's a first-observation (page load / top-up after
+        // SUBSCRIBED). On page load, `syncFromServer(snapshotId)` already
+        // fetches fresh remixes in parallel — refetching here would be
+        // redundant. The realtime branch in `applyServerEvent` covers the
+        // first-observation-already-terminal corner case.
+        const prevJobsById = new Map(get().jobs.map((j) => [j.id, j]));
+        const refetchTargets = new Set<string>();
+        for (const incoming of jobs) {
+          const prev = prevJobsById.get(incoming.id);
+          if (!prev) continue;
+          const wasActive = prev.status === 'queued' || prev.status === 'running';
+          const isTerminal =
+            incoming.status === 'completed' ||
+            incoming.status === 'failed' ||
+            incoming.status === 'cancelled';
+          if (wasActive && isTerminal && incoming.remixId) {
+            refetchTargets.add(incoming.remixId);
+          }
+        }
+
+        log.info('syncJobsFromServer', 'done', {
+          userId,
+          active: activeRes.data?.length ?? 0,
+          terminal: terminalRes.data?.length ?? 0,
+          refetchTargets: refetchTargets.size,
+        });
+        set({ jobs });
+
+        for (const remixId of refetchTargets) {
+          void get()
+            .refetchRemix(remixId)
+            .catch((err) => {
+              log.warn('syncJobsFromServer', 'refetch failed', {
+                remixId,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
+        }
+      },
 
       patchRemixIllustration: (id, spreads) =>
         set((s) => ({
@@ -353,6 +746,67 @@ useSnapshotStore.subscribe(
   },
 );
 
+// ── Module-level background_jobs realtime subscription ───────────────────────
+// Subscribe per-user; tear down + re-open when the active user id changes.
+
+let activeJobSubscription:
+  | { userId: string; sub: ReturnType<typeof subscribeBackgroundJobs> }
+  | null = null;
+let lastSubscribedUserId: string | null = null;
+
+function ensureJobsSubscription(userId: string | null | undefined): void {
+  if (userId === lastSubscribedUserId) return;
+
+  if (activeJobSubscription) {
+    log.info('ensureJobsSubscription', 'tear down previous', {
+      userId: activeJobSubscription.userId,
+    });
+    unsubscribeBackgroundJobs(activeJobSubscription.sub);
+    activeJobSubscription = null;
+  }
+  lastSubscribedUserId = userId ?? null;
+
+  if (!userId) {
+    log.info('ensureJobsSubscription', 'no user — cleared jobs');
+    useRemixStore.setState({ jobs: [] });
+    return;
+  }
+
+  log.info('ensureJobsSubscription', 'subscribe', { userId });
+  void useRemixStore
+    .getState()
+    .syncJobsFromServer(userId)
+    .catch((err) => {
+      log.warn('ensureJobsSubscription', 'initial sync failed', {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+
+  const sub = subscribeBackgroundJobs(
+    userId,
+    (event) => useRemixStore.getState().applyServerEvent(event),
+    () => {
+      void useRemixStore.getState().syncJobsFromServer(userId);
+    },
+  );
+  activeJobSubscription = { userId, sub };
+}
+
+// Listen for auth user changes (auth-store doesn't use subscribeWithSelector
+// so we read full state and check userId-changed manually).
+useAuthStore.subscribe((state) => {
+  ensureJobsSubscription(state.user?.id ?? null);
+});
+
+// Kick off subscription if auth is already initialized at module load time.
+{
+  const initialUserId = useAuthStore.getState().user?.id ?? null;
+  if (initialUserId) {
+    ensureJobsSubscription(initialUserId);
+  }
+}
+
 // ── Selectors ────────────────────────────────────────────────────────────────
 
 export const useRemixes = (): Remix[] => useRemixStore((s) => s.remixes);
@@ -372,22 +826,39 @@ export const useRemixById = (id: string | null | undefined): Remix | null =>
     id ? s.remixes.find((r) => r.id === id) ?? null : null,
   );
 
-const EMPTY_JOBS: InjectJob[] = [];
+const EMPTY_JOBS: RemixJob[] = [];
 
-export const useInjectJobsForRemix = (remixId: string): InjectJob[] =>
+export const useJobsForRemix = (remixId: string): RemixJob[] =>
   useRemixStore(
-    useShallow((s) => s.injectJobs.filter((j) => j.remixId === remixId) ?? EMPTY_JOBS),
+    useShallow((s) => s.jobs.filter((j) => j.remixId === remixId) ?? EMPTY_JOBS),
   );
 
-export const useLatestInjectJob = (remixId: string): InjectJob | null =>
+export const useLatestAudioJob = (remixId: string): RemixJob | null =>
   useRemixStore((s) => {
-    const matches = s.injectJobs.filter((j) => j.remixId === remixId);
-    return matches.length === 0 ? null : matches[matches.length - 1];
+    const matches = s.jobs.filter(
+      (j) => j.remixId === remixId && j.phase === 'audio',
+    );
+    if (matches.length === 0) return null;
+    // Sort DESC by createdAt — latest first.
+    return matches.reduce((latest, cur) =>
+      cur.createdAt > latest.createdAt ? cur : latest,
+    );
   });
 
-export const useHasPendingInject = (): boolean =>
+export const useLatestImageJob = (remixId: string): RemixJob | null =>
+  useRemixStore((s) => {
+    const matches = s.jobs.filter(
+      (j) => j.remixId === remixId && j.phase === 'image',
+    );
+    if (matches.length === 0) return null;
+    return matches.reduce((latest, cur) =>
+      cur.createdAt > latest.createdAt ? cur : latest,
+    );
+  });
+
+export const useHasPendingJob = (): boolean =>
   useRemixStore((s) =>
-    s.injectJobs.some((j) => j.status === 'pending' || j.status === 'running'),
+    s.jobs.some((j) => j.status === 'queued' || j.status === 'running'),
   );
 
 export const useRemixActions = () =>
@@ -398,12 +869,16 @@ export const useRemixActions = () =>
       renameRemix: s.renameRemix,
       deleteRemix: s.deleteRemix,
       setActiveRemixId: s.setActiveRemixId,
-      startInjectJob: s.startInjectJob,
-      cancelInjectJob: s.cancelInjectJob,
-      dismissInjectJob: s.dismissInjectJob,
-      clearFinishedJobs: s.clearFinishedJobs,
+      startAudioJob: s.startAudioJob,
+      startImageJob: s.startImageJob,
+      cancelJob: s.cancelJob,
+      dismissJob: s.dismissJob,
       syncFromServer: s.syncFromServer,
+      syncJobsFromServer: s.syncJobsFromServer,
       patchRemixIllustration: s.patchRemixIllustration,
       patchRemixCropSheets: s.patchRemixCropSheets,
     })),
   );
+
+// Re-export selector hook (Phase 03) for convenient single-import surface.
+export { useAudioJobBadgeState, deriveAudioJobBadgeState } from './audio-job-badge-state';

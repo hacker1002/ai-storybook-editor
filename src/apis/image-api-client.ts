@@ -1,4 +1,5 @@
 import { createLogger } from '@/utils/logger';
+import { supabase } from './supabase';
 
 const log = createLogger('API', 'ImageApiClient');
 
@@ -13,9 +14,29 @@ export interface ImageApiFailure {
   errorCode?: string;
 }
 
+/** Fetch Bearer header from active Supabase session; undefined when unauthenticated
+ *  (share-preview / pre-login). Image/retouch endpoints ignore unknown Bearer;
+ *  jobs/* endpoints require it for RLS user-id resolution. */
+async function getAuthHeader(): Promise<string | undefined> {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      log.warn('getAuthHeader', 'session lookup failed', { error: error.message });
+      return undefined;
+    }
+    const token = data.session?.access_token;
+    return token ? `Bearer ${token}` : undefined;
+  } catch (err) {
+    log.warn('getAuthHeader', 'unexpected error', { error: err instanceof Error ? err.message : String(err) });
+    return undefined;
+  }
+}
+
 /**
  * Generic client for the FastAPI image-api service.
- * Uses X-API-Key header (service-to-service auth) instead of Supabase Bearer JWT.
+ * Always sends X-API-Key (service-to-service); also sends Authorization: Bearer
+ * when a Supabase session exists. Image/retouch endpoints ignore the Bearer
+ * header; jobs/* endpoints require it for RLS user_id resolution.
  * On failure returns ImageApiFailure (success: false) with httpStatus + errorCode for
  * precise downstream classification — callers cast via `as ImageApiFailure` after !success check.
  */
@@ -28,13 +49,19 @@ export async function callImageApi<R extends { success: boolean; error?: string 
 
   log.info('callImageApi', 'request', { path, method: 'POST', payloadKeys: Object.keys(payload || {}) });
 
+  const authHeader = await getAuthHeader();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-API-Key': imageApiKey,
+  };
+  if (authHeader) {
+    headers['Authorization'] = authHeader;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': imageApiKey,
-      },
+      headers,
       body: JSON.stringify(body),
     });
 

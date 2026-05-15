@@ -1,7 +1,8 @@
 // player-header.tsx — Source picker dropdown for PreviewCreativeSpace.
 // Single-select Popover: "Original" (snapshot retouch data) or one of the remixes.
-// Each RemixListItem self-subscribes useLatestInjectJob(remix.id) so a tick on
-// one remix's job does not re-render the entire header.
+// Each RemixListItem self-subscribes useLatestAudioJob(remix.id) so a tick on
+// one remix's job does not re-render the entire header. Phase 3 will mirror
+// useLatestImageJob for inject-related badge variants.
 "use client";
 
 import { useMemo, useState } from "react";
@@ -12,7 +13,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { useLatestInjectJob } from "@/stores/remix-store";
+import { useLatestAudioJob } from "@/stores/remix-store";
 import type { Remix } from "@/types/remix";
 import { createLogger } from "@/utils/logger";
 import { deriveBadge, type PreviewSourceBadge } from "./derive-badge";
@@ -121,7 +122,7 @@ interface RemixListItemProps {
 }
 
 function RemixListItem({ remix, isSelected, onClick }: RemixListItemProps) {
-  const latestJob = useLatestInjectJob(remix.id);
+  const latestJob = useLatestAudioJob(remix.id);
   const badge = useMemo(() => deriveBadge(latestJob), [latestJob]);
 
   return (

@@ -1,19 +1,13 @@
 // inject-button.tsx — Disabled placeholder. Phase 1 (text swap) runs synchronously
-// at createRemix; Phase 2 (audio regen) + Phase 3 (image inject) backend not
-// shipped — button re-enabled when Phase 3 lands.
+// at createRemix; Phase 2 (audio regen) ships as auto-trigger via the new
+// AudioJobBadge; Phase 3 (image inject) backend not shipped — button re-enabled
+// when Phase 3 lands. Component is intentionally prop-less to discourage
+// callers from wiring legacy state to it.
 
 import { Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { InjectJob } from '@/types/remix';
 
-interface Props {
-  job: InjectJob | null;
-  onInject: () => void;
-  onCancel?: () => void;
-}
-
-export function InjectButton(_props: Props) {
-  void _props;
+export function InjectButton() {
   return (
     <Button
       disabled
