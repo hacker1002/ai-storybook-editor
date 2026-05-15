@@ -117,6 +117,20 @@ function isSelectionFrameTarget(el: EventTarget | null): boolean {
   return !!el.closest('[data-selection-frame-target="true"]');
 }
 
+// React portals (toolbar, Radix Dialog) preserve event bubbling through the
+// React tree, not the DOM tree. So onMouseDownCapture / onMouseMove on the
+// canvas div still fires for clicks on portaled overlays — geometry hit-test
+// would then "click through" to items beneath the overlay. Guard by checking
+// the event target is actually a descendant of the canvas DOM subtree.
+function isEventInsideCanvas(
+  target: EventTarget | null,
+  canvasEl: HTMLElement | null,
+): boolean {
+  if (!canvasEl) return false;
+  if (!(target instanceof Node)) return false;
+  return canvasEl.contains(target);
+}
+
 function resolveNaturalTargetId(
   target: EventTarget | null,
   canvasEl: HTMLElement | null,
@@ -263,6 +277,13 @@ export function useCanvasHitTest(
       if (!stateRef.current.smartHitTestEnabled) return;
       const canvasEl = canvasRef.current;
       if (!canvasEl) return;
+      // Bail when event originates from a portaled overlay (toolbar / Radix
+      // Dialog). React portals bubble through React tree → this handler fires
+      // even though the cursor isn't actually over the canvas surface.
+      if (!isEventInsideCanvas(e.target, canvasEl)) {
+        if (hoveredTargetIdRef.current !== null) setHoveredTargetId(null);
+        return;
+      }
       const rect = canvasEl.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
       latestPointRef.current = {
@@ -335,6 +356,10 @@ export function useCanvasHitTest(
       if (isSelectionFrameTarget(e.target)) return;
       const canvasEl = canvasRef.current;
       if (!canvasEl) return;
+      // Portaled overlays (toolbar / modals) bubble through React tree to this
+      // capture handler. Without this guard, clicks on a toolbar button would
+      // hijack-select an item underneath the toolbar.
+      if (!isEventInsideCanvas(e.target, canvasEl)) return;
       const rect = canvasEl.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
       const point = {
