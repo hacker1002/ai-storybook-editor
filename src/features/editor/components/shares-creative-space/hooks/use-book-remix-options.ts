@@ -1,14 +1,27 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
-import type { RemixOption } from '../share-link-types';
-import { ORIGINAL_REMIX_OPTION } from '../share-link-types';
+import type { RemixConfig, RemixLanguageChoice } from '@/types/remix';
+import type { RemixOption, ShareLanguage } from '../share-link-types';
+import { LANGUAGE_OPTIONS, ORIGINAL_REMIX_OPTION } from '../share-link-types';
 
 const log = createLogger('Editor', 'useBookRemixOptions');
 
 interface UseBookRemixOptionsReturn {
   remixOptions: RemixOption[];
   isLoading: boolean;
+}
+
+// Intersect a remix's enabled languages with LANGUAGE_OPTIONS (share-link universe).
+// Order follows LANGUAGE_OPTIONS so the modal renders a stable, predictable list.
+function deriveAvailableLanguages(remixConfig: RemixConfig | null): ShareLanguage[] {
+  if (!remixConfig?.languages?.length) return [...LANGUAGE_OPTIONS];
+  const enabledCodes = new Set(
+    remixConfig.languages
+      .filter((l: RemixLanguageChoice) => l.is_enabled)
+      .map((l) => l.code),
+  );
+  return LANGUAGE_OPTIONS.filter((opt) => enabledCodes.has(opt.code));
 }
 
 // Fetch all remixes whose underlying snapshot belongs to `bookId`, then prepend the
@@ -22,11 +35,9 @@ export function useBookRemixOptions(bookId: string): UseBookRemixOptionsReturn {
     log.info('fetchRemixOptions', 'fetching remix options for book', { bookId });
     setIsLoading(true);
     try {
-      // Nested filter: only remixes whose snapshot.book_id matches.
-      // `!inner` makes the join a filter (not a left-join), so unmatched rows drop out.
       const { data, error } = await supabase
         .from('remixes')
-        .select('id, name, snapshot:snapshots!inner(book_id)')
+        .select('id, name, remix_config, snapshot:snapshots!inner(book_id)')
         .eq('snapshot.book_id', bookId)
         .order('created_at', { ascending: true });
 
@@ -36,10 +47,18 @@ export function useBookRemixOptions(bookId: string): UseBookRemixOptionsReturn {
         return;
       }
 
-      const rows = (data ?? []) as Array<{ id: string; name: string | null }>;
+      const rows = (data ?? []) as Array<{
+        id: string;
+        name: string | null;
+        remix_config: RemixConfig | null;
+      }>;
       const options: RemixOption[] = [
         ORIGINAL_REMIX_OPTION,
-        ...rows.map((r) => ({ id: r.id, name: r.name ?? 'Untitled Remix' })),
+        ...rows.map((r) => ({
+          id: r.id,
+          name: r.name ?? 'Untitled Remix',
+          available_languages: deriveAvailableLanguages(r.remix_config),
+        })),
       ];
       log.debug('fetchRemixOptions', 'fetched', { count: rows.length });
       setRemixOptions(options);

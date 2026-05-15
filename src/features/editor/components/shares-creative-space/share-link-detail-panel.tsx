@@ -109,36 +109,52 @@ export function ShareLinkDetailPanel({
     onUpdate(link.id, { editions: allFalse ? {} : updated });
   };
 
+  // --- Remix ---
+  // shadcn Select can't bind to null, so we use a sentinel string for Original.
+  // Remix is chosen at create-time via CreateShareLinkDialog and locked thereafter;
+  // the Select is rendered disabled (display-only).
+  const remixSelectValue = link.remix_id ?? ORIGINAL_REMIX_ID_SENTINEL;
+
+  // Match the remix option for this link to determine the language universe.
+  // Original (no `available_languages` on option) → full LANGUAGE_OPTIONS.
+  // Remix-restricted → only the enabled languages from that remix's config.
+  const selectedRemixOption = remixOptions.find(
+    (opt) => (opt.id ?? ORIGINAL_REMIX_ID_SENTINEL) === remixSelectValue,
+  );
+  const availableLanguages = selectedRemixOption?.available_languages ?? LANGUAGE_OPTIONS;
+  const isRemixRestricted =
+    !!selectedRemixOption?.id && !!selectedRemixOption.available_languages;
+
   // --- Languages ---
-  // Convention "empty = all": [] means all languages allowed → show all checked
+  // Convention "empty = all available for this link's remix universe" → show all checked
   const isLanguagesEmpty = link.languages.length === 0;
 
   const handleLanguageChange = (code: string, checked: boolean) => {
-    // Expand empty to explicit-all before applying the toggle
-    const effective = isLanguagesEmpty ? [...LANGUAGE_OPTIONS] : [...link.languages];
+    // Expand empty to explicit-all-available before applying the toggle
+    const effective = isLanguagesEmpty ? [...availableLanguages] : [...link.languages];
     let updated;
     if (checked) {
-      const option = LANGUAGE_OPTIONS.find((l) => l.code === code);
+      const option = availableLanguages.find((l) => l.code === code);
       updated = option && !effective.find((l) => l.code === code)
         ? [...effective, option]
         : effective;
     } else {
       updated = effective.filter((l) => l.code !== code);
     }
-    // If all languages selected → normalize back to [] (= all)
-    const allSelected = LANGUAGE_OPTIONS.every((opt) => updated.some((l) => l.code === opt.code));
-    log.debug('handleLanguageChange', 'language toggled', { linkId: link.id, code, checked });
-    onUpdate(link.id, { languages: allSelected ? [] : updated });
-  };
-
-  // --- Remix ---
-  // shadcn Select can't bind to null, so we use a sentinel string for Original.
-  const remixSelectValue = link.remix_id ?? ORIGINAL_REMIX_ID_SENTINEL;
-
-  const handleRemixChange = (value: string) => {
-    const remix_id = value === ORIGINAL_REMIX_ID_SENTINEL ? null : value;
-    log.debug('handleRemixChange', 'remix changed', { linkId: link.id, remix_id });
-    onUpdate(link.id, { remix_id });
+    // Normalize to [] (= "all") only when the full LANGUAGE_OPTIONS universe is covered.
+    // For remix-restricted links we always store the explicit subset to avoid ambiguity
+    // with the "[] = all 5" convention used by Original links downstream.
+    const coversFullUniverse = LANGUAGE_OPTIONS.every((opt) =>
+      updated.some((l) => l.code === opt.code),
+    );
+    const normalized = !isRemixRestricted && coversFullUniverse ? [] : updated;
+    log.debug('handleLanguageChange', 'language toggled', {
+      linkId: link.id,
+      code,
+      checked,
+      isRemixRestricted,
+    });
+    onUpdate(link.id, { languages: normalized });
   };
 
   // --- Privacy ---
@@ -205,7 +221,7 @@ export function ShareLinkDetailPanel({
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Remixes
           </Label>
-          <Select value={remixSelectValue} onValueChange={handleRemixChange}>
+          <Select value={remixSelectValue} disabled>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -220,6 +236,9 @@ export function ShareLinkDetailPanel({
               })}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Remix is set when the link is created and cannot be changed.
+          </p>
         </div>
 
         {/* EDITIONS */}
@@ -253,28 +272,35 @@ export function ShareLinkDetailPanel({
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Languages
           </Label>
-          <div className="space-y-2">
-            {LANGUAGE_OPTIONS.map((lang) => {
-              const isChecked = isLanguagesEmpty || link.languages.some((l) => l.code === lang.code);
-              return (
-                <div key={lang.code} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={`lang-${link.id}-${lang.code}`}
-                    checked={isChecked}
-                    onChange={(e) => handleLanguageChange(lang.code, e.target.checked)}
-                    className="h-4 w-4 accent-primary"
-                  />
-                  <label
-                    htmlFor={`lang-${link.id}-${lang.code}`}
-                    className="cursor-pointer text-sm"
-                  >
-                    {lang.name}
-                  </label>
-                </div>
-              );
-            })}
-          </div>
+          {availableLanguages.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              This remix has no enabled languages.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {availableLanguages.map((lang) => {
+                const isChecked =
+                  isLanguagesEmpty || link.languages.some((l) => l.code === lang.code);
+                return (
+                  <div key={lang.code} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`lang-${link.id}-${lang.code}`}
+                      checked={isChecked}
+                      onChange={(e) => handleLanguageChange(lang.code, e.target.checked)}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <label
+                      htmlFor={`lang-${link.id}-${lang.code}`}
+                      className="cursor-pointer text-sm"
+                    >
+                      {lang.name}
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* PRIVACY */}

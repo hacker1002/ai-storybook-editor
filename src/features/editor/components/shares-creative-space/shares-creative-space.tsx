@@ -6,6 +6,8 @@ import { createLogger } from '@/utils/logger';
 import { useShareLinks, useBookRemixOptions } from './hooks';
 import { SharesSidebar } from './shares-sidebar';
 import { ShareLinkDetailPanel } from './share-link-detail-panel';
+import { CreateShareLinkDialog } from './create-share-link-dialog';
+import type { CreateShareLinkInput } from './share-link-types';
 
 const log = createLogger('Editor', 'SharesCreativeSpace');
 
@@ -34,7 +36,7 @@ export function SharesCreativeSpace() {
   const { remixOptions } = useBookRemixOptions(bookId);
 
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   // Auto-select logic: select first link on mount, handle deletions
   useEffect(() => {
@@ -57,12 +59,18 @@ export function SharesCreativeSpace() {
     setSelectedLinkId(linkId);
   };
 
-  const handleCreate = async () => {
-    log.info('handleCreate', 'creating new share link');
-    setIsCreating(true);
-    await createShareLink();
-    setIsCreating(false);
-    // Auto-select will pick up the new link via useEffect
+  const handleOpenCreateDialog = () => {
+    log.info('handleOpenCreateDialog', 'opening create dialog');
+    setIsCreateDialogOpen(true);
+  };
+
+  const handleCreateSubmit = async (input: CreateShareLinkInput) => {
+    log.info('handleCreateSubmit', 'creating share link from modal');
+    const created = await createShareLink(input);
+    if (created) {
+      log.debug('handleCreateSubmit', 'auto-selecting new link', { id: created.id });
+      setSelectedLinkId(created.id);
+    }
   };
 
   const handleDelete = async (linkId: string) => {
@@ -85,9 +93,9 @@ export function SharesCreativeSpace() {
       <SharesSidebar
         shareLinks={shareLinks}
         selectedLinkId={selectedLinkId}
-        isCreating={isCreating}
+        isCreating={isCreateDialogOpen}
         onSelect={handleSelect}
-        onCreate={handleCreate}
+        onCreate={handleOpenCreateDialog}
         onDelete={handleDelete}
       />
       <div className="flex-1 overflow-hidden">
@@ -99,9 +107,16 @@ export function SharesCreativeSpace() {
             onUpdate={updateShareLink}
           />
         ) : (
-          <EmptyState onCreateLink={handleCreate} />
+          <EmptyState onCreateLink={handleOpenCreateDialog} />
         )}
       </div>
+
+      <CreateShareLinkDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        remixOptions={remixOptions}
+        onSubmit={handleCreateSubmit}
+      />
     </div>
   );
 }

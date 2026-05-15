@@ -4,8 +4,11 @@ import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
-import type { ShareLink, ShareLinkUpdatePayload } from '../share-link-types';
-import { DEFAULT_SHARE_LINK } from '../share-link-types';
+import type {
+  CreateShareLinkInput,
+  ShareLink,
+  ShareLinkUpdatePayload,
+} from '../share-link-types';
 
 const log = createLogger('Editor', 'useShareLinks');
 
@@ -15,7 +18,7 @@ interface UseShareLinksReturn {
   shareLinks: ShareLink[];
   isLoading: boolean;
   isSaving: boolean;
-  createShareLink: () => Promise<void>;
+  createShareLink: (input: CreateShareLinkInput) => Promise<ShareLink | null>;
   updateShareLink: (id: string, changes: ShareLinkUpdatePayload) => Promise<void>;
   deleteShareLink: (id: string) => Promise<void>;
 }
@@ -56,52 +59,66 @@ export function useShareLinks(bookId: string): UseShareLinksReturn {
     fetchShareLinks();
   }, [bookId, fetchShareLinks]);
 
-  const createShareLink = useCallback(async () => {
-    if (!bookId) {
-      log.warn('createShareLink', 'no bookId, skipping');
-      return;
-    }
-    log.info('createShareLink', 'creating share link', { bookId });
-    setIsSaving(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        log.error('createShareLink', 'no authenticated user');
-        toast.error('Not authenticated');
-        return;
+  const createShareLink = useCallback(
+    async (input: CreateShareLinkInput): Promise<ShareLink | null> => {
+      if (!bookId) {
+        log.warn('createShareLink', 'no bookId, skipping');
+        return null;
       }
+      log.info('createShareLink', 'creating share link', {
+        bookId,
+        remix_id: input.remix_id,
+        privacy: input.privacy,
+      });
+      setIsSaving(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          log.error('createShareLink', 'no authenticated user');
+          toast.error('Not authenticated');
+          return null;
+        }
 
-      const slug = nanoid(8);
-      const newLink = {
-        user_id: user.id,
-        book_id: bookId,
-        remix_id: DEFAULT_SHARE_LINK.remix_id,
-        name: DEFAULT_SHARE_LINK.name,
-        url: slug,
-        privacy: DEFAULT_SHARE_LINK.privacy,
-        passcode: DEFAULT_SHARE_LINK.passcode,
-        editions: DEFAULT_SHARE_LINK.editions,
-        languages: DEFAULT_SHARE_LINK.languages,
-      };
+        const slug = nanoid(8);
+        const passcodeHash =
+          input.privacy === 2 && input.passcode
+            ? await bcrypt.hash(input.passcode, BCRYPT_SALT_ROUNDS)
+            : null;
 
-      const { data, error } = await supabase
-        .from('share_links')
-        .insert(newLink)
-        .select()
-        .single();
+        const newLink = {
+          user_id: user.id,
+          book_id: bookId,
+          remix_id: input.remix_id,
+          name: input.name,
+          url: slug,
+          privacy: input.privacy,
+          passcode: passcodeHash,
+          editions: input.editions,
+          languages: input.languages,
+        };
 
-      if (error) {
-        log.error('createShareLink', 'insert failed', { error: error.message });
-        toast.error('Failed to create share link');
-        return;
+        const { data, error } = await supabase
+          .from('share_links')
+          .insert(newLink)
+          .select()
+          .single();
+
+        if (error) {
+          log.error('createShareLink', 'insert failed', { error: error.message });
+          toast.error('Failed to create share link');
+          return null;
+        }
+
+        log.debug('createShareLink', 'created', { id: data.id });
+        const created = data as ShareLink;
+        setShareLinks((prev) => [...prev, created]);
+        return created;
+      } finally {
+        setIsSaving(false);
       }
-
-      log.debug('createShareLink', 'created', { id: data.id });
-      setShareLinks((prev) => [...prev, data as ShareLink]);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [bookId]);
+    },
+    [bookId],
+  );
 
   const updateShareLink = useCallback(
     async (id: string, changes: ShareLinkUpdatePayload) => {

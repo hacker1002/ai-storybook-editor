@@ -19,9 +19,12 @@ export interface ShareLink {
 }
 
 // Option populating the REMIXES dropdown. `id: null` is the Original sentinel.
+// `available_languages: undefined` = Original (no restriction → all LANGUAGE_OPTIONS allowed).
+// `available_languages: ShareLanguage[]` = remix-restricted subset (only enabled langs in remix_config).
 export interface RemixOption {
   id: string | null;
   name: string;
+  available_languages?: ShareLanguage[];
 }
 
 export const ORIGINAL_REMIX_ID_SENTINEL = '__original__';
@@ -48,6 +51,17 @@ export interface ShareLinkUpdatePayload {
   languages?: ShareLanguage[];
   privacy?: SharePrivacy;
   passcode?: string; // plaintext — hook hashes with bcrypt before saving
+}
+
+// Payload from create-share-link-dialog → useShareLinks.createShareLink.
+// `remix_id` chosen at create time and locked thereafter (no remix swap on existing links).
+export interface CreateShareLinkInput {
+  name: string;
+  remix_id: string | null;
+  editions: ShareEditions;
+  languages: ShareLanguage[];
+  privacy: SharePrivacy;
+  passcode?: string; // plaintext — hook hashes; only used when privacy = 2
 }
 
 // --- Constants ---
