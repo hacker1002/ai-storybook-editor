@@ -488,8 +488,12 @@ export function addTweenToTimeline(
       // starts emitting samples ('playing' event). Otherwise word-highlight
       // calls scheduled at label+offsetSec would fire before audio output and
       // text would race ahead. Fallback timer ensures forward progress if the
-      // event is suppressed (autoplay block, codec error, etc.).
-      const READ_ALONG_PLAY_FALLBACK_MS = 300;
+      // event is suppressed (autoplay block, codec error, etc.). 1000ms gives
+      // editor enough headroom on heavy spreads (many items decoding in
+      // parallel) without deadlocking — `audio.play().catch` still resolves
+      // immediately on hard play() rejection (autoplay block) via the catch
+      // handler below, so this fallback only bites on silent-stall paths.
+      const READ_ALONG_PLAY_FALLBACK_MS = 1000;
       timeline.call(
         () => {
           audio.currentTime = 0;
