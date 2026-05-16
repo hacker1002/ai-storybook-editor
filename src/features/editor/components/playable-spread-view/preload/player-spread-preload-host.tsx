@@ -20,30 +20,38 @@ import { usePlayerSpreadPreload } from '../hooks/use-player-spread-preload';
 interface PlayerSpreadPreloadHostProps {
   spreads: PlayableSpread[];
   activeSpreadId: string;
+  /**
+   * Stable identifier for the spread source — Original vs Remix. Drives both
+   * audio pool eviction (stale URLs on switch) and preload re-fire.
+   */
+  sourceKey?: string;
 }
 
 export function PlayerSpreadPreloadHost({
   spreads,
   activeSpreadId,
+  sourceKey,
 }: PlayerSpreadPreloadHostProps): null {
   const narrationLangCode = useNarrationLanguage();
   const quizLangCode = useQuizLanguage();
 
-  // On language switch, all pooled audio URLs are stale (different localized
-  // tracks). Evict everything; preload tier re-primes the new URL set on the
-  // next render. Tween reset on lang change (parent behaviour) means in-flight
-  // playback is going to be killed anyway, so a hard pause here is safe.
+  // On language OR source switch, all pooled audio URLs are stale (different
+  // localized tracks / different remix's audio set). Evict everything; preload
+  // tier re-primes the new URL set on the next render. Tween reset on these
+  // changes (parent behaviour) means in-flight playback is going to be killed
+  // anyway, so a hard pause here is safe.
   useEffect(() => {
     return () => {
       usePlayerAudioStore.getState().releaseAllAudio();
     };
-  }, [narrationLangCode, quizLangCode]);
+  }, [narrationLangCode, quizLangCode, sourceKey]);
 
   usePlayerSpreadPreload({
     spreads,
     activeSpreadId,
     narrationLangCode,
     quizLangCode,
+    sourceKey,
   });
   return null;
 }

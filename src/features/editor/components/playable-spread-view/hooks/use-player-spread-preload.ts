@@ -29,6 +29,13 @@ interface UsePlayerSpreadPreloadParams {
   activeSpreadId: string;
   narrationLangCode: string;
   quizLangCode: string;
+  /**
+   * Stable identifier for the spread source (e.g. `original:<bookId>` or
+   * `remix:<remixId>`). Changing this key re-fires the preload window so a
+   * source switch (Original ↔ Remix) repopulates the audio pool with the new
+   * URL set even when `activeSpreadId` is unchanged.
+   */
+  sourceKey?: string;
   enabled?: boolean;
 }
 
@@ -124,7 +131,14 @@ function preload(item: MediaItem): PreloaderHandle {
  * — book replacement implies spread id change anyway.
  */
 export function usePlayerSpreadPreload(params: UsePlayerSpreadPreloadParams): void {
-  const { spreads, activeSpreadId, narrationLangCode, quizLangCode, enabled = true } = params;
+  const {
+    spreads,
+    activeSpreadId,
+    narrationLangCode,
+    quizLangCode,
+    sourceKey,
+    enabled = true,
+  } = params;
 
   useEffect(() => {
     if (!enabled) return;
@@ -191,9 +205,10 @@ export function usePlayerSpreadPreload(params: UsePlayerSpreadPreloadParams): vo
     };
     // `spreads` is intentionally not a dep: we read it at trigger time. Adding
     // it would re-fire on every parent re-render that produces a new array
-    // identity even when content is unchanged.
+    // identity even when content is unchanged. Source switches are signaled by
+    // `sourceKey` instead (Original ↔ Remix toggles the spread set).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSpreadId, narrationLangCode, quizLangCode, enabled]);
+  }, [activeSpreadId, narrationLangCode, quizLangCode, sourceKey, enabled]);
 }
 
 export type { MediaKind };

@@ -104,6 +104,14 @@ interface PlayableSpreadViewProps {
   isSharePreview?: boolean;
   // Controlled-or-uncontrolled props (ADR-021)
   selectedSpreadId?: string | null;      // controlled from parent
+  /**
+   * Stable key identifying the spread source (e.g. `original:<bookId>`,
+   * `remix:<remixId>`). Forwarded to the preload host so source switches
+   * (Original ↔ Remix) re-fire the preload window and evict stale pooled audio.
+   * Omit in single-source contexts (share preview) — defaults to a stable
+   * undefined and the preload behaves as a one-shot per active spread.
+   */
+  sourceKey?: string;
 }
 
 const KEYBOARD_SHORTCUTS = {
@@ -126,6 +134,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
   pageNumbering,
   isSharePreview = false,
   selectedSpreadId: propSelectedSpreadId,
+  sourceKey,
 }) => {
 
   // === Internal State ===
@@ -475,6 +484,7 @@ export const PlayableSpreadView: React.FC<PlayableSpreadViewProps> = ({
         <PlayerSpreadPreloadHost
           spreads={spreads}
           activeSpreadId={effectiveSelectedSpreadId}
+          sourceKey={sourceKey}
         />
       )}
 

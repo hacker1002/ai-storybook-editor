@@ -273,6 +273,7 @@ export function PreviewCreativeSpace() {
             sections={sections}
             onSpreadSelect={setUserSelectedSpreadId}
             pageNumbering={templateLayout?.page_numbering}
+            sourceKey={payload?.sessionId}
           />
         </div>
       </div>
