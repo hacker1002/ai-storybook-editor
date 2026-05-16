@@ -19,6 +19,7 @@ import {
   DEFAULT_INFERENCE_PARAMS,
   NARRATOR_LANGUAGE_KEY_REGEX,
   VOLUME_DEFAULT,
+  normalizeBookRemix,
 } from "@/constants/config-constants";
 import { createLogger } from "@/utils/logger";
 
@@ -113,9 +114,10 @@ export const useBookStore = create<BookStore>()(
             return null;
           }
 
+          const normalized: Book = { ...data, remix: normalizeBookRemix(data.remix) };
           log.info("fetchBook", "done", { bookId });
-          set({ currentBook: data, isLoading: false });
-          return data;
+          set({ currentBook: normalized, isLoading: false });
+          return normalized;
         },
 
         createBook: async (params) => {

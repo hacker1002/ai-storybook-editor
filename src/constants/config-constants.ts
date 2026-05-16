@@ -257,6 +257,30 @@ export const DEFAULT_REMIX: BookRemix = {
   props:      [],
 };
 
+/**
+ * Coerce raw `books.remix` JSONB into a full BookRemix shape.
+ * Legacy rows may store partial shapes (missing narrator/arrays) — normalize
+ * once at the store ingress so downstream consumers can trust the contract.
+ * Returns null only when the raw value is null/undefined (preserves the
+ * "remix not configured" empty-state branch).
+ */
+export function normalizeBookRemix(raw: unknown): BookRemix | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'object') {
+    log.warn('normalizeBookRemix', 'unexpected non-object', { type: typeof raw });
+    return null;
+  }
+  const r = raw as Partial<BookRemix>;
+  return {
+    languages:  Array.isArray(r.languages)  ? r.languages  : [],
+    narrator:   r.narrator && typeof r.narrator === 'object'
+                  ? { is_enabled: !!r.narrator.is_enabled }
+                  : { is_enabled: false },
+    characters: Array.isArray(r.characters) ? r.characters : [],
+    props:      Array.isArray(r.props)      ? r.props      : [],
+  };
+}
+
 // ── Preview texts ────────────────────────────────────────────────────────────
 
 export const PREVIEW_TEXTS: Record<string, string> = {
