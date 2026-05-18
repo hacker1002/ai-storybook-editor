@@ -24,7 +24,7 @@ import type {
   RemixProp,
   RemixSpread,
 } from '@/types/remix';
-import { mixSignature } from '@/types/remix';
+import { canonicalMixKey } from '@/types/remix';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'RemixCloneBuilder');
@@ -185,7 +185,7 @@ function buildMixes(
       if (subjectTags.length <= 1) continue;
 
       const keys = subjectTags.map((t) => t.object_key);
-      const sig = mixSignature(keys);
+      const sig = canonicalMixKey(keys);
       let mix = bySig.get(sig);
       if (!mix) {
         const mixName = composeMixName(keys, characters, props);

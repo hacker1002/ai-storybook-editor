@@ -10,15 +10,19 @@ import { createLogger } from '@/utils/logger';
 import type {
   BackgroundJobRow,
   CLIENT_AUDIO_CHUNK_CAP as CapType,
+  CropSheetSwapTaskKey,
   EnqueueRemixJobOutcome,
   Remix,
   RemixConfig,
   RemixCropSheet,
+  RemixEntityRef,
   RemixJob,
   RemixServerEvent,
   RemixSpread,
+  StartCropSheetSwapParams,
+  SwapTaskStatus,
 } from '@/types/remix';
-import { CLIENT_AUDIO_CHUNK_CAP } from '@/types/remix';
+import { CLIENT_AUDIO_CHUNK_CAP, canonicalMixKey } from '@/types/remix';
 import type { Human } from '@/types/human';
 import { buildRemixClonePayload } from './clone-builder';
 import { mapRowToRemix } from './supabase-mapping';
@@ -56,6 +60,23 @@ export interface RemixCropSheetPatch {
   patch: Partial<RemixCropSheet>;
 }
 
+// ── Crop sheet swap task helpers ─────────────────────────────────────────────
+
+/** Composes the `cropSheetSwapTasks` map key. Shared between action + selector
+ *  so the format never drifts. */
+function buildSwapTaskKey(
+  remixId: string,
+  type: 'character' | 'prop' | 'mix',
+  key: string,
+  sheetIndex: number,
+): CropSheetSwapTaskKey {
+  return `${remixId}:${type}:${key}:${sheetIndex}`;
+}
+
+/** Stable reference for the default idle task — avoids a fresh object per
+ *  `useCropSheetSwapTask` call (would defeat selector re-render guards). */
+const IDLE_SWAP_TASK: SwapTaskStatus = { state: 'idle' };
+
 // ── Store shape ──────────────────────────────────────────────────────────────
 
 interface StartAudioJobOptions {
@@ -68,6 +89,9 @@ interface RemixStore {
   remixes: Remix[];
   activeRemixId: string | null;
   jobs: RemixJob[];
+  /** Ephemeral per-sheet swap task map (memory-only — not persisted, no
+   *  background_jobs row). Mirrors ImageTaskSlice but flat. */
+  cropSheetSwapTasks: Record<CropSheetSwapTaskKey, SwapTaskStatus>;
 
   syncFromServer: (snapshotId: string) => Promise<void>;
   clearAll: () => void;
@@ -95,6 +119,10 @@ interface RemixStore {
 
   patchRemixIllustration: (id: string, spreads: RemixSpread[]) => void;
   patchRemixCropSheets: (id: string, updates: RemixCropSheetPatch[]) => void;
+
+  /** Modal-driven per-sheet swap trigger. DEFERRED no-op — guard + validate +
+   *  log are real; the POST branch lands when the swap API ships. */
+  startCropSheetSwap: (params: StartCropSheetSwapParams) => Promise<void>;
 }
 
 export const useRemixStore = create<RemixStore>()(
@@ -103,6 +131,7 @@ export const useRemixStore = create<RemixStore>()(
       remixes: [],
       activeRemixId: null,
       jobs: [],
+      cropSheetSwapTasks: {},
 
       syncFromServer: async (snapshotId) => {
         log.info('syncFromServer', 'start', { snapshotId });
@@ -124,7 +153,12 @@ export const useRemixStore = create<RemixStore>()(
 
       clearAll: () => {
         log.info('clearAll', 'clearing remix store');
-        set({ remixes: [], activeRemixId: null, jobs: [] });
+        set({
+          remixes: [],
+          activeRemixId: null,
+          jobs: [],
+          cropSheetSwapTasks: {},
+        });
       },
 
       createRemix: async (config, name) => {
@@ -283,16 +317,28 @@ export const useRemixStore = create<RemixStore>()(
             });
         }
 
-        set((s) => ({
-          remixes: s.remixes.filter((r) => r.id !== id),
-          activeRemixId: wasActive
-            ? (s.remixes.find((r) => r.id !== id)?.id ?? null)
-            : s.activeRemixId,
-        }));
+        set((s) => {
+          // Sweep ephemeral swap tasks belonging to the deleted remix.
+          const prefix = `${id}:`;
+          const sweptTasks: Record<CropSheetSwapTaskKey, SwapTaskStatus> = {};
+          for (const [taskKey, status] of Object.entries(s.cropSheetSwapTasks)) {
+            if (!taskKey.startsWith(prefix)) sweptTasks[taskKey] = status;
+          }
+          return {
+            remixes: s.remixes.filter((r) => r.id !== id),
+            activeRemixId: wasActive
+              ? (s.remixes.find((r) => r.id !== id)?.id ?? null)
+              : s.activeRemixId,
+            cropSheetSwapTasks: sweptTasks,
+          };
+        });
 
         const { error } = await supabase.from('remixes').delete().eq('id', id);
         if (error) {
           log.error('deleteRemix', 'rollback', { id, error: error.message });
+          // FUTURE: when startCropSheetSwap writes cropSheetSwapTasks (POST
+          // branch), also capture + restore the swept tasks here — currently
+          // the map is always empty (no-op) so there is nothing to restore.
           set({ remixes: prevList, activeRemixId: prevActiveId });
           return false;
         }
@@ -679,6 +725,49 @@ export const useRemixStore = create<RemixStore>()(
         }
       },
 
+      // ── Crop sheet swap (modal-driven) ─────────────────────────────────
+      startCropSheetSwap: async (params) => {
+        const taskKey = buildSwapTaskKey(
+          params.remixId,
+          params.type,
+          params.key,
+          params.cropSheetIndex,
+        );
+        log.info('startCropSheetSwap', 'invoked', {
+          taskKey,
+          mode: params.mode,
+        });
+
+        // Guard double-fire — a running task for this sheet wins.
+        if (get().cropSheetSwapTasks[taskKey]?.state === 'running') {
+          log.debug('startCropSheetSwap', 'blocked — task already running', {
+            taskKey,
+          });
+          return;
+        }
+
+        // Validate refine input before any work.
+        if (params.mode === 'refine' && !params.prompt?.trim()) {
+          log.warn('startCropSheetSwap', 'refine missing prompt — abort', {
+            taskKey,
+          });
+          return;
+        }
+
+        // ── DEFERRED: swap API endpoint not yet implemented (design §5 open
+        //    item). When ready, replace this block with:
+        //      set task → { state:'running', mode }
+        //      POST swap API → success: patchRemixCropSheets(swap_results) +
+        //        clear task; error: set task → { state:'error', mode, message }
+        log.warn(
+          'startCropSheetSwap',
+          'NO-OP — swap API endpoint not implemented (deferred)',
+          { taskKey, mode: params.mode },
+        );
+        // Task stays idle (never set running/error) → UI never stuck spinning.
+        return;
+      },
+
       patchRemixIllustration: (id, spreads) =>
         set((s) => ({
           remixes: s.remixes.map((r) =>
@@ -707,8 +796,8 @@ export const useRemixStore = create<RemixStore>()(
                 );
               } else {
                 next.mixes = next.mixes.map((m) =>
-                  // Mix has no `key` field — match by composed name.
-                  m.name === u.key ? applySheetPatch(m, u) : m,
+                  // Mix has no `key` field — match by canonical mix key.
+                  canonicalMixKey(m.keys) === u.key ? applySheetPatch(m, u) : m,
                 );
               }
             }
@@ -861,6 +950,47 @@ export const useHasPendingJob = (): boolean =>
     s.jobs.some((j) => j.status === 'queued' || j.status === 'running'),
   );
 
+/** Resolves a single entity (character | prop | mix) from a remix into the
+ *  normalized `RemixEntityRef` projection used by SwapCropSheetModal. Returns
+ *  `null` when the remix or entity is missing (e.g. deleted realtime). */
+export const useRemixEntity = (
+  remixId: string,
+  type: 'character' | 'prop' | 'mix',
+  key: string,
+): RemixEntityRef | null =>
+  useRemixStore(
+    useShallow((s): RemixEntityRef | null => {
+      const remix = s.remixes.find((r) => r.id === remixId);
+      if (!remix) return null;
+
+      let ent: { name: string; crop_sheets: RemixCropSheet[] } | undefined;
+      if (type === 'character') {
+        ent = remix.characters.find((c) => c.key === key);
+      } else if (type === 'prop') {
+        ent = remix.props.find((p) => p.key === key);
+      } else {
+        ent = remix.mixes.find((m) => canonicalMixKey(m.keys) === key);
+      }
+      if (!ent) return null;
+
+      return { type, key, name: ent.name, crop_sheets: ent.crop_sheets };
+    }),
+  );
+
+/** Reads the ephemeral swap task for a specific crop sheet. Defaults to a
+ *  stable idle object so callers never trigger a re-render on the default. */
+export const useCropSheetSwapTask = (
+  remixId: string,
+  type: 'character' | 'prop' | 'mix',
+  key: string,
+  sheetIndex: number,
+): SwapTaskStatus =>
+  useRemixStore(
+    (s) =>
+      s.cropSheetSwapTasks[buildSwapTaskKey(remixId, type, key, sheetIndex)] ??
+      IDLE_SWAP_TASK,
+  );
+
 export const useRemixActions = () =>
   useRemixStore(
     useShallow((s) => ({
@@ -877,6 +1007,7 @@ export const useRemixActions = () =>
       syncJobsFromServer: s.syncJobsFromServer,
       patchRemixIllustration: s.patchRemixIllustration,
       patchRemixCropSheets: s.patchRemixCropSheets,
+      startCropSheetSwap: s.startCropSheetSwap,
     })),
   );
 

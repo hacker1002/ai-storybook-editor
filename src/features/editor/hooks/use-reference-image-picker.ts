@@ -4,18 +4,18 @@ import { useRef, useState, useCallback } from "react";
 import { fileToBase64 } from "@/utils/file-utils";
 import { createLogger } from "@/utils/logger";
 import { toast } from "sonner";
+import type { ReferenceImage } from "@/types/remix";
+
+// Canonical `ReferenceImage` shape lives in `@/types/remix` (single source of
+// truth, shared with the crop-sheet swap modal). Re-exported here so existing
+// consumers importing it from the hook keep working.
+export type { ReferenceImage };
 
 const log = createLogger("Editor", "ReferenceImagePicker");
 
 const DEFAULT_MAX_IMAGES = 5;
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
-
-export interface ReferenceImage {
-  label: string;
-  base64Data: string;
-  mimeType: string;
-}
 
 export function useReferenceImagePicker(maxImages = DEFAULT_MAX_IMAGES) {
   const inputRef = useRef<HTMLInputElement>(null);

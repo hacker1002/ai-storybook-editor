@@ -260,11 +260,56 @@ export interface SwapCropSheetTarget {
   key: string;
 }
 
-// ── Mix signature helper (used by clone-builder + downstream consumers) ──────
-/** Stable dedupe identifier for a mix — sorted keys joined by comma. */
-export function mixSignature(keys: string[]): string {
-  return [...keys].sort().join(',');
+// ── Canonical mix key ────────────────────────────────────────────────────────
+/** Stable identity for a mix — sorted keys joined by '-'. Single source of
+ *  truth used for clone-builder dedupe, SwapCropSheetTarget.key, crop-sheet
+ *  patch matching, and useRemixEntity resolution. Sorted → stable under
+ *  keys[] reorder. */
+export function canonicalMixKey(keys: string[]): string {
+  return keys.slice().sort().join('-');
 }
+
+// === Crop sheet swap (modal-driven, per-sheet) — SwapCropSheetModal ==========
+
+export type SwapTaskMode = 'swap' | 'refine';
+
+export type SwapTaskStatus =
+  | { state: 'idle' }
+  | { state: 'running'; mode: SwapTaskMode }
+  | { state: 'error'; mode: SwapTaskMode; message: string };
+
+/** Reference image for refine — canonical shape shared with
+ *  `useReferenceImagePicker` (which re-exports this type). */
+export interface ReferenceImage {
+  label: string;
+  base64Data: string;
+  mimeType: string;
+}
+
+/** Normalized projection of a single entity (character | prop | mix) for the
+ *  swap modal. */
+export interface RemixEntityRef {
+  type: 'character' | 'prop' | 'mix';
+  /** character/prop: native key; mix: canonicalMixKey(keys). */
+  key: string;
+  name: string;
+  crop_sheets: RemixCropSheet[];
+}
+
+export interface StartCropSheetSwapParams {
+  remixId: string;
+  type: 'character' | 'prop' | 'mix';
+  key: string;
+  cropSheetIndex: number;
+  mode: SwapTaskMode;
+  /** Required when mode='refine'. */
+  prompt?: string;
+  /** Refine only — max 5. */
+  referenceImages?: ReferenceImage[];
+}
+
+/** Task identity — `${remixId}:${type}:${key}:${cropSheetIndex}`. */
+export type CropSheetSwapTaskKey = string;
 
 // ── Text Swap Engine (Phase 1) ───────────────────────────────────────────────
 // Sync client-side swap of `character.name` → `humans.display_name[lang]` over

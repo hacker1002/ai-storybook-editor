@@ -4,6 +4,7 @@
 
 import { Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { canonicalMixKey } from '@/types/remix';
 import type {
   RemixCharacter,
   RemixMix,
@@ -65,16 +66,19 @@ export function RemixInventorySection({
       )}
       {mixes.length > 0 && (
         <SubSection label="Mixes">
-          {mixes.map((m) => (
-            <InventoryRow
-              key={`mix-${m.name}`}
-              name={m.name}
-              entityKey={m.keys.join(',')}
-              onEyeClick={() =>
-                onOpenSwapCropSheet({ type: 'mix', key: m.name })
-              }
-            />
-          ))}
+          {mixes.map((m) => {
+            const mixKey = canonicalMixKey(m.keys);
+            return (
+              <InventoryRow
+                key={`mix-${mixKey}`}
+                name={m.name}
+                entityKey={mixKey}
+                onEyeClick={() =>
+                  onOpenSwapCropSheet({ type: 'mix', key: mixKey })
+                }
+              />
+            );
+          })}
         </SubSection>
       )}
     </div>
