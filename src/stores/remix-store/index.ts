@@ -885,7 +885,9 @@ export const useRemixStore = create<RemixStore>()(
               failed: summary.failed,
               total: summary.total_groups,
             });
-            toast.warning('Some crop sheets failed to build — retry from sidebar');
+            toast.warning(
+              `Crop sheets partial for "${remix.name}" — ${message}, retry from sidebar`,
+            );
           } else {
             set((s) => ({
               cropSheetBuildTasks: omitKey(s.cropSheetBuildTasks, remixId),
@@ -894,6 +896,9 @@ export const useRemixStore = create<RemixStore>()(
               remixId,
               totalSheets: summary.total_sheets,
             });
+            toast.success(
+              `Crop sheets ready for "${remix.name}" — ${summary.total_sheets} sheets`,
+            );
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -904,7 +909,7 @@ export const useRemixStore = create<RemixStore>()(
             },
           }));
           log.error('buildCropSheets', 'build failed', { remixId, error: msg });
-          toast.error('Crop sheet build failed: ' + msg);
+          toast.error(`Crop sheets failed for "${remix.name}": ${msg}`);
         }
       },
 
