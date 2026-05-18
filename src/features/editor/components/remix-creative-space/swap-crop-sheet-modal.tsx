@@ -211,20 +211,22 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
                 busyLabel={busyLabel}
                 errorMsg={errorMsg}
                 editSlot={
-                  <EditImagePopover
-                    open={isEditOpen}
-                    onOpenChange={setEditOpen}
-                    promptValue={editPrompt}
-                    onPromptChange={setEditPrompt}
-                    onSubmit={handleRefineSubmit}
-                    referenceImages={images.map((i) => ({
-                      label: i.label,
-                    }))}
-                    onAttachClick={openPicker}
-                    onRemoveReference={removeImage}
-                    disabled={isBusy || selectedSwap === null}
-                    triggerAriaLabel="Refine swap image"
-                  />
+                  selectedSwap === null ? null : (
+                    <EditImagePopover
+                      open={isEditOpen}
+                      onOpenChange={setEditOpen}
+                      promptValue={editPrompt}
+                      onPromptChange={setEditPrompt}
+                      onSubmit={handleRefineSubmit}
+                      referenceImages={images.map((i) => ({
+                        label: i.label,
+                      }))}
+                      onAttachClick={openPicker}
+                      onRemoveReference={removeImage}
+                      disabled={isBusy}
+                      triggerAriaLabel="Refine swap image"
+                    />
+                  )
                 }
               />
             )}

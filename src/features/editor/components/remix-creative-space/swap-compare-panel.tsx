@@ -117,57 +117,49 @@ function ComparePanelBody({
     setImgError(true);
   };
 
+  const originalImg = (
+    <img
+      src={originalUrl}
+      alt="Original image"
+      onLoad={handleLoad}
+      onError={handleError}
+      className="h-full w-full object-contain"
+    />
+  );
+
+  const swappedNode =
+    swappedUrl === null ? (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-background/60 px-3 text-center">
+        <ImageOff className="h-6 w-6 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">
+          No swap image yet — click Swap to create
+        </span>
+      </div>
+    ) : (
+      <img
+        src={swappedUrl}
+        alt="Swapped image"
+        onLoad={handleLoad}
+        onError={handleError}
+        className="h-full w-full object-contain"
+      />
+    );
+
   return (
     <>
-      {swappedUrl === null ? (
-        <>
-          <img
-            src={originalUrl}
-            alt="Original image"
-            onLoad={handleLoad}
-            onError={handleError}
-            className="h-full w-full object-contain"
-          />
-          <div className="absolute inset-y-0 right-0 flex w-1/2 flex-col items-center justify-center gap-2 border-l border-dashed border-border bg-background/60 px-3 text-center">
-            <ImageOff className="h-6 w-6 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
-              No swap image yet — click Swap to create
-            </span>
-          </div>
-        </>
-      ) : (
-        <>
-          <ReactCompareSlider
-            defaultPosition={dividerPosition}
-            onPositionChange={onDividerChange}
-            className="h-full w-full"
-            itemOne={
-              <img
-                src={originalUrl}
-                alt="Original image"
-                onLoad={handleLoad}
-                onError={handleError}
-                className="h-full w-full object-contain"
-              />
-            }
-            itemTwo={
-              <img
-                src={swappedUrl}
-                alt="Swapped image"
-                onLoad={handleLoad}
-                onError={handleError}
-                className="h-full w-full object-contain"
-              />
-            }
-          />
-          <span className="absolute left-2 top-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground">
-            Original
-          </span>
-          <span className="absolute right-2 top-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground">
-            Swapped
-          </span>
-        </>
-      )}
+      <ReactCompareSlider
+        defaultPosition={swappedUrl === null ? 100 : dividerPosition}
+        onPositionChange={onDividerChange}
+        className="h-full w-full"
+        itemOne={originalImg}
+        itemTwo={swappedNode}
+      />
+      <span className="absolute left-2 top-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground">
+        Original
+      </span>
+      <span className="absolute right-2 top-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground">
+        {swappedUrl === null ? 'No swap yet' : 'Swapped'}
+      </span>
 
       {!imgLoaded && !imgError && (
         <div
