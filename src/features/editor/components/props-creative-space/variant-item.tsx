@@ -21,11 +21,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
-import {
   ChevronDown,
   ChevronRight,
   Pencil,
@@ -38,8 +33,8 @@ import {
   Sparkles,
   Image as ImageIcon,
   Loader2,
-  Send,
 } from "lucide-react";
+import { EditImagePopover } from "@/features/editor/components/shared-components";
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { Label } from "@/components/ui/label";
 import { useSnapshotActions, usePropByKey, useImageTasksForChild } from "@/stores/snapshot-store";
@@ -483,81 +478,17 @@ export function VariantItem({
                   )}
                   {/* Floating action buttons — bottom-right on image */}
                   <div className="absolute bottom-2 right-2 flex gap-2 z-20">
-                    <Popover
+                    <EditImagePopover
                       open={isEditPopoverOpen}
                       onOpenChange={setIsEditPopoverOpen}
-                    >
-                      <PopoverTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={isProcessing}
-                          aria-label="Edit image"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        side="top"
-                        align="end"
-                        className="w-80 p-3"
-                      >
-                        {editRefs.images.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mb-2">
-                            {editRefs.images.map((img, idx) => (
-                              <div
-                                key={`edit-${img.label}-${idx}`}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
-                              >
-                                <span className="truncate max-w-[120px]">
-                                  {img.label}
-                                </span>
-                                <button
-                                  onClick={() => editRefs.removeImage(idx)}
-                                  className="hover:bg-blue-100 rounded"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex gap-2">
-                          <Textarea
-                            value={editPromptText}
-                            onChange={(e) => setEditPromptText(e.target.value)}
-                            placeholder="Describe changes..."
-                            className="min-h-[60px] flex-1 resize-none text-sm"
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                handleEditImage();
-                              }
-                            }}
-                          />
-                          <div className="flex flex-col gap-1.5 shrink-0">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={editRefs.openPicker}
-                              aria-label="Attach reference image"
-                            >
-                              <Paperclip className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              className="h-8 w-8"
-                              disabled={!editPromptText.trim()}
-                              onClick={handleEditImage}
-                              aria-label="Submit edit"
-                            >
-                              <Send className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                      promptValue={editPromptText}
+                      onPromptChange={setEditPromptText}
+                      onSubmit={handleEditImage}
+                      referenceImages={editRefs.images}
+                      onAttachClick={editRefs.openPicker}
+                      onRemoveReference={editRefs.removeImage}
+                      disabled={isProcessing}
+                    />
                     <Button
                       size="sm"
                       variant="secondary"

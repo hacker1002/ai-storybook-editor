@@ -1,23 +1,10 @@
 // variant-item-image-area.tsx - Image preview + thumbnail gallery + edit popover for a stage variant item
 
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Pencil,
-  Download,
-  X,
-  Check,
-  Image as ImageIcon,
-  Send,
-  Paperclip,
-} from 'lucide-react';
+import { Download, Check, Image as ImageIcon } from 'lucide-react';
 import { ImageZoomPreview } from '@/components/ui/image-zoom-preview';
+import { EditImagePopover } from '@/features/editor/components/shared-components';
 import type { Illustration } from '@/types/prop-types';
 import { cn } from '@/utils/utils';
 
@@ -94,64 +81,17 @@ export function VariantItemImageArea({
             )}
             {/* Floating action buttons */}
             <div className="absolute bottom-2 right-2 flex gap-2 z-20">
-              <Popover open={isEditPopoverOpen} onOpenChange={onEditPopoverOpenChange}>
-                <PopoverTrigger asChild>
-                  <Button size="sm" variant="secondary" disabled={isProcessing} aria-label="Edit image">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent side="top" align="end" className="w-80 p-3">
-                  {editRefImages.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {editRefImages.map((img, idx) => (
-                        <div
-                          key={`edit-${img.label}-${idx}`}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs"
-                        >
-                          <span className="truncate max-w-[120px]">{img.label}</span>
-                          <button onClick={() => onEditRefRemove(idx)} className="hover:bg-blue-100 rounded">
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Textarea
-                      value={editPromptText}
-                      onChange={(e) => onEditPromptChange(e.target.value)}
-                      placeholder="Describe changes..."
-                      className="min-h-[60px] flex-1 resize-none text-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          onEditSubmit();
-                        }
-                      }}
-                    />
-                    <div className="flex flex-col gap-1.5 shrink-0">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={onEditRefPickerOpen}
-                        aria-label="Attach reference image"
-                      >
-                        <Paperclip className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        className="h-8 w-8"
-                        disabled={!editPromptText.trim()}
-                        onClick={onEditSubmit}
-                        aria-label="Submit edit"
-                      >
-                        <Send className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <EditImagePopover
+                open={isEditPopoverOpen}
+                onOpenChange={onEditPopoverOpenChange}
+                promptValue={editPromptText}
+                onPromptChange={onEditPromptChange}
+                onSubmit={onEditSubmit}
+                referenceImages={editRefImages}
+                onAttachClick={onEditRefPickerOpen}
+                onRemoveReference={onEditRefRemove}
+                disabled={isProcessing}
+              />
               <Button
                 size="sm"
                 variant="secondary"

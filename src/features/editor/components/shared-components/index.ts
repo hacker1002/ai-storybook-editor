@@ -28,3 +28,5 @@ export { SegmentLayerModal } from './segment-layer-modal';
 export type { SegmentResult } from './segment-layer-modal';
 export { CreateAssetDialog } from './create-asset-dialog';
 export type { CreateAssetDialogProps } from './create-asset-dialog';
+export { EditImagePopover } from './edit-image-popover';
+export type { EditImagePopoverProps, EditImagePopoverReference } from './edit-image-popover';
