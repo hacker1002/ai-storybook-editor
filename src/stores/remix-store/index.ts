@@ -10,6 +10,7 @@ import { createLogger } from '@/utils/logger';
 import type {
   BackgroundJobRow,
   CLIENT_AUDIO_CHUNK_CAP as CapType,
+  CropSheetBuildStatus,
   CropSheetSwapTaskKey,
   EnqueueRemixJobOutcome,
   Remix,
@@ -43,6 +44,8 @@ import {
   type EnqueueAudioSwapEnqueuedData,
   type EnqueueAudioSwapDedupedData,
 } from '@/apis/jobs-api';
+import { buildRemixCropSheets } from '@/apis/remix-api';
+import { toast } from 'sonner';
 
 const log = createLogger('Store', 'RemixStore');
 
@@ -77,6 +80,15 @@ function buildSwapTaskKey(
  *  `useCropSheetSwapTask` call (would defeat selector re-render guards). */
 const IDLE_SWAP_TASK: SwapTaskStatus = { state: 'idle' };
 
+/** Immutable single-key removal from a record. Returns a new object without
+ *  `key`; used to clear ephemeral per-remix task entries. */
+function omitKey<T>(map: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in map)) return map;
+  const next = { ...map };
+  delete next[key];
+  return next;
+}
+
 // ── Store shape ──────────────────────────────────────────────────────────────
 
 interface StartAudioJobOptions {
@@ -92,6 +104,9 @@ interface RemixStore {
   /** Ephemeral per-sheet swap task map (memory-only — not persisted, no
    *  background_jobs row). Mirrors ImageTaskSlice but flat. */
   cropSheetSwapTasks: Record<CropSheetSwapTaskKey, SwapTaskStatus>;
+  /** Ephemeral per-remix crop-sheet build task map (key = remixId). Memory-only
+   *  — synchronous endpoint, no background_jobs row, lost on refresh (v1). */
+  cropSheetBuildTasks: Record<string, CropSheetBuildStatus>;
 
   syncFromServer: (snapshotId: string) => Promise<void>;
   clearAll: () => void;
@@ -123,6 +138,12 @@ interface RemixStore {
   /** Modal-driven per-sheet swap trigger. DEFERRED no-op — guard + validate +
    *  log are real; the POST branch lands when the swap API ships. */
   startCropSheetSwap: (params: StartCropSheetSwapParams) => Promise<void>;
+
+  /** Phase 1.5 — builds crop sheets for a remix's characters/props. Auto-fired
+   *  fire-and-forget after createRemix; also the retry entry point. On success
+   *  (full or partial) refetches the remix row to materialize crop_sheets[]
+   *  (no realtime remixes channel exists). */
+  buildCropSheets: (remixId: string) => Promise<void>;
 }
 
 export const useRemixStore = create<RemixStore>()(
@@ -132,6 +153,7 @@ export const useRemixStore = create<RemixStore>()(
       activeRemixId: null,
       jobs: [],
       cropSheetSwapTasks: {},
+      cropSheetBuildTasks: {},
 
       syncFromServer: async (snapshotId) => {
         log.info('syncFromServer', 'start', { snapshotId });
@@ -158,6 +180,7 @@ export const useRemixStore = create<RemixStore>()(
           activeRemixId: null,
           jobs: [],
           cropSheetSwapTasks: {},
+          cropSheetBuildTasks: {},
         });
       },
 
@@ -233,6 +256,20 @@ export const useRemixStore = create<RemixStore>()(
           .startAudioJob(remix.id, { triggeredBy: 'auto-create' })
           .catch((err) => {
             log.warn('createRemix', 'audio swap enqueue failed (non-blocking)', {
+              remixId: remix.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+
+        // ── Phase 1.5 auto-trigger crop-sheet build (fire-and-forget) ───
+        // Parallel with audio: writes characters/props/mixes columns vs audio's
+        // illustration column — Postgres row-lock serializes the two UPDATEs.
+        // buildCropSheets catches its own errors; the outer .catch is defensive.
+        log.info('createRemix', 'auto-trigger crop-sheet build', { remixId: remix.id });
+        void get()
+          .buildCropSheets(remix.id)
+          .catch((err) => {
+            log.warn('createRemix', 'crop-sheet build failed (non-blocking)', {
               remixId: remix.id,
               error: err instanceof Error ? err.message : String(err),
             });
@@ -330,6 +367,7 @@ export const useRemixStore = create<RemixStore>()(
               ? (s.remixes.find((r) => r.id !== id)?.id ?? null)
               : s.activeRemixId,
             cropSheetSwapTasks: sweptTasks,
+            cropSheetBuildTasks: omitKey(s.cropSheetBuildTasks, id),
           };
         });
 
@@ -768,6 +806,108 @@ export const useRemixStore = create<RemixStore>()(
         return;
       },
 
+      // ── Crop sheet build (Phase 1.5 — auto + retry) ────────────────────
+      buildCropSheets: async (remixId) => {
+        const remix = get().remixes.find((r) => r.id === remixId);
+        if (!remix) {
+          // Race: createRemix fired this before a concurrent deleteRemix.
+          log.warn('buildCropSheets', 'remix not found — skip', { remixId });
+          return;
+        }
+
+        // Guard double-fire — a build already in flight wins (mirrors
+        // startCropSheetSwap). The badge hides the retry button while running,
+        // so this only defends against races (auto-trigger + manual retry).
+        if (get().cropSheetBuildTasks[remixId]?.state === 'running') {
+          log.debug('buildCropSheets', 'blocked — build already running', {
+            remixId,
+          });
+          return;
+        }
+
+        const characterKeys = remix.characters.map((c) => c.key);
+        const propKeys = remix.props.map((p) => p.key);
+
+        // Endpoint rejects an empty character∪prop union (400). A remix with
+        // only narrator/language choices has nothing to build → no-op, badge
+        // stays idle.
+        if (characterKeys.length === 0 && propKeys.length === 0) {
+          log.info('buildCropSheets', 'skip — no character/prop', { remixId });
+          return;
+        }
+
+        set((s) => ({
+          cropSheetBuildTasks: {
+            ...s.cropSheetBuildTasks,
+            [remixId]: { state: 'running' },
+          },
+        }));
+        log.info('buildCropSheets', 'build start', {
+          remixId,
+          charCount: characterKeys.length,
+          propCount: propKeys.length,
+        });
+
+        try {
+          const result = await buildRemixCropSheets(
+            remixId,
+            characterKeys,
+            propKeys,
+          );
+
+          // ImageApiFailure (4xx/5xx pre-flight) carries no `data` field —
+          // discriminate on its presence, NOT on `success` (a partial build
+          // returns HTTP 200 with success:false too). `|| !result.data` also
+          // catches a malformed 200 body lacking `data` → treat as failure.
+          if (!('data' in result) || !result.data) {
+            throw new Error(result.error ?? 'Crop sheet build failed');
+          }
+
+          const { summary } = result.data;
+          // Refetch on BOTH full-success and partial: succeeded groups already
+          // persisted (atomic 1-UPDATE) so the user sees them immediately even
+          // when the badge stays in `error` to drive a retry. Best-effort —
+          // refetchRemix swallows its own errors and never throws, so the badge
+          // still clears on failure; stale crop_sheets[] heal on a later
+          // refetch trigger (audio job terminal transition / next build).
+          await get().refetchRemix(remixId);
+
+          if (summary.failed > 0) {
+            const message = `${summary.failed}/${summary.total_groups} groups failed`;
+            set((s) => ({
+              cropSheetBuildTasks: {
+                ...s.cropSheetBuildTasks,
+                [remixId]: { state: 'error', message },
+              },
+            }));
+            log.warn('buildCropSheets', 'partial', {
+              remixId,
+              failed: summary.failed,
+              total: summary.total_groups,
+            });
+            toast.warning('Some crop sheets failed to build — retry from sidebar');
+          } else {
+            set((s) => ({
+              cropSheetBuildTasks: omitKey(s.cropSheetBuildTasks, remixId),
+            }));
+            log.info('buildCropSheets', 'build done', {
+              remixId,
+              totalSheets: summary.total_sheets,
+            });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          set((s) => ({
+            cropSheetBuildTasks: {
+              ...s.cropSheetBuildTasks,
+              [remixId]: { state: 'error', message: msg },
+            },
+          }));
+          log.error('buildCropSheets', 'build failed', { remixId, error: msg });
+          toast.error('Crop sheet build failed: ' + msg);
+        }
+      },
+
       patchRemixIllustration: (id, spreads) =>
         set((s) => ({
           remixes: s.remixes.map((r) =>
@@ -1008,8 +1148,10 @@ export const useRemixActions = () =>
       patchRemixIllustration: s.patchRemixIllustration,
       patchRemixCropSheets: s.patchRemixCropSheets,
       startCropSheetSwap: s.startCropSheetSwap,
+      buildCropSheets: s.buildCropSheets,
     })),
   );
 
-// Re-export selector hook (Phase 03) for convenient single-import surface.
+// Re-export selector hooks for a convenient single-import surface.
 export { useAudioJobBadgeState, deriveAudioJobBadgeState } from './audio-job-badge-state';
+export { useCropSheetBuildState } from './crop-sheet-build-state';

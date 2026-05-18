@@ -278,6 +278,14 @@ export type SwapTaskStatus =
   | { state: 'running'; mode: SwapTaskMode }
   | { state: 'error'; mode: SwapTaskMode; message: string };
 
+// Crop sheet build (Phase 1.5) — per-remix ephemeral task. Synchronous endpoint,
+// NO background_jobs row. `error` folds transport failure (4xx/5xx) together
+// with partial build (summary.failed > 0). No progress %, no cancel.
+export type CropSheetBuildStatus =
+  | { state: 'idle' }
+  | { state: 'running' }
+  | { state: 'error'; message: string };
+
 /** Reference image for refine — canonical shape shared with
  *  `useReferenceImagePicker` (which re-exports this type). */
 export interface ReferenceImage {

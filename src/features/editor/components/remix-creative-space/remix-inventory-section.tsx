@@ -17,6 +17,9 @@ interface Props {
   props: RemixProp[];
   mixes: RemixMix[];
   onOpenSwapCropSheet: (target: Omit<SwapCropSheetTarget, 'remixId'>) => void;
+  /** Disables every eye icon while a crop-sheet build is in flight — crop
+   *  sheets are mid-rewrite so the swap modal would show stale data. */
+  eyeDisabled: boolean;
 }
 
 export function RemixInventorySection({
@@ -24,6 +27,7 @@ export function RemixInventorySection({
   props,
   mixes,
   onOpenSwapCropSheet,
+  eyeDisabled,
 }: Props) {
   const hasAny = characters.length > 0 || props.length > 0 || mixes.length > 0;
   if (!hasAny) {
@@ -43,6 +47,7 @@ export function RemixInventorySection({
               key={`char-${c.key}`}
               name={c.name}
               entityKey={c.key}
+              eyeDisabled={eyeDisabled}
               onEyeClick={() =>
                 onOpenSwapCropSheet({ type: 'character', key: c.key })
               }
@@ -57,6 +62,7 @@ export function RemixInventorySection({
               key={`prop-${p.key}`}
               name={p.name}
               entityKey={p.key}
+              eyeDisabled={eyeDisabled}
               onEyeClick={() =>
                 onOpenSwapCropSheet({ type: 'prop', key: p.key })
               }
@@ -73,6 +79,7 @@ export function RemixInventorySection({
                 key={`mix-${mixKey}`}
                 name={m.name}
                 entityKey={mixKey}
+                eyeDisabled={eyeDisabled}
                 onEyeClick={() =>
                   onOpenSwapCropSheet({ type: 'mix', key: mixKey })
                 }
@@ -103,10 +110,12 @@ function SubSection({
 function InventoryRow({
   name,
   entityKey,
+  eyeDisabled,
   onEyeClick,
 }: {
   name: string;
   entityKey: string;
+  eyeDisabled: boolean;
   onEyeClick: () => void;
 }) {
   return (
@@ -121,6 +130,8 @@ function InventoryRow({
         variant="ghost"
         size="icon"
         className="h-7 w-7 shrink-0"
+        disabled={eyeDisabled}
+        title={eyeDisabled ? 'Building crop sheets…' : undefined}
         onClick={(e) => {
           e.stopPropagation();
           onEyeClick();
