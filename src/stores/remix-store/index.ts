@@ -860,12 +860,15 @@ export const useRemixStore = create<RemixStore>()(
       // ── Crop sheet count (modal-driven append / remove) ────────────────
       appendCropSheet: async (remixId, type, key) => {
         log.info('appendCropSheet', 'invoked', { remixId, type, key });
-        // Title mirrors clone-builder `makeDefaultSheet` (entity name) so an
-        // appended sheet is indistinguishable from a cloned one.
+        // Title = "<entity name> <n+1>" where n = existing sheet count BEFORE
+        // append. Initial clone keeps unsuffixed name (see clone-builder
+        // `makeDefaultSheet`), so first append yields e.g. "Leela 2".
         const remix = get().remixes.find((r) => r.id === remixId);
         const entity = remix ? resolveEntity(remix, type, key) : null;
+        const nextIndex = (entity?.crop_sheets.length ?? 0) + 1;
+        const baseName = entity?.name ?? 'Sheet';
         const newSheet: RemixCropSheet = {
-          title: entity?.name ?? 'Sheet',
+          title: `${baseName} — sheet ${nextIndex}`,
           image_url: '',
           swap_results: [],
           crops: [],

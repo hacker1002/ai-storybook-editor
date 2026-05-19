@@ -147,8 +147,9 @@ function EntityRow({
 
   return (
     <div className="rounded-lg border border-border bg-card">
-      <div className="flex items-start justify-between gap-2 px-3 pb-2 pt-2.5">
-        <div className="min-w-0">
+      {/* Header row — name/@key on the left, [−][+][⇄] on the right. */}
+      <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-2.5">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">
             {entity.name}
           </p>
@@ -157,16 +158,72 @@ function EntityRow({
           </p>
         </div>
 
-        {swapTask.state === 'running' && (
-          <span
-            role="status"
-            aria-live="polite"
-            className="flex items-center gap-1 text-xs text-primary"
+        <div className="flex shrink-0 items-center gap-1">
+          {swapTask.state === 'running' && (
+            <span
+              role="status"
+              aria-live="polite"
+              className="mr-1 flex items-center gap-1 text-xs text-primary"
+            >
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {swapTask.current}/{swapTask.total}
+            </span>
+          )}
+
+          <button
+            type="button"
+            aria-label={`Bớt sheet cho ${entity.name}`}
+            disabled={removeDisabled}
+            onClick={() => {
+              log.debug('onClick', 'remove sheet', {
+                entityKey: entity.key,
+                lastIndex: sheetCount - 1,
+              });
+              onRemoveSheet(entity.key, sheetCount - 1);
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
           >
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            {swapTask.current}/{swapTask.total}
-          </span>
-        )}
+            <Minus className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            aria-label={`Thêm sheet cho ${entity.name}`}
+            onClick={() => {
+              log.debug('onClick', 'add sheet', { entityKey: entity.key });
+              onAddSheet(entity.key);
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+
+          {/* DEFERRED: swap hard-disabled on every tab (swap API not ready).
+              Future phase → `disabled={anySwapRunning}` + drop the tooltip. */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* span wrapper — a disabled button swallows hover events. */}
+                <span>
+                  <button
+                    type="button"
+                    aria-label={`Swap ${entity.name} — ${SWAP_DISABLED_REASON}`}
+                    aria-busy={swapTask.state === 'running'}
+                    aria-disabled
+                    disabled
+                    onClick={() => {
+                      if (anySwapRunning) return;
+                      onSwapEntity(entity.key);
+                    }}
+                    className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <ArrowLeftRight className="h-3 w-3" />
+                  </button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{SWAP_DISABLED_REASON}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
 
       {swapTask.state === 'error' && (
@@ -175,75 +232,13 @@ function EntityRow({
         </p>
       )}
 
-      {/* Action row — stepper [−][+] + swap [⇄] */}
-      <div className="flex items-center gap-1 px-3 pb-2">
-        <button
-          type="button"
-          aria-label={`Bớt sheet cho ${entity.name}`}
-          disabled={removeDisabled}
-          onClick={() => {
-            log.debug('onClick', 'remove sheet', {
-              entityKey: entity.key,
-              lastIndex: sheetCount - 1,
-            });
-            onRemoveSheet(entity.key, sheetCount - 1);
-          }}
-          className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-        >
-          <Minus className="h-3 w-3" />
-        </button>
-        <span className="w-6 text-center text-xs tabular-nums text-muted-foreground">
-          {sheetCount}
-        </span>
-        <button
-          type="button"
-          aria-label={`Thêm sheet cho ${entity.name}`}
-          onClick={() => {
-            log.debug('onClick', 'add sheet', { entityKey: entity.key });
-            onAddSheet(entity.key);
-          }}
-          className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-
-        <div className="flex-1" />
-
-        {/* DEFERRED: swap hard-disabled on every tab (swap API not ready).
-            Future phase → `disabled={anySwapRunning}` + drop the tooltip. */}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {/* span wrapper — a disabled button swallows hover events. */}
-              <span>
-                <button
-                  type="button"
-                  aria-label={`Swap ${entity.name} — ${SWAP_DISABLED_REASON}`}
-                  aria-busy={swapTask.state === 'running'}
-                  aria-disabled
-                  disabled
-                  onClick={() => {
-                    if (anySwapRunning) return;
-                    onSwapEntity(entity.key);
-                  }}
-                  className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground disabled:pointer-events-none disabled:opacity-40"
-                >
-                  <ArrowLeftRight className="h-3 w-3" />
-                </button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{SWAP_DISABLED_REASON}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
       {/* Sheet rows — listbox */}
       <div
         role="listbox"
         aria-label={`Crop sheets của ${entity.name}`}
         className="flex flex-col pb-1.5"
       >
-        {entity.crop_sheets.map((_, index) => {
+        {entity.crop_sheets.map((sheet, index) => {
           const isSheetActive =
             isRowActive && activeSheetRef.sheetIndex === index;
           return (
@@ -283,7 +278,7 @@ function EntityRow({
                   isSheetActive ? 'bg-primary' : 'bg-muted-foreground/40',
                 )}
               />
-              Sheet {index + 1}
+              {sheet.title || `Sheet ${index + 1}`}
             </div>
           );
         })}

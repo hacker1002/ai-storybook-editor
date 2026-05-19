@@ -31,6 +31,7 @@ import {
   useEntitySwapTask,
   useAnySwapRunning,
   useRemixActions,
+  useRemixStore,
 } from '@/stores/remix-store';
 import { createLogger } from '@/utils/logger';
 import type {
@@ -76,6 +77,9 @@ function clamp(value: number, min: number, max: number): number {
 
 export function SwapCropSheetModal({ target, onClose }: Props) {
   const entities = useRemixEntities(target.remixId);
+  const remixName = useRemixStore(
+    (s) => s.remixes.find((r) => r.id === target.remixId)?.name ?? '',
+  );
   const { startEntitySwap, appendCropSheet, removeCropSheet } =
     useRemixActions();
 
@@ -260,6 +264,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         </DialogDescription>
 
         <RemixModalHeader
+          title={remixName || 'Remix'}
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onClose={onClose}

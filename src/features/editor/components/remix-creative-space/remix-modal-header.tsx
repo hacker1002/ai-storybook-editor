@@ -13,6 +13,7 @@ import {
 const log = createLogger('Editor', 'RemixModalHeader');
 
 interface RemixModalHeaderProps {
+  title: string;
   activeTab: RemixEntityType;
   onTabChange: (tab: RemixEntityType) => void;
   onClose: () => void;
@@ -32,6 +33,7 @@ const TABS: TabDef[] = [
 ];
 
 export function RemixModalHeader({
+  title,
   activeTab,
   onTabChange,
   onClose,
@@ -59,8 +61,12 @@ export function RemixModalHeader({
       className="flex shrink-0 items-center justify-between border-b border-border bg-background px-4"
       style={{ height: HEADER_HEIGHT_PX }}
     >
-      <h2 id="swap-crop-sheet-modal-title" className="text-base font-semibold">
-        Remix
+      <h2
+        id="swap-crop-sheet-modal-title"
+        className="truncate text-base font-semibold"
+        title={title}
+      >
+        {title}
       </h2>
 
       <div
