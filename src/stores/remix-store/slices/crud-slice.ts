@@ -1,0 +1,259 @@
+// remix-store/slices/crud-slice.ts — Remix CRUD slice. Frontend owns remix
+// rows via supabase-js (RLS-protected): create / update config / rename /
+// delete + active selection + illustration/crop-sheet patching.
+
+import { supabase } from '@/apis/supabase';
+import { createLogger } from '@/utils/logger';
+import { canonicalMixKey } from '@/types/remix';
+import type { Human } from '@/types/human';
+import type { EntitySwapTaskKey, SwapTaskStatus } from '@/types/remix';
+import { applyTextSwap } from '@/features/remix/text-swap-engine';
+import { buildRemixClonePayload } from '../clone-builder';
+import { mapRowToRemix } from '../supabase-mapping';
+import { computeCropSheets } from '../crop-sheet-layout';
+import { useSnapshotStore } from '../../snapshot-store';
+import { useHumansStore } from '../../humans-store';
+import { useBookStore } from '../../book-store';
+import { applySheetPatch } from '../slice-helpers';
+import type { RemixCrudSlice, RemixSliceCreator } from '../types';
+
+const log = createLogger('Store', 'RemixStore');
+
+export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
+  set,
+  get,
+) => ({
+  remixes: [],
+  activeRemixId: null,
+
+  createRemix: async (config, name) => {
+    const snapshotState = useSnapshotStore.getState();
+    const snapshotId = snapshotState.meta.id;
+    if (!snapshotId) {
+      log.warn('createRemix', 'no active snapshot');
+      return null;
+    }
+
+    const payload = buildRemixClonePayload(
+      {
+        snapshotId,
+        illustration: snapshotState.illustration,
+        characters: snapshotState.characters,
+        props: snapshotState.props,
+      },
+      config,
+      name,
+    );
+
+    // ── Phase 1 text swap ────────────────────────────────────────────
+    const humansList = useHumansStore.getState().humans;
+    const humansMap: Record<string, Human> = Object.fromEntries(
+      humansList.map((h) => [h.id, h]),
+    );
+    const enabledLanguages = config.languages
+      .filter((l) => l.is_enabled)
+      .map((l) => l.code);
+
+    const swap = applyTextSwap({
+      illustration: payload.illustration,
+      remixCharacters: payload.characters,
+      configCharacters: config.characters,
+      enabledLanguages,
+      humans: humansMap,
+    });
+
+    const finalPayload = { ...payload, illustration: swap.illustration };
+
+    // ── Step 2h — client-side crop-sheet layout (before INSERT) ──────
+    // Computes crop_sheets[] (sheet_geometry + px crop geometry) for every
+    // character/prop/mix and writes them back onto finalPayload IN PLACE so
+    // they persist in the same INSERT round-trip. Replaces the old
+    // fire-and-forget build-crop-sheets endpoint call.
+    const dimension = useBookStore.getState().currentBook?.dimension ?? null;
+    computeCropSheets(finalPayload, dimension);
+
+    log.info('createRemix', 'insert', { snapshotId, name: finalPayload.name });
+    const { data, error } = await supabase
+      .from('remixes')
+      .insert(finalPayload)
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      log.error('createRemix', 'failed', { error: error?.message });
+      return null;
+    }
+
+    const remix = mapRowToRemix(data);
+    set((s) => ({
+      remixes: [...s.remixes, remix],
+      activeRemixId: remix.id,
+    }));
+
+    if (swap.warnings.length > 0) {
+      log.warn('createRemix', 'text swap warnings', {
+        remixId: remix.id,
+        warningCount: swap.warnings.length,
+        matchCount: swap.matchCount,
+        chunksMarkedUnsynced: swap.chunksMarkedUnsynced,
+        warnings: swap.warnings,
+      });
+    }
+
+    // ── Phase 2 auto-trigger audio swap (fire-and-forget) ───────────
+    log.info('createRemix', 'auto-trigger audio swap', { remixId: remix.id });
+    void get()
+      .startAudioJob(remix.id, { triggeredBy: 'auto-create' })
+      .catch((err) => {
+        log.warn('createRemix', 'audio swap enqueue failed (non-blocking)', {
+          remixId: remix.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+
+    return remix;
+  },
+
+  updateRemixConfig: async (id, patch) => {
+    const prev = get().remixes.find((r) => r.id === id);
+    if (!prev) {
+      log.warn('updateRemixConfig', 'not found', { id });
+      return false;
+    }
+
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === id ? { ...r, remix_config: patch } : r,
+      ),
+    }));
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ remix_config: patch })
+      .eq('id', id);
+
+    if (error) {
+      log.error('updateRemixConfig', 'rollback', { id, error: error.message });
+      set((s) => ({
+        remixes: s.remixes.map((r) => (r.id === id ? prev : r)),
+      }));
+      return false;
+    }
+    return true;
+  },
+
+  renameRemix: async (id, name) => {
+    const trimmed = name.trim() || 'Untitled Remix';
+    const prev = get().remixes.find((r) => r.id === id);
+    if (!prev) return false;
+
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === id ? { ...r, name: trimmed } : r,
+      ),
+    }));
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ name: trimmed })
+      .eq('id', id);
+
+    if (error) {
+      log.error('renameRemix', 'rollback', { id, error: error.message });
+      set((s) => ({
+        remixes: s.remixes.map((r) => (r.id === id ? prev : r)),
+      }));
+      return false;
+    }
+    return true;
+  },
+
+  deleteRemix: async (id) => {
+    const prevList = get().remixes;
+    const prevActiveId = get().activeRemixId;
+    const wasActive = prevActiveId === id;
+
+    // Best-effort cancel any active jobs for the deleted remix.
+    const active = get().jobs.filter(
+      (j) =>
+        j.remixId === id &&
+        (j.status === 'queued' || j.status === 'running'),
+    );
+    for (const job of active) {
+      void get()
+        .cancelJob(job.id)
+        .catch((err) => {
+          log.warn('deleteRemix', 'cancel job failed (non-blocking)', {
+            jobId: job.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    }
+
+    set((s) => {
+      // Sweep ephemeral swap tasks belonging to the deleted remix.
+      const prefix = `${id}:`;
+      const sweptTasks: Record<EntitySwapTaskKey, SwapTaskStatus> = {};
+      for (const [taskKey, status] of Object.entries(s.entitySwapTasks)) {
+        if (!taskKey.startsWith(prefix)) sweptTasks[taskKey] = status;
+      }
+      return {
+        remixes: s.remixes.filter((r) => r.id !== id),
+        activeRemixId: wasActive
+          ? (s.remixes.find((r) => r.id !== id)?.id ?? null)
+          : s.activeRemixId,
+        entitySwapTasks: sweptTasks,
+      };
+    });
+
+    const { error } = await supabase.from('remixes').delete().eq('id', id);
+    if (error) {
+      log.error('deleteRemix', 'rollback', { id, error: error.message });
+      // FUTURE: when startEntitySwap writes entitySwapTasks (swap loop),
+      // also capture + restore the swept tasks here — currently the map is
+      // always empty (no-op stub) so there is nothing to restore.
+      set({ remixes: prevList, activeRemixId: prevActiveId });
+      return false;
+    }
+    return true;
+  },
+
+  setActiveRemixId: (id) => set({ activeRemixId: id }),
+
+  patchRemixIllustration: (id, spreads) =>
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              illustration: { ...r.illustration, spreads },
+            }
+          : r,
+      ),
+    })),
+
+  patchRemixCropSheets: (id, updates) =>
+    set((s) => ({
+      remixes: s.remixes.map((r) => {
+        if (r.id !== id) return r;
+        const next = { ...r };
+        for (const u of updates) {
+          if (u.type === 'character') {
+            next.characters = next.characters.map((c) =>
+              c.key === u.key ? applySheetPatch(c, u) : c,
+            );
+          } else if (u.type === 'prop') {
+            next.props = next.props.map((p) =>
+              p.key === u.key ? applySheetPatch(p, u) : p,
+            );
+          } else {
+            next.mixes = next.mixes.map((m) =>
+              // Mix has no `key` field — match by canonical mix key.
+              canonicalMixKey(m.keys) === u.key ? applySheetPatch(m, u) : m,
+            );
+          }
+        }
+        return next;
+      }),
+    })),
+});

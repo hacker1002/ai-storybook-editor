@@ -71,15 +71,20 @@ function stripSpread(spread: BaseSpread): RemixSpread {
 
 // ── Tag-bearing layer iteration ──────────────────────────────────────────────
 
-type TaggedLayer = SpreadImage | SpreadVideo | SpreadAutoPic | SpreadAudio | SpreadAutoAudio;
+export type TaggedLayer =
+  | SpreadImage
+  | SpreadVideo
+  | SpreadAutoPic
+  | SpreadAudio
+  | SpreadAutoAudio;
 type TaggedLayerKind = 'image' | 'video' | 'auto_pic' | 'audio' | 'auto_audio';
 
-interface TaggedLayerVisit {
+export interface TaggedLayerVisit {
   layer: TaggedLayer;
   kind: TaggedLayerKind;
 }
 
-function* iterTaggedLayers(spread: RemixSpread): Generator<TaggedLayerVisit> {
+export function* iterTaggedLayers(spread: RemixSpread): Generator<TaggedLayerVisit> {
   for (const layer of spread.images ?? []) yield { layer, kind: 'image' };
   for (const layer of spread.auto_pics ?? []) yield { layer, kind: 'auto_pic' };
   for (const layer of spread.videos ?? []) yield { layer, kind: 'video' };
@@ -89,7 +94,7 @@ function* iterTaggedLayers(spread: RemixSpread): Generator<TaggedLayerVisit> {
 
 // ── Crop sheet population ────────────────────────────────────────────────────
 
-function spreadNumberOf(spread: RemixSpread): number {
+export function spreadNumberOf(spread: RemixSpread): number {
   const raw = spread.pages?.[0]?.number;
   if (typeof raw === 'number') return raw;
   if (typeof raw === 'string') {
@@ -99,7 +104,7 @@ function spreadNumberOf(spread: RemixSpread): number {
   return 0;
 }
 
-function geometryOf(layer: TaggedLayer): { x: number; y: number; w: number; h: number } {
+export function geometryOf(layer: TaggedLayer): { x: number; y: number; w: number; h: number } {
   const g = (layer as { geometry?: Geometry | { x: number; y: number } }).geometry;
   if (!g) return { x: 0, y: 0, w: 0, h: 0 };
   const full = g as Geometry;
@@ -114,12 +119,18 @@ function geometryOf(layer: TaggedLayer): { x: number; y: number; w: number; h: n
 /** A blank crop sheet for a config-enabled entity. Every character/prop key
  *  carries exactly one sheet, even when no layer tags it (0 crops). */
 function makeDefaultSheet(entityName: string): RemixCropSheet {
-  return { title: entityName, image_url: '', swap_results: [], crops: [] };
+  return {
+    title: entityName,
+    sheet_geometry: { width: 0, height: 0 },
+    image_url: '',
+    swap_results: [],
+    crops: [],
+  };
 }
 
 /** Subject tags only — `character` / `prop`. Role tags (`other`, e.g. stage /
  *  background) are excluded so they cannot affect single-vs-mix classification. */
-function subjectTagsOf(layer: TaggedLayer): SpreadTag[] {
+export function subjectTagsOf(layer: TaggedLayer): SpreadTag[] {
   return (layer.tags ?? []).filter((t) => t.type === 'character' || t.type === 'prop');
 }
 
@@ -136,7 +147,9 @@ function populateSingleSubjectCrops(
 
   for (const spread of illustration.spreads) {
     const spreadNumber = spreadNumberOf(spread);
-    for (const { layer } of iterTaggedLayers(spread)) {
+    for (const { layer, kind } of iterTaggedLayers(spread)) {
+      // Crop sheets carry static-image crops only — skip auto_pic/video/audio.
+      if (kind !== 'image') continue;
       const subjectTags = subjectTagsOf(layer);
       if (subjectTags.length !== 1) continue;
       const tag = subjectTags[0];
@@ -170,7 +183,10 @@ function buildMixes(
 
   for (const spread of illustration.spreads) {
     const spreadNumber = spreadNumberOf(spread);
-    for (const { layer } of iterTaggedLayers(spread)) {
+    for (const { layer, kind } of iterTaggedLayers(spread)) {
+      // Mixes are derived from image crops only — a co-occurrence that exists
+      // solely in an auto_pic/video/audio layer yields no swappable crop.
+      if (kind !== 'image') continue;
       const subjectTags = subjectTagsOf(layer);
       if (subjectTags.length <= 1) continue;
 

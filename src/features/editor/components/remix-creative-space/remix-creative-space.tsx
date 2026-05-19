@@ -62,7 +62,6 @@ export function RemixCreativeSpace() {
     startAudioJob,
     cancelJob,
     dismissJob,
-    buildCropSheets,
   } = useRemixActions();
 
   const [filter, setFilter] = useState<RemixFilterState>({
@@ -145,7 +144,6 @@ export function RemixCreativeSpace() {
         onRetryAudio={(id) => startAudioJob(id, { triggeredBy: 'user' })}
         onCancelAudio={(_id, jobId) => cancelJob(jobId)}
         onDismissJob={dismissJob}
-        onRetryBuildCropSheets={buildCropSheets}
       />
 
       <div className="flex-1 min-w-0">

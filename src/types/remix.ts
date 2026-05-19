@@ -34,6 +34,11 @@ export type RemixCrop = Crop;
 
 export interface RemixCropSheet {
   title: string;
+  /** Sheet frame size (px) — computed by crop-sheet-layout-engine. Additive
+   *  JSONB field (DB-CHANGELOG 2026-05-19), no migration needed. */
+  sheet_geometry: { width: number; height: number };
+  /** @deprecated build API removed (2026-05-19) — usually empty ''. Kept for
+   *  backward-compat; client now composes the sheet from crops + sheet_geometry. */
   image_url: string;
   swap_results: SwapResult[];
   crops: Crop[];
@@ -277,14 +282,6 @@ export type SwapTaskStatus =
   | { state: 'idle' }
   | { state: 'running'; current: number; total: number }
   | { state: 'error'; message: string; failedSheets: number };
-
-// Crop sheet build (Phase 1.5) — per-remix ephemeral task. Synchronous endpoint,
-// NO background_jobs row. `error` folds transport failure (4xx/5xx) together
-// with partial build (summary.failed > 0). No progress %, no cancel.
-export type CropSheetBuildStatus =
-  | { state: 'idle' }
-  | { state: 'running' }
-  | { state: 'error'; message: string };
 
 /** Reference image for refine — canonical shape shared with
  *  `useReferenceImagePicker` (which re-exports this type). */

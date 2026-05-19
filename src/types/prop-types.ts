@@ -40,6 +40,9 @@ export interface Crop {
   name: string;
   variant: string;
   media_url: string;
+  /** px, sheet-relative — computed by crop-sheet-layout-engine.
+   *  Before 2026-05-19 this was relative to a fixed 2688×1512 spread;
+   *  now it is absolute pixels within the parent crop sheet's sheet_geometry. */
   geometry: { x: number; y: number; w: number; h: number };
   'z-index': number;
 }

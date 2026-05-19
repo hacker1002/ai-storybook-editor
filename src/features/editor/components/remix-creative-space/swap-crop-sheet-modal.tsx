@@ -45,9 +45,11 @@ import { RemixModalHeader } from './remix-modal-header';
 import { CropSheetEntitySidebar } from './crop-sheet-entity-sidebar';
 import { CropSheetStage } from './crop-sheet-stage';
 import { SwapParametersSidebar } from './swap-parameters-sidebar';
+import { RelayoutConfirmDialog } from './relayout-confirm-dialog';
 import {
   DEFAULT_SWAP_PARAMS,
   ZOOM,
+  SHEET_MIN,
   type RemixEntityType,
 } from './swap-modal-constants';
 
@@ -61,6 +63,18 @@ interface Props {
 interface ActiveSheetRef {
   entityKey: string;
   sheetIndex: number;
+}
+
+/** A stepper action ([+] add / [−] remove) deferred behind the relayout
+ *  confirm dialog. `run()` is the actual mutation, invoked on confirm. */
+interface PendingStepperAction {
+  run: () => void;
+}
+
+/** True when ANY sheet of the entity already carries swap output — a relayout
+ *  (add or remove) would wipe them all, so the action needs confirmation. */
+function entityHasSwapResults(entity: RemixEntityRef): boolean {
+  return entity.crop_sheets.some((s) => s.swap_results.length > 0);
 }
 
 /** Maps a tab id to its key in the `RemixEntities` projection. */
@@ -92,6 +106,9 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const [zoomLevel, setZoomLevel] = useState<number>(ZOOM.default);
   const [dividerPosition, setDividerPosition] = useState(50);
   const [params, setParams] = useState<SwapModelParams>(DEFAULT_SWAP_PARAMS);
+  // Stepper action awaiting relayout confirmation (null = dialog closed).
+  const [pendingAction, setPendingAction] =
+    useState<PendingStepperAction | null>(null);
 
   // Focus-restore — modal is mounted off `swapCropSheetTarget` state (no
   // DialogTrigger); the parent unmounts it abruptly. Capture the opener
@@ -185,56 +202,93 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     });
   };
 
-  const handleAddSheet = (entityKey: string) => {
-    log.info('handleAddSheet', 'append crop sheet', {
-      type: activeTab,
-      entityKey,
+  // Gate a relayout-causing stepper action behind the confirm dialog when the
+  // entity still has swap output (add + remove both relayout → wipe swaps).
+  // Returns true if `action` ran immediately, false if it was deferred.
+  const confirmRelayoutIfSwaps = (
+    entity: RemixEntityRef,
+    action: () => void,
+  ): boolean => {
+    if (!entityHasSwapResults(entity)) {
+      action();
+      return true;
+    }
+    log.debug('confirmRelayoutIfSwaps', 'defer action — entity has swaps', {
+      entityKey: entity.key,
     });
-    void appendCropSheet(target.remixId, activeTab, entityKey);
+    setPendingAction({ run: action });
+    return false;
+  };
+
+  const handleAddSheet = (entityKey: string) => {
+    const entity = tabEntities.find((e) => e.key === entityKey);
+    if (!entity) {
+      log.warn('handleAddSheet', 'entity not found — skip', { entityKey });
+      return;
+    }
+    confirmRelayoutIfSwaps(entity, () => {
+      log.info('handleAddSheet', 'append crop sheet', {
+        type: activeTab,
+        entityKey,
+      });
+      void appendCropSheet(target.remixId, activeTab, entityKey);
+    });
   };
 
   const handleRemoveSheet = (entityKey: string, sheetIndex: number) => {
     const entity = tabEntities.find((e) => e.key === entityKey);
-    const sheet = entity?.crop_sheets[sheetIndex];
-    if (!entity || !sheet) {
-      log.warn('handleRemoveSheet', 'sheet not found — skip', {
+    if (!entity) {
+      log.warn('handleRemoveSheet', 'entity not found — skip', { entityKey });
+      return;
+    }
+    // Stepper already disables [−] at the floor, but guard defensively.
+    if (entity.crop_sheets.length <= SHEET_MIN) {
+      log.debug('handleRemoveSheet', 'skip: at sheet minimum', {
+        entityKey,
+        count: entity.crop_sheets.length,
+      });
+      return;
+    }
+    if (!entity.crop_sheets[sheetIndex]) {
+      log.warn('handleRemoveSheet', 'sheet index out of range — skip', {
         entityKey,
         sheetIndex,
       });
       return;
     }
-    // Confirm before destroying a sheet that already carries swap output.
-    if (sheet.swap_results.length > 0) {
-      const ok = window.confirm(
-        'Sheet này đã có swap result — xoá luôn?',
-      );
-      if (!ok) {
-        log.debug('handleRemoveSheet', 'user cancelled removal', {
-          entityKey,
-          sheetIndex,
-        });
-        return;
-      }
-    }
-    log.info('handleRemoveSheet', 'remove crop sheet', {
-      type: activeTab,
-      entityKey,
-      sheetIndex,
-    });
-    void removeCropSheet(target.remixId, activeTab, entityKey, sheetIndex);
 
-    // Clamp activeSheetRef if the removed sheet was at/after the active one.
-    if (
-      activeSheetRef.entityKey === entityKey &&
-      activeSheetRef.sheetIndex >= sheetIndex
-    ) {
-      const nextIndex = Math.max(0, activeSheetRef.sheetIndex - 1);
-      log.debug('handleRemoveSheet', 'clamp active sheet ref', {
-        from: activeSheetRef.sheetIndex,
-        to: nextIndex,
+    confirmRelayoutIfSwaps(entity, () => {
+      log.info('handleRemoveSheet', 'remove crop sheet', {
+        type: activeTab,
+        entityKey,
+        sheetIndex,
       });
-      setActiveSheetRef({ entityKey, sheetIndex: nextIndex });
-    }
+      void removeCropSheet(target.remixId, activeTab, entityKey, sheetIndex);
+
+      // Clamp activeSheetRef if the removed sheet was at/after the active one.
+      if (
+        activeSheetRef.entityKey === entityKey &&
+        activeSheetRef.sheetIndex >= sheetIndex
+      ) {
+        const nextIndex = Math.max(0, activeSheetRef.sheetIndex - 1);
+        log.debug('handleRemoveSheet', 'clamp active sheet ref', {
+          from: activeSheetRef.sheetIndex,
+          to: nextIndex,
+        });
+        setActiveSheetRef({ entityKey, sheetIndex: nextIndex });
+      }
+    });
+  };
+
+  const handleConfirmRelayout = () => {
+    log.info('handleConfirmRelayout', 'user confirmed relayout', {});
+    pendingAction?.run();
+    setPendingAction(null);
+  };
+
+  const handleCancelRelayout = () => {
+    log.debug('handleCancelRelayout', 'user cancelled relayout', {});
+    setPendingAction(null);
   };
 
   // entities === null is handled by the effect above (modal closes); render a
@@ -300,6 +354,12 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
 
           <SwapParametersSidebar params={params} onChange={setParams} />
         </div>
+
+        <RelayoutConfirmDialog
+          open={pendingAction !== null}
+          onConfirm={handleConfirmRelayout}
+          onCancel={handleCancelRelayout}
+        />
       </DialogContent>
     </Dialog>
   );

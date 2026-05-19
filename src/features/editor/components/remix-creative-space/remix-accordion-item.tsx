@@ -6,15 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  useAudioJobBadgeState,
-  useCropSheetBuildState,
-} from '@/stores/remix-store';
+import { useAudioJobBadgeState } from '@/stores/remix-store';
 import { cn } from '@/utils/utils';
 import { RemixInventorySection } from './remix-inventory-section';
 import { InjectButton } from './inject-button';
 import { AudioJobBadge } from './audio-job-badge';
-import { CropSheetBuildBadge } from './crop-sheet-build-badge';
 import type { Remix, SwapCropSheetTarget } from '@/types/remix';
 
 interface Props {
@@ -28,7 +24,6 @@ interface Props {
   onRetryAudio: () => Promise<void>;
   onCancelAudio: (jobId: string) => Promise<void>;
   onDismissJob: (jobId: string) => void;
-  onRetryBuildCropSheets: () => Promise<void>;
 }
 
 export function RemixAccordionItem({
@@ -42,11 +37,8 @@ export function RemixAccordionItem({
   onRetryAudio,
   onCancelAudio,
   onDismissJob,
-  onRetryBuildCropSheets,
 }: Props) {
   const audioJobState = useAudioJobBadgeState(remix.id);
-  const buildState = useCropSheetBuildState(remix.id);
-  const buildRunning = buildState.state === 'running';
   const [renameMode, setRenameMode] = useState(false);
   const [renameValue, setRenameValue] = useState(remix.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -145,15 +137,9 @@ export function RemixAccordionItem({
             characters={remix.characters}
             props={remix.props}
             mixes={remix.mixes}
-            eyeDisabled={buildRunning}
             onOpenSwapCropSheet={(t) =>
               onOpenSwapCropSheet({ ...t, remixId: remix.id })
             }
-          />
-          <CropSheetBuildBadge
-            state={buildState}
-            remixName={remix.name}
-            onRetry={onRetryBuildCropSheets}
           />
           <AudioJobBadge
             state={audioJobState}
@@ -162,8 +148,6 @@ export function RemixAccordionItem({
             onCancel={onCancelAudio}
             onDismiss={onDismissJob}
           />
-          {/* TODO(Phase 3): pass `disabled={buildRunning}` once InjectButton
-              is no longer a hard-disabled placeholder. */}
           <InjectButton />
         </div>
       )}

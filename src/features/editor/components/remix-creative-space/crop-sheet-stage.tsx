@@ -1,27 +1,20 @@
 // crop-sheet-stage.tsx — Center stage of SwapCropSheetModal (design §3.3).
 // StageHeader: Compare toggle [▣] + zoom slider. StageCanvas: the active crop
-// sheet rendered either as a single image (non-compare) or a before/after
+// sheet composed client-side from `crops[] + sheet_geometry` (build API removed
+// 2026-05-19) rendered either alone (non-compare) or in a before/after
 // react-compare-slider.
 //
 // DEFERRED (Validation S1): v1 has no swap_results, so `selectedSwap` is always
 // null → the Compare button stays disabled and the canvas only shows the
-// original `sheet.image_url`. The compare branch + busy/error overlays are kept
+// composed crop sheet. The compare branch + busy/error overlays are kept
 // dormant (future-ready) — do NOT delete.
 //
 // Slider engine: react-compare-slider@4 has no controlled `position` prop, only
 // uncontrolled `defaultPosition`. `dividerPosition` is therefore an init value;
-// the inner body is keyed by the image URLs so a parent reset re-applies it.
+// the inner body is keyed by the swap URL so a parent reset re-applies it.
 
-import { useState } from 'react';
 import { ReactCompareSlider } from 'react-compare-slider';
-import {
-  Columns2,
-  Loader2,
-  AlertTriangle,
-  ImageOff,
-  ScanLine,
-  RotateCcw,
-} from 'lucide-react';
+import { Columns2, Loader2, AlertTriangle, ScanLine, RotateCcw } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import {
@@ -32,6 +25,7 @@ import {
 } from '@/components/ui/tooltip';
 import type { RemixCropSheet, SwapResult, SwapTaskStatus } from '@/types/remix';
 import { ZOOM, HEADER_HEIGHT_PX } from './swap-modal-constants';
+import { ComposedCropSheet } from './crop-sheet-stage/composed-crop-sheet';
 
 const log = createLogger('Editor', 'CropSheetStage');
 
@@ -47,7 +41,7 @@ interface CropSheetStageProps {
   onDividerChange: (pos: number) => void;
 }
 
-// Checkerboard — simulates a transparent backdrop behind the sheet image.
+// Checkerboard — simulates a transparent backdrop behind the composed sheet.
 const CHECKERBOARD_STYLE: React.CSSProperties = {
   backgroundImage:
     'linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(-45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, hsl(var(--muted)) 75%), linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%)',
@@ -66,9 +60,10 @@ export function CropSheetStage({
   onZoomChange,
   onDividerChange,
 }: CropSheetStageProps) {
-  const isEmptySheet = sheet !== null && sheet.image_url === '';
-  // Compare needs a swap result to diff against (always null in v1).
-  const compareDisabled = selectedSwap === null || sheet === null || isEmptySheet;
+  // Compare needs a swap result to diff the composed sheet against (always
+  // null in v1). The composed "before" is always renderable, so the only gate
+  // left is the absence of a swap "after".
+  const compareDisabled = selectedSwap === null;
 
   return (
     <section
@@ -147,18 +142,13 @@ function StageHeader({
             </span>
           </TooltipTrigger>
           {compareDisabled && (
-            <TooltipContent>
-              Chưa có swap result để so sánh
-            </TooltipContent>
+            <TooltipContent>Chưa có swap result để so sánh</TooltipContent>
           )}
         </Tooltip>
       </TooltipProvider>
 
       <div className="flex items-center gap-2">
-        <ScanLine
-          className="h-4 w-4 text-muted-foreground"
-          aria-hidden="true"
-        />
+        <ScanLine className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <input
           type="range"
           role="slider"
@@ -210,22 +200,7 @@ function StageCanvas({
   if (sheet === null) {
     return (
       <div className="flex flex-1 items-center justify-center p-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          Tab này chưa có key nào
-        </p>
-      </div>
-    );
-  }
-
-  // Freshly-added sheet — no content built yet.
-  if (sheet.image_url === '') {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-        <ImageOff className="h-10 w-10 text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">Sheet trống</p>
-        <p className="text-xs text-muted-foreground">
-          Chạy build hoặc thêm nội dung cho sheet này
-        </p>
+        <p className="text-sm text-muted-foreground">Tab này chưa có key nào</p>
       </div>
     );
   }
@@ -246,19 +221,20 @@ function StageCanvas({
 
         {compareMode && swapUrl !== null ? (
           <CompareBody
-            // Key by URL pair so the uncontrolled slider re-applies
-            // `defaultPosition` when the compared images change.
-            key={`${sheet.image_url}|${swapUrl}`}
-            originalUrl={sheet.image_url}
+            // Key by the swap URL so the uncontrolled slider re-applies
+            // `defaultPosition` when the compared "after" image changes.
+            key={swapUrl}
+            sheet={sheet}
             swappedUrl={swapUrl}
             dividerPosition={dividerPosition}
             onDividerChange={onDividerChange}
           />
+        ) : swapUrl !== null ? (
+          <CanvasImage key={swapUrl} url={swapUrl} />
         ) : (
-          <CanvasImage
-            key={swapUrl ?? sheet.image_url}
-            url={swapUrl ?? sheet.image_url}
-          />
+          <div className="relative h-full w-full">
+            <ComposedCropSheet sheet={sheet} />
+          </div>
         )}
       </div>
 
@@ -293,61 +269,44 @@ function StageCanvas({
   );
 }
 
-// ── CanvasImage — single-image (non-compare) ─────────────────────────────────
+// ── CanvasImage — single swap image (non-compare) ────────────────────────────
 
 interface CanvasImageProps {
   url: string;
 }
 
-/** Single image with its own load/error state — keyed by URL by the parent so
- *  no useEffect+setState is needed to reset on URL change. */
+/** Single swap-result image with its own load/error state — keyed by URL by
+ *  the parent so no useEffect+setState is needed to reset on URL change. */
 function CanvasImage({ url }: CanvasImageProps) {
-  const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
-
   return (
-    <>
-      <img
-        src={url}
-        alt="Crop sheet"
-        onLoad={() => setLoaded(true)}
-        onError={() => {
-          log.warn('CanvasImage', 'image failed to load', {
-            // Log only the path tail — full URL may carry signed tokens (PII).
-            urlTail: url.slice(url.lastIndexOf('/') + 1),
-          });
-          setErrored(true);
-        }}
-        className="relative h-full w-full object-contain"
-      />
-      {!loaded && !errored && (
-        <div className="absolute inset-0 flex animate-pulse items-center justify-center bg-muted">
-          <ScanLine className="h-8 w-8 text-muted-foreground/50" />
-        </div>
-      )}
-      {errored && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted">
-          <ImageOff className="h-8 w-8 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Ảnh lỗi</span>
-        </div>
-      )}
-    </>
+    <img
+      src={url}
+      alt="Swap result"
+      onError={() => {
+        log.warn('CanvasImage', 'swap image failed to load', {
+          // Log only the path tail — full URL may carry signed tokens (PII).
+          urlTail: url.slice(url.lastIndexOf('/') + 1),
+        });
+      }}
+      className="relative h-full w-full object-contain"
+    />
   );
 }
 
 // ── CompareBody — before/after slider ────────────────────────────────────────
 
 interface CompareBodyProps {
-  originalUrl: string;
+  sheet: RemixCropSheet;
   swappedUrl: string;
   dividerPosition: number;
   onDividerChange: (pos: number) => void;
 }
 
-/** before/after compare. Keyed by URL pair upstream so the uncontrolled slider
- *  resets to `dividerPosition` whenever the compared images change. */
+/** before/after compare — "before" is the composed crop sheet, "after" is the
+ *  swap result. Keyed by the swap URL upstream so the uncontrolled slider
+ *  resets to `dividerPosition` whenever the "after" image changes. */
 function CompareBody({
-  originalUrl,
+  sheet,
   swappedUrl,
   dividerPosition,
   onDividerChange,
@@ -359,11 +318,9 @@ function CompareBody({
         onPositionChange={onDividerChange}
         className="relative h-full w-full"
         itemOne={
-          <img
-            src={originalUrl}
-            alt="Ảnh gốc"
-            className="h-full w-full object-contain"
-          />
+          <div className="relative h-full w-full">
+            <ComposedCropSheet sheet={sheet} />
+          </div>
         }
         itemTwo={
           <img

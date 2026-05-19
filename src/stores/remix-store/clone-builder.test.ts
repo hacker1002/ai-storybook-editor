@@ -10,7 +10,7 @@ import type { RemixConfig } from '@/types/remix';
 import type { Character } from '@/types/character-types';
 import type { Prop } from '@/types/prop-types';
 import type { IllustrationData } from '@/types/illustration-types';
-import type { SpreadImage, SpreadTag } from '@/types/spread-types';
+import type { SpreadImage, SpreadAutoPic, SpreadTag } from '@/types/spread-types';
 
 // ── Fixture builders ─────────────────────────────────────────────────────────
 
@@ -55,12 +55,29 @@ function makeImage(id: string, tags: SpreadTag[]): SpreadImage {
   } as unknown as SpreadImage;
 }
 
-/** A minimal spread carrying tagged image layers. */
-function makeSpread(id: string, pageNumber: number, images: SpreadImage[]) {
+/** A tagged auto_pic (animated, e.g. .lottie) layer — must NOT become a crop. */
+function makeAutoPic(id: string, tags: SpreadTag[]): SpreadAutoPic {
+  return {
+    id,
+    media_url: `https://cdn/${id}.lottie`,
+    geometry: { x: 0, y: 0, w: 100, h: 100 },
+    'z-index': 0,
+    tags,
+  } as unknown as SpreadAutoPic;
+}
+
+/** A minimal spread carrying tagged image (and optionally auto_pic) layers. */
+function makeSpread(
+  id: string,
+  pageNumber: number,
+  images: SpreadImage[],
+  autoPics: SpreadAutoPic[] = [],
+) {
   return {
     id,
     pages: [{ number: pageNumber, type: 'normal_page', layout: null, background: { color: '#fff', texture: null } }],
     images,
+    auto_pics: autoPics,
     textboxes: [],
   };
 }
@@ -126,6 +143,7 @@ describe('buildRemixClonePayload — clone-builder Phase 03', () => {
     expect(r.characters[0].crop_sheets).toHaveLength(1);
     expect(r.characters[0].crop_sheets[0]).toEqual({
       title: 'Miu',
+      sheet_geometry: { width: 0, height: 0 },
       image_url: '',
       swap_results: [],
       crops: [],
@@ -229,5 +247,17 @@ describe('buildRemixClonePayload — clone-builder Phase 03', () => {
     expect(r.characters.map((c) => c.key)).toEqual(['c1']);
     expect(r.props).toHaveLength(0);
     expect(r.characters[0].crop_sheets).toHaveLength(1);
+  });
+
+  // Case 8: BUG GUARD — an auto_pic (animated, e.g. .lottie) layer tagged to a
+  // subject must NOT become a crop. Crop sheets carry static-image crops only.
+  it('ignores tagged auto_pic (animated) layers — no crop produced', () => {
+    const r = build({
+      characters: [makeChar('c1', 'Miu')],
+      spreads: [
+        makeSpread('s1', 1, [], [makeAutoPic('anim1', [subjectTag('character', 'c1')])]),
+      ],
+    });
+    expect(r.characters[0].crop_sheets[0].crops).toEqual([]);
   });
 });

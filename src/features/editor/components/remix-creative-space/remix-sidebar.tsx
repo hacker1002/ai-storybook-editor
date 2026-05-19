@@ -46,7 +46,6 @@ interface Props {
   onRetryAudio: (remixId: string) => Promise<EnqueueRemixJobOutcome>;
   onCancelAudio: (remixId: string, jobId: string) => Promise<void>;
   onDismissJob: (jobId: string) => void;
-  onRetryBuildCropSheets: (remixId: string) => Promise<void>;
 }
 
 export function RemixSidebar({
@@ -63,7 +62,6 @@ export function RemixSidebar({
   onRetryAudio,
   onCancelAudio,
   onDismissJob,
-  onRetryBuildCropSheets,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(() =>
     new Set(activeRemixId ? [activeRemixId] : []),
@@ -210,18 +208,6 @@ export function RemixSidebar({
                 }
               }}
               onDismissJob={onDismissJob}
-              onRetryBuildCropSheets={async () => {
-                // buildCropSheets toasts its own failures; the outer catch
-                // only logs to avoid a double-toast.
-                try {
-                  await onRetryBuildCropSheets(remix.id);
-                } catch (err) {
-                  log.error('onRetryBuildCropSheets', 'failed', {
-                    remixId: remix.id,
-                    error: err instanceof Error ? err.message : String(err),
-                  });
-                }
-              }}
             />
           ))
         )}
