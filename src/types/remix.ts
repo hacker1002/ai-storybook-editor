@@ -269,14 +269,14 @@ export function canonicalMixKey(keys: string[]): string {
   return keys.slice().sort().join('-');
 }
 
-// === Crop sheet swap (modal-driven, per-sheet) — SwapCropSheetModal ==========
-
-export type SwapTaskMode = 'swap' | 'refine';
+// === Entity swap (modal-driven, per-key) — SwapCropSheetModal ================
+// Swap runs over every crop sheet of one entity key. `current`/`total` track
+// loop progress; `failedSheets` counts sheets that errored in a partial run.
 
 export type SwapTaskStatus =
   | { state: 'idle' }
-  | { state: 'running'; mode: SwapTaskMode }
-  | { state: 'error'; mode: SwapTaskMode; message: string };
+  | { state: 'running'; current: number; total: number }
+  | { state: 'error'; message: string; failedSheets: number };
 
 // Crop sheet build (Phase 1.5) — per-remix ephemeral task. Synchronous endpoint,
 // NO background_jobs row. `error` folds transport failure (4xx/5xx) together
@@ -304,20 +304,25 @@ export interface RemixEntityRef {
   crop_sheets: RemixCropSheet[];
 }
 
-export interface StartCropSheetSwapParams {
-  remixId: string;
-  type: 'character' | 'prop' | 'mix';
-  key: string;
-  cropSheetIndex: number;
-  mode: SwapTaskMode;
-  /** Required when mode='refine'. */
-  prompt?: string;
-  /** Refine only — max 5. */
-  referenceImages?: ReferenceImage[];
+/** Swap model / upscale params collected by the right-sidebar.
+ *  v1: collect-only — not yet wired to any API (see plan §unresolved #2). */
+export interface SwapModelParams {
+  swapModel: string;
+  upscaleModel: string;
+  scale: number; // 2..10
 }
 
-/** Task identity — `${remixId}:${type}:${key}:${cropSheetIndex}`. */
-export type CropSheetSwapTaskKey = string;
+export interface StartEntitySwapParams {
+  remixId: string;
+  type: 'character' | 'prop' | 'mix';
+  /** character/prop: native key; mix: canonicalMixKey(keys). */
+  key: string;
+  /** v1 collect-only — not forwarded to the swap API yet. */
+  params: SwapModelParams;
+}
+
+/** Task identity — `${remixId}:${type}:${key}` (per-key, not per-sheet). */
+export type EntitySwapTaskKey = string;
 
 // ── Text Swap Engine (Phase 1) ───────────────────────────────────────────────
 // Sync client-side swap of `character.name` → `humans.display_name[lang]` over

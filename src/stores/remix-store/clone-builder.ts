@@ -29,10 +29,6 @@ import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'RemixCloneBuilder');
 
-/** Max crops per sheet before splitting into an additional sheet. Heuristic per
- *  Validation Session 1 — keeps a single visual grid manageable (8×4). */
-export const MAX_CROPS_PER_SHEET = 32;
-
 export interface CloneBuilderInput {
   snapshotId: string;
   illustration: IllustrationData;
@@ -115,28 +111,23 @@ function geometryOf(layer: TaggedLayer): { x: number; y: number; w: number; h: n
   };
 }
 
-function appendCropWithChunking(
-  sheets: RemixCropSheet[],
-  entityName: string,
-  crop: RemixCropSheet['crops'][number],
-): void {
-  let target = sheets[sheets.length - 1];
-  if (!target || target.crops.length >= MAX_CROPS_PER_SHEET) {
-    const idx = sheets.length + 1;
-    target = {
-      title: idx === 1 ? entityName : `${entityName} (${idx})`,
-      image_url: '',
-      swap_results: [],
-      crops: [],
-    };
-    sheets.push(target);
-  }
-  target.crops.push(crop);
+/** A blank crop sheet for a config-enabled entity. Every character/prop key
+ *  carries exactly one sheet, even when no layer tags it (0 crops). */
+function makeDefaultSheet(entityName: string): RemixCropSheet {
+  return { title: entityName, image_url: '', swap_results: [], crops: [] };
+}
+
+/** Subject tags only — `character` / `prop`. Role tags (`other`, e.g. stage /
+ *  background) are excluded so they cannot affect single-vs-mix classification. */
+function subjectTagsOf(layer: TaggedLayer): SpreadTag[] {
+  return (layer.tags ?? []).filter((t) => t.type === 'character' || t.type === 'prop');
 }
 
 /** Walks illustration spreads, pushes single-subject crops into each entity's
- *  crop_sheets. Mutates `entities` in place. */
-function buildSingleSubjectCropSheets(
+ *  single crop sheet (`crop_sheets[0]`). Mutates `entities` in place.
+ *  Classification uses subject-tag count only: a layer counts as a single-subject
+ *  crop iff it has exactly one `character`/`prop` tag matching `tagType`. */
+function populateSingleSubjectCrops(
   entities: { key: string; name: string; crop_sheets: RemixCropSheet[] }[],
   illustration: RemixIllustration,
   tagType: 'character' | 'prop',
@@ -146,9 +137,9 @@ function buildSingleSubjectCropSheets(
   for (const spread of illustration.spreads) {
     const spreadNumber = spreadNumberOf(spread);
     for (const { layer } of iterTaggedLayers(spread)) {
-      const tags = layer.tags ?? [];
-      if (tags.length !== 1) continue;
-      const tag = tags[0];
+      const subjectTags = subjectTagsOf(layer);
+      if (subjectTags.length !== 1) continue;
+      const tag = subjectTags[0];
       if (tag.type !== tagType) continue;
 
       const entity = byKey.get(tag.object_key);
@@ -163,7 +154,8 @@ function buildSingleSubjectCropSheets(
         geometry: geometryOf(layer),
         'z-index': (layer as { 'z-index'?: number })['z-index'] ?? 0,
       };
-      appendCropWithChunking(entity.crop_sheets, entity.name, crop);
+      // Single sheet per key — created up-front in buildRemixClonePayload.
+      entity.crop_sheets[0].crops.push(crop);
     }
   }
 }
@@ -179,9 +171,7 @@ function buildMixes(
   for (const spread of illustration.spreads) {
     const spreadNumber = spreadNumberOf(spread);
     for (const { layer } of iterTaggedLayers(spread)) {
-      const subjectTags: SpreadTag[] = (layer.tags ?? []).filter(
-        (t) => t.type === 'character' || t.type === 'prop',
-      );
+      const subjectTags = subjectTagsOf(layer);
       if (subjectTags.length <= 1) continue;
 
       const keys = subjectTags.map((t) => t.object_key);
@@ -189,7 +179,8 @@ function buildMixes(
       let mix = bySig.get(sig);
       if (!mix) {
         const mixName = composeMixName(keys, characters, props);
-        mix = { order: order++, name: mixName, keys, crop_sheets: [] };
+        // Each mix carries exactly one crop sheet.
+        mix = { order: order++, name: mixName, keys, crop_sheets: [makeDefaultSheet(mixName)] };
         bySig.set(sig, mix);
       }
 
@@ -202,7 +193,7 @@ function buildMixes(
         geometry: geometryOf(layer),
         'z-index': (layer as { 'z-index'?: number })['z-index'] ?? 0,
       };
-      appendCropWithChunking(mix.crop_sheets, mix.name, crop);
+      mix.crop_sheets[0].crops.push(crop);
     }
   }
   return [...bySig.values()];
@@ -233,10 +224,10 @@ export function buildRemixClonePayload(
     .filter((c) => enabledCharKeys.has(c.key))
     .map((c) => {
       const cloned = structuredClone(c) as Character;
-      // Replace base CropSheet[] with RemixCropSheet[] (initialized empty).
+      // Replace base CropSheet[] with exactly one blank RemixCropSheet.
       const { crop_sheets: _unused, ...rest } = cloned;
       void _unused;
-      return { ...rest, crop_sheets: [] as RemixCropSheet[] } as RemixCharacter;
+      return { ...rest, crop_sheets: [makeDefaultSheet(c.name)] } as RemixCharacter;
     });
 
   const props: RemixProp[] = input.props
@@ -246,13 +237,13 @@ export function buildRemixClonePayload(
       const { crop_sheets: _cs, sounds: _sounds, ...rest } = cloned;
       void _cs;
       void _sounds;
-      return { ...rest, crop_sheets: [] as RemixCropSheet[] } as RemixProp;
+      return { ...rest, crop_sheets: [makeDefaultSheet(p.name)] } as RemixProp;
     });
 
   const illustration = cloneIllustration(input.illustration);
 
-  buildSingleSubjectCropSheets(characters, illustration, 'character');
-  buildSingleSubjectCropSheets(props, illustration, 'prop');
+  populateSingleSubjectCrops(characters, illustration, 'character');
+  populateSingleSubjectCrops(props, illustration, 'prop');
   const mixes = buildMixes(illustration, characters, props);
 
   const sheetTotal =
