@@ -2,8 +2,8 @@
 // + hover-reveal pencil/trash. Delete fires a callback only; parent owns the
 // confirm dialog (per memory rule: sidebars don't own destructive hotkeys).
 
-import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAudioJobBadgeState } from '@/stores/remix-store';
@@ -11,6 +11,7 @@ import { cn } from '@/utils/utils';
 import { RemixInventorySection } from './remix-inventory-section';
 import { InjectButton } from './inject-button';
 import { AudioJobBadge } from './audio-job-badge';
+import { canonicalMixKey } from '@/types/remix';
 import type { Remix, SwapCropSheetTarget } from '@/types/remix';
 
 interface Props {
@@ -62,6 +63,18 @@ export function RemixAccordionItem({
     setRenameMode(false);
   };
 
+  // Top-level eye opens the swap modal at a default entity — the modal's own
+  // entity sidebar handles further navigation. Order: character → prop → mix.
+  const defaultSwapTarget = useMemo<Omit<SwapCropSheetTarget, 'remixId'> | null>(() => {
+    const c = remix.characters[0];
+    if (c) return { type: 'character', key: c.key };
+    const p = remix.props[0];
+    if (p) return { type: 'prop', key: p.key };
+    const m = remix.mixes[0];
+    if (m) return { type: 'mix', key: canonicalMixKey(m.keys) };
+    return null;
+  }, [remix.characters, remix.props, remix.mixes]);
+
   return (
     <div className="border-b">
       <div
@@ -103,43 +116,58 @@ export function RemixAccordionItem({
           </span>
         )}
 
-        <Button
-          data-action
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
-          onClick={(e) => {
-            e.stopPropagation();
-            setRenameMode(true);
-          }}
-          aria-label={`Rename ${remix.name}`}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          data-action
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          aria-label={`Delete ${remix.name}`}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex shrink-0 items-center">
+          {defaultSwapTarget && (
+            <Button
+              data-action
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenSwapCropSheet({ ...defaultSwapTarget, remixId: remix.id });
+              }}
+              aria-label={`Open swap sheet for ${remix.name}`}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button
+            data-action
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRenameMode(true);
+            }}
+            aria-label={`Rename ${remix.name}`}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            data-action
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            aria-label={`Delete ${remix.name}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
 
       {isExpanded && (
-        <div className="space-y-3 px-3 pb-3">
+        <div className="space-y-3 px-3 pb-3 pt-3">
           <RemixInventorySection
             characters={remix.characters}
             props={remix.props}
             mixes={remix.mixes}
-            onOpenSwapCropSheet={(t) =>
-              onOpenSwapCropSheet({ ...t, remixId: remix.id })
-            }
+            remixConfig={remix.remix_config}
           />
           <AudioJobBadge
             state={audioJobState}

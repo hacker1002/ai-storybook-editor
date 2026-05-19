@@ -85,7 +85,7 @@ export function RemixSidebar({
 
   return (
     <aside className="flex h-full w-[280px] flex-col border-r bg-background">
-      <div className="flex items-center gap-1 border-b px-3 py-2">
+      <div className="flex h-14 shrink-0 items-center gap-1 border-b px-3">
         <Popover open={filterOpen} onOpenChange={setFilterOpen}>
           <PopoverTrigger asChild>
             <Button

@@ -1,30 +1,50 @@
 // remix-inventory-section.tsx — Renders 3 sub-sections (Characters / Props /
-// Mixes) inside an expanded accordion item. Each row exposes an eye icon
-// callback for opening the swap-crop-sheet modal.
+// Mixes) inside an expanded accordion item. Each character row shows a
+// `name → humanDisplayName` arrow when `remix_config.characters[].human_id` is
+// set; otherwise bare name. Prop arrow target intentionally skipped — items
+// library still TBD (see remix-config-modal.tsx PROPS section comment).
 
-import { Eye } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useMemo } from 'react';
 import { canonicalMixKey } from '@/types/remix';
 import type {
   RemixCharacter,
+  RemixConfig,
   RemixMix,
   RemixProp,
-  SwapCropSheetTarget,
 } from '@/types/remix';
+import { useHumans } from '@/stores/humans-store';
+import { useLanguageCode } from '@/stores/editor-settings-store';
+import type { Human } from '@/types/human';
 
 interface Props {
   characters: RemixCharacter[];
   props: RemixProp[];
   mixes: RemixMix[];
-  onOpenSwapCropSheet: (target: Omit<SwapCropSheetTarget, 'remixId'>) => void;
+  remixConfig: RemixConfig;
 }
 
 export function RemixInventorySection({
   characters,
   props,
   mixes,
-  onOpenSwapCropSheet,
+  remixConfig,
 }: Props) {
+  const humans = useHumans();
+  const langCode = useLanguageCode();
+
+  const humanById = useMemo<Map<string, Human>>(
+    () => new Map(humans.map((h) => [h.id, h])),
+    [humans],
+  );
+
+  const resolveCharacterTarget = (entityKey: string): string | null => {
+    const choice = remixConfig.characters.find((c) => c.key === entityKey);
+    if (!choice?.human_id) return null;
+    const human = humanById.get(choice.human_id);
+    if (!human) return null;
+    return human.displayName[langCode] || human.sourceName || null;
+  };
+
   const hasAny = characters.length > 0 || props.length > 0 || mixes.length > 0;
   if (!hasAny) {
     return (
@@ -43,9 +63,7 @@ export function RemixInventorySection({
               key={`char-${c.key}`}
               name={c.name}
               entityKey={c.key}
-              onEyeClick={() =>
-                onOpenSwapCropSheet({ type: 'character', key: c.key })
-              }
+              targetName={resolveCharacterTarget(c.key)}
             />
           ))}
         </SubSection>
@@ -57,9 +75,7 @@ export function RemixInventorySection({
               key={`prop-${p.key}`}
               name={p.name}
               entityKey={p.key}
-              onEyeClick={() =>
-                onOpenSwapCropSheet({ type: 'prop', key: p.key })
-              }
+              targetName={null}
             />
           ))}
         </SubSection>
@@ -73,9 +89,7 @@ export function RemixInventorySection({
                 key={`mix-${mixKey}`}
                 name={m.name}
                 entityKey={mixKey}
-                onEyeClick={() =>
-                  onOpenSwapCropSheet({ type: 'mix', key: mixKey })
-                }
+                targetName={null}
               />
             );
           })}
@@ -103,32 +117,30 @@ function SubSection({
 function InventoryRow({
   name,
   entityKey,
-  onEyeClick,
+  targetName,
 }: {
   name: string;
   entityKey: string;
-  onEyeClick: () => void;
+  targetName: string | null;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent">
+    <div className="flex items-center gap-2 rounded-sm px-2 py-1.5">
       <div className="flex min-w-0 flex-1 flex-col leading-tight">
-        <span className="truncate text-sm font-medium">{name}</span>
+        <span className="truncate text-sm font-medium">
+          {name}
+          {targetName && (
+            <>
+              <span className="mx-1.5 text-muted-foreground">→</span>
+              <span className="font-normal text-muted-foreground">
+                {targetName}
+              </span>
+            </>
+          )}
+        </span>
         <span className="truncate text-xs text-muted-foreground">
           @{entityKey}
         </span>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        onClick={(e) => {
-          e.stopPropagation();
-          onEyeClick();
-        }}
-        aria-label={`Open swap sheet for ${name}`}
-      >
-        <Eye className="h-3.5 w-3.5" />
-      </Button>
     </div>
   );
 }
