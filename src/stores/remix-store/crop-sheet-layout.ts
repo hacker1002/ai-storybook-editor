@@ -62,10 +62,10 @@ function resolveSpread(dimension: number | null | undefined): {
   return DIMENSION_CANVAS_SIZE[dimension] ?? DEFAULT_CANVAS_SIZE;
 }
 
-/** Builds the title for sheet `index`: index 0 = bare entity name; n>0 =
- *  `"<name> — sheet <n+1>"` (human-readable 1-based). */
-function sheetTitle(entityName: string, index: number): string {
-  return index === 0 ? entityName : `${entityName} — sheet ${index + 1}`;
+/** Builds the title for sheet `index` — `"sheet <n+1>"` (1-based, no entity
+ *  name). The owning entity is rendered separately in the sidebar header. */
+function sheetTitle(index: number): string {
+  return `sheet ${index + 1}`;
 }
 
 /**
@@ -79,10 +79,9 @@ function sheetTitle(entityName: string, index: number): string {
 export function buildSheetsFromLayout(
   layout: CropSheetLayoutResult,
   cropMetaById: Record<string, RemixCrop>,
-  entityName: string,
 ): RemixCropSheet[] {
   return layout.sheets.map((sheet) => ({
-    title: sheetTitle(entityName, sheet.index),
+    title: sheetTitle(sheet.index),
     sheet_geometry: sheet.sheetGeometry,
     image_url: '',
     swap_results: [],
@@ -117,7 +116,6 @@ export function computeCropSheets(
   const layoutOne = (
     type: CropGroupType,
     key: string,
-    name: string,
   ): RemixCropSheet[] => {
     const { cropInputs, cropMetaById } = groupCropsForKey(
       payload.illustration,
@@ -133,17 +131,17 @@ export function computeCropSheets(
       sheetCount: 1,
       spread,
     });
-    return buildSheetsFromLayout(layout, cropMetaById, name);
+    return buildSheetsFromLayout(layout, cropMetaById);
   };
 
   for (const c of payload.characters) {
-    c.crop_sheets = layoutOne('character', c.key, c.name);
+    c.crop_sheets = layoutOne('character', c.key);
   }
   for (const p of payload.props) {
-    p.crop_sheets = layoutOne('prop', p.key, p.name);
+    p.crop_sheets = layoutOne('prop', p.key);
   }
   for (const m of payload.mixes) {
-    m.crop_sheets = layoutOne('mix', canonicalMixKey(m.keys), m.name);
+    m.crop_sheets = layoutOne('mix', canonicalMixKey(m.keys));
   }
 
   log.info('computeCropSheets', 'done', {
@@ -166,7 +164,6 @@ interface RelayoutDeps {
 
 /** Normalized read-projection of one remix entity. */
 interface ResolvedEntity {
-  name: string;
   crop_sheets: RemixCropSheet[];
 }
 
@@ -294,7 +291,7 @@ export async function relayoutCropSheets(
     sheetCount: nextCount,
     spread,
   });
-  const nextSheets = buildSheetsFromLayout(layout, cropMetaById, entity.name);
+  const nextSheets = buildSheetsFromLayout(layout, cropMetaById);
 
   log.debug('relayoutCropSheets', 'optimistic update', {
     remixId,

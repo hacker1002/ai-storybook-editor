@@ -117,10 +117,12 @@ export function geometryOf(layer: TaggedLayer): { x: number; y: number; w: numbe
 }
 
 /** A blank crop sheet for a config-enabled entity. Every character/prop key
- *  carries exactly one sheet, even when no layer tags it (0 crops). */
-function makeDefaultSheet(entityName: string): RemixCropSheet {
+ *  carries exactly one sheet, even when no layer tags it (0 crops). Title is
+ *  the canonical default `sheet 1` — entity name is rendered separately in the
+ *  sidebar header (see `crop-sheet-entity-sidebar.tsx`). */
+function makeDefaultSheet(): RemixCropSheet {
   return {
-    title: entityName,
+    title: 'sheet 1',
     sheet_geometry: { width: 0, height: 0 },
     image_url: '',
     swap_results: [],
@@ -196,7 +198,7 @@ function buildMixes(
       if (!mix) {
         const mixName = composeMixName(keys, characters, props);
         // Each mix carries exactly one crop sheet.
-        mix = { order: order++, name: mixName, keys, crop_sheets: [makeDefaultSheet(mixName)] };
+        mix = { order: order++, name: mixName, keys, crop_sheets: [makeDefaultSheet()] };
         bySig.set(sig, mix);
       }
 
@@ -243,7 +245,7 @@ export function buildRemixClonePayload(
       // Replace base CropSheet[] with exactly one blank RemixCropSheet.
       const { crop_sheets: _unused, ...rest } = cloned;
       void _unused;
-      return { ...rest, crop_sheets: [makeDefaultSheet(c.name)] } as RemixCharacter;
+      return { ...rest, crop_sheets: [makeDefaultSheet()] } as RemixCharacter;
     });
 
   const props: RemixProp[] = input.props
@@ -253,7 +255,7 @@ export function buildRemixClonePayload(
       const { crop_sheets: _cs, sounds: _sounds, ...rest } = cloned;
       void _cs;
       void _sounds;
-      return { ...rest, crop_sheets: [makeDefaultSheet(p.name)] } as RemixProp;
+      return { ...rest, crop_sheets: [makeDefaultSheet()] } as RemixProp;
     });
 
   const illustration = cloneIllustration(input.illustration);

@@ -27,7 +27,7 @@ export const UPSCALE_MODEL_OPTIONS = [
 export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
   swapModel: 'google/nano-banana-pro',
   upscaleModel: 'nightmareai/real-esrgan',
-  scale: 2,
+  scale: 4,
 };
 
 /** Zoom slider range — applied as the stage canvas-inner `width/height`
@@ -37,7 +37,7 @@ export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
 export const ZOOM = { min: 10, max: 400, step: 5, default: 100 } as const;
 
 /** Scale stepper range (right sidebar). */
-export const SCALE = { min: 2, max: 10, step: 1, default: 2 } as const;
+export const SCALE = { min: 2, max: 10, step: 1, default: 4 } as const;
 
 /** Each entity key must keep at least this many crop sheets. */
 export const SHEET_MIN = 1;
