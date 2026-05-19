@@ -21,6 +21,7 @@ import {
   UPSCALE_MODEL_OPTIONS,
   SCALE,
   RIGHT_SIDEBAR_WIDTH_PX,
+  HEADER_HEIGHT_PX,
 } from './swap-modal-constants';
 
 const log = createLogger('Editor', 'SwapParametersSidebar');
@@ -51,13 +52,20 @@ export function SwapParametersSidebar({
 
   return (
     <aside
-      className="flex h-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-border bg-background px-4 py-4"
+      className="flex h-full shrink-0 flex-col border-l border-border bg-background"
       style={{ width: RIGHT_SIDEBAR_WIDTH_PX }}
       aria-label="Tham số swap"
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Parameters
-      </p>
+      <div
+        className="flex shrink-0 items-center border-b border-border bg-background px-4"
+        style={{ height: HEADER_HEIGHT_PX }}
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Parameters
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
 
       <ParamField label="Swap Model" htmlFor="swap-model-select">
         <Select value={params.swapModel} onValueChange={handleSwapModelChange}>
@@ -102,9 +110,10 @@ export function SwapParametersSidebar({
         />
       </ParamField>
 
-      <p className="mt-auto text-[11px] leading-relaxed text-muted-foreground">
-        Tham số v1 chỉ thu thập ở UI — chưa nối API.
-      </p>
+        <p className="mt-auto text-[11px] leading-relaxed text-muted-foreground">
+          Tham số v1 chỉ thu thập ở UI — chưa nối API.
+        </p>
+      </div>
     </aside>
   );
 }

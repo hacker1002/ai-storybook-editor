@@ -18,6 +18,7 @@ import {
 import { useEntitySwapTask } from '@/stores/remix-store';
 import type { RemixEntityRef } from '@/types/remix';
 import {
+  HEADER_HEIGHT_PX,
   SHEET_MIN,
   SWAP_DISABLED_REASON,
   type RemixEntityType,
@@ -62,19 +63,24 @@ export function CropSheetEntitySidebar({
 }: CropSheetEntitySidebarProps) {
   return (
     <aside
-      className="flex h-full shrink-0 flex-col overflow-y-auto border-r border-border bg-background"
+      className="flex h-full shrink-0 flex-col border-r border-border bg-background"
       style={{ width: 300 }}
     >
-      <p className="sticky top-0 z-10 bg-background px-4 pb-2 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {SECTION_LABEL[type]}
-      </p>
+      <div
+        className="flex shrink-0 items-center border-b border-border bg-background px-4"
+        style={{ height: HEADER_HEIGHT_PX }}
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {SECTION_LABEL[type]}
+        </p>
+      </div>
 
       {entities.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted-foreground">
           Tab này chưa có key nào.
         </p>
       ) : (
-        <div className="flex flex-col gap-2 px-3 pb-4">
+        <div className="flex flex-col gap-2 overflow-y-auto px-3 py-4">
           {entities.map((entity) => (
             <EntityRow
               key={entity.key}
