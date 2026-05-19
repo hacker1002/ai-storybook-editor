@@ -13,8 +13,11 @@
 // uncontrolled `defaultPosition`. `dividerPosition` is therefore an init value;
 // the inner body is keyed by the swap URL so a parent reset re-applies it.
 
+import { useRef } from 'react';
 import { ReactCompareSlider } from 'react-compare-slider';
-import { Columns2, Loader2, AlertTriangle, ScanLine, RotateCcw } from 'lucide-react';
+import { Columns2, Loader2, AlertTriangle, RotateCcw, Minus, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import {
@@ -26,6 +29,7 @@ import {
 import type { RemixCropSheet, SwapResult, SwapTaskStatus } from '@/types/remix';
 import { ZOOM, HEADER_HEIGHT_PX } from './swap-modal-constants';
 import { ComposedCropSheet } from './crop-sheet-stage/composed-crop-sheet';
+import { useStageZoom } from './crop-sheet-stage/use-stage-zoom';
 
 const log = createLogger('Editor', 'CropSheetStage');
 
@@ -40,14 +44,6 @@ interface CropSheetStageProps {
   onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
 }
-
-// Checkerboard — simulates a transparent backdrop behind the composed sheet.
-const CHECKERBOARD_STYLE: React.CSSProperties = {
-  backgroundImage:
-    'linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(-45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, hsl(var(--muted)) 75%), linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%)',
-  backgroundSize: '20px 20px',
-  backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
-};
 
 export function CropSheetStage({
   sheet,
@@ -85,6 +81,7 @@ export function CropSheetStage({
         zoomLevel={zoomLevel}
         dividerPosition={dividerPosition}
         swapTask={swapTask}
+        onZoomChange={onZoomChange}
         onDividerChange={onDividerChange}
       />
     </section>
@@ -148,26 +145,50 @@ function StageHeader({
       </TooltipProvider>
 
       <div className="flex items-center gap-2">
-        <ScanLine className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <input
-          type="range"
-          role="slider"
-          aria-label="Zoom"
-          aria-valuenow={zoomLevel}
-          aria-valuemin={ZOOM.min}
-          aria-valuemax={ZOOM.max}
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Decrease zoom"
+          disabled={zoomLevel <= ZOOM.min}
+          onClick={() => {
+            const next = Math.max(zoomLevel - ZOOM.step, ZOOM.min);
+            log.debug('onClick', 'zoom decrease', { from: zoomLevel, to: next });
+            onZoomChange(next);
+          }}
+          className="h-8 w-8"
+        >
+          <Minus className="h-4 w-4" />
+        </Button>
+        <Slider
+          value={[zoomLevel]}
           min={ZOOM.min}
           max={ZOOM.max}
           step={ZOOM.step}
-          value={zoomLevel}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            log.debug('onChange', 'zoom change', { zoom: next });
+          onValueChange={([v]) => {
+            log.debug('onValueChange', 'zoom change', { zoom: v });
+            onZoomChange(v);
+          }}
+          aria-label="Zoom level"
+          className="w-[120px]"
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Increase zoom"
+          disabled={zoomLevel >= ZOOM.max}
+          onClick={() => {
+            const next = Math.min(zoomLevel + ZOOM.step, ZOOM.max);
+            log.debug('onClick', 'zoom increase', { from: zoomLevel, to: next });
             onZoomChange(next);
           }}
-          className="h-1 w-[140px] cursor-pointer accent-primary"
-        />
-        <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
+          className="h-8 w-8"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+        <span
+          className="w-12 text-right text-sm font-medium tabular-nums"
+          aria-live="polite"
+        >
           {zoomLevel}%
         </span>
       </div>
@@ -184,6 +205,7 @@ interface StageCanvasProps {
   zoomLevel: number;
   dividerPosition: number;
   swapTask: SwapTaskStatus;
+  onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
 }
 
@@ -194,8 +216,21 @@ function StageCanvas({
   zoomLevel,
   dividerPosition,
   swapTask,
+  onZoomChange,
   onDividerChange,
 }: StageCanvasProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  // Fit-to-canvas + center-anchored zoom. Called before the early return
+  // below (Rules of Hooks) — `sheetGeometry: null` makes the hook a no-op
+  // when the tab has no sheet.
+  useStageZoom({
+    viewportRef,
+    sheetGeometry: sheet?.sheet_geometry ?? null,
+    zoomLevel,
+    onZoomChange,
+  });
+
   // Tab has no entity / no sheet at all.
   if (sheet === null) {
     return (
@@ -206,36 +241,51 @@ function StageCanvas({
   }
 
   const swapUrl = selectedSwap?.media_url ?? null;
+  // Zoom is applied as the canvas-inner real width/height (design §4.3) — the
+  // sheet's natural pixel size scaled by the zoom %. Child crops are positioned
+  // in percent so they scale automatically.
+  const { width: sheetW, height: sheetH } = sheet.sheet_geometry;
+  const innerW = (sheetW * zoomLevel) / 100;
+  const innerH = (sheetH * zoomLevel) / 100;
 
   return (
-    <div className="relative flex flex-1 items-center justify-center overflow-auto p-6">
+    <div
+      ref={viewportRef}
+      // viewport — scrolls the canvas-inner; flat muted-gray backdrop.
+      className="relative min-h-0 flex-1 overflow-auto bg-muted"
+    >
+      {/* Centering layer — sheet smaller than the viewport is centered, larger
+          scrolls. `safe center` falls back to `start` when the sheet overflows,
+          so the left/top edges stay reachable via scroll (without `safe`, the
+          centered child gets a negative offset that scroll cannot reach).
+          Applied inline because Tailwind's arbitrary-value syntax does not
+          accept multi-keyword `safe center`. */}
       <div
-        // `transform: scale` applied on the inner wrapper for both modes.
-        style={{
-          transform: `scale(${zoomLevel / 100})`,
-          transformOrigin: 'center',
-        }}
-        className="relative h-[70vh] w-[70vh] max-h-full max-w-full overflow-hidden rounded-md"
+        className="flex min-h-full min-w-full"
+        style={{ justifyContent: 'safe center', alignItems: 'safe center' }}
       >
-        <div className="absolute inset-0" style={CHECKERBOARD_STYLE} />
-
-        {compareMode && swapUrl !== null ? (
-          <CompareBody
-            // Key by the swap URL so the uncontrolled slider re-applies
-            // `defaultPosition` when the compared "after" image changes.
-            key={swapUrl}
-            sheet={sheet}
-            swappedUrl={swapUrl}
-            dividerPosition={dividerPosition}
-            onDividerChange={onDividerChange}
-          />
-        ) : swapUrl !== null ? (
-          <CanvasImage key={swapUrl} url={swapUrl} />
-        ) : (
-          <div className="relative h-full w-full">
-            <ComposedCropSheet sheet={sheet} />
-          </div>
-        )}
+        <div
+          className="relative shrink-0 overflow-hidden rounded-md bg-white"
+          style={{ width: innerW, height: innerH }}
+        >
+          {compareMode && swapUrl !== null ? (
+            <CompareBody
+              // Key by the swap URL so the uncontrolled slider re-applies
+              // `defaultPosition` when the compared "after" image changes.
+              key={swapUrl}
+              sheet={sheet}
+              swappedUrl={swapUrl}
+              dividerPosition={dividerPosition}
+              onDividerChange={onDividerChange}
+            />
+          ) : swapUrl !== null ? (
+            <CanvasImage key={swapUrl} url={swapUrl} />
+          ) : (
+            <div className="relative h-full w-full">
+              <ComposedCropSheet sheet={sheet} />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* DORMANT in v1 — swapTask is always idle (swap deferred). */}

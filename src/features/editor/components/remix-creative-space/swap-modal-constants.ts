@@ -30,8 +30,11 @@ export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
   scale: 2,
 };
 
-/** Zoom slider range — applied as `transform: scale()` on the stage canvas. */
-export const ZOOM = { min: 50, max: 400, step: 5, default: 100 } as const;
+/** Zoom slider range — applied as the stage canvas-inner `width/height`
+ *  (not `transform: scale()`, so `scrollWidth/Height` stay accurate for
+ *  fit + anchor scrolling). `min` is 10 so a large sheet (e.g. 3000×1285)
+ *  can fit-to-canvas inside a narrow viewport (design 05-03 §4.2/§4.6). */
+export const ZOOM = { min: 10, max: 400, step: 5, default: 100 } as const;
 
 /** Scale stepper range (right sidebar). */
 export const SCALE = { min: 2, max: 10, step: 1, default: 2 } as const;

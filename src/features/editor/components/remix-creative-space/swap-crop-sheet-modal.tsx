@@ -170,7 +170,8 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     const first = entities?.[TAB_TO_GROUP[tab]][0];
     setActiveSheetRef({ entityKey: first?.key ?? '', sheetIndex: 0 });
     setCompareMode(false);
-    setZoomLevel(ZOOM.default);
+    // No zoom reset — StageCanvas measures the new sheet and reports its
+    // fit zoom via onZoomChange (design 05-03 §4.3).
   };
 
   const handleSelectSheet = (entityKey: string, sheetIndex: number) => {
@@ -178,7 +179,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     setActiveSheetRef({ entityKey, sheetIndex });
     setCompareMode(false);
     setDividerPosition(50);
-    setZoomLevel(ZOOM.default);
+    // No zoom reset — StageCanvas re-fits when sheet_geometry changes.
   };
 
   // DEFERRED — swap [⇄] is hard-disabled on every tab; this never fires from
