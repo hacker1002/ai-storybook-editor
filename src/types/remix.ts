@@ -42,6 +42,10 @@ export interface RemixCropSheet {
   image_url: string;
   swap_results: SwapResult[];
   crops: Crop[];
+  /** Self-describing variant scope (DB-CHANGELOG 2026-05-20). `null` cho mix
+   *  entity. Engine dual-writes `crops[].variant = sheet.variant_key` for
+   *  legacy readers. */
+  variant_key: string | null;
 }
 
 // ── Cloned entity snapshots (DB JSONB columns) ───────────────────────────────
@@ -152,7 +156,7 @@ export interface RemixRow {
 // failed|cancelled). `partial` is a derived UI state (status='completed' AND
 // result.errors.length > 0). Spec: ai-storybook-design/component/stores/remix-store.md §2.
 
-export type RemixJobPhase = 'audio' | 'image';
+export type RemixJobPhase = 'audio' | 'image' | 'entity_swap';
 
 export type RemixJobStatus =
   | 'queued'
@@ -223,7 +227,7 @@ export type AudioJobBadgeState =
 /** Raw shape of public.background_jobs row returned by Supabase select + realtime payload. */
 export interface BackgroundJobRow {
   id: string;
-  type: 'remix_audio_swap' | 'remix_image_swap' | string;
+  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_entity_swap' | string;
   user_id: string;
   book_id: string | null;
   status: RemixJobStatus;
@@ -291,6 +295,16 @@ export interface ReferenceImage {
   mimeType: string;
 }
 
+/** Variant group projection — bucket of crop_sheets[] indices that share a
+ *  `variant_key`. Ordering follows raw `variants[]` (designer-defined).
+ *  Only populated for character/prop entities; mix entity always `[]`. */
+export interface RemixVariantGroup {
+  variantKey: string;
+  name: string;
+  /** Index vào RemixEntityRef.crop_sheets[] theo thứ tự xuất hiện. */
+  sheetIndices: number[];
+}
+
 /** Normalized projection of a single entity (character | prop | mix) for the
  *  swap modal. */
 export interface RemixEntityRef {
@@ -299,6 +313,11 @@ export interface RemixEntityRef {
   key: string;
   name: string;
   crop_sheets: RemixCropSheet[];
+  /** Variant grouping projection — filter "≥1 sheet" (char/prop only; mix=[]).
+   *  VariantsVisualModal đọc field này (validation session 1: không thêm
+   *  rawVariants — modal chỉ show variants có ≥1 sheet). Populated by
+   *  `buildVariantGroups` in the selector layer. */
+  variants: RemixVariantGroup[];
 }
 
 /** Swap model / upscale params collected by the right-sidebar.

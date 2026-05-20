@@ -13,7 +13,11 @@ const TERMINAL_STATUSES = new Set<RemixJob['status']>([
 /** Map raw background_jobs row → RemixJob. Pure, no I/O. */
 export function mapRowToJob(row: BackgroundJobRow): RemixJob {
   const phase: RemixJobPhase =
-    row.type === 'remix_image_swap' ? 'image' : 'audio';
+    row.type === 'remix_image_swap'
+      ? 'image'
+      : row.type === 'remix_entity_swap'
+        ? 'entity_swap'
+        : 'audio';
 
   const triggeredBy =
     row.params?.triggered_by === 'auto-create' ? 'auto-create' : 'user';

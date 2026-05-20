@@ -20,6 +20,11 @@ import {
 export interface RelayoutConfirmDialogProps {
   /** Open while a stepper action awaits confirmation. */
   open: boolean;
+  /** Human-readable variant name for the confirm message scope.
+   *  Truthy → char/prop variant scope (relayout target = ONE variant of the
+   *  entity); body copy names that variant. Falsy/undefined/null → mix entity
+   *  scope (relayout target = whole entity); generic body copy. */
+  variantName?: string | null;
   /** User confirmed → run the pending stepper action. */
   onConfirm: () => void;
   /** User cancelled / dismissed → drop the pending action. */
@@ -27,12 +32,21 @@ export interface RelayoutConfirmDialogProps {
 }
 
 /** Confirms a relayout-causing stepper action. The caller decides whether to
- *  mount this at all (only when some sheet of the entity has swap results). */
+ *  mount this at all (only when some sheet of the variant has swap results). */
 export function RelayoutConfirmDialog({
   open,
+  variantName,
   onConfirm,
   onCancel,
 }: RelayoutConfirmDialogProps) {
+  // Branched copy (Phase 07): variant-scoped relayout names the variant so the
+  // user knows only ONE variant's swap_results will be wiped. Mix-entity or
+  // unnamed variant fallback uses the generic "entity này" copy. Both cases
+  // emphasise the irreversible nature of the action.
+  const description = variantName
+    ? `Variant "${variantName}" có sheet đã được swap. Đổi số sheet sẽ tính lại layout của variant này và xoá toàn bộ swap result. Hành động này không thể hoàn tác.`
+    : 'Đổi số sheet sẽ tính lại layout và xoá toàn bộ swap result của entity này. Hành động này không thể hoàn tác.';
+
   return (
     <AlertDialog
       open={open}
@@ -43,10 +57,7 @@ export function RelayoutConfirmDialog({
       <AlertDialogContent className="sm:max-w-[440px]">
         <AlertDialogHeader>
           <AlertDialogTitle>Tính lại layout?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Đổi số sheet sẽ tính lại layout và xoá toàn bộ swap result của
-            entity này. Hành động này không thể hoàn tác.
-          </AlertDialogDescription>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
 
         <AlertDialogFooter>

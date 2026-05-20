@@ -52,7 +52,14 @@ export function useRemixJobNotifications(): void {
       for (const job of transitioned) {
         const remix = remixes.find((r) => r.id === job.remixId);
         const name = remix?.name ?? 'Untitled';
-        const label = job.phase === 'audio' ? 'Audio' : 'Inject';
+        const label =
+          job.phase === 'audio'
+            ? 'Audio'
+            : job.phase === 'image'
+              ? 'Inject'
+              : job.phase === 'entity_swap'
+                ? 'Swap entity'
+                : 'Job';
         const errorCount = job.result?.errors?.length ?? 0;
 
         switch (job.status) {

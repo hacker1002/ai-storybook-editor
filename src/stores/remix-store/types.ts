@@ -19,14 +19,31 @@ import type {
 } from '@/types/remix';
 
 // ── Patch shape exposed by job/runner helpers ────────────────────────────────
+// Discriminated union — `patch` (legacy single-sheet merge) vs `replaceAll`
+// (variant relayout rewrites every sheet in deterministic raw-variant order).
+// Validation session 1: union shape required because variant relayout cannot
+// be expressed as N independent index-based patches (sheet count + ordering
+// both change atomically).
 
-export interface RemixCropSheetPatch {
-  type: 'character' | 'prop' | 'mix';
-  key: string;
-  /** Index into entity.crop_sheets[]. */
-  sheetIndex: number;
-  patch: Partial<RemixCropSheet>;
-}
+export type CropSheetUpdate =
+  | {
+      kind: 'patch';
+      entityType: 'character' | 'prop' | 'mix';
+      entityKey: string;
+      /** Index into entity.crop_sheets[]. */
+      sheetIndex: number;
+      patch: Partial<RemixCropSheet>;
+    }
+  | {
+      kind: 'replaceAll';
+      entityType: 'character' | 'prop' | 'mix';
+      entityKey: string;
+      sheets: RemixCropSheet[];
+    };
+
+/** Backward-compat alias — existing import paths keep building. New code
+ *  should prefer `CropSheetUpdate`. */
+export type RemixCropSheetPatch = CropSheetUpdate;
 
 // ── Audio job enqueue options ────────────────────────────────────────────────
 
@@ -61,7 +78,7 @@ export interface RemixCrudSlice {
   setActiveRemixId: (id: string | null) => void;
 
   patchRemixIllustration: (id: string, spreads: RemixSpread[]) => void;
-  patchRemixCropSheets: (id: string, updates: RemixCropSheetPatch[]) => void;
+  patchRemixCropSheets: (id: string, updates: CropSheetUpdate[]) => void;
 }
 
 /** Remote background_jobs (audio/image swap): enqueue, cancel, dismiss. */
@@ -90,24 +107,28 @@ export interface RemixSwapSlice {
    *  `running`/`error` so the UI never spins. */
   startEntitySwap: (params: StartEntitySwapParams) => Promise<void>;
 
-  /** Appends one crop sheet to an entity (`crop_sheets.length + 1`), re-layouts
-   *  all crops across the new sheet count via the client-side layout engine,
-   *  and persists the owning JSONB column. Optimistic with rollback on failure. */
+  /** Appends one crop sheet to an entity within the scope of `variantKey`
+   *  (or whole entity when `null` — mix). Re-layouts every sheet of that
+   *  variant group via the client-side layout engine, then `replaceAll` on
+   *  `crop_sheets[]` so variant grouping order stays deterministic. Optimistic
+   *  with rollback on failure. Implementation lands in Phase 02. */
   appendCropSheet: (
     remixId: string,
     type: 'character' | 'prop' | 'mix',
     key: string,
+    variantKey: string | null,
   ) => Promise<boolean>;
 
-  /** Removes one crop sheet from an entity (`crop_sheets.length - 1`, clamped to
-   *  `SHEET_MIN`), re-layouts all crops across the reduced sheet count, and
-   *  persists the owning JSONB column. `sheetIndex` is accepted for caller
-   *  parity but unused — the engine re-packs from scratch. Optimistic with
-   *  rollback on failure. */
+  /** Removes one crop sheet within the scope of `variantKey` (mix → null).
+   *  Variant group count clamped to `SHEET_MIN`; layout engine re-packs the
+   *  group; sibling variants pass-through. `sheetIndex` is the absolute index
+   *  into `crop_sheets[]` (caller already resolved). Optimistic with rollback
+   *  on failure. Implementation lands in Phase 02. */
   removeCropSheet: (
     remixId: string,
     type: 'character' | 'prop' | 'mix',
     key: string,
+    variantKey: string | null,
     sheetIndex: number,
   ) => Promise<boolean>;
 }

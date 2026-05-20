@@ -238,18 +238,18 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
         if (r.id !== id) return r;
         const next = { ...r };
         for (const u of updates) {
-          if (u.type === 'character') {
+          if (u.entityType === 'character') {
             next.characters = next.characters.map((c) =>
-              c.key === u.key ? applySheetPatch(c, u) : c,
+              c.key === u.entityKey ? applySheetPatch(c, u) : c,
             );
-          } else if (u.type === 'prop') {
+          } else if (u.entityType === 'prop') {
             next.props = next.props.map((p) =>
-              p.key === u.key ? applySheetPatch(p, u) : p,
+              p.key === u.entityKey ? applySheetPatch(p, u) : p,
             );
           } else {
             next.mixes = next.mixes.map((m) =>
               // Mix has no `key` field — match by canonical mix key.
-              canonicalMixKey(m.keys) === u.key ? applySheetPatch(m, u) : m,
+              canonicalMixKey(m.keys) === u.entityKey ? applySheetPatch(m, u) : m,
             );
           }
         }

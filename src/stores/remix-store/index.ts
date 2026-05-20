@@ -31,7 +31,7 @@ const log = createLogger('Store', 'RemixStore');
 // Re-export so callers don't need a separate import for the cap constant.
 export { CLIENT_AUDIO_CHUNK_CAP };
 export type { CapType };
-export type { RemixCropSheetPatch, RemixEntities } from './types';
+export type { CropSheetUpdate, RemixCropSheetPatch, RemixEntities } from './types';
 
 export const useRemixStore = create<RemixStore>()(
   devtools(

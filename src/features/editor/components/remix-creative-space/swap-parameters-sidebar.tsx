@@ -50,17 +50,28 @@ export function SwapParametersSidebar({
     onChange({ ...params, scale: value });
   };
 
+  // Dark field classes (Phase 07): mirror tokens — translucent white surface
+  // + border-strong + white text. Applied via shadcn `Select`'s className API
+  // (passes through to Radix `Trigger` element). Native `<option>` styling
+  // inside `<SelectContent>` is shadcn-controlled — Radix Popover content
+  // inherits theme tokens through the parent provider so the dropdown panel
+  // renders dark by default (no further override required).
+  const DARK_TRIGGER_CLASS =
+    'w-full bg-[var(--swap-modal-surface-hover)] border-[var(--swap-modal-border-strong)] text-[var(--swap-modal-text-primary)] hover:bg-[var(--swap-modal-surface-hover-strong)] focus-visible:ring-[var(--swap-modal-accent)]';
+
   return (
     <aside
-      className="flex h-full shrink-0 flex-col border-l border-border bg-background"
+      // Dark right sidebar container (Phase 07): surface + border tokens.
+      className="flex h-full shrink-0 flex-col border-l border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)]"
       style={{ width: RIGHT_SIDEBAR_WIDTH_PX }}
       aria-label="Tham số swap"
     >
       <div
-        className="flex shrink-0 items-center border-b border-border bg-background px-4"
+        // Dark header bar (49px) matches StageHeader styling.
+        className="flex shrink-0 items-center border-b border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)] px-4"
         style={{ height: HEADER_HEIGHT_PX }}
       >
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]">
           Parameters
         </p>
       </div>
@@ -69,7 +80,7 @@ export function SwapParametersSidebar({
 
       <ParamField label="Swap Model" htmlFor="swap-model-select">
         <Select value={params.swapModel} onValueChange={handleSwapModelChange}>
-          <SelectTrigger id="swap-model-select" className="w-full">
+          <SelectTrigger id="swap-model-select" className={DARK_TRIGGER_CLASS}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -87,7 +98,10 @@ export function SwapParametersSidebar({
           value={params.upscaleModel}
           onValueChange={handleUpscaleModelChange}
         >
-          <SelectTrigger id="upscale-model-select" className="w-full">
+          <SelectTrigger
+            id="upscale-model-select"
+            className={DARK_TRIGGER_CLASS}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -101,16 +115,22 @@ export function SwapParametersSidebar({
       </ParamField>
 
       <ParamField label="Scale">
+        {/* Dark stepper override (Phase 07): NumberStepper is a shared
+            component using `bg-background` / `text-muted-foreground` tokens
+            tuned for the global light theme. Scoping descendant overrides
+            via Tailwind arbitrary variants keeps the shared component
+            untouched while painting it dark inside this modal only. */}
         <NumberStepper
           value={params.scale}
           min={SCALE.min}
           max={SCALE.max}
           step={SCALE.step}
           onChange={handleScaleChange}
+          className="[&_button]:border-[var(--swap-modal-border-strong)] [&_button]:bg-[var(--swap-modal-surface-hover)] [&_button]:text-[var(--swap-modal-text-muted)] [&_button:hover]:bg-[var(--swap-modal-surface-hover-strong)] [&_button:hover]:text-[var(--swap-modal-text-primary)] [&_input]:border-[var(--swap-modal-border-strong)] [&_input]:bg-[var(--swap-modal-surface-hover)] [&_input]:text-[var(--swap-modal-text-primary)]"
         />
       </ParamField>
 
-        <p className="mt-auto text-[11px] leading-relaxed text-muted-foreground">
+        <p className="mt-auto text-[11px] leading-relaxed text-[var(--swap-modal-text-muted)]">
           Tham số v1 chỉ thu thập ở UI — chưa nối API.
         </p>
       </div>
@@ -129,7 +149,7 @@ function ParamField({ label, htmlFor, children }: ParamFieldProps) {
     <div className="flex flex-col gap-1.5">
       <label
         htmlFor={htmlFor}
-        className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+        className="text-xs font-medium uppercase tracking-wide text-[var(--swap-modal-text-muted)]"
       >
         {label}
       </label>

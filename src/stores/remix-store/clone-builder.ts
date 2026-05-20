@@ -127,6 +127,9 @@ function makeDefaultSheet(): RemixCropSheet {
     image_url: '',
     swap_results: [],
     crops: [],
+    // Phase 01 placeholder: clone-builder defaults to null. Phase 02 wires the
+    // variant_key during initial sheet construction once the engine ships.
+    variant_key: null,
   };
 }
 

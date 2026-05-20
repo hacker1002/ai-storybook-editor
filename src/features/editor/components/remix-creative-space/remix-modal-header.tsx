@@ -58,12 +58,12 @@ export function RemixModalHeader({
 
   return (
     <header
-      className="flex shrink-0 items-center justify-between border-b border-border bg-background px-4"
+      className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)] px-4"
       style={{ height: HEADER_HEIGHT_PX }}
     >
       <h2
         id="swap-crop-sheet-modal-title"
-        className="truncate text-base font-semibold"
+        className="truncate text-base font-semibold text-[var(--swap-modal-text-primary)]"
         title={title}
       >
         {title}
@@ -72,7 +72,7 @@ export function RemixModalHeader({
       <div
         role="tablist"
         aria-label="Loại entity"
-        className="flex items-center gap-1 rounded-lg bg-muted p-1"
+        className="flex items-center gap-1 rounded-lg bg-[var(--swap-modal-surface-hover)] p-1"
       >
         {TABS.map(({ id, label, Icon }) => {
           const isActive = id === activeTab;
@@ -92,8 +92,8 @@ export function RemixModalHeader({
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-3 py-1 text-sm transition-colors',
                 isActive
-                  ? 'bg-background font-semibold text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-[var(--swap-modal-surface-hover-strong)] font-semibold text-[var(--swap-modal-text-primary)] shadow-sm'
+                  : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
               )}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
@@ -110,7 +110,7 @@ export function RemixModalHeader({
           log.debug('onClick', 'close modal');
           onClose();
         }}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--swap-modal-text-muted)] transition-colors hover:bg-[var(--swap-modal-surface-hover-strong)] hover:text-[var(--swap-modal-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--swap-modal-accent)]"
       >
         <X className="h-4 w-4" />
       </button>

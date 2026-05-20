@@ -63,7 +63,9 @@ export function CropSheetStage({
 
   return (
     <section
-      className="flex h-full min-w-0 flex-1 flex-col bg-muted/30"
+      // Dark theme container (Phase 07): swap-modal-bg base so the stage sits
+      // on the modal's dark canvas without bleeding light surfaces.
+      className="flex h-full min-w-0 flex-1 flex-col bg-[var(--swap-modal-bg)]"
       aria-label="Crop sheet stage"
     >
       <StageHeader
@@ -107,7 +109,8 @@ function StageHeader({
 }: StageHeaderProps) {
   return (
     <div
-      className="flex shrink-0 items-center justify-between border-b border-border bg-background px-4"
+      // Dark stage header (Phase 07): surface + border tokens.
+      className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)] px-4"
       style={{ height: HEADER_HEIGHT_PX }}
     >
       <TooltipProvider>
@@ -128,9 +131,11 @@ function StageHeader({
                 className={cn(
                   'flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors',
                   'disabled:pointer-events-none disabled:opacity-40',
+                  // Dark variant (Phase 07): selection token when pressed,
+                  // muted surface + secondary text otherwise.
                   compareMode
-                    ? 'border-primary bg-primary/10 font-medium text-primary'
-                    : 'border-border text-muted-foreground hover:text-foreground',
+                    ? 'border-[var(--swap-modal-border-strong)] bg-[var(--swap-modal-selection)] font-medium text-[var(--swap-modal-text-primary)]'
+                    : 'border-[var(--swap-modal-border)] text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]',
                 )}
               >
                 <Columns2 className="h-4 w-4" aria-hidden="true" />
@@ -144,7 +149,7 @@ function StageHeader({
         </Tooltip>
       </TooltipProvider>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 text-[var(--swap-modal-text-primary)]">
         <Button
           variant="ghost"
           size="icon"
@@ -155,7 +160,8 @@ function StageHeader({
             log.debug('onClick', 'zoom decrease', { from: zoomLevel, to: next });
             onZoomChange(next);
           }}
-          className="h-8 w-8"
+          // Dark ghost button (Phase 07): muted icon, surface hover.
+          className="h-8 w-8 text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]"
         >
           <Minus className="h-4 w-4" />
         </Button>
@@ -181,12 +187,12 @@ function StageHeader({
             log.debug('onClick', 'zoom increase', { from: zoomLevel, to: next });
             onZoomChange(next);
           }}
-          className="h-8 w-8"
+          className="h-8 w-8 text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]"
         >
           <Plus className="h-4 w-4" />
         </Button>
         <span
-          className="w-12 text-right text-sm font-medium tabular-nums"
+          className="w-12 text-right text-sm font-medium tabular-nums text-[var(--swap-modal-text-secondary)]"
           aria-live="polite"
         >
           {zoomLevel}%
@@ -234,8 +240,10 @@ function StageCanvas({
   // Tab has no entity / no sheet at all.
   if (sheet === null) {
     return (
-      <div className="flex flex-1 items-center justify-center p-8 text-center">
-        <p className="text-sm text-muted-foreground">Tab này chưa có key nào</p>
+      <div className="flex flex-1 items-center justify-center bg-[var(--swap-modal-canvas-bg)] p-8 text-center">
+        <p className="text-sm text-[var(--swap-modal-text-muted)]">
+          Tab này chưa có key nào
+        </p>
       </div>
     );
   }
@@ -251,8 +259,10 @@ function StageCanvas({
   return (
     <div
       ref={viewportRef}
-      // viewport — scrolls the canvas-inner; flat muted-gray backdrop.
-      className="relative min-h-0 flex-1 overflow-auto bg-muted"
+      // viewport — scrolls the canvas-inner. Dark muted backdrop (Phase 07):
+      // canvas-bg token so the white sheet frame pops against deep navy. See
+      // `--swap-modal-canvas-bg` (#0c0f16) in swap-modal-constants.
+      className="relative min-h-0 flex-1 overflow-auto bg-[var(--swap-modal-canvas-bg)]"
     >
       {/* Centering layer — sheet smaller than the viewport is centered, larger
           scrolls. `safe center` falls back to `start` when the sheet overflows,
@@ -265,7 +275,9 @@ function StageCanvas({
         style={{ justifyContent: 'safe center', alignItems: 'safe center' }}
       >
         <div
-          className="relative shrink-0 overflow-hidden rounded-md bg-white"
+          // Sheet frame: intentionally bg-white — pops against the dark
+          // canvas backdrop (design §4.12, Phase 07 audit). Do NOT theme.
+          className="relative shrink-0 overflow-hidden rounded-md bg-[var(--swap-modal-sheet-frame-bg)] shadow-2xl"
           style={{ width: innerW, height: innerH }}
         >
           {compareMode && swapUrl !== null ? (
@@ -288,28 +300,29 @@ function StageCanvas({
         </div>
       </div>
 
-      {/* DORMANT in v1 — swapTask is always idle (swap deferred). */}
+      {/* DORMANT in v1 — swapTask is always idle (swap deferred).
+          Dark overlays (Phase 07): backdrop token + white-text labels. */}
       {swapTask.state === 'running' && (
         <div
           role="status"
           aria-live="polite"
-          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[var(--swap-modal-backdrop)] backdrop-blur-sm"
         >
-          <Loader2 className="h-7 w-7 animate-spin text-primary" />
-          <span className="text-sm text-muted-foreground">
+          <Loader2 className="h-7 w-7 animate-spin text-[var(--swap-modal-accent)]" />
+          <span className="text-sm text-[var(--swap-modal-text-secondary)]">
             Swapping {swapTask.current}/{swapTask.total} sheets
           </span>
         </div>
       )}
 
       {swapTask.state === 'error' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-destructive/10 px-4 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[var(--swap-modal-backdrop)] px-4 text-center backdrop-blur-sm">
           <AlertTriangle className="h-7 w-7 text-destructive" />
           <span className="text-sm font-medium text-destructive">
             Swap thất bại
           </span>
           <span className="text-xs text-destructive">{swapTask.message}</span>
-          <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="mt-1 flex items-center gap-1 text-xs text-[var(--swap-modal-text-muted)]">
             <RotateCcw className="h-3.5 w-3.5" />
             Bấm [⇄] ở sidebar để thử lại
           </span>
@@ -380,10 +393,12 @@ function CompareBody({
           />
         }
       />
-      <span className="absolute left-2 top-2 z-10 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground">
+      {/* Dark Before/After badges (Phase 07): card-bg token over sheet image
+          for legibility (background is mostly white sheet content). */}
+      <span className="absolute left-2 top-2 z-10 rounded bg-[var(--swap-modal-card-bg)]/85 px-1.5 py-0.5 text-xs text-[var(--swap-modal-text-secondary)]">
         Before
       </span>
-      <span className="absolute right-2 top-2 z-10 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground">
+      <span className="absolute right-2 top-2 z-10 rounded bg-[var(--swap-modal-card-bg)]/85 px-1.5 py-0.5 text-xs text-[var(--swap-modal-text-secondary)]">
         After
       </span>
     </>

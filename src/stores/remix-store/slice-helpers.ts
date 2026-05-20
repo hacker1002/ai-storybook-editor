@@ -9,7 +9,7 @@ import type {
   SwapTaskStatus,
 } from '@/types/remix';
 import { canonicalMixKey } from '@/types/remix';
-import type { RemixCropSheetPatch } from './types';
+import type { CropSheetUpdate } from './types';
 
 /** Composes the `entitySwapTasks` map key (per-KEY, not per-sheet). Shared
  *  between swap action + selector so the format never drifts. */
@@ -25,11 +25,18 @@ export function buildEntityTaskKey(
  *  `useEntitySwapTask` call (would defeat selector re-render guards). */
 export const IDLE_SWAP_TASK: SwapTaskStatus = { state: 'idle' };
 
-/** Applies a single crop-sheet patch onto an entity's `crop_sheets[]`. */
+/** Applies one `CropSheetUpdate` onto an entity's `crop_sheets[]`. Handles
+ *  both discriminated kinds:
+ *   - `patch`: merges `patch` into `crop_sheets[sheetIndex]` (single-sheet).
+ *   - `replaceAll`: replaces the entire `crop_sheets[]` array (variant
+ *     relayout — sheet count + ordering both change). */
 export function applySheetPatch<T extends { crop_sheets: RemixCropSheet[] }>(
   entity: T,
-  update: RemixCropSheetPatch,
+  update: CropSheetUpdate,
 ): T {
+  if (update.kind === 'replaceAll') {
+    return { ...entity, crop_sheets: update.sheets };
+  }
   return {
     ...entity,
     crop_sheets: entity.crop_sheets.map((sheet, idx) =>
