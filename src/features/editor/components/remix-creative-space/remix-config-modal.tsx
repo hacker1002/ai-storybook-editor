@@ -28,6 +28,7 @@ import { useHumans } from '@/stores/humans-store';
 import { useVoicesStore } from '@/stores/voices-store';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
+import { NARRATOR_VOICE_KEY } from '@/constants/config-constants';
 import type { BookRemix } from '@/types/editor';
 import type {
   RemixCharacterChoice,
@@ -75,7 +76,11 @@ export function RemixConfigModal({
     () => bookRemix.languages.filter((l) => l.is_enabled),
     [bookRemix],
   );
-  const narratorOn = bookRemix.narrator.is_enabled;
+  // Narrator availability now lives in book.remix.voices[] (key='narrator').
+  // Full per-character voice UI port is a follow-up (see plan Phase 05).
+  const narratorOn = bookRemix.voices.some(
+    (v) => v.key === NARRATOR_VOICE_KEY && v.is_enabled,
+  );
 
   const isValid = useMemo(() => {
     if (draft.characters.some((c) => c.is_enabled)) return true;

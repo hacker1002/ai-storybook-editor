@@ -1,3 +1,5 @@
+import type { TraitType } from '@/types/human';
+
 // Language type for editor localization
 export interface Language {
   name: string;
@@ -81,7 +83,15 @@ export interface BookBranch {
 }
 
 // ── Remix settings (book.remix JSONB) ─────────────────────────────────────
+// Reshape 2026-05-21 (design 29fe1d6): narrator singular → voices[] collection;
+// characters[] gain per-trait gating via traits[] (replaces the old `type` enum).
 export type RemixLanguageCode = 'en_US' | 'vi_VN' | 'ja_JP' | 'ko_KR' | 'zh_CN';
+
+/**
+ * @deprecated Book-config remix dropped the `body`/`custom` character type in
+ * favour of per-trait `traits[]` (see RemixCharacterEntry). Kept only until any
+ * remix_config follow-up confirms it is unused. Do not use for new code.
+ */
 export type CharacterRemixType = 'body' | 'custom';
 
 export interface RemixLanguageEntry {
@@ -90,15 +100,26 @@ export interface RemixLanguageEntry {
   is_enabled: boolean;
 }
 
-export interface RemixNarratorEntry {
+// Per-trait gating for character swap. Keyed by `type`; order display-only.
+export interface RemixTraitEntry {
+  type: TraitType;
+  is_enabled: boolean;
+}
+
+// Voice availability slot. key = 'narrator' (literal) | <character.key>.
+// No voice_id — book configs availability only; the concrete voice is chosen at
+// remix execution (remix_config.voices[].voice_id).
+export interface RemixVoiceEntry {
+  key: string;   // 'narrator' | <character.key>
+  name: string;  // 'Narrator' | character.name (materialized for fallback render)
   is_enabled: boolean;
 }
 
 export interface RemixCharacterEntry {
   key: string;
   name: string;
-  type: CharacterRemixType;
   is_enabled: boolean;
+  traits: RemixTraitEntry[]; // always 5 entries (TRAIT_TYPES); reader fills missing → true
 }
 
 export interface RemixPropEntry {
@@ -109,7 +130,7 @@ export interface RemixPropEntry {
 
 export interface BookRemix {
   languages: RemixLanguageEntry[];
-  narrator: RemixNarratorEntry;
+  voices: RemixVoiceEntry[];
   characters: RemixCharacterEntry[];
   props: RemixPropEntry[];
 }

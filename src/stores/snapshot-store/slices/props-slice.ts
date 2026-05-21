@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, PropsSlice } from '../types';
 import { createLogger } from '@/utils/logger';
-import { cascadeRemixName } from '../utils/remix-name-resync';
+import { cascadeRemixName, cascadeRemixDelete } from '../utils/remix-name-resync';
 
 const log = createLogger('Store', 'PropsSlice');
 
@@ -42,14 +42,16 @@ export const createPropsSlice: StateCreator<
     }
   },
 
-  deleteProp: (key) =>
+  deleteProp: (key) => {
     set((state) => {
       log.debug('deleteProp', 'delete', { key });
       state.props = state.props.filter((p) => p.key !== key);
       // Clean up any pending image tasks for this prop
       state.imageTasks = state.imageTasks.filter((t) => !(t.entityType === 'prop' && t.entityKey === key));
       state.sync.isDirty = true;
-    }),
+    });
+    cascadeRemixDelete('prop', key);
+  },
 
   reorderProps: (fromIndex, toIndex) =>
     set((state) => {

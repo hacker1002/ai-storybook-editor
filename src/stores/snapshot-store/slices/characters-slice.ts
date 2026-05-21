@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, CharactersSlice } from '../types';
 import { createLogger } from '@/utils/logger';
-import { cascadeRemixName } from '../utils/remix-name-resync';
+import { cascadeRemixName, cascadeRemixDelete } from '../utils/remix-name-resync';
 
 const log = createLogger('Store', 'CharactersSlice');
 
@@ -42,13 +42,15 @@ export const createCharactersSlice: StateCreator<
     }
   },
 
-  deleteCharacter: (key) =>
+  deleteCharacter: (key) => {
     set((state) => {
       log.debug('deleteCharacter', 'delete', { key });
       state.characters = state.characters.filter((c) => c.key !== key);
       state.imageTasks = state.imageTasks.filter((t) => !(t.entityType === 'character' && t.entityKey === key));
       state.sync.isDirty = true;
-    }),
+    });
+    cascadeRemixDelete('character', key);
+  },
 
   reorderCharacters: (fromIndex, toIndex) =>
     set((state) => {

@@ -2,7 +2,8 @@
 
 export type HumanGender = 0 | 1 | null; // 0=female, 1=male, null=unspecified
 
-export type TraitType = 'face' | 'hair' | 'skin' | 'facewear' | 'outfit';
+// Canonical order (display-only) — see src/constants/trait-constants.ts (TRAIT_TYPES).
+export type TraitType = 'face' | 'facewear' | 'hair' | 'skin' | 'outfit';
 
 /** Trait shape persisted in visual_profiles[].traits[] JSONB (snake_case inner keys). */
 export interface VisualProfileTrait {

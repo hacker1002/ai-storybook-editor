@@ -16,20 +16,14 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { AddProfileCard } from '@/features/humans/components/shared/add-profile-card';
-import type { TraitType, VisualProfile } from '@/types/human';
+import type { VisualProfile } from '@/types/human';
+import { TRAIT_TYPES, TRAIT_LABELS } from '@/constants/trait-constants';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Humans', 'VisualProfilesSection');
 
 const STYLE_BADGE_LABEL = '3D';
-const TRAIT_TYPE_LABEL: Record<TraitType, string> = {
-  face: 'Face',
-  hair: 'Hair',
-  skin: 'Skin',
-  facewear: 'Facewear',
-  outfit: 'Outfit',
-};
 const VISUAL_PROFILE_TYPE_LABEL: Record<string, string> = {
   face: 'face',
   full_body: 'full body',
@@ -86,9 +80,13 @@ function VisualProfileCardImpl({
 
   // Prefer the normalized 3D output once ready; fall back to the raw photo while processing/failed.
   const thumb = profile.convertedImage ?? profile.rawImages[0];
+  // Render in canonical TRAIT_TYPES order (display-only; traits[] is keyed by type
+  // and may arrive in any order from the API/DB).
   const presentTraits = (profile.traits ?? []).filter((t) => t.description != null);
   const traitsLabel = presentTraits.length
-    ? presentTraits.map((t) => TRAIT_TYPE_LABEL[t.type]).join(', ')
+    ? TRAIT_TYPES.filter((type) => presentTraits.some((t) => t.type === type))
+        .map((type) => TRAIT_LABELS[type])
+        .join(', ')
     : null;
   const typeLabel = VISUAL_PROFILE_TYPE_LABEL[profile.type] ?? profile.type;
 

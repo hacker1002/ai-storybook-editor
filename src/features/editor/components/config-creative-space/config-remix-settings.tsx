@@ -1,36 +1,39 @@
 // config-remix-settings.tsx — Remix availability config panel.
-// 4 groups (CHARACTERS / PROPS / NARRATOR / LANGUAGES). Toggles persist immediately
-// via updateBook. Entries are upserted (preserved when toggled OFF) so character `type`
-// survives a re-toggle. Name is materialized from the live snapshot on every upsert.
+// 4 groups (CHARACTERS / PROPS / VOICES / LANGUAGES). Toggles persist immediately
+// via updateBook. Entries are upserted (preserved when toggled OFF) so a character's
+// per-trait config survives a re-toggle. Name is materialized from the live
+// snapshot on every upsert. Rows derive from snapshot (book.remix is an overlay).
 
 import * as React from 'react';
 import { useCurrentBook, useBookRemix, useBookActions } from '@/stores/book-store';
 import { useCharacters, useProps } from '@/stores/snapshot-store/selectors';
 import {
-  DEFAULT_CHARACTER_REMIX_TYPE,
   DEFAULT_REMIX,
+  NARRATOR_VOICE_KEY,
   REMIX_LANGUAGES,
+  makeDefaultTraits,
+  normalizeRemixTraits,
 } from '@/constants/config-constants';
 import type {
   BookRemix,
-  CharacterRemixType,
-  RemixCharacterEntry,
   RemixPropEntry,
   RemixLanguageEntry,
+  RemixVoiceEntry,
 } from '@/types/editor';
+import type { TraitType } from '@/types/human';
 import type { Character } from '@/types/character-types';
 import type { Prop } from '@/types/prop-types';
 import { CharacterRemixRow } from './remix/character-remix-row';
 import { PropRemixRow } from './remix/prop-remix-row';
 import { LanguageRemixRow } from './remix/language-remix-row';
-import { NarratorRemixRow } from './remix/narrator-remix-row';
+import { VoiceRemixRow } from './remix/voice-remix-row';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'ConfigRemixSettings');
 
 function GroupHeader({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <p className="mb-2.5 border-b pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
       {children}
     </p>
   );
@@ -45,7 +48,7 @@ function summarizeRemix(remix: BookRemix) {
     chars: remix.characters.length,
     props: remix.props.length,
     langs: remix.languages.length,
-    narrator: remix.narrator.is_enabled,
+    voices: remix.voices.length,
   };
 }
 
@@ -62,7 +65,7 @@ export function ConfigRemixSettings() {
     characters: remixRaw?.characters ?? DEFAULT_REMIX.characters,
     props:      remixRaw?.props      ?? DEFAULT_REMIX.props,
     languages:  remixRaw?.languages  ?? DEFAULT_REMIX.languages,
-    narrator:   remixRaw?.narrator   ?? DEFAULT_REMIX.narrator,
+    voices:     remixRaw?.voices     ?? DEFAULT_REMIX.voices,
   };
 
   const persist = (next: BookRemix) => {
@@ -70,33 +73,51 @@ export function ConfigRemixSettings() {
     void updateBook(book.id, { remix: next });
   };
 
-  const upsertCharacterEntry = (
-    ch: Character,
-    patch: Partial<Pick<RemixCharacterEntry, 'is_enabled' | 'type'>>,
-  ) => {
-    log.info('upsertCharacterEntry', 'start', { key: ch.key, patch });
+  const upsertCharacter = (ch: Character, patch: { is_enabled: boolean }) => {
+    log.info('upsertCharacter', 'start', { key: ch.key, enabled: patch.is_enabled });
     const next = [...remix.characters];
     const idx = next.findIndex((c) => c.key === ch.key);
     if (idx >= 0) {
-      log.debug('upsertCharacterEntry', 'update', { idx });
-      next[idx] = { ...next[idx], ...patch, name: ch.name };
+      log.debug('upsertCharacter', 'update', { idx });
+      next[idx] = { ...next[idx], ...patch, name: ch.name, traits: normalizeRemixTraits(next[idx].traits) };
     } else {
-      log.debug('upsertCharacterEntry', 'insert', { key: ch.key });
-      next.push({
-        key: ch.key,
-        name: ch.name,
-        type: DEFAULT_CHARACTER_REMIX_TYPE,
-        is_enabled: false,
-        ...patch,
-      });
+      log.debug('upsertCharacter', 'insert', { key: ch.key });
+      next.push({ key: ch.key, name: ch.name, is_enabled: patch.is_enabled, traits: makeDefaultTraits() });
     }
     persist({ ...remix, characters: next });
   };
 
-  const upsertPropEntry = (
-    pr: Prop,
-    patch: Partial<Pick<RemixPropEntry, 'is_enabled'>>,
-  ) => {
+  const upsertCharacterTrait = (ch: Character, type: TraitType, isEnabled: boolean) => {
+    log.info('upsertCharacterTrait', 'start', { key: ch.key, type, enabled: isEnabled });
+    const next = [...remix.characters];
+    let idx = next.findIndex((c) => c.key === ch.key);
+    if (idx < 0) {
+      log.debug('upsertCharacterTrait', 'insert default entry', { key: ch.key });
+      next.push({ key: ch.key, name: ch.name, is_enabled: false, traits: makeDefaultTraits() });
+      idx = next.length - 1;
+    }
+    const traits = normalizeRemixTraits(next[idx].traits).map((t) =>
+      t.type === type ? { ...t, is_enabled: isEnabled } : t,
+    );
+    next[idx] = { ...next[idx], name: ch.name, traits };
+    persist({ ...remix, characters: next });
+  };
+
+  const upsertVoice = (subj: { key: string; name: string }, patch: { is_enabled: boolean }) => {
+    log.info('upsertVoice', 'start', { key: subj.key, enabled: patch.is_enabled });
+    const next = [...remix.voices];
+    const idx = next.findIndex((v) => v.key === subj.key);
+    if (idx >= 0) {
+      log.debug('upsertVoice', 'update', { idx });
+      next[idx] = { ...next[idx], ...patch, name: subj.name };
+    } else {
+      log.debug('upsertVoice', 'insert', { key: subj.key });
+      next.push({ key: subj.key, name: subj.name, is_enabled: patch.is_enabled });
+    }
+    persist({ ...remix, voices: next });
+  };
+
+  const upsertPropEntry = (pr: Prop, patch: Partial<Pick<RemixPropEntry, 'is_enabled'>>) => {
     log.info('upsertPropEntry', 'start', { key: pr.key, patch });
     const next = [...remix.props];
     const idx = next.findIndex((p) => p.key === pr.key);
@@ -105,12 +126,7 @@ export function ConfigRemixSettings() {
       next[idx] = { ...next[idx], ...patch, name: pr.name };
     } else {
       log.debug('upsertPropEntry', 'insert', { key: pr.key });
-      next.push({
-        key: pr.key,
-        name: pr.name,
-        is_enabled: false,
-        ...patch,
-      });
+      next.push({ key: pr.key, name: pr.name, is_enabled: false, ...patch });
     }
     persist({ ...remix, props: next });
   };
@@ -127,20 +143,23 @@ export function ConfigRemixSettings() {
       next[idx] = { ...next[idx], ...patch, name: lang.name };
     } else {
       log.debug('upsertLanguageEntry', 'insert', { code: lang.code });
-      next.push({
-        code: lang.code,
-        name: lang.name,
-        is_enabled: false,
-        ...patch,
-      });
+      next.push({ code: lang.code, name: lang.name, is_enabled: false, ...patch });
     }
     persist({ ...remix, languages: next });
   };
 
-  const toggleNarrator = (next: boolean) => {
-    log.info('toggleNarrator', 'toggle', { next });
-    persist({ ...remix, narrator: { is_enabled: next } });
-  };
+  // Voice subjects: one per character, narrator last (matches screenshot).
+  const seenVoiceKeys = new Set<string>();
+  const voiceSubjects: { key: string; name: string }[] = [];
+  for (const ch of snapshotChars) {
+    if (seenVoiceKeys.has(ch.key)) {
+      log.warn('voiceSubjects', 'duplicate character key skipped', { key: ch.key });
+      continue;
+    }
+    seenVoiceKeys.add(ch.key);
+    voiceSubjects.push({ key: ch.key, name: ch.name });
+  }
+  voiceSubjects.push({ key: NARRATOR_VOICE_KEY, name: 'Narrator' });
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -157,19 +176,15 @@ export function ConfigRemixSettings() {
               {snapshotChars.map((ch) => {
                 const entry = remix.characters.find((c) => c.key === ch.key);
                 const isEnabled = entry?.is_enabled ?? false;
-                const type = entry?.type ?? DEFAULT_CHARACTER_REMIX_TYPE;
+                const traits = normalizeRemixTraits(entry?.traits);
                 return (
                   <CharacterRemixRow
                     key={ch.key}
                     name={ch.name}
                     checked={isEnabled}
-                    type={type}
-                    onToggle={(next) =>
-                      upsertCharacterEntry(ch, { is_enabled: next, type })
-                    }
-                    onTypeChange={(nextType: CharacterRemixType) =>
-                      upsertCharacterEntry(ch, { is_enabled: isEnabled, type: nextType })
-                    }
+                    traits={traits}
+                    onToggle={(next) => upsertCharacter(ch, { is_enabled: next })}
+                    onTraitToggle={(type, next) => upsertCharacterTrait(ch, type, next)}
                   />
                 );
               })}
@@ -200,11 +215,21 @@ export function ConfigRemixSettings() {
         </div>
 
         <div>
-          <GroupHeader>Narrator</GroupHeader>
-          <NarratorRemixRow
-            checked={remix.narrator.is_enabled}
-            onToggle={toggleNarrator}
-          />
+          <GroupHeader>Voices</GroupHeader>
+          <div className="flex flex-col">
+            {voiceSubjects.map((subj) => {
+              const entry = remix.voices.find((v: RemixVoiceEntry) => v.key === subj.key);
+              const isEnabled = entry?.is_enabled ?? false;
+              return (
+                <VoiceRemixRow
+                  key={subj.key}
+                  name={subj.name}
+                  checked={isEnabled}
+                  onToggle={(next) => upsertVoice(subj, { is_enabled: next })}
+                />
+              );
+            })}
+          </div>
         </div>
 
         <div>

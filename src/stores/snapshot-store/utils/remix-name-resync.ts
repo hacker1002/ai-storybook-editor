@@ -57,3 +57,49 @@ export function cascadeRemixName(
   void bookState.updateBook(book.id, { remix: { ...remix, props: next } });
   log.debug('cascadeRemixName', 'updated prop', { key, newName });
 }
+
+/**
+ * Eager cleanup of book.remix entries when a snapshot entity is deleted (soft FK
+ * has no DB cascade). Character delete drops both the characters[] entry AND the
+ * matching voices[] entry (key match; the 'narrator' voice never matches a
+ * character key). Prop delete drops the props[] entry. Idempotent: no matching
+ * entry → no updateBook call.
+ */
+export function cascadeRemixDelete(kind: RemixCascadeKind, key: string): void {
+  log.info('cascadeRemixDelete', 'start', { kind, key });
+
+  const bookState = useBookStore.getState();
+  const book = bookState.currentBook;
+  if (!book || !book.remix) {
+    log.debug('cascadeRemixDelete', 'skip: no book or no remix', { hasBook: !!book });
+    return;
+  }
+
+  const remix = book.remix;
+
+  if (kind === 'character') {
+    const nextChars = remix.characters.filter((c) => c.key !== key);
+    const nextVoices = remix.voices.filter((v) => v.key !== key);
+    if (
+      nextChars.length === remix.characters.length &&
+      nextVoices.length === remix.voices.length
+    ) {
+      log.debug('cascadeRemixDelete', 'skip: no character/voice entry', { key });
+      return;
+    }
+    void bookState.updateBook(book.id, {
+      remix: { ...remix, characters: nextChars, voices: nextVoices },
+    });
+    log.debug('cascadeRemixDelete', 'dropped character + voice', { key });
+    return;
+  }
+
+  // kind === 'prop'
+  const nextProps = remix.props.filter((p) => p.key !== key);
+  if (nextProps.length === remix.props.length) {
+    log.debug('cascadeRemixDelete', 'skip: no prop entry', { key });
+    return;
+  }
+  void bookState.updateBook(book.id, { remix: { ...remix, props: nextProps } });
+  log.debug('cascadeRemixDelete', 'dropped prop', { key });
+}

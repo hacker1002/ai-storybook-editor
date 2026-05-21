@@ -3,10 +3,17 @@
 
 import type { BookRemix } from '@/types/editor';
 import type { RemixConfig } from '@/types/remix';
+import { NARRATOR_VOICE_KEY } from '@/constants/config-constants';
+
+// Narrator voice availability now lives in book.remix.voices[] (key='narrator').
+// Full per-character voice draft port is a follow-up; this keeps the existing
+// singular-narrator RemixConfig shape by reading just the narrator voice slot.
+const isNarratorVoiceEnabled = (book: BookRemix): boolean =>
+  book.voices.some((v) => v.key === NARRATOR_VOICE_KEY && v.is_enabled);
 
 export function defaultConfigFromBookRemix(book: BookRemix): RemixConfig {
   return {
-    narrator: book.narrator.is_enabled
+    narrator: isNarratorVoiceEnabled(book)
       ? { name: '', voice_id: null }
       : undefined,
     characters: book.characters
@@ -39,7 +46,7 @@ export function defaultConfigFromBookRemix(book: BookRemix): RemixConfig {
 export function isBookRemixEmpty(book: BookRemix | null): boolean {
   if (!book) return true;
   return (
-    !book.narrator.is_enabled &&
+    book.voices.every((v) => !v.is_enabled) &&
     book.characters.every((c) => !c.is_enabled) &&
     book.props.every((p) => !p.is_enabled) &&
     book.languages.every((l) => !l.is_enabled)

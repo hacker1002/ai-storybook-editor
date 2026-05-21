@@ -12,8 +12,11 @@ import type {
   TransitionType,
   BookRemix,
   CharacterRemixType,
+  RemixCharacterEntry,
+  RemixTraitEntry,
   RemixLanguageCode,
 } from '@/types/editor';
+import { TRAIT_TYPES } from '@/constants/trait-constants';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Utils', 'LanguageName');
@@ -243,24 +246,43 @@ export const REMIX_LANGUAGES: ReadonlyArray<{ code: RemixLanguageCode; name: str
   { code: 'zh_CN', name: 'Chinese',    label: 'Chinese (zh-CN)'    },
 ] as const;
 
+/**
+ * @deprecated Book-config remix replaced the `body`/`custom` dropdown with
+ * per-trait checkboxes. Kept until a remix_config follow-up confirms unused.
+ */
 export const CHARACTER_TYPE_OPTIONS: ReadonlyArray<{ value: CharacterRemixType; label: string }> = [
   { value: 'body',   label: 'Body'           },
   { value: 'custom', label: 'Body & Customs' },
 ] as const;
 
+/** @deprecated see CHARACTER_TYPE_OPTIONS. */
 export const DEFAULT_CHARACTER_REMIX_TYPE: CharacterRemixType = 'body';
+
+// Discriminator key for the narrator voice slot inside book.remix.voices[].
+export const NARRATOR_VOICE_KEY = 'narrator' as const;
+
+// Every trait defaults enabled when a character is first added to remix.
+export const makeDefaultTraits = (): RemixTraitEntry[] =>
+  TRAIT_TYPES.map((type) => ({ type, is_enabled: true }));
 
 export const DEFAULT_REMIX: BookRemix = {
   languages: [],
-  narrator:  { is_enabled: false },
+  voices:    [],
   characters: [],
   props:      [],
 };
 
 /**
  * Coerce raw `books.remix` JSONB into a full BookRemix shape.
- * Legacy rows may store partial shapes (missing narrator/arrays) — normalize
- * once at the store ingress so downstream consumers can trust the contract.
+ * Legacy rows may store partial shapes (missing arrays) — normalize once at the
+ * store ingress so downstream consumers can trust the contract.
+ *
+ * Reshape 2026-05-21 (Validation S1 decision): legacy `narrator` singular is
+ * NOT seeded into voices[]. We init `voices: []` (all OFF) and only log a warn
+ * when a legacy `narrator` field is present — this is INTENTIONAL (remix not in
+ * production; prior toggle is acceptable to drop) and overrides the design
+ * changelog wording about seeding voices from narrator. Do not "restore" seeding.
+ *
  * Returns null only when the raw value is null/undefined (preserves the
  * "remix not configured" empty-state branch).
  */
@@ -270,15 +292,33 @@ export function normalizeBookRemix(raw: unknown): BookRemix | null {
     log.warn('normalizeBookRemix', 'unexpected non-object', { type: typeof raw });
     return null;
   }
-  const r = raw as Partial<BookRemix>;
+  const r = raw as Partial<BookRemix> & { narrator?: unknown };
+  if (r.narrator !== undefined) {
+    log.warn('normalizeBookRemix', 'legacy narrator field dropped (not seeded into voices)', {
+      hadNarrator: true,
+    });
+  }
+  const characters = (Array.isArray(r.characters) ? r.characters : []).map((c) => ({
+    ...c,
+    traits: normalizeRemixTraits((c as Partial<RemixCharacterEntry>).traits),
+  }));
   return {
-    languages:  Array.isArray(r.languages)  ? r.languages  : [],
-    narrator:   r.narrator && typeof r.narrator === 'object'
-                  ? { is_enabled: !!r.narrator.is_enabled }
-                  : { is_enabled: false },
-    characters: Array.isArray(r.characters) ? r.characters : [],
-    props:      Array.isArray(r.props)      ? r.props      : [],
+    languages:  Array.isArray(r.languages) ? r.languages : [],
+    voices:     Array.isArray(r.voices)    ? r.voices    : [],
+    characters,
+    props:      Array.isArray(r.props)     ? r.props     : [],
   };
+}
+
+/**
+ * Ensure a character's traits[] has exactly the 5 canonical entries in order.
+ * Missing/legacy-shaped entries fall back to `is_enabled: true` (writer seeds
+ * full set; reader tolerates partial). Order is display-only (keyed by type).
+ */
+export function normalizeRemixTraits(traits: RemixTraitEntry[] | undefined): RemixTraitEntry[] {
+  return TRAIT_TYPES.map(
+    (type) => traits?.find((t) => t.type === type) ?? { type, is_enabled: true },
+  );
 }
 
 // ── Preview texts ────────────────────────────────────────────────────────────

@@ -12,7 +12,8 @@ import type { Human } from './human';
 export type {
   BookRemix,
   RemixLanguageEntry,
-  RemixNarratorEntry,
+  RemixVoiceEntry,
+  RemixTraitEntry,
   RemixCharacterEntry,
   RemixPropEntry,
   RemixLanguageCode,
