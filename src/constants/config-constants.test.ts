@@ -33,7 +33,7 @@ describe('normalizeBookRemix', () => {
     expect(result).not.toBeNull();
     expect(result!.voices).toEqual([]);
     // No 'narrator' key leaks into the normalized shape.
-    expect(result as Record<string, unknown>).not.toHaveProperty('narrator');
+    expect(result as unknown as Record<string, unknown>).not.toHaveProperty('narrator');
   });
 
   it('preserves an explicit voices[] collection', () => {
