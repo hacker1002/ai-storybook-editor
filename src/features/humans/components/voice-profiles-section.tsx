@@ -3,6 +3,17 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Play, Plus, Square, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { AddProfileCard } from '@/features/humans/components/shared/add-profile-card';
 import type { VoiceProfile } from '@/types/human';
 import { cn } from '@/utils/utils';
@@ -94,18 +105,41 @@ function VoiceProfileCardImpl({
         >
           {isPlaying ? <Square className="h-6 w-6" /> : <Play className="h-6 w-6" />}
         </button>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label="Remove voice profile"
-          className={cn(
-            'absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full',
-            'bg-background/80 backdrop-blur text-muted-foreground hover:bg-destructive hover:text-destructive-foreground',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          )}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              type="button"
+              aria-label="Remove voice profile"
+              className={cn(
+                'absolute right-1.5 top-1.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full',
+                'bg-background/80 backdrop-blur text-muted-foreground hover:bg-destructive hover:text-destructive-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              )}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="sm:max-w-[440px]">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete voice profile?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong className="font-medium text-foreground">
+                  &ldquo;{profile.name || 'Unnamed profile'}&rdquo;
+                </strong>{' '}
+                will be permanently removed. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={onRemove}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       <div className="flex gap-1.5 p-2">
