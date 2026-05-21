@@ -16,6 +16,7 @@ import {
   toStoredTraits,
 } from '@/apis/image-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
+import { callImageRemoveBg } from '@/apis/retouch-api';
 import {
   mapHumanRow,
   toVisualProfileRow,
@@ -52,7 +53,7 @@ interface HumansStore {
   updateVisualProfile: (
     id: string,
     index: number,
-    patch: Partial<Pick<VisualProfile, 'name' | 'age' | 'type' | 'convertedImage' | 'traits'>>,
+    patch: Partial<Pick<VisualProfile, 'name' | 'age' | 'type' | 'nobgImage' | 'convertedImage' | 'traits'>>,
   ) => Promise<Human | null>;
   removeVisualProfile: (id: string, index: number) => Promise<Human | null>;
   runProfilePipeline: (humanId: string, clientId: string) => Promise<void>;
@@ -318,7 +319,7 @@ export const useHumansStore = create<HumansStore>()(
           }
         });
         log.info('addVisualProfile', 'done', { id, count: merged.length });
-        // Background pipeline (normalize → extract). Don't await — modal closes immediately.
+        // Background pipeline (remove-bg → normalize → extract). Don't await — modal closes immediately.
         void get().runProfilePipeline(id, profile.clientId);
         return { ...mapped, visualProfiles: merged };
       },
@@ -456,8 +457,12 @@ export const useHumansStore = create<HumansStore>()(
             return;
           }
 
-          // Step 1 — normalize (skip if already converted; retry path saves Replicate cost).
-          if (!profile.convertedImage) {
+          // nobgImage is the head of the chain: when null, regen the whole pipeline so a stale
+          // legacy convertedImage (made from raw, not the white-bg nobg) is forced to re-normalize.
+          let regeneratedNobg = false;
+
+          // Step 1 — remove-bg white (skip if already nobg; retry path saves Replicate cost).
+          if (!profile.nobgImage) {
             const rawImage = profile.rawImages[0];
             if (!rawImage) {
               log.warn('runProfilePipeline', 'no raw image', { clientId });
@@ -465,7 +470,38 @@ export const useHumansStore = create<HumansStore>()(
               get().setExtractCooldown(clientId);
               return;
             }
-            const norm = await normalizeHuman(rawImage, '3D');
+            const nobg = await callImageRemoveBg({ imageUrl: rawImage, backgroundColor: '#FFFFFF' });
+            if (!nobg.success) {
+              log.error('runProfilePipeline', 'remove-bg failed', { clientId, errorCode: (nobg as ImageApiFailure).errorCode });
+              toast.error(mapPipelineError(nobg as ImageApiFailure));
+              get().setExtractCooldown(clientId);
+              return;
+            }
+            if (!nobg.data?.imageUrl) {
+              log.error('runProfilePipeline', 'remove-bg returned no imageUrl', { clientId });
+              toast.error('Failed to process profile. Tap Extract to retry.');
+              get().setExtractCooldown(clientId);
+              return;
+            }
+            const idx = indexByClientId();
+            if (idx < 0) {
+              log.warn('runProfilePipeline', 'profile removed after remove-bg', { clientId });
+              return;
+            }
+            await get().updateVisualProfile(humanId, idx, { nobgImage: nobg.data.imageUrl });
+            regeneratedNobg = true;
+          } else {
+            log.debug('runProfilePipeline', 'skip remove-bg (already nobg)', { clientId });
+          }
+
+          // Step 2 — normalize (skip if already converted; force regen when nobg was just remade).
+          profile = resolveByClientId();
+          if (regeneratedNobg || !profile?.convertedImage) {
+            if (!profile?.nobgImage) {
+              log.warn('runProfilePipeline', 'nobgImage missing before normalize', { clientId });
+              return;
+            }
+            const norm = await normalizeHuman(profile.nobgImage, '3D');
             if (!norm.success) {
               log.error('runProfilePipeline', 'normalize failed', { clientId, errorCode: norm.errorCode });
               toast.error(mapPipelineError(norm));
@@ -479,10 +515,10 @@ export const useHumansStore = create<HumansStore>()(
             }
             await get().updateVisualProfile(humanId, idx, { convertedImage: norm.data.imageUrl });
           } else {
-            log.debug('runProfilePipeline', 'skip normalize (already converted)', { clientId });
+            log.debug('runProfilePipeline', 'skip normalize (already converted, nobg not regenerated)', { clientId });
           }
 
-          // Step 2 — extract traits.
+          // Step 3 — extract traits.
           profile = resolveByClientId();
           if (!profile || !profile.convertedImage) {
             log.warn('runProfilePipeline', 'profile/convertedImage missing before extract', { clientId });

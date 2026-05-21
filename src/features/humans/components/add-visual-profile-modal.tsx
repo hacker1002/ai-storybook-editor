@@ -148,6 +148,7 @@ export function AddVisualProfileModal({
         age: parsedAge,
         type,
         rawImages: urls,
+        nobgImage: null,
         convertedImage: null,
         traits: [],
       };

@@ -25,6 +25,7 @@ export interface VisualProfile {
   age: number;
   type: 'face' | 'full_body' | string;
   rawImages: string[];
+  nobgImage: string | null;        // step-1 output (remove-bg white); intermediate, NOT in `done`
   convertedImage: string | null;   // set by normalize-human pipeline step
   traits: VisualProfileTrait[];     // set by extract-human-traits pipeline step (5 items)
 }
@@ -62,6 +63,7 @@ export interface VisualProfileRow {
   age: number;
   type: string;
   raw_images: string[];
+  nobg_image: string | null;
   converted_image: string | null;
   traits: VisualProfileTrait[];
 }

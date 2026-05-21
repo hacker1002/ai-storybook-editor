@@ -79,13 +79,14 @@ export interface CropObjectImageResult {
 export interface ImageRemoveBgParams {
   imageUrl: string;
   preserveAlpha?: boolean;
+  backgroundColor?: string | null;
 }
 
 export interface ImageRemoveBgResult {
   success: boolean;
   data?: { imageUrl: string; storagePath: string };
   error?: string;
-  meta?: { processingTime?: number; mimeType?: string; replicatePredictionId?: string };
+  meta?: { processingTime?: number; mimeType?: string; replicatePredictionId?: string; backgroundColor?: string | null };
 }
 
 export interface GenerateNarrationParams {
@@ -161,6 +162,7 @@ export async function callImageRemoveBg(
   log.info('callImageRemoveBg', 'start', {
     imageUrl: params.imageUrl.slice(0, 80),
     preserveAlpha: params.preserveAlpha,
+    backgroundColor: params.backgroundColor,
   });
   const res = await callImageApi<ImageRemoveBgResult>('/api/retouch/image-remove-bg', params);
   if (res.success) {
