@@ -5,10 +5,17 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { useShallow } from 'zustand/react/shallow';
+import { toast } from 'sonner';
 import { supabase } from '@/apis/supabase';
 import {
   removeHumanStorageFolder,
 } from '@/apis/human-api';
+import {
+  extractHumanTraits,
+  normalizeHuman,
+  toStoredTraits,
+} from '@/apis/image-api';
+import type { ImageApiFailure } from '@/apis/image-api-client';
 import {
   mapHumanRow,
   toVisualProfileRow,
@@ -30,6 +37,11 @@ interface HumansStore {
   isLoading: boolean;
   error: string | null;
 
+  /** clientIds whose normalize→extract pipeline is currently in-flight. */
+  processingClientIds: Record<string, true>;
+  /** clientIds temporarily blocked from re-Extract after a failure (5s cooldown). */
+  extractCooldownClientIds: Record<string, true>;
+
   fetchHumans: () => Promise<void>;
   fetchHumanById: (id: string) => Promise<Human | null>;
   createHuman: (insertPayload: Record<string, unknown>) => Promise<Human | null>;
@@ -40,9 +52,11 @@ interface HumansStore {
   updateVisualProfile: (
     id: string,
     index: number,
-    patch: Partial<Pick<VisualProfile, 'name' | 'age' | 'type'>>,
+    patch: Partial<Pick<VisualProfile, 'name' | 'age' | 'type' | 'convertedImage' | 'traits'>>,
   ) => Promise<Human | null>;
   removeVisualProfile: (id: string, index: number) => Promise<Human | null>;
+  runProfilePipeline: (humanId: string, clientId: string) => Promise<void>;
+  setExtractCooldown: (clientId: string) => void;
 
   addVoiceProfile: (id: string, profile: VoiceProfile) => Promise<Human | null>;
   updateVoiceProfile: (
@@ -53,6 +67,24 @@ interface HumansStore {
   removeVoiceProfile: (id: string, index: number) => Promise<Human | null>;
 
   upsertLocal: (human: Human) => void;
+}
+
+/** Collapse pipeline failure codes → user-facing toast (card stays in `failed` state). */
+function mapPipelineError(failure: ImageApiFailure): string {
+  switch (failure.errorCode) {
+    case 'NO_FACE_DETECTED':
+    case 'NO_HUMAN_DETECTED':
+      return 'No person detected. Try a different image.';
+    case 'IMAGE_FETCH_ERROR':
+      return "Couldn't load the image. Try again.";
+    case 'TIMEOUT':
+      return 'Processing timed out. Tap Extract to retry.';
+    case 'REPLICATE_RATE_LIMIT':
+    case 'GEMINI_RATE_LIMIT':
+      return 'Service busy. Retry in a moment.';
+    default:
+      return 'Failed to process profile. Tap Extract to retry.';
+  }
 }
 
 function metadataPatchToDb(patch: HumanMetadataPatch): Record<string, unknown> {
@@ -71,6 +103,8 @@ export const useHumansStore = create<HumansStore>()(
       humans: [],
       isLoading: false,
       error: null,
+      processingClientIds: {},
+      extractCooldownClientIds: {},
 
       fetchHumans: async () => {
         log.info('fetchHumans', 'start');
@@ -284,6 +318,8 @@ export const useHumansStore = create<HumansStore>()(
           }
         });
         log.info('addVisualProfile', 'done', { id, count: merged.length });
+        // Background pipeline (normalize → extract). Don't await — modal closes immediately.
+        void get().runProfilePipeline(id, profile.clientId);
         return { ...mapped, visualProfiles: merged };
       },
 
@@ -381,6 +417,96 @@ export const useHumansStore = create<HumansStore>()(
         });
         log.info('removeVisualProfile', 'done', { id, index });
         return { ...mapped, visualProfiles: merged };
+      },
+
+      setExtractCooldown: (clientId) => {
+        set((state) => {
+          state.extractCooldownClientIds[clientId] = true;
+        });
+        setTimeout(() => {
+          set((state) => {
+            delete state.extractCooldownClientIds[clientId];
+          });
+        }, 5000);
+      },
+
+      runProfilePipeline: async (humanId, clientId) => {
+        log.info('runProfilePipeline', 'start', { humanId, clientId });
+
+        const resolveByClientId = (): VisualProfile | undefined =>
+          get().humans.find((h) => h.id === humanId)?.visualProfiles.find((p) => p.clientId === clientId);
+        const indexByClientId = (): number => {
+          const human = get().humans.find((h) => h.id === humanId);
+          return human ? human.visualProfiles.findIndex((p) => p.clientId === clientId) : -1;
+        };
+
+        if (get().extractCooldownClientIds[clientId] || get().processingClientIds[clientId]) {
+          log.debug('runProfilePipeline', 'skip — cooldown or already in-flight', { clientId });
+          return;
+        }
+
+        set((state) => {
+          state.processingClientIds[clientId] = true;
+        });
+
+        try {
+          let profile = resolveByClientId();
+          if (!profile) {
+            log.warn('runProfilePipeline', 'profile removed before start', { clientId });
+            return;
+          }
+
+          // Step 1 — normalize (skip if already converted; retry path saves Replicate cost).
+          if (!profile.convertedImage) {
+            const rawImage = profile.rawImages[0];
+            if (!rawImage) {
+              log.warn('runProfilePipeline', 'no raw image', { clientId });
+              toast.error('No image to process.');
+              get().setExtractCooldown(clientId);
+              return;
+            }
+            const norm = await normalizeHuman(rawImage, '3D');
+            if (!norm.success) {
+              log.error('runProfilePipeline', 'normalize failed', { clientId, errorCode: norm.errorCode });
+              toast.error(mapPipelineError(norm));
+              get().setExtractCooldown(clientId);
+              return;
+            }
+            const idx = indexByClientId();
+            if (idx < 0) {
+              log.warn('runProfilePipeline', 'profile removed after normalize', { clientId });
+              return;
+            }
+            await get().updateVisualProfile(humanId, idx, { convertedImage: norm.data.imageUrl });
+          } else {
+            log.debug('runProfilePipeline', 'skip normalize (already converted)', { clientId });
+          }
+
+          // Step 2 — extract traits.
+          profile = resolveByClientId();
+          if (!profile || !profile.convertedImage) {
+            log.warn('runProfilePipeline', 'profile/convertedImage missing before extract', { clientId });
+            return;
+          }
+          const ext = await extractHumanTraits(profile.convertedImage, 'en');
+          if (!ext.success) {
+            log.error('runProfilePipeline', 'extract failed', { clientId, errorCode: ext.errorCode });
+            toast.error(mapPipelineError(ext));
+            get().setExtractCooldown(clientId);
+            return;
+          }
+          const idx = indexByClientId();
+          if (idx < 0) {
+            log.warn('runProfilePipeline', 'profile removed after extract', { clientId });
+            return;
+          }
+          await get().updateVisualProfile(humanId, idx, { traits: toStoredTraits(ext.data.traits) });
+          log.info('runProfilePipeline', 'done', { humanId, clientId });
+        } finally {
+          set((state) => {
+            delete state.processingClientIds[clientId];
+          });
+        }
       },
 
       addVoiceProfile: async (id, profile) => {
@@ -539,6 +665,8 @@ export const useHumansLoading = () => useHumansStore((s) => s.isLoading);
 export const useHumansError = () => useHumansStore((s) => s.error);
 export const useHumanById = (id: string | undefined) =>
   useHumansStore((s) => (id ? s.humans.find((h) => h.id === id) : undefined));
+export const useProcessingClientIds = () => useHumansStore((s) => s.processingClientIds);
+export const useExtractCooldownClientIds = () => useHumansStore((s) => s.extractCooldownClientIds);
 
 export const useHumansActions = () =>
   useHumansStore(
@@ -551,6 +679,7 @@ export const useHumansActions = () =>
       addVisualProfile: s.addVisualProfile,
       updateVisualProfile: s.updateVisualProfile,
       removeVisualProfile: s.removeVisualProfile,
+      runProfilePipeline: s.runProfilePipeline,
       addVoiceProfile: s.addVoiceProfile,
       updateVoiceProfile: s.updateVoiceProfile,
       removeVoiceProfile: s.removeVoiceProfile,

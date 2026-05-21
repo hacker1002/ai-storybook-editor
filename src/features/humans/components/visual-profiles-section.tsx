@@ -1,89 +1,90 @@
-// visual-profiles-section.tsx — Grid of inline-edit visual profile cards + add card.
+// visual-profiles-section.tsx — Grid of visual profile cards with normalize→extract pipeline states.
 
-import { memo, useState } from 'react';
-import { Image as ImageIcon, Plus, X } from 'lucide-react';
+import { memo } from 'react';
+import { Image as ImageIcon, Loader2, Plus, RotateCw, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { AddProfileCard } from '@/features/humans/components/shared/add-profile-card';
-import { VISUAL_PROFILE_TYPES } from '@/constants/config-constants';
-import type { VisualProfile } from '@/types/human';
+import type { TraitType, VisualProfile } from '@/types/human';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Humans', 'VisualProfilesSection');
 
+const STYLE_BADGE_LABEL = '3D';
+const TRAIT_TYPE_LABEL: Record<TraitType, string> = {
+  face: 'Face',
+  hair: 'Hair',
+  skin: 'Skin',
+  facewear: 'Facewear',
+  outfit: 'Outfit',
+};
+const VISUAL_PROFILE_TYPE_LABEL: Record<string, string> = {
+  face: 'face',
+  full_body: 'full body',
+};
+
+type CardState = 'processing' | 'done' | 'failed';
+
+function deriveCardState(p: VisualProfile, isProcessing: boolean): CardState {
+  if (isProcessing) return 'processing';
+  if (p.convertedImage == null || (p.traits?.length ?? 0) !== 5) return 'failed';
+  return 'done';
+}
+
 interface VisualProfilesSectionProps {
   profiles: VisualProfile[];
+  processingClientIds: Record<string, true>;
+  extractCooldownClientIds: Record<string, true>;
   onAdd: () => void;
-  onUpdate: (index: number, patch: Partial<Pick<VisualProfile, 'name' | 'age' | 'type'>>) => void;
+  onUpdate: (index: number, patch: Partial<Pick<VisualProfile, 'name'>>) => void;
   onRemove: (index: number) => void;
+  onExtractTraits: (index: number) => void;
 }
 
 interface VisualProfileCardProps {
   profile: VisualProfile;
-  onUpdate: (patch: Partial<Pick<VisualProfile, 'name' | 'age' | 'type'>>) => void;
+  isProcessing: boolean;
+  isCooldown: boolean;
+  onUpdate: (patch: Partial<Pick<VisualProfile, 'name'>>) => void;
   onRemove: () => void;
+  onExtractTraits: () => void;
 }
 
-function clampAge(raw: string): number | null {
-  if (raw.trim() === '') return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
-  const i = Math.round(n);
-  if (i < 0 || i > 120) return null;
-  return i;
-}
+function VisualProfileCardImpl({
+  profile,
+  isProcessing,
+  isCooldown,
+  onUpdate,
+  onRemove,
+  onExtractTraits,
+}: VisualProfileCardProps) {
+  const state = deriveCardState(profile, isProcessing);
+  log.debug('VisualProfileCard', 'render', { clientId: profile.clientId, state });
 
-function VisualProfileCardImpl({ profile, onUpdate, onRemove }: VisualProfileCardProps) {
-  const [trackedName, setTrackedName] = useState(profile.name);
-  const [trackedAge, setTrackedAge] = useState(profile.age);
-  const [localName, setLocalName] = useState(profile.name);
-  const [localAge, setLocalAge] = useState<string>(String(profile.age ?? 0));
-
-  // Drift correction: server-side canonical value lands → reset local mirror.
-  if (profile.name !== trackedName) {
-    setTrackedName(profile.name);
-    setLocalName(profile.name);
-  }
-  if (profile.age !== trackedAge) {
-    setTrackedAge(profile.age);
-    setLocalAge(String(profile.age ?? 0));
-  }
-
-  const commitName = () => {
-    const trimmed = localName.trim();
+  const commitName = (el: HTMLInputElement) => {
+    const trimmed = el.value.trim();
     if (trimmed === profile.name) return;
     if (trimmed.length < 1 || trimmed.length > 255) {
       log.warn('commitName', 'invalid; reverting', { length: trimmed.length });
-      setLocalName(profile.name);
+      el.value = profile.name;
       return;
     }
     onUpdate({ name: trimmed });
   };
 
-  const commitAge = () => {
-    const age = clampAge(localAge);
-    if (age === null) {
-      log.warn('commitAge', 'invalid; reverting');
-      setLocalAge(String(profile.age ?? 0));
-      return;
-    }
-    if (age === profile.age) return;
-    onUpdate({ age });
-  };
-
-  const thumb = profile.rawImages[0];
+  // Prefer the normalized 3D output once ready; fall back to the raw photo while processing/failed.
+  const thumb = profile.convertedImage ?? profile.rawImages[0];
+  const presentTraits = (profile.traits ?? []).filter((t) => t.description != null);
+  const traitsLabel = presentTraits.length
+    ? presentTraits.map((t) => TRAIT_TYPE_LABEL[t.type]).join(', ')
+    : null;
+  const typeLabel = VISUAL_PROFILE_TYPE_LABEL[profile.type] ?? profile.type;
 
   return (
     <article
       aria-label={`Visual profile ${profile.name || 'unnamed'}`}
-      className="flex w-[280px] flex-col gap-2 self-start rounded-lg border border-border bg-card overflow-hidden"
+      className="flex w-[280px] flex-col gap-2 self-start overflow-hidden rounded-lg border border-border bg-card"
     >
       <div className="relative aspect-square overflow-hidden bg-muted">
         {thumb ? (
@@ -98,61 +99,77 @@ function VisualProfileCardImpl({ profile, onUpdate, onRemove }: VisualProfileCar
             <ImageIcon className="h-8 w-8" aria-hidden="true" />
           </div>
         )}
+
+        <span className="absolute left-1.5 top-1.5 rounded-full bg-background/80 px-2 py-0.5 text-xs font-medium backdrop-blur">
+          {STYLE_BADGE_LABEL}
+        </span>
+        {profile.rawImages.length > 1 ? (
+          <span className="absolute bottom-1.5 left-1.5 rounded-full bg-background/80 px-2 py-0.5 text-xs font-medium backdrop-blur">
+            {profile.rawImages.length}
+          </span>
+        ) : null}
+
         <button
           type="button"
           onClick={onRemove}
+          disabled={isProcessing}
           aria-label="Remove profile"
           className={cn(
             'absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full',
-            'bg-background/80 backdrop-blur text-muted-foreground hover:bg-destructive hover:text-destructive-foreground',
+            'bg-background/80 text-muted-foreground backdrop-blur hover:bg-destructive hover:text-destructive-foreground',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
           <X className="h-3.5 w-3.5" />
         </button>
-        {profile.rawImages.length > 1 ? (
-          <span className="absolute left-1.5 top-1.5 rounded-full bg-background/80 backdrop-blur px-2 py-0.5 text-xs font-medium">
-            {profile.rawImages.length}
-          </span>
+
+        {state === 'processing' ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/60 backdrop-blur-sm">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
+            <span className="text-xs font-medium text-foreground">Processing…</span>
+          </div>
+        ) : null}
+
+        {state === 'failed' ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={onExtractTraits}
+              disabled={isCooldown}
+              aria-label="Extract traits"
+              className="gap-1.5"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+              Extract
+            </Button>
+          </div>
         ) : null}
       </div>
 
       <div className="space-y-1.5 p-2">
         <Input
-          value={localName}
-          onChange={(e) => setLocalName(e.target.value)}
-          onBlur={commitName}
+          key={profile.clientId}
+          defaultValue={profile.name}
+          onBlur={(e) => commitName(e.currentTarget)}
           placeholder="Name"
           maxLength={255}
+          disabled={isProcessing}
           aria-label="Profile name"
         />
-        <div className="grid grid-cols-[64px_1fr] gap-1.5">
-          <Input
-            type="number"
-            min={0}
-            max={120}
-            step={1}
-            value={localAge}
-            onChange={(e) => setLocalAge(e.target.value)}
-            onBlur={commitAge}
-            aria-label="Age"
-          />
-          <Select
-            value={profile.type}
-            onValueChange={(v) => onUpdate({ type: v })}
-          >
-            <SelectTrigger aria-label="Type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {VISUAL_PROFILE_TYPES.map((t) => (
-                <SelectItem key={t.value} value={t.value}>
-                  {t.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>Age: {profile.age}</span>
+          <span>Type: {typeLabel}</span>
         </div>
+        <p className="text-xs text-muted-foreground">
+          {state === 'processing'
+            ? 'Extracting traits…'
+            : traitsLabel
+              ? `Traits: ${traitsLabel}`
+              : 'Traits not extracted'}
+        </p>
       </div>
     </article>
   );
@@ -162,10 +179,14 @@ const VisualProfileCard = memo(VisualProfileCardImpl);
 
 export function VisualProfilesSection({
   profiles,
+  processingClientIds,
+  extractCooldownClientIds,
   onAdd,
   onUpdate,
   onRemove,
+  onExtractTraits,
 }: VisualProfilesSectionProps) {
+  log.info('VisualProfilesSection', 'render', { count: profiles.length });
   return (
     <section
       aria-labelledby="visual-profiles-heading"
@@ -182,8 +203,11 @@ export function VisualProfilesSection({
           <VisualProfileCard
             key={profile.clientId}
             profile={profile}
+            isProcessing={processingClientIds[profile.clientId] === true}
+            isCooldown={extractCooldownClientIds[profile.clientId] === true}
             onUpdate={(patch) => onUpdate(idx, patch)}
             onRemove={() => onRemove(idx)}
+            onExtractTraits={() => onExtractTraits(idx)}
           />
         ))}
         <AddProfileCard

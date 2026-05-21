@@ -132,13 +132,15 @@ export function AddVisualProfileModal({
 
     const uploadedPaths: string[] = [];
     try {
-      const urls: string[] = [];
-      for (const img of images) {
-        const result = await uploadHumanImage(humanId, img.file);
-        uploadedPaths.push(result.path);
-        urls.push(result.publicUrl);
-        setUploadedCount((c) => c + 1);
-      }
+      const results = await Promise.all(
+        images.map(async (img) => {
+          const result = await uploadHumanImage(humanId, img.file);
+          uploadedPaths.push(result.path);
+          setUploadedCount((c) => c + 1);
+          return result.publicUrl;
+        }),
+      );
+      const urls: string[] = results;
 
       const profile: VisualProfile = {
         clientId: genId(),
@@ -146,7 +148,8 @@ export function AddVisualProfileModal({
         age: parsedAge,
         type,
         rawImages: urls,
-        faceModel: null,
+        convertedImage: null,
+        traits: [],
       };
 
       images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
@@ -301,7 +304,7 @@ export function AddVisualProfileModal({
             {step === 'uploading' ? (
               <>
                 <Upload className="h-4 w-4" />
-                Uploading {uploadedCount}/{images.length}…
+                Creating… ({uploadedCount}/{images.length})
               </>
             ) : (
               'Create'

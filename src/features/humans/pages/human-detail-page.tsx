@@ -13,9 +13,11 @@ import { AddVisualProfileModal } from '@/features/humans/components/add-visual-p
 import { AddVoiceProfileModal } from '@/features/humans/components/add-voice-profile-modal';
 import { DeleteHumanDialog } from '@/features/humans/components/delete-human-dialog';
 import {
+  useExtractCooldownClientIds,
   useHumanById,
   useHumansActions,
   useHumansLoading,
+  useProcessingClientIds,
 } from '@/stores/humans-store';
 import type {
   Human,
@@ -39,12 +41,15 @@ export function HumanDetailPage() {
 
   const human = useHumanById(validId ?? undefined);
   const isLoading = useHumansLoading();
+  const processingClientIds = useProcessingClientIds();
+  const extractCooldownClientIds = useExtractCooldownClientIds();
   const {
     fetchHumanById,
     updateHumanMetadata,
     addVisualProfile,
     updateVisualProfile,
     removeVisualProfile,
+    runProfilePipeline,
     addVoiceProfile,
     updateVoiceProfile,
     removeVoiceProfile,
@@ -77,7 +82,7 @@ export function HumanDetailPage() {
   );
 
   const handleVisualUpdate = useCallback(
-    async (index: number, patch: Partial<Pick<VisualProfile, 'name' | 'age' | 'type'>>) => {
+    async (index: number, patch: Partial<Pick<VisualProfile, 'name'>>) => {
       if (!validId) return;
       const result = await updateVisualProfile(validId, index, patch);
       if (!result) toast.error('Failed to update visual profile');
@@ -92,6 +97,16 @@ export function HumanDetailPage() {
       if (!result) toast.error('Failed to remove visual profile');
     },
     [validId, removeVisualProfile],
+  );
+
+  const handleExtractTraits = useCallback(
+    (index: number) => {
+      if (!human) return;
+      const profile = human.visualProfiles[index];
+      if (!profile) return;
+      void runProfilePipeline(human.id, profile.clientId);
+    },
+    [human, runProfilePipeline],
   );
 
   const handleVoiceUpdate = useCallback(
@@ -161,9 +176,12 @@ export function HumanDetailPage() {
 
       <VisualProfilesSection
         profiles={human.visualProfiles}
+        processingClientIds={processingClientIds}
+        extractCooldownClientIds={extractCooldownClientIds}
         onAdd={() => setActiveModal('add-visual')}
         onUpdate={handleVisualUpdate}
         onRemove={handleVisualRemove}
+        onExtractTraits={handleExtractTraits}
       />
 
       <VoiceProfilesSection

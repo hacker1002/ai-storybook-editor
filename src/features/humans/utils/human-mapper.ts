@@ -24,7 +24,8 @@ export function mapVisualProfileRow(row: VisualProfileRow): VisualProfile {
     age: typeof row.age === 'number' ? row.age : 0,
     type: row.type ?? 'face',
     rawImages: Array.isArray(row.raw_images) ? row.raw_images : [],
-    faceModel: row.face_model ?? null,
+    convertedImage: row.converted_image ?? null,
+    traits: Array.isArray(row.traits) ? row.traits : [],
   };
 }
 
@@ -58,7 +59,8 @@ export function toVisualProfileRow(profile: VisualProfile): VisualProfileRow {
     age: profile.age,
     type: profile.type,
     raw_images: profile.rawImages,
-    face_model: profile.faceModel,
+    converted_image: profile.convertedImage,
+    traits: profile.traits,
   };
 }
 

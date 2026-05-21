@@ -1,6 +1,8 @@
 import { callEdgeFunction } from './edge-function-client';
+import { callImageApi, type ImageApiFailure } from './image-api-client';
 import { createLogger } from '@/utils/logger';
 import type { AspectRatio } from '@/constants/aspect-ratio-constants';
+import type { ExtractedTrait, VisualProfileTrait } from '@/types/human';
 
 export type { AspectRatio };
 
@@ -169,4 +171,78 @@ export async function callGenerateFromDescription(
     'image-generate-from-description',
     params
   );
+}
+
+// --- Human visual-profile pipeline (normalize-human → extract-human-traits) ---
+
+export type FaceToManyStyle = '3D' | 'Emoji' | 'Video Game' | 'Pixels' | 'Clay' | 'Toy';
+
+export interface NormalizeHumanResponse {
+  success: true;
+  data: { imageUrl: string; storagePath: string };
+}
+
+export interface ExtractHumanTraitsResponse {
+  success: true;
+  data: { traits: ExtractedTrait[] };
+}
+
+/** Host-only for logging — never log full URL (may carry signed tokens). */
+function urlHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+/**
+ * Stylize a real-person image into a normalized character reference (Replicate face-to-many).
+ * POST /api/image/normalize-human
+ */
+export async function normalizeHuman(
+  imageUrl: string,
+  style: FaceToManyStyle = '3D',
+): Promise<NormalizeHumanResponse | ImageApiFailure> {
+  log.info('normalizeHuman', 'start', { host: urlHost(imageUrl), style });
+  const result = await callImageApi<NormalizeHumanResponse>('/api/image/normalize-human', {
+    imageUrl,
+    style,
+  });
+  if (result.success) {
+    log.debug('normalizeHuman', 'ok', { host: urlHost(result.data.imageUrl) });
+  } else {
+    log.error('normalizeHuman', 'failed', { errorCode: result.errorCode, httpStatus: result.httpStatus });
+  }
+  return result;
+}
+
+/**
+ * Extract 5 fixed visual traits from a real-person image (Gemini multimodal vision).
+ * POST /api/image/extract-human-traits
+ */
+export async function extractHumanTraits(
+  imageUrl: string,
+  descriptionLanguage: 'en' | 'vi' = 'en',
+): Promise<ExtractHumanTraitsResponse | ImageApiFailure> {
+  log.info('extractHumanTraits', 'start', { host: urlHost(imageUrl), descriptionLanguage });
+  const result = await callImageApi<ExtractHumanTraitsResponse>('/api/image/extract-human-traits', {
+    imageUrl,
+    descriptionLanguage,
+  });
+  if (result.success) {
+    log.debug('extractHumanTraits', 'ok', { count: result.data.traits.length });
+  } else {
+    log.error('extractHumanTraits', 'failed', { errorCode: result.errorCode, httpStatus: result.httpStatus });
+  }
+  return result;
+}
+
+/** Map API trait shape → persisted DB shape: drop `present`, null-out description when absent, reserve image_url. */
+export function toStoredTraits(apiTraits: ExtractedTrait[]): VisualProfileTrait[] {
+  return apiTraits.map((t) => ({
+    type: t.type,
+    description: t.present ? t.description : null,
+    image_url: null,
+  }));
 }

@@ -2,6 +2,22 @@
 
 export type HumanGender = 0 | 1 | null; // 0=female, 1=male, null=unspecified
 
+export type TraitType = 'face' | 'hair' | 'skin' | 'facewear' | 'outfit';
+
+/** Trait shape persisted in visual_profiles[].traits[] JSONB (snake_case inner keys). */
+export interface VisualProfileTrait {
+  type: TraitType;
+  description: string | null; // null ↔ trait absent (UI derives present = description != null)
+  image_url: string | null;   // reserved — not populated yet (future crop-human-traits)
+}
+
+/** API response trait from extract-human-traits — client-layer only, never persisted. */
+export interface ExtractedTrait {
+  type: TraitType;
+  present: boolean;
+  description: string | null;
+}
+
 export interface VisualProfile {
   /** FE-only React key (uuid). Stripped before DB write by `toVisualProfileRow`. */
   clientId: string;
@@ -9,7 +25,8 @@ export interface VisualProfile {
   age: number;
   type: 'face' | 'full_body' | string;
   rawImages: string[];
-  faceModel: Record<string, unknown> | null;
+  convertedImage: string | null;   // set by normalize-human pipeline step
+  traits: VisualProfileTrait[];     // set by extract-human-traits pipeline step (5 items)
 }
 
 export interface VoiceProfile {
@@ -45,7 +62,8 @@ export interface VisualProfileRow {
   age: number;
   type: string;
   raw_images: string[];
-  face_model: Record<string, unknown> | null;
+  converted_image: string | null;
+  traits: VisualProfileTrait[];
 }
 
 export interface VoiceProfileRow {
