@@ -3,10 +3,10 @@
 
 import type { BaseSpread } from './spread-types';
 import type { IllustrationData, Section } from './illustration-types';
-import type { Character } from './character-types';
+import type { Character, CharacterVariant } from './character-types';
 import type { Prop, Crop } from './prop-types';
 import type { RemixLanguageCode } from './editor';
-import type { Human } from './human';
+import type { Human, TraitType } from './human';
 
 // Re-export book-level remix entries so consumers have a single import point.
 export type {
@@ -53,8 +53,19 @@ export interface RemixCropSheet {
 // Mirror snapshot Character/Prop shape but replace `crop_sheets` with the
 // remix variant carrying `swap_results`. Prop also drops `sounds` (not used).
 
-export type RemixCharacter = Omit<Character, 'crop_sheets'> & {
+/** Character variant extended for remix — adds `swap_visual_url`, the per-variant
+ *  output of `/api/remix/swap-character-visual`. Populated at clone time on the
+ *  base variant (type=0) from `remix_config.characters[].base_image_url`
+ *  (DB-CHANGELOG 2026-05-20 / Validation S1b). Optional → legacy rows omit it.
+ *  NOTE: this is distinct from `RemixCharacterChoice.base_image_url`, which is
+ *  the modal staging value; the variant field is the persisted result. */
+export type RemixCharacterVariant = CharacterVariant & {
+  swap_visual_url?: string | null;
+};
+
+export type RemixCharacter = Omit<Character, 'crop_sheets' | 'variants'> & {
   crop_sheets: RemixCropSheet[];
+  variants: RemixCharacterVariant[];
 };
 
 export type RemixProp = Omit<Prop, 'crop_sheets' | 'sounds'> & {
@@ -87,16 +98,23 @@ export interface RemixIllustration {
 
 // ── Remix config (user-driven picks) ─────────────────────────────────────────
 
-export interface RemixNarratorChoice {
-  name: string;
-  voice_id: string | null;
+/** Per-trait toggle inside a character choice. 5 entries (TRAIT_TYPES), cloned
+ *  from the book character's trait gate; order is display-only (keyed by type). */
+export interface RemixTraitChoice {
+  type: TraitType;
+  is_enabled: boolean;
 }
 
 export interface RemixCharacterChoice {
   key: string;
   human_id: string | null;
   visual: string | null;
-  voice_id: string | null;
+  /** 5 trait toggles; only enabled traits (with a human description) are sent
+   *  to the swap endpoint. */
+  traits: RemixTraitChoice[];
+  /** Result of live base-variant swap (`/api/remix/swap-character-visual`).
+   *  Copied into the cloned variant `swap_visual_url` at create time. */
+  base_image_url: string | null;
   is_enabled: boolean;
 }
 
@@ -107,6 +125,16 @@ export interface RemixPropChoice {
   is_enabled: boolean;
 }
 
+/** Voice collection entry — replaces the legacy singular `narrator` + per-character
+ *  `voice_id`. key = 'narrator' (literal) | <character.key>. `name` is materialized
+ *  from book.voices[] for fallback render; narrator name is user-editable. */
+export interface RemixVoiceChoice {
+  key: string;
+  name: string;
+  voice_id: string | null;
+  is_enabled: boolean;
+}
+
 export interface RemixLanguageChoice {
   name: string;
   code: RemixLanguageCode | string;
@@ -114,11 +142,42 @@ export interface RemixLanguageChoice {
 }
 
 export interface RemixConfig {
-  narrator?: RemixNarratorChoice;
   characters: RemixCharacterChoice[];
   props: RemixPropChoice[];
+  voices: RemixVoiceChoice[];
   languages: RemixLanguageChoice[];
 }
+
+// ── Modal-local option / preview types (ephemeral — never persisted) ─────────
+
+/** Per-character live-swap preview state held by the modal (not in RemixConfig). */
+export interface SwapPreviewState {
+  status: 'idle' | 'loading' | 'done' | 'error';
+  beforeUrl: string | null;
+  afterUrl: string | null;
+  errorMessage?: string;
+}
+
+export interface HumanOption {
+  id: string;
+  name: string;
+  thumbnail_url?: string;
+}
+
+export interface VisualOption {
+  value: string;
+  label: string;
+  thumbnail_url?: string;
+}
+
+export interface VoiceOption {
+  id: string;
+  name: string;
+  language?: string;
+}
+
+/** Default name for a freshly created remix (create-only modal). */
+export const REMIX_NAME_DEFAULT = 'New Remix';
 
 // ── Top-level DB row ─────────────────────────────────────────────────────────
 

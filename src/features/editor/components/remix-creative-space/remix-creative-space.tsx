@@ -33,17 +33,14 @@ import {
   isBookRemixEmpty,
 } from './default-config-builder';
 import type {
-  RemixConfig,
   RemixFilterState,
   SwapCropSheetTarget,
 } from '@/types/remix';
 
 const log = createLogger('Editor', 'RemixCreativeSpace');
 
-type ConfigModalState =
-  | { open: false }
-  | { open: true; mode: 'create' }
-  | { open: true; mode: 'edit'; remixId: string };
+// Create-only modal — config is frozen after create (edit mode removed).
+type ConfigModalState = { open: boolean };
 
 export function RemixCreativeSpace() {
   const currentBook = useCurrentBook();
@@ -55,7 +52,6 @@ export function RemixCreativeSpace() {
   const activeRemix = useActiveRemix();
   const {
     createRemix,
-    updateRemixConfig,
     renameRemix,
     deleteRemix,
     setActiveRemixId,
@@ -120,13 +116,7 @@ export function RemixCreativeSpace() {
     );
   }
 
-  const editRemix = remixes.find(
-    (r) => configModal.open && configModal.mode === 'edit' && r.id === configModal.remixId,
-  );
-  const initialConfig: RemixConfig =
-    configModal.open && configModal.mode === 'edit' && editRemix
-      ? editRemix.remix_config
-      : defaultConfigFromBookRemix(bookRemix);
+  const initialConfig = defaultConfigFromBookRemix(bookRemix);
 
   return (
     <div className="flex h-full">
@@ -136,7 +126,7 @@ export function RemixCreativeSpace() {
         bookRemix={bookRemix}
         filter={filter}
         onSelectRemix={setActiveRemixId}
-        onCreateRemix={() => setConfigModal({ open: true, mode: 'create' })}
+        onCreateRemix={() => setConfigModal({ open: true })}
         onRenameRemix={(id, name) => void renameRemix(id, name)}
         onDeleteRemix={(id) => setDeleteConfirmId(id)}
         onApplyFilter={setFilter}
@@ -163,38 +153,22 @@ export function RemixCreativeSpace() {
 
       {configModal.open && (
         <RemixConfigModal
-          mode={configModal.mode}
           bookRemix={bookRemix}
           initialConfig={initialConfig}
-          initialName={
-            configModal.mode === 'edit' && editRemix ? editRemix.name : ''
-          }
           onSave={async (config, name) => {
             try {
-              if (configModal.mode === 'create') {
-                const remix = await createRemix(config, name);
-                if (!remix) {
-                  toast.error('Failed to create remix');
-                  return;
-                }
-                toast.success(`Created "${remix.name}"`);
-              } else {
-                const ok = await updateRemixConfig(configModal.remixId, config);
-                if (!ok) {
-                  toast.error('Failed to save remix');
-                  return;
-                }
-                if (name && editRemix && name !== editRemix.name) {
-                  await renameRemix(configModal.remixId, name);
-                }
-                toast.success('Remix updated');
+              const remix = await createRemix(config, name);
+              if (!remix) {
+                toast.error('Failed to create remix');
+                return;
               }
+              toast.success(`Created "${remix.name}"`);
               setConfigModal({ open: false });
             } catch (e) {
               log.error('config modal save', 'failed', {
                 error: e instanceof Error ? e.message : String(e),
               });
-              toast.error('Failed to save remix');
+              toast.error('Failed to create remix');
             }
           }}
           onCancel={() => setConfigModal({ open: false })}

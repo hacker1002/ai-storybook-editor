@@ -1,19 +1,22 @@
-// remix-config-modal.tsx — Create/Edit remix configuration modal.
-// Filter-driven: only book-allowed entries render. Save validates ≥1 enabled.
+// remix-config-modal.tsx — Create-only remix configuration modal (tabbed).
+// Edit mode was removed (config is frozen after create). Four tabs:
+// Characters (with live appearance swap) / Props / Voices / Languages.
+//
+// The modal owns `draft` (RemixConfig), `name`, `dirty`, and ephemeral
+// `swapTasks` (per-character live-swap preview state). Switching tabs never
+// resets draft/swapTasks. OK is disabled while any swap is loading so a remix
+// is never created mid-swap (Validation S1).
 
 import { useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { SearchableDropdown } from '@/components/ui/searchable-dropdown';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,44 +28,59 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useHumans } from '@/stores/humans-store';
-import { useVoicesStore } from '@/stores/voices-store';
-import { cn } from '@/utils/utils';
+import { useCharacters } from '@/stores/snapshot-store/selectors';
 import { createLogger } from '@/utils/logger';
-import { NARRATOR_VOICE_KEY } from '@/constants/config-constants';
+import { TRAIT_TYPES } from '@/constants/trait-constants';
 import type { BookRemix } from '@/types/editor';
-import type {
-  RemixCharacterChoice,
-  RemixConfig,
-  RemixPropChoice,
+import type { Human } from '@/types/human';
+import {
+  REMIX_NAME_DEFAULT,
+  type RemixCharacterChoice,
+  type RemixConfig,
+  type RemixLanguageChoice,
+  type RemixPropChoice,
+  type RemixVoiceChoice,
+  type SwapPreviewState,
 } from '@/types/remix';
+import { CharactersTab } from './tabs/characters-tab';
+import { PropsTab } from './tabs/props-tab';
+import { VoicesTab } from './tabs/voices-tab';
+import { LanguagesTab } from './tabs/languages-tab';
+import { resolveBaseSheetUrl } from './tabs/resolve-base-sheet-url';
+import { runCharacterSwap } from './tabs/run-character-swap';
 
 const log = createLogger('Editor', 'RemixConfigModal');
 
+type TabKey = 'characters' | 'props' | 'voices' | 'languages';
+const TAB_ORDER: TabKey[] = ['characters', 'props', 'voices', 'languages'];
+const TAB_LABELS: Record<TabKey, string> = {
+  characters: 'Characters',
+  props: 'Props',
+  voices: 'Voices',
+  languages: 'Languages',
+};
+
 interface Props {
-  mode: 'create' | 'edit';
   bookRemix: BookRemix;
   initialConfig: RemixConfig;
   onSave: (config: RemixConfig, name: string) => void | Promise<void>;
   onCancel: () => void;
-  /** Initial name shown in the rename input. Modal owns local state from here. */
-  initialName?: string;
 }
 
 export function RemixConfigModal({
-  mode,
   bookRemix,
   initialConfig,
   onSave,
   onCancel,
-  initialName,
 }: Props) {
   const [draft, setDraft] = useState<RemixConfig>(initialConfig);
-  const [name, setName] = useState<string>(initialName ?? '');
+  const [name, setName] = useState('');
   const [dirty, setDirty] = useState(false);
   const [showDiscard, setShowDiscard] = useState(false);
+  const [swapTasks, setSwapTasks] = useState<Record<string, SwapPreviewState>>({});
 
   const humans = useHumans();
-  const voices = useVoicesStore((s) => s.voices);
+  const snapshotChars = useCharacters();
 
   const allowedChars = useMemo(
     () => bookRemix.characters.filter((c) => c.is_enabled),
@@ -76,20 +94,18 @@ export function RemixConfigModal({
     () => bookRemix.languages.filter((l) => l.is_enabled),
     [bookRemix],
   );
-  // Narrator availability now lives in book.remix.voices[] (key='narrator').
-  // Full per-character voice UI port is a follow-up (see plan Phase 05).
-  const narratorOn = bookRemix.voices.some(
-    (v) => v.key === NARRATOR_VOICE_KEY && v.is_enabled,
-  );
 
-  const isValid = useMemo(() => {
-    if (draft.characters.some((c) => c.is_enabled)) return true;
-    if (draft.props.some((p) => p.is_enabled)) return true;
-    if (draft.narrator !== undefined) return true;
-    if (draft.languages.some((l) => l.is_enabled)) return true;
-    return false;
-  }, [draft]);
+  const firstNonEmptyTab = useMemo<TabKey>(() => {
+    if (allowedChars.length) return 'characters';
+    if (allowedProps.length) return 'props';
+    if (draft.voices.length) return 'voices';
+    if (allowedLangs.length) return 'languages';
+    return 'characters';
+  }, [allowedChars, allowedProps, allowedLangs, draft.voices]);
 
+  const [activeTab, setActiveTab] = useState<TabKey>(firstNonEmptyTab);
+
+  // ── Upsert helpers (preserve entries across toggles) ──────────────────────
   const upsertCharacter = (key: string, patch: Partial<RemixCharacterChoice>) => {
     setDraft((prev) => ({
       ...prev,
@@ -101,7 +117,8 @@ export function RemixConfigModal({
               key,
               human_id: null,
               visual: null,
-              voice_id: null,
+              traits: TRAIT_TYPES.map((type) => ({ type, is_enabled: true })),
+              base_image_url: null,
               is_enabled: true,
               ...patch,
             },
@@ -115,44 +132,88 @@ export function RemixConfigModal({
       ...prev,
       props: prev.props.some((p) => p.key === key)
         ? prev.props.map((p) => (p.key === key ? { ...p, ...patch } : p))
-        : [
-            ...prev.props,
-            { key, prop_id: null, visual: null, is_enabled: true, ...patch },
-          ],
+        : [...prev.props, { key, prop_id: null, visual: null, is_enabled: true, ...patch }],
     }));
     setDirty(true);
   };
 
-  const toggleLanguage = (code: string, langName: string, enabled: boolean) => {
+  const upsertVoice = (key: string, patch: Partial<RemixVoiceChoice>) => {
+    setDraft((prev) => ({
+      ...prev,
+      voices: prev.voices.map((v) => (v.key === key ? { ...v, ...patch } : v)),
+    }));
+    setDirty(true);
+  };
+
+  const upsertLanguage = (code: string, patch: Partial<RemixLanguageChoice>) => {
     setDraft((prev) => ({
       ...prev,
       languages: prev.languages.some((l) => l.code === code)
-        ? prev.languages.map((l) =>
-            l.code === code ? { ...l, is_enabled: enabled } : l,
-          )
-        : [...prev.languages, { name: langName, code, is_enabled: enabled }],
+        ? prev.languages.map((l) => (l.code === code ? { ...l, ...patch } : l))
+        : [...prev.languages, { name: '', code, is_enabled: false, ...patch }],
     }));
     setDirty(true);
   };
 
-  const toggleNarrator = (enabled: boolean) => {
-    setDraft((prev) => ({
-      ...prev,
-      narrator: enabled
-        ? prev.narrator ?? { name: '', voice_id: null }
-        : undefined,
-    }));
-    setDirty(true);
-  };
+  // ── Live character swap orchestration (testable helper, injected deps) ────
+  const humansMap = useMemo<Record<string, Human>>(
+    () => Object.fromEntries(humans.map((h) => [h.id, h])),
+    [humans],
+  );
 
-  const updateNarrator = (patch: Partial<{ name: string; voice_id: string | null }>) => {
-    setDraft((prev) =>
-      prev.narrator
-        ? { ...prev, narrator: { ...prev.narrator, ...patch } }
-        : prev,
+  const setTask = (key: string, state: SwapPreviewState) =>
+    setSwapTasks((prev) => ({ ...prev, [key]: state }));
+
+  // Current (pre-swap) base-sheet visual per allowed character — shown in the
+  // accordion body even before any swap so the user sees the existing art.
+  const currentVisualUrls = useMemo<Record<string, string | null>>(
+    () =>
+      Object.fromEntries(
+        allowedChars.map((c) => [c.key, resolveBaseSheetUrl(c.key, snapshotChars)]),
+      ),
+    [allowedChars, snapshotChars],
+  );
+
+  const handleSwapCharacter = (charKey: string) => {
+    const entry = draft.characters.find((c) => c.key === charKey);
+    if (!entry) {
+      log.warn('handleSwapCharacter', 'no draft entry', { charKey });
+      return;
+    }
+    const beforeUrl = resolveBaseSheetUrl(charKey, snapshotChars);
+    log.debug('handleSwapCharacter', 'invoke', { charKey, hasBeforeUrl: !!beforeUrl });
+    void runCharacterSwap(
+      charKey,
+      entry,
+      beforeUrl,
+      humansMap,
+      snapshotChars,
+      setTask,
+      upsertCharacter,
     );
-    setDirty(true);
   };
+
+  // ── Validation / gating ───────────────────────────────────────────────────
+  const isValidDraft = useMemo(() => {
+    return (
+      draft.characters.some((c) => c.is_enabled) ||
+      draft.props.some((p) => p.is_enabled) ||
+      draft.voices.some((v) => v.is_enabled) ||
+      draft.languages.some((l) => l.is_enabled)
+    );
+  }, [draft]);
+
+  const anySwapLoading = useMemo(
+    () => Object.values(swapTasks).some((t) => t.status === 'loading'),
+    [swapTasks],
+  );
+
+  const canSave = isValidDraft && !anySwapLoading;
+  const everyTabEmpty =
+    allowedChars.length === 0 &&
+    allowedProps.length === 0 &&
+    draft.voices.length === 0 &&
+    allowedLangs.length === 0;
 
   const handleCancel = () => {
     if (dirty) {
@@ -163,42 +224,28 @@ export function RemixConfigModal({
   };
 
   const handleSave = async () => {
-    log.info('handleSave', 'submitting', { mode, name });
-    await onSave(draft, name.trim());
+    log.info('handleSave', 'submitting', { name });
+    await onSave(draft, name.trim() || REMIX_NAME_DEFAULT);
   };
 
-  const humanOptions = useMemo(
-    () =>
-      humans.map((h) => ({
-        value: h.id,
-        label: h.sourceName || h.id,
-      })),
-    [humans],
-  );
-
-  const voiceOptions = useMemo(
-    () =>
-      voices.map((v) => ({
-        value: v.id,
-        label: v.name,
-      })),
-    [voices],
-  );
-
-  // Cascading: visual options derived from selected human's visualProfiles.
-  // Persisted as profile.name (composite key with human_id).
-  const visualOptionsForHuman = (humanId: string | null) => {
-    if (!humanId) return [];
-    const human = humans.find((h) => h.id === humanId);
-    return (
-      human?.visualProfiles.map((vp) => ({ value: vp.name, label: vp.name })) ??
-      []
-    );
-  };
-
-  const handleCharacterHumanChange = (key: string, humanId: string | null) => {
-    // Cascade: clear visual when human changes to avoid stale (human_id, name) refs.
-    upsertCharacter(key, { human_id: humanId, visual: null });
+  // Keyboard: ←/→ cycle tabs (ignore when typing); Enter = OK (when valid).
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const typing =
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.isContentEditable;
+    if (typing) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const idx = TAB_ORDER.indexOf(activeTab);
+      const delta = e.key === 'ArrowLeft' ? -1 : 1;
+      const next = TAB_ORDER[(idx + delta + TAB_ORDER.length) % TAB_ORDER.length];
+      setActiveTab(next);
+    } else if (e.key === 'Enter' && canSave) {
+      e.preventDefault();
+      void handleSave();
+    }
   };
 
   return (
@@ -209,201 +256,84 @@ export function RemixConfigModal({
           if (!open) handleCancel();
         }}
       >
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {mode === 'create' ? 'Create Remix' : 'Edit Remix Config'}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent
+          className="flex h-[700px] max-h-[700px] w-[900px] max-w-[900px] flex-col"
+          onKeyDown={handleKeyDown}
+        >
+          {/* Visually-hidden title — Radix Dialog needs it for aria-labelledby. */}
+          <DialogTitle className="sr-only">Create Remix</DialogTitle>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setDirty(true);
-                }}
-                placeholder="Untitled Remix"
-              />
-            </div>
+          {/* Title input intentionally does NOT mark the draft dirty. */}
+          <Input
+            id="remix-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={REMIX_NAME_DEFAULT}
+            className="w-[200px]"
+          />
 
-            {allowedChars.length > 0 && (
-              <Section label="CHARACTERS">
-                {allowedChars.map((bookChar) => {
-                  const entry = draft.characters.find((c) => c.key === bookChar.key);
-                  const enabled = entry?.is_enabled ?? false;
-                  const humanId = entry?.human_id ?? null;
-                  return (
-                    <div
-                      key={bookChar.key}
-                      className={cn(
-                        'flex items-center gap-3 py-2',
-                        !enabled && 'opacity-60',
-                      )}
-                    >
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={(v) =>
-                          upsertCharacter(bookChar.key, { is_enabled: v })
-                        }
-                        aria-label={`Toggle ${bookChar.name}`}
-                      />
-                      <span className="flex-1 min-w-0 truncate text-sm font-medium">
-                        {bookChar.name}
-                      </span>
-                      <SearchableDropdown
-                        options={humanOptions}
-                        value={humanId}
-                        onChange={(id) =>
-                          handleCharacterHumanChange(bookChar.key, id)
-                        }
-                        placeholder="Human"
-                        disabled={!enabled}
-                        className="w-[140px] shrink-0"
-                      />
-                      <SearchableDropdown
-                        options={visualOptionsForHuman(humanId)}
-                        value={entry?.visual ?? null}
-                        onChange={(v) =>
-                          upsertCharacter(bookChar.key, { visual: v })
-                        }
-                        placeholder={humanId ? 'Visual' : 'Pick Human'}
-                        disabled={!enabled || !humanId}
-                        className="w-[140px] shrink-0"
-                      />
-                      <SearchableDropdown
-                        options={voiceOptions}
-                        value={entry?.voice_id ?? null}
-                        onChange={(id) =>
-                          upsertCharacter(bookChar.key, { voice_id: id })
-                        }
-                        placeholder="Voice"
-                        disabled={!enabled}
-                        className="w-[140px] shrink-0"
-                      />
-                    </div>
-                  );
-                })}
-              </Section>
-            )}
+          {everyTabEmpty ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nothing to configure. Enable items in book remix settings first.
+            </p>
+          ) : (
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) => setActiveTab(v as TabKey)}
+              className="mt-2 flex min-h-0 flex-1 flex-col"
+            >
+              <TabsList>
+                {TAB_ORDER.map((key) => (
+                  <TabsTrigger key={key} value={key}>
+                    {TAB_LABELS[key]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
 
-            {allowedProps.length > 0 && (
-              <Section label="PROPS">
-                {allowedProps.map((bookProp) => {
-                  const entry = draft.props.find((p) => p.key === bookProp.key);
-                  const enabled = entry?.is_enabled ?? false;
-                  return (
-                    <div
-                      key={bookProp.key}
-                      className={cn(
-                        'flex items-center gap-3 py-2',
-                        !enabled && 'opacity-60',
-                      )}
-                    >
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={(v) =>
-                          upsertProp(bookProp.key, { is_enabled: v })
-                        }
-                        aria-label={`Toggle ${bookProp.name}`}
-                      />
-                      <span className="flex-1 min-w-0 truncate text-sm font-medium">
-                        {bookProp.name}
-                      </span>
-                      {/* Prop + Visual mirror Character's Human + Visual flow.
-                          Items library TBD — both dropdowns render empty options for now.
-                          Cascading: Visual options will derive from items[prop_id].visualProfiles. */}
-                      <SearchableDropdown
-                        options={[]}
-                        value={entry?.prop_id ?? null}
-                        onChange={(id) =>
-                          upsertProp(bookProp.key, { prop_id: id, visual: null })
-                        }
-                        placeholder="Prop"
-                        disabled={!enabled}
-                        className="w-[140px] shrink-0"
-                      />
-                      <SearchableDropdown
-                        options={[]}
-                        value={entry?.visual ?? null}
-                        onChange={(v) =>
-                          upsertProp(bookProp.key, { visual: v })
-                        }
-                        placeholder={entry?.prop_id ? 'Visual' : 'Pick Prop'}
-                        disabled={!enabled || !entry?.prop_id}
-                        className="w-[140px] shrink-0"
-                      />
-                    </div>
-                  );
-                })}
-              </Section>
-            )}
-
-            {narratorOn && (
-              <Section label="NARRATOR">
-                <div
-                  className={cn(
-                    'flex items-center gap-3 py-2',
-                    !draft.narrator && 'opacity-60',
-                  )}
-                >
-                  <Switch
-                    checked={!!draft.narrator}
-                    onCheckedChange={toggleNarrator}
-                    aria-label="Toggle narrator"
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <TabsContent value="characters">
+                  <CharactersTab
+                    allowedChars={allowedChars}
+                    draftCharacters={draft.characters}
+                    humans={humans}
+                    swapTasks={swapTasks}
+                    currentVisualUrls={currentVisualUrls}
+                    onUpsert={upsertCharacter}
+                    onSwap={handleSwapCharacter}
                   />
-                  <Input
-                    value={draft.narrator?.name ?? ''}
-                    onChange={(e) => updateNarrator({ name: e.target.value })}
-                    placeholder="Narrator name"
-                    disabled={!draft.narrator}
-                    className="flex-1 min-w-0"
+                </TabsContent>
+                <TabsContent value="props">
+                  <PropsTab
+                    allowedProps={allowedProps}
+                    draftProps={draft.props}
+                    onUpsert={upsertProp}
                   />
-                  <SearchableDropdown
-                    options={voiceOptions}
-                    value={draft.narrator?.voice_id ?? null}
-                    onChange={(id) => updateNarrator({ voice_id: id })}
-                    placeholder="Voice"
-                    disabled={!draft.narrator}
-                    className="w-[140px] shrink-0"
+                </TabsContent>
+                <TabsContent value="voices">
+                  <VoicesTab draftVoices={draft.voices} onUpsert={upsertVoice} />
+                </TabsContent>
+                <TabsContent value="languages">
+                  <LanguagesTab
+                    allowedLangs={allowedLangs}
+                    draftLanguages={draft.languages}
+                    onUpsert={upsertLanguage}
                   />
-                </div>
-              </Section>
-            )}
-
-            {allowedLangs.length > 0 && (
-              <Section label="LANGUAGES">
-                {allowedLangs.map((lang) => {
-                  const entry = draft.languages.find((l) => l.code === lang.code);
-                  const enabled = entry?.is_enabled ?? false;
-                  return (
-                    <div
-                      key={lang.code}
-                      className="flex items-center gap-3 py-1.5"
-                    >
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={(v) =>
-                          toggleLanguage(lang.code, lang.name, v)
-                        }
-                        aria-label={`Toggle ${lang.name}`}
-                      />
-                      <span className="text-sm">{lang.name}</span>
-                    </div>
-                  );
-                })}
-              </Section>
-            )}
-          </div>
+                </TabsContent>
+              </div>
+            </Tabs>
+          )}
 
           <DialogFooter>
             <Button variant="ghost" onClick={handleCancel}>
-              Cancel
+              Discard
             </Button>
-            <Button disabled={!isValid} onClick={handleSave}>
-              {mode === 'create' ? 'Create' : 'Save'}
+            <Button
+              disabled={!canSave}
+              aria-disabled={!canSave}
+              onClick={handleSave}
+              title={anySwapLoading ? 'Waiting for swap to finish' : undefined}
+            >
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -431,23 +361,5 @@ export function RemixConfigModal({
         </AlertDialogContent>
       </AlertDialog>
     </>
-  );
-}
-
-function Section({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1">
-      <h3 className="text-xs font-semibold tracking-wider text-muted-foreground">
-        {label}
-      </h3>
-      <Separator />
-      <div className="pt-1">{children}</div>
-    </div>
   );
 }

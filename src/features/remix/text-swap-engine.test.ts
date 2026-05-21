@@ -113,7 +113,7 @@ function makeConfigChar(
   human_id: string | null,
   is_enabled = true,
 ): RemixCharacterChoice {
-  return { key, human_id, visual: null, voice_id: null, is_enabled };
+  return { key, human_id, visual: null, traits: [], base_image_url: null, is_enabled };
 }
 
 interface BuildInputOpts {

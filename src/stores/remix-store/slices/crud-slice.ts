@@ -114,36 +114,8 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
     return remix;
   },
 
-  updateRemixConfig: async (id, patch) => {
-    const prev = get().remixes.find((r) => r.id === id);
-    if (!prev) {
-      log.warn('updateRemixConfig', 'not found', { id });
-      return false;
-    }
-
-    set((s) => ({
-      remixes: s.remixes.map((r) =>
-        r.id === id ? { ...r, remix_config: patch } : r,
-      ),
-    }));
-
-    const { error } = await supabase
-      .from('remixes')
-      .update({ remix_config: patch })
-      .eq('id', id);
-
-    if (error) {
-      log.error('updateRemixConfig', 'rollback', { id, error: error.message });
-      set((s) => ({
-        remixes: s.remixes.map((r) => (r.id === id ? prev : r)),
-      }));
-      return false;
-    }
-    return true;
-  },
-
   renameRemix: async (id, name) => {
-    const trimmed = name.trim() || 'Untitled Remix';
+    const trimmed = name.trim() || 'New Remix';
     const prev = get().remixes.find((r) => r.id === id);
     if (!prev) return false;
 

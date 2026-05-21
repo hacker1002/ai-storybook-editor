@@ -72,7 +72,6 @@ export interface RemixCrudSlice {
   activeRemixId: string | null;
 
   createRemix: (config: RemixConfig, name?: string) => Promise<Remix | null>;
-  updateRemixConfig: (id: string, patch: RemixConfig) => Promise<boolean>;
   renameRemix: (id: string, name: string) => Promise<boolean>;
   deleteRemix: (id: string) => Promise<boolean>;
   setActiveRemixId: (id: string | null) => void;

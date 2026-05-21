@@ -27,6 +27,7 @@ const EMPTY_ILLUSTRATION: RemixIllustration = { spreads: [], sections: [] };
 const EMPTY_CONFIG: RemixConfig = {
   characters: [],
   props: [],
+  voices: [],
   languages: [],
 };
 
@@ -34,7 +35,7 @@ export function mapRowToRemix(row: RawRemixRow): Remix {
   return {
     id: row.id,
     snapshot_id: row.snapshot_id,
-    name: row.name ?? 'Untitled Remix',
+    name: row.name ?? 'New Remix',
     remix_config: (row.remix_config as RemixConfig | null) ?? EMPTY_CONFIG,
     illustration: (row.illustration as RemixIllustration | null) ?? EMPTY_ILLUSTRATION,
     characters: (row.characters as RemixCharacter[] | null) ?? [],

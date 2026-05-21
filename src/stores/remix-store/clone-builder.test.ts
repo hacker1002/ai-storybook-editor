@@ -142,11 +142,12 @@ describe('buildRemixClonePayload — clone-builder Phase 03', () => {
     expect(r.characters).toHaveLength(1);
     expect(r.characters[0].crop_sheets).toHaveLength(1);
     expect(r.characters[0].crop_sheets[0]).toEqual({
-      title: 'Miu',
+      title: 'sheet 1',
       sheet_geometry: { width: 0, height: 0 },
       image_url: '',
       swap_results: [],
       crops: [],
+      variant_key: null,
     });
     expect(r.props[0].crop_sheets).toHaveLength(1);
     expect(r.props[0].crop_sheets[0].crops).toEqual([]);
@@ -259,5 +260,94 @@ describe('buildRemixClonePayload — clone-builder Phase 03', () => {
       ],
     });
     expect(r.characters[0].crop_sheets[0].crops).toEqual([]);
+  });
+});
+
+// ── Reshape 2026-05-20/21: base_image_url → variant.swap_visual_url + name ────
+
+/** Character carrying a base variant (type=0) so swap_visual_url can be copied. */
+function makeCharWithBaseVariant(key: string, name: string): Character {
+  return {
+    order: 0,
+    key,
+    name,
+    basic_info: {},
+    personality: {},
+    variants: [
+      {
+        name: 'base',
+        key: `${key}_v0`,
+        type: 0,
+        appearance: {},
+        visual_description: '',
+        illustrations: [],
+        image_references: [],
+      },
+    ],
+    voice_setting: null,
+    crop_sheets: [],
+  } as unknown as Character;
+}
+
+function makeReshapedConfig(baseImageUrl: string | null): RemixConfig {
+  return {
+    characters: [
+      {
+        key: 'c1',
+        human_id: 'h1',
+        visual: 'vp1',
+        traits: [],
+        base_image_url: baseImageUrl,
+        is_enabled: true,
+      },
+    ],
+    props: [],
+    voices: [],
+    languages: [],
+  };
+}
+
+describe('buildRemixClonePayload — base_image_url copy + default name', () => {
+  it('copies config.characters[].base_image_url onto base variant swap_visual_url', () => {
+    const r = buildRemixClonePayload(
+      {
+        snapshotId: 'snap-1',
+        illustration: makeIllustration([]),
+        characters: [makeCharWithBaseVariant('c1', 'Miu')],
+        props: [],
+      },
+      makeReshapedConfig('https://swap/c1.png'),
+      'My Remix',
+    );
+    const base = r.characters[0].variants.find((v) => v.type === 0);
+    expect(base?.swap_visual_url).toBe('https://swap/c1.png');
+    expect(r.name).toBe('My Remix');
+  });
+
+  it('leaves swap_visual_url unset when base_image_url is null', () => {
+    const r = buildRemixClonePayload(
+      {
+        snapshotId: 'snap-1',
+        illustration: makeIllustration([]),
+        characters: [makeCharWithBaseVariant('c1', 'Miu')],
+        props: [],
+      },
+      makeReshapedConfig(null),
+    );
+    const base = r.characters[0].variants.find((v) => v.type === 0);
+    expect(base?.swap_visual_url).toBeUndefined();
+  });
+
+  it("defaults the name to 'New Remix' when none is provided", () => {
+    const r = buildRemixClonePayload(
+      {
+        snapshotId: 'snap-1',
+        illustration: makeIllustration([]),
+        characters: [makeCharWithBaseVariant('c1', 'Miu')],
+        props: [],
+      },
+      makeReshapedConfig(null),
+    );
+    expect(r.name).toBe('New Remix');
   });
 });

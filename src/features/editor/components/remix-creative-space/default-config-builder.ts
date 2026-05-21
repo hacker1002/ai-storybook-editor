@@ -1,28 +1,28 @@
 // default-config-builder.ts — Pure helper to derive a fresh RemixConfig draft
 // from the book-level BookRemix availability list.
+//
+// Reshape 2026-05-20/21: narrator singular → voices[] collection; characters[]
+// carry per-trait toggles (traits[]) + a `base_image_url` slot for live swap.
 
 import type { BookRemix } from '@/types/editor';
 import type { RemixConfig } from '@/types/remix';
-import { NARRATOR_VOICE_KEY } from '@/constants/config-constants';
-
-// Narrator voice availability now lives in book.remix.voices[] (key='narrator').
-// Full per-character voice draft port is a follow-up; this keeps the existing
-// singular-narrator RemixConfig shape by reading just the narrator voice slot.
-const isNarratorVoiceEnabled = (book: BookRemix): boolean =>
-  book.voices.some((v) => v.key === NARRATOR_VOICE_KEY && v.is_enabled);
+import { normalizeRemixTraits } from '@/constants/config-constants';
 
 export function defaultConfigFromBookRemix(book: BookRemix): RemixConfig {
   return {
-    narrator: isNarratorVoiceEnabled(book)
-      ? { name: '', voice_id: null }
-      : undefined,
     characters: book.characters
       .filter((c) => c.is_enabled)
       .map((c) => ({
         key: c.key,
         human_id: null,
         visual: null,
-        voice_id: null,
+        // Clone the book character's trait gate (5 canonical entries); a freshly
+        // added character defaults every trait enabled (reader fills missing).
+        traits: normalizeRemixTraits(c.traits).map((t) => ({
+          type: t.type,
+          is_enabled: t.is_enabled,
+        })),
+        base_image_url: null,
         is_enabled: true,
       })),
     props: book.props
@@ -31,6 +31,16 @@ export function defaultConfigFromBookRemix(book: BookRemix): RemixConfig {
         key: p.key,
         prop_id: null,
         visual: null,
+        is_enabled: true,
+      })),
+    // Voice availability lives in book.voices[] (key='narrator' | <char.key>).
+    // Concrete voice_id is chosen per-remix; name is materialized for fallback.
+    voices: book.voices
+      .filter((v) => v.is_enabled)
+      .map((v) => ({
+        key: v.key,
+        name: v.name,
+        voice_id: null,
         is_enabled: true,
       })),
     languages: book.languages

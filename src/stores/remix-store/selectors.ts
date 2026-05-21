@@ -249,7 +249,6 @@ export const useRemixActions = () =>
   useRemixStore(
     useShallow((s) => ({
       createRemix: s.createRemix,
-      updateRemixConfig: s.updateRemixConfig,
       renameRemix: s.renameRemix,
       deleteRemix: s.deleteRemix,
       setActiveRemixId: s.setActiveRemixId,
