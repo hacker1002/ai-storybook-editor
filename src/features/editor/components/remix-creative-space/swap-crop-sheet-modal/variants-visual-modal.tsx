@@ -240,6 +240,24 @@ export function VariantsVisualModal({
   const afterUrl =
     (variantKey ? swapUrlsByVariant[variantKey] : null) ?? task?.afterUrl ?? null;
 
+  // Base variant = snapshot variant with type === 0 (clone-builder seeds its
+  // `visual_swap_url` from `remix_config.base_image_url` at creation, then this
+  // modal updates it on re-gen → source of truth). Non-base variants reuse that
+  // swapped visual as the appearance reference (Image #2) so every variant stays
+  // consistent with the base swap, instead of re-swapping from the human image.
+  const baseVariantKey = useMemo<string | null>(() => {
+    const snapChar = snapshotChars.find((c) => c.key === entity.key);
+    return snapChar?.variants.find((v) => v.type === 0)?.key ?? null;
+  }, [snapshotChars, entity.key]);
+
+  const baseSwapUrl =
+    baseVariantKey != null ? (swapUrlsByVariant[baseVariantKey] ?? null) : null;
+  const isBaseVariant = variantKey != null && variantKey === baseVariantKey;
+  // Override is null for the base tab (builder falls back to human-normalize) and
+  // for non-base it is the base swap visual. Gating below blocks non-base when it
+  // is still null (base not swapped yet).
+  const humanImageUrlOverride = isBaseVariant ? null : baseSwapUrl;
+
   // Synthetic 'base' fallback guard (M1): `withSyntheticBaseFallback` (selectors)
   // can mint a display-only group keyed 'base' (or any orphan-sheet group) that
   // has NO matching real persistable variant. `swapUrlsByVariant` is keyed by
@@ -254,6 +272,9 @@ export function VariantsVisualModal({
   // visual + normalized image + ≥1 enabled trait + a source sheet. (Prop →
   // cfgChar null → disabled.)
   const hasEnabledTrait = cfgChar?.traits.some((t) => t.is_enabled) ?? false;
+  // Non-base variants depend on the base swap existing (reused as Image #2).
+  // Base tab has no such dependency.
+  const baseSwapReady = isBaseVariant || baseSwapUrl != null;
   const canGenerate =
     entity.type === 'character' &&
     isPersistableVariant &&
@@ -261,7 +282,8 @@ export function VariantsVisualModal({
     cfgChar?.visual != null &&
     cfgChar?.converted_image != null &&
     hasEnabledTrait &&
-    beforeUrl != null;
+    beforeUrl != null &&
+    baseSwapReady;
   const isSwapping = task?.status === 'loading';
 
   // Tooltip reason when Generate is disabled (PII-safe — no human data).
@@ -276,6 +298,7 @@ export function VariantsVisualModal({
     if (cfgChar.converted_image == null) return 'Run Extract for this human first.';
     if (!hasEnabledTrait) return 'Enable at least 1 trait.';
     if (beforeUrl == null) return 'No visual image to swap.';
+    if (!baseSwapReady) return 'Swap the base variant first.';
     return null;
   }, [
     canGenerate,
@@ -284,6 +307,7 @@ export function VariantsVisualModal({
     cfgChar,
     hasEnabledTrait,
     beforeUrl,
+    baseSwapReady,
   ]);
 
   const handleGenerate = () => {
@@ -298,11 +322,15 @@ export function VariantsVisualModal({
     log.info('handleGenerate', 'start variant swap', {
       entityKey: entity.key,
       variantKey,
+      isBaseVariant,
+      // PII-safe: presence flag only, never the URL.
+      reuseBaseSwap: humanImageUrlOverride != null,
     });
     void runVariantSwap(
       variantKey,
       cfgChar,
       beforeUrl,
+      humanImageUrlOverride,
       humansMap,
       snapshotChars,
       entity.key,

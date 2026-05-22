@@ -45,7 +45,13 @@ const DEFAULT_DEPS: RunVariantSwapDeps = {
  * @param variantKey  Per-variant task identity (keys `swapTasks` + persist target).
  * @param cfgChar     Frozen `remix_config` character view ({ human_id, visual,
  *                    traits[], converted_image }). `null` ⇒ prop/missing → guard error.
- * @param beforeUrl   Variant illustration `is_selected` (fallback `[0]`) — source sheet.
+ * @param beforeUrl   Variant illustration `is_selected` (fallback `[0]`) — source sheet
+ *                    (Image #1: template/pose).
+ * @param humanImageUrlOverride  Appearance reference (Image #2). For NON-base
+ *                    variants this is the base variant's swapped `visual_swap_url`
+ *                    (consistency source-of-truth); `null` ⇒ base flow → builder
+ *                    falls back to the human-normalize image. Caller gates that a
+ *                    non-base variant only runs once the base swap exists.
  * @param humans      Live humans cache keyed by id (mirrors create flow).
  * @param snapChar    Snapshot characters[] — supplies `character_context`.
  * @param charKey     Character key (snapshot lookup + request mapping).
@@ -59,6 +65,7 @@ export async function runVariantSwap(
   variantKey: string,
   cfgChar: RemixConfigCharacterView | null,
   beforeUrl: string | null,
+  humanImageUrlOverride: string | null,
   humans: Record<string, Human>,
   snapChar: Character[],
   charKey: string,
@@ -89,7 +96,14 @@ export async function runVariantSwap(
     is_enabled: true,
   };
 
-  const built = deps.buildRequest(charKey, entry, beforeUrl, humans, snapChar);
+  const built = deps.buildRequest(
+    charKey,
+    entry,
+    beforeUrl,
+    humans,
+    snapChar,
+    humanImageUrlOverride,
+  );
   if (!built.ok) {
     log.debug('runVariantSwap', 'guard failed', { variantKey, charKey, reason: built.reason });
     setTask(variantKey, {

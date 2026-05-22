@@ -43,6 +43,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -81,6 +82,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -115,6 +117,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       null,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -148,6 +151,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -181,6 +185,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -211,6 +216,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -239,6 +245,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -269,6 +276,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -297,6 +305,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -325,6 +334,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -353,6 +363,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -361,7 +372,7 @@ describe('runVariantSwap — orchestration', () => {
       deps,
     );
 
-    // Verify buildRequest was called with adapted entry
+    // Verify buildRequest was called with adapted entry + override last (null = base flow)
     expect(buildRequest).toHaveBeenCalledWith(
       'char-1',
       {
@@ -375,6 +386,42 @@ describe('runVariantSwap — orchestration', () => {
       'https://before.png',
       {},
       [],
+      null,
+    );
+  });
+
+  it('non-base variant: passes base swap visual as human_image_url override', async () => {
+    const { setTask, persist } = harness();
+    const buildRequest = vi.fn(() => ({ ok: true as const, request: FAKE_REQUEST }));
+    const deps: RunVariantSwapDeps = {
+      buildRequest,
+      swap: vi.fn(async () => ({
+        success: true,
+        data: { image_url: 'https://after.png', width: 10, height: 10 },
+      })),
+    };
+
+    await runVariantSwap(
+      'variant-2',
+      CFG_CHAR,
+      'https://before.png',
+      'https://base-swap.png', // override = base variant's swapped visual
+      {},
+      [],
+      'char-1',
+      setTask,
+      persist,
+      deps,
+    );
+
+    // 6th arg (override, last) reaches the builder so non-base reuses the base swap.
+    expect(buildRequest).toHaveBeenCalledWith(
+      'char-1',
+      expect.objectContaining({ key: 'char-1' }),
+      'https://before.png',
+      {},
+      [],
+      'https://base-swap.png',
     );
   });
 
@@ -391,6 +438,7 @@ describe('runVariantSwap — orchestration', () => {
     await runVariantSwap(
       'variant-1',
       CFG_CHAR,
+      null,
       null,
       {},
       [],
@@ -418,6 +466,7 @@ describe('runVariantSwap — orchestration', () => {
       'variant-1',
       CFG_CHAR,
       'https://before.png',
+      null,
       {},
       [],
       'char-1',
@@ -443,6 +492,7 @@ describe('runVariantSwap — orchestration', () => {
         'variant-1',
         null, // null cfgChar short-circuits before using deps
         'https://before.png',
+        null,
         {},
         [],
         'char-1',

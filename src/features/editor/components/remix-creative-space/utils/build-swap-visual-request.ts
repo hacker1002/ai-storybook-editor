@@ -31,6 +31,12 @@ export function buildSwapVisualCoreRequest(
   characterImageUrl: string | null,
   humans: Record<string, Human>,
   snapshotChars: Character[],
+  // Non-base variants reuse the BASE variant's swapped visual as the appearance
+  // reference (Image #2) instead of the raw human-normalize image — this keeps
+  // all variants visually consistent with the base swap. `null`/omitted → base
+  // flow (uses `profile.convertedImage`). The human profile is still required
+  // (swap_traits + human_description come from it verbatim per product decision).
+  humanImageUrlOverride?: string | null,
 ): BuildSwapRequestResult {
   if (!characterImageUrl) return { ok: false, reason: 'NO_CHARACTER_IMAGE' };
   if (!entry.human_id) return { ok: false, reason: 'NO_HUMAN' };
@@ -41,7 +47,9 @@ export function buildSwapVisualCoreRequest(
 
   const profile = human.visualProfiles.find((vp) => vp.name === entry.visual);
   if (!profile) return { ok: false, reason: 'NO_VISUAL' };
-  // converted_image null → swap blocked (API Open Q5: caller decides).
+  // converted_image null → swap blocked (API Open Q5: caller decides). Required
+  // even for the override path: the base swap was itself generated from it, so a
+  // missing converted_image signals a broken human/visual selection.
   if (!profile.convertedImage) return { ok: false, reason: 'NO_CONVERTED_IMAGE' };
 
   // Only enabled traits whose human profile has a non-empty description (API Open
@@ -64,11 +72,14 @@ export function buildSwapVisualCoreRequest(
   const baseVariant =
     snapChar.variants.find((v) => v.type === 0) ?? snapChar.variants[0];
 
+  // Base flow → human-normalize image; non-base → base variant's swapped visual.
+  const human_image_url = humanImageUrlOverride ?? profile.convertedImage;
+
   return {
     ok: true,
     request: {
       character_image_url: characterImageUrl,
-      human_image_url: profile.convertedImage,
+      human_image_url,
       human_description: human.description ?? '',
       swap_traits,
       character_context: {

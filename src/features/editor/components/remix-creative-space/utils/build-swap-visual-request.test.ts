@@ -92,6 +92,41 @@ describe('buildSwapVisualCoreRequest — ok path', () => {
     expect(r.request.character_context.name).toBe('Miu');
     expect(r.request.character_context.visual_description).toBe('base visual');
   });
+
+  it('humanImageUrlOverride replaces human_image_url (non-base variant reuse)', () => {
+    const r = buildSwapVisualCoreRequest(
+      'c1',
+      makeEntry(),
+      CHAR_IMG,
+      humans,
+      snapshotChars,
+      'https://img/base-swap.png',
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Image #2 = base swap visual, NOT the human-normalize image.
+    expect(r.request.human_image_url).toBe('https://img/base-swap.png');
+    // swap_traits + human_description still sourced from the human profile.
+    expect(r.request.human_description).toBe('a real person');
+    expect(r.request.swap_traits).toEqual([{ type: 'face', description: 'round face, hazel eyes' }]);
+  });
+
+  it('still guards NO_CONVERTED_IMAGE even when override is provided', () => {
+    const noConverted = {
+      h1: makeHuman({
+        visualProfiles: [{ ...makeHuman().visualProfiles[0], convertedImage: null }],
+      }),
+    };
+    const r = buildSwapVisualCoreRequest(
+      'c1',
+      makeEntry(),
+      CHAR_IMG,
+      noConverted,
+      snapshotChars,
+      'https://img/base-swap.png',
+    );
+    expect(r).toEqual({ ok: false, reason: 'NO_CONVERTED_IMAGE' });
+  });
 });
 
 describe('buildSwapVisualCoreRequest — guards', () => {
