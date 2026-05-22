@@ -38,17 +38,44 @@ export interface CloneBuilderInput {
 
 // ── Public helpers ───────────────────────────────────────────────────────────
 
-/** Compose a human-readable mix name from key list, preserving order.
- *  Falls back to the key string when no entity name is found. */
+/** A mix lineup token: `${objectKey}/${variantKey}`, or bare `${objectKey}`
+ *  when the entity has no variant. Split on the FIRST `/` — object/variant keys
+ *  are slugs that never contain `/`. */
+const MIX_TOKEN_SEP = '/';
+
+export function parseMixToken(token: string): { key: string; variantKey: string } {
+  const i = token.indexOf(MIX_TOKEN_SEP);
+  return i === -1
+    ? { key: token, variantKey: '' }
+    : { key: token.slice(0, i), variantKey: token.slice(i + 1) };
+}
+
+export function makeMixToken(key: string, variantKey: string): string {
+  return variantKey ? `${key}${MIX_TOKEN_SEP}${variantKey}` : key;
+}
+
+/** Compose a human-readable mix name from a variant-qualified lineup, in lineup
+ *  order. The variant name is shown in parens only when the entity has >1
+ *  variant — so single-variant casts read cleanly ("Elara & Magic Sword") while
+ *  multi-variant lineups disambiguate ("Elara (happy) & ..." vs "Elara (sad) & ..."). */
 export function composeMixName(
-  keys: string[],
-  characters: { key: string; name: string }[],
-  props: { key: string; name: string }[],
+  lineup: string[],
+  entities: { key: string; name: string; variants?: { key: string; name?: string }[] }[],
 ): string {
-  const lookup = new Map<string, string>();
-  for (const c of characters) lookup.set(c.key, c.name);
-  for (const p of props) lookup.set(p.key, p.name);
-  return keys.map((k) => lookup.get(k) ?? k).join(' & ');
+  const byKey = new Map(entities.map((e) => [e.key, e]));
+  return lineup
+    .map((token) => {
+      const { key, variantKey } = parseMixToken(token);
+      const entity = byKey.get(key);
+      if (!entity) return key;
+      const variants = entity.variants ?? [];
+      if (variantKey && variants.length > 1) {
+        const vName = variants.find((v) => v.key === variantKey)?.name ?? variantKey;
+        return `${entity.name} (${vName})`;
+      }
+      return entity.name;
+    })
+    .join(' & ');
 }
 
 /** Drop editor-only fields from a snapshot spread. Layer IDs and the rest are
@@ -178,13 +205,93 @@ function populateSingleSubjectCrops(
   }
 }
 
+type MixVariant = { key: string; name?: string; type?: number };
+type MixEntity = {
+  key: string;
+  name: string;
+  variants?: MixVariant[];
+  crop_sheets: RemixCropSheet[];
+};
+
+/** Base variant of an entity (`type === 0`), else the first declared variant,
+ *  else `''`. Used to fill entities absent from a crop when canonicalizing its
+ *  mix lineup — the dedup tie-break (a co-occurrence with no explicit variant
+ *  for entity E lands in E's base-variant lineup). */
+export function baseVariantKey(entity: {
+  variants?: { key: string; type?: number }[];
+}): string {
+  const variants = entity.variants ?? [];
+  return (variants.find((v) => v.type === 0) ?? variants[0])?.key ?? '';
+}
+
+/** Full enabled-cast member for mix lineup math: entity key + its base variant. */
+export interface MixCastMember {
+  key: string;
+  baseVariant: string;
+}
+
+/** Canonical full-cast variant lineup for a set of enabled subject tags. Each
+ *  cast member contributes the variant it carries in THIS crop, or its base
+ *  variant when absent. Shared by clone-builder (mix enumeration) and
+ *  crop-grouping (mix crop membership) so both agree on a mix's identity —
+ *  `canonicalMixKey(mixLineupTokens(...))`. */
+export function mixLineupTokens(
+  enabledTags: { object_key: string; variant_key?: string | null }[],
+  cast: MixCastMember[],
+): string[] {
+  const baseByKey = new Map(cast.map((c) => [c.key, c.baseVariant]));
+  const cropVariantByKey = new Map<string, string>();
+  for (const t of enabledTags) {
+    cropVariantByKey.set(t.object_key, t.variant_key || (baseByKey.get(t.object_key) ?? ''));
+  }
+  return cast.map((c) => makeMixToken(c.key, cropVariantByKey.get(c.key) ?? c.baseVariant));
+}
+
+function makeMixCrop(layer: TaggedLayer, spreadNumber: number, variant: string) {
+  return {
+    spread_number: spreadNumber,
+    aspect_ratio: (layer as SpreadImage).aspect_ratio ?? '1:1',
+    name: variant,
+    variant,
+    media_url: (layer as { media_url?: string }).media_url ?? '',
+    geometry: geometryOf(layer),
+    'z-index': (layer as { 'z-index'?: number })['z-index'] ?? 0,
+  };
+}
+
+/**
+ * Mixes = co-occurrence swap groups, keyed on a **variant lineup** of the full
+ * enabled cast (not just the object keys present in a crop). Each multi-subject
+ * image crop is assigned to exactly one group:
+ *
+ *   - Drop disabled subjects from the layer, then classify by enabled count:
+ *       0 → no swappable subject, skip
+ *       1 → effectively single-subject, fold into that entity's crop sheet
+ *       ≥2 → genuine mix
+ *   - For a mix, build the lineup over the WHOLE enabled cast: each entity
+ *     contributes the variant tagged in this crop, or its base variant when
+ *     absent. This canonical fill is what dedups the example:
+ *       (A1,B1), (A1,C1), (B1,C1), (B1,C1,D) → all canonicalize to {A1,B1,C1,D}
+ *       (A2,C1), (A2,D)                       → {A2,B1,C1,D}  (A pinned to A2)
+ *     so a crop never lands in two groups, and the swap can reference the full
+ *     cast (the AI ignores cast members absent from a given crop).
+ */
 function buildMixes(
   illustration: RemixIllustration,
-  characters: { key: string; name: string }[],
-  props: { key: string; name: string }[],
+  characters: MixEntity[],
+  props: MixEntity[],
+  enabledKeys: Set<string>,
 ): RemixMix[] {
   const bySig = new Map<string, RemixMix>();
   let order = 0;
+
+  // Full enabled cast (characters first, then props) — deterministic lineup order.
+  const castEntities: MixEntity[] = [...characters, ...props];
+  const entityByKey = new Map(castEntities.map((e) => [e.key, e]));
+  const cast: MixCastMember[] = castEntities.map((e) => ({
+    key: e.key,
+    baseVariant: baseVariantKey(e),
+  }));
 
   for (const spread of illustration.spreads) {
     const spreadNumber = spreadNumberOf(spread);
@@ -195,26 +302,37 @@ function buildMixes(
       const subjectTags = subjectTagsOf(layer);
       if (subjectTags.length <= 1) continue;
 
-      const keys = subjectTags.map((t) => t.object_key);
-      const sig = canonicalMixKey(keys);
+      const enabledTags = subjectTags.filter((t) => enabledKeys.has(t.object_key));
+      if (enabledTags.length === 0) continue;
+
+      if (enabledTags.length === 1) {
+        const tag = enabledTags[0];
+        const entity = entityByKey.get(tag.object_key);
+        if (!entity) continue;
+        entity.crop_sheets[0].crops.push(
+          makeMixCrop(layer, spreadNumber, tag.variant_key ?? ''),
+        );
+        continue;
+      }
+
+      // ≥2 enabled subjects → genuine mix. Identity = canonical full-cast
+      // variant lineup (shared with crop-grouping so membership agrees).
+      const lineup = mixLineupTokens(enabledTags, cast);
+      const sig = canonicalMixKey(lineup);
       let mix = bySig.get(sig);
       if (!mix) {
-        const mixName = composeMixName(keys, characters, props);
         // Each mix carries exactly one crop sheet.
-        mix = { order: order++, name: mixName, keys, crop_sheets: [makeDefaultSheet()] };
+        mix = {
+          order: order++,
+          name: composeMixName(lineup, castEntities),
+          keys: lineup,
+          crop_sheets: [makeDefaultSheet()],
+        };
         bySig.set(sig, mix);
       }
 
-      const crop = {
-        spread_number: spreadNumber,
-        aspect_ratio: (layer as SpreadImage).aspect_ratio ?? '1:1',
-        name: subjectTags.map((t) => t.variant_key ?? '').join('+'),
-        variant: subjectTags.map((t) => t.variant_key ?? '').join('+'),
-        media_url: (layer as { media_url?: string }).media_url ?? '',
-        geometry: geometryOf(layer),
-        'z-index': (layer as { 'z-index'?: number })['z-index'] ?? 0,
-      };
-      mix.crop_sheets[0].crops.push(crop);
+      const variant = enabledTags.map((t) => t.variant_key ?? '').join('+');
+      mix.crop_sheets[0].crops.push(makeMixCrop(layer, spreadNumber, variant));
     }
   }
   return [...bySig.values()];
@@ -277,7 +395,10 @@ export function buildRemixClonePayload(
 
   populateSingleSubjectCrops(characters, illustration, 'character');
   populateSingleSubjectCrops(props, illustration, 'prop');
-  const mixes = buildMixes(illustration, characters, props);
+  const mixes = buildMixes(illustration, characters, props, new Set([
+    ...enabledCharKeys,
+    ...enabledPropKeys,
+  ]));
 
   const sheetTotal =
     characters.reduce((a, c) => a + c.crop_sheets.length, 0) +

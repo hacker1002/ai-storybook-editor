@@ -179,7 +179,8 @@ describe('buildRemixClonePayload — clone-builder Phase 03', () => {
     expect(r.characters[0].crop_sheets[0].crops).toHaveLength(0);
     expect(r.characters[1].crop_sheets[0].crops).toHaveLength(0);
     expect(r.mixes).toHaveLength(1);
-    expect(r.mixes[0].keys).toEqual(['c1', 'c2']);
+    // keys are now a variant-qualified full-cast lineup (`${key}/${variant}`).
+    expect(r.mixes[0].keys).toEqual(['c1/v1', 'c2/v1']);
     expect(r.mixes[0].crop_sheets).toHaveLength(1);
     expect(r.mixes[0].crop_sheets[0].crops).toHaveLength(1);
   });
@@ -260,6 +261,109 @@ describe('buildRemixClonePayload — clone-builder Phase 03', () => {
       ],
     });
     expect(r.characters[0].crop_sheets[0].crops).toEqual([]);
+  });
+
+  // Case 9: only 1 of 2 co-occurring subjects enabled → not a mix; fold into
+  // the enabled entity (leela enabled, didi disabled → leela crop, 0 mixes).
+  it('folds a co-occurrence into the single enabled subject when others are disabled', () => {
+    const r = build({
+      characters: [makeChar('leela', 'Leela'), makeChar('didi', 'Didi')],
+      enabledCharKeys: ['leela'],
+      spreads: [
+        makeSpread('s1', 1, [
+          makeImage('img1', [
+            subjectTag('character', 'didi'),
+            subjectTag('character', 'leela'),
+          ]),
+        ]),
+      ],
+    });
+    expect(r.characters.map((c) => c.key)).toEqual(['leela']);
+    expect(r.characters[0].crop_sheets[0].crops).toHaveLength(1);
+    expect(r.mixes).toHaveLength(0);
+  });
+});
+
+// ── Variant-lineup mixes (full-cast, base-variant dedup) ─────────────────────
+
+function makeCharVariants(
+  key: string,
+  name: string,
+  variants: { key: string; type: 0 | 1 }[],
+): Character {
+  return {
+    key,
+    name,
+    description: '',
+    variants: variants.map((v) => ({ key: v.key, name: v.key, type: v.type })),
+    crop_sheets: [],
+  } as unknown as Character;
+}
+function makePropVariants(
+  key: string,
+  name: string,
+  variants: { key: string; type: 0 | 1 }[],
+): Prop {
+  return {
+    key,
+    name,
+    description: '',
+    variants: variants.map((v) => ({ key: v.key, name: v.key, type: v.type })),
+    crop_sheets: [],
+    sounds: [],
+  } as unknown as Prop;
+}
+
+describe('buildRemixClonePayload — variant-lineup mixes', () => {
+  // User spec: A(a1,a2), B(b1), C(c1), prop D(d1) enabled. Two groups emerge:
+  //   group1 {A/a1,B/b1,C/c1,D/d1} ← (a1,b1),(b1,c1),(b1,c1,d1)  (A base-filled)
+  //   group2 {A/a2,B/b1,C/c1,D/d1} ← (a2,c1),(a2,d1)
+  it('groups multi-subject crops by full-cast variant lineup with base-variant dedup', () => {
+    const r = build({
+      characters: [
+        makeCharVariants('A', 'Aria', [
+          { key: 'a1', type: 0 },
+          { key: 'a2', type: 1 },
+        ]),
+        makeCharVariants('B', 'Bee', [{ key: 'b1', type: 0 }]),
+        makeCharVariants('C', 'Cleo', [{ key: 'c1', type: 0 }]),
+      ],
+      props: [makePropVariants('D', 'Drum', [{ key: 'd1', type: 0 }])],
+      spreads: [
+        makeSpread('s1', 1, [
+          makeImage('i1', [subjectTag('character', 'A', 'a1'), subjectTag('character', 'B', 'b1')]),
+          makeImage('i2', [subjectTag('character', 'B', 'b1'), subjectTag('character', 'C', 'c1')]),
+        ]),
+        makeSpread('s2', 2, [
+          makeImage('i3', [
+            subjectTag('character', 'B', 'b1'),
+            subjectTag('character', 'C', 'c1'),
+            subjectTag('prop', 'D', 'd1'),
+          ]),
+          makeImage('i4', [subjectTag('character', 'A', 'a2'), subjectTag('character', 'C', 'c1')]),
+          makeImage('i5', [subjectTag('character', 'A', 'a2'), subjectTag('prop', 'D', 'd1')]),
+        ]),
+      ],
+    });
+
+    expect(r.mixes).toHaveLength(2);
+
+    const g1 = r.mixes.find((m) => m.keys.includes('A/a1'));
+    const g2 = r.mixes.find((m) => m.keys.includes('A/a2'));
+    expect(g1).toBeDefined();
+    expect(g2).toBeDefined();
+
+    // Both groups carry the FULL enabled cast (even members absent from a crop).
+    expect(g1!.keys).toEqual(['A/a1', 'B/b1', 'C/c1', 'D/d1']);
+    expect(g2!.keys).toEqual(['A/a2', 'B/b1', 'C/c1', 'D/d1']);
+
+    // (a1,b1),(b1,c1),(b1,c1,d1) → group1 ; (a2,c1),(a2,d1) → group2
+    expect(g1!.crop_sheets[0].crops).toHaveLength(3);
+    expect(g2!.crop_sheets[0].crops).toHaveLength(2);
+
+    // Name disambiguates the multi-variant entity, leaves single-variant clean.
+    expect(g1!.name).toBe('Aria (a1) & Bee & Cleo & Drum');
+    expect(g2!.name).toBe('Aria (a2) & Bee & Cleo & Drum');
   });
 });
 

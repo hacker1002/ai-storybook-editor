@@ -5,6 +5,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { groupCropsForKey } from './crop-grouping';
+import type { GroupCropsContext } from './crop-grouping';
+import { canonicalMixKey } from '@/types/remix';
+import { mixLineupTokens } from '@/stores/remix-store/clone-builder';
 import type { RemixIllustration } from '@/types/remix';
 import type {
   SpreadImage,
@@ -76,6 +79,14 @@ function makeIllustration(layers: {
   } as unknown as RemixIllustration;
 }
 
+/** Enabled-cast context — single-variant cast (baseVariant ''). */
+function ctx(...keys: string[]): GroupCropsContext {
+  return {
+    enabledKeys: new Set(keys),
+    cast: keys.map((key) => ({ key, baseVariant: '' })),
+  };
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('groupCropsForKey — image-only crop selection', () => {
@@ -83,7 +94,7 @@ describe('groupCropsForKey — image-only crop selection', () => {
     const ill = makeIllustration({
       images: [makeImage('img1', [subjectTag('character', 'c1')])],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1');
+    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
     expect(r.cropInputs).toHaveLength(1);
     expect(r.cropInputs[0].id).toBe('img1');
     expect(r.cropMetaById['img1'].media_url).toBe('https://cdn/img1.png');
@@ -94,7 +105,7 @@ describe('groupCropsForKey — image-only crop selection', () => {
     const ill = makeIllustration({
       auto_pics: [makeAutoPic('anim1', [subjectTag('character', 'c1')])],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1');
+    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
     expect(r.cropInputs).toEqual([]);
     expect(r.cropMetaById).toEqual({});
   });
@@ -103,7 +114,7 @@ describe('groupCropsForKey — image-only crop selection', () => {
     const ill = makeIllustration({
       videos: [makeVideo('vid1', [subjectTag('character', 'c1')])],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1');
+    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
     expect(r.cropInputs).toEqual([]);
   });
 
@@ -112,7 +123,54 @@ describe('groupCropsForKey — image-only crop selection', () => {
       images: [makeImage('img1', [subjectTag('character', 'c1')])],
       auto_pics: [makeAutoPic('anim1', [subjectTag('character', 'c1')])],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1');
+    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
     expect(r.cropInputs.map((c) => c.id)).toEqual(['img1']);
+  });
+});
+
+describe('groupCropsForKey — enabled-aware fold + mix lineup', () => {
+  // User bug: only didi enabled → a didi+leela layer must fold into didi.
+  it('folds a co-occurrence into the sole enabled subject', () => {
+    const ill = makeIllustration({
+      images: [
+        makeImage('img1', [
+          subjectTag('character', 'didi'),
+          subjectTag('character', 'leela'),
+        ]),
+      ],
+    });
+    const onlyDidi = ctx('didi');
+    expect(
+      groupCropsForKey(ill, 'character', 'didi', onlyDidi).cropInputs.map((c) => c.id),
+    ).toEqual(['img1']);
+    // leela is disabled → no crops, even though it is tagged on the layer.
+    expect(groupCropsForKey(ill, 'character', 'leela', onlyDidi).cropInputs).toEqual([]);
+  });
+
+  it('keeps a genuine mix (≥2 enabled) out of either single key, matched by lineup', () => {
+    const ill = makeIllustration({
+      images: [
+        makeImage('img1', [
+          subjectTag('character', 'didi'),
+          subjectTag('character', 'leela'),
+        ]),
+      ],
+    });
+    const both = ctx('didi', 'leela');
+    expect(groupCropsForKey(ill, 'character', 'didi', both).cropInputs).toEqual([]);
+    expect(groupCropsForKey(ill, 'character', 'leela', both).cropInputs).toEqual([]);
+
+    const lineupKey = canonicalMixKey(
+      mixLineupTokens(
+        [
+          { object_key: 'didi', variant_key: 'v1' },
+          { object_key: 'leela', variant_key: 'v1' },
+        ],
+        both.cast,
+      ),
+    );
+    expect(
+      groupCropsForKey(ill, 'mix', lineupKey, both).cropInputs.map((c) => c.id),
+    ).toEqual(['img1']);
   });
 });

@@ -31,7 +31,9 @@ import {
   subjectTagsOf,
   spreadNumberOf,
   geometryOf,
+  mixLineupTokens,
   type TaggedLayer,
+  type MixCastMember,
 } from '@/stores/remix-store/clone-builder';
 import { createLogger } from '@/utils/logger';
 
@@ -72,19 +74,39 @@ export function resolveEffectiveUrl(layer: TaggedLayer): string {
   return img.media_url ?? '';
 }
 
+/** Enabled-cast context for grouping — sourced from the remix settings (config
+ *  / persisted row), NOT the raw illustration tags. This is what makes grouping
+ *  respect swap-enabled state: disabled subjects are dropped before a layer is
+ *  classified single-vs-mix. */
+export interface GroupCropsContext {
+  /** Swap-enabled entity keys (characters + props). */
+  enabledKeys: Set<string>;
+  /** Full enabled cast (chars then props) with base variants — needed to
+   *  compute a layer's variant-lineup identity for mix matching. */
+  cast: MixCastMember[];
+}
+
 /**
- * Group crops of one entity key from the illustration.
+ * Group crops of one entity key from the illustration, respecting swap-enabled
+ * state. Disabled subjects are dropped from each layer first, then the layer is
+ * classified by the count of ENABLED subject tags (mirrors clone-builder):
+ *   - 0 enabled            → skip
+ *   - 1 enabled            → single-subject crop for that entity (this is the
+ *                            fold: a didi+leela layer with only didi enabled
+ *                            becomes a didi crop)
+ *   - ≥2 enabled           → mix; matches when the canonical full-cast variant
+ *                            lineup equals `key`
  *
  * @param illustration  Frozen remix illustration (post-create source of truth).
- * @param type          'character' | 'prop' — single-subject match;
- *                       'mix' — layers with ≥2 subject tags whose
- *                       canonicalMixKey equals `key`.
- * @param key           Native entity key, or canonicalMixKey for a mix.
+ * @param type          'character' | 'prop' — 1-enabled match; 'mix' — ≥2.
+ * @param key           Native entity key, or canonicalMixKey(lineup) for a mix.
+ * @param ctx           Enabled cast from settings (see GroupCropsContext).
  */
 export function groupCropsForKey(
   illustration: RemixIllustration,
   type: CropGroupType,
   key: string,
+  ctx: GroupCropsContext,
 ): GroupCropsResult {
   log.info('groupCropsForKey', 'start', { type, key });
 
@@ -101,19 +123,23 @@ export function groupCropsForKey(
       if (kind !== 'image') continue;
 
       const subjectTags = subjectTagsOf(layer);
+      // Drop disabled subjects FIRST — grouping keys come from settings, not raw
+      // tags. A co-occurrence collapses to whatever stays swap-enabled.
+      const enabledTags = subjectTags.filter((t) => ctx.enabledKeys.has(t.object_key));
+      if (enabledTags.length === 0) continue;
 
-      // Classify: mix matches ≥2 tags by canonical key; character/prop matches
-      // exactly one tag of the right type + key (mirrors clone-builder).
+      // Classify by enabled-tag count: ≥2 → mix (match by full-cast variant
+      // lineup); exactly 1 → single-subject crop for that entity (the fold).
       let matched = false;
       if (type === 'mix') {
         matched =
-          subjectTags.length >= 2 &&
-          canonicalMixKey(subjectTags.map((t) => t.object_key)) === key;
+          enabledTags.length >= 2 &&
+          canonicalMixKey(mixLineupTokens(enabledTags, ctx.cast)) === key;
       } else {
         matched =
-          subjectTags.length === 1 &&
-          subjectTags[0].type === type &&
-          subjectTags[0].object_key === key;
+          enabledTags.length === 1 &&
+          enabledTags[0].type === type &&
+          enabledTags[0].object_key === key;
       }
       if (!matched) continue;
 
@@ -134,12 +160,12 @@ export function groupCropsForKey(
         log.warn('groupCropsForKey', 'crop has empty url', { key, id: layer.id });
       }
 
-      // name/variant follow clone-builder: single tag → variant_key;
-      // mix → all variant_keys joined with '+'.
+      // name/variant follow clone-builder, over ENABLED tags only: single →
+      // variant_key; mix → enabled variant_keys joined with '+'.
       const variant =
         type === 'mix'
-          ? subjectTags.map((t) => t.variant_key ?? '').join('+')
-          : (subjectTags[0]?.variant_key ?? '');
+          ? enabledTags.map((t) => t.variant_key ?? '').join('+')
+          : (enabledTags[0]?.variant_key ?? '');
 
       cropInputs.push({
         id: layer.id,

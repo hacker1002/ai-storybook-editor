@@ -43,8 +43,24 @@ import type {
   CropSheetLayoutResult,
 } from '@/utils/crop-sheet-layout-engine';
 import { groupCropsForKey } from '@/utils/crop-grouping';
-import type { CropGroupType } from '@/utils/crop-grouping';
+import type { CropGroupType, GroupCropsContext } from '@/utils/crop-grouping';
+import { baseVariantKey } from './clone-builder';
+import type { MixCastMember } from './clone-builder';
 import type { CropSheetUpdate } from './types';
+
+/** Build the enabled-cast grouping context from a remix's character/prop lists
+ *  (already enabled-filtered in both the insert payload and the persisted row).
+ *  `enabledKeys` + `cast` drive enabled-aware single-vs-mix classification. */
+function buildGroupCtx(
+  characters: { key: string; variants?: { key: string; type?: number }[] }[],
+  props: { key: string; variants?: { key: string; type?: number }[] }[],
+): GroupCropsContext {
+  const cast: MixCastMember[] = [
+    ...characters.map((c) => ({ key: c.key, baseVariant: baseVariantKey(c) })),
+    ...props.map((p) => ({ key: p.key, baseVariant: baseVariantKey(p) })),
+  ];
+  return { enabledKeys: new Set(cast.map((m) => m.key)), cast };
+}
 
 const log = createLogger('Store', 'CropSheetLayout');
 
@@ -145,11 +161,14 @@ export function computeCropSheets(
     spreadH: spread.height,
   });
 
+  const ctx = buildGroupCtx(payload.characters, payload.props);
+
   const layoutMix = (key: string): RemixCropSheet[] => {
     const { cropInputs, cropMetaById } = groupCropsForKey(
       payload.illustration,
       'mix',
       key,
+      ctx,
     );
     log.debug('computeCropSheets', 'grouped mix', {
       key,
@@ -171,6 +190,7 @@ export function computeCropSheets(
       payload.illustration,
       type,
       key,
+      ctx,
     );
     log.debug('computeCropSheets', 'grouped entity', {
       type,
@@ -439,6 +459,7 @@ export async function relayoutVariantCropSheets(
     prevRemix.illustration as RemixIllustration,
     type,
     key,
+    buildGroupCtx(prevRemix.characters, prevRemix.props),
   );
 
   // Variant-scope filter:

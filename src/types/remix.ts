@@ -77,7 +77,10 @@ export interface RemixMix {
   order: number;
   /** Composed display name e.g. "Elara & Magic Sword" (preserves tag order, not sorted). */
   name: string;
-  /** Soft refs to remix.characters[].key | remix.props[].key. */
+  /** Variant-qualified lineup of the full enabled cast, one token per entity:
+   *  `${objectKey}/${variantKey}` (or bare `${objectKey}` when the entity has no
+   *  variant). objectKey is a soft ref to remix.characters[].key | remix.props[].key.
+   *  Identity = canonicalMixKey(keys) — variant tokens make A/a1 vs A/a2 distinct. */
   keys: string[];
   crop_sheets: RemixCropSheet[];
 }
