@@ -23,12 +23,23 @@ import { X } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
 import { createLogger } from '@/utils/logger';
-import type { RemixEntityRef } from '@/types/remix';
-import { useEntityVariantIllustrations } from '@/stores/remix-store/selectors';
+import type { Human } from '@/types/human';
+import type { RemixEntityRef, SwapPreviewState } from '@/types/remix';
+import {
+  useEntityVariantIllustrations,
+  useEntityVariantSwapUrls,
+  useRemixConfigCharacter,
+  useRemixActions,
+} from '@/stores/remix-store/selectors';
+import { useHumans } from '@/stores/humans-store';
+import { useCharacters } from '@/stores/snapshot-store/selectors';
 import { useInteractionLayer } from '@/features/editor/contexts';
 import type { Layer } from '@/features/editor/contexts';
 
 import { SWAP_MODAL_TOKENS, Z_INDEX } from './swap-modal-constants';
+import { VariantsModalCanvas } from './variants-modal-canvas';
+import { VariantsModalFooter } from './variants-modal-footer';
+import { runVariantSwap } from '../utils/run-variant-swap';
 
 const log = createLogger('Editor', 'VariantsVisualModal');
 
@@ -55,7 +66,7 @@ const CARD_STYLE: React.CSSProperties = {
   // above the parent swap modal (z-index 5000 > parent 4000).
   width: 'min(720px, calc(100vw - 80px))',
   maxWidth: 'none',
-  height: 'min(680px, calc(100vh - 80px))',
+  height: 'min(760px, calc(100vh - 80px))',
   maxHeight: 'calc(100vh - 80px)',
   borderRadius: 14,
   background: 'var(--swap-modal-card-bg)',
@@ -79,16 +90,6 @@ const HEADER_STYLE: React.CSSProperties = {
   flex: '0 0 auto',
 };
 
-// Dark transparency checker — matches the mockup (subtle, two near-equal alpha
-// whites over the modal's canvas surface). Tile size doubled vs default for a
-// calmer pattern at large image sizes.
-const CHECKER_BG: React.CSSProperties = {
-  backgroundColor: 'var(--swap-modal-canvas-bg)',
-  backgroundImage:
-    'repeating-conic-gradient(rgba(255,255,255,0.05) 0% 25%, rgba(255,255,255,0.02) 0% 50%)',
-  backgroundSize: '20px 20px',
-};
-
 const CLOSE_BTN_STYLE: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
@@ -109,16 +110,6 @@ const TABS_ROW_STYLE: React.CSSProperties = {
   borderBottom: '1px solid var(--swap-modal-border)',
   flex: '0 0 auto',
   overflowX: 'auto',
-};
-
-const CANVAS_STYLE: React.CSSProperties = {
-  position: 'relative',
-  flex: '1 1 auto',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minHeight: 0,
-  padding: 24,
 };
 
 function tabButtonStyle(active: boolean): React.CSSProperties {
@@ -152,13 +143,34 @@ export function VariantsVisualModal({
   // Mix entity guarded at the caller (swap-crop-sheet-modal renders this
   // modal only when `modalEntity?.type !== 'mix'`). Hooks run unconditionally.
   const [activeIndex, setActiveIndex] = useState(0);
+  // Per-variant swap task — modal-level, survives tab switch, lost on unmount
+  // (mirror RemixConfigModal.swapTasks; NOT zustand / NOT background_jobs).
+  const [swapTasks, setSwapTasks] = useState<Record<string, SwapPreviewState>>({});
   const dialogContentRef = useRef<HTMLDivElement>(null);
 
+  const entityType = entity.type as 'character' | 'prop';
   const illustrationsByVariant = useEntityVariantIllustrations(
     remixId,
-    entity.type as 'character' | 'prop',
+    entityType,
     entity.key,
   );
+  // AFTER source-of-truth — persisted visual_swap_url per variant.
+  const swapUrlsByVariant = useEntityVariantSwapUrls(remixId, entityType, entity.key);
+  // Frozen remix_config view (gating + swap request context). null for prop.
+  const cfgChar = useRemixConfigCharacter(remixId, entity.key);
+  const { setVariantVisualSwapUrl } = useRemixActions();
+
+  // Swap request context — mirror RemixConfigModal: live humans cache (keyed by
+  // id) + snapshot characters supply human_description / character_context.
+  const humans = useHumans();
+  const snapshotChars = useCharacters();
+  const humansMap = useMemo<Record<string, Human>>(
+    () => Object.fromEntries(humans.map((h) => [h.id, h])),
+    [humans],
+  );
+
+  const setTask = (vk: string, state: SwapPreviewState) =>
+    setSwapTasks((prev) => ({ ...prev, [vk]: state }));
 
   // Mount/unmount log.
   useEffect(() => {
@@ -209,18 +221,95 @@ export function VariantsVisualModal({
     yieldedFrom,
   });
 
-  // Resolve current illustration: selected → first → null.
-  const { mediaUrl, activeVariantName } = useMemo(() => {
-    const variant = entity.variants[activeIndex] ?? null;
-    if (!variant) return { mediaUrl: null as string | null, activeVariantName: '' };
-    const illustrations = illustrationsByVariant[variant.variantKey] ?? [];
+  // Active variant + derived render inputs (design §2.3).
+  const variant = entity.variants[activeIndex] ?? null;
+  const variantKey = variant?.variantKey ?? null;
+  const activeVariantName = variant ? variant.name || variant.variantKey : '';
+  const task = variantKey ? swapTasks[variantKey] : undefined;
+
+  // BEFORE = illustration is_selected → [0] → null. AFTER = persisted
+  // visual_swap_url (source-of-truth) ?? optimistic task.afterUrl ?? null.
+  const beforeUrl = useMemo<string | null>(() => {
+    if (!variantKey) return null;
+    const illustrations = illustrationsByVariant[variantKey] ?? [];
     const chosen =
       illustrations.find((il) => il.is_selected) ?? illustrations[0] ?? null;
-    return {
-      mediaUrl: chosen?.media_url ?? null,
-      activeVariantName: variant.name || variant.variantKey,
-    };
-  }, [entity.variants, activeIndex, illustrationsByVariant]);
+    return chosen?.media_url ?? null;
+  }, [variantKey, illustrationsByVariant]);
+
+  const afterUrl =
+    (variantKey ? swapUrlsByVariant[variantKey] : null) ?? task?.afterUrl ?? null;
+
+  // Synthetic 'base' fallback guard (M1): `withSyntheticBaseFallback` (selectors)
+  // can mint a display-only group keyed 'base' (or any orphan-sheet group) that
+  // has NO matching real persistable variant. `swapUrlsByVariant` is keyed by
+  // the REAL `variants[].key`, so a variantKey absent from it has no persist
+  // target — Generate would no-op inside `setVariantVisualSwapUrl`'s "variant
+  // not found" guard. Disable Generate for these (display-only) groups.
+  const isPersistableVariant =
+    variantKey != null &&
+    Object.prototype.hasOwnProperty.call(swapUrlsByVariant, variantKey);
+
+  // Generate gating — character only; needs a real persistable variant + human +
+  // visual + normalized image + ≥1 enabled trait + a source sheet. (Prop →
+  // cfgChar null → disabled.)
+  const hasEnabledTrait = cfgChar?.traits.some((t) => t.is_enabled) ?? false;
+  const canGenerate =
+    entity.type === 'character' &&
+    isPersistableVariant &&
+    cfgChar?.human_id != null &&
+    cfgChar?.visual != null &&
+    cfgChar?.converted_image != null &&
+    hasEnabledTrait &&
+    beforeUrl != null;
+  const isSwapping = task?.status === 'loading';
+
+  // Tooltip reason when Generate is disabled (PII-safe — no human data).
+  const disabledReason = useMemo<string | null>(() => {
+    if (canGenerate) return null;
+    if (entity.type !== 'character') return 'Generate is available for characters only.';
+    if (!isPersistableVariant)
+      return 'This variant is view-only (no real variant to save a swap to).';
+    if (cfgChar == null) return 'This character is not configured for swap.';
+    if (cfgChar.human_id == null || cfgChar.visual == null)
+      return 'No human/visual selected for this character.';
+    if (cfgChar.converted_image == null) return 'Run Extract for this human first.';
+    if (!hasEnabledTrait) return 'Enable at least 1 trait.';
+    if (beforeUrl == null) return 'No visual image to swap.';
+    return null;
+  }, [
+    canGenerate,
+    entity.type,
+    isPersistableVariant,
+    cfgChar,
+    hasEnabledTrait,
+    beforeUrl,
+  ]);
+
+  const handleGenerate = () => {
+    if (!variantKey || !canGenerate) {
+      log.warn('handleGenerate', 'blocked', {
+        entityKey: entity.key,
+        hasVariantKey: !!variantKey,
+        canGenerate,
+      });
+      return;
+    }
+    log.info('handleGenerate', 'start variant swap', {
+      entityKey: entity.key,
+      variantKey,
+    });
+    void runVariantSwap(
+      variantKey,
+      cfgChar,
+      beforeUrl,
+      humansMap,
+      snapshotChars,
+      entity.key,
+      setTask,
+      (img) => setVariantVisualSwapUrl(remixId, entity.key, variantKey, img),
+    );
+  };
 
   const handleTabClick = (i: number) => {
     if (i === activeIndex) return;
@@ -231,6 +320,8 @@ export function VariantsVisualModal({
       to: i,
       variantKey: v?.variantKey,
     });
+    // Switching tabs resets the compare position (slider remounts via
+    // key={variantKey}); swapTasks are kept (per-variant, survive tab switch).
     setActiveIndex(i);
   };
 
@@ -306,7 +397,7 @@ export function VariantsVisualModal({
           <button
             type="button"
             onClick={handleCloseButton}
-            aria-label="Đóng"
+            aria-label="Close"
             style={CLOSE_BTN_STYLE}
           >
             <X size={18} />
@@ -326,7 +417,7 @@ export function VariantsVisualModal({
               textAlign: 'center',
             }}
           >
-            Chưa có variant nào — thêm sheet trước khi xem
+            No variants yet — add a sheet before viewing
           </div>
         ) : (
           <>
@@ -349,30 +440,22 @@ export function VariantsVisualModal({
               })}
             </div>
 
-            <div style={{ ...CANVAS_STYLE, ...CHECKER_BG }}>
-              {mediaUrl ? (
-                <img
-                  src={mediaUrl}
-                  alt={activeVariantName || 'variant'}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain',
-                    borderRadius: 8,
-                  }}
-                />
-              ) : (
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 13,
-                    color: 'var(--swap-modal-text-muted)',
-                  }}
-                >
-                  Chưa có ảnh visual
-                </p>
-              )}
-            </div>
+            <VariantsModalCanvas
+              variantKey={variantKey}
+              beforeUrl={beforeUrl}
+              afterUrl={afterUrl}
+              isSwapping={!!isSwapping}
+              variantName={activeVariantName}
+            />
+
+            <VariantsModalFooter
+              task={task}
+              afterUrl={afterUrl}
+              canGenerate={canGenerate}
+              isSwapping={!!isSwapping}
+              disabledReason={disabledReason}
+              onGenerate={handleGenerate}
+            />
           </>
         )}
       </DialogContent>

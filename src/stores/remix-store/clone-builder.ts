@@ -369,14 +369,14 @@ export function buildRemixClonePayload(
       const remixChar = { ...rest, crop_sheets: [makeDefaultSheet()] } as RemixCharacter;
 
       // Live-swap result: copy config.characters[].base_image_url onto the base
-      // variant (type=0) as `swap_visual_url` (Option A — Validation S1b). The
+      // variant (type=0) as `visual_swap_url` (Option A — Validation S1b). The
       // config field is modal staging; the variant field is the persisted
       // per-variant swap visual. Downstream (Phase 3 crop-sheet inject) reads
-      // `swap_visual_url` when present, else the original base sheet.
+      // `visual_swap_url` when present, else the original base sheet.
       const cfg = config.characters.find((x) => x.key === c.key);
       if (cfg?.base_image_url) {
         const base = remixChar.variants.find((v) => v.type === 0);
-        if (base) base.swap_visual_url = cfg.base_image_url;
+        if (base) base.visual_swap_url = cfg.base_image_url;
       }
       return remixChar;
     });

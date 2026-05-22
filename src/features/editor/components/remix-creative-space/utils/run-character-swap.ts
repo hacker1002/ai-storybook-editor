@@ -16,12 +16,14 @@ import {
 import {
   buildSwapVisualCoreRequest as defaultBuildRequest,
   type SwapGuardReason,
-} from '../build-swap-visual-request';
+} from './build-swap-visual-request';
 
 const log = createLogger('Editor', 'RunCharacterSwap');
 
-/** Generic, PII-safe messages for guard reasons (no human data echoed). */
-const GUARD_MESSAGES: Record<SwapGuardReason, string> = {
+/** Generic, PII-safe messages for guard reasons (no human data echoed).
+ *  Exported so the post-create variant orchestration (`run-variant-swap.ts`)
+ *  reuses the exact same guard copy — DRY, single source of truth. */
+export const GUARD_MESSAGES: Record<SwapGuardReason, string> = {
   NO_CHARACTER_IMAGE: 'Character base image not found.',
   NO_HUMAN: 'Pick a human first.',
   NO_VISUAL: 'Pick a visual first.',
@@ -30,8 +32,10 @@ const GUARD_MESSAGES: Record<SwapGuardReason, string> = {
   NO_SNAPSHOT_CHARACTER: 'Character not found in snapshot.',
 };
 
-/** Map an API error to a generic message — never echoes human/PII data. */
-function mapSwapError(errorCode?: string, fallback?: string): string {
+/** Map an API error to a generic message — never echoes human/PII data.
+ *  Exported so `run-variant-swap.ts` keeps error-copy parity with the create
+ *  flow (same 422 / rate-limit / timeout mapping). */
+export function mapSwapError(errorCode?: string, fallback?: string): string {
   switch (errorCode) {
     case 'EMPTY_SWAP_TRAITS':
       return 'Enable at least one trait with a description.';

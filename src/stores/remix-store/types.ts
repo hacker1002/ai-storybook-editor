@@ -130,6 +130,24 @@ export interface RemixSwapSlice {
     variantKey: string | null,
     sheetIndex: number,
   ) => Promise<boolean>;
+
+  /** Persist-writer for a per-variant swap result. Writes
+   *  `characters[charKey].variants[variantKey].visual_swap_url` and persists
+   *  the whole `characters` JSONB column. Optimistic with full-remix snapshot
+   *  rollback on error (single-writer assumption). `imageUrl=null` clears the
+   *  field (revert). Char-only — does NOT write `remix_config` or
+   *  `background_jobs`.
+   *
+   *  Resolves `true` on a successful Supabase write; `false` on a guard miss
+   *  (remix/char/variant not found) or after a persist error has been rolled
+   *  back. Callers must surface `false` as an error (do NOT show the optimistic
+   *  result as committed). */
+  setVariantVisualSwapUrl: (
+    remixId: string,
+    charKey: string,
+    variantKey: string,
+    imageUrl: string | null,
+  ) => Promise<boolean>;
 }
 
 /** Server sync: snapshot remix load, realtime event apply, targeted refetch. */

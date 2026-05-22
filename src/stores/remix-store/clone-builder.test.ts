@@ -367,9 +367,9 @@ describe('buildRemixClonePayload — variant-lineup mixes', () => {
   });
 });
 
-// ── Reshape 2026-05-20/21: base_image_url → variant.swap_visual_url + name ────
+// ── Reshape 2026-05-20/21: base_image_url → variant.visual_swap_url + name ────
 
-/** Character carrying a base variant (type=0) so swap_visual_url can be copied. */
+/** Character carrying a base variant (type=0) so visual_swap_url can be copied. */
 function makeCharWithBaseVariant(key: string, name: string): Character {
   return {
     order: 0,
@@ -412,7 +412,7 @@ function makeReshapedConfig(baseImageUrl: string | null): RemixConfig {
 }
 
 describe('buildRemixClonePayload — base_image_url copy + default name', () => {
-  it('copies config.characters[].base_image_url onto base variant swap_visual_url', () => {
+  it('copies config.characters[].base_image_url onto base variant visual_swap_url', () => {
     const r = buildRemixClonePayload(
       {
         snapshotId: 'snap-1',
@@ -424,11 +424,11 @@ describe('buildRemixClonePayload — base_image_url copy + default name', () => 
       'My Remix',
     );
     const base = r.characters[0].variants.find((v) => v.type === 0);
-    expect(base?.swap_visual_url).toBe('https://swap/c1.png');
+    expect(base?.visual_swap_url).toBe('https://swap/c1.png');
     expect(r.name).toBe('My Remix');
   });
 
-  it('leaves swap_visual_url unset when base_image_url is null', () => {
+  it('leaves visual_swap_url unset when base_image_url is null', () => {
     const r = buildRemixClonePayload(
       {
         snapshotId: 'snap-1',
@@ -439,7 +439,7 @@ describe('buildRemixClonePayload — base_image_url copy + default name', () => 
       makeReshapedConfig(null),
     );
     const base = r.characters[0].variants.find((v) => v.type === 0);
-    expect(base?.swap_visual_url).toBeUndefined();
+    expect(base?.visual_swap_url).toBeUndefined();
   });
 
   it("defaults the name to 'New Remix' when none is provided", () => {

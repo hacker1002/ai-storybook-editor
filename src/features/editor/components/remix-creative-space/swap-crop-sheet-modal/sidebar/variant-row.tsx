@@ -70,7 +70,7 @@ export function VariantRow({
       {/* Caret — toggles collapse only, does NOT select the variant. */}
       <button
         type="button"
-        aria-label={`${isCollapsed ? 'Mở' : 'Đóng'} sheet của variant ${variant.name}`}
+        aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} sheets of variant ${variant.name}`}
         onClick={(e) => {
           e.stopPropagation();
           log.debug('onClick', 'toggle variant caret', {
@@ -113,7 +113,7 @@ export function VariantRow({
       <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
-          aria-label={`Bớt sheet cho variant ${variant.name}`}
+          aria-label={`Remove sheet from variant ${variant.name}`}
           disabled={removeDisabled}
           onClick={(e) => {
             e.stopPropagation();
@@ -130,7 +130,7 @@ export function VariantRow({
         </button>
         <button
           type="button"
-          aria-label={`Thêm sheet cho variant ${variant.name}`}
+          aria-label={`Add sheet to variant ${variant.name}`}
           onClick={(e) => {
             e.stopPropagation();
             log.debug('onClick', 'add sheet to variant', {

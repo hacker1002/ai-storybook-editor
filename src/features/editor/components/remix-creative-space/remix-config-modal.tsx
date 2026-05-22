@@ -46,8 +46,8 @@ import { CharactersTab } from './tabs/characters-tab';
 import { PropsTab } from './tabs/props-tab';
 import { VoicesTab } from './tabs/voices-tab';
 import { LanguagesTab } from './tabs/languages-tab';
-import { resolveBaseSheetUrl } from './tabs/resolve-base-sheet-url';
-import { runCharacterSwap } from './tabs/run-character-swap';
+import { resolveBaseSheetUrl } from './utils/resolve-base-sheet-url';
+import { runCharacterSwap } from './utils/run-character-swap';
 
 const log = createLogger('Editor', 'RemixConfigModal');
 

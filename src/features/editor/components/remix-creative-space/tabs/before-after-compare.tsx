@@ -2,18 +2,63 @@
 // Local UI state only (handle %), never touches the draft. Pointer drag +
 // keyboard (←/→ = 5%). `after` is clipped from the left by the handle position.
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/utils/utils';
 
 interface Props {
   beforeUrl: string;
   afterUrl: string;
   className?: string;
+  /**
+   * When true, the slider box is sized to the BEFORE image's contained fit
+   * within the available area (measured), so it frames the image exactly like
+   * a standalone <img> — no side/letterbox bands. Requires an ancestor with a
+   * definite height (the area wrapper fills it). When false (default), the box
+   * fills its parent and the caller sets the size via `className`.
+   */
+  matchImageAspect?: boolean;
 }
 
-export function BeforeAfterCompare({ beforeUrl, afterUrl, className }: Props) {
+interface Box {
+  width: number;
+  height: number;
+}
+
+function containFit(areaW: number, areaH: number, aspect: number): Box {
+  let width = areaW;
+  let height = areaW / aspect;
+  if (height > areaH) {
+    height = areaH;
+    width = areaH * aspect;
+  }
+  return { width: Math.round(width), height: Math.round(height) };
+}
+
+export function BeforeAfterCompare({
+  beforeUrl,
+  afterUrl,
+  className,
+  matchImageAspect = false,
+}: Props) {
   const [pct, setPct] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
+  const beforeImgRef = useRef<HTMLImageElement>(null);
+  const [box, setBox] = useState<Box | null>(null);
+
+  // Derive the contained box from the BEFORE image's natural aspect + the
+  // available area. Reads the live <img>, so it works both on load and on
+  // resize without storing aspect in state.
+  const measure = useCallback(() => {
+    if (!matchImageAspect) return;
+    const area = areaRef.current;
+    const img = beforeImgRef.current;
+    if (!area || !img) return;
+    const { clientWidth: aw, clientHeight: ah } = area;
+    const { naturalWidth: iw, naturalHeight: ih } = img;
+    if (aw === 0 || ah === 0 || iw === 0 || ih === 0) return;
+    setBox(containFit(aw, ah, iw / ih));
+  }, [matchImageAspect]);
 
   const updateFromClientX = useCallback((clientX: number) => {
     const el = containerRef.current;
@@ -46,18 +91,33 @@ export function BeforeAfterCompare({ beforeUrl, afterUrl, className }: Props) {
     }
   };
 
-  return (
-    <div
-      ref={containerRef}
-      className={cn(
-        'relative h-[360px] w-full select-none overflow-hidden rounded-md bg-muted',
-        className,
-      )}
-    >
+  // Pre-paint measure: cached images report `complete` synchronously here, so
+  // switching back to an already-viewed variant sizes correctly on the first
+  // frame — no fallback flash. Resets box on URL change before recompute.
+  useLayoutEffect(() => {
+    if (!matchImageAspect) return;
+    setBox(null);
+    if (beforeImgRef.current?.complete) measure();
+  }, [matchImageAspect, beforeUrl, measure]);
+
+  // Recompute on area resize (window/modal resize).
+  useEffect(() => {
+    if (!matchImageAspect) return;
+    const area = areaRef.current;
+    if (!area) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(area);
+    return () => ro.disconnect();
+  }, [matchImageAspect, measure]);
+
+  const inner = (
+    <>
       <img
+        ref={beforeImgRef}
         src={beforeUrl}
         alt="Before swap"
         draggable={false}
+        onLoad={measure}
         className="block h-full w-full object-contain"
       />
       <div
@@ -93,6 +153,43 @@ export function BeforeAfterCompare({ beforeUrl, afterUrl, className }: Props) {
       <span className="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
         AFTER
       </span>
+    </>
+  );
+
+  if (matchImageAspect) {
+    // Area fills the (definite-height) parent; box hugs the contained image.
+    return (
+      <div
+        ref={areaRef}
+        className="flex h-full w-full items-center justify-center"
+      >
+        <div
+          ref={containerRef}
+          className={cn(
+            'relative select-none overflow-hidden rounded-md bg-muted',
+            className,
+          )}
+          style={
+            box
+              ? { width: box.width, height: box.height }
+              : { width: '100%', height: '100%', visibility: 'hidden' }
+          }
+        >
+          {inner}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn(
+        'relative w-full select-none overflow-hidden rounded-md bg-muted',
+        className,
+      )}
+    >
+      {inner}
     </div>
   );
 }

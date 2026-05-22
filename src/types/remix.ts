@@ -4,7 +4,7 @@
 import type { BaseSpread } from './spread-types';
 import type { IllustrationData, Section } from './illustration-types';
 import type { Character, CharacterVariant } from './character-types';
-import type { Prop, Crop } from './prop-types';
+import type { Prop, PropVariant, Crop } from './prop-types';
 import type { RemixLanguageCode } from './editor';
 import type { Human, TraitType } from './human';
 
@@ -53,14 +53,22 @@ export interface RemixCropSheet {
 // Mirror snapshot Character/Prop shape but replace `crop_sheets` with the
 // remix variant carrying `swap_results`. Prop also drops `sounds` (not used).
 
-/** Character variant extended for remix — adds `swap_visual_url`, the per-variant
+/** Character variant extended for remix — adds `visual_swap_url`, the per-variant
  *  output of `/api/remix/swap-character-visual`. Populated at clone time on the
  *  base variant (type=0) from `remix_config.characters[].base_image_url`
  *  (DB-CHANGELOG 2026-05-20 / Validation S1b). Optional → legacy rows omit it.
  *  NOTE: this is distinct from `RemixCharacterChoice.base_image_url`, which is
  *  the modal staging value; the variant field is the persisted result. */
 export type RemixCharacterVariant = CharacterVariant & {
-  swap_visual_url?: string | null;
+  visual_swap_url?: string | null;
+};
+
+/** Prop variant extended for remix — mirrors `RemixCharacterVariant` so the
+ *  cloned prop variants match the DB schema (`props[].variants[].visual_swap_url`).
+ *  Char-only feature: props never get a Generate action, but the field must
+ *  exist on the type for parity with the persisted JSONB column. */
+export type RemixPropVariant = PropVariant & {
+  visual_swap_url?: string | null;
 };
 
 export type RemixCharacter = Omit<Character, 'crop_sheets' | 'variants'> & {
@@ -68,8 +76,9 @@ export type RemixCharacter = Omit<Character, 'crop_sheets' | 'variants'> & {
   variants: RemixCharacterVariant[];
 };
 
-export type RemixProp = Omit<Prop, 'crop_sheets' | 'sounds'> & {
+export type RemixProp = Omit<Prop, 'crop_sheets' | 'sounds' | 'variants'> & {
   crop_sheets: RemixCropSheet[];
+  variants: RemixPropVariant[];
 };
 
 /** Mix entry — auto-generated from multi-subject layer tags during clone. */
@@ -116,7 +125,7 @@ export interface RemixCharacterChoice {
    *  to the swap endpoint. */
   traits: RemixTraitChoice[];
   /** Result of live base-variant swap (`/api/remix/swap-character-visual`).
-   *  Copied into the cloned variant `swap_visual_url` at create time. */
+   *  Copied into the cloned variant `visual_swap_url` at create time. */
   base_image_url: string | null;
   is_enabled: boolean;
 }

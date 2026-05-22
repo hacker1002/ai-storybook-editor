@@ -10,9 +10,11 @@ import type {
   Remix,
   RemixEntityRef,
   RemixJob,
+  RemixTraitChoice,
   SwapTaskStatus,
 } from '@/types/remix';
 import type { Illustration } from '@/types/prop-types';
+import { useHumans } from '@/stores/humans-store';
 import { useRemixStore } from './index';
 import { buildEntityTaskKey, IDLE_SWAP_TASK } from './slice-helpers';
 import { buildVariantGroups } from './build-variant-groups';
@@ -219,6 +221,95 @@ export const useEntityVariantIllustrations = (
   }, [remix, type, entityKey]);
 };
 
+/**
+ * Per-variant persisted `visual_swap_url` (AFTER image source-of-truth) keyed
+ * by `variantKey` (= variant `.key`). Feeds the VariantsVisualModal AFTER pane:
+ * `afterUrl = swapUrls[variantKey] ?? task.afterUrl ?? null` (persisted wins;
+ * the modal-level task is optimistic-only within a session).
+ *
+ * Returns `{}` for missing remix/entity (mix has no variants → `{}`). Memoized
+ * on the raw remix row ref — refreshes after a realtime / persist update.
+ */
+export const useEntityVariantSwapUrls = (
+  remixId: string,
+  type: 'character' | 'prop',
+  entityKey: string,
+): Record<string, string | null> => {
+  const remix = useRemixStore(
+    (s) => s.remixes.find((r) => r.id === remixId) ?? null,
+  );
+
+  return useMemo<Record<string, string | null>>(() => {
+    if (!remix) return {};
+    const variants =
+      type === 'character'
+        ? remix.characters.find((c) => c.key === entityKey)?.variants
+        : remix.props.find((p) => p.key === entityKey)?.variants;
+    if (!variants) return {};
+    return variants.reduce<Record<string, string | null>>((acc, v) => {
+      acc[v.key] = v.visual_swap_url ?? null;
+      return acc;
+    }, {});
+  }, [remix, type, entityKey]);
+};
+
+/** Frozen remix_config character picks joined with the live humans cache.
+ *  Returned shape feeds the Generate gating + swap request build in Phase 03:
+ *    - `human_id`, `visual`, `traits[]` — read verbatim from the FROZEN
+ *      `remix_config.characters[charKey]` (the create-time staging values).
+ *    - `converted_image` — joined from the humans cache (same source the CREATE
+ *      modal feeds into `runCharacterSwap`: `useHumans()` → `Human[]`, keyed by
+ *      id, resolved via `visualProfiles.find(vp.name === visual).convertedImage`,
+ *      mirroring `buildSwapVisualCoreRequest`). Camel-case domain shape — NOT
+ *      the snake_case DB row.
+ *
+ *  Returns `null` when the remix is missing, or `charKey` is not present in
+ *  `remix_config.characters` (prop / unknown key). `converted_image` is `null`
+ *  when the human/visual is unpicked, the human is absent from cache, or the
+ *  visual profile has no normalized image yet (Generate stays disabled).
+ *
+ *  Memoized on `[configChar, humans]` — `configChar` is ref-stable until an
+ *  action replaces the remix row; `humans` is the stable store array. */
+export interface RemixConfigCharacterView {
+  human_id: string | null;
+  visual: string | null;
+  traits: RemixTraitChoice[];
+  converted_image: string | null;
+}
+
+export const useRemixConfigCharacter = (
+  remixId: string,
+  charKey: string,
+): RemixConfigCharacterView | null => {
+  const configChar = useRemixStore(
+    (s) =>
+      s.remixes
+        .find((r) => r.id === remixId)
+        ?.remix_config.characters.find((c) => c.key === charKey) ?? null,
+  );
+  const humans = useHumans();
+
+  return useMemo<RemixConfigCharacterView | null>(() => {
+    if (!configChar) return null;
+
+    let convertedImage: string | null = null;
+    if (configChar.human_id && configChar.visual) {
+      const human = humans.find((h) => h.id === configChar.human_id);
+      const profile = human?.visualProfiles.find(
+        (vp) => vp.name === configChar.visual,
+      );
+      convertedImage = profile?.convertedImage ?? null;
+    }
+
+    return {
+      human_id: configChar.human_id,
+      visual: configChar.visual,
+      traits: configChar.traits,
+      converted_image: convertedImage,
+    };
+  }, [configChar, humans]);
+};
+
 /** Reads the ephemeral swap task for an entity KEY. Defaults to a stable idle
  *  object so callers never trigger a re-render on the default. v1: always idle
  *  (swap deferred — `startEntitySwap` is a no-op stub). */
@@ -263,5 +354,6 @@ export const useRemixActions = () =>
       startEntitySwap: s.startEntitySwap,
       appendCropSheet: s.appendCropSheet,
       removeCropSheet: s.removeCropSheet,
+      setVariantVisualSwapUrl: s.setVariantVisualSwapUrl,
     })),
   );
