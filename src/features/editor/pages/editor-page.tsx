@@ -35,6 +35,7 @@ import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
 import { useRemixJobNotifications } from '../hooks/use-remix-job-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
+import { useFlushOnHidden } from '../hooks/use-flush-on-hidden';
 
 const log = createLogger('Editor', 'EditorPage');
 
@@ -58,6 +59,8 @@ export function EditorPage() {
 
   // Register auto-save timer — must be called exactly once
   useAutoSave();
+  // Flush on page hidden (tab switch / minimize / reload / close)
+  useFlushOnHidden();
 
   // Editor settings
   const { setCurrentStep, resetSettings, rememberLanguageForBook, rememberStepForBook } =
