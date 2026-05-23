@@ -16,7 +16,7 @@ import type {
 import type { Illustration } from '@/types/prop-types';
 import { useHumans } from '@/stores/humans-store';
 import { useRemixStore } from './index';
-import { buildEntityTaskKey, IDLE_SWAP_TASK } from './slice-helpers';
+import { IDLE_SWAP_TASK } from './slice-helpers';
 import { buildVariantGroups } from './build-variant-groups';
 import type { RemixEntities } from './types';
 import type { RemixVariantGroup } from '@/types/remix';
@@ -44,6 +44,7 @@ import type { RemixVariantGroup } from '@/types/remix';
 function withSyntheticBaseFallback(
   entity: { crop_sheets: { variant_key: string | null }[] },
   groups: RemixVariantGroup[],
+  rawVariants: { key: string; visual_swap_url?: string | null }[],
 ): RemixVariantGroup[] {
   if (entity.crop_sheets.length === 0) return groups;
   const claimedIndices = new Set<number>();
@@ -57,12 +58,17 @@ function withSyntheticBaseFallback(
     if (vk === 'base' || vk === null) orphanBaseIndices.push(i);
   }
   if (orphanBaseIndices.length === 0) return groups;
+  // Anchor the synthetic group to a raw variant keyed 'base' if one exists;
+  // otherwise visualSwapUrl stays null → `[⇄]` disabled (no reference image to
+  // swap against — correct fail-closed behavior, matches MISSING_VARIANT_REFERENCE).
+  const baseVariant = rawVariants.find((v) => v.key === 'base');
   return [
     ...groups,
     {
       variantKey: 'base',
       name: 'Base',
       sheetIndices: orphanBaseIndices,
+      visualSwapUrl: baseVariant?.visual_swap_url ?? null,
     },
   ];
 }
@@ -157,6 +163,7 @@ export const useRemixEntities = (remixId: string): RemixEntities | null => {
         ref.variants = withSyntheticBaseFallback(
           ref,
           buildVariantGroups(ref, rawVariants),
+          rawVariants,
         );
         return ref;
       }),
@@ -172,6 +179,7 @@ export const useRemixEntities = (remixId: string): RemixEntities | null => {
         ref.variants = withSyntheticBaseFallback(
           ref,
           buildVariantGroups(ref, rawVariants),
+          rawVariants,
         );
         return ref;
       }),
@@ -310,29 +318,87 @@ export const useRemixConfigCharacter = (
   }, [configChar, humans]);
 };
 
-/** Reads the ephemeral swap task for an entity KEY. Defaults to a stable idle
- *  object so callers never trigger a re-render on the default. v1: always idle
- *  (swap deferred — `startEntitySwap` is a no-op stub). */
+/** Derives the swap task for one character KEY from the `jobs[]` slice (single
+ *  source of truth — there is no separate ephemeral task map). Only `character`
+ *  entities have a swap job; prop/mix always resolve `idle`.
+ *
+ *  Matches the latest `character_swap` job for (remixId, characterKey) and maps
+ *  its status → UI task:
+ *   - none / completed-clean              → idle
+ *   - queued | running                    → running (current/total = step counts)
+ *   - completed with errors / failed /
+ *     cancelled                           → error (failedSheets = result.failed_sheets)
+ *
+ *  `useShallow` keeps the flat result ref-stable across unrelated store updates
+ *  (the object is rebuilt each call; shallow value-compare avoids spurious
+ *  re-renders — see memory feedback_zustand_useshallow_nested_arrays).
+ *  GUARD: `SwapTaskStatus` MUST stay FLAT (primitive fields only). useShallow is
+ *  a 1-level compare — nesting an array/object here would defeat it and loop. */
 export const useEntitySwapTask = (
   remixId: string,
   type: 'character' | 'prop' | 'mix',
   key: string,
 ): SwapTaskStatus =>
   useRemixStore(
-    (s) =>
-      s.entitySwapTasks[buildEntityTaskKey(remixId, type, key)] ??
-      IDLE_SWAP_TASK,
+    useShallow((s): SwapTaskStatus => {
+      if (type !== 'character') return IDLE_SWAP_TASK;
+      const matches = s.jobs.filter(
+        (j) =>
+          j.phase === 'character_swap' &&
+          j.remixId === remixId &&
+          j.characterKey === key,
+      );
+      if (matches.length === 0) return IDLE_SWAP_TASK;
+      const job = matches.reduce((latest, cur) =>
+        cur.createdAt > latest.createdAt ? cur : latest,
+      );
+
+      if (job.status === 'queued' || job.status === 'running') {
+        return {
+          state: 'running',
+          current: job.currentStep,
+          total: job.totalSteps,
+        };
+      }
+
+      const failedSheets =
+        typeof job.result?.failed_sheets === 'number'
+          ? job.result.failed_sheets
+          : 0;
+
+      if (job.status === 'failed' || job.status === 'cancelled') {
+        return {
+          state: 'error',
+          message: job.result?.errors?.[0]?.message ?? 'Swap failed',
+          failedSheets,
+        };
+      }
+
+      // completed — partial when any sheet errored (gate on errors.length).
+      const errors = job.result?.errors ?? [];
+      if (errors.length > 0) {
+        return {
+          state: 'error',
+          message: errors[0]?.message ?? 'Swap partially failed',
+          failedSheets: failedSheets || errors.length,
+        };
+      }
+      return IDLE_SWAP_TASK;
+    }),
   );
 
-/** True when ANY entity of the remix has a running swap task. Guards the modal
- *  against firing a second swap. v1: always `false` (swap deferred). */
+/** True when ANY `character_swap` job of the remix is queued/running. Guards the
+ *  modal against firing a second swap (backend dedups 1 char-swap / remix).
+ *  Derived from `jobs[]` — boolean primitive, ref-stable by value. */
 export const useAnySwapRunning = (remixId: string): boolean =>
-  useRemixStore((s) => {
-    const prefix = `${remixId}:`;
-    return Object.entries(s.entitySwapTasks).some(
-      ([k, v]) => k.startsWith(prefix) && v.state === 'running',
-    );
-  });
+  useRemixStore((s) =>
+    s.jobs.some(
+      (j) =>
+        j.phase === 'character_swap' &&
+        j.remixId === remixId &&
+        (j.status === 'queued' || j.status === 'running'),
+    ),
+  );
 
 // ── Action bundle ────────────────────────────────────────────────────────────
 

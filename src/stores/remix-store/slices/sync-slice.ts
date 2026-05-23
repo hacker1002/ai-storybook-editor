@@ -8,6 +8,7 @@ import { createLogger } from '@/utils/logger';
 import type { BackgroundJobRow } from '@/types/remix';
 import { mapRowToRemix } from '../supabase-mapping';
 import { mapRowToJob } from '../map-background-job-row';
+import { pruneSupersededJobs } from '../slice-helpers';
 import type { RemixSyncSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -40,7 +41,6 @@ export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
       remixes: [],
       activeRemixId: null,
       jobs: [],
-      entitySwapTasks: {},
     });
   },
 
@@ -64,11 +64,11 @@ export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
         set((s) => {
           const idx = s.jobs.findIndex((j) => j.id === incoming.id);
           if (idx === -1) {
-            return { jobs: [...s.jobs, incoming] };
+            return { jobs: pruneSupersededJobs([...s.jobs, incoming]) };
           }
           const next = [...s.jobs];
           next[idx] = { ...next[idx], ...incoming };
-          return { jobs: next };
+          return { jobs: pruneSupersededJobs(next) };
         });
         log.debug('applyServerEvent', 'job_upsert', {
           jobId: incoming.id,
@@ -219,7 +219,7 @@ export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
       terminal: terminalRes.data?.length ?? 0,
       refetchTargets: refetchTargets.size,
     });
-    set({ jobs });
+    set({ jobs: pruneSupersededJobs(jobs) });
 
     for (const remixId of refetchTargets) {
       void get()

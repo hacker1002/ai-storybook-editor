@@ -228,7 +228,11 @@ export interface RemixRow {
 // failed|cancelled). `partial` is a derived UI state (status='completed' AND
 // result.errors.length > 0). Spec: ai-storybook-design/component/stores/remix-store.md §2.
 
-export type RemixJobPhase = 'audio' | 'image' | 'entity_swap';
+// `character_swap` (renamed from `entity_swap`, design 2026-05-22) = bulk swap
+// of every crop sheet × variant of ONE character via the character-swap job.
+// Prop/mix swap will ship later under distinct phases (`prop_swap`/`mix_swap`)
+// — keep the type→phase map (map-background-job-row.ts) extensible, not hardcoded.
+export type RemixJobPhase = 'audio' | 'image' | 'character_swap';
 
 export type RemixJobStatus =
   | 'queued'
@@ -240,6 +244,7 @@ export type RemixJobStatus =
 export interface RemixJobError {
   // Audio: 'narrate-script' | 'combine-audio-chunks' | 'persist' | 'internal'
   // Image (Phase 3): 'crop-swap' | 'crop-rasterize' | 'persist' | 'internal'
+  // Character swap (api/jobs/04): 'compose' | 'swap' | 'persist' | 'resolve' | 'internal'
   stage: string;
   spreadId?: string;
   textboxId?: string;
@@ -261,6 +266,12 @@ export interface RemixJobResult {
   failed_spreads?: number;
   total_chunks_regenerated?: number;
   total_textboxes_recombined?: number;
+  // Character swap (api/jobs/04 §Result) — per-sheet counters.
+  character_key?: string;
+  swapped_sheets?: number;
+  skipped_sheets?: number;
+  failed_sheets?: number;
+  variants_processed?: number;
   [k: string]: unknown;
 }
 
@@ -270,6 +281,10 @@ export interface RemixJob {
   phase: RemixJobPhase;
   triggeredBy: 'auto-create' | 'user';
   status: RemixJobStatus;
+  /** Set for `character_swap` jobs only — mirrors `params.character_key`. Lets
+   *  selectors match the running swap to its character row. Undefined for
+   *  audio/image phases. */
+  characterKey?: string;
   currentStep: number;
   totalSteps: number;
   stepDetails?: { spreads: Record<string, RemixJobStepDetail> };
@@ -280,10 +295,13 @@ export interface RemixJob {
   completedAt?: string;
 }
 
-/** 3-shape result returned by startAudioJob/startImageJob. Spec: api/jobs/01 §Result. */
+/** 3-shape result returned by startAudioJob/startImageJob/startEntitySwap.
+ *  Spec: api/jobs/01 §Result + api/jobs/04 §Result. `characterKey` is set only
+ *  by the character-swap enqueue path; on `deduped` it is the character of the
+ *  ALREADY-active job (may differ from the requested key — see api/jobs/04). */
 export type EnqueueRemixJobOutcome =
-  | { kind: 'enqueued'; jobId: string; totalSteps: number; chunksToRegen?: number; textboxesToRecombine?: number }
-  | { kind: 'deduped';  jobId: string; status: 'queued' | 'running' }
+  | { kind: 'enqueued'; jobId: string; totalSteps: number; chunksToRegen?: number; textboxesToRecombine?: number; characterKey?: string }
+  | { kind: 'deduped';  jobId: string; status: 'queued' | 'running'; characterKey?: string }
   | { kind: 'skipped';  reason: string };
 
 /** 7-state discriminated union driving AudioJobBadge component render. */
@@ -299,7 +317,7 @@ export type AudioJobBadgeState =
 /** Raw shape of public.background_jobs row returned by Supabase select + realtime payload. */
 export interface BackgroundJobRow {
   id: string;
-  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_entity_swap' | string;
+  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_character_swap' | string;
   user_id: string;
   book_id: string | null;
   status: RemixJobStatus;
@@ -307,7 +325,13 @@ export interface BackgroundJobRow {
   total_steps: number;
   current_step: number;
   step_details: RemixJob['stepDetails'];
-  params: { remix_id: string; triggered_by?: 'auto-create' | 'user'; [k: string]: unknown };
+  params: {
+    remix_id: string;
+    triggered_by?: 'auto-create' | 'user';
+    /** Present on `remix_character_swap` rows — the swapped character key. */
+    character_key?: string;
+    [k: string]: unknown;
+  };
   result: RemixJobResult | null;
   created_at: string;
   updated_at: string;
@@ -375,6 +399,11 @@ export interface RemixVariantGroup {
   name: string;
   /** Index vào RemixEntityRef.crop_sheets[] theo thứ tự xuất hiện. */
   sheetIndices: number[];
+  /** Raw `variants[].visual_swap_url` of this variant — the per-variant identity
+   *  anchor the character-swap job references. `null` until the user Generates a
+   *  swapped visual. Drives the `[⇄]` precondition (every in-scope variant must
+   *  be non-null) — see api/jobs/04 §MISSING_VARIANT_REFERENCE. */
+  visualSwapUrl: string | null;
 }
 
 /** Normalized projection of a single entity (character | prop | mix) for the
@@ -407,10 +436,10 @@ export interface StartEntitySwapParams {
   key: string;
   /** v1 collect-only — not forwarded to the swap API yet. */
   params: SwapModelParams;
+  /** When true, clear + re-swap every sheet; false (default) is idempotent —
+   *  backend skips sheets that already carry an `is_selected` swap (api/jobs/04). */
+  forceResweep?: boolean;
 }
-
-/** Task identity — `${remixId}:${type}:${key}` (per-key, not per-sheet). */
-export type EntitySwapTaskKey = string;
 
 // ── Text Swap Engine (Phase 1) ───────────────────────────────────────────────
 // Sync client-side swap of `character.name` → `humans.display_name[lang]` over

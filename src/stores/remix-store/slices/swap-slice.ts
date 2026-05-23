@@ -1,17 +1,12 @@
-// remix-store/slices/swap-slice.ts — Entity swap slice. Ephemeral per-KEY swap
-// tasks (memory-only, no background_jobs row) + variant-scoped crop-sheet
-// count append/remove.
-//
-// `startEntitySwap` is a NO-OP STUB (Validation S1) — the swap endpoint is not
-// implemented yet, and the UI hard-disables the `[⇄]` button (Phase 04 spec).
-// Action signature is preserved for parity with the store §4.4 spec so Phase
-// 06 modal integration doesn't need to change when the endpoint ships.
+// remix-store/slices/swap-slice.ts — Crop-sheet count append/remove +
+// per-variant visual-swap persist. The character-swap ENQUEUE action
+// (`startEntitySwap`) lives in jobs-slice.ts (co-located with the other
+// background-job enqueue actions per Validation S1) — it is NOT here.
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import { useBookStore } from '../../book-store';
 import { relayoutVariantCropSheets } from '../crop-sheet-layout';
-import { buildEntityTaskKey } from '../slice-helpers';
 import type { RemixSwapSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -20,26 +15,6 @@ export const createSwapSlice: RemixSliceCreator<RemixSwapSlice> = (
   set,
   get,
 ) => ({
-  entitySwapTasks: {},
-
-  // ── Entity swap (modal-driven, per-key) ────────────────────────────
-  // NO-OP STUB (Validation S1) — swap endpoint not implemented yet. Phase 04
-  // hard-disables `[⇄]` button so no UI code path triggers this; keeping the
-  // action makes Phase 06 wiring trivial when the endpoint ships.
-  startEntitySwap: async (params) => {
-    const taskKey = buildEntityTaskKey(
-      params.remixId,
-      params.type,
-      params.key,
-    );
-    log.debug(
-      'startEntitySwap',
-      'endpoint not implemented yet — no-op',
-      { taskKey, type: params.type, key: params.key },
-    );
-    return;
-  },
-
   // ── Crop sheet count (modal-driven append / remove) ────────────────
   // Both delegate to the variant-scoped re-layout helper. The engine re-groups
   // crops from the (frozen) illustration, FILTERS by `variantKey` (mix: no

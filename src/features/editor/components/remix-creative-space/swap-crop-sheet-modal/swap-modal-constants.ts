@@ -42,10 +42,6 @@ export const SCALE = { min: 2, max: 10, step: 1, default: 4 } as const;
 /** Each entity key must keep at least this many crop sheets. */
 export const SHEET_MIN = 1;
 
-/** Tooltip reason — swap deferred in v1 (swap API not yet available). */
-export const SWAP_DISABLED_REASON =
-  'Swap chưa khả dụng — API chưa sẵn sàng';
-
 // ── Layout constants (design §4.12) ──────────────────────────────────────────
 export const HEADER_HEIGHT_PX = 49;
 export const LEFT_SIDEBAR_WIDTH_PX = 300;

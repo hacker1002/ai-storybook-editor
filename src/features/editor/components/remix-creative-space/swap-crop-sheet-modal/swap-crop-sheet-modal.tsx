@@ -19,12 +19,12 @@
 //  • Relayout confirm scoped to the variant being mutated (not whole entity).
 //  • VariantsVisualModal (Phase 05) rendered conditionally on `variantsModalFor`.
 //
-// DEFERRED boundary (Validation S1):
-//  • The [⇄] swap button is hard-disabled on ALL tabs — the swap API is not
-//    wired. `startEntitySwap` is a no-op stub and is NEVER called from the UI.
-//  • v1 has no swap_results → `selectedSwap` is always null → Compare disabled.
-//  • `entitySwapTasks` is always idle → busy/error overlays never show.
-//  appendCropSheet / removeCropSheet (the [−][+] stepper) ARE fully functional.
+// Character swap ([⇄]):
+//  • Char-only v1 — `handleSwapEntity` enqueues the character crop-sheet swap
+//    job (api/jobs/04) via `startEntitySwap`; props/mixes stay disabled.
+//  • Busy/error overlays + swap_results derive from the realtime `jobs[]` slice
+//    (`useEntitySwapTask`); Compare unlocks once a sheet carries swap_results.
+//  • appendCropSheet / removeCropSheet (the [−][+] stepper) are independent.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -42,6 +42,7 @@ import {
   useRemixStore,
 } from '@/stores/remix-store';
 import { useInteractionLayer } from '@/features/editor/contexts';
+import { EnqueueJobError } from '@/apis/jobs-api';
 import { createLogger } from '@/utils/logger';
 import type {
   SwapCropSheetTarget,
@@ -147,7 +148,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const remixName = useRemixStore(
     (s) => s.remixes.find((r) => r.id === target.remixId)?.name ?? '',
   );
-  const { appendCropSheet, removeCropSheet } =
+  const { appendCropSheet, removeCropSheet, startEntitySwap } =
     useRemixActions();
 
   const [activeTab, setActiveTab] = useState<RemixEntityType>(target.type);
@@ -289,6 +290,16 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   );
   const anySwapRunning = useAnySwapRunning(target.remixId);
 
+  // Immediate click feedback: the running state derives from jobs[], but the
+  // optimistic seed only lands AFTER the enqueue POST resolves — so for the
+  // in-flight window there'd be no visual cue. `submittingKey` marks the entity
+  // whose swap POST is in flight (set synchronously on click, cleared in
+  // `finally`), so the button disables + a "Starting…" indicator shows at once.
+  const [submittingKey, setSubmittingKey] = useState<string | null>(null);
+  // Effective busy = a job is running OR an enqueue POST is in flight. Disables
+  // every [⇄] during the gap so a second click can't double-submit.
+  const swapBusy = anySwapRunning || submittingKey !== null;
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleTabChange = (tab: RemixEntityType) => {
     log.debug('handleTabChange', 'switch tab', { from: activeTab, to: tab });
@@ -336,20 +347,83 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     setVariantsModalFor(entityKey);
   };
 
-  // DEFERRED — swap [⇄] is hard-disabled on every tab; this never fires from
-  // the UI. Kept as a guarded no-op so a future phase only flips the button.
-  // When the endpoint ships, uncomment the `void _startEntitySwap(...)` call.
-  const handleSwapEntity = (entityKey: string) => {
-    log.debug('handleSwapEntity', 'swap endpoint not ready — no-op', {
-      entityKey,
-      type: activeTab,
-    });
-    // void _startEntitySwap({
-    //   remixId: target.remixId,
-    //   type: activeTab,
-    //   key: entityKey,
-    //   params,
-    // });
+  // Enqueue the character crop-sheet swap job (api/jobs/04). Char-only v1 —
+  // props/mixes are disabled at the button; the guards here are defensive
+  // (hotkey/programmatic — memory feedback_sidebar_destructive_hotkeys). The
+  // store action no-ops type!=='character' and a busy remix; 422
+  // MISSING_VARIANT_REFERENCE surfaces as an EnqueueJobError → distinct toast.
+  const handleSwapEntity = async (entityKey: string) => {
+    if (activeTab !== 'character') {
+      log.debug('handleSwapEntity', 'unsupported type — ignore', {
+        entityKey,
+        type: activeTab,
+      });
+      return;
+    }
+    if (swapBusy) {
+      log.debug('handleSwapEntity', 'swap busy (running or submitting) — ignore', {
+        entityKey,
+      });
+      return;
+    }
+    const entity = tabEntities.find((e) => e.key === entityKey);
+    if (!entity) {
+      log.warn('handleSwapEntity', 'entity not found — ignore', { entityKey });
+      return;
+    }
+    // Client precondition (api/jobs/04): every in-scope variant must have a
+    // visual reference. Mirrors the button disable matrix — fail loud if reached.
+    if (
+      entity.variants.length === 0 ||
+      entity.variants.some((v) => v.visualSwapUrl == null)
+    ) {
+      log.warn('handleSwapEntity', 'missing variant visual — block', {
+        entityKey,
+      });
+      toast.error('Some variants are missing a swapped visual');
+      return;
+    }
+
+    setSubmittingKey(entityKey);
+    try {
+      const outcome = await startEntitySwap({
+        remixId: target.remixId,
+        type: 'character',
+        key: entityKey,
+        params,
+        forceResweep: false,
+      });
+      log.info('handleSwapEntity', 'enqueue outcome', {
+        entityKey,
+        kind: outcome.kind,
+      });
+      if (outcome.kind === 'skipped') {
+        if (outcome.reason === 'all_sheets_already_swapped') {
+          toast.info('All sheets are already swapped');
+        } else if (outcome.reason === 'no_crop_sheets') {
+          toast.info('No crop sheets to swap');
+        }
+        // 'busy' / 'unsupported_type' are silent (button already guards them).
+      } else if (outcome.kind === 'deduped') {
+        toast.info('A swap is already running for this remix');
+      } else {
+        toast.success('Character swap started');
+      }
+    } catch (err) {
+      const code =
+        err instanceof EnqueueJobError ? err.code : undefined;
+      log.error('handleSwapEntity', 'enqueue failed', { entityKey, code });
+      if (code === 'MISSING_VARIANT_REFERENCE') {
+        toast.error('Some variants are missing a swapped visual');
+      } else {
+        toast.error("Couldn't start swap — try again");
+      }
+    } finally {
+      // On the enqueued path the optimistic seed is already in jobs[] by now, so
+      // swapTask='running' takes over seamlessly. On skip/dedup/error we just
+      // release the in-flight lock.
+      setSubmittingKey(null);
+    }
   };
 
   // Gate a relayout-causing stepper action behind the confirm dialog when the
@@ -570,7 +644,8 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
               variantKey: activeVariant?.variantKey ?? null,
               sheetIndex: safeSheetLocalIdx,
             }}
-            anySwapRunning={anySwapRunning}
+            anySwapRunning={swapBusy}
+            submittingKey={submittingKey}
             onSelectVariant={handleSelectVariant}
             onSelectSheet={handleSelectSheet}
             onAddSheet={handleAddSheet}
@@ -586,6 +661,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
             zoomLevel={zoomLevel}
             dividerPosition={dividerPosition}
             swapTask={swapTask}
+            isSubmitting={submittingKey !== null && submittingKey === activeEntity?.key}
             onToggleCompare={() => setCompareMode((prev) => !prev)}
             onZoomChange={setZoomLevel}
             onDividerChange={setDividerPosition}

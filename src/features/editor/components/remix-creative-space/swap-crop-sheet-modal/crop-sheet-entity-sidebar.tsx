@@ -8,11 +8,8 @@
 // navigation) lives in `./sidebar/`. This file is the orchestrator: section
 // header + entity loop + collapse-state owner.
 //
-// Validation Session 1:
-//  • The [⇄] swap button is HARD-DISABLED on every tab — the swap endpoint is
-//    not shipped. `onSwapEntity` is kept in the contract for spec parity; the
-//    EntityRow does NOT wire it to any click handler.
-//    TODO(swap-endpoint): re-enable khi POST /api/jobs/remix/{id}/entity-swap ship.
+// The [⇄] swap button (EntityRow) enqueues the character crop-sheet swap job;
+// `anySwapRunning` + the per-variant `visualSwapUrl` drive its disable matrix.
 
 import { createLogger } from '@/utils/logger';
 import type { RemixEntityRef } from '@/types/remix';
@@ -37,8 +34,13 @@ interface CropSheetEntitySidebarProps {
   type: RemixEntityType;
   entities: RemixEntityRef[];
   activeSheetRef: ActiveSheetRef;
-  /** True while any swap runs anywhere in the remix — v1 always false ([⇄] disabled). */
+  /** True while any character_swap job runs in this remix (or an enqueue POST is
+   *  in flight) — disables every [⇄]. */
   anySwapRunning: boolean;
+  /** Entity key whose swap enqueue POST is in flight (immediate click feedback),
+   *  or null. The matching row shows a "Starting…" indicator before jobs[] gains
+   *  the optimistic seed. */
+  submittingKey: string | null;
   onSelectVariant: (entityKey: string, variantKey: string) => void;
   onSelectSheet: (
     entityKey: string,
@@ -51,7 +53,7 @@ interface CropSheetEntitySidebarProps {
     variantKey: string | null,
     sheetIndex: number,
   ) => void;
-  /** Kept for spec parity — Validation S1 hard-disables the [⇄] button. */
+  /** Enqueues the character crop-sheet swap job for an entity. */
   onSwapEntity: (entityKey: string) => void;
   /** char/prop only — opens VariantsVisualModal (Phase 05). */
   onOpenVariants: (entityKey: string) => void;
@@ -69,6 +71,7 @@ export function CropSheetEntitySidebar({
   entities,
   activeSheetRef,
   anySwapRunning,
+  submittingKey,
   onSelectVariant,
   onSelectSheet,
   onAddSheet,
@@ -116,6 +119,7 @@ export function CropSheetEntitySidebar({
               entity={entity}
               activeSheetRef={activeSheetRef}
               anySwapRunning={anySwapRunning}
+              isSubmitting={submittingKey === entity.key}
               collapse={collapse}
               onSelectVariant={onSelectVariant}
               onSelectSheet={onSelectSheet}

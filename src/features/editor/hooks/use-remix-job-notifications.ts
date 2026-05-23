@@ -57,10 +57,16 @@ export function useRemixJobNotifications(): void {
             ? 'Audio'
             : job.phase === 'image'
               ? 'Inject'
-              : job.phase === 'entity_swap'
-                ? 'Swap entity'
+              : job.phase === 'character_swap'
+                ? 'Swap character'
                 : 'Job';
         const errorCount = job.result?.errors?.length ?? 0;
+        // Character swap reports per-sheet failures via `result.failed_sheets`;
+        // other phases only carry `errors[]`. Display the sheet count when present.
+        const failedSheets =
+          typeof job.result?.failed_sheets === 'number'
+            ? job.result.failed_sheets
+            : errorCount;
 
         switch (job.status) {
           case 'completed':
@@ -69,9 +75,10 @@ export function useRemixJobNotifications(): void {
                 jobId: job.id,
                 phase: job.phase,
                 errorCount,
+                failedSheets,
               });
               toast.warning(
-                `${label} finished with ${errorCount} warnings for "${name}" — check sidebar`,
+                `${label} finished with ${failedSheets} warnings for "${name}" — check sidebar`,
               );
             } else {
               log.info('toast', 'success', { jobId: job.id, phase: job.phase });

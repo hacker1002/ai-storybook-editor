@@ -6,7 +6,6 @@
 import type { StateCreator } from 'zustand';
 import type {
   EnqueueRemixJobOutcome,
-  EntitySwapTaskKey,
   Remix,
   RemixConfig,
   RemixCropSheet,
@@ -15,7 +14,6 @@ import type {
   RemixServerEvent,
   RemixSpread,
   StartEntitySwapParams,
-  SwapTaskStatus,
 } from '@/types/remix';
 
 // ── Patch shape exposed by job/runner helpers ────────────────────────────────
@@ -80,7 +78,7 @@ export interface RemixCrudSlice {
   patchRemixCropSheets: (id: string, updates: CropSheetUpdate[]) => void;
 }
 
-/** Remote background_jobs (audio/image swap): enqueue, cancel, dismiss. */
+/** Remote background_jobs (audio/image/character swap): enqueue, cancel, dismiss. */
 export interface RemixJobsSlice {
   jobs: RemixJob[];
 
@@ -89,23 +87,24 @@ export interface RemixJobsSlice {
     opts: StartAudioJobOptions,
   ) => Promise<EnqueueRemixJobOutcome>;
   startImageJob: (remixId: string) => Promise<EnqueueRemixJobOutcome>;
+
+  /** Modal-driven character crop-sheet swap (`[⇄]`). POST
+   *  `/api/jobs/remix/{id}/character-swap` + optimistic seed (mirrors
+   *  startAudioJob/startImageJob — co-located here per Validation S1).
+   *  Guards: `type !== 'character'` and an already-running swap both no-op to a
+   *  `skipped` outcome. Throws (with `code`) on 422/non-2xx so the modal can
+   *  toast MISSING_VARIANT_REFERENCE distinctly. The swap LOOP runs backend; the
+   *  client only enqueues + reflects realtime job_upsert into `jobs[]`. */
+  startEntitySwap: (
+    params: StartEntitySwapParams,
+  ) => Promise<EnqueueRemixJobOutcome>;
+
   cancelJob: (jobId: string) => Promise<void>;
   dismissJob: (jobId: string) => void;
 }
 
-/** Ephemeral per-KEY swap tasks + crop-sheet count append/remove. */
+/** Crop-sheet count append/remove + per-variant visual-swap persist. */
 export interface RemixSwapSlice {
-  /** Ephemeral per-KEY swap task map (memory-only — not persisted, no
-   *  background_jobs row). Key = `${remixId}:${type}:${key}`. v1: always idle
-   *  (swap deferred — `startEntitySwap` is a no-op stub). */
-  entitySwapTasks: Record<EntitySwapTaskKey, SwapTaskStatus>;
-
-  /** Modal-driven per-KEY swap trigger. DEFERRED no-op (Validation S1) — guard
-   *  (`useAnySwapRunning`) + remix/entity resolution + log are real; the swap
-   *  loop + API call + persist land when the swap API ships. Never sets
-   *  `running`/`error` so the UI never spins. */
-  startEntitySwap: (params: StartEntitySwapParams) => Promise<void>;
-
   /** Appends one crop sheet to an entity within the scope of `variantKey`
    *  (or whole entity when `null` — mix). Re-layouts every sheet of that
    *  variant group via the client-side layout engine, then `replaceAll` on

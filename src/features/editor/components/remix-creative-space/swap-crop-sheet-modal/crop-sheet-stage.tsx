@@ -4,10 +4,10 @@
 // 2026-05-19) rendered either alone (non-compare) or in a before/after
 // react-compare-slider.
 //
-// DEFERRED (Validation S1): v1 has no swap_results, so `selectedSwap` is always
-// null → the Compare button stays disabled and the canvas only shows the
-// composed crop sheet. The compare branch + busy/error overlays are kept
-// dormant (future-ready) — do NOT delete.
+// `selectedSwap` is null until a sheet carries swap_results (populated by the
+// character-swap job via realtime); until then Compare is disabled and the
+// canvas shows the composed crop sheet. Busy/error overlays read `swapTask`
+// (derived from the realtime `jobs[]` slice).
 //
 // Slider engine: react-compare-slider@4 has no controlled `position` prop, only
 // uncontrolled `defaultPosition`. `dividerPosition` is therefore an init value;
@@ -40,6 +40,9 @@ interface CropSheetStageProps {
   zoomLevel: number;
   dividerPosition: number;
   swapTask: SwapTaskStatus;
+  /** True while the active entity's enqueue POST is in flight — shows a
+   *  "Starting swap…" overlay before the job's running state takes over. */
+  isSubmitting: boolean;
   onToggleCompare: () => void;
   onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
@@ -52,6 +55,7 @@ export function CropSheetStage({
   zoomLevel,
   dividerPosition,
   swapTask,
+  isSubmitting,
   onToggleCompare,
   onZoomChange,
   onDividerChange,
@@ -83,6 +87,7 @@ export function CropSheetStage({
         zoomLevel={zoomLevel}
         dividerPosition={dividerPosition}
         swapTask={swapTask}
+        isSubmitting={isSubmitting}
         onZoomChange={onZoomChange}
         onDividerChange={onDividerChange}
       />
@@ -211,6 +216,7 @@ interface StageCanvasProps {
   zoomLevel: number;
   dividerPosition: number;
   swapTask: SwapTaskStatus;
+  isSubmitting: boolean;
   onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
 }
@@ -222,6 +228,7 @@ function StageCanvas({
   zoomLevel,
   dividerPosition,
   swapTask,
+  isSubmitting,
   onZoomChange,
   onDividerChange,
 }: StageCanvasProps) {
@@ -300,9 +307,11 @@ function StageCanvas({
         </div>
       </div>
 
-      {/* DORMANT in v1 — swapTask is always idle (swap deferred).
-          Dark overlays (Phase 07): backdrop token + white-text labels. */}
-      {swapTask.state === 'running' && (
+      {/* Busy/error overlays driven by `swapTask` (derived from jobs[]) plus the
+          in-flight `isSubmitting` cue. Dark overlays (Phase 07): backdrop token +
+          white-text labels. While submitting, show "Starting swap…" and suppress
+          a stale error from the previous attempt (the seed hasn't landed yet). */}
+      {(isSubmitting || swapTask.state === 'running') && (
         <div
           role="status"
           aria-live="polite"
@@ -310,21 +319,23 @@ function StageCanvas({
         >
           <Loader2 className="h-7 w-7 animate-spin text-[var(--swap-modal-accent)]" />
           <span className="text-sm text-[var(--swap-modal-text-secondary)]">
-            Swapping {swapTask.current}/{swapTask.total} sheets
+            {swapTask.state === 'running'
+              ? `Swapping ${swapTask.current}/${swapTask.total} sheets`
+              : 'Starting swap…'}
           </span>
         </div>
       )}
 
-      {swapTask.state === 'error' && (
+      {!isSubmitting && swapTask.state === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[var(--swap-modal-backdrop)] px-4 text-center backdrop-blur-sm">
           <AlertTriangle className="h-7 w-7 text-destructive" />
           <span className="text-sm font-medium text-destructive">
-            Swap thất bại
+            Swap failed
           </span>
           <span className="text-xs text-destructive">{swapTask.message}</span>
           <span className="mt-1 flex items-center gap-1 text-xs text-[var(--swap-modal-text-muted)]">
             <RotateCcw className="h-3.5 w-3.5" />
-            Bấm [⇄] ở sidebar để thử lại
+            Click [⇄] in the sidebar to retry
           </span>
         </div>
       )}

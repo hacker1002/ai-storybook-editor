@@ -22,6 +22,10 @@ const log = createLogger('Store', 'BuildVariantGroups');
 export interface VariantLike {
   key: string;
   name?: string;
+  /** Per-variant identity-anchor image (`RemixCharacterVariant.visual_swap_url`).
+   *  Surfaced onto the group as `visualSwapUrl` so the modal can gate `[⇄]` on
+   *  every in-scope variant being non-null. `null`/absent until Generated. */
+  visual_swap_url?: string | null;
 }
 
 /** Minimal entity shape consumed by the helper. */
@@ -86,6 +90,7 @@ export function buildVariantGroups(
         variantKey: v.key,
         name: v.name ?? v.key,
         sheetIndices,
+        visualSwapUrl: v.visual_swap_url ?? null,
       });
     }
   }

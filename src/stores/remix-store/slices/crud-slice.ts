@@ -6,7 +6,6 @@ import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import { canonicalMixKey } from '@/types/remix';
 import type { Human } from '@/types/human';
-import type { EntitySwapTaskKey, SwapTaskStatus } from '@/types/remix';
 import { applyTextSwap } from '@/features/remix/text-swap-engine';
 import { buildRemixClonePayload } from '../clone-builder';
 import { mapRowToRemix } from '../supabase-mapping';
@@ -162,28 +161,19 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
         });
     }
 
-    set((s) => {
-      // Sweep ephemeral swap tasks belonging to the deleted remix.
-      const prefix = `${id}:`;
-      const sweptTasks: Record<EntitySwapTaskKey, SwapTaskStatus> = {};
-      for (const [taskKey, status] of Object.entries(s.entitySwapTasks)) {
-        if (!taskKey.startsWith(prefix)) sweptTasks[taskKey] = status;
-      }
-      return {
-        remixes: s.remixes.filter((r) => r.id !== id),
-        activeRemixId: wasActive
-          ? (s.remixes.find((r) => r.id !== id)?.id ?? null)
-          : s.activeRemixId,
-        entitySwapTasks: sweptTasks,
-      };
-    });
+    set((s) => ({
+      remixes: s.remixes.filter((r) => r.id !== id),
+      activeRemixId: wasActive
+        ? (s.remixes.find((r) => r.id !== id)?.id ?? null)
+        : s.activeRemixId,
+    }));
 
     const { error } = await supabase.from('remixes').delete().eq('id', id);
     if (error) {
       log.error('deleteRemix', 'rollback', { id, error: error.message });
-      // FUTURE: when startEntitySwap writes entitySwapTasks (swap loop),
-      // also capture + restore the swept tasks here — currently the map is
-      // always empty (no-op stub) so there is nothing to restore.
+      // Swap state is derived from `jobs[]` (no separate task map) — the
+      // active-job cancel above + realtime job rows are the only swap state,
+      // so nothing extra to restore here on rollback.
       set({ remixes: prevList, activeRemixId: prevActiveId });
       return false;
     }

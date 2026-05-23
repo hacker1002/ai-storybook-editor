@@ -2,28 +2,42 @@
 // selector layer. Kept out of any single slice so the format never drifts
 // between the action that writes and the selector that reads.
 
-import type {
-  EntitySwapTaskKey,
-  Remix,
-  RemixCropSheet,
-  SwapTaskStatus,
-} from '@/types/remix';
+import type { Remix, RemixCropSheet, RemixJob, SwapTaskStatus } from '@/types/remix';
 import { canonicalMixKey } from '@/types/remix';
 import type { CropSheetUpdate } from './types';
 
-/** Composes the `entitySwapTasks` map key (per-KEY, not per-sheet). Shared
- *  between swap action + selector so the format never drifts. */
-export function buildEntityTaskKey(
-  remixId: string,
-  type: 'character' | 'prop' | 'mix',
-  key: string,
-): EntitySwapTaskKey {
-  return `${remixId}:${type}:${key}`;
-}
-
 /** Stable reference for the default idle task — avoids a fresh object per
- *  `useEntitySwapTask` call (would defeat selector re-render guards). */
+ *  `useEntitySwapTask` call (would defeat the selector's value-compare guard). */
 export const IDLE_SWAP_TASK: SwapTaskStatus = { state: 'idle' };
+
+/** Collapse `jobs[]` to the latest job per swap lineage
+ *  (`remixId + phase + characterKey`). A newer attempt SUPERSEDES older ones for
+ *  the same target, so older siblings are dropped.
+ *
+ *  WHY: `useEntitySwapTask` / `useLatestAudioJob` resolve the "current" task by
+ *  picking the latest-by-`createdAt` matching job. A partial/failed job is
+ *  `status='completed'` (per-sheet partial-success contract) and is NEVER
+ *  auto-dismissed, so it lingers. When a newer CLEAN-complete job is later
+ *  auto-dismissed (30s), the selector falls back to the stale failed sibling
+ *  and the error banner RESURRECTS even though the latest attempt succeeded.
+ *  Keeping only the newest job per lineage makes the stored set match what the
+ *  selector reads, so dismissal can't expose an older failure.
+ *
+ *  Lineage key folds `characterKey` (undefined for audio/image → ''), so all
+ *  audio attempts of a remix collapse to the latest — matching
+ *  `useLatestAudioJob` semantics. Returns the SAME array ref when nothing is
+ *  pruned (avoids spurious store churn). */
+export function pruneSupersededJobs(jobs: RemixJob[]): RemixJob[] {
+  const latestByLineage = new Map<string, RemixJob>();
+  for (const job of jobs) {
+    const lineage = `${job.remixId}|${job.phase}|${job.characterKey ?? ''}`;
+    const cur = latestByLineage.get(lineage);
+    if (!cur || job.createdAt > cur.createdAt) latestByLineage.set(lineage, job);
+  }
+  if (latestByLineage.size === jobs.length) return jobs;
+  const survivors = new Set(latestByLineage.values());
+  return jobs.filter((j) => survivors.has(j));
+}
 
 /** Applies one `CropSheetUpdate` onto an entity's `crop_sheets[]`. Handles
  *  both discriminated kinds:

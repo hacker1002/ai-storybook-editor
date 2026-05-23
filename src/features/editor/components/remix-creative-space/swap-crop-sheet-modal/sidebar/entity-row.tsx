@@ -9,9 +9,11 @@
 //
 // Subtree rendering lives in `entity-subtrees.tsx` so this file stays small.
 //
-// [⇄] is HARD-DISABLED on every tab (Validation Session 1 — swap endpoint not
-// shipped). The button renders `disabled={true}` + tooltip; onClick is NOT bound.
-// TODO(swap-endpoint): re-enable khi POST /api/jobs/remix/{id}/entity-swap ship.
+// [⇄] enqueues the character crop-sheet swap job (api/jobs/04). Enabled only for
+// `character` entities whose every in-scope variant has a `visualSwapUrl`; the
+// disable matrix below (`resolveSwapButtonState`) covers props/mixes, a running
+// swap, no sheets, and missing visuals. onClick → `onSwapEntity` (the modal's
+// `handleSwapEntity` enqueues + toasts).
 //
 // Keyboard ↑/↓ on a SheetRow flattens visible sheets across the ENTITY'S variants
 // (respecting variant-collapse state) and wraps within the entity. Stepper button
@@ -35,11 +37,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useEntitySwapTask } from '@/stores/remix-store';
 import type { RemixEntityRef } from '@/types/remix';
-import {
-  SHEET_MIN,
-  SWAP_DISABLED_REASON,
-  type RemixEntityType,
-} from '../swap-modal-constants';
+import { SHEET_MIN, type RemixEntityType } from '../swap-modal-constants';
 import { VariantIcon } from './variant-icon';
 import type { CollapseApi } from './use-collapse-state';
 import { MixSheets, VariantSubtree } from './entity-subtrees';
@@ -57,8 +55,12 @@ interface EntityRowProps {
   type: RemixEntityType;
   entity: RemixEntityRef;
   activeSheetRef: ActiveSheetRef;
-  /** True while any entity has a running swap. v1: always false (swap deferred). */
+  /** True while any character_swap job runs in this remix (or an enqueue POST is
+   *  in flight) — disables every [⇄]. */
   anySwapRunning: boolean;
+  /** True while THIS entity's enqueue POST is in flight — shows a "Starting…"
+   *  indicator before the optimistic job seed lands in jobs[]. */
+  isSubmitting: boolean;
   collapse: CollapseApi;
   onSelectVariant: (entityKey: string, variantKey: string) => void;
   onSelectSheet: (
@@ -72,7 +74,7 @@ interface EntityRowProps {
     variantKey: string | null,
     sheetIndex: number,
   ) => void;
-  /** Kept for spec parity — Validation S1 hard-disables the [⇄] button. */
+  /** Enqueues the character crop-sheet swap job for this entity. */
   onSwapEntity: (entityKey: string) => void;
   /** char/prop only — opens VariantsVisualModal (Phase 05). */
   onOpenVariants: (entityKey: string) => void;
@@ -85,24 +87,52 @@ interface FlatSheetRef {
   sheetIndex: number;
 }
 
+/** [⇄] disable matrix (api/jobs/04 + modal §3.2). Priority order; first match
+ *  wins. Char-only v1 — prop/mix always disabled. EN tooltip literals per spec. */
+function resolveSwapButtonState(
+  type: RemixEntityType,
+  entity: RemixEntityRef,
+  anySwapRunning: boolean,
+): { disabled: boolean; tooltip: string } {
+  if (type !== 'character') {
+    return { disabled: true, tooltip: 'Not available for props/mixes yet' };
+  }
+  if (anySwapRunning) {
+    return { disabled: true, tooltip: 'A swap is already running for this remix' };
+  }
+  if (entity.variants.length === 0) {
+    return { disabled: true, tooltip: 'No crop sheets to swap yet' };
+  }
+  if (entity.variants.some((v) => v.visualSwapUrl == null)) {
+    return {
+      disabled: true,
+      tooltip:
+        'Generate a swapped visual for every variant first — open ▣ View Variants',
+    };
+  }
+  return { disabled: false, tooltip: `Swap ${entity.name}` };
+}
+
 export function EntityRow({
   remixId,
   type,
   entity,
   activeSheetRef,
-  anySwapRunning: _anySwapRunning,
+  anySwapRunning,
+  isSubmitting,
   collapse,
   onSelectVariant,
   onSelectSheet,
   onAddSheet,
   onRemoveSheet,
-  onSwapEntity: _onSwapEntity, // hard-disabled; intentionally unused on click
+  onSwapEntity,
   onOpenVariants,
 }: EntityRowProps) {
   const swapTask = useEntitySwapTask(remixId, type, entity.key);
   const isMix = type === 'mix';
   const entityCollapsed = collapse.isEntityCollapsed(entity.key);
   const isRowActive = activeSheetRef.entityKey === entity.key;
+  const swapButton = resolveSwapButtonState(type, entity, anySwapRunning);
 
   // Build flat-sheet list (in DOM render order) for keyboard ↑/↓ navigation.
   // Respects variant-collapse: a collapsed variant contributes 0 entries.
@@ -229,14 +259,16 @@ export function EntityRow({
 
       {/* Trailing actions */}
       <div className="flex shrink-0 items-center gap-2">
-        {swapTask.state === 'running' && (
+        {(isSubmitting || swapTask.state === 'running') && (
           <span
             role="status"
             aria-live="polite"
             className="mr-1 flex items-center gap-1 text-xs text-[var(--swap-modal-accent)]"
           >
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            {swapTask.current}/{swapTask.total}
+            {swapTask.state === 'running'
+              ? `${swapTask.current}/${swapTask.total}`
+              : 'Starting…'}
           </span>
         )}
 
@@ -295,26 +327,35 @@ export function EntityRow({
           </button>
         )}
 
-        {/* [⇄] Swap — HARD-DISABLED (Validation Session 1).
-            TODO(swap-endpoint): re-enable khi POST /api/jobs/remix/{id}/entity-swap ship. */}
+        {/* [⇄] Swap — enqueues the character crop-sheet swap job. Disabled per
+            `resolveSwapButtonState` matrix (props/mixes, busy, no sheets, missing
+            visual). Defensive: `disabled` + handler re-guards (memory
+            feedback_sidebar_destructive_hotkeys). */}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <span>
                 <button
                   type="button"
-                  aria-label={`Swap ${entity.name} — ${SWAP_DISABLED_REASON}`}
-                  aria-disabled
-                  disabled={true}
-                  className="flex h-6 w-6 items-center justify-center rounded bg-[var(--swap-modal-surface-hover)] text-[rgba(255,255,255,0.75)] disabled:pointer-events-none disabled:opacity-40"
+                  aria-label={swapButton.tooltip}
+                  aria-disabled={swapButton.disabled}
+                  disabled={swapButton.disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (swapButton.disabled) return;
+                    log.info('onClick', 'swap entity', {
+                      entityKey: entity.key,
+                      type,
+                    });
+                    onSwapEntity(entity.key);
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded bg-[var(--swap-modal-surface-hover)] text-[rgba(255,255,255,0.75)] transition-colors hover:bg-[var(--swap-modal-surface-hover-strong)] hover:text-[var(--swap-modal-text-primary)] disabled:pointer-events-none disabled:opacity-40"
                 >
                   <Repeat className="h-3 w-3" />
                 </button>
               </span>
             </TooltipTrigger>
-            <TooltipContent>
-              Coming soon — endpoint chưa sẵn sàng
-            </TooltipContent>
+            <TooltipContent>{swapButton.tooltip}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
@@ -354,7 +395,7 @@ export function EntityRow({
       {headerContent}
       {swapTask.state === 'error' && (
         <p className="px-3 pb-1 text-xs text-red-400">
-          Swap lỗi ({swapTask.failedSheets} sheet)
+          Swap failed ({swapTask.failedSheets} sheets)
         </p>
       )}
       {(!entityCollapsed || isMix) && subtree}
