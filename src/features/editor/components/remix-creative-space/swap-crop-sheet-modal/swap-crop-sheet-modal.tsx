@@ -391,7 +391,10 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         type: 'character',
         key: entityKey,
         params,
-        forceResweep: false,
+        // Always re-swap every sheet on click (clear existing swap_results +
+        // re-run). The cheap idempotent skip (force_resweep=false) is not the
+        // desired UX — a user pressing [⇄] expects a full fresh swap.
+        forceResweep: true,
       });
       log.info('handleSwapEntity', 'enqueue outcome', {
         entityKey,
