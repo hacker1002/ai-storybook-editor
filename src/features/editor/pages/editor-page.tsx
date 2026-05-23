@@ -51,7 +51,7 @@ export function EditorPage() {
   const bookError = useBooksError();
 
   // Snapshot store
-  const { fetchSnapshot, resetSnapshot } = useSnapshotActions();
+  const { fetchSnapshot, resetSnapshot, autoSaveSnapshot } = useSnapshotActions();
   const sync = useSyncState();
   const snapshotLoading = useSnapshotFetchLoading();
   const snapshotError = useSnapshotFetchError();
@@ -168,7 +168,22 @@ export function EditorPage() {
   const saveStatus = deriveSaveStatus(sync);
 
   // Handlers
+  // Flush dirty snapshot before navigating away. Fire-and-forget: never block
+  // UI navigation on the network round-trip. autoSaveSnapshot() self-guards on
+  // !isDirty / isSaving (snapshot-store/index.ts), so redundant calls no-op.
+  const handleCreativeSpaceChange = (target: CreativeSpaceType) => {
+    // 'history' owns its own awaited save-then-load (history-creative-space.tsx);
+    // a fire-and-forget save here would flip isSaving and defeat that await → stale list.
+    if (target !== 'history' && target !== activeCreativeSpace) {
+      log.debug('handleCreativeSpaceChange', 'flush before switch', { from: activeCreativeSpace, to: target });
+      autoSaveSnapshot();
+    }
+    setActiveCreativeSpace(target);
+  };
+
   const handleStepChange = (targetStep: PipelineStep) => {
+    log.debug('handleStepChange', 'flush before step switch', { to: targetStep });
+    autoSaveSnapshot();
     setCurrentStep(targetStep);
     setActiveCreativeSpace(getDefaultCreativeSpace(targetStep) as CreativeSpaceType);
     handleStepChangePersist(targetStep);
@@ -254,7 +269,7 @@ export function EditorPage() {
           {/* Icon Rail */}
           <IconRail
             activeCreativeSpace={activeCreativeSpace}
-            onCreativeSpaceChange={setActiveCreativeSpace}
+            onCreativeSpaceChange={handleCreativeSpaceChange}
           />
 
           {/* Creative Space */}
