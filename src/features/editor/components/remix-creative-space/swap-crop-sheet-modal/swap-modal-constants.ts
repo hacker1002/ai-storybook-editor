@@ -42,6 +42,37 @@ export const SCALE = { min: 2, max: 10, step: 1, default: 4 } as const;
 /** Each entity key must keep at least this many crop sheets. */
 export const SHEET_MIN = 1;
 
+/** Composer parity — colours mirror `DEFAULT_FRAME_*` in
+ *  `ai-storybook-image-api/src/models/requests/build_crop_sheet.py`. The
+ *  client-side preview (`ComposedCropSheet`) reproduces the PNG the Python
+ *  composer bakes: `gutterColor` fills the canvas (so transparent crop areas
+ *  read as that colour, not a checkerboard), `cellStrokeColor` strokes each
+ *  cell's outer bbox. FE does NOT send a `frame` payload, so these colours are
+ *  the live contract — keep in sync if the API defaults change.
+ *
+ *  Stroke width: the composer draws `cellStrokeWidthSheetPx` in SHEET pixels.
+ *  The preview canvas is scaled by `zoomLevel/100`, so the parity CSS width is
+ *  `cellStrokeWidthSheetPx × zoomLevel/100` (see `resolveStrokePx`). Clamped to
+ *  `[cellStrokeMinPx, cellStrokeMaxPx]` so it stays visible at low zoom and
+ *  never dominates at high zoom. */
+export const COMPOSER_FRAME = {
+  gutterColor: '#FF00FF',
+  cellStrokeColor: '#000000',
+  cellStrokeWidthSheetPx: 4,
+  cellStrokeMinPx: 1,
+  cellStrokeMaxPx: 4,
+} as const;
+
+/** Maps a zoom % to the parity stroke width in CSS px (clamped). Single source
+ *  for both the border width and the wrapper inflate offset. */
+export function resolveStrokePx(zoomLevel: number): number {
+  const scaled = (COMPOSER_FRAME.cellStrokeWidthSheetPx * zoomLevel) / 100;
+  return Math.max(
+    COMPOSER_FRAME.cellStrokeMinPx,
+    Math.min(COMPOSER_FRAME.cellStrokeMaxPx, scaled),
+  );
+}
+
 // ── Layout constants (design §4.12) ──────────────────────────────────────────
 export const HEADER_HEIGHT_PX = 49;
 export const LEFT_SIDEBAR_WIDTH_PX = 300;

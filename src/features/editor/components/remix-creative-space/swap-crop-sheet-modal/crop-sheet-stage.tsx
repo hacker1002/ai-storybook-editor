@@ -296,12 +296,13 @@ function StageCanvas({
               swappedUrl={swapUrl}
               dividerPosition={dividerPosition}
               onDividerChange={onDividerChange}
+              zoomLevel={zoomLevel}
             />
           ) : swapUrl !== null ? (
             <CanvasImage key={swapUrl} url={swapUrl} />
           ) : (
             <div className="relative h-full w-full">
-              <ComposedCropSheet sheet={sheet} />
+              <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
             </div>
           )}
         </div>
@@ -374,6 +375,7 @@ interface CompareBodyProps {
   swappedUrl: string;
   dividerPosition: number;
   onDividerChange: (pos: number) => void;
+  zoomLevel: number;
 }
 
 /** before/after compare — "before" is the composed crop sheet, "after" is the
@@ -384,6 +386,7 @@ function CompareBody({
   swappedUrl,
   dividerPosition,
   onDividerChange,
+  zoomLevel,
 }: CompareBodyProps) {
   return (
     <>
@@ -393,7 +396,7 @@ function CompareBody({
         className="relative h-full w-full"
         itemOne={
           <div className="relative h-full w-full">
-            <ComposedCropSheet sheet={sheet} />
+            <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
           </div>
         }
         itemTwo={

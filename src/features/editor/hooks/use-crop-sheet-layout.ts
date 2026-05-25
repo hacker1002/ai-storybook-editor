@@ -29,7 +29,7 @@ export function useCropSheetLayout(
   crops: CropInput[],
   config: LayoutConfig,
 ): CropSheetLayoutResult {
-  const { sheetCount, gutter, landscapeTolerance } = config;
+  const { sheetCount, gutterX, gutterY, landscapeTolerance } = config;
   const spreadWidth = config.spread.width;
   const spreadHeight = config.spread.height;
 
@@ -38,9 +38,10 @@ export function useCropSheetLayout(
       computeCropSheetLayout(crops, {
         sheetCount,
         spread: { width: spreadWidth, height: spreadHeight },
-        gutter,
+        gutterX,
+        gutterY,
         landscapeTolerance,
       }),
-    [crops, sheetCount, spreadWidth, spreadHeight, gutter, landscapeTolerance],
+    [crops, sheetCount, spreadWidth, spreadHeight, gutterX, gutterY, landscapeTolerance],
   );
 }

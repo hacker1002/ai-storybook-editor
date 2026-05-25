@@ -26,7 +26,7 @@
 //    (`useEntitySwapTask`); Compare unlocks once a sheet carries swap_results.
 //  • appendCropSheet / removeCropSheet (the [−][+] stepper) are independent.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,8 @@ import {
   useRemixStore,
 } from '@/stores/remix-store';
 import { useInteractionLayer } from '@/features/editor/contexts';
+import { useCurrentBook } from '@/stores/book-store';
+import { recomputeSheetPreview } from './crop-sheet-stage/recompute-sheet-preview';
 import { EnqueueJobError } from '@/apis/jobs-api';
 import { createLogger } from '@/utils/logger';
 import type {
@@ -274,6 +276,19 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     resolvedSheetIdx !== null
       ? activeEntity?.crop_sheets[resolvedSheetIdx] ?? null
       : null;
+
+  // Preview-only LIVE re-layout: stored `crop_sheets[]` geometry is frozen at
+  // remix-create time, so engine-config changes (gutters, ratios) don't show on
+  // an existing remix. Re-pack on the fly for the stage render — NOT persisted,
+  // does NOT change what the AI swap receives (still the stored geometry).
+  const currentBook = useCurrentBook();
+  const previewSheet = useMemo(
+    () =>
+      activeSheet
+        ? recomputeSheetPreview(activeSheet, currentBook?.dimension ?? null)
+        : null,
+    [activeSheet, currentBook?.dimension],
+  );
 
   // Selected swap result — newest `is_selected`, fallback last. Always null in
   // v1 (no swap_results) but kept future-ready.
@@ -658,7 +673,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
           />
 
           <CropSheetStage
-            sheet={activeSheet}
+            sheet={previewSheet}
             selectedSwap={selectedSwap}
             compareMode={compareMode}
             zoomLevel={zoomLevel}

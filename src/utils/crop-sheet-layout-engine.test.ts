@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeCropSheetLayout,
   ALLOWED_RATIOS,
+  DEFAULTS,
 } from './crop-sheet-layout-engine';
 import type {
   CropInput,
@@ -186,6 +187,47 @@ describe('computeCropSheetLayout — crop-sheet layout engine §5', () => {
     const { sheets } = computeCropSheetLayout(crops, config(1));
     const ids = sheets.flatMap((s) => s.placements.map((p) => p.id));
     expect(ids).toEqual(['good']);
+  });
+
+  it('default gutters are asymmetric — single crop offset by gutterX+marginLeftExtra / gutterY=8', () => {
+    // One crop packs at origin (0,0); its x offset == gutterX + marginLeftExtra
+    // (the extra left margin that gives 2-digit index badges room), y offset ==
+    // gutterY. Pins the asymmetric default + 64px left margin (32+32).
+    const { sheets } = computeCropSheetLayout([crop('only', 50, 50)], config(1));
+    const g = sheets[0].placements[0].geometry;
+    expect(g.x).toBe(DEFAULTS.gutterX + DEFAULTS.marginLeftExtra);
+    expect(g.y).toBe(8);
+  });
+
+  it('honours explicit gutterX / gutterY overrides (x still adds marginLeftExtra)', () => {
+    const { sheets } = computeCropSheetLayout(
+      [crop('only', 50, 50)],
+      config(1, { gutterX: 40, gutterY: 12 }),
+    );
+    const g = sheets[0].placements[0].geometry;
+    expect(g.x).toBe(40 + DEFAULTS.marginLeftExtra);
+    expect(g.y).toBe(12);
+  });
+
+  it('two side-by-side crops keep a 2·gutterX horizontal gap when packed in a row', () => {
+    // Two small equal crops pack into one row; the inner horizontal gap between
+    // them equals 2·gutterX (right pad of the left crop + left pad of the right).
+    const { sheets } = computeCropSheetLayout(
+      [crop('l', 20, 20), crop('r', 20, 20)],
+      config(1, { gutterX: 16, gutterY: 8 }),
+    );
+    const ps = [...sheets[0].placements].sort((a, b) => a.geometry.x - b.geometry.x);
+    const [left, right] = ps;
+    const sameRow = left.geometry.y === right.geometry.y;
+    if (sameRow) {
+      const gap = right.geometry.x - (left.geometry.x + left.geometry.w);
+      expect(gap).toBe(32);
+    } else {
+      // Packed in a column instead — assert the vertical gap is 2·gutterY.
+      const top = ps.sort((a, b) => a.geometry.y - b.geometry.y)[0];
+      const bottom = ps[1];
+      expect(bottom.geometry.y - (top.geometry.y + top.geometry.h)).toBe(16);
+    }
   });
 
   it('picks a ratioKey from the allowed set', () => {

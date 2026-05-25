@@ -11,17 +11,21 @@ import { useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import { createLogger } from '@/utils/logger';
 import type { RemixCropSheet, RemixCrop } from '@/types/remix';
+import { COMPOSER_FRAME, resolveStrokePx } from '../swap-modal-constants';
 
 const log = createLogger('Editor', 'ComposedCropSheet');
 
 interface ComposedCropSheetProps {
   sheet: RemixCropSheet;
+  /** Current zoom % — drives the parity stroke width (sheet-px × zoom/100). */
+  zoomLevel: number;
 }
 
 /** Composes `sheet.crops[]` over a frame sized by `sheet.sheet_geometry`.
  *  Guards an empty/degenerate sheet with a "Sheet trống" placeholder. */
-export function ComposedCropSheet({ sheet }: ComposedCropSheetProps) {
+export function ComposedCropSheet({ sheet, zoomLevel }: ComposedCropSheetProps) {
   const { width: sw, height: sh } = sheet.sheet_geometry;
+  const strokePx = resolveStrokePx(zoomLevel);
 
   if (sheet.crops.length === 0 || sw <= 0 || sh <= 0) {
     log.debug('render', 'empty or degenerate sheet — placeholder', {
@@ -46,8 +50,13 @@ export function ComposedCropSheet({ sheet }: ComposedCropSheetProps) {
         <ComposedCrop
           key={`crop-${index}`}
           crop={crop}
+          // 1-based index — drawn as a badge for navigation. Order matches
+          // `req.crops` (the order the composer processes + reports `skipped[]`
+          // by), so the preview numbering lines up with the composed sheet.
+          ordinal={index + 1}
           sheetWidth={sw}
           sheetHeight={sh}
+          strokePx={strokePx}
         />
       ))}
     </div>
@@ -58,54 +67,58 @@ export function ComposedCropSheet({ sheet }: ComposedCropSheetProps) {
 
 interface ComposedCropProps {
   crop: RemixCrop;
+  /** 1-based ordinal shown as a badge in the left gutter. */
+  ordinal: number;
   sheetWidth: number;
   sheetHeight: number;
+  /** Zoom-scaled stroke width (CSS px) — drives both border + inflate. */
+  strokePx: number;
 }
 
 /** A single crop placed at `geometry / sheet_geometry * 100%`. Keeps its own
  *  error state so a 404 shows a per-crop placeholder without breaking siblings.
  *
- *  Wrapper inflates the crop slot by 4px on every side so adjacent wrappers
- *  meet flush in the middle of the layout engine's 8px gap. The wrapper's
- *  4px border (muted, matches the canvas backdrop) then visualises the gap as
- *  a continuous 8px gutter. Box-sizing border-box keeps the inner area at the
- *  original crop size — image position is unchanged. */
-function ComposedCrop({ crop, sheetWidth, sheetHeight }: ComposedCropProps) {
+ *  Wrapper inflates the crop slot by `cellStrokeWidthPx` on every side and
+ *  draws a same-width `cellStrokeColor` border (border-box), reproducing the
+ *  composer's per-cell outer stroke. The wrapper is filled with `gutterColor`
+ *  so transparent PNG areas read as that colour — matching the flattened PNG
+ *  the Python composer bakes (NOT a checkerboard). The ordinal badge sits in
+ *  the left gutter strip (see `OrdinalBadge`). */
+function ComposedCrop({ crop, ordinal, sheetWidth, sheetHeight, strokePx }: ComposedCropProps) {
   const [errored, setErrored] = useState(false);
   const { x, y, w, h } = crop.geometry;
 
+  const stroke = strokePx;
   const wrapperStyle: React.CSSProperties = {
     position: 'absolute',
-    left: `calc(${(x / sheetWidth) * 100}% - 4px)`,
-    top: `calc(${(y / sheetHeight) * 100}% - 4px)`,
-    width: `calc(${(w / sheetWidth) * 100}% + 8px)`,
-    height: `calc(${(h / sheetHeight) * 100}% + 8px)`,
+    left: `calc(${(x / sheetWidth) * 100}% - ${stroke}px)`,
+    top: `calc(${(y / sheetHeight) * 100}% - ${stroke}px)`,
+    width: `calc(${(w / sheetWidth) * 100}% + ${stroke * 2}px)`,
+    height: `calc(${(h / sheetHeight) * 100}% + ${stroke * 2}px)`,
     zIndex: crop['z-index'],
+    boxSizing: 'border-box',
+    borderStyle: 'solid',
+    borderWidth: stroke,
+    borderColor: COMPOSER_FRAME.cellStrokeColor,
+    backgroundColor: COMPOSER_FRAME.gutterColor,
   };
-
-  // Checkerboard inside the wrapper — shows behind transparent PNGs so the
-  // user sees the crop's actual alpha. White 4px border (border-box) acts as
-  // the gap gutter between adjacent crops.
-  const checkerClass =
-    'bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px]';
 
   if (errored) {
     return (
       <div
         style={wrapperStyle}
-        className={`flex flex-col items-center justify-center gap-1 border-4 border-white ${checkerClass}`}
+        className="flex flex-col items-center justify-center gap-1"
       >
-        <ImageOff className="h-6 w-6 text-muted-foreground" />
-        <span className="text-[10px] text-muted-foreground">Ảnh lỗi</span>
+        <OrdinalBadge ordinal={ordinal} />
+        <ImageOff className="h-6 w-6 text-white/70" />
+        <span className="text-[10px] text-white/70">Ảnh lỗi</span>
       </div>
     );
   }
 
   return (
-    <div
-      style={wrapperStyle}
-      className={`border-4 border-white ${checkerClass}`}
-    >
+    <div style={wrapperStyle}>
+      <OrdinalBadge ordinal={ordinal} />
       <img
         src={crop.media_url}
         alt={crop.name || 'Crop'}
@@ -119,5 +132,26 @@ function ComposedCrop({ crop, sheetWidth, sheetHeight }: ComposedCropProps) {
         className="h-full w-full"
       />
     </div>
+  );
+}
+
+// ── OrdinalBadge — crop index, in the left gutter, top-aligned ────────────────
+
+/** Frontend-only crop index (the composer bakes no ordinals). FIXED size,
+ *  zoom-independent — the modal scales the sheet via container width/height,
+ *  not `transform`, so `text-sm`/`px-1.5` stay constant at every zoom.
+ *
+ *  Always rendered in the left separating strip (`-translate-x-full` lifts it
+ *  fully out of the cell) so it never overlaps artwork. The layout engine's
+ *  widened left margin guarantees gutter room for the first column, so even
+ *  column-1 badges stay inside the sheet without clipping. */
+function OrdinalBadge({ ordinal }: { ordinal: number }) {
+  return (
+    <span
+      className="pointer-events-none absolute left-0 top-0 z-20 -translate-x-full rounded-l-md rounded-r-none bg-black/85 px-1.5 py-0.5 text-sm font-bold leading-none tabular-nums text-white shadow-sm"
+      aria-hidden="true"
+    >
+      {ordinal}
+    </span>
   );
 }

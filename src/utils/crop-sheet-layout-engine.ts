@@ -34,8 +34,12 @@ export interface LayoutConfig {
   sheetCount: number;
   /** Real spread size (px) — DIMENSION_CANVAS_SIZE[book.dimension] ?? DEFAULT_CANVAS_SIZE. */
   spread: { width: number; height: number };
-  /** Padding (px) around each crop. Default DEFAULTS.gutter. */
-  gutter?: number;
+  /** Horizontal padding (px) on EACH side of a crop. Default DEFAULTS.gutterX.
+   *  The gap between two horizontally-adjacent crops is therefore 2·gutterX. */
+  gutterX?: number;
+  /** Vertical padding (px) on EACH side of a crop. Default DEFAULTS.gutterY.
+   *  The gap between two vertically-adjacent crops is therefore 2·gutterY. */
+  gutterY?: number;
   /** τ — landscape-ratio preference threshold. Default DEFAULTS.landscapeTolerance. */
   landscapeTolerance?: number;
 }
@@ -85,7 +89,20 @@ export const ALLOWED_RATIOS: { key: string; value: number; orientation: Orientat
 ];
 
 export const DEFAULTS = {
-  gutter: 8, // padding around each crop (px)
+  // Asymmetric padding around each crop (px). gutterX > gutterY widens the
+  // horizontal gap (2·gutterX = 64px between adjacent crops) so the per-crop
+  // index badge fits in the left separating strip WITHOUT being clipped or
+  // overlapping the neighbour; the vertical gap stays tighter (2·gutterY =
+  // 16px). See spec 05-05 §5.3.
+  gutterX: 32, // horizontal padding each side → 64px horizontal gap
+  gutterY: 8, // vertical padding each side → 16px vertical gap
+  // Extra LEFT-only margin (px) added on top of gutterX for the first column,
+  // so the per-crop index badge (rendered in the left strip, translated fully
+  // out of the cell) fits 2-digit ordinals (≥10) without clipping. Applied as a
+  // uniform +x shift on every placement plus an equal widening of the sheet, so
+  // inter-crop gaps, vertical spacing and the right margin stay unchanged.
+  // left margin = gutterX + marginLeftExtra = 32 + 32 = 64px.
+  marginLeftExtra: 32,
   landscapeTolerance: 0.08, // τ — accept landscape ratio if ≤ 8% worse than global best
   fillTarget: 0.95, // slack factor when seeding potpack bin width
 };
@@ -153,7 +170,8 @@ export function computeCropSheetLayout(
   }
 
   const sheetCount = Math.max(1, Math.floor(config.sheetCount));
-  const gutter = config.gutter ?? DEFAULTS.gutter;
+  const gutterX = config.gutterX ?? DEFAULTS.gutterX;
+  const gutterY = config.gutterY ?? DEFAULTS.gutterY;
   const landscapeTolerance = config.landscapeTolerance ?? DEFAULTS.landscapeTolerance;
 
   // Silently drop crops with non-positive dimensions (caller logs warnings).
@@ -162,7 +180,7 @@ export function computeCropSheetLayout(
   const groups = partitionByArea(pxCrops, sheetCount);
 
   const sheets = groups.map((group, index) =>
-    packOneSheet(group, index, gutter, landscapeTolerance),
+    packOneSheet(group, index, gutterX, gutterY, landscapeTolerance),
   );
 
   return { sheets };
@@ -208,7 +226,8 @@ function partitionByArea(pxCrops: PxCrop[], k: number): PxCrop[][] {
 function packOneSheet(
   group: PxCrop[],
   index: number,
-  gutter: number,
+  gutterX: number,
+  gutterY: number,
   landscapeTolerance: number,
 ): SheetLayout {
   if (group.length === 0) {
@@ -222,11 +241,12 @@ function packOneSheet(
     };
   }
 
-  // Inflate each crop by 2*gutter (padding around the crop).
+  // Inflate each crop by 2*gutterX horizontally / 2*gutterY vertically
+  // (asymmetric padding around the crop).
   const inflated: PackBox[] = group.map((c) => ({
     id: c.id,
-    w: c.w + 2 * gutter,
-    h: c.h + 2 * gutter,
+    w: c.w + 2 * gutterX,
+    h: c.h + 2 * gutterY,
     x: 0,
     y: 0,
   }));
@@ -260,7 +280,7 @@ function packOneSheet(
   }
 
   const best = pickByPreference(candidates, landscapeTolerance);
-  return toSheetLayout(best, index, gutter);
+  return toSheetLayout(best, index, gutterX, gutterY);
 }
 
 // ── Step 4: forked potpack — strip-packing + guillotine split (spec §5.4) ────
@@ -409,15 +429,24 @@ function pickByPreference(candidates: Candidate[], tolerance: number): Candidate
 
 // ── Step 6: emit real pixels (spec §5.6) ─────────────────────────────────────
 
-function toSheetLayout(best: Candidate, index: number, gutter: number): SheetLayout {
+function toSheetLayout(
+  best: Candidate,
+  index: number,
+  gutterX: number,
+  gutterY: number,
+): SheetLayout {
+  // Shift every crop right by the extra left margin; widen the sheet by the
+  // same amount so only the LEFT margin grows (right margin / gaps unchanged).
+  const marginLeft = DEFAULTS.marginLeftExtra;
+
   const placements: CropPlacement[] = best.packed.boxes.map((box) => ({
     id: box.id,
     geometry: {
-      x: Math.round(box.x + gutter),
-      y: Math.round(box.y + gutter),
+      x: Math.round(box.x + gutterX + marginLeft),
+      y: Math.round(box.y + gutterY),
       // Clamp ≥ 1px — gutter larger than the crop would yield ≤ 0 (spec §8).
-      w: Math.max(1, Math.round(box.w - 2 * gutter)),
-      h: Math.max(1, Math.round(box.h - 2 * gutter)),
+      w: Math.max(1, Math.round(box.w - 2 * gutterX)),
+      h: Math.max(1, Math.round(box.h - 2 * gutterY)),
     },
   }));
 
@@ -426,7 +455,7 @@ function toSheetLayout(best: Candidate, index: number, gutter: number): SheetLay
     ratioKey: best.key,
     ratio: best.R,
     fill: best.fill,
-    sheetGeometry: { width: Math.round(best.W), height: Math.round(best.H) },
+    sheetGeometry: { width: Math.round(best.W + marginLeft), height: Math.round(best.H) },
     placements,
   };
 }
