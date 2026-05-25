@@ -98,6 +98,10 @@ describe('groupCropsForKey — image-only crop selection', () => {
     expect(r.cropInputs).toHaveLength(1);
     expect(r.cropInputs[0].id).toBe('img1');
     expect(r.cropMetaById['img1'].media_url).toBe('https://cdn/img1.png');
+    // Source identity persisted (DB-CHANGELOG 2026-05-25): id = image layer id,
+    // spread_id = source spread id.
+    expect(r.cropMetaById['img1'].id).toBe('img1');
+    expect(r.cropMetaById['img1'].spread_id).toBe('s1');
   });
 
   // BUG GUARD — the .lottie-in-crop-sheet regression.

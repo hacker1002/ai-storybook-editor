@@ -35,6 +35,13 @@ export interface PropSound {
 }
 
 export interface Crop {
+  /** id of the SOURCE image layer in `illustration.spreads[].images[]`.
+   *  Matches the `crops[].id` param of remix API 01/02 (API takes it verbatim).
+   *  Renamed from the legacy `layer_id`. Spec: DB-CHANGELOG [2026-05-25]. */
+  id: string;
+  /** id of the source spread the crop was lifted from. Metadata only — never
+   *  feeds the layout engine; re-attached at emit time by `placement.id`. */
+  spread_id: string;
   spread_number: number;
   aspect_ratio: string;
   name: string;

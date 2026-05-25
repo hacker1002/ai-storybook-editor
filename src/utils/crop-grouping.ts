@@ -8,6 +8,9 @@
 //   - `cropInputs`     — CropInput[] for crop-sheet-layout-engine.
 //   - `cropMetaById`   — RemixCrop metadata keyed by layer id (for the P4
 //                        merge step that writes engine placement geometry).
+//                        Carries source identity `id` (image layer id) +
+//                        `spread_id` — mandated persist per DB-CHANGELOG
+//                        2026-05-25 (`layer_id` renamed → `id`).
 //
 // IMPORTANT — two distinct geometry concepts:
 //   - `CropInput.widthPct/heightPct` is the SOURCE layer geometry (% of the
@@ -173,6 +176,12 @@ export function groupCropsForKey(
         heightPct: g.h,
       });
       cropMetaById[layer.id] = {
+        // Source identity — mandated persist (DB-CHANGELOG 2026-05-25). `id` =
+        // image layer id (echoes engine `placement.id`); `spread_id` = source
+        // spread id (metadata only, engine ignores it). Both flow through to
+        // the persisted `crops[]` so remix API 01/02 receive them verbatim.
+        id: layer.id,
+        spread_id: spread.id,
         spread_number: spreadNumber,
         aspect_ratio: (layer as { aspect_ratio?: string }).aspect_ratio ?? '1:1',
         name: variant,

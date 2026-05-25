@@ -191,6 +191,8 @@ function populateSingleSubjectCrops(
       if (!entity) continue;
 
       const crop = {
+        id: layer.id,
+        spread_id: spread.id,
         spread_number: spreadNumber,
         aspect_ratio: (layer as SpreadImage).aspect_ratio ?? '1:1',
         name: tag.variant_key ?? '',
@@ -247,8 +249,15 @@ export function mixLineupTokens(
   return cast.map((c) => makeMixToken(c.key, cropVariantByKey.get(c.key) ?? c.baseVariant));
 }
 
-function makeMixCrop(layer: TaggedLayer, spreadNumber: number, variant: string) {
+function makeMixCrop(
+  layer: TaggedLayer,
+  spreadId: string,
+  spreadNumber: number,
+  variant: string,
+) {
   return {
+    id: layer.id,
+    spread_id: spreadId,
     spread_number: spreadNumber,
     aspect_ratio: (layer as SpreadImage).aspect_ratio ?? '1:1',
     name: variant,
@@ -310,7 +319,7 @@ function buildMixes(
         const entity = entityByKey.get(tag.object_key);
         if (!entity) continue;
         entity.crop_sheets[0].crops.push(
-          makeMixCrop(layer, spreadNumber, tag.variant_key ?? ''),
+          makeMixCrop(layer, spread.id, spreadNumber, tag.variant_key ?? ''),
         );
         continue;
       }
@@ -332,7 +341,9 @@ function buildMixes(
       }
 
       const variant = enabledTags.map((t) => t.variant_key ?? '').join('+');
-      mix.crop_sheets[0].crops.push(makeMixCrop(layer, spreadNumber, variant));
+      mix.crop_sheets[0].crops.push(
+        makeMixCrop(layer, spread.id, spreadNumber, variant),
+      );
     }
   }
   return [...bySig.values()];
