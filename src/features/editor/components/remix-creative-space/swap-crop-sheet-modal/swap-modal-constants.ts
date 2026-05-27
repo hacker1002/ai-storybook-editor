@@ -39,8 +39,14 @@ export const ZOOM = { min: 10, max: 400, step: 5, default: 100 } as const;
 /** Scale stepper range (right sidebar). */
 export const SCALE = { min: 2, max: 10, step: 1, default: 4 } as const;
 
-/** Each entity key must keep at least this many crop sheets. */
+/** Each batch must keep at least this many crop sheets. */
 export const SHEET_MIN = 1;
+
+/** Upper bound on crop sheets per batch (relayout K clamp). */
+export const SHEET_MAX = 10;
+
+/** A remix must keep at least this many batches. */
+export const BATCH_MIN = 1;
 
 /** Composer parity — colours mirror `DEFAULT_FRAME_*` in
  *  `ai-storybook-image-api/src/models/requests/build_crop_sheet.py`. The
@@ -105,9 +111,13 @@ export const SWAP_MODAL_TOKENS = {
   '--swap-modal-sheet-frame-bg': '#ffffff', // sheet frame still white (pop on dark canvas)
 } as const satisfies Record<string, string>;
 
-/** Z-index layering — swap modal vs Variants overlay (design §4.12). */
+/** Z-index layering — swap modal vs Variants overlay (design §4.12).
+ *  `confirmDialog` must sit ABOVE `swapModal`: the shared AlertDialog ships at
+ *  z-50, which the full-screen swapModal (4000) would otherwise occlude — the
+ *  relayout-confirm popup mounts but is painted behind the modal (invisible). */
 export const Z_INDEX = {
   swapModal: 4000,
+  confirmDialog: 4100,
   variantsModal: 5000,
 } as const;
 

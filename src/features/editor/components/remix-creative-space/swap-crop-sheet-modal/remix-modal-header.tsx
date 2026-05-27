@@ -1,35 +1,35 @@
-// remix-modal-header.tsx — Header band for SwapCropSheetModal (design §3.1).
-// Title "Remix" + a 3-tab group (Characters / Props / Mixes) + close button.
+// remix-modal-header.tsx — Header band for SwapCropSheetModal (design §3.1, rev2).
+// Title (remix name) + a 3-tab pill group (Variants / Batches / Lotties) + close.
 // The tab group is a roving-tabindex `tablist` — ←/→ moves the active tab.
 
-import { Users, Package, Shuffle, X } from 'lucide-react';
+import { SplitSquareHorizontal, LayoutGrid, Sparkles, X } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
-import {
-  HEADER_HEIGHT_PX,
-  type RemixEntityType,
-} from './swap-modal-constants';
+import { HEADER_HEIGHT_PX } from './swap-modal-constants';
 
 const log = createLogger('Editor', 'RemixModalHeader');
 
+/** The three top-level tabs of the rev2 swap modal. */
+export type RemixModalTab = 'variants' | 'batches' | 'lotties';
+
 interface RemixModalHeaderProps {
   title: string;
-  activeTab: RemixEntityType;
-  onTabChange: (tab: RemixEntityType) => void;
+  activeTab: RemixModalTab;
+  onTabChange: (tab: RemixModalTab) => void;
   onClose: () => void;
 }
 
 interface TabDef {
-  id: RemixEntityType;
+  id: RemixModalTab;
   label: string;
-  Icon: typeof Users;
+  Icon: typeof SplitSquareHorizontal;
 }
 
 // Order is the keyboard navigation order for ←/→.
 const TABS: TabDef[] = [
-  { id: 'character', label: 'Characters', Icon: Users },
-  { id: 'prop', label: 'Props', Icon: Package },
-  { id: 'mix', label: 'Mixes', Icon: Shuffle },
+  { id: 'variants', label: 'Variants', Icon: SplitSquareHorizontal },
+  { id: 'batches', label: 'Batches', Icon: LayoutGrid },
+  { id: 'lotties', label: 'Lotties', Icon: Sparkles },
 ];
 
 export function RemixModalHeader({
@@ -63,7 +63,7 @@ export function RemixModalHeader({
     >
       <h2
         id="swap-crop-sheet-modal-title"
-        className="truncate text-base font-semibold text-[var(--swap-modal-text-primary)]"
+        className="min-w-0 flex-1 truncate text-base font-semibold text-[var(--swap-modal-text-primary)]"
         title={title}
       >
         {title}
@@ -71,7 +71,7 @@ export function RemixModalHeader({
 
       <div
         role="tablist"
-        aria-label="Loại entity"
+        aria-label="Chế độ remix"
         className="flex items-center gap-1 rounded-lg bg-[var(--swap-modal-surface-hover)] p-1"
       >
         {TABS.map(({ id, label, Icon }) => {
@@ -92,7 +92,7 @@ export function RemixModalHeader({
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-3 py-1 text-sm transition-colors',
                 isActive
-                  ? 'bg-[var(--swap-modal-surface-hover-strong)] font-semibold text-[var(--swap-modal-text-primary)] shadow-sm'
+                  ? 'bg-white font-semibold text-[#0a0d18] shadow-sm'
                   : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
               )}
             >
@@ -103,17 +103,19 @@ export function RemixModalHeader({
         })}
       </div>
 
-      <button
-        type="button"
-        aria-label="Đóng"
-        onClick={() => {
-          log.debug('onClick', 'close modal');
-          onClose();
-        }}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--swap-modal-text-muted)] transition-colors hover:bg-[var(--swap-modal-surface-hover-strong)] hover:text-[var(--swap-modal-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--swap-modal-accent)]"
-      >
-        <X className="h-4 w-4" />
-      </button>
+      <div className="flex flex-1 justify-end">
+        <button
+          type="button"
+          aria-label="Đóng"
+          onClick={() => {
+            log.debug('onClick', 'close modal');
+            onClose();
+          }}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--swap-modal-text-muted)] transition-colors hover:bg-[var(--swap-modal-surface-hover-strong)] hover:text-[var(--swap-modal-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--swap-modal-accent)]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     </header>
   );
 }
