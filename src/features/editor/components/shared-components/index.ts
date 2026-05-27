@@ -3,6 +3,7 @@
 // Components
 export { EditableTextbox } from './editable-textbox';
 export { EditableImage } from './editable-image';
+export { resolveEffectiveImageUrl } from './resolve-effective-image-url';
 export { EditableShape } from './editable-shape';
 export { EditableVideo } from './editable-video';
 export { EditableAudio } from './editable-audio';

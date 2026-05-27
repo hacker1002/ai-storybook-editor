@@ -339,6 +339,16 @@ export interface PageData {
   };
 }
 
+// === Image Annotation (Objects space — enhance-annotation flow) ===
+// Per-image annotation describing the dynamic state (pose/action/expression) of
+// tagged subjects in the scene. Generated via multimodal enhance-annotation API,
+// later cloned into remix crop-sheet swap prompts. Additive JSONB [2026-05-27].
+// Extensible object — preserve future fields when persisting (currently only
+// `description`: plain text, single-lang; empty string = cleared).
+export interface SpreadImageAnnotation {
+  description?: string;
+}
+
 // === Spread Item Types ===
 export interface SpreadImage {
   id: string;
@@ -367,6 +377,10 @@ export interface SpreadImage {
   aspect_ratio?: string;
   original_image_id?: string;
   tags?: SpreadTag[];
+
+  // Objects space — batch image annotation (enhance-annotation flow).
+  // Additive optional → non-breaking. See SpreadImageAnnotation.
+  annotation?: SpreadImageAnnotation;
 }
 
 export interface SpreadTextbox {

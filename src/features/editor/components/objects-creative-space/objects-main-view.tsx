@@ -3,13 +3,18 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Languages, Mic } from "lucide-react";
+import { Languages, Mic, MessageSquare } from "lucide-react";
 import { createLogger } from "@/utils/logger";
 import { TranslateSpreadModal, type ApplyTranslationsPayload } from "./translate-spread-modal";
 import {
   EnhanceSpreadNarrationModal,
   type ApplyEnhancementsPayload,
 } from "./enhance-spread-narration-modal";
+import {
+  EnhanceImageAnnotationModal,
+  type ApplyAnnotationsPayload,
+} from "./enhance-image-annotation-modal";
+import { buildAnnotationImages } from "./build-annotation-images";
 import {
   buildNarrationReaders,
   buildNarrationReaderToVoice,
@@ -56,7 +61,9 @@ import {
   useRetouchSpreads,
   useSnapshotActions,
   useCharacters,
+  useProps,
 } from "@/stores/snapshot-store/selectors";
+import { useArtStyleDescription } from "@/stores/art-style-store";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { useBookTemplateLayout, useCurrentBook } from "@/stores/book-store";
@@ -154,6 +161,7 @@ export function ObjectsMainView({
 
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [narrationSpreadModalOpen, setNarrationSpreadModalOpen] = useState(false);
+  const [annotationModalOpen, setAnnotationModalOpen] = useState(false);
   const [browseOpen, setBrowseOpen] = useState<{
     itemId: string;
     spreadId: string;
@@ -162,6 +170,8 @@ export function ObjectsMainView({
   const sounds = useSounds();
 
   const characters = useCharacters();
+  const props = useProps();
+  const annotationArtStyle = useArtStyleDescription() ?? undefined;
 
   const selectedSpread = useMemo(
     () => retouchSpreads.find(s => s.id === selectedSpreadId),
@@ -218,6 +228,23 @@ export function ObjectsMainView({
     () => buildBookContext(book, retouchSpreads, selectedSpread),
     [book, retouchSpreads, selectedSpread]
   );
+
+  // Annotation modal rows — filter tagged char/prop images + resolve subjects +
+  // effective URL. Single-lang fields → NOT keyed on editorLang.
+  const annotationImages = useMemo(
+    () => buildAnnotationImages(selectedSpread, characters, props),
+    [selectedSpread, characters, props]
+  );
+
+  // Language LOCKED = book.original_language (NOT editorLang). Fallback 'en_US'.
+  const annotationLanguage = useMemo(() => {
+    const lang = book?.original_language;
+    if (!lang) {
+      log.warn("annotationLanguage", "original_language empty, fallback en_US");
+      return "en_US";
+    }
+    return lang;
+  }, [book?.original_language]);
 
   const handleApplyTranslations = useCallback(
     (payload: ApplyTranslationsPayload) => {
@@ -289,6 +316,47 @@ export function ObjectsMainView({
     [retouchSpreads, actions]
   );
 
+  const handleApplyAnnotations = useCallback(
+    (payload: ApplyAnnotationsPayload) => {
+      log.info("handleApplyAnnotations", "start", {
+        spreadId: payload.spreadId,
+        count: payload.results.length,
+      });
+      const spread = retouchSpreads.find(s => s.id === payload.spreadId);
+      if (!spread) {
+        log.warn("handleApplyAnnotations", "spread not found", {
+          spreadId: payload.spreadId,
+        });
+        return;
+      }
+      let applied = 0;
+      for (const { imageId, description } of payload.results) {
+        const image = spread.images.find(img => img.id === imageId);
+        if (!image) {
+          log.debug("handleApplyAnnotations", "image missing", { imageId });
+          continue;
+        }
+        const existing = image.annotation?.description ?? "";
+        if (existing === description) {
+          log.debug("handleApplyAnnotations", "unchanged, skip", { imageId });
+          continue; // no-op guard
+        }
+        actions.updateRetouchImage(payload.spreadId, imageId, {
+          annotation: {
+            ...(image.annotation ?? {}), // extensible — preserve future fields
+            description,
+          },
+        });
+        applied += 1;
+      }
+      log.info("handleApplyAnnotations", "done", {
+        spreadId: payload.spreadId,
+        applied,
+      });
+    },
+    [retouchSpreads, actions]
+  );
+
   const translateLeftAction = useMemo(
     () => (
       <Button
@@ -327,14 +395,34 @@ export function ObjectsMainView({
     [selectedSpreadId, selectedSpread]
   );
 
+  const annotationLeftAction = useMemo(
+    () => (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          log.info("annotationButton", "click", { spreadId: selectedSpreadId });
+          setAnnotationModalOpen(true);
+        }}
+        disabled={!selectedSpreadId || !selectedSpread}
+        aria-label="Enhance image annotations"
+      >
+        <MessageSquare className="h-4 w-4 mr-1.5" />
+        Annotations
+      </Button>
+    ),
+    [selectedSpreadId, selectedSpread]
+  );
+
   const combinedLeftActions = useMemo(
     () => (
       <>
         {translateLeftAction}
         {narrationLeftAction}
+        {annotationLeftAction}
       </>
     ),
-    [translateLeftAction, narrationLeftAction]
+    [translateLeftAction, narrationLeftAction, annotationLeftAction]
   );
 
   const handleDeselect = useCallback(() => onItemSelect(null), [onItemSelect]);
@@ -990,6 +1078,19 @@ export function ObjectsMainView({
           readerToVoice={enhanceReaderToVoice}
           context={bookContext}
           onApplyEnhancements={handleApplyEnhancements}
+        />
+      )}
+
+      {selectedSpread && (
+        <EnhanceImageAnnotationModal
+          isOpen={annotationModalOpen}
+          onClose={() => setAnnotationModalOpen(false)}
+          spreadId={selectedSpreadId}
+          images={annotationImages}
+          language={annotationLanguage}
+          artStyle={annotationArtStyle}
+          context={bookContext}
+          onApplyAnnotations={handleApplyAnnotations}
         />
       )}
 

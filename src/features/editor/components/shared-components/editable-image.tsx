@@ -8,6 +8,7 @@ import type { SpreadImage } from "@/types/spread-types";
 import { COLORS, DIMMED_BY_OVERLAP_OPACITY } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
 import { useZoomLevel } from "@/stores/editor-settings-store";
+import { resolveEffectiveImageUrl } from "./resolve-effective-image-url";
 
 const log = createLogger("Editor", "EditableImage");
 
@@ -63,11 +64,7 @@ export function EditableImage({
   const editableRef = useRef<HTMLDivElement>(null);
 
   // Image URL priority: final_hires > illustrations[selected] > illustrations[0] > media_url (sketch)
-  const imageUrl =
-    image.final_hires_media_url ||
-    image.illustrations?.find((i) => i.is_selected)?.media_url ||
-    image.illustrations?.[0]?.media_url ||
-    image.media_url;
+  const imageUrl = resolveEffectiveImageUrl(image);
 
   // Get display content for placeholder
   const artNoteText = image.art_note || image.visual_description || "";

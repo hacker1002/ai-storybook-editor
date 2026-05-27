@@ -445,6 +445,241 @@ export async function callEnhanceNarration(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Enhance Image Annotation (multimodal vision — image-IN/text-OUT)
+// Spec: ai-storybook-design/api/text-generation/07-enhance-annotation.md
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const MAX_ANNOTATION_IMAGES_PER_BATCH = 12;
+export const MAX_ANNOTATION_SUBJECTS_PER_IMAGE = 20;
+
+export interface AnnotationSubjectPayload {
+  key: string;
+  type: 'character' | 'prop';
+  variant_key: string | null;
+  name?: string;
+  visual_description?: string;
+}
+
+export interface AnnotationImagePayload {
+  index: number;
+  media_url: string;
+  subjects: AnnotationSubjectPayload[];
+}
+
+export interface EnhanceImageAnnotationParams {
+  images: AnnotationImagePayload[]; // 1..12
+  language: string;
+  art_style?: string;
+  prompt?: string; // v1 not sent
+  context?: string;
+}
+
+export interface AnnotationItem {
+  index: number;
+  description: string;
+}
+
+export type SkippedImageReason =
+  | 'FETCH_ERROR'
+  | 'SSRF_BLOCKED'
+  | 'TOO_LARGE'
+  | 'UNSUPPORTED_TYPE';
+
+export interface SkippedImage {
+  index: number;
+  reason: SkippedImageReason;
+}
+
+export interface EnhanceImageAnnotationMeta {
+  imageCount?: number;
+  annotatedCount?: number;
+  language?: string;
+  skipped?: SkippedImage[];
+  processingTimeMs?: number;
+  tokenUsage?: number;
+}
+
+export interface EnhanceImageAnnotationSuccess {
+  success: true;
+  data: { annotations: AnnotationItem[] };
+  meta?: EnhanceImageAnnotationMeta;
+}
+
+export type EnhanceImageAnnotationErrorCode =
+  | 'VALIDATION'
+  | 'IMAGE_FETCH_ERROR'
+  | 'LLM_ERROR'
+  | 'LENGTH_MISMATCH'
+  | 'INTERNAL'
+  | 'CONNECTION_ERROR'
+  | 'ABORT'
+  | 'UNKNOWN';
+
+export interface EnhanceImageAnnotationFailure {
+  success: false;
+  error: string;
+  httpStatus: number;
+  errorCode: EnhanceImageAnnotationErrorCode;
+}
+
+export type EnhanceImageAnnotationResult =
+  | EnhanceImageAnnotationSuccess
+  | EnhanceImageAnnotationFailure;
+
+function annotationFailure(
+  errorCode: EnhanceImageAnnotationErrorCode,
+  error: string,
+  httpStatus = 0
+): EnhanceImageAnnotationFailure {
+  return { success: false, error, httpStatus, errorCode };
+}
+
+function mapAnnotationServerErrorCode(
+  code: string | undefined
+): EnhanceImageAnnotationErrorCode {
+  switch (code) {
+    // Body-validation errors come from the global RequestValidationError
+    // handler as "VALIDATION_ERROR" (HTTP 400); normalize to internal 'VALIDATION'.
+    case 'VALIDATION_ERROR':
+    case 'VALIDATION':
+      return 'VALIDATION';
+    case 'IMAGE_FETCH_ERROR':
+    case 'LLM_ERROR':
+    case 'LENGTH_MISMATCH':
+    case 'INTERNAL':
+      return code;
+    default:
+      return 'UNKNOWN';
+  }
+}
+
+export async function callEnhanceImageAnnotation(
+  params: EnhanceImageAnnotationParams,
+  options?: CallOptions
+): Promise<EnhanceImageAnnotationResult> {
+  const { images, language } = params;
+
+  if (!Array.isArray(images) || images.length === 0) {
+    return annotationFailure('VALIDATION', 'images empty');
+  }
+  if (images.length > MAX_ANNOTATION_IMAGES_PER_BATCH) {
+    return annotationFailure(
+      'VALIDATION',
+      `images exceeds ${MAX_ANNOTATION_IMAGES_PER_BATCH}`
+    );
+  }
+  if (images.some(img => !img.media_url || !img.media_url.trim())) {
+    return annotationFailure('VALIDATION', 'image media_url missing');
+  }
+  if (!language) {
+    return annotationFailure('VALIDATION', 'language required');
+  }
+
+  const path = '/api/text/enhance-annotation';
+  const url = `${imageApiBaseUrl}${path}`;
+
+  log.info('callEnhanceImageAnnotation', 'start', {
+    count: images.length,
+    language,
+    hasArtStyle: Boolean(params.art_style),
+    hasContext: Boolean(params.context),
+  });
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': imageApiKey,
+      },
+      body: JSON.stringify(params),
+      signal: options?.signal,
+    });
+
+    if (options?.signal?.aborted) {
+      return annotationFailure('ABORT', 'Request aborted', 0);
+    }
+
+    if (!response.ok) {
+      const { message, errorCode } = await extractErrorInfo(response);
+      log.error('callEnhanceImageAnnotation', 'http error', {
+        httpStatus: response.status,
+        errorCode,
+        msg: message.slice(0, 100),
+      });
+      return {
+        success: false,
+        error: message,
+        httpStatus: response.status,
+        errorCode: mapAnnotationServerErrorCode(errorCode),
+      };
+    }
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      data?: { annotations?: AnnotationItem[] };
+      meta?: EnhanceImageAnnotationMeta;
+      error?: string;
+    };
+
+    if (data.success === false) {
+      log.error('callEnhanceImageAnnotation', 'server returned success=false', {
+        error: data.error,
+      });
+      return annotationFailure(
+        'INTERNAL',
+        data.error || 'Server returned success=false',
+        response.status
+      );
+    }
+
+    const annotations = data.data?.annotations;
+    if (!Array.isArray(annotations)) {
+      return annotationFailure(
+        'INTERNAL',
+        'Malformed response: annotations missing',
+        response.status
+      );
+    }
+
+    log.info('callEnhanceImageAnnotation', 'success', {
+      annotatedCount: annotations.length,
+      skippedCount: data.meta?.skipped?.length ?? 0,
+      processingTimeMs: data.meta?.processingTimeMs,
+      tokenUsage: data.meta?.tokenUsage,
+    });
+
+    return {
+      success: true,
+      data: { annotations },
+      meta: data.meta,
+    };
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === 'AbortError' || options?.signal?.aborted) {
+      log.info('callEnhanceImageAnnotation', 'aborted');
+      return annotationFailure('ABORT', 'Request aborted', 0);
+    }
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    if (err instanceof TypeError) {
+      log.error('callEnhanceImageAnnotation', 'connection error', {
+        msg: rawMessage.slice(0, 100),
+      });
+      return annotationFailure(
+        'CONNECTION_ERROR',
+        `Không kết nối được máy chủ (${rawMessage}). Vui lòng thử lại.`,
+        0
+      );
+    }
+    log.error('callEnhanceImageAnnotation', 'unknown error', {
+      name,
+      msg: rawMessage.slice(0, 100),
+    });
+    return annotationFailure('UNKNOWN', rawMessage || 'Unknown error', 0);
+  }
+}
+
 async function extractErrorInfo(
   response: Response
 ): Promise<{ message: string; errorCode?: string }> {
