@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import { createLogger } from '@/utils/logger';
-import type { RemixCropSheet, RemixCrop } from '@/types/remix';
+import type { RemixCropSheet, CropEntry } from '@/types/remix';
 import { COMPOSER_FRAME, resolveStrokePx } from '../swap-modal-constants';
 
 const log = createLogger('Editor', 'ComposedCropSheet');
@@ -66,7 +66,7 @@ export function ComposedCropSheet({ sheet, zoomLevel }: ComposedCropSheetProps) 
 // ── ComposedCrop — one absolutely-positioned crop image ──────────────────────
 
 interface ComposedCropProps {
-  crop: RemixCrop;
+  crop: CropEntry;
   /** 1-based ordinal shown as a badge in the left gutter. */
   ordinal: number;
   sheetWidth: number;
@@ -95,7 +95,8 @@ function ComposedCrop({ crop, ordinal, sheetWidth, sheetHeight, strokePx }: Comp
     top: `calc(${(y / sheetHeight) * 100}% - ${stroke}px)`,
     width: `calc(${(w / sheetWidth) * 100}% + ${stroke * 2}px)`,
     height: `calc(${(h / sheetHeight) * 100}% + ${stroke * 2}px)`,
-    zIndex: crop['z-index'],
+    // CropEntry (rev2) has no per-crop z-index/variant — crops are stacked in
+    // array order (later crops paint on top via DOM order). Stable layering.
     boxSizing: 'border-box',
     borderStyle: 'solid',
     borderWidth: stroke,

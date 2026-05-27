@@ -1,21 +1,32 @@
 // crop-sheet-stage.tsx — Center stage of SwapCropSheetModal (design §3.3).
-// StageHeader: Compare toggle [▣] + zoom slider. StageCanvas: the active crop
-// sheet composed client-side from `crops[] + sheet_geometry` (build API removed
-// 2026-05-19) rendered either alone (non-compare) or in a before/after
-// react-compare-slider.
 //
-// `selectedSwap` is null until a sheet carries swap_results (populated by the
-// character-swap job via realtime); until then Compare is disabled and the
-// canvas shows the composed crop sheet. Busy/error overlays read `swapTask`
-// (derived from the realtime `jobs[]` slice).
+// rev2 (Phase 09): generic stage reused by BOTH the Variants and Batches tabs.
+// The tab supplies the primary header action (`headerPrimary` — "Generate" for
+// Variants, "Swap" for Batches) and a discriminated `source`:
+//   - variants: before/after are plain portrait image URLs.
+//   - batches:  before = composed crop sheet (crops[] + sheet_geometry),
+//               after  = the selected swap-result image URL.
+//
+// StageHeader: tab-supplied primary button + Compare toggle [▣] + zoom slider.
+// StageCanvas: renders the active "before" (img | ComposedCropSheet) alone, or
+// in a before/after react-compare-slider when Compare is on and an "after"
+// image exists. Compare is disabled until an "after" is available.
 //
 // Slider engine: react-compare-slider@4 has no controlled `position` prop, only
 // uncontrolled `defaultPosition`. `dividerPosition` is therefore an init value;
-// the inner body is keyed by the swap URL so a parent reset re-applies it.
+// the inner body is keyed by the after URL so a parent reset re-applies it.
 
 import { useRef } from 'react';
 import { ReactCompareSlider } from 'react-compare-slider';
-import { Columns2, Loader2, AlertTriangle, RotateCcw, Minus, Plus } from 'lucide-react';
+import {
+  Columns2,
+  Loader2,
+  AlertTriangle,
+  RotateCcw,
+  Minus,
+  Plus,
+  type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/utils/utils';
@@ -26,31 +37,116 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { RemixCropSheet, SwapResult, SwapTaskStatus } from '@/types/remix';
+import type {
+  RemixCropSheet,
+  SwapPreviewState,
+  BatchSwapTaskStatus,
+} from '@/types/remix';
 import { ZOOM, HEADER_HEIGHT_PX } from './swap-modal-constants';
 import { ComposedCropSheet } from './crop-sheet-stage/composed-crop-sheet';
 import { useStageZoom } from './crop-sheet-stage/use-stage-zoom';
 
 const log = createLogger('Editor', 'CropSheetStage');
 
-interface CropSheetStageProps {
-  sheet: RemixCropSheet | null;
-  selectedSwap: SwapResult | null;
+// ── Public contract (imported by VariantsTab/BatchesTab — Phase 07/08) ───────
+
+/** Tab-supplied primary action rendered at the left of the stage header.
+ *  Variants → "Generate"/"Retry"; Batches → "Swap". */
+export interface StageHeaderPrimary {
+  label: string;
+  /** Optional leading icon; hidden while busy (spinner takes its place). */
+  icon?: LucideIcon;
+  disabled: boolean;
+  /** Optional gating reason shown as a tooltip when present. */
+  tooltip?: string;
+  /** Spinner + aria-busy while the action is in flight. */
+  busy?: boolean;
+  onClick: () => void;
+}
+
+/** Discriminated before/after source. The tab owns deriving these. */
+export type StageSource =
+  | { mode: 'variants'; beforeUrl: string | null; afterUrl: string | null }
+  | {
+      mode: 'batches';
+      sheet: RemixCropSheet | null;
+      selectedSwapUrl: string | null;
+    };
+
+export interface CropSheetStageProps {
+  source: StageSource;
+  /** Primary action button (Generate | Swap) — tab-supplied. */
+  headerPrimary: StageHeaderPrimary;
+  // Shared view state (owned by the modal root, passed through the tab):
   compareMode: boolean;
   zoomLevel: number;
   dividerPosition: number;
-  swapTask: SwapTaskStatus;
-  /** True while the active entity's enqueue POST is in flight — shows a
-   *  "Starting swap…" overlay before the job's running state takes over. */
-  isSubmitting: boolean;
+  /** Busy/error overlay source.
+   *  - variants: per-variant `SwapPreviewState` (status loading|error).
+   *  - batches:  per-batch `BatchSwapTaskStatus` (state running|error). */
+  swapTask?: SwapPreviewState | BatchSwapTaskStatus;
+  /** Batches only — true while the enqueue POST is in flight ("Starting swap…"
+   *  before the job's running state takes over). Ignored in variants mode. */
+  isSubmitting?: boolean;
   onToggleCompare: () => void;
   onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
 }
 
+// ── Source helpers — collapse the discriminated union to canvas primitives ───
+
+/** The "after" image URL for the current mode (null → Compare disabled). */
+function afterUrlOf(source: StageSource): string | null {
+  return source.mode === 'variants' ? source.afterUrl : source.selectedSwapUrl;
+}
+
+/** sheet_geometry for the zoom hook (variants have no sheet → null no-op). */
+function sheetGeometryOf(source: StageSource) {
+  return source.mode === 'batches'
+    ? (source.sheet?.sheet_geometry ?? null)
+    : null;
+}
+
+// ── Overlay model — normalize variant/batch task into a single render shape ──
+
+type OverlayState =
+  | { kind: 'busy'; label: string }
+  | { kind: 'error'; message: string }
+  | null;
+
+/** Resolve the overlay from mode + task + submitting flag. */
+function resolveOverlay(
+  source: StageSource,
+  swapTask: SwapPreviewState | BatchSwapTaskStatus | undefined,
+  isSubmitting: boolean | undefined,
+): OverlayState {
+  if (source.mode === 'variants') {
+    const task = swapTask as SwapPreviewState | undefined;
+    if (task?.status === 'loading') return { kind: 'busy', label: 'Đang swap…' };
+    if (task?.status === 'error') {
+      return { kind: 'error', message: task.errorMessage ?? 'Swap failed' };
+    }
+    return null;
+  }
+  // batches
+  const task = swapTask as BatchSwapTaskStatus | undefined;
+  if (task?.state === 'running') {
+    return {
+      kind: 'busy',
+      label: `Swapping sheet ${task.current}/${task.total}…`,
+    };
+  }
+  // The in-flight enqueue cue wins over a stale error from a prior attempt.
+  if (isSubmitting) return { kind: 'busy', label: 'Starting swap…' };
+  if (task?.state === 'error') {
+    return { kind: 'error', message: task.message };
+  }
+  return null;
+}
+
 export function CropSheetStage({
-  sheet,
-  selectedSwap,
+  source,
+  headerPrimary,
   compareMode,
   zoomLevel,
   dividerPosition,
@@ -60,19 +156,18 @@ export function CropSheetStage({
   onZoomChange,
   onDividerChange,
 }: CropSheetStageProps) {
-  // Compare needs a swap result to diff the composed sheet against (always
-  // null in v1). The composed "before" is always renderable, so the only gate
-  // left is the absence of a swap "after".
-  const compareDisabled = selectedSwap === null;
+  // Compare needs an "after" to diff the "before" against.
+  const compareDisabled = afterUrlOf(source) === null;
 
   return (
     <section
-      // Dark theme container (Phase 07): swap-modal-bg base so the stage sits
-      // on the modal's dark canvas without bleeding light surfaces.
+      // Dark theme container: swap-modal-bg base so the stage sits on the
+      // modal's dark canvas without bleeding light surfaces.
       className="flex h-full min-w-0 flex-1 flex-col bg-[var(--swap-modal-bg)]"
       aria-label="Crop sheet stage"
     >
       <StageHeader
+        headerPrimary={headerPrimary}
         compareMode={compareMode}
         compareDisabled={compareDisabled}
         zoomLevel={zoomLevel}
@@ -81,8 +176,7 @@ export function CropSheetStage({
       />
 
       <StageCanvas
-        sheet={sheet}
-        selectedSwap={selectedSwap}
+        source={source}
         compareMode={compareMode}
         zoomLevel={zoomLevel}
         dividerPosition={dividerPosition}
@@ -98,6 +192,7 @@ export function CropSheetStage({
 // ── StageHeader ──────────────────────────────────────────────────────────────
 
 interface StageHeaderProps {
+  headerPrimary: StageHeaderPrimary;
   compareMode: boolean;
   compareDisabled: boolean;
   zoomLevel: number;
@@ -106,6 +201,7 @@ interface StageHeaderProps {
 }
 
 function StageHeader({
+  headerPrimary,
   compareMode,
   compareDisabled,
   zoomLevel,
@@ -114,45 +210,47 @@ function StageHeader({
 }: StageHeaderProps) {
   return (
     <div
-      // Dark stage header (Phase 07): surface + border tokens.
+      // Dark stage header: surface + border tokens.
       className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)] px-4"
       style={{ height: HEADER_HEIGHT_PX }}
     >
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <button
-                type="button"
-                aria-pressed={compareMode}
-                aria-label="So sánh trước/sau"
-                disabled={compareDisabled}
-                onClick={() => {
-                  log.debug('onClick', 'toggle compare', {
-                    next: !compareMode,
-                  });
-                  onToggleCompare();
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors',
-                  'disabled:pointer-events-none disabled:opacity-40',
-                  // Dark variant (Phase 07): selection token when pressed,
-                  // muted surface + secondary text otherwise.
-                  compareMode
-                    ? 'border-[var(--swap-modal-border-strong)] bg-[var(--swap-modal-selection)] font-medium text-[var(--swap-modal-text-primary)]'
-                    : 'border-[var(--swap-modal-border)] text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]',
-                )}
-              >
-                <Columns2 className="h-4 w-4" aria-hidden="true" />
-                Compare
-              </button>
-            </span>
-          </TooltipTrigger>
-          {compareDisabled && (
-            <TooltipContent>Chưa có swap result để so sánh</TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
+      <div className="flex items-center gap-2">
+        <PrimaryActionButton headerPrimary={headerPrimary} />
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <button
+                  type="button"
+                  aria-pressed={compareMode}
+                  aria-label="So sánh trước/sau"
+                  disabled={compareDisabled}
+                  onClick={() => {
+                    log.debug('onClick', 'toggle compare', {
+                      next: !compareMode,
+                    });
+                    onToggleCompare();
+                  }}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors',
+                    'disabled:pointer-events-none disabled:opacity-40',
+                    compareMode
+                      ? 'border-[var(--swap-modal-border-strong)] bg-[var(--swap-modal-selection)] font-medium text-[var(--swap-modal-text-primary)]'
+                      : 'border-[var(--swap-modal-border)] text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]',
+                  )}
+                >
+                  <Columns2 className="h-4 w-4" aria-hidden="true" />
+                  Compare
+                </button>
+              </span>
+            </TooltipTrigger>
+            {compareDisabled && (
+              <TooltipContent>Chưa có swap result để so sánh</TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      </div>
 
       <div className="flex items-center gap-2 text-[var(--swap-modal-text-primary)]">
         <Button
@@ -165,7 +263,6 @@ function StageHeader({
             log.debug('onClick', 'zoom decrease', { from: zoomLevel, to: next });
             onZoomChange(next);
           }}
-          // Dark ghost button (Phase 07): muted icon, surface hover.
           className="h-8 w-8 text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]"
         >
           <Minus className="h-4 w-4" />
@@ -207,23 +304,69 @@ function StageHeader({
   );
 }
 
+// ── PrimaryActionButton — tab-supplied Generate | Swap ───────────────────────
+
+function PrimaryActionButton({
+  headerPrimary,
+}: {
+  headerPrimary: StageHeaderPrimary;
+}) {
+  const { label, icon: Icon, disabled, tooltip, busy, onClick } = headerPrimary;
+
+  const button = (
+    <button
+      type="button"
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      onClick={() => {
+        log.debug('onClick', 'primary action', { label });
+        onClick();
+      }}
+      className={cn(
+        'flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-colors',
+        'bg-[var(--swap-modal-accent)] text-[var(--swap-modal-bg)]',
+        'hover:bg-[var(--swap-modal-accent-hover)]',
+        'disabled:pointer-events-none disabled:opacity-40',
+      )}
+    >
+      {busy ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      ) : (
+        Icon && <Icon className="h-4 w-4" aria-hidden="true" />
+      )}
+      {label}
+    </button>
+  );
+
+  // Only wrap in a tooltip when a gating reason is supplied (disabled state).
+  if (!tooltip) return button;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>{button}</span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 // ── StageCanvas ──────────────────────────────────────────────────────────────
 
 interface StageCanvasProps {
-  sheet: RemixCropSheet | null;
-  selectedSwap: SwapResult | null;
+  source: StageSource;
   compareMode: boolean;
   zoomLevel: number;
   dividerPosition: number;
-  swapTask: SwapTaskStatus;
-  isSubmitting: boolean;
+  swapTask: SwapPreviewState | BatchSwapTaskStatus | undefined;
+  isSubmitting: boolean | undefined;
   onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
 }
 
 function StageCanvas({
-  sheet,
-  selectedSwap,
+  source,
   compareMode,
   zoomLevel,
   dividerPosition,
@@ -234,85 +377,92 @@ function StageCanvas({
 }: StageCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
-  // Fit-to-canvas + center-anchored zoom. Called before the early return
-  // below (Rules of Hooks) — `sheetGeometry: null` makes the hook a no-op
-  // when the tab has no sheet.
-  useStageZoom({
-    viewportRef,
-    sheetGeometry: sheet?.sheet_geometry ?? null,
-    zoomLevel,
-    onZoomChange,
-  });
+  // Fit-to-canvas + center-anchored zoom. Called before any early return
+  // (Rules of Hooks) — `sheetGeometry: null` makes the hook a no-op when there
+  // is no sheet (variants mode always passes null).
+  const sheetGeometry = sheetGeometryOf(source);
+  useStageZoom({ viewportRef, sheetGeometry, zoomLevel, onZoomChange });
 
-  // Tab has no entity / no sheet at all.
-  if (sheet === null) {
+  const overlay = resolveOverlay(source, swapTask, isSubmitting);
+  const afterUrl = afterUrlOf(source);
+
+  // Empty state: variants has no "before" portrait, or batches has no sheet.
+  const hasBefore =
+    source.mode === 'variants'
+      ? source.beforeUrl !== null
+      : source.sheet !== null;
+
+  if (!hasBefore) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[var(--swap-modal-canvas-bg)] p-8 text-center">
         <p className="text-sm text-[var(--swap-modal-text-muted)]">
-          Tab này chưa có key nào
+          {source.mode === 'variants'
+            ? 'Chọn một variant để xem trước'
+            : 'Tab này chưa có sheet nào'}
         </p>
       </div>
     );
   }
 
-  const swapUrl = selectedSwap?.media_url ?? null;
-  // Zoom is applied as the canvas-inner real width/height (design §4.3) — the
-  // sheet's natural pixel size scaled by the zoom %. Child crops are positioned
-  // in percent so they scale automatically.
-  const { width: sheetW, height: sheetH } = sheet.sheet_geometry;
-  const innerW = (sheetW * zoomLevel) / 100;
-  const innerH = (sheetH * zoomLevel) / 100;
+  // Canvas-inner real size: variants use the after/before natural box (img is
+  // object-contain inside the frame, so we let the frame fill the viewport);
+  // batches scale the sheet's pixel size by zoom (child crops positioned in %).
+  const inner =
+    source.mode === 'batches'
+      ? {
+          width: (source.sheet!.sheet_geometry.width * zoomLevel) / 100,
+          height: (source.sheet!.sheet_geometry.height * zoomLevel) / 100,
+        }
+      : null;
 
   return (
     <div
       ref={viewportRef}
-      // viewport — scrolls the canvas-inner. Dark muted backdrop (Phase 07):
-      // canvas-bg token so the white sheet frame pops against deep navy. See
-      // `--swap-modal-canvas-bg` (#0c0f16) in swap-modal-constants.
+      // viewport — scrolls the canvas-inner. Dark muted backdrop (canvas-bg
+      // token) so the white sheet frame pops against deep navy.
       className="relative min-h-0 flex-1 overflow-auto bg-[var(--swap-modal-canvas-bg)]"
     >
-      {/* Centering layer — sheet smaller than the viewport is centered, larger
-          scrolls. `safe center` falls back to `start` when the sheet overflows,
-          so the left/top edges stay reachable via scroll (without `safe`, the
-          centered child gets a negative offset that scroll cannot reach).
-          Applied inline because Tailwind's arbitrary-value syntax does not
-          accept multi-keyword `safe center`. */}
       <div
+        // Centering layer — smaller content centers, larger scrolls. `safe`
+        // keeps the left/top edges reachable when content overflows.
         className="flex min-h-full min-w-full"
         style={{ justifyContent: 'safe center', alignItems: 'safe center' }}
       >
-        <div
-          // Sheet frame: intentionally bg-white — pops against the dark
-          // canvas backdrop (design §4.12, Phase 07 audit). Do NOT theme.
-          className="relative shrink-0 overflow-hidden rounded-md bg-[var(--swap-modal-sheet-frame-bg)] shadow-2xl"
-          style={{ width: innerW, height: innerH }}
-        >
-          {compareMode && swapUrl !== null ? (
-            <CompareBody
-              // Key by the swap URL so the uncontrolled slider re-applies
-              // `defaultPosition` when the compared "after" image changes.
-              key={swapUrl}
-              sheet={sheet}
-              swappedUrl={swapUrl}
+        {source.mode === 'batches' ? (
+          <div
+            // Sheet frame: intentionally sheet-frame-bg — pops against the dark
+            // canvas backdrop. Do NOT theme.
+            className="relative shrink-0 overflow-hidden rounded-md bg-[var(--swap-modal-sheet-frame-bg)] shadow-2xl"
+            style={{ width: inner!.width, height: inner!.height }}
+          >
+            <BatchesCanvasBody
+              sheet={source.sheet!}
+              afterUrl={afterUrl}
+              compareMode={compareMode}
+              dividerPosition={dividerPosition}
+              zoomLevel={zoomLevel}
+              onDividerChange={onDividerChange}
+            />
+          </div>
+        ) : (
+          <div
+            // Variants: portrait images are free-sized; frame grows to the
+            // viewport so object-contain centers the portrait.
+            className="relative flex h-full max-h-full w-full max-w-full shrink overflow-hidden rounded-md shadow-2xl"
+          >
+            <VariantsCanvasBody
+              beforeUrl={source.beforeUrl!}
+              afterUrl={afterUrl}
+              compareMode={compareMode}
               dividerPosition={dividerPosition}
               onDividerChange={onDividerChange}
-              zoomLevel={zoomLevel}
             />
-          ) : swapUrl !== null ? (
-            <CanvasImage key={swapUrl} url={swapUrl} />
-          ) : (
-            <div className="relative h-full w-full">
-              <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Busy/error overlays driven by `swapTask` (derived from jobs[]) plus the
-          in-flight `isSubmitting` cue. Dark overlays (Phase 07): backdrop token +
-          white-text labels. While submitting, show "Starting swap…" and suppress
-          a stale error from the previous attempt (the seed hasn't landed yet). */}
-      {(isSubmitting || swapTask.state === 'running') && (
+      {/* Busy/error overlays. aria-live polite so SRs announce progress. */}
+      {overlay?.kind === 'busy' && (
         <div
           role="status"
           aria-live="polite"
@@ -320,23 +470,25 @@ function StageCanvas({
         >
           <Loader2 className="h-7 w-7 animate-spin text-[var(--swap-modal-accent)]" />
           <span className="text-sm text-[var(--swap-modal-text-secondary)]">
-            {swapTask.state === 'running'
-              ? `Swapping ${swapTask.current}/${swapTask.total} sheets`
-              : 'Starting swap…'}
+            {overlay.label}
           </span>
         </div>
       )}
 
-      {!isSubmitting && swapTask.state === 'error' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[var(--swap-modal-backdrop)] px-4 text-center backdrop-blur-sm">
+      {overlay?.kind === 'error' && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[var(--swap-modal-backdrop)] px-4 text-center backdrop-blur-sm"
+        >
           <AlertTriangle className="h-7 w-7 text-destructive" />
           <span className="text-sm font-medium text-destructive">
             Swap failed
           </span>
-          <span className="text-xs text-destructive">{swapTask.message}</span>
+          <span className="text-xs text-destructive">{overlay.message}</span>
           <span className="mt-1 flex items-center gap-1 text-xs text-[var(--swap-modal-text-muted)]">
             <RotateCcw className="h-3.5 w-3.5" />
-            Click [⇄] in the sidebar to retry
+            Thử lại từ nút hành động
           </span>
         </div>
       )}
@@ -344,21 +496,90 @@ function StageCanvas({
   );
 }
 
-// ── CanvasImage — single swap image (non-compare) ────────────────────────────
+// ── BatchesCanvasBody — composed sheet (before) ↔ swap image (after) ─────────
 
-interface CanvasImageProps {
-  url: string;
+interface BatchesCanvasBodyProps {
+  sheet: RemixCropSheet;
+  afterUrl: string | null;
+  compareMode: boolean;
+  dividerPosition: number;
+  zoomLevel: number;
+  onDividerChange: (pos: number) => void;
 }
 
-/** Single swap-result image with its own load/error state — keyed by URL by
- *  the parent so no useEffect+setState is needed to reset on URL change. */
-function CanvasImage({ url }: CanvasImageProps) {
+function BatchesCanvasBody({
+  sheet,
+  afterUrl,
+  compareMode,
+  dividerPosition,
+  zoomLevel,
+  onDividerChange,
+}: BatchesCanvasBodyProps) {
+  if (compareMode && afterUrl !== null) {
+    return (
+      <CompareBody
+        key={afterUrl}
+        before={
+          <div className="relative h-full w-full">
+            <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
+          </div>
+        }
+        afterUrl={afterUrl}
+        dividerPosition={dividerPosition}
+        onDividerChange={onDividerChange}
+      />
+    );
+  }
+  if (afterUrl !== null) return <CanvasImage key={afterUrl} url={afterUrl} />;
+  return (
+    <div className="relative h-full w-full">
+      <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
+    </div>
+  );
+}
+
+// ── VariantsCanvasBody — portrait before ↔ after images ──────────────────────
+
+interface VariantsCanvasBodyProps {
+  beforeUrl: string;
+  afterUrl: string | null;
+  compareMode: boolean;
+  dividerPosition: number;
+  onDividerChange: (pos: number) => void;
+}
+
+function VariantsCanvasBody({
+  beforeUrl,
+  afterUrl,
+  compareMode,
+  dividerPosition,
+  onDividerChange,
+}: VariantsCanvasBodyProps) {
+  if (compareMode && afterUrl !== null) {
+    return (
+      <CompareBody
+        key={afterUrl}
+        before={<CanvasImage url={beforeUrl} />}
+        afterUrl={afterUrl}
+        dividerPosition={dividerPosition}
+        onDividerChange={onDividerChange}
+      />
+    );
+  }
+  // Non-compare: show the after when present, else the before portrait.
+  const url = afterUrl ?? beforeUrl;
+  return <CanvasImage key={url} url={url} />;
+}
+
+// ── CanvasImage — single image (object-contain) ──────────────────────────────
+
+function CanvasImage({ url }: { url: string }) {
   return (
     <img
       src={url}
-      alt="Swap result"
+      alt=""
       onError={() => {
-        log.warn('CanvasImage', 'swap image failed to load', {
+        log.warn('CanvasImage', 'image failed to load', {
           // Log only the path tail — full URL may carry signed tokens (PII).
           urlTail: url.slice(url.lastIndexOf('/') + 1),
         });
@@ -371,22 +592,20 @@ function CanvasImage({ url }: CanvasImageProps) {
 // ── CompareBody — before/after slider ────────────────────────────────────────
 
 interface CompareBodyProps {
-  sheet: RemixCropSheet;
-  swappedUrl: string;
+  before: React.ReactNode;
+  afterUrl: string;
   dividerPosition: number;
   onDividerChange: (pos: number) => void;
-  zoomLevel: number;
 }
 
-/** before/after compare — "before" is the composed crop sheet, "after" is the
- *  swap result. Keyed by the swap URL upstream so the uncontrolled slider
- *  resets to `dividerPosition` whenever the "after" image changes. */
+/** before/after compare slider. `before` is mode-specific (composed sheet or
+ *  portrait img); `after` is always the swap image. Keyed by the after URL
+ *  upstream so the uncontrolled slider resets to `dividerPosition` on change. */
 function CompareBody({
-  sheet,
-  swappedUrl,
+  before,
+  afterUrl,
   dividerPosition,
   onDividerChange,
-  zoomLevel,
 }: CompareBodyProps) {
   return (
     <>
@@ -394,21 +613,16 @@ function CompareBody({
         defaultPosition={dividerPosition}
         onPositionChange={onDividerChange}
         className="relative h-full w-full"
-        itemOne={
-          <div className="relative h-full w-full">
-            <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
-          </div>
-        }
+        itemOne={before}
         itemTwo={
           <img
-            src={swappedUrl}
+            src={afterUrl}
             alt="Ảnh swap"
             className="h-full w-full object-contain"
           />
         }
       />
-      {/* Dark Before/After badges (Phase 07): card-bg token over sheet image
-          for legibility (background is mostly white sheet content). */}
+      {/* Before/After badges — card-bg token over the image for legibility. */}
       <span className="absolute left-2 top-2 z-10 rounded bg-[var(--swap-modal-card-bg)]/85 px-1.5 py-0.5 text-xs text-[var(--swap-modal-text-secondary)]">
         Before
       </span>

@@ -1,82 +1,48 @@
-// use-collapse-state.ts — Local collapse state for 3-level sidebar tree.
-// Two parallel sets: collapsed entities (variant group hidden) and collapsed
-// variants (sheet group hidden). Variant key is composite `${entityKey}:${variantKey}`
-// so a single Set can store all variant collapse flags across every entity.
+// use-collapse-state.ts — Generic collapse-set hook (rev2, Phase 08).
 //
-// KISS: default all expanded. Re-mount (e.g. tab change) resets — acceptable per
-// plan §risk. Persist later if user complains.
+// A single reusable `Set<string>` toggle hook. The rev2 sidebar is a Batch→Sheet
+// tree whose only collapse axis is the batch row, so the previous 3-level
+// entity/variant collapse API is gone. Kept generic (any string key) so it can
+// back any single-axis collapse tree (DRY) — BatchesSidebar uses it for
+// `collapsedBatches` keyed by `batch.id`.
+//
+// KISS: default all expanded (empty set). Re-mount (e.g. tab change) resets —
+// acceptable per plan §risk. Persist later if user complains.
 
 import { useState, useCallback } from 'react';
 import { createLogger } from '@/utils/logger';
 
-const log = createLogger('Editor', 'useSidebarCollapseState');
+const log = createLogger('Editor', 'useCollapseState');
 
-export interface CollapseState {
-  /** entityKeys whose variant group is collapsed (char/prop only). */
-  entities: Set<string>;
-  /** Composite keys `${entityKey}:${variantKey}` whose sheet group is collapsed. */
-  variants: Set<string>;
+export interface CollapseSetApi {
+  /** True when `key` is currently collapsed. */
+  isCollapsed: (key: string) => boolean;
+  /** Flip the collapse flag for `key`. */
+  toggle: (key: string) => void;
 }
 
-function variantCompositeKey(entityKey: string, variantKey: string): string {
-  return `${entityKey}:${variantKey}`;
-}
+/** Single-axis collapse state backed by one `Set<string>`. */
+export function useCollapseState(): CollapseSetApi {
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
-export interface CollapseApi {
-  isEntityCollapsed: (entityKey: string) => boolean;
-  isVariantCollapsed: (entityKey: string, variantKey: string) => boolean;
-  toggleEntity: (entityKey: string) => void;
-  toggleVariant: (entityKey: string, variantKey: string) => void;
-}
-
-export function useSidebarCollapseState(): CollapseApi {
-  const [state, setState] = useState<CollapseState>(() => ({
-    entities: new Set<string>(),
-    variants: new Set<string>(),
-  }));
-
-  const isEntityCollapsed = useCallback(
-    (entityKey: string) => state.entities.has(entityKey),
-    [state.entities],
+  const isCollapsed = useCallback(
+    (key: string) => collapsed.has(key),
+    [collapsed],
   );
 
-  const isVariantCollapsed = useCallback(
-    (entityKey: string, variantKey: string) =>
-      state.variants.has(variantCompositeKey(entityKey, variantKey)),
-    [state.variants],
-  );
-
-  const toggleEntity = useCallback((entityKey: string) => {
-    setState((prev) => {
-      const next = new Set(prev.entities);
-      if (next.has(entityKey)) {
-        next.delete(entityKey);
-        log.debug('toggleEntity', 'expand', { entityKey });
+  const toggle = useCallback((key: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        log.debug('toggle', 'expand', { key });
       } else {
-        next.add(entityKey);
-        log.debug('toggleEntity', 'collapse', { entityKey });
+        next.add(key);
+        log.debug('toggle', 'collapse', { key });
       }
-      return { ...prev, entities: next };
+      return next;
     });
   }, []);
 
-  const toggleVariant = useCallback(
-    (entityKey: string, variantKey: string) => {
-      const k = variantCompositeKey(entityKey, variantKey);
-      setState((prev) => {
-        const next = new Set(prev.variants);
-        if (next.has(k)) {
-          next.delete(k);
-          log.debug('toggleVariant', 'expand', { entityKey, variantKey });
-        } else {
-          next.add(k);
-          log.debug('toggleVariant', 'collapse', { entityKey, variantKey });
-        }
-        return { ...prev, variants: next };
-      });
-    },
-    [],
-  );
-
-  return { isEntityCollapsed, isVariantCollapsed, toggleEntity, toggleVariant };
+  return { isCollapsed, toggle };
 }

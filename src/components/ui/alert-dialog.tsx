@@ -25,9 +25,13 @@ AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <AlertDialogPortal>
+  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content> & {
+    /** Portal target. Default body; pass a node to render inside another layer
+     *  (e.g. a full-screen modal that owns its own click-outside routing). */
+    container?: HTMLElement | null;
+  }
+>(({ className, container, ...props }, ref) => (
+  <AlertDialogPortal container={container ?? undefined}>
     <AlertDialogOverlay />
     <AlertDialogPrimitive.Content
       ref={ref}

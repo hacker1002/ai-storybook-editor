@@ -5,7 +5,8 @@
 // and the persist target is `variants[].visual_swap_url` (NOT a draft).
 //
 // Extracted from the modal so it is unit-testable with injected deps (mock the
-// swap API, assert setTask transitions + persist). See VariantsVisualModal v2.
+// swap API, assert setTask transitions + persist). Drives the Variants tab
+// Generate action (rev2 — absorbed the former VariantsVisualModal).
 //
 // Flow: build request (reuse buildSwapVisualCoreRequest) → guard fail ⇒ error;
 // else loading → call API → success ⇒ await persist(image_url): persisted ⇒
