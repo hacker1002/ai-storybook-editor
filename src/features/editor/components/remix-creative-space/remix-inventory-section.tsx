@@ -1,15 +1,15 @@
-// remix-inventory-section.tsx — Renders 3 sub-sections (Characters / Props /
-// Mixes) inside an expanded accordion item. Each character row shows a
+// remix-inventory-section.tsx — Renders 2 sub-sections (Characters / Props)
+// inside an expanded accordion item. Each character row shows a
 // `name → humanDisplayName` arrow when `remix_config.characters[].human_id` is
 // set; otherwise bare name. Prop arrow target intentionally skipped — items
 // library still TBD (see remix-config-modal.tsx PROPS section comment).
+// Mixes (= batches, swap-config) are NOT inventory entities — accessed via the
+// modal Batches tab (Validation S1).
 
 import { useMemo } from 'react';
-import { canonicalMixKey } from '@/types/remix';
 import type {
   RemixCharacter,
   RemixConfig,
-  RemixMix,
   RemixProp,
 } from '@/types/remix';
 import { useHumans } from '@/stores/humans-store';
@@ -19,14 +19,12 @@ import type { Human } from '@/types/human';
 interface Props {
   characters: RemixCharacter[];
   props: RemixProp[];
-  mixes: RemixMix[];
   remixConfig: RemixConfig;
 }
 
 export function RemixInventorySection({
   characters,
   props,
-  mixes,
   remixConfig,
 }: Props) {
   const humans = useHumans();
@@ -45,7 +43,7 @@ export function RemixInventorySection({
     return human.displayName[langCode] || human.sourceName || null;
   };
 
-  const hasAny = characters.length > 0 || props.length > 0 || mixes.length > 0;
+  const hasAny = characters.length > 0 || props.length > 0;
   if (!hasAny) {
     return (
       <p className="px-2 py-1 text-xs text-muted-foreground">
@@ -78,21 +76,6 @@ export function RemixInventorySection({
               targetName={null}
             />
           ))}
-        </SubSection>
-      )}
-      {mixes.length > 0 && (
-        <SubSection label="Mixes">
-          {mixes.map((m) => {
-            const mixKey = canonicalMixKey(m.keys);
-            return (
-              <InventoryRow
-                key={`mix-${mixKey}`}
-                name={m.name}
-                entityKey={mixKey}
-                targetName={null}
-              />
-            );
-          })}
         </SubSection>
       )}
     </div>

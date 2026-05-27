@@ -11,7 +11,6 @@ import { cn } from '@/utils/utils';
 import { RemixInventorySection } from './remix-inventory-section';
 import { InjectButton } from './inject-button';
 import { AudioJobBadge } from './audio-job-badge';
-import { canonicalMixKey } from '@/types/remix';
 import type { Remix, SwapCropSheetTarget } from '@/types/remix';
 
 interface Props {
@@ -63,17 +62,17 @@ export function RemixAccordionItem({
     setRenameMode(false);
   };
 
-  // Top-level eye opens the swap modal at a default entity — the modal's own
-  // entity sidebar handles further navigation. Order: character → prop → mix.
+  // Top-level eye opens the swap modal at a default entity (→ Variants tab).
+  // Order: character → prop. Batches are accessed via the modal's Batches tab,
+  // not from an inventory row (Validation S1 — mixes[] are swap-config, not
+  // inventory entities).
   const defaultSwapTarget = useMemo<Omit<SwapCropSheetTarget, 'remixId'> | null>(() => {
     const c = remix.characters[0];
     if (c) return { type: 'character', key: c.key };
     const p = remix.props[0];
     if (p) return { type: 'prop', key: p.key };
-    const m = remix.mixes[0];
-    if (m) return { type: 'mix', key: canonicalMixKey(m.keys) };
     return null;
-  }, [remix.characters, remix.props, remix.mixes]);
+  }, [remix.characters, remix.props]);
 
   return (
     <div className="border-b">
@@ -166,7 +165,6 @@ export function RemixAccordionItem({
           <RemixInventorySection
             characters={remix.characters}
             props={remix.props}
-            mixes={remix.mixes}
             remixConfig={remix.remix_config}
           />
           <AudioJobBadge
