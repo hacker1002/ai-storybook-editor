@@ -1,10 +1,13 @@
 // remix.ts — Domain types for Remix feature (DB row + ephemeral inject job state)
 // DB row JSONB structure: snapshot illustration/characters/props snapshot + remix_config + mixes.
 
-import type { BaseSpread } from './spread-types';
+import type { BaseSpread, SpreadTag } from './spread-types';
 import type { IllustrationData, Section } from './illustration-types';
 import type { Character, CharacterVariant } from './character-types';
 import type { Prop, PropVariant, Crop } from './prop-types';
+
+// Re-export SpreadTag so swap-modal consumers have a single import point.
+export type { SpreadTag } from './spread-types';
 import type { RemixLanguageCode } from './editor';
 import type { Human, TraitType } from './human';
 
@@ -24,14 +27,47 @@ export type {
 // Base CropSheet from prop-types.ts has `{title, image_url, crops[]}`.
 // Remix variant adds `swap_results[]` to record AI-driven swap output.
 
+// ── Swap modal tabs (rev2) ───────────────────────────────────────────────────
+/** Top-level tab of SwapCropSheetModal (rev2 — replaces Characters/Props/Mixes). */
+export type RemixModalTab = 'variants' | 'batches' | 'lotties';
+
+/** Re-cut crop produced by the mix-swap job (api/jobs/05). Backend service that
+ *  emits these is deferred — FE v1 declares the type for realtime parity but
+ *  does NOT render from `crops[]` (only `swap_results[].media_url`). */
+export interface SwapResultCrop {
+  spread_id: string;
+  id: string;
+  geometry: { x: number; y: number; w: number; h: number };
+  media_url: string;
+  tags: SpreadTag[];
+}
+
 export interface SwapResult {
   media_url: string;
   created_time: string;
   is_selected: boolean;
+  /** rev2 — re-cut output (backend deferred). FE v1 does not consume. */
+  crops: SwapResultCrop[];
 }
 
 /** Re-export of crop entry shape from prop-types for consumer convenience. */
 export type RemixCrop = Crop;
+
+/** Crop entry stored on a batch crop sheet (rev2). Replaces the legacy `Crop`
+ *  shape: carries multi-subject `tags[]` instead of `object_key`/`variant`.
+ *  Affinity primary subject = `tags[0].object_key`; `geometry` is the engine
+ *  OUTPUT (px, sheet-relative — placeholder until layout runs in Phase 03). */
+export interface CropEntry {
+  spread_id: string;
+  id: string;
+  layer_kind: string;
+  spread_number: number;
+  aspect_ratio: string;
+  name: string;
+  tags: SpreadTag[];
+  media_url: string;
+  geometry: { x: number; y: number; w: number; h: number };
+}
 
 export interface RemixCropSheet {
   title: string;
@@ -42,11 +78,9 @@ export interface RemixCropSheet {
    *  backward-compat; client now composes the sheet from crops + sheet_geometry. */
   image_url: string;
   swap_results: SwapResult[];
-  crops: Crop[];
-  /** Self-describing variant scope (DB-CHANGELOG 2026-05-20). `null` cho mix
-   *  entity. Engine dual-writes `crops[].variant = sheet.variant_key` for
-   *  legacy readers. */
-  variant_key: string | null;
+  /** rev2 — crops carry multi-subject `tags[]` (CropEntry), replacing the legacy
+   *  per-variant `Crop` shape. Relayout no longer groups by variant. */
+  crops: CropEntry[];
 }
 
 // ── Cloned entity snapshots (DB JSONB columns) ───────────────────────────────
@@ -81,16 +115,14 @@ export type RemixProp = Omit<Prop, 'crop_sheets' | 'sounds' | 'variants'> & {
   variants: RemixPropVariant[];
 };
 
-/** Mix entry — auto-generated from multi-subject layer tags during clone. */
+/** Batch entry (rev2) — a swap-config group of crop sheets. Identity = `id`
+ *  (uuid). Crops carry multi-subject `tags[]`; the legacy `keys[]` lineup is
+ *  gone. Was named "mix"; persisted column is still `mixes[]`. */
 export interface RemixMix {
+  id: string;
   order: number;
-  /** Composed display name e.g. "Elara & Magic Sword" (preserves tag order, not sorted). */
+  /** Display name e.g. "Batch 1". */
   name: string;
-  /** Variant-qualified lineup of the full enabled cast, one token per entity:
-   *  `${objectKey}/${variantKey}` (or bare `${objectKey}` when the entity has no
-   *  variant). objectKey is a soft ref to remix.characters[].key | remix.props[].key.
-   *  Identity = canonicalMixKey(keys) — variant tokens make A/a1 vs A/a2 distinct. */
-  keys: string[];
   crop_sheets: RemixCropSheet[];
 }
 
@@ -232,7 +264,9 @@ export interface RemixRow {
 // of every crop sheet × variant of ONE character via the character-swap job.
 // Prop/mix swap will ship later under distinct phases (`prop_swap`/`mix_swap`)
 // — keep the type→phase map (map-background-job-row.ts) extensible, not hardcoded.
-export type RemixJobPhase = 'audio' | 'image' | 'character_swap';
+// rev2: `remix_mix_swap` = batch-level swap (api/jobs/05). `character_swap` kept
+// until Phase 10 prunes its callers (keep union wide to reduce churn mid-chain).
+export type RemixJobPhase = 'audio' | 'image' | 'character_swap' | 'remix_mix_swap';
 
 export type RemixJobStatus =
   | 'queued'
@@ -285,6 +319,9 @@ export interface RemixJob {
    *  selectors match the running swap to its character row. Undefined for
    *  audio/image phases. */
   characterKey?: string;
+  /** Set for `remix_mix_swap` jobs only — mirrors `params.batch_id`. Lets
+   *  selectors match the running swap to its batch. Undefined otherwise. */
+  batchId?: string;
   currentStep: number;
   totalSteps: number;
   stepDetails?: { spreads: Record<string, RemixJobStepDetail> };
@@ -295,10 +332,10 @@ export interface RemixJob {
   completedAt?: string;
 }
 
-/** 3-shape result returned by startAudioJob/startImageJob/startEntitySwap.
- *  Spec: api/jobs/01 §Result + api/jobs/04 §Result. `characterKey` is set only
- *  by the character-swap enqueue path; on `deduped` it is the character of the
- *  ALREADY-active job (may differ from the requested key — see api/jobs/04). */
+/** 3-shape result returned by startAudioJob/startImageJob/startMixSwap.
+ *  Spec: api/jobs/01 §Result + api/jobs/05 §Result. `characterKey` is set only
+ *  on cross-type dedup against an ALREADY-active character-swap job (may differ
+ *  from the requested key — see api/jobs/05 §cross-type dedup). */
 export type EnqueueRemixJobOutcome =
   | { kind: 'enqueued'; jobId: string; totalSteps: number; chunksToRegen?: number; textboxesToRecombine?: number; characterKey?: string }
   | { kind: 'deduped';  jobId: string; status: 'queued' | 'running'; characterKey?: string }
@@ -317,7 +354,7 @@ export type AudioJobBadgeState =
 /** Raw shape of public.background_jobs row returned by Supabase select + realtime payload. */
 export interface BackgroundJobRow {
   id: string;
-  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_character_swap' | string;
+  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_character_swap' | 'remix_mix_swap' | string;
   user_id: string;
   book_id: string | null;
   status: RemixJobStatus;
@@ -330,6 +367,8 @@ export interface BackgroundJobRow {
     triggered_by?: 'auto-create' | 'user';
     /** Present on `remix_character_swap` rows — the swapped character key. */
     character_key?: string;
+    /** Present on `remix_mix_swap` rows — the swapped batch id (api/jobs/05). */
+    batch_id?: string;
     [k: string]: unknown;
   };
   result: RemixJobResult | null;
@@ -365,13 +404,55 @@ export interface SwapCropSheetTarget {
   key: string;
 }
 
-// ── Canonical mix key ────────────────────────────────────────────────────────
-/** Stable identity for a mix — sorted keys joined by '-'. Single source of
- *  truth used for clone-builder dedupe, SwapCropSheetTarget.key, crop-sheet
- *  patch matching, and useRemixEntity resolution. Sorted → stable under
- *  keys[] reorder. */
-export function canonicalMixKey(keys: string[]): string {
-  return keys.slice().sort().join('-');
+
+// === rev2 projections (Variants / Batches tabs) ==============================
+
+/** A single variant node for the Variants tab. `visualSwapUrl` is the persisted
+ *  per-variant swap result (Generate action); `isBase` marks the type=0 variant. */
+export interface RemixVariantNode {
+  variantKey: string;
+  name: string;
+  illustrationUrl: string | null;
+  visualSwapUrl: string | null;
+  isBase: boolean;
+}
+
+/** A character/prop entity projection for the Variants tab. */
+export interface RemixVariantEntity {
+  type: 'character' | 'prop';
+  key: string;
+  name: string;
+  variants: RemixVariantNode[];
+}
+
+/** Batch-level swap task progress (rev2 — mirrors SwapTaskStatus but batch-scoped). */
+export type BatchSwapTaskStatus =
+  | { state: 'idle' }
+  | { state: 'running'; current: number; total: number }
+  | { state: 'error'; message: string; failedSheets: number };
+
+/** Batches-tab projection of one `remix.mixes[]` entry + its derived swap task. */
+export interface RemixBatch {
+  id: string;
+  order: number;
+  name: string;
+  crop_sheets: RemixCropSheet[];
+  swapTask: BatchSwapTaskStatus;
+}
+
+/** Variant-qualified lineup tokens of a batch — `${object_key}/${variant_key}`
+ *  per distinct subject tag across all sheets. Replaces the legacy `mixes[].keys[]`
+ *  identity (now derived from crop tags, not persisted). */
+export function batchLineupTokens(batch: RemixBatch): string[] {
+  const tokens = new Set<string>();
+  for (const sheet of batch.crop_sheets) {
+    for (const crop of sheet.crops) {
+      for (const tag of crop.tags) {
+        tokens.add(`${tag.object_key}/${tag.variant_key}`);
+      }
+    }
+  }
+  return [...tokens];
 }
 
 // === Entity swap (modal-driven, per-key) — SwapCropSheetModal ================
@@ -391,36 +472,6 @@ export interface ReferenceImage {
   mimeType: string;
 }
 
-/** Variant group projection — bucket of crop_sheets[] indices that share a
- *  `variant_key`. Ordering follows raw `variants[]` (designer-defined).
- *  Only populated for character/prop entities; mix entity always `[]`. */
-export interface RemixVariantGroup {
-  variantKey: string;
-  name: string;
-  /** Index vào RemixEntityRef.crop_sheets[] theo thứ tự xuất hiện. */
-  sheetIndices: number[];
-  /** Raw `variants[].visual_swap_url` of this variant — the per-variant identity
-   *  anchor the character-swap job references. `null` until the user Generates a
-   *  swapped visual. Drives the `[⇄]` precondition (every in-scope variant must
-   *  be non-null) — see api/jobs/04 §MISSING_VARIANT_REFERENCE. */
-  visualSwapUrl: string | null;
-}
-
-/** Normalized projection of a single entity (character | prop | mix) for the
- *  swap modal. */
-export interface RemixEntityRef {
-  type: 'character' | 'prop' | 'mix';
-  /** character/prop: native key; mix: canonicalMixKey(keys). */
-  key: string;
-  name: string;
-  crop_sheets: RemixCropSheet[];
-  /** Variant grouping projection — filter "≥1 sheet" (char/prop only; mix=[]).
-   *  VariantsVisualModal đọc field này (validation session 1: không thêm
-   *  rawVariants — modal chỉ show variants có ≥1 sheet). Populated by
-   *  `buildVariantGroups` in the selector layer. */
-  variants: RemixVariantGroup[];
-}
-
 /** Swap model / upscale params collected by the right-sidebar.
  *  v1: collect-only — not yet wired to any API (see plan §unresolved #2). */
 export interface SwapModelParams {
@@ -429,15 +480,15 @@ export interface SwapModelParams {
   scale: number; // 2..10
 }
 
-export interface StartEntitySwapParams {
+/** Args for the batch-level mix-swap enqueue (rev2 — api/jobs/05). `params`
+ *  (swap model) is v1 collect-only — NOT forwarded to the API yet. */
+export interface StartMixSwapParams {
   remixId: string;
-  type: 'character' | 'prop' | 'mix';
-  /** character/prop: native key; mix: canonicalMixKey(keys). */
-  key: string;
+  batchId: string;
   /** v1 collect-only — not forwarded to the swap API yet. */
   params: SwapModelParams;
-  /** When true, clear + re-swap every sheet; false (default) is idempotent —
-   *  backend skips sheets that already carry an `is_selected` swap (api/jobs/04). */
+  /** When true (default), clear + re-swap every sheet of the batch; false is
+   *  idempotent — backend skips sheets that already carry a swap (api/jobs/05). */
   forceResweep?: boolean;
 }
 

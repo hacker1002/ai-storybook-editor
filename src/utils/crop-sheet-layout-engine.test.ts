@@ -27,6 +27,22 @@ function crop(id: string, widthPct: number, heightPct: number): CropInput {
   return { id, widthPct, heightPct };
 }
 
+/** Crop carrying an entity affinity key (= tags[0].object_key). Drives
+ *  `partitionByEntityAffinity` clustering. */
+function entityCrop(
+  id: string,
+  objectKey: string,
+  widthPct: number,
+  heightPct: number,
+): CropInput {
+  return { id, widthPct, heightPct, objectKey };
+}
+
+/** Returns the 0-based sheet index a crop id landed on, or -1 if unplaced. */
+function sheetOf(sheets: SheetLayout[], id: string): number {
+  return sheets.findIndex((s) => s.placements.some((p) => p.id === id));
+}
+
 function config(sheetCount: number, over: Partial<LayoutConfig> = {}): LayoutConfig {
   return { sheetCount, spread: SPREAD, ...over };
 }
@@ -237,5 +253,91 @@ describe('computeCropSheetLayout — crop-sheet layout engine §5', () => {
       config(1),
     );
     expect(allowed.has(sheets[0].ratioKey)).toBe(true);
+  });
+});
+
+// ── partitionByEntityAffinity (tested via the public computeCropSheetLayout) ──
+// Phase 02 replaced pure LPT `partitionByArea` with entity-affinity clustering:
+// crops sharing an `objectKey` stay on ONE sheet (K≥2); K=1 gathers everyone;
+// an entity whose cluster exceeds the per-sheet area budget AND has >1 crop is
+// split across the smallest buckets. Asserted through the public API by which
+// sheet each crop id lands on.
+describe('computeCropSheetLayout — entity affinity (partitionByEntityAffinity)', () => {
+  it('K=1 gathers ALL crops onto the single sheet regardless of objectKey', () => {
+    const crops = [
+      entityCrop('a1', 'alpha', 20, 20),
+      entityCrop('b1', 'beta', 20, 20),
+      entityCrop('a2', 'alpha', 20, 20),
+    ];
+    const { sheets } = computeCropSheetLayout(crops, config(1));
+    expect(sheets).toHaveLength(1);
+    expect(sheets[0].placements.map((p) => p.id).sort()).toEqual(['a1', 'a2', 'b1']);
+    assertNoOverlap(sheets[0]);
+  });
+
+  it('K≥2 keeps a same-entity cluster (small, within budget) together on one sheet', () => {
+    // Two entities, each with 2 equal-area crops. Budget per sheet = totalArea/2
+    // = exactly one entity's worth, so neither cluster is "oversized" → each
+    // entity stays whole on its own sheet.
+    const crops = [
+      entityCrop('a1', 'alpha', 20, 20),
+      entityCrop('a2', 'alpha', 20, 20),
+      entityCrop('b1', 'beta', 20, 20),
+      entityCrop('b2', 'beta', 20, 20),
+    ];
+    const { sheets } = computeCropSheetLayout(crops, config(2));
+    // a1/a2 share a sheet; b1/b2 share a sheet; the two entities are on
+    // different sheets.
+    expect(sheetOf(sheets, 'a1')).toBe(sheetOf(sheets, 'a2'));
+    expect(sheetOf(sheets, 'b1')).toBe(sheetOf(sheets, 'b2'));
+    expect(sheetOf(sheets, 'a1')).not.toBe(sheetOf(sheets, 'b1'));
+    for (const s of sheets) assertNoOverlap(s);
+  });
+
+  it('an oversized single-entity cluster (cluster area > budget, >1 crop) is split across sheets', () => {
+    // One dominant entity with 4 large crops + a tiny second entity. With K=2,
+    // budget = totalArea/2; alpha's 4 big crops far exceed it → alpha is split
+    // (crop-by-crop into the smallest bucket) instead of piling onto one sheet.
+    const crops = [
+      entityCrop('a1', 'alpha', 60, 60),
+      entityCrop('a2', 'alpha', 60, 60),
+      entityCrop('a3', 'alpha', 60, 60),
+      entityCrop('a4', 'alpha', 60, 60),
+      entityCrop('b1', 'beta', 10, 10),
+    ];
+    const { sheets } = computeCropSheetLayout(crops, config(2));
+    const alphaSheets = new Set(
+      ['a1', 'a2', 'a3', 'a4'].map((id) => sheetOf(sheets, id)),
+    );
+    // Split → alpha's crops occupy BOTH sheets (not all on one).
+    expect(alphaSheets.size).toBe(2);
+    // Every crop placed exactly once, no overlaps.
+    const ids = sheets.flatMap((s) => s.placements.map((p) => p.id)).sort();
+    expect(ids).toEqual(['a1', 'a2', 'a3', 'a4', 'b1']);
+    for (const s of sheets) assertNoOverlap(s);
+  });
+
+  it('crops with no objectKey fall into a single __none__ cluster (kept together when within budget)', () => {
+    const crops = [
+      crop('n1', 15, 15), // no objectKey → __none__
+      crop('n2', 15, 15),
+      entityCrop('x1', 'x', 15, 15),
+      entityCrop('x2', 'x', 15, 15),
+    ];
+    const { sheets } = computeCropSheetLayout(crops, config(2));
+    expect(sheetOf(sheets, 'n1')).toBe(sheetOf(sheets, 'n2'));
+    expect(sheetOf(sheets, 'x1')).toBe(sheetOf(sheets, 'x2'));
+    for (const s of sheets) assertNoOverlap(s);
+  });
+
+  it('is deterministic with affinity metadata — same input twice → deep-equal', () => {
+    const crops = [
+      entityCrop('a1', 'alpha', 30, 30),
+      entityCrop('b1', 'beta', 40, 25),
+      entityCrop('a2', 'alpha', 20, 50),
+    ];
+    const first = computeCropSheetLayout(crops, config(2));
+    const second = computeCropSheetLayout(crops, config(2));
+    expect(second).toEqual(first);
   });
 });

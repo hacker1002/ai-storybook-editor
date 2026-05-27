@@ -2,19 +2,14 @@
 // selector layer. Kept out of any single slice so the format never drifts
 // between the action that writes and the selector that reads.
 
-import type { Remix, RemixCropSheet, RemixJob, SwapTaskStatus } from '@/types/remix';
-import { canonicalMixKey } from '@/types/remix';
+import type { RemixCropSheet, RemixJob } from '@/types/remix';
 import type { CropSheetUpdate } from './types';
 
-/** Stable reference for the default idle task — avoids a fresh object per
- *  `useEntitySwapTask` call (would defeat the selector's value-compare guard). */
-export const IDLE_SWAP_TASK: SwapTaskStatus = { state: 'idle' };
-
 /** Collapse `jobs[]` to the latest job per swap lineage
- *  (`remixId + phase + characterKey`). A newer attempt SUPERSEDES older ones for
- *  the same target, so older siblings are dropped.
+ *  (`remixId + phase + characterKey + batchId`). A newer attempt SUPERSEDES
+ *  older ones for the same target, so older siblings are dropped.
  *
- *  WHY: `useEntitySwapTask` / `useLatestAudioJob` resolve the "current" task by
+ *  WHY: `deriveBatchSwapTask` / `useLatestAudioJob` resolve the "current" task by
  *  picking the latest-by-`createdAt` matching job. A partial/failed job is
  *  `status='completed'` (per-sheet partial-success contract) and is NEVER
  *  auto-dismissed, so it lingers. When a newer CLEAN-complete job is later
@@ -30,7 +25,10 @@ export const IDLE_SWAP_TASK: SwapTaskStatus = { state: 'idle' };
 export function pruneSupersededJobs(jobs: RemixJob[]): RemixJob[] {
   const latestByLineage = new Map<string, RemixJob>();
   for (const job of jobs) {
-    const lineage = `${job.remixId}|${job.phase}|${job.characterKey ?? ''}`;
+    // Lineage folds characterKey (char-swap) and batchId (remix_mix_swap) so
+    // two distinct batch swaps don't prune each other. Both undefined for
+    // audio/image → '' (all attempts collapse to latest).
+    const lineage = `${job.remixId}|${job.phase}|${job.characterKey ?? ''}|${job.batchId ?? ''}`;
     const cur = latestByLineage.get(lineage);
     if (!cur || job.createdAt > cur.createdAt) latestByLineage.set(lineage, job);
   }
@@ -57,27 +55,4 @@ export function applySheetPatch<T extends { crop_sheets: RemixCropSheet[] }>(
       idx === update.sheetIndex ? { ...sheet, ...update.patch } : sheet,
     ),
   };
-}
-
-/** Normalized projection of one remix entity (character | prop | mix). Used by
- *  `startEntitySwap` resolution and selectors so the shape never drifts. */
-export type ResolvedEntity = {
-  name: string;
-  crop_sheets: RemixCropSheet[];
-};
-
-/** Resolves a single entity from a remix by type + key. Mix matches by
- *  `canonicalMixKey(keys)`. Returns `null` when the entity is missing. */
-export function resolveEntity(
-  remix: Remix,
-  type: 'character' | 'prop' | 'mix',
-  key: string,
-): ResolvedEntity | null {
-  if (type === 'character') {
-    return remix.characters.find((c) => c.key === key) ?? null;
-  }
-  if (type === 'prop') {
-    return remix.props.find((p) => p.key === key) ?? null;
-  }
-  return remix.mixes.find((m) => canonicalMixKey(m.keys) === key) ?? null;
 }

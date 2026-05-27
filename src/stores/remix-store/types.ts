@@ -9,11 +9,10 @@ import type {
   Remix,
   RemixConfig,
   RemixCropSheet,
-  RemixEntityRef,
   RemixJob,
   RemixServerEvent,
   RemixSpread,
-  StartEntitySwapParams,
+  StartMixSwapParams,
 } from '@/types/remix';
 
 // ── Patch shape exposed by job/runner helpers ────────────────────────────────
@@ -51,17 +50,6 @@ export interface StartAudioJobOptions {
   maxConcurrentChunksPerTextbox?: number;
 }
 
-// ── Entity projection (selectors) ────────────────────────────────────────────
-
-/** All swappable entities of a remix, grouped by type, projected to the
- *  normalized `RemixEntityRef` shape consumed by SwapCropSheetModal. Returns
- *  `null` when the remix is missing (e.g. deleted via realtime). */
-export interface RemixEntities {
-  characters: RemixEntityRef[];
-  props: RemixEntityRef[];
-  mixes: RemixEntityRef[];
-}
-
 // ── Per-slice interfaces ─────────────────────────────────────────────────────
 
 /** Remix CRUD + active selection + illustration/crop-sheet patching. */
@@ -78,7 +66,7 @@ export interface RemixCrudSlice {
   patchRemixCropSheets: (id: string, updates: CropSheetUpdate[]) => void;
 }
 
-/** Remote background_jobs (audio/image/character swap): enqueue, cancel, dismiss. */
+/** Remote background_jobs (audio/image/mix swap): enqueue, cancel, dismiss. */
 export interface RemixJobsSlice {
   jobs: RemixJob[];
 
@@ -88,45 +76,48 @@ export interface RemixJobsSlice {
   ) => Promise<EnqueueRemixJobOutcome>;
   startImageJob: (remixId: string) => Promise<EnqueueRemixJobOutcome>;
 
-  /** Modal-driven character crop-sheet swap (`[⇄]`). POST
-   *  `/api/jobs/remix/{id}/character-swap` + optimistic seed (mirrors
-   *  startAudioJob/startImageJob — co-located here per Validation S1).
-   *  Guards: `type !== 'character'` and an already-running swap both no-op to a
-   *  `skipped` outcome. Throws (with `code`) on 422/non-2xx so the modal can
-   *  toast MISSING_VARIANT_REFERENCE distinctly. The swap LOOP runs backend; the
-   *  client only enqueues + reflects realtime job_upsert into `jobs[]`. */
-  startEntitySwap: (
-    params: StartEntitySwapParams,
+  /** Modal-driven batch (mix) crop-sheet swap (rev2 — api/jobs/05). POST
+   *  `/api/jobs/remix/{id}/mix-swap` + optimistic seed `remix_mix_swap` job.
+   *  Guards: an already-running mix swap for the remix no-ops to `skipped`.
+   *  Throws `EnqueueJobError` (with `code`) on 422/non-2xx so the modal can
+   *  toast MISSING_VARIANT_REFERENCE / TOO_MANY_SWAP_TARGETS / NO_SWAP_TARGETS
+   *  distinctly. The swap LOOP runs backend; the client only enqueues + reflects
+   *  realtime job_upsert into `jobs[]`. */
+  startMixSwap: (
+    params: StartMixSwapParams,
   ) => Promise<EnqueueRemixJobOutcome>;
 
   cancelJob: (jobId: string) => Promise<void>;
   dismissJob: (jobId: string) => void;
 }
 
-/** Crop-sheet count append/remove + per-variant visual-swap persist. */
+/** Batch lifecycle (add/remove batch + append/remove batch sheet) + per-variant
+ *  visual-swap persist (rev2 — batch model). */
 export interface RemixSwapSlice {
-  /** Appends one crop sheet to an entity within the scope of `variantKey`
-   *  (or whole entity when `null` — mix). Re-layouts every sheet of that
-   *  variant group via the client-side layout engine, then `replaceAll` on
-   *  `crop_sheets[]` so variant grouping order stays deterministic. Optimistic
-   *  with rollback on failure. Implementation lands in Phase 02. */
-  appendCropSheet: (
-    remixId: string,
-    type: 'character' | 'prop' | 'mix',
-    key: string,
-    variantKey: string | null,
-  ) => Promise<boolean>;
+  /** Appends a NEW batch (fresh uuid + K=1 sheets from all enabled-subject
+   *  crops). Optimistic push + `mixes` persist with full-remix rollback.
+   *  Resolves `true` on success. */
+  addBatch: (remixId: string) => Promise<boolean>;
 
-  /** Removes one crop sheet within the scope of `variantKey` (mix → null).
-   *  Variant group count clamped to `SHEET_MIN`; layout engine re-packs the
-   *  group; sibling variants pass-through. `sheetIndex` is the absolute index
-   *  into `crop_sheets[]` (caller already resolved). Optimistic with rollback
-   *  on failure. Implementation lands in Phase 02. */
-  removeCropSheet: (
+  /** Removes a batch by id. Guarded so the last batch (`mixes.length ===
+   *  BATCH_MIN`) cannot be removed. Optimistic + rollback. Resolves `true` on
+   *  success. */
+  removeBatch: (remixId: string, batchId: string) => Promise<boolean>;
+
+  /** Appends one crop sheet to a batch (clamped to `SHEET_MAX`). Re-groups ALL
+   *  crops from the frozen illustration and re-packs at K+1 via the layout
+   *  engine, then `replaceAll` on the batch's `crop_sheets[]`. DESTRUCTIVE:
+   *  clears `swap_results` of the batch — caller MUST gate. Optimistic with
+   *  rollback. */
+  appendBatchSheet: (remixId: string, batchId: string) => Promise<boolean>;
+
+  /** Removes one crop sheet from a batch (clamped to `SHEET_MIN`). `sheetIndex`
+   *  is accepted for caller-API parity but unused (engine re-packs from
+   *  scratch). DESTRUCTIVE: clears `swap_results` of the batch — caller MUST
+   *  gate. Optimistic with rollback. */
+  removeBatchSheet: (
     remixId: string,
-    type: 'character' | 'prop' | 'mix',
-    key: string,
-    variantKey: string | null,
+    batchId: string,
     sheetIndex: number,
   ) => Promise<boolean>;
 
@@ -160,6 +151,14 @@ export interface RemixSyncSlice {
    *  that remix transitions to a terminal status — DB row may have new
    *  illustration/audio chunk URLs the local copy doesn't reflect. */
   refetchRemix: (remixId: string) => Promise<void>;
+
+  /** Lazy migration of a legacy remix to the rev2 batch model. Idempotent —
+   *  only runs when a legacy shape is detected (no batch / `mixes[].keys[]` /
+   *  entity crops). Rebuilds `mixes` as a single batch from `groupCropsForBatch`
+   *  (reads frozen illustration tags), clears entity `crop_sheets`, and persists
+   *  `{ mixes, characters, props }` once. Called by the modal root on-mount
+   *  (Phase 06). No-op (resolves `false`) when no migration needed. */
+  migrateLegacyRemixToBatch: (remixId: string) => Promise<boolean>;
 }
 
 // ── Composed store ───────────────────────────────────────────────────────────

@@ -1,180 +1,194 @@
-// crop-grouping.test.ts — Unit tests for groupCropsForKey.
-// Core contract under test: crop sheets are built from STATIC-IMAGE layers
-// ONLY. auto_pic (.lottie/.riv/.webm animations), video and audio layers must
-// never become crops, even when tagged to the entity key.
+// crop-grouping.test.ts — Unit tests for groupCropsForBatch (rev2 batch model).
+// Covers: image-only selection (auto_pic/video excluded), dedup by
+// (spread_id, id) for a multi-subject layer, multi-subject tags[] carried on
+// one crop, disabled-subject tag drop, entity order (characters then props,
+// tie-break spread_number), zero-geometry skip, objectKey = tags[0].object_key.
 
 import { describe, it, expect } from 'vitest';
-import { groupCropsForKey } from './crop-grouping';
-import type { GroupCropsContext } from './crop-grouping';
-import { canonicalMixKey } from '@/types/remix';
-import { mixLineupTokens } from '@/stores/remix-store/clone-builder';
-import type { RemixIllustration } from '@/types/remix';
-import type {
-  SpreadImage,
-  SpreadAutoPic,
-  SpreadVideo,
-  SpreadTag,
-} from '@/types/spread-types';
+import { groupCropsForBatch } from './crop-grouping';
+import type { Remix } from '@/types/remix';
+import type { SpreadTag } from '@/types/spread-types';
 
 // ── Fixture builders ─────────────────────────────────────────────────────────
 
-function subjectTag(
-  type: 'character' | 'prop',
+function tag(
+  type: 'character' | 'prop' | 'other',
   objectKey: string,
   variant = 'v1',
 ): SpreadTag {
-  return { type, object_key: objectKey, variant_key: variant };
+  return { type, object_key: objectKey, variant_key: variant } as SpreadTag;
 }
 
-function makeImage(id: string, tags: SpreadTag[]): SpreadImage {
+interface ImgOpts {
+  id: string;
+  tags: SpreadTag[];
+  w?: number;
+  h?: number;
+  mediaUrl?: string;
+}
+function img(o: ImgOpts) {
   return {
-    id,
-    media_url: `https://cdn/${id}.png`,
-    aspect_ratio: '4:3',
-    geometry: { x: 10, y: 20, w: 40, h: 30 },
+    id: o.id,
+    media_url: o.mediaUrl ?? `https://cdn/${o.id}.png`,
+    aspect_ratio: '1:1',
+    geometry: { x: 0, y: 0, w: o.w ?? 100, h: o.h ?? 100 },
     'z-index': 0,
-    tags,
-  } as unknown as SpreadImage;
+    tags: o.tags,
+  };
 }
-
-/** Animated layer (.lottie) — must be excluded from crop sheets. */
-function makeAutoPic(id: string, tags: SpreadTag[]): SpreadAutoPic {
+function autoPic(id: string, tags: SpreadTag[]) {
   return {
     id,
     media_url: `https://cdn/${id}.lottie`,
-    geometry: { x: 0, y: 0, w: 50, h: 50 },
+    geometry: { x: 0, y: 0, w: 100, h: 100 },
     'z-index': 0,
     tags,
-  } as unknown as SpreadAutoPic;
-}
-
-/** Video layer (.mp4) — must be excluded from crop sheets. */
-function makeVideo(id: string, tags: SpreadTag[]): SpreadVideo {
-  return {
-    id,
-    media_url: `https://cdn/${id}.mp4`,
-    geometry: { x: 0, y: 0, w: 50, h: 50 },
-    'z-index': 0,
-    tags,
-  } as unknown as SpreadVideo;
-}
-
-function makeIllustration(layers: {
-  images?: SpreadImage[];
-  auto_pics?: SpreadAutoPic[];
-  videos?: SpreadVideo[];
-}): RemixIllustration {
-  return {
-    sections: [],
-    spreads: [
-      {
-        id: 's1',
-        pages: [{ number: 1 }],
-        images: layers.images ?? [],
-        auto_pics: layers.auto_pics ?? [],
-        videos: layers.videos ?? [],
-        textboxes: [],
-      },
-    ],
-  } as unknown as RemixIllustration;
-}
-
-/** Enabled-cast context — single-variant cast (baseVariant ''). */
-function ctx(...keys: string[]): GroupCropsContext {
-  return {
-    enabledKeys: new Set(keys),
-    cast: keys.map((key) => ({ key, baseVariant: '' })),
   };
+}
+
+interface SpreadOpts {
+  id: string;
+  pageNumber: number;
+  images?: ReturnType<typeof img>[];
+  autoPics?: ReturnType<typeof autoPic>[];
+}
+function spread(o: SpreadOpts) {
+  return {
+    id: o.id,
+    pages: [{ number: o.pageNumber, type: 'normal_page', layout: null, background: { color: '#fff', texture: null } }],
+    images: o.images ?? [],
+    auto_pics: o.autoPics ?? [],
+    textboxes: [],
+  };
+}
+
+interface RemixOpts {
+  charKeys?: string[];
+  propKeys?: string[];
+  spreads?: ReturnType<typeof spread>[];
+}
+function makeRemix(o: RemixOpts = {}): Remix {
+  return {
+    id: 'remix-1',
+    characters: (o.charKeys ?? []).map((k) => ({ key: k, name: k, crop_sheets: [], variants: [] })),
+    props: (o.propKeys ?? []).map((k) => ({ key: k, name: k, crop_sheets: [], variants: [] })),
+    illustration: { spreads: o.spreads ?? [], sections: [] },
+  } as unknown as Remix;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('groupCropsForKey — image-only crop selection', () => {
-  it('includes a tagged image layer', () => {
-    const ill = makeIllustration({
-      images: [makeImage('img1', [subjectTag('character', 'c1')])],
+describe('groupCropsForBatch — image-only crop selection', () => {
+  it('selects image layers carrying ≥1 enabled subject tag', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [spread({ id: 's1', pageNumber: 1, images: [img({ id: 'i1', tags: [tag('character', 'c1')] })] })],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
-    expect(r.cropInputs).toHaveLength(1);
-    expect(r.cropInputs[0].id).toBe('img1');
-    expect(r.cropMetaById['img1'].media_url).toBe('https://cdn/img1.png');
-    // Source identity persisted (DB-CHANGELOG 2026-05-25): id = image layer id,
-    // spread_id = source spread id.
-    expect(r.cropMetaById['img1'].id).toBe('img1');
-    expect(r.cropMetaById['img1'].spread_id).toBe('s1');
+    const { cropInputs, cropMetaById } = groupCropsForBatch(r);
+    expect(cropInputs.map((c) => c.id)).toEqual(['i1']);
+    expect(cropInputs[0].objectKey).toBe('c1');
+    expect(cropMetaById['i1'].media_url).toBe('https://cdn/i1.png');
+    expect(cropMetaById['i1'].spread_id).toBe('s1');
+    expect(cropMetaById['i1'].spread_number).toBe(1);
   });
 
-  // BUG GUARD — the .lottie-in-crop-sheet regression.
-  it('excludes a tagged auto_pic (.lottie animation) layer', () => {
-    const ill = makeIllustration({
-      auto_pics: [makeAutoPic('anim1', [subjectTag('character', 'c1')])],
+  it('ignores auto_pic (animated) layers even when subject-tagged', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [spread({ id: 's1', pageNumber: 1, autoPics: [autoPic('anim1', [tag('character', 'c1')])] })],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
-    expect(r.cropInputs).toEqual([]);
-    expect(r.cropMetaById).toEqual({});
+    expect(groupCropsForBatch(r).cropInputs).toEqual([]);
   });
 
-  it('excludes a tagged video layer', () => {
-    const ill = makeIllustration({
-      videos: [makeVideo('vid1', [subjectTag('character', 'c1')])],
+  it('skips a layer with no enabled subject tag (only role/other tags)', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [spread({ id: 's1', pageNumber: 1, images: [img({ id: 'i1', tags: [tag('other', 'background')] })] })],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
-    expect(r.cropInputs).toEqual([]);
+    expect(groupCropsForBatch(r).cropInputs).toEqual([]);
   });
 
-  it('picks only the image when an image and an auto_pic share the key', () => {
-    const ill = makeIllustration({
-      images: [makeImage('img1', [subjectTag('character', 'c1')])],
-      auto_pics: [makeAutoPic('anim1', [subjectTag('character', 'c1')])],
+  it('skips a layer with zero/negative geometry', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [spread({ id: 's1', pageNumber: 1, images: [img({ id: 'i1', tags: [tag('character', 'c1')], w: 0, h: 50 })] })],
     });
-    const r = groupCropsForKey(ill, 'character', 'c1', ctx('c1'));
-    expect(r.cropInputs.map((c) => c.id)).toEqual(['img1']);
+    expect(groupCropsForBatch(r).cropInputs).toEqual([]);
   });
 });
 
-describe('groupCropsForKey — enabled-aware fold + mix lineup', () => {
-  // User bug: only didi enabled → a didi+leela layer must fold into didi.
-  it('folds a co-occurrence into the sole enabled subject', () => {
-    const ill = makeIllustration({
-      images: [
-        makeImage('img1', [
-          subjectTag('character', 'didi'),
-          subjectTag('character', 'leela'),
-        ]),
+describe('groupCropsForBatch — dedup + multi-subject tags[]', () => {
+  it('a multi-subject layer becomes ONE crop carrying all enabled tags (no per-subject duplication)', () => {
+    const r = makeRemix({
+      charKeys: ['c1', 'c2'],
+      spreads: [
+        spread({
+          id: 's1',
+          pageNumber: 1,
+          images: [img({ id: 'i1', tags: [tag('character', 'c1'), tag('character', 'c2')] })],
+        }),
       ],
     });
-    const onlyDidi = ctx('didi');
-    expect(
-      groupCropsForKey(ill, 'character', 'didi', onlyDidi).cropInputs.map((c) => c.id),
-    ).toEqual(['img1']);
-    // leela is disabled → no crops, even though it is tagged on the layer.
-    expect(groupCropsForKey(ill, 'character', 'leela', onlyDidi).cropInputs).toEqual([]);
+    const { cropInputs, cropMetaById } = groupCropsForBatch(r);
+    expect(cropInputs).toHaveLength(1);
+    expect(cropInputs[0].id).toBe('i1');
+    // tags[] carries BOTH enabled subjects.
+    expect(cropMetaById['i1'].tags.map((t) => t.object_key).sort()).toEqual(['c1', 'c2']);
+    // objectKey (affinity) = the first tag's object_key.
+    expect(cropInputs[0].objectKey).toBe('c1');
   });
 
-  it('keeps a genuine mix (≥2 enabled) out of either single key, matched by lineup', () => {
-    const ill = makeIllustration({
-      images: [
-        makeImage('img1', [
-          subjectTag('character', 'didi'),
-          subjectTag('character', 'leela'),
-        ]),
+  it('drops disabled subject tags from tags[] (keeps enabled ones)', () => {
+    // c2 is NOT in the enabled set → its tag is dropped; c1 remains.
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [
+        spread({
+          id: 's1',
+          pageNumber: 1,
+          images: [img({ id: 'i1', tags: [tag('character', 'c1'), tag('character', 'c2')] })],
+        }),
       ],
     });
-    const both = ctx('didi', 'leela');
-    expect(groupCropsForKey(ill, 'character', 'didi', both).cropInputs).toEqual([]);
-    expect(groupCropsForKey(ill, 'character', 'leela', both).cropInputs).toEqual([]);
+    const { cropMetaById } = groupCropsForBatch(r);
+    expect(cropMetaById['i1'].tags.map((t) => t.object_key)).toEqual(['c1']);
+  });
 
-    const lineupKey = canonicalMixKey(
-      mixLineupTokens(
-        [
-          { object_key: 'didi', variant_key: 'v1' },
-          { object_key: 'leela', variant_key: 'v1' },
-        ],
-        both.cast,
-      ),
-    );
-    expect(
-      groupCropsForKey(ill, 'mix', lineupKey, both).cropInputs.map((c) => c.id),
-    ).toEqual(['img1']);
+  it('dedups the SAME (spread_id, layer id) — never two crops for one layer', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [
+        spread({ id: 's1', pageNumber: 1, images: [img({ id: 'i1', tags: [tag('character', 'c1')] })] }),
+      ],
+    });
+    const { cropInputs } = groupCropsForBatch(r);
+    expect(cropInputs.filter((c) => c.id === 'i1')).toHaveLength(1);
+  });
+});
+
+describe('groupCropsForBatch — ordering', () => {
+  it('orders crops by entity (characters then props), tie-break spread_number', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      propKeys: ['p1'],
+      spreads: [
+        // prop crop on an earlier spread, character crop on a later one — order
+        // must still be character-first (entity order beats spread_number).
+        spread({ id: 's1', pageNumber: 1, images: [img({ id: 'prop1', tags: [tag('prop', 'p1')] })] }),
+        spread({ id: 's2', pageNumber: 2, images: [img({ id: 'char1', tags: [tag('character', 'c1')] })] }),
+      ],
+    });
+    expect(groupCropsForBatch(r).cropInputs.map((c) => c.id)).toEqual(['char1', 'prop1']);
+  });
+
+  it('within one entity, orders by spread_number', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [
+        spread({ id: 's2', pageNumber: 5, images: [img({ id: 'late', tags: [tag('character', 'c1')] })] }),
+        spread({ id: 's1', pageNumber: 2, images: [img({ id: 'early', tags: [tag('character', 'c1')] })] }),
+      ],
+    });
+    expect(groupCropsForBatch(r).cropInputs.map((c) => c.id)).toEqual(['early', 'late']);
   });
 });

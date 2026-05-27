@@ -19,7 +19,7 @@
 
 // ── Public types (engine input/output contract) ─────────────────────────────
 
-/** 1 crop = 1 image grouped by key, geometry relative (%) to the spread. */
+/** 1 crop = 1 image, geometry relative (%) to the spread. */
 export interface CropInput {
   /** layer/crop id — opaque, echoed verbatim into output. */
   id: string;
@@ -27,6 +27,11 @@ export interface CropInput {
   widthPct: number;
   /** (0, 100] — height as % of spread height. */
   heightPct: number;
+  /** Primary subject affinity key (= `tags[0].object_key`). Metadata only —
+   *  NOT used by packing; only groups crops of the same entity onto one sheet
+   *  via `partitionByEntityAffinity`. Undefined → falls in the `'__none__'`
+   *  cluster. */
+  objectKey?: string;
 }
 
 export interface LayoutConfig {
@@ -117,6 +122,8 @@ interface PxCrop {
   id: string;
   w: number;
   h: number;
+  /** Primary subject affinity key — echoed from CropInput.objectKey. */
+  objectKey?: string;
 }
 
 /** A box being packed — potpack mutates `x`/`y` in place. */
@@ -177,7 +184,7 @@ export function computeCropSheetLayout(
   // Silently drop crops with non-positive dimensions (caller logs warnings).
   const sanitized = crops.filter((c) => c.widthPct > 0 && c.heightPct > 0);
   const pxCrops = toPixels(sanitized, spread);
-  const groups = partitionByArea(pxCrops, sheetCount);
+  const groups = partitionByEntityAffinity(pxCrops, sheetCount);
 
   const sheets = groups.map((group, index) =>
     packOneSheet(group, index, gutterX, gutterY, landscapeTolerance),
@@ -193,30 +200,79 @@ function toPixels(crops: CropInput[], spread: { width: number; height: number })
     id: c.id,
     w: (c.widthPct / 100) * spread.width,
     h: (c.heightPct / 100) * spread.height,
+    objectKey: c.objectKey,
   }));
 }
 
-// ── Step 2: partition into K balanced-area buckets — LPT (spec §5.2) ─────────
+// ── Step 2: partition into K buckets — entity affinity (spec §5.2) ───────────
 
-function partitionByArea(pxCrops: PxCrop[], k: number): PxCrop[][] {
+const NONE_CLUSTER = '__none__';
+
+/**
+ * Partition crops into K sheets, keeping crops of the same entity (objectKey)
+ * on the same sheet where possible. Each whole entity cluster is assigned to
+ * the smallest-area bucket; an oversized cluster (area > budget, >1 crop) is
+ * split crop-by-crop into the smallest buckets (simple heuristic — engine §9
+ * open, rare). Deterministic: clusters keep first-appearance order, sorted by
+ * (total area desc, appearance order asc); ties pick the lowest bucket index.
+ */
+function partitionByEntityAffinity(pxCrops: PxCrop[], k: number): PxCrop[][] {
+  if (k <= 1) return [pxCrops];
+
+  // Group by objectKey, preserving first-appearance order.
+  const order: string[] = [];
+  const clusters = new Map<string, PxCrop[]>();
+  for (const crop of pxCrops) {
+    const ck = crop.objectKey ?? NONE_CLUSTER;
+    let bucket = clusters.get(ck);
+    if (!bucket) {
+      bucket = [];
+      clusters.set(ck, bucket);
+      order.push(ck);
+    }
+    bucket.push(crop);
+  }
+
   const buckets: PxCrop[][] = Array.from({ length: k }, () => []);
   const bucketArea: number[] = new Array(k).fill(0);
+  const areaOf = (c: PxCrop) => c.w * c.h;
+  const totalArea = pxCrops.reduce((s, c) => s + areaOf(c), 0);
+  const budget = totalArea / k;
 
-  // Sort by area descending, tie-break id ascending — deterministic.
-  const sorted = [...pxCrops].sort((a, b) => {
-    const areaDiff = b.w * b.h - a.w * a.h;
-    if (areaDiff !== 0) return areaDiff;
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
-
-  for (const crop of sorted) {
-    // Pick the bucket with the smallest running area total.
+  // Smallest-area bucket; tie-break lowest index — deterministic.
+  const smallestBucket = (): number => {
     let target = 0;
     for (let i = 1; i < k; i++) {
       if (bucketArea[i] < bucketArea[target]) target = i;
     }
-    buckets[target].push(crop);
-    bucketArea[target] += crop.w * crop.h;
+    return target;
+  };
+
+  // Sort clusters by total area desc, tie-break appearance order asc.
+  const clusterArea = (ck: string) => clusters.get(ck)!.reduce((s, c) => s + areaOf(c), 0);
+  const appearance = new Map(order.map((ck, i) => [ck, i]));
+  const sorted = [...order].sort((a, b) => {
+    const diff = clusterArea(b) - clusterArea(a);
+    if (diff !== 0) return diff;
+    return appearance.get(a)! - appearance.get(b)!;
+  });
+
+  for (const ck of sorted) {
+    const cluster = clusters.get(ck)!;
+    const cArea = clusterArea(ck);
+    if (cArea > budget && cluster.length > 1) {
+      // Oversized entity — spread its crops across the smallest buckets.
+      for (const crop of cluster) {
+        const target = smallestBucket();
+        buckets[target].push(crop);
+        bucketArea[target] += areaOf(crop);
+      }
+    } else {
+      // Keep the whole cluster together on one sheet.
+      const target = smallestBucket();
+      buckets[target].push(...cluster);
+      bucketArea[target] += cArea;
+    }
   }
   return buckets;
 }
