@@ -19,6 +19,7 @@ const JOB_TYPE_TO_PHASE: Record<string, RemixJobPhase> = {
   remix_audio_swap: 'audio',
   remix_image_swap: 'image',
   remix_character_swap: 'character_swap',
+  remix_mix_swap: 'remix_mix_swap',
 };
 
 /** Map raw background_jobs row → RemixJob. Pure, no I/O. */
@@ -38,11 +39,17 @@ export function mapRowToJob(row: BackgroundJobRow): RemixJob {
       ? row.params.character_key
       : undefined;
 
+  // Surface `params.batch_id` for remix_mix_swap jobs so selectors can match
+  // the running swap to its batch row.
+  const batchId =
+    typeof row.params?.batch_id === 'string' ? row.params.batch_id : undefined;
+
   return {
     id: row.id,
     remixId,
     phase,
     characterKey,
+    batchId,
     triggeredBy,
     status: row.status,
     currentStep: row.current_step ?? 0,

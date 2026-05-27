@@ -61,47 +61,48 @@ export interface EnqueueAudioSwapParams {
   max_concurrent_chunks_per_textbox: number;
 }
 
-// ── Character swap (api/jobs/04) ─────────────────────────────────────────────
+// ── Mix swap (api/jobs/05 — batch-level swap) ────────────────────────────────
 
-export interface EnqueueCharacterSwapBody {
-  character_key: string;
+export interface EnqueueMixSwapBody {
+  batch_id: string;
   force_resweep?: boolean;
 }
 
-export interface EnqueueCharacterSwapEnqueuedData {
+export interface EnqueueMixSwapEnqueuedData {
   job_id: string;
   status: 'queued';
-  type: 'remix_character_swap';
+  type: 'remix_mix_swap';
   remix_id: string;
-  character_key: string;
+  batch_id: string;
+  target_count: number;
+  unchanged_count: number;
   total_steps: number;
   sheets_to_process: number;
-  variants_in_scope: number;
   estimated_duration_sec: number;
   skipped?: false;
   deduped?: false;
 }
 
-export interface EnqueueCharacterSwapSkippedData {
+export interface EnqueueMixSwapSkippedData {
   skipped: true;
   reason: 'all_sheets_already_swapped' | 'no_crop_sheets' | string;
   sheets_to_process: 0;
 }
 
-export interface EnqueueCharacterSwapDedupedData {
+export interface EnqueueMixSwapDedupedData {
   job_id: string;
   status: 'queued' | 'running';
-  type: 'remix_character_swap';
+  /** Active job may be a char-swap (cross-type dedup — strictly 1 swap/remix). */
+  type: 'remix_mix_swap' | 'remix_character_swap';
   remix_id: string;
-  /** Character of the ALREADY-active job — may differ from the requested key. */
-  character_key: string;
+  active_swap_key: string;
   deduped: true;
 }
 
-export type EnqueueCharacterSwapData =
-  | EnqueueCharacterSwapEnqueuedData
-  | EnqueueCharacterSwapSkippedData
-  | EnqueueCharacterSwapDedupedData;
+export type EnqueueMixSwapData =
+  | EnqueueMixSwapEnqueuedData
+  | EnqueueMixSwapSkippedData
+  | EnqueueMixSwapDedupedData;
 
 /** Error thrown by enqueue wrappers on non-2xx so callers can branch on the
  *  backend `code` (e.g. MISSING_VARIANT_REFERENCE) — a plain `Error` would lose
@@ -142,27 +143,26 @@ export async function enqueueImageSwap(
   );
 }
 
-/** POST /api/jobs/remix/{remixId}/character-swap (api/jobs/04).
- *  Returns parsed `data` on 2xx; throws `EnqueueJobError` (with backend `code`)
- *  on non-2xx so the modal can distinguish MISSING_VARIANT_REFERENCE from a
- *  generic failure. */
-export async function enqueueCharacterSwap(
+/** POST /api/jobs/remix/{remixId}/mix-swap (api/jobs/05 — batch-level swap).
+ *  Returns parsed `data` on 2xx (enqueued/skipped/deduped); throws
+ *  `EnqueueJobError` (with backend `code`) on non-2xx so the modal can
+ *  distinguish 422 MISSING_VARIANT_REFERENCE / TOO_MANY_SWAP_TARGETS /
+ *  NO_SWAP_TARGETS from a generic failure. */
+export async function enqueueRemixMixSwap(
   remixId: string,
-  body: EnqueueCharacterSwapBody,
-): Promise<EnqueueCharacterSwapData> {
-  log.info('enqueueCharacterSwap', 'request', {
+  body: EnqueueMixSwapBody,
+): Promise<EnqueueMixSwapData> {
+  log.info('enqueueRemixMixSwap', 'request', {
     remixId,
-    forceResweep: body.force_resweep ?? false,
+    forceResweep: body.force_resweep ?? true,
   });
-  const result = await callImageApi<
-    EnqueueJobResponse<EnqueueCharacterSwapData>
-  >(
-    `/api/jobs/remix/${encodeURIComponent(remixId)}/character-swap`,
-    { character_key: body.character_key, force_resweep: body.force_resweep ?? false },
+  const result = await callImageApi<EnqueueJobResponse<EnqueueMixSwapData>>(
+    `/api/jobs/remix/${encodeURIComponent(remixId)}/mix-swap`,
+    { batch_id: body.batch_id, force_resweep: body.force_resweep ?? true },
   );
   if (!result.success) {
     const failure = result as ImageApiFailure;
-    log.error('enqueueCharacterSwap', 'failed', {
+    log.error('enqueueRemixMixSwap', 'failed', {
       remixId,
       httpStatus: failure.httpStatus,
       errorCode: failure.errorCode,

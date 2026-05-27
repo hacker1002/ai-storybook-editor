@@ -8,7 +8,7 @@ import type { RemixJob } from '@/types/remix';
 import {
   enqueueAudioSwap,
   enqueueImageSwap,
-  enqueueCharacterSwap,
+  enqueueRemixMixSwap,
   cancelJobRemote,
   type EnqueueAudioSwapData,
   type EnqueueAudioSwapEnqueuedData,
@@ -182,56 +182,50 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
     };
   },
 
-  // ── Character crop-sheet swap enqueue (api/jobs/04) ────────────────
-  // Mirrors startAudioJob/startImageJob: POST enqueue + optimistic seed row.
-  // The swap LOOP runs backend (per-sheet Gemini); the client only enqueues and
-  // reflects realtime job_upsert into jobs[]. Co-located here (not swap-slice)
-  // per Validation S1.
-  startEntitySwap: async (params) => {
-    const { remixId, type, key, forceResweep = false } = params;
+  // ── Batch (mix) crop-sheet swap enqueue (api/jobs/05) ──────────────
+  // Mirrors startAudioJob/startImageJob: POST enqueue + optimistic seed
+  // `remix_mix_swap` row. Cross-type dedup (backend allows 1 swap/remix);
+  // an already-running mix
+  // swap no-ops. `params` (swap model) is v1 collect-only — NOT sent in body.
+  startMixSwap: async (params) => {
+    const { remixId, batchId, forceResweep = true } = params;
 
-    // Defensive guards (button is also disabled in the UI):
-    //  - prop/mix have no character-swap job (char-only v1).
-    //  - dedup: backend allows strictly 1 char-swap / remix.
-    if (type !== 'character') {
-      log.debug('startEntitySwap', 'unsupported type — no-op', { type, key });
-      return { kind: 'skipped', reason: 'unsupported_type' };
-    }
     const alreadyRunning = get().jobs.some(
       (j) =>
-        j.phase === 'character_swap' &&
+        j.phase === 'remix_mix_swap' &&
         j.remixId === remixId &&
+        j.batchId === batchId &&
         (j.status === 'queued' || j.status === 'running'),
     );
     if (alreadyRunning) {
-      log.debug('startEntitySwap', 'swap already running — no-op', {
+      log.debug('startMixSwap', 'swap already running — no-op', {
         remixId,
-        key,
+        batchId,
       });
       return { kind: 'skipped', reason: 'busy' };
     }
 
-    log.info('startEntitySwap', 'enqueue', { remixId, key, forceResweep });
-    // Throws EnqueueJobError on non-2xx (incl. 422 MISSING_VARIANT_REFERENCE) —
-    // caller (modal) toasts based on `code`.
-    const data = await enqueueCharacterSwap(remixId, {
-      character_key: key,
+    log.info('startMixSwap', 'enqueue', { remixId, batchId, forceResweep });
+    // Throws EnqueueJobError on non-2xx (incl. 422 MISSING_VARIANT_REFERENCE /
+    // TOO_MANY_SWAP_TARGETS / NO_SWAP_TARGETS) — caller (modal) toasts on `code`.
+    const data = await enqueueRemixMixSwap(remixId, {
+      batch_id: batchId,
       force_resweep: forceResweep,
     });
 
     if ('skipped' in data && data.skipped) {
-      log.info('startEntitySwap', 'skipped', { remixId, reason: data.reason });
+      log.info('startMixSwap', 'skipped', { remixId, reason: data.reason });
       return { kind: 'skipped', reason: data.reason };
     }
 
     if ('deduped' in data && data.deduped) {
-      log.info('startEntitySwap', 'deduped', {
+      log.info('startMixSwap', 'deduped', {
         remixId,
         jobId: data.job_id,
         status: data.status,
       });
-      // The active job's character_key may differ from the requested key.
-      // Top-up jobs[] if the row isn't mirrored locally yet.
+      // Active job may be a char-swap (cross-type dedup). Top-up jobs[] if the
+      // row isn't mirrored locally yet.
       if (!get().jobs.find((j) => j.id === data.job_id)) {
         const userId = useAuthStore.getState().user?.id;
         if (userId) {
@@ -242,25 +236,24 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
         kind: 'deduped',
         jobId: data.job_id,
         status: data.status,
-        characterKey: data.character_key,
       };
     }
 
-    log.info('startEntitySwap', 'enqueued', {
+    log.info('startMixSwap', 'enqueued', {
       remixId,
+      batchId,
       jobId: data.job_id,
       totalSteps: data.total_steps,
-      characterKey: data.character_key,
     });
 
-    // Optimistic seed — badge/overlay appears immediately; realtime fills
+    // Optimistic seed — overlay appears immediately; realtime fills
     // current_step/result next. Merge by id so realtime doesn't duplicate.
     const nowIso = new Date().toISOString();
     const seed: RemixJob = {
       id: data.job_id,
       remixId,
-      phase: 'character_swap',
-      characterKey: data.character_key,
+      phase: 'remix_mix_swap',
+      batchId,
       triggeredBy: 'user',
       status: 'queued',
       currentStep: 0,
@@ -274,8 +267,6 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
     };
     set((s) => {
       if (s.jobs.find((j) => j.id === seed.id)) return s;
-      // Prune so a stale failed sibling of the same lineage clears the moment a
-      // fresh attempt is seeded (no resurrection after the new job dismisses).
       return { jobs: pruneSupersededJobs([...s.jobs, seed]) };
     });
 
@@ -283,7 +274,6 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       kind: 'enqueued',
       jobId: data.job_id,
       totalSteps: data.total_steps,
-      characterKey: data.character_key,
     };
   },
 

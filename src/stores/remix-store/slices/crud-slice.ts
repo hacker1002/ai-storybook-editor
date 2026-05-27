@@ -4,7 +4,6 @@
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
-import { canonicalMixKey } from '@/types/remix';
 import type { Human } from '@/types/human';
 import { applyTextSwap } from '@/features/remix/text-swap-engine';
 import { buildRemixClonePayload } from '../clone-builder';
@@ -209,9 +208,9 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
               p.key === u.entityKey ? applySheetPatch(p, u) : p,
             );
           } else {
+            // rev2: batch (mix) identity is `id` (uuid). entityKey === batchId.
             next.mixes = next.mixes.map((m) =>
-              // Mix has no `key` field — match by canonical mix key.
-              canonicalMixKey(m.keys) === u.entityKey ? applySheetPatch(m, u) : m,
+              m.id === u.entityKey ? applySheetPatch(m, u) : m,
             );
           }
         }

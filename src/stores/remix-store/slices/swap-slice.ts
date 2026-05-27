@@ -1,12 +1,17 @@
-// remix-store/slices/swap-slice.ts — Crop-sheet count append/remove +
-// per-variant visual-swap persist. The character-swap ENQUEUE action
-// (`startEntitySwap`) lives in jobs-slice.ts (co-located with the other
-// background-job enqueue actions per Validation S1) — it is NOT here.
+// remix-store/slices/swap-slice.ts — Batch lifecycle (add/remove batch +
+// append/remove batch sheet) + per-variant visual-swap persist (rev2). The
+// character-swap / mix-swap ENQUEUE actions live in jobs-slice.ts (co-located
+// with the other background-job enqueue actions per Validation S1) — NOT here.
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import { useBookStore } from '../../book-store';
-import { relayoutVariantCropSheets } from '../crop-sheet-layout';
+import {
+  addBatch as engineAddBatch,
+  removeBatch as engineRemoveBatch,
+  relayoutBatchSheets,
+  type RelayoutDeps,
+} from '../crop-sheet-layout';
 import type { RemixSwapSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -14,73 +19,49 @@ const log = createLogger('Store', 'RemixStore');
 export const createSwapSlice: RemixSliceCreator<RemixSwapSlice> = (
   set,
   get,
-) => ({
-  // ── Crop sheet count (modal-driven append / remove) ────────────────
-  // Both delegate to the variant-scoped re-layout helper. The engine re-groups
-  // crops from the (frozen) illustration, FILTERS by `variantKey` (mix: no
-  // filter), then re-packs the target variant group. Sibling variants
-  // pass-through unchanged.
+) => {
+  // Build the engine `RelayoutDeps` (set/get + active book dimension) — shared
+  // by every batch-lifecycle action. `set`/`get` are the full-store creator
+  // args; the engine narrows to `{ remixes }`, structurally compatible.
+  const buildDeps = (): RelayoutDeps => ({
+    set: set as RelayoutDeps['set'],
+    get: get as unknown as RelayoutDeps['get'],
+    dimension: useBookStore.getState().currentBook?.dimension ?? null,
+    patchRemixCropSheets: get().patchRemixCropSheets,
+  });
+
+  return {
+  // ── Batch lifecycle (modal-driven) ─────────────────────────────────
+  // add/remove a whole batch; append/remove one sheet within a batch. The
+  // engine re-groups ALL enabled-subject crops from the frozen illustration
+  // and re-packs at the new sheet count.
   //
-  // CONTRACT — DESTRUCTIVE (TARGET VARIANT ONLY): `appendCropSheet` and
-  // `removeCropSheet` both run `relayoutVariantCropSheets`, which REBUILDS the
-  // target variant's sheets via `buildSheetsFromLayout` (which hardcodes
-  // `swap_results: []`) — i.e. it DESTROYS swap_results in the target variant.
-  // Sibling-variant sheets are preserved verbatim. The store does NOT warn.
-  // Callers MUST gate on existing swap_results themselves (currently only the
-  // P6 swap modal's confirm dialog does). Any future caller bypassing that
-  // warning silently discards the user's swaps in the target variant.
-  appendCropSheet: async (remixId, type, key, variantKey) => {
-    log.info('appendCropSheet', 'invoked', {
-      remixId,
-      type,
-      key,
-      variantKey,
-    });
-    const dimension =
-      useBookStore.getState().currentBook?.dimension ?? null;
-    return relayoutVariantCropSheets(
-      {
-        set,
-        get,
-        dimension,
-        patchRemixCropSheets: get().patchRemixCropSheets,
-      },
-      remixId,
-      type,
-      key,
-      variantKey,
-      1,
-    );
+  // CONTRACT — DESTRUCTIVE (whole batch): `appendBatchSheet`/`removeBatchSheet`
+  // rebuild the batch's sheets via `buildSheetsFromLayout` (hardcodes
+  // `swap_results: []`) — i.e. they DESTROY swap_results of the batch. The store
+  // does NOT warn. Callers MUST gate on existing swap_results (P08 confirm
+  // dialog).
+  addBatch: async (remixId) => {
+    log.info('addBatch', 'invoked', { remixId });
+    return engineAddBatch(buildDeps(), remixId);
   },
 
-  removeCropSheet: async (remixId, type, key, variantKey, sheetIndex) => {
-    // DESTRUCTIVE (target variant) — see the `appendCropSheet` contract above.
+  removeBatch: async (remixId, batchId) => {
+    log.info('removeBatch', 'invoked', { remixId, batchId });
+    return engineRemoveBatch(buildDeps(), remixId, batchId);
+  },
+
+  appendBatchSheet: async (remixId, batchId) => {
+    log.info('appendBatchSheet', 'invoked', { remixId, batchId });
+    return relayoutBatchSheets(buildDeps(), remixId, batchId, 1);
+  },
+
+  removeBatchSheet: async (remixId, batchId, sheetIndex) => {
     // `sheetIndex` is accepted for caller-API parity but unused: the engine
-    // re-packs from scratch, so "which" sheet inside the variant scope is
-    // moot. Delta -1 + SHEET_MIN clamp inside `relayoutVariantCropSheets` is
-    // the guard.
-    log.info('removeCropSheet', 'invoked', {
-      remixId,
-      type,
-      key,
-      variantKey,
-      sheetIndex,
-    });
-    const dimension =
-      useBookStore.getState().currentBook?.dimension ?? null;
-    return relayoutVariantCropSheets(
-      {
-        set,
-        get,
-        dimension,
-        patchRemixCropSheets: get().patchRemixCropSheets,
-      },
-      remixId,
-      type,
-      key,
-      variantKey,
-      -1,
-    );
+    // re-packs from scratch, so "which" sheet is moot. Delta -1 + SHEET_MIN
+    // clamp inside `relayoutBatchSheets` is the guard.
+    log.info('removeBatchSheet', 'invoked', { remixId, batchId, sheetIndex });
+    return relayoutBatchSheets(buildDeps(), remixId, batchId, -1);
   },
 
   // ── Per-variant visual swap result (persist-writer) ────────────────
@@ -193,4 +174,5 @@ export const createSwapSlice: RemixSliceCreator<RemixSwapSlice> = (
     });
     return true;
   },
-});
+  };
+};

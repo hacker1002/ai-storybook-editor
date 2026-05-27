@@ -1,16 +1,18 @@
 // clone-builder.test.ts — Unit tests for buildRemixClonePayload pure transform.
-// Covers Phase 03 spec: exactly 1 crop sheet per config-enabled key, drop
-// chunking, subject-tag-count classification (role/`other` tags excluded from
-// single-vs-mix), mix dedup by canonical sorted-key signature.
+// rev2 (batch model, Phase 03): entities carry an EMPTY `crop_sheets: []`
+// (crops live on the batch now), and exactly ONE empty batch skeleton is
+// produced (`makeBatchSkeleton(0,'Batch 1')`). The crop population +
+// single-subject/mix enumeration that the legacy builder did is gone — crops
+// are filled by `computeCropSheets` (layout engine over `groupCropsForBatch`)
+// in the same INSERT path, NOT by this pure builder.
 
 import { describe, it, expect } from 'vitest';
-import { buildRemixClonePayload } from './clone-builder';
+import { buildRemixClonePayload, makeBatchSkeleton } from './clone-builder';
 import type { CloneBuilderInput } from './clone-builder';
 import type { RemixConfig } from '@/types/remix';
 import type { Character } from '@/types/character-types';
 import type { Prop } from '@/types/prop-types';
 import type { IllustrationData } from '@/types/illustration-types';
-import type { SpreadImage, SpreadAutoPic, SpreadTag } from '@/types/spread-types';
 
 // ── Fixture builders ─────────────────────────────────────────────────────────
 
@@ -35,63 +37,16 @@ function makeProp(key: string, name: string): Prop {
   } as unknown as Prop;
 }
 
-/** Tag helpers — `subject` counts toward classification, `role` (type=other) does not. */
-function subjectTag(type: 'character' | 'prop', objectKey: string, variant = 'v1'): SpreadTag {
-  return { type, object_key: objectKey, variant_key: variant };
-}
-function roleTag(objectKey: 'background' | 'foreground' | 'vfx' = 'background'): SpreadTag {
-  return { type: 'other', object_key: objectKey, variant_key: null };
-}
-
-/** A tagged image layer on a spread. */
-function makeImage(id: string, tags: SpreadTag[]): SpreadImage {
-  return {
-    id,
-    media_url: `https://cdn/${id}.png`,
-    aspect_ratio: '1:1',
-    geometry: { x: 0, y: 0, w: 100, h: 100 },
-    'z-index': 0,
-    tags,
-  } as unknown as SpreadImage;
-}
-
-/** A tagged auto_pic (animated, e.g. .lottie) layer — must NOT become a crop. */
-function makeAutoPic(id: string, tags: SpreadTag[]): SpreadAutoPic {
-  return {
-    id,
-    media_url: `https://cdn/${id}.lottie`,
-    geometry: { x: 0, y: 0, w: 100, h: 100 },
-    'z-index': 0,
-    tags,
-  } as unknown as SpreadAutoPic;
-}
-
-/** A minimal spread carrying tagged image (and optionally auto_pic) layers. */
-function makeSpread(
-  id: string,
-  pageNumber: number,
-  images: SpreadImage[],
-  autoPics: SpreadAutoPic[] = [],
-) {
-  return {
-    id,
-    pages: [{ number: pageNumber, type: 'normal_page', layout: null, background: { color: '#fff', texture: null } }],
-    images,
-    auto_pics: autoPics,
-    textboxes: [],
-  };
-}
-
-function makeIllustration(spreads: ReturnType<typeof makeSpread>[]): IllustrationData {
-  return { spreads, sections: [] } as unknown as IllustrationData;
+function makeIllustration(): IllustrationData {
+  return { spreads: [], sections: [] } as unknown as IllustrationData;
 }
 
 interface BuildOpts {
   characters?: Character[];
   props?: Prop[];
-  spreads?: ReturnType<typeof makeSpread>[];
   enabledCharKeys?: string[];
   enabledPropKeys?: string[];
+  name?: string;
 }
 
 /** Build a CloneBuilderInput + RemixConfig. By default every passed character /
@@ -104,7 +59,7 @@ function build(opts: BuildOpts = {}) {
 
   const input: CloneBuilderInput = {
     snapshotId: 'snap-1',
-    illustration: makeIllustration(opts.spreads ?? []),
+    illustration: makeIllustration(),
     characters,
     props,
   };
@@ -126,248 +81,78 @@ function build(opts: BuildOpts = {}) {
     languages: ['vi_VN'],
   } as unknown as RemixConfig;
 
-  return buildRemixClonePayload(input, config, 'Test Remix');
+  return buildRemixClonePayload(input, config, opts.name ?? 'Test Remix');
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
+// ── makeBatchSkeleton ─────────────────────────────────────────────────────────
 
-describe('buildRemixClonePayload — clone-builder Phase 03', () => {
-  // Case 1: config-enabled char/prop with 0 layer tags → still 1 sheet, crops:[].
-  it('config-enabled char/prop with no tagged layer still gets exactly 1 empty sheet', () => {
+describe('makeBatchSkeleton', () => {
+  it('builds an empty batch with a uuid id, the given order/name, empty crop_sheets', () => {
+    const b = makeBatchSkeleton(0, 'Batch 1');
+    expect(b.order).toBe(0);
+    expect(b.name).toBe('Batch 1');
+    expect(b.crop_sheets).toEqual([]);
+    expect(typeof b.id).toBe('string');
+    expect(b.id.length).toBeGreaterThan(0);
+    // rev2: no legacy `keys[]` lineup on the batch.
+    expect((b as unknown as { keys?: unknown }).keys).toBeUndefined();
+  });
+
+  it('mints a distinct id per call', () => {
+    expect(makeBatchSkeleton(0, 'a').id).not.toBe(makeBatchSkeleton(0, 'b').id);
+  });
+});
+
+// ── buildRemixClonePayload (rev2 batch model) ─────────────────────────────────
+
+describe('buildRemixClonePayload — rev2 batch model', () => {
+  it('produces exactly one empty batch skeleton (entities carry no crops)', () => {
     const r = build({
       characters: [makeChar('c1', 'Miu')],
       props: [makeProp('p1', 'Sword')],
-      spreads: [],
+    });
+    expect(r.mixes).toHaveLength(1);
+    expect(r.mixes[0].order).toBe(0);
+    expect(r.mixes[0].name).toBe('Batch 1');
+    expect(r.mixes[0].crop_sheets).toEqual([]);
+    expect(typeof r.mixes[0].id).toBe('string');
+  });
+
+  it('clones enabled entities with an EMPTY crop_sheets[] (crops live on the batch)', () => {
+    const r = build({
+      characters: [makeChar('c1', 'Miu')],
+      props: [makeProp('p1', 'Sword')],
     });
     expect(r.characters).toHaveLength(1);
-    expect(r.characters[0].crop_sheets).toHaveLength(1);
-    expect(r.characters[0].crop_sheets[0]).toEqual({
-      title: 'sheet 1',
-      sheet_geometry: { width: 0, height: 0 },
-      image_url: '',
-      swap_results: [],
-      crops: [],
-      variant_key: null,
-    });
-    expect(r.props[0].crop_sheets).toHaveLength(1);
-    expect(r.props[0].crop_sheets[0].crops).toEqual([]);
+    expect(r.characters[0].key).toBe('c1');
+    expect(r.characters[0].crop_sheets).toEqual([]);
+    expect(r.props).toHaveLength(1);
+    expect(r.props[0].crop_sheets).toEqual([]);
   });
 
-  // Case 2: layer with 1 character subject tag → crop goes to that character.
-  it('layer with 1 character subject tag pushes crop into that character sheet', () => {
-    const r = build({
-      characters: [makeChar('c1', 'Miu')],
-      spreads: [makeSpread('s1', 1, [makeImage('img1', [subjectTag('character', 'c1')])])],
-    });
-    expect(r.characters[0].crop_sheets).toHaveLength(1);
-    expect(r.characters[0].crop_sheets[0].crops).toHaveLength(1);
-    expect(r.characters[0].crop_sheets[0].crops[0].media_url).toBe('https://cdn/img1.png');
-    expect(r.characters[0].crop_sheets[0].crops[0].spread_number).toBe(1);
-    expect(r.mixes).toHaveLength(0);
-  });
-
-  // Case 3: layer with 2 subject tags → crop goes to mix, NOT to either character.
-  it('layer with 2 subject tags pushes crop into a mix, not the 2 characters', () => {
-    const r = build({
-      characters: [makeChar('c1', 'Miu'), makeChar('c2', 'Lulu')],
-      spreads: [
-        makeSpread('s1', 1, [
-          makeImage('img1', [subjectTag('character', 'c1'), subjectTag('character', 'c2')]),
-        ]),
-      ],
-    });
-    expect(r.characters[0].crop_sheets[0].crops).toHaveLength(0);
-    expect(r.characters[1].crop_sheets[0].crops).toHaveLength(0);
-    expect(r.mixes).toHaveLength(1);
-    // keys are now a variant-qualified full-cast lineup (`${key}/${variant}`).
-    expect(r.mixes[0].keys).toEqual(['c1/v1', 'c2/v1']);
-    expect(r.mixes[0].crop_sheets).toHaveLength(1);
-    expect(r.mixes[0].crop_sheets[0].crops).toHaveLength(1);
-  });
-
-  // Case 4: BUG GUARD — 1 subject tag + 1 role(`other`) tag → still single-subject.
-  // Old code filtered on tags.length (counted ALL tag types) → would skip this.
-  it('layer with 1 subject tag + 1 role tag is still classified single-subject', () => {
-    const r = build({
-      characters: [makeChar('c1', 'Miu')],
-      spreads: [
-        makeSpread('s1', 1, [
-          makeImage('img1', [subjectTag('character', 'c1'), roleTag('background')]),
-        ]),
-      ],
-    });
-    // Role tag must NOT bump the subject count → crop lands on the character.
-    expect(r.characters[0].crop_sheets[0].crops).toHaveLength(1);
-    expect(r.mixes).toHaveLength(0);
-  });
-
-  // Case 5: mix dedup — same subject combo across spreads (any tag order) → 1 mix.
-  it('dedups mixes by canonical sorted-key signature regardless of tag order', () => {
-    const r = build({
-      characters: [makeChar('c1', 'Miu'), makeChar('c2', 'Lulu')],
-      spreads: [
-        makeSpread('s1', 1, [
-          makeImage('img1', [subjectTag('character', 'c1'), subjectTag('character', 'c2')]),
-        ]),
-        makeSpread('s2', 2, [
-          makeImage('img2', [subjectTag('character', 'c2'), subjectTag('character', 'c1')]),
-        ]),
-      ],
-    });
-    expect(r.mixes).toHaveLength(1);
-    expect(r.mixes[0].crop_sheets).toHaveLength(1);
-    expect(r.mixes[0].crop_sheets[0].crops).toHaveLength(2);
-  });
-
-  // Case 6: every key (char + prop + mix) carries exactly 1 crop sheet.
-  it('every char/prop/mix key has crop_sheets.length === 1', () => {
-    const r = build({
-      characters: [makeChar('c1', 'Miu'), makeChar('c2', 'Lulu')],
-      props: [makeProp('p1', 'Sword')],
-      spreads: [
-        makeSpread('s1', 1, [makeImage('img1', [subjectTag('character', 'c1')])]),
-        makeSpread('s2', 2, [makeImage('img2', [subjectTag('prop', 'p1')])]),
-        makeSpread('s3', 3, [
-          makeImage('img3', [subjectTag('character', 'c1'), subjectTag('prop', 'p1')]),
-        ]),
-      ],
-    });
-    for (const c of r.characters) expect(c.crop_sheets).toHaveLength(1);
-    for (const p of r.props) expect(p.crop_sheets).toHaveLength(1);
-    for (const m of r.mixes) expect(m.crop_sheets).toHaveLength(1);
-  });
-
-  // Case 7: disabled config keys are excluded; only enabled keys produce sheets.
   it('excludes config-disabled char/prop keys from the payload', () => {
     const r = build({
       characters: [makeChar('c1', 'Miu'), makeChar('c2', 'Lulu')],
       props: [makeProp('p1', 'Sword')],
       enabledCharKeys: ['c1'],
       enabledPropKeys: [],
-      spreads: [],
     });
     expect(r.characters.map((c) => c.key)).toEqual(['c1']);
     expect(r.props).toHaveLength(0);
-    expect(r.characters[0].crop_sheets).toHaveLength(1);
+    // Still exactly one batch even with no crops anywhere.
+    expect(r.mixes).toHaveLength(1);
   });
 
-  // Case 8: BUG GUARD — an auto_pic (animated, e.g. .lottie) layer tagged to a
-  // subject must NOT become a crop. Crop sheets carry static-image crops only.
-  it('ignores tagged auto_pic (animated) layers — no crop produced', () => {
-    const r = build({
-      characters: [makeChar('c1', 'Miu')],
-      spreads: [
-        makeSpread('s1', 1, [], [makeAutoPic('anim1', [subjectTag('character', 'c1')])]),
-      ],
-    });
-    expect(r.characters[0].crop_sheets[0].crops).toEqual([]);
-  });
-
-  // Case 9: only 1 of 2 co-occurring subjects enabled → not a mix; fold into
-  // the enabled entity (leela enabled, didi disabled → leela crop, 0 mixes).
-  it('folds a co-occurrence into the single enabled subject when others are disabled', () => {
-    const r = build({
-      characters: [makeChar('leela', 'Leela'), makeChar('didi', 'Didi')],
-      enabledCharKeys: ['leela'],
-      spreads: [
-        makeSpread('s1', 1, [
-          makeImage('img1', [
-            subjectTag('character', 'didi'),
-            subjectTag('character', 'leela'),
-          ]),
-        ]),
-      ],
-    });
-    expect(r.characters.map((c) => c.key)).toEqual(['leela']);
-    expect(r.characters[0].crop_sheets[0].crops).toHaveLength(1);
-    expect(r.mixes).toHaveLength(0);
+  it('passes through snapshot_id + remix_config + cloned illustration', () => {
+    const r = build({ characters: [makeChar('c1', 'Miu')] });
+    expect(r.snapshot_id).toBe('snap-1');
+    expect(r.remix_config).toBeDefined();
+    expect(r.illustration).toBeDefined();
+    expect(r.illustration.spreads).toEqual([]);
   });
 });
 
-// ── Variant-lineup mixes (full-cast, base-variant dedup) ─────────────────────
-
-function makeCharVariants(
-  key: string,
-  name: string,
-  variants: { key: string; type: 0 | 1 }[],
-): Character {
-  return {
-    key,
-    name,
-    description: '',
-    variants: variants.map((v) => ({ key: v.key, name: v.key, type: v.type })),
-    crop_sheets: [],
-  } as unknown as Character;
-}
-function makePropVariants(
-  key: string,
-  name: string,
-  variants: { key: string; type: 0 | 1 }[],
-): Prop {
-  return {
-    key,
-    name,
-    description: '',
-    variants: variants.map((v) => ({ key: v.key, name: v.key, type: v.type })),
-    crop_sheets: [],
-    sounds: [],
-  } as unknown as Prop;
-}
-
-describe('buildRemixClonePayload — variant-lineup mixes', () => {
-  // User spec: A(a1,a2), B(b1), C(c1), prop D(d1) enabled. Two groups emerge:
-  //   group1 {A/a1,B/b1,C/c1,D/d1} ← (a1,b1),(b1,c1),(b1,c1,d1)  (A base-filled)
-  //   group2 {A/a2,B/b1,C/c1,D/d1} ← (a2,c1),(a2,d1)
-  it('groups multi-subject crops by full-cast variant lineup with base-variant dedup', () => {
-    const r = build({
-      characters: [
-        makeCharVariants('A', 'Aria', [
-          { key: 'a1', type: 0 },
-          { key: 'a2', type: 1 },
-        ]),
-        makeCharVariants('B', 'Bee', [{ key: 'b1', type: 0 }]),
-        makeCharVariants('C', 'Cleo', [{ key: 'c1', type: 0 }]),
-      ],
-      props: [makePropVariants('D', 'Drum', [{ key: 'd1', type: 0 }])],
-      spreads: [
-        makeSpread('s1', 1, [
-          makeImage('i1', [subjectTag('character', 'A', 'a1'), subjectTag('character', 'B', 'b1')]),
-          makeImage('i2', [subjectTag('character', 'B', 'b1'), subjectTag('character', 'C', 'c1')]),
-        ]),
-        makeSpread('s2', 2, [
-          makeImage('i3', [
-            subjectTag('character', 'B', 'b1'),
-            subjectTag('character', 'C', 'c1'),
-            subjectTag('prop', 'D', 'd1'),
-          ]),
-          makeImage('i4', [subjectTag('character', 'A', 'a2'), subjectTag('character', 'C', 'c1')]),
-          makeImage('i5', [subjectTag('character', 'A', 'a2'), subjectTag('prop', 'D', 'd1')]),
-        ]),
-      ],
-    });
-
-    expect(r.mixes).toHaveLength(2);
-
-    const g1 = r.mixes.find((m) => m.keys.includes('A/a1'));
-    const g2 = r.mixes.find((m) => m.keys.includes('A/a2'));
-    expect(g1).toBeDefined();
-    expect(g2).toBeDefined();
-
-    // Both groups carry the FULL enabled cast (even members absent from a crop).
-    expect(g1!.keys).toEqual(['A/a1', 'B/b1', 'C/c1', 'D/d1']);
-    expect(g2!.keys).toEqual(['A/a2', 'B/b1', 'C/c1', 'D/d1']);
-
-    // (a1,b1),(b1,c1),(b1,c1,d1) → group1 ; (a2,c1),(a2,d1) → group2
-    expect(g1!.crop_sheets[0].crops).toHaveLength(3);
-    expect(g2!.crop_sheets[0].crops).toHaveLength(2);
-
-    // Name disambiguates the multi-variant entity, leaves single-variant clean.
-    expect(g1!.name).toBe('Aria (a1) & Bee & Cleo & Drum');
-    expect(g2!.name).toBe('Aria (a2) & Bee & Cleo & Drum');
-  });
-});
-
-// ── Reshape 2026-05-20/21: base_image_url → variant.visual_swap_url + name ────
+// ── base_image_url copy + default name ────────────────────────────────────────
 
 /** Character carrying a base variant (type=0) so visual_swap_url can be copied. */
 function makeCharWithBaseVariant(key: string, name: string): Character {
@@ -408,7 +193,7 @@ function makeReshapedConfig(baseImageUrl: string | null): RemixConfig {
     props: [],
     voices: [],
     languages: [],
-  };
+  } as unknown as RemixConfig;
 }
 
 describe('buildRemixClonePayload — base_image_url copy + default name', () => {
@@ -416,7 +201,7 @@ describe('buildRemixClonePayload — base_image_url copy + default name', () => 
     const r = buildRemixClonePayload(
       {
         snapshotId: 'snap-1',
-        illustration: makeIllustration([]),
+        illustration: makeIllustration(),
         characters: [makeCharWithBaseVariant('c1', 'Miu')],
         props: [],
       },
@@ -432,7 +217,7 @@ describe('buildRemixClonePayload — base_image_url copy + default name', () => 
     const r = buildRemixClonePayload(
       {
         snapshotId: 'snap-1',
-        illustration: makeIllustration([]),
+        illustration: makeIllustration(),
         characters: [makeCharWithBaseVariant('c1', 'Miu')],
         props: [],
       },
@@ -446,7 +231,7 @@ describe('buildRemixClonePayload — base_image_url copy + default name', () => 
     const r = buildRemixClonePayload(
       {
         snapshotId: 'snap-1',
-        illustration: makeIllustration([]),
+        illustration: makeIllustration(),
         characters: [makeCharWithBaseVariant('c1', 'Miu')],
         props: [],
       },

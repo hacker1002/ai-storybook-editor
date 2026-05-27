@@ -5,13 +5,41 @@
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
-import type { BackgroundJobRow } from '@/types/remix';
+import { newUuid } from '@/utils/uuid';
+import type { BackgroundJobRow, Remix, RemixMix } from '@/types/remix';
+import {
+  DIMENSION_CANVAS_SIZE,
+  DEFAULT_CANVAS_SIZE,
+} from '@/constants/canvas-dimension-constants';
+import { computeCropSheetLayout } from '@/utils/crop-sheet-layout-engine';
+import { groupCropsForBatch } from '@/utils/crop-grouping';
+import { buildSheetsFromLayout } from '../crop-sheet-layout';
 import { mapRowToRemix } from '../supabase-mapping';
 import { mapRowToJob } from '../map-background-job-row';
 import { pruneSupersededJobs } from '../slice-helpers';
+import { useBookStore } from '../../book-store';
 import type { RemixSyncSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
+
+/** Detect a remix still on the legacy (pre-batch) shape. Idempotent guard for
+ *  `migrateLegacyRemixToBatch` — true when there's no batch, a batch is missing
+ *  its uuid `id`, a batch still carries the legacy `keys[]` lineup, or crops are
+ *  still attached to entity `crop_sheets[]`. */
+function needsBatchMigration(remix: Remix): boolean {
+  if (remix.mixes.length === 0) return true;
+  if (
+    remix.mixes.some(
+      (m) => m.id == null || (m as { keys?: unknown }).keys != null,
+    )
+  ) {
+    return true;
+  }
+  const hasEntityCrops = [...remix.characters, ...remix.props].some((e) =>
+    (e.crop_sheets ?? []).some((s) => (s.crops ?? []).length > 0),
+  );
+  return hasEntityCrops;
+}
 
 export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
   set,
@@ -231,5 +259,92 @@ export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
           });
         });
     }
+  },
+
+  migrateLegacyRemixToBatch: async (remixId) => {
+    const prevRemix = get().remixes.find((r) => r.id === remixId);
+    if (!prevRemix) {
+      log.warn('migrateLegacyRemixToBatch', 'remix not found — skip', {
+        remixId,
+      });
+      return false;
+    }
+    if (!needsBatchMigration(prevRemix)) {
+      log.debug('migrateLegacyRemixToBatch', 'no migration needed', { remixId });
+      return false;
+    }
+
+    log.info('migrateLegacyRemixToBatch', 'start', {
+      remixId,
+      mixCount: prevRemix.mixes.length,
+    });
+
+    // Rebuild crops from the frozen illustration tags (single source of truth) —
+    // NOT from legacy entity/mix crops (no longer type-valid post-reshape).
+    const dimension = useBookStore.getState().currentBook?.dimension ?? null;
+    const spread =
+      dimension == null
+        ? DEFAULT_CANVAS_SIZE
+        : DIMENSION_CANVAS_SIZE[dimension] ?? DEFAULT_CANVAS_SIZE;
+    const { cropInputs, cropMetaById } = groupCropsForBatch(prevRemix);
+    const layout = computeCropSheetLayout(cropInputs, { sheetCount: 1, spread });
+
+    // Preserve an existing valid batch id (idempotent re-shape); else a new uuid.
+    const existingId = prevRemix.mixes.find((m) => typeof m.id === 'string')?.id;
+    const batch: RemixMix = {
+      id: existingId ?? newUuid(),
+      order: 0,
+      name: 'Batch 1',
+      crop_sheets: buildSheetsFromLayout(layout, cropMetaById),
+    };
+
+    // Optimistic: single batch + cleared entity crop_sheets.
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === remixId
+          ? {
+              ...r,
+              mixes: [batch],
+              characters: r.characters.map((c) => ({ ...c, crop_sheets: [] })),
+              props: r.props.map((p) => ({ ...p, crop_sheets: [] })),
+            }
+          : r,
+      ),
+    }));
+
+    const remixAfter = get().remixes.find((r) => r.id === remixId);
+    if (!remixAfter) {
+      log.warn('migrateLegacyRemixToBatch', 'remix gone before persist — skip', {
+        remixId,
+      });
+      return false;
+    }
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({
+        mixes: remixAfter.mixes,
+        characters: remixAfter.characters,
+        props: remixAfter.props,
+      })
+      .eq('id', remixId);
+
+    if (error) {
+      log.error('migrateLegacyRemixToBatch', 'persist failed — rollback', {
+        remixId,
+        error: error.message,
+      });
+      set((s) => ({
+        remixes: s.remixes.map((r) => (r.id === remixId ? prevRemix : r)),
+      }));
+      return false;
+    }
+
+    log.info('migrateLegacyRemixToBatch', 'done', {
+      remixId,
+      batchId: batch.id,
+      sheetCount: batch.crop_sheets.length,
+    });
+    return true;
   },
 });
