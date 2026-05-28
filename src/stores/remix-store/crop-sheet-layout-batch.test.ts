@@ -20,11 +20,12 @@ import {
   addBatch,
   removeBatch,
   relayoutBatchSheets,
+  currentCropsOfBatch,
   type RelayoutDeps,
 } from './crop-sheet-layout';
 import { deriveBatchSwapTask } from './selectors';
 import type { CropSheetUpdate } from './types';
-import type { Remix, RemixMix, RemixJob } from '@/types/remix';
+import type { CropEntry, Remix, RemixMix, RemixJob } from '@/types/remix';
 import type { SpreadTag } from '@/types/spread-types';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -53,7 +54,36 @@ function spreadWithCrop(id: string, page: number, layerId: string, objectKey: st
   };
 }
 
-function makeBatch(id: string, order: number, name: string, withSwap = false): RemixMix {
+/** Build a CropEntry matching the spread fixture (`spreadWithCrop`). Used to
+ *  populate a batch lineup so `currentCropsOfBatch` returns non-empty subsets
+ *  (rev6 `addBatch` subset path + `relayoutBatchSheets` per-batch scope). */
+function makeCropEntry(spreadId: string, layerId: string, objectKey: string): CropEntry {
+  return {
+    spread_id: spreadId,
+    id: layerId,
+    layer_kind: 'image',
+    spread_number: spreadId === 's1' ? 1 : 2,
+    aspect_ratio: '1:1',
+    name: 'v1',
+    tags: [tag(objectKey)],
+    media_url: `https://cdn/${layerId}.png`,
+    geometry: { x: 0, y: 0, w: 0, h: 0 },
+  };
+}
+
+/** A batch fixture that can carry a real `crops[]` lineup so rev6 subset filters
+ *  + per-batch relayout have something to work with. `cropIds` defaults to the
+ *  illustration's full set (`i1`, `i2`). Pass `[]` to simulate an empty batch. */
+function makeBatch(
+  id: string,
+  order: number,
+  name: string,
+  withSwap = false,
+  cropIds: Array<{ spreadId: string; layerId: string; objectKey: string }> = [
+    { spreadId: 's1', layerId: 'i1', objectKey: 'c1' },
+    { spreadId: 's2', layerId: 'i2', objectKey: 'c1' },
+  ],
+): RemixMix {
   return {
     id,
     order,
@@ -66,7 +96,7 @@ function makeBatch(id: string, order: number, name: string, withSwap = false): R
         swap_results: withSwap
           ? [{ media_url: 'https://cdn/swap.png', created_time: 't', is_selected: true, crops: [] }]
           : [],
-        crops: [],
+        crops: cropIds.map((c) => makeCropEntry(c.spreadId, c.layerId, c.objectKey)),
       },
     ],
   };
@@ -117,37 +147,121 @@ beforeEach(() => {
   updateEq.mockResolvedValue({ error: null });
 });
 
-// ── addBatch ────────────────────────────────────────────────────────────────
+// ── currentCropsOfBatch (helper) ────────────────────────────────────────────
 
-describe('addBatch', () => {
-  it('appends a new batch (fresh uuid id, K=1 sheets from enabled crops) + persists', async () => {
+describe('currentCropsOfBatch', () => {
+  it('returns deduplicated crops across all sheets of the batch', () => {
+    const batch: RemixMix = {
+      id: 'b1',
+      order: 0,
+      name: 'Batch 1',
+      crop_sheets: [
+        {
+          title: 'sheet 1',
+          sheet_geometry: { width: 100, height: 100 },
+          image_url: '',
+          swap_results: [],
+          crops: [makeCropEntry('s1', 'i1', 'c1'), makeCropEntry('s2', 'i2', 'c1')],
+        },
+        {
+          // Duplicate (s1/i1) on a second sheet — must collapse to ONE entry.
+          title: 'sheet 2',
+          sheet_geometry: { width: 100, height: 100 },
+          image_url: '',
+          swap_results: [],
+          crops: [makeCropEntry('s1', 'i1', 'c1')],
+        },
+      ],
+    };
+    const out = currentCropsOfBatch(batch);
+    expect(out.map((c) => `${c.spread_id}/${c.id}`)).toEqual(['s1/i1', 's2/i2']);
+  });
+
+  it('returns an empty array for a batch with no crops', () => {
+    expect(currentCropsOfBatch(makeBatch('b1', 0, 'Batch 1', false, []))).toEqual([]);
+  });
+});
+
+// ── addBatch (rev6 — subset signature) ─────────────────────────────────────
+
+describe('addBatch (rev6 subset)', () => {
+  it('appends a new batch packed from the SELECTED subset (K=1) + returns new id', async () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
 
-    const ok = await addBatch(deps, 'remix-1');
-    expect(ok).toBe(true);
+    // Pick only the s1/i1 crop — the new batch must contain ONLY that crop.
+    const selection = new Set<string>(['s1/i1']);
+    const newId = await addBatch(deps, 'remix-1', 'b1', selection);
+
+    expect(newId).not.toBeNull();
+    expect(typeof newId).toBe('string');
+    expect(newId).not.toBe('b1');
 
     const mixes = deps.state.remixes[0].mixes;
     expect(mixes).toHaveLength(2);
     const added = mixes[1];
-    expect(added.id).not.toBe('b1');
-    expect(typeof added.id).toBe('string');
+    expect(added.id).toBe(newId);
     expect(added.order).toBe(1);
-    // K=1 — exactly one crop sheet packed from the enabled crops.
     expect(added.crop_sheets).toHaveLength(1);
-    expect(added.crop_sheets[0].crops.length).toBeGreaterThan(0);
+    // Subset filter actually narrowed the lineup.
+    const addedKeys = added.crop_sheets[0].crops.map(
+      (c) => `${c.spread_id}/${c.id}`,
+    );
+    expect(addedKeys).toEqual(['s1/i1']);
     expect(updateEq).toHaveBeenCalledTimes(1);
   });
 
-  it('rolls back the optimistic push when persist fails', async () => {
+  it('throws on empty selection (no UI bug should ever call this with empty)', async () => {
+    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
+    const deps = makeDeps(remix);
+
+    await expect(addBatch(deps, 'remix-1', 'b1', new Set())).rejects.toThrow(
+      /non-empty/i,
+    );
+    // No optimistic push, no persist.
+    expect(deps.state.remixes[0].mixes).toHaveLength(1);
+    expect(updateEq).not.toHaveBeenCalled();
+  });
+
+  it('throws when selection has zero matches against the active batch (stale keys)', async () => {
+    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
+    const deps = makeDeps(remix);
+
+    const stale = new Set<string>(['s9/i9', 's8/i8']);
+    await expect(addBatch(deps, 'remix-1', 'b1', stale)).rejects.toThrow(
+      /stale|match/i,
+    );
+    expect(deps.state.remixes[0].mixes).toHaveLength(1);
+    expect(updateEq).not.toHaveBeenCalled();
+  });
+
+  it('returns null and rolls back when persist fails', async () => {
     updateEq.mockResolvedValueOnce({ error: { message: 'db down' } });
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
 
-    const ok = await addBatch(deps, 'remix-1');
-    expect(ok).toBe(false);
+    const newId = await addBatch(
+      deps,
+      'remix-1',
+      'b1',
+      new Set<string>(['s1/i1']),
+    );
+    expect(newId).toBeNull();
     // Rolled back to the single original batch.
     expect(deps.state.remixes[0].mixes.map((m) => m.id)).toEqual(['b1']);
+  });
+
+  it('returns null when the remix is missing', async () => {
+    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
+    const deps = makeDeps(remix);
+    const newId = await addBatch(
+      deps,
+      'unknown-remix',
+      'b1',
+      new Set<string>(['s1/i1']),
+    );
+    expect(newId).toBeNull();
+    expect(updateEq).not.toHaveBeenCalled();
   });
 });
 
@@ -206,6 +320,26 @@ describe('relayoutBatchSheets', () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
     expect(await relayoutBatchSheets(deps, 'remix-1', 'nope', +1)).toBe(false);
+  });
+
+  it('rev6: uses PER-BATCH scope (subset) instead of full illustration', async () => {
+    // batch carries ONLY the s1/i1 crop (subset of the illustration which has
+    // s1/i1 + s2/i2). After relayout the rebuilt sheets must still carry that
+    // subset only — not pull in the missing s2/i2 from the full grouping.
+    const subsetBatch = makeBatch('b1', 0, 'Batch 1', false, [
+      { spreadId: 's1', layerId: 'i1', objectKey: 'c1' },
+    ]);
+    const remix = makeRemix([subsetBatch]);
+    const deps = makeDeps(remix);
+
+    const ok = await relayoutBatchSheets(deps, 'remix-1', 'b1', +1); // K: 1 → 2
+    expect(ok).toBe(true);
+
+    const sheets = deps.state.remixes[0].mixes[0].crop_sheets;
+    // Union of crop ids across the rebuilt sheets — must be the subset {i1}.
+    const ids = new Set<string>();
+    for (const s of sheets) for (const c of s.crops) ids.add(`${c.spread_id}/${c.id}`);
+    expect([...ids].sort()).toEqual(['s1/i1']);
   });
 });
 

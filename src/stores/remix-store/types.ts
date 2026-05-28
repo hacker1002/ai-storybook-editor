@@ -94,10 +94,30 @@ export interface RemixJobsSlice {
 /** Batch lifecycle (add/remove batch + append/remove batch sheet) + per-variant
  *  visual-swap persist (rev2 — batch model). */
 export interface RemixSwapSlice {
-  /** Appends a NEW batch (fresh uuid + K=1 sheets from all enabled-subject
-   *  crops). Optimistic push + `mixes` persist with full-remix rollback.
-   *  Resolves `true` on success. */
-  addBatch: (remixId: string) => Promise<boolean>;
+  /** Appends a NEW batch as a SUBSET clone of the active batch (rev6 — modal
+   *  "Add as Batch" with per-crop selection). `selectedCropKeys` is a set of
+   *  `${spread_id}/${id}` keys identifying the PRE-SWAP crops
+   *  (`sheet.crops[]`, never `swap_results[].crops[]`) the user picked off the
+   *  active batch. K=1 sheets packed from the subset; new batch ordered as
+   *  `max(order)+1`. Optimistic push + `mixes` persist with full-remix
+   *  rollback.
+   *
+   *  THROWS on empty selection OR zero match against the active batch lineup
+   *  (stale keys) — caller must surface the error as a toast. Resolves the
+   *  NEW batch id on persist success so the caller can auto-select it; `null`
+   *  on guard miss / persist failure. */
+  addBatch: (
+    remixId: string,
+    activeBatchId: string,
+    selectedCropKeys: ReadonlySet<string>,
+  ) => Promise<string | null>;
+
+  /** Lazy seed of `mixes[]` for a remix opened in the modal — guards
+   *  `mixes.length >= 1` and delegates to `migrateLegacyRemixToBatch`
+   *  (idempotent). Resolves `true` when a batch was seeded, `false` when the
+   *  remix already has ≥1 batch or guard missed. Thin alias kept on the swap
+   *  slice so modal callers don't need to reach into sync-slice. */
+  seedInitialBatchIfMissing: (remixId: string) => Promise<boolean>;
 
   /** Removes a batch by id. Guarded so the last batch (`mixes.length ===
    *  BATCH_MIN`) cannot be removed. Optimistic + rollback. Resolves `true` on

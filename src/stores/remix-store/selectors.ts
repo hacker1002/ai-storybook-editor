@@ -311,6 +311,7 @@ export const useRemixActions = () =>
       patchRemixCropSheets: s.patchRemixCropSheets,
       startMixSwap: s.startMixSwap,
       addBatch: s.addBatch,
+      seedInitialBatchIfMissing: s.seedInitialBatchIfMissing,
       removeBatch: s.removeBatch,
       appendBatchSheet: s.appendBatchSheet,
       removeBatchSheet: s.removeBatchSheet,

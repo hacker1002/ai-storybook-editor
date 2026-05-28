@@ -41,9 +41,36 @@ export const createSwapSlice: RemixSliceCreator<RemixSwapSlice> = (
   // `swap_results: []`) — i.e. they DESTROY swap_results of the batch. The store
   // does NOT warn. Callers MUST gate on existing swap_results (P08 confirm
   // dialog).
-  addBatch: async (remixId) => {
-    log.info('addBatch', 'invoked', { remixId });
-    return engineAddBatch(buildDeps(), remixId);
+  addBatch: async (remixId, activeBatchId, selectedCropKeys) => {
+    log.info('addBatch', 'invoked', {
+      remixId,
+      activeBatchId,
+      selectionSize: selectedCropKeys.size,
+    });
+    return engineAddBatch(buildDeps(), remixId, activeBatchId, selectedCropKeys);
+  },
+
+  // ── Lazy seed of an initial batch (rev6 — modal mount) ─────────────────
+  // Thin alias to `migrateLegacyRemixToBatch` with a fast-path guard
+  // `mixes.length >= 1`. Both are idempotent — the alias only saves modal
+  // callers a cross-slice reach.
+  seedInitialBatchIfMissing: async (remixId) => {
+    const remix = get().remixes.find((r) => r.id === remixId);
+    if (!remix) {
+      log.warn('seedInitialBatchIfMissing', 'remix not found — skip', {
+        remixId,
+      });
+      return false;
+    }
+    if (remix.mixes.length >= 1) {
+      log.debug('seedInitialBatchIfMissing', 'batch already present — skip', {
+        remixId,
+        mixCount: remix.mixes.length,
+      });
+      return false;
+    }
+    log.info('seedInitialBatchIfMissing', 'delegate to migration', { remixId });
+    return get().migrateLegacyRemixToBatch(remixId);
   },
 
   removeBatch: async (remixId, batchId) => {

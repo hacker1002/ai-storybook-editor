@@ -41,6 +41,7 @@ import type {
   RemixCropSheet,
   SwapPreviewState,
   BatchSwapTaskStatus,
+  SwapResult,
 } from '@/types/remix';
 import { ZOOM, HEADER_HEIGHT_PX } from './swap-modal-constants';
 import { ComposedCropSheet } from './crop-sheet-stage/composed-crop-sheet';
@@ -64,13 +65,20 @@ export interface StageHeaderPrimary {
   onClick: () => void;
 }
 
-/** Discriminated before/after source. The tab owns deriving these. */
+/** Discriminated before/after source. The tab owns deriving these.
+ *
+ *  rev6 — batches mode now carries the full `selectedSwap: SwapResult | null`
+ *  (was `selectedSwapUrl: string | null`). The stage composes the AFTER side
+ *  from `selectedSwap.crops[]` instead of rendering a single <img>, so it needs
+ *  the array (not just the URL). The legacy `media_url` is reached via
+ *  `selectedSwap.media_url` (used by the compare-slider key + the legacy
+ *  single-image fallback when `crops[]` is empty). */
 export type StageSource =
   | { mode: 'variants'; beforeUrl: string | null; afterUrl: string | null }
   | {
       mode: 'batches';
       sheet: RemixCropSheet | null;
-      selectedSwapUrl: string | null;
+      selectedSwap: SwapResult | null;
     };
 
 export interface CropSheetStageProps {
@@ -91,13 +99,31 @@ export interface CropSheetStageProps {
   onToggleCompare: () => void;
   onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
+
+  // ⚡rev6 — Selective add-batch (AFTER selection overlay). Batches-only; the
+  // Variants and Lotties tabs leave these undefined. The Stage re-gates on
+  // mode + selectedSwap.crops + non-compare via `effectiveSelectable` and only
+  // forwards to the AFTER `ComposedCropSheet`. Selection state itself lives in
+  // a `<SelectionProvider>` owned by the modal (Phase 04).
+  /** Caller intent — passes `true` when the modal is in a state where the user
+   *  can mark crops for re-swap (e.g. swap completed, not submitting, not
+   *  running). Stage re-gates on its own preconditions. */
+  selectableSwapCrops?: boolean;
+  /** Set of `${spread_id}/${id}` keys currently selected by the user. */
+  selectedSwapCropKeys?: ReadonlySet<string>;
+  /** Toggle callback fired by per-crop checkboxes; receives the `cropKey`. */
+  onToggleSwapCropSelection?: (cropKey: string) => void;
 }
 
 // ── Source helpers — collapse the discriminated union to canvas primitives ───
 
-/** The "after" image URL for the current mode (null → Compare disabled). */
+/** The "after" image URL for the current mode (null → Compare disabled).
+ *  Batches: derived from `selectedSwap.media_url` (rev6) — still used as the
+ *  Compare-slider remount key + as `compareDisabled` gating. */
 function afterUrlOf(source: StageSource): string | null {
-  return source.mode === 'variants' ? source.afterUrl : source.selectedSwapUrl;
+  return source.mode === 'variants'
+    ? source.afterUrl
+    : (source.selectedSwap?.media_url ?? null);
 }
 
 /** sheet_geometry for the zoom hook (variants have no sheet → null no-op). */
@@ -155,9 +181,29 @@ export function CropSheetStage({
   onToggleCompare,
   onZoomChange,
   onDividerChange,
+  selectableSwapCrops,
+  selectedSwapCropKeys,
+  onToggleSwapCropSelection,
 }: CropSheetStageProps) {
   // Compare needs an "after" to diff the "before" against.
   const compareDisabled = afterUrlOf(source) === null;
+
+  // ⚡rev6 — `effectiveSelectable` gate. Caller (BatchesTab) already derives
+  // `selectableSwapCrops` from its own preconditions (not submitting / not
+  // running / swap completed) but Stage applies a second layer:
+  //   1. mode === 'batches'    — Variants/Lotties never opt in.
+  //   2. selectedSwap !== null — nothing to select if no swap was run.
+  //   3. crops.length > 0      — legacy fallback (single media_url, no crops[])
+  //                              skips the per-crop overlay entirely.
+  //   4. !compareMode          — slider hides per-crop affordances.
+  // The Stage stays presentational: selection state lives in a
+  // `<SelectionProvider>` owned by the modal (Phase 04).
+  const effectiveSelectable =
+    source.mode === 'batches' &&
+    !!selectableSwapCrops &&
+    source.selectedSwap !== null &&
+    (source.selectedSwap.crops?.length ?? 0) > 0 &&
+    !compareMode;
 
   return (
     <section
@@ -184,6 +230,9 @@ export function CropSheetStage({
         isSubmitting={isSubmitting}
         onZoomChange={onZoomChange}
         onDividerChange={onDividerChange}
+        effectiveSelectable={effectiveSelectable}
+        selectedSwapCropKeys={selectedSwapCropKeys}
+        onToggleSwapCropSelection={onToggleSwapCropSelection}
       />
     </section>
   );
@@ -363,6 +412,11 @@ interface StageCanvasProps {
   isSubmitting: boolean | undefined;
   onZoomChange: (zoom: number) => void;
   onDividerChange: (pos: number) => void;
+  // ⚡rev6 — Selection forwarding for the AFTER `ComposedCropSheet`. Already
+  // gated by `CropSheetStage.effectiveSelectable` before reaching here.
+  effectiveSelectable: boolean;
+  selectedSwapCropKeys?: ReadonlySet<string>;
+  onToggleSwapCropSelection?: (cropKey: string) => void;
 }
 
 function StageCanvas({
@@ -374,6 +428,9 @@ function StageCanvas({
   isSubmitting,
   onZoomChange,
   onDividerChange,
+  effectiveSelectable,
+  selectedSwapCropKeys,
+  onToggleSwapCropSelection,
 }: StageCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -437,11 +494,14 @@ function StageCanvas({
           >
             <BatchesCanvasBody
               sheet={source.sheet!}
-              afterUrl={afterUrl}
+              selectedSwap={source.selectedSwap}
               compareMode={compareMode}
               dividerPosition={dividerPosition}
               zoomLevel={zoomLevel}
               onDividerChange={onDividerChange}
+              effectiveSelectable={effectiveSelectable}
+              selectedSwapCropKeys={selectedSwapCropKeys}
+              onToggleSwapCropSelection={onToggleSwapCropSelection}
             />
           </div>
         ) : (
@@ -496,44 +556,99 @@ function StageCanvas({
   );
 }
 
-// ── BatchesCanvasBody — composed sheet (before) ↔ swap image (after) ─────────
+// ── BatchesCanvasBody — composed sheet (before) ↔ composed swap (after) ──────
 
 interface BatchesCanvasBodyProps {
   sheet: RemixCropSheet;
-  afterUrl: string | null;
+  /** rev6 — full SwapResult so AFTER side can compose from `crops[]`. Null
+   *  when nothing has been swapped yet (renders BEFORE only). */
+  selectedSwap: SwapResult | null;
   compareMode: boolean;
   dividerPosition: number;
   zoomLevel: number;
   onDividerChange: (pos: number) => void;
+  // ⚡rev6 — Selection forwarding. Only consumed on the AFTER non-compare path
+  // (compare suppresses per-crop overlays; BEFORE never shows them).
+  effectiveSelectable: boolean;
+  selectedSwapCropKeys?: ReadonlySet<string>;
+  onToggleSwapCropSelection?: (cropKey: string) => void;
 }
 
+/** Renders the batches canvas body in 3 modes:
+ *  - Compare ON + a swap exists → before/after slider, both sides composed.
+ *  - Non-compare + a swap exists → AFTER composed (full sheet of swap crops).
+ *  - No swap → BEFORE composed (legacy default — sheet.crops with ordinal badges).
+ *
+ *  AFTER renders pass `cropsSource='after'` and `selectedSwap`; the composer
+ *  falls back to a single legacy <img> + banner when `selectedSwap.crops[]` is
+ *  empty but a `media_url` is present (pre-rev6 results).
+ *
+ *  rev6 — Selection overlay (per-crop checkbox + outline halo) is forwarded
+ *  ONLY to the AFTER non-compare path. Compare ON keeps the slider clean; the
+ *  legacy single-image fallback never renders a `ComposedCrop`. */
 function BatchesCanvasBody({
   sheet,
-  afterUrl,
+  selectedSwap,
   compareMode,
   dividerPosition,
   zoomLevel,
   onDividerChange,
+  effectiveSelectable,
+  selectedSwapCropKeys,
+  onToggleSwapCropSelection,
 }: BatchesCanvasBodyProps) {
-  if (compareMode && afterUrl !== null) {
+  if (compareMode && selectedSwap !== null) {
     return (
       <CompareBody
-        key={afterUrl}
+        // Remount the uncontrolled slider when the selected swap changes so it
+        // re-applies `defaultPosition`. media_url is a stable per-swap identifier.
+        key={selectedSwap.media_url}
         before={
           <div className="relative h-full w-full">
-            <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
+            <ComposedCropSheet
+              sheet={sheet}
+              zoomLevel={zoomLevel}
+              cropsSource="before"
+            />
           </div>
         }
-        afterUrl={afterUrl}
+        after={
+          <div className="relative h-full w-full">
+            <ComposedCropSheet
+              sheet={sheet}
+              zoomLevel={zoomLevel}
+              cropsSource="after"
+              selectedSwap={selectedSwap}
+            />
+          </div>
+        }
         dividerPosition={dividerPosition}
         onDividerChange={onDividerChange}
       />
     );
   }
-  if (afterUrl !== null) return <CanvasImage key={afterUrl} url={afterUrl} />;
+
+  if (selectedSwap !== null) {
+    return (
+      <div className="relative h-full w-full" key={selectedSwap.media_url}>
+        <ComposedCropSheet
+          sheet={sheet}
+          zoomLevel={zoomLevel}
+          cropsSource="after"
+          selectedSwap={selectedSwap}
+          // rev6 — only the AFTER non-compare path opts into per-crop overlays.
+          selectableSwapCrops={effectiveSelectable}
+          selectedSwapCropKeys={selectedSwapCropKeys}
+          onToggleSwapCropSelection={onToggleSwapCropSelection}
+        />
+      </div>
+    );
+  }
+
+  // No swap yet — BEFORE composed with ordinal badges (default).
   return (
     <div className="relative h-full w-full">
-      <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} />
+      <ComposedCropSheet sheet={sheet} zoomLevel={zoomLevel} cropsSource="before" />
     </div>
   );
 }
@@ -556,11 +671,14 @@ function VariantsCanvasBody({
   onDividerChange,
 }: VariantsCanvasBodyProps) {
   if (compareMode && afterUrl !== null) {
+    // rev6 — CompareBody now takes `after: ReactNode` (the batches branch needs
+    // to compose AFTER, so the slider can't hardcode an <img>). Variants still
+    // wants a portrait img — wrap CanvasImage as the node.
     return (
       <CompareBody
         key={afterUrl}
         before={<CanvasImage url={beforeUrl} />}
-        afterUrl={afterUrl}
+        after={<CanvasImage url={afterUrl} />}
         dividerPosition={dividerPosition}
         onDividerChange={onDividerChange}
       />
@@ -593,17 +711,21 @@ function CanvasImage({ url }: { url: string }) {
 
 interface CompareBodyProps {
   before: React.ReactNode;
-  afterUrl: string;
+  /** rev6 — was `afterUrl: string`. AFTER may now be a composed sheet (batches)
+   *  OR a portrait img (variants), so the caller supplies the node. */
+  after: React.ReactNode;
   dividerPosition: number;
   onDividerChange: (pos: number) => void;
 }
 
-/** before/after compare slider. `before` is mode-specific (composed sheet or
- *  portrait img); `after` is always the swap image. Keyed by the after URL
- *  upstream so the uncontrolled slider resets to `dividerPosition` on change. */
+/** before/after compare slider. Both sides are mode-specific nodes: variants
+ *  pass portrait <img>s; batches pass composed crop sheets. The parent keys
+ *  the body by a stable per-swap identifier (variants: afterUrl; batches:
+ *  selectedSwap.media_url) so the uncontrolled slider resets to
+ *  `dividerPosition` on change. */
 function CompareBody({
   before,
-  afterUrl,
+  after,
   dividerPosition,
   onDividerChange,
 }: CompareBodyProps) {
@@ -614,13 +736,7 @@ function CompareBody({
         onPositionChange={onDividerChange}
         className="relative h-full w-full"
         itemOne={before}
-        itemTwo={
-          <img
-            src={afterUrl}
-            alt="Ảnh swap"
-            className="h-full w-full object-contain"
-          />
-        }
+        itemTwo={after}
       />
       {/* Before/After badges — card-bg token over the image for legibility. */}
       <span className="absolute left-2 top-2 z-10 rounded bg-[var(--swap-modal-card-bg)]/85 px-1.5 py-0.5 text-xs text-[var(--swap-modal-text-secondary)]">

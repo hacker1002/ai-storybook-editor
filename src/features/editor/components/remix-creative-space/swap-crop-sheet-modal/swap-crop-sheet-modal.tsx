@@ -19,7 +19,7 @@
 // On mount the root fires the idempotent legacy→batch migration once, and an
 // effect closes the modal when the underlying remix disappears (realtime).
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -54,6 +54,7 @@ import { SwapParametersSidebar } from './swap-parameters-sidebar';
 import { VariantsTab } from './tabs/variants-tab';
 import { BatchesTab } from './tabs/batches-tab';
 import { LottiesTab } from './tabs/lotties-tab';
+import { SelectionProvider } from './hooks/use-selected-swap-crops';
 import { runVariantSwap } from '../utils/run-variant-swap';
 import { DEFAULT_SWAP_PARAMS, SWAP_MODAL_TOKENS, Z_INDEX, ZOOM } from './swap-modal-constants';
 
@@ -162,7 +163,6 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const anyMixSwapRunning = useAnyMixSwapRunning(target.remixId);
   const {
     setVariantVisualSwapUrl,
-    addBatch,
     removeBatch,
     appendBatchSheet,
     removeBatchSheet,
@@ -373,10 +373,10 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   );
 
   // ── Batch sidebar action callbacks (thin store delegates) ────────────────────
-  const handleAddBatch = useCallback(
-    () => void addBatch(target.remixId),
-    [addBatch, target.remixId],
-  );
+  // Note: `handleAddBatch` lives in `BatchesTab` (rev6 — phase 04 + 05) because
+  // it must read selection state from `useSelectedSwapCrops()`. The modal owns
+  // only the `onActivateBatch` setter that BatchesTab calls after a successful
+  // add (auto-select the newly created batch).
   const handleRemoveBatch = useCallback(
     (batchId: string) => void removeBatch(target.remixId, batchId),
     [removeBatch, target.remixId],
@@ -390,6 +390,41 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
       void removeBatchSheet(target.remixId, batchId, sheetIndex),
     [removeBatchSheet, target.remixId],
   );
+
+  // ── Selection reset key (rev6 — phase 04) ───────────────────────────────────
+  // `SelectionProvider` below wraps `BatchesTab` and holds the per-crop checkbox
+  // selection state. We remount it (→ fresh `new Set()`) by changing its `key`
+  // prop, NOT by `useEffect` + `setState` (React 19 lint — memory
+  // feedback_react19_set_state_in_effect).
+  //
+  // CRITICAL: `activeBatchTotalSwapResultsCount` is the SUM across all sheets in
+  // the active batch (NOT a per-sheet media_url). Switching sheets within the
+  // same batch keeps the sum stable → key stable → selection persists. A
+  // completed swap pushes new `swap_results` entries → sum increases → key
+  // changes → selection resets. See phase-04 gotcha #1.
+  //
+  // Hooks must run before the `if (remix === null) return null` early-return
+  // below — Rules of Hooks.
+  const activeBatch = useMemo(
+    () =>
+      activeBatchRef
+        ? batches.find((b) => b.id === activeBatchRef.batchId) ?? null
+        : null,
+    [batches, activeBatchRef],
+  );
+
+  const activeBatchTotalSwapResultsCount = useMemo(
+    () =>
+      activeBatch
+        ? activeBatch.crop_sheets.reduce(
+            (acc, s) => acc + s.swap_results.length,
+            0,
+          )
+        : 0,
+    [activeBatch],
+  );
+
+  const selectionResetKey = `${activeBatchRef?.batchId ?? '__none__'}::${activeBatchTotalSwapResultsCount}`;
 
   // entity selectors return [] when the remix is gone; the null-remix close is
   // handled by the effect above. Render null for that single frame.
@@ -454,20 +489,28 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
           )}
 
           {activeTab === 'batches' && (
-            <BatchesTab
-              remixId={target.remixId}
-              batches={batches}
-              activeBatchRef={activeBatchRef}
-              submittingBatchId={submittingBatchId}
-              anyMixSwapRunning={anyMixSwapRunning}
-              onSelectBatchSheet={handleSelectBatchSheet}
-              onAddBatch={handleAddBatch}
-              onRemoveBatch={handleRemoveBatch}
-              onAddSheet={handleAddSheet}
-              onRemoveSheet={handleRemoveSheet}
-              onSwapBatch={handleSwapBatch}
-              {...sharedStageProps}
-            />
+            // Keyed remount → selection state inside `SelectionProvider` resets
+            // automatically when `selectionResetKey` changes (batch switch OR
+            // new swap_results pushed). NO useEffect+setState pair — React 19
+            // lint clean by construction. Provider lives at modal scope so tab
+            // switches (variants ↔ batches) preserve identity; only key change
+            // unmounts the subtree.
+            <SelectionProvider key={selectionResetKey}>
+              <BatchesTab
+                remixId={target.remixId}
+                batches={batches}
+                activeBatchRef={activeBatchRef}
+                submittingBatchId={submittingBatchId}
+                anyMixSwapRunning={anyMixSwapRunning}
+                onSelectBatchSheet={handleSelectBatchSheet}
+                onActivateBatch={setActiveBatchRef}
+                onRemoveBatch={handleRemoveBatch}
+                onAddSheet={handleAddSheet}
+                onRemoveSheet={handleRemoveSheet}
+                onSwapBatch={handleSwapBatch}
+                {...sharedStageProps}
+              />
+            </SelectionProvider>
           )}
 
           {activeTab === 'lotties' && <LottiesTab remixId={target.remixId} />}

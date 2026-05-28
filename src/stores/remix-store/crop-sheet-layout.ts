@@ -32,6 +32,32 @@ import type { CropEntry, RemixMix } from '@/types/remix';
 import { makeBatchSkeleton } from './clone-builder';
 import type { CropSheetUpdate } from './types';
 
+/**
+ * Returns the de-duplicated crops currently living in a batch (per-batch
+ * scope — rev6). Reads ONLY the pre-swap `sheet.crops[]` lineup (never
+ * `swap_results[].crops[]`, which is post-swap output). Dedup key
+ * `(spread_id, id)` — a layer that ended up on multiple sheets of the same
+ * batch collapses to one entry (first occurrence wins).
+ *
+ * Used by:
+ *   - `addBatch` rev6 subset filter (selected crops ∈ active batch lineup).
+ *   - `relayoutBatchSheets` per-batch scope (do NOT re-pull the full remix —
+ *     subset batches carry a subset of the illustration's crops).
+ */
+export function currentCropsOfBatch(batch: RemixMix): CropEntry[] {
+  const seen = new Set<string>();
+  const out: CropEntry[] = [];
+  for (const sheet of batch.crop_sheets) {
+    for (const crop of sheet.crops) {
+      const dedupKey = `${crop.spread_id}/${crop.id}`;
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+      out.push(crop);
+    }
+  }
+  return out;
+}
+
 /** Minimum number of batches a remix must keep. The last batch cannot be
  *  removed (caller also hides the affordance). */
 export const BATCH_MIN = 1;
@@ -199,11 +225,28 @@ export async function relayoutBatchSheets(
 
   // Re-group from the frozen illustration — single source of truth for the
   // source (%) geometry the engine needs (post-create crop geometry is px).
-  const { cropInputs, cropMetaById } = groupCropsForBatch(prevRemix);
+  // ⚡rev6: scope per-batch — subset batches carry a strict subset of the
+  // illustration's crops, so we filter the full grouping down to the batch's
+  // (spread_id, id) lineup (`currentCropsOfBatch`). For a full-set batch (e.g.
+  // seeded batch[0]) this collapses to the same result as groupCropsForBatch.
+  const grouped = groupCropsForBatch(prevRemix);
+  const batchCropKeys = new Set(
+    currentCropsOfBatch(batch).map((c) => `${c.spread_id}/${c.id}`),
+  );
+  const cropInputs = grouped.cropInputs.filter((ci) => {
+    const meta = grouped.cropMetaById[ci.id];
+    if (!meta) return false;
+    return batchCropKeys.has(`${meta.spread_id}/${meta.id}`);
+  });
+  const cropMetaById: Record<string, CropEntry> = {};
+  for (const ci of cropInputs) {
+    cropMetaById[ci.id] = grouped.cropMetaById[ci.id];
+  }
   if (cropInputs.length === 0) {
     log.warn('relayoutBatchSheets', 'no crops to layout — abort', {
       remixId,
       batchId,
+      batchSize: batchCropKeys.size,
     });
     return false;
   }
@@ -297,24 +340,98 @@ async function persistMixes(
 }
 
 /**
- * Appends a NEW batch to a remix — a fresh uuid + K=1 sheets packed from ALL
- * enabled-subject crops (same source as `computeCropSheets`). Optimistic push +
- * `mixes` persist with full-remix rollback. Returns `true` on success.
+ * Appends a NEW batch to a remix as a SUBSET clone of the active batch
+ * (rev6 — modal-driven "Add as Batch" with per-crop selection).
+ *
+ * `selectedCropKeys` is the set of `${spread_id}/${id}` keys the user picked
+ * from the ACTIVE batch's pre-swap crops (`sheet.crops[]`, NOT
+ * `swap_results[].crops[]`). The new batch is packed at K=1 from that
+ * subset, then ordered as `max(order)+1`. Optimistic push + `mixes` persist
+ * with full-remix rollback.
+ *
+ * Throws (caller catches + toasts) when:
+ *   - `selectedCropKeys.size === 0` — empty selection is a UI bug.
+ *   - The selection has zero matches against the active batch's lineup —
+ *     stale keys (e.g. modal stayed open across a swap that rebuilt crops).
+ *
+ * Returns the new batch's id on persist success, `null` on guard miss / persist
+ * error (callers can auto-select the new batch on success).
  */
 export async function addBatch(
   deps: RelayoutDeps,
   remixId: string,
-): Promise<boolean> {
+  activeBatchId: string,
+  selectedCropKeys: ReadonlySet<string>,
+): Promise<string | null> {
   const { set, get, dimension } = deps;
-  log.info('addBatch', 'start', { remixId });
+  log.info('addBatch', 'start', {
+    remixId,
+    activeBatchId,
+    selectionSize: selectedCropKeys.size,
+  });
+
+  if (selectedCropKeys.size === 0) {
+    log.warn('addBatch', 'empty selection — throw', { remixId, activeBatchId });
+    throw new Error('addBatch requires a non-empty crop selection');
+  }
 
   const prevRemix = get().remixes.find((r) => r.id === remixId);
   if (!prevRemix) {
     log.warn('addBatch', 'remix not found — abort', { remixId });
-    return false;
+    return null;
   }
 
-  const { cropInputs, cropMetaById } = groupCropsForBatch(prevRemix);
+  const activeBatch =
+    prevRemix.mixes.find((m) => m.id === activeBatchId) ?? prevRemix.mixes[0];
+  if (!activeBatch) {
+    log.warn('addBatch', 'no active batch — abort', { remixId, activeBatchId });
+    return null;
+  }
+
+  // Pre-swap lineup of the active batch (sheet.crops[], NOT swap_results).
+  const activeCrops = currentCropsOfBatch(activeBatch);
+  const subsetKeys = new Set<string>();
+  for (const crop of activeCrops) {
+    const key = `${crop.spread_id}/${crop.id}`;
+    if (selectedCropKeys.has(key)) subsetKeys.add(key);
+  }
+
+  if (subsetKeys.size === 0) {
+    log.warn('addBatch', 'selection has zero matches in active batch — throw', {
+      remixId,
+      activeBatchId,
+      selectionSize: selectedCropKeys.size,
+      activeBatchSize: activeCrops.length,
+    });
+    throw new Error(
+      'addBatch: selection does not match any crop of the active batch (stale)',
+    );
+  }
+
+  // Re-derive engine inputs (source-% geometry) from the frozen illustration
+  // and filter to the subset. CropEntry.geometry is px sheet-relative (engine
+  // output) — we cannot feed it back into the engine, so we use the full
+  // grouping as the canonical source-% lookup keyed by `(spread_id, id)`.
+  const grouped = groupCropsForBatch(prevRemix);
+  const cropInputs = grouped.cropInputs.filter((ci) => {
+    const meta = grouped.cropMetaById[ci.id];
+    if (!meta) return false;
+    return subsetKeys.has(`${meta.spread_id}/${meta.id}`);
+  });
+  const cropMetaById: Record<string, CropEntry> = {};
+  for (const ci of cropInputs) {
+    cropMetaById[ci.id] = grouped.cropMetaById[ci.id];
+  }
+
+  if (cropInputs.length === 0) {
+    log.warn('addBatch', 'subset resolved to no engine inputs — abort', {
+      remixId,
+      activeBatchId,
+      subsetSize: subsetKeys.size,
+    });
+    return null;
+  }
+
   const spread = resolveSpread(dimension);
   const layout = computeCropSheetLayout(cropInputs, { sheetCount: 1, spread });
 
@@ -333,12 +450,18 @@ export async function addBatch(
 
   log.debug('addBatch', 'optimistic push', {
     remixId,
+    activeBatchId,
     batchId: newBatch.id,
     order,
     sheetCount: newBatch.crop_sheets.length,
+    subsetSize: subsetKeys.size,
+    cropCount: cropInputs.length,
   });
 
-  return persistMixes(deps, remixId, prevRemix, 'addBatch');
+  const ok = await persistMixes(deps, remixId, prevRemix, 'addBatch');
+  if (!ok) return null;
+  log.info('addBatch', 'done', { remixId, batchId: newBatch.id });
+  return newBatch.id;
 }
 
 /**

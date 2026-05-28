@@ -14,10 +14,11 @@
 //
 // SECURITY: never log media_url / swap URLs.
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Repeat } from 'lucide-react';
+import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
-import { useRemixVariants } from '@/stores/remix-store';
+import { useRemixVariants, useRemixActions } from '@/stores/remix-store';
 import type { RemixBatch } from '@/types/remix';
 import { missingCharRefs as resolveMissingCharRefs } from './batch-swap-gating';
 import { CropSheetStage } from '../crop-sheet-stage';
@@ -26,6 +27,7 @@ import {
   type RelayoutConfirmKind,
 } from '../relayout-confirm-dialog';
 import { useCollapseState } from '../sidebar/use-collapse-state';
+import { useSelectedSwapCrops } from '../hooks/use-selected-swap-crops';
 import { BatchesSidebar } from './batches-sidebar';
 
 const log = createLogger('Editor', 'BatchesTab');
@@ -37,7 +39,11 @@ export interface BatchesTabProps {
   submittingBatchId: string | null;
   anyMixSwapRunning: boolean;
   onSelectBatchSheet: (batchId: string, sheetIndex: number) => void;
-  onAddBatch: () => void;
+  /** ⚡rev6 — set the modal-owned activeBatchRef after a successful subset
+   *  Add Batch so the new batch (sheet 0) is auto-selected. Replaces the
+   *  former modal-owned `onAddBatch` callback; selective Add Batch now lives
+   *  inside this tab and consumes selection via `useSelectedSwapCrops`. */
+  onActivateBatch: (ref: { batchId: string; sheetIndex: number }) => void;
   onRemoveBatch: (batchId: string) => void;
   onAddSheet: (batchId: string) => void;
   onRemoveSheet: (batchId: string, sheetIndex: number) => void;
@@ -74,7 +80,7 @@ export function BatchesTab({
   submittingBatchId,
   anyMixSwapRunning,
   onSelectBatchSheet,
-  onAddBatch,
+  onActivateBatch,
   onRemoveBatch,
   onAddSheet,
   onRemoveSheet,
@@ -86,8 +92,18 @@ export function BatchesTab({
   onZoomChange,
   onDividerChange,
 }: BatchesTabProps) {
-  const { isCollapsed, toggle } = useCollapseState();
+  const { isCollapsed, toggle: toggleCollapse } = useCollapseState();
   const [pending, setPending] = useState<PendingAction | null>(null);
+
+  // ⚡rev6 — Subset Add Batch selection state lives in `<SelectionProvider>`
+  // mounted by the modal (keyed-remount resets across batch switch + new
+  // swap_results). The tab consumes via the hook, owns `handleAddBatch`.
+  const {
+    keys: selectedSwapCrops,
+    toggle: toggleSwapCropSelection,
+    clear: clearSwapCropSelection,
+  } = useSelectedSwapCrops();
+  const { addBatch } = useRemixActions();
 
   // Read-only variant projection for token → visual_swap_url resolution.
   const variantEntities = useRemixVariants(remixId);
@@ -106,8 +122,11 @@ export function BatchesTab({
       ? clamp(activeBatchRef?.sheetIndex ?? 0, 0, sheetCount - 1)
       : 0;
   const sheet = batch?.crop_sheets[sheetIndex] ?? null;
-  const selectedSwapUrl =
-    sheet?.swap_results.find((s) => s.is_selected)?.media_url ?? null;
+  // rev6 — pass the full SwapResult through to the stage so it can compose the
+  // AFTER side from `crops[]` (legacy single-image fallback when crops is empty
+  // but `media_url` is present). Was: `selectedSwapUrl` (string only).
+  const selectedSwap =
+    sheet?.swap_results.find((s) => s.is_selected) ?? null;
   const swapTask = batch?.swapTask ?? { state: 'idle' as const };
   const isSubmitting = submittingBatchId != null && submittingBatchId === batch?.id;
   const isRunning = swapTask.state === 'running';
@@ -207,16 +226,94 @@ export function BatchesTab({
     onSwapBatch(batch.id);
   };
 
+  // ── Selective Add Batch (rev6 §5.1) ────────────────────────────────────────
+  // The Stage's per-crop checkbox overlay is enabled when a swap result is
+  // selected, Compare is off, and no swap is in flight. The sidebar's [+]
+  // button is gated additionally on a non-empty selection + no foreign swap
+  // running (the active swap already implies `isRunning`/`isSubmitting`).
+  const selectionSize = selectedSwapCrops.size;
+  const stageSelectable =
+    selectedSwap !== null && !compareMode && !isSubmitting && !isRunning;
+  const canAddBatch =
+    selectionSize > 0 && !isSubmitting && !isRunning && !anyMixSwapRunning;
+  const addBatchTooltip =
+    selectionSize === 0
+      ? 'Tick the crops you want to redo first — checkboxes on each crop in the swap result'
+      : anyMixSwapRunning
+        ? 'Wait until the current swap finishes'
+        : '';
+
+  const handleAddBatch = useCallback(async () => {
+    if (selectionSize === 0) {
+      log.warn('handleAddBatch', 'empty selection — abort', {});
+      return;
+    }
+    if (anyMixSwapRunning || isSubmitting || isRunning) {
+      log.warn('handleAddBatch', 'busy — abort', {
+        anyMixSwapRunning,
+        isSubmitting,
+        isRunning,
+      });
+      return;
+    }
+    const activeBatchId = activeBatchRef?.batchId;
+    if (!activeBatchId) {
+      log.warn('handleAddBatch', 'no active batch — abort', {});
+      return;
+    }
+
+    log.info('handleAddBatch', 'start subset add batch', {
+      activeBatchId,
+      selectionSize,
+    });
+
+    try {
+      const newBatchId = await addBatch(
+        remixId,
+        activeBatchId,
+        selectedSwapCrops,
+      );
+      if (newBatchId === null) {
+        log.error('handleAddBatch', 'addBatch returned null', {});
+        toast.error("Couldn't add batch — try again");
+        clearSwapCropSelection();
+        return;
+      }
+      clearSwapCropSelection();
+      onActivateBatch({ batchId: newBatchId, sheetIndex: 0 });
+      log.info('handleAddBatch', 'success', { newBatchId });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add batch';
+      log.error('handleAddBatch', 'failed', { error: msg });
+      toast.error(msg);
+      clearSwapCropSelection();
+    }
+  }, [
+    selectionSize,
+    anyMixSwapRunning,
+    isSubmitting,
+    isRunning,
+    activeBatchRef,
+    addBatch,
+    remixId,
+    selectedSwapCrops,
+    clearSwapCropSelection,
+    onActivateBatch,
+  ]);
+
   return (
     <>
       <BatchesSidebar
         batches={batches}
         activeBatchRef={activeBatchRef}
         isCollapsed={isCollapsed}
-        onToggleCollapse={toggle}
+        onToggleCollapse={toggleCollapse}
         anyMixSwapRunning={anyMixSwapRunning}
+        canAddBatch={canAddBatch}
+        addBatchTooltip={addBatchTooltip}
+        selectionSize={selectionSize}
         onSelectBatchSheet={onSelectBatchSheet}
-        onAddBatch={onAddBatch}
+        onAddBatch={handleAddBatch}
         onRemoveBatch={handleRemoveBatch}
         onAddSheet={handleAddSheet}
         onRemoveSheet={handleRemoveSheet}
@@ -224,7 +321,7 @@ export function BatchesTab({
 
       {batch ? (
         <CropSheetStage
-          source={{ mode: 'batches', sheet, selectedSwapUrl }}
+          source={{ mode: 'batches', sheet, selectedSwap }}
           headerPrimary={{
             label: swapTask.state === 'error' ? 'Retry swap' : 'Swap',
             icon: Repeat,
@@ -241,6 +338,9 @@ export function BatchesTab({
           onToggleCompare={onToggleCompare}
           onZoomChange={onZoomChange}
           onDividerChange={onDividerChange}
+          selectableSwapCrops={stageSelectable}
+          selectedSwapCropKeys={selectedSwapCrops}
+          onToggleSwapCropSelection={toggleSwapCropSelection}
         />
       ) : (
         <section
