@@ -472,7 +472,8 @@ export interface EnhanceImageAnnotationParams {
   language: string;
   art_style?: string;
   prompt?: string; // v1 not sent
-  context?: string;
+  // `context` dropped 2026-05-28 — manuscript dump contaminated the
+  // describe-what-you-see contract. Server FlexibleModel ignores stray fields.
 }
 
 export interface AnnotationItem {
@@ -583,7 +584,6 @@ export async function callEnhanceImageAnnotation(
     count: images.length,
     language,
     hasArtStyle: Boolean(params.art_style),
-    hasContext: Boolean(params.context),
   });
 
   try {

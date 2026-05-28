@@ -64,7 +64,7 @@ export interface EnhanceImageAnnotationModalProps {
   images: AnnotationRowInput[];
   language: string; // LOCKED = book.original_language
   artStyle?: string;
-  context?: string;
+  // `context` dropped 2026-05-28 — see text-api.ts EnhanceImageAnnotationParams.
   onApplyAnnotations: (payload: ApplyAnnotationsPayload) => void;
 }
 
@@ -125,7 +125,6 @@ export function EnhanceImageAnnotationModal({
   images,
   language,
   artStyle,
-  context,
   onApplyAnnotations,
 }: EnhanceImageAnnotationModalProps) {
   const [rows, setRows] = useState<AnnotationRow[]>([]);
@@ -252,7 +251,6 @@ export function EnhanceImageAnnotationModal({
       count: selected.length,
       language,
       hasArtStyle: Boolean(artStyle),
-      hasContext: Boolean(context),
     });
 
     try {
@@ -265,7 +263,6 @@ export function EnhanceImageAnnotationModal({
           })),
           language,
           art_style: artStyle || undefined,
-          context: context || undefined,
         },
         { signal: ctrl.signal }
       );
@@ -348,7 +345,7 @@ export function EnhanceImageAnnotationModal({
       if (abortRef.current === ctrl) abortRef.current = null;
       if (!ctrl.signal.aborted) setIsGenerating(false);
     }
-  }, [canGenerate, rows, language, artStyle, context]);
+  }, [canGenerate, rows, language, artStyle]);
 
   const handleSave = useCallback(() => {
     if (!canSave) return;

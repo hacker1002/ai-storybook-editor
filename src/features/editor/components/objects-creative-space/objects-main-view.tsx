@@ -1089,7 +1089,6 @@ export function ObjectsMainView({
           images={annotationImages}
           language={annotationLanguage}
           artStyle={annotationArtStyle}
-          context={bookContext}
           onApplyAnnotations={handleApplyAnnotations}
         />
       )}
