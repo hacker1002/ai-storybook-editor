@@ -62,7 +62,9 @@ export const BATCH_MIN = 1;
  *  `[cellStrokeMinPx, cellStrokeMaxPx]` so it stays visible at low zoom and
  *  never dominates at high zoom. */
 export const COMPOSER_FRAME = {
-  gutterColor: '#FF00FF',
+  // 2026-05-29: flipped magenta (#FF00FF) → white, parity with backend
+  // DEFAULT_FRAME_GUTTER_COLOR. Cell delineation now relies on the black stroke.
+  gutterColor: '#FFFFFF',
   cellStrokeColor: '#000000',
   cellStrokeWidthSheetPx: 4,
   cellStrokeMinPx: 1,
