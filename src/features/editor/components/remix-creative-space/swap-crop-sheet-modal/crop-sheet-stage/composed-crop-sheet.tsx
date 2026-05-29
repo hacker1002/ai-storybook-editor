@@ -21,6 +21,14 @@ import { createLogger } from '@/utils/logger';
 import type { RemixCropSheet, CropEntry, SwapResult } from '@/types/remix';
 import { COMPOSER_FRAME, resolveStrokePx } from '../swap-modal-constants';
 
+// Checkerboard background — codebase-standard `repeating-conic-gradient` at a
+// 16px tile (≈8px visible squares). Matches `edit-image-modal`,
+// `segment-layer-modal`, `erase-image-modal`, `image-zoom-preview`. Zoom-
+// independent (modal scales via width/height, not `transform`).
+const CHECKERBOARD_BACKGROUND_IMAGE =
+  'repeating-conic-gradient(#e5e7eb 0% 25%, #f9fafb 0% 50%)';
+const CHECKERBOARD_BACKGROUND_SIZE = '16px 16px';
+
 const log = createLogger('Editor', 'ComposedCropSheet');
 
 interface ComposedCropSheetProps {
@@ -184,10 +192,12 @@ interface ComposedCropProps {
  *
  *  Wrapper inflates the crop slot by `cellStrokeWidthPx` on every side and
  *  draws a same-width `cellStrokeColor` border (border-box), reproducing the
- *  composer's per-cell outer stroke. The wrapper is filled with `gutterColor`
- *  so transparent PNG areas read as that colour — matching the flattened PNG
- *  the Python composer bakes (NOT a checkerboard). The ordinal badge sits in
- *  the left gutter strip (see `OrdinalBadge`).
+ *  composer's per-cell outer stroke. The wrapper background is a CSS
+ *  checkerboard (`CHECKERBOARD_*`) so transparent PNG areas read as the tiled
+ *  pattern — this INTENTIONALLY diverges from the composer's flat
+ *  `gutterColor` bake to let editors visually distinguish transparent crops in
+ *  the preview. The ordinal badge sits in the left gutter strip (see
+ *  `OrdinalBadge`).
  *
  *  rev6 — When `selectable` + `onToggleSelection` are both supplied, renders a
  *  top-right `SelectionCheckbox` (fixed 22×22 px, zoom-independent) and adds
@@ -221,7 +231,8 @@ function ComposedCrop({
     borderStyle: 'solid',
     borderWidth: stroke,
     borderColor: COMPOSER_FRAME.cellStrokeColor,
-    backgroundColor: COMPOSER_FRAME.gutterColor,
+    backgroundImage: CHECKERBOARD_BACKGROUND_IMAGE,
+    backgroundSize: CHECKERBOARD_BACKGROUND_SIZE,
   };
 
   // rev6 — Selected-state outline halo. Paints OUTSIDE the composer border, so

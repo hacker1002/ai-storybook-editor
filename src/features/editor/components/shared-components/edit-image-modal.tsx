@@ -392,7 +392,7 @@ export function EditImageModal({
                         {/* Inner wrapper hugs the rendered image rect so the
                             checker bg only shows through genuinely transparent
                             pixels, not through letterbox gaps. */}
-                        <div className="relative rounded-md bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:12px_12px] overflow-hidden">
+                        <div className="relative rounded-md bg-[repeating-conic-gradient(#e5e7eb_0%_25%,#f9fafb_0%_50%)] bg-[length:16px_16px] overflow-hidden">
                           <img
                             src={illustration.media_url}
                             alt={`Illustration ${illustration.origIdx + 1}`}
