@@ -63,20 +63,14 @@ export function RemixSidebar({
   onCancelAudio,
   onDismissJob,
 }: Props) {
-  const [expanded, setExpanded] = useState<Set<string>>(() =>
-    new Set(activeRemixId ? [activeRemixId] : []),
-  );
+  // Single-expand semantics: only one remix open at a time. Eye-click + chevron
+  // toggle + activeRemixId change all funnel through the same id slot.
+  const [expandedId, setExpandedId] = useState<string | null>(activeRemixId);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Auto-expand whenever the active remix changes.
   useEffect(() => {
     if (!activeRemixId) return;
-    setExpanded((prev) => {
-      if (prev.has(activeRemixId)) return prev;
-      const next = new Set(prev);
-      next.add(activeRemixId);
-      return next;
-    });
+    setExpandedId((prev) => (prev === activeRemixId ? prev : activeRemixId));
   }, [activeRemixId]);
 
   const filterActive =
@@ -154,19 +148,22 @@ export function RemixSidebar({
               key={remix.id}
               remix={remix}
               isActive={remix.id === activeRemixId}
-              isExpanded={expanded.has(remix.id)}
+              isExpanded={expandedId === remix.id}
               onToggle={() => {
-                setExpanded((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(remix.id)) next.delete(remix.id);
-                  else next.add(remix.id);
-                  return next;
-                });
+                setExpandedId((prev) => (prev === remix.id ? null : remix.id));
                 onSelectRemix(remix.id);
               }}
               onRename={(name) => onRenameRemix(remix.id, name)}
               onDelete={() => onDeleteRemix(remix.id)}
-              onOpenSwapCropSheet={onOpenSwapCropSheet}
+              onOpenSwapCropSheet={(target) => {
+                log.info('onOpenSwapCropSheet', 'view_remix', {
+                  remixId: remix.id,
+                  type: target.type,
+                });
+                setExpandedId(remix.id);
+                onSelectRemix(remix.id);
+                onOpenSwapCropSheet(target);
+              }}
               onRetryAudio={async () => {
                 try {
                   const outcome = await onRetryAudio(remix.id);
