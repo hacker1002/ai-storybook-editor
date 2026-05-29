@@ -141,6 +141,20 @@ export interface RemixSwapSlice {
     sheetIndex: number,
   ) => Promise<boolean>;
 
+  /** R5 user take-back — set `is_final=true` on the crop matching
+   *  `(spreadId, layerId)` inside `fromBatchId` AND clear `is_final` on every
+   *  other batch's crop with the same key (cross-batch mutex, mirrors backend
+   *  helper `_promote_is_final_for_sheet`). Gated when `anyMixSwapRunning`
+   *  (defense-in-depth — UI already disables the affordance). Throws on gate
+   *  reject; resolves `false` on guard miss (remix/crop not found) or persist
+   *  failure (rolled back). */
+  takeFinalBack: (
+    remixId: string,
+    spreadId: string,
+    layerId: string,
+    fromBatchId: string,
+  ) => Promise<boolean>;
+
   /** Persist-writer for a per-variant swap result. Writes
    *  `characters[charKey].variants[variantKey].visual_swap_url` and persists
    *  the whole `characters` JSONB column. Optimistic with full-remix snapshot

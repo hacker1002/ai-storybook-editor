@@ -16,6 +16,10 @@ import { groupCropsForBatch } from '@/utils/crop-grouping';
 import { buildSheetsFromLayout } from '../crop-sheet-layout';
 import { mapRowToRemix } from '../supabase-mapping';
 import { mapRowToJob } from '../map-background-job-row';
+import {
+  needsMigration as needsFinalFlagMigration,
+  reconcileOrphanFinals,
+} from '../selectors/select-final-crops';
 import { pruneSupersededJobs } from '../slice-helpers';
 import { useBookStore } from '../../book-store';
 import type { RemixSyncSlice, RemixSliceCreator } from '../types';
@@ -61,6 +65,45 @@ export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
     const remixes = (data ?? []).map(mapRowToRemix);
     log.info('syncFromServer', 'done', { snapshotId, count: remixes.length });
     set({ remixes, activeRemixId: null });
+
+    // R3 / migration — one-shot fixup for remixes whose mixes blob predates
+    // the `is_final` flag (Validation Session 1: case "created" semantic on
+    // initial load, NEVER on realtime "updated"). `reconcileOrphanFinals` is
+    // idempotent (`changed=false` short-circuits before persist) so this is
+    // safe to call across every load — work only happens once per remix.
+    for (const remix of remixes) {
+      if (!needsFinalFlagMigration(remix.mixes)) continue;
+      const result = reconcileOrphanFinals(remix.mixes);
+      if (!result.changed) continue;
+      log.info('syncFromServer', 'is_final migration applied', {
+        remixId: remix.id,
+        claimed: result.log.claimed,
+        defensiveCleared: result.log.defensiveCleared,
+        dropped: result.log.dropped,
+      });
+      set((s) => ({
+        remixes: s.remixes.map((r) =>
+          r.id === remix.id ? { ...r, mixes: result.mixes } : r,
+        ),
+      }));
+      const { error } = await supabase
+        .from('remixes')
+        .update({ mixes: result.mixes })
+        .eq('id', remix.id);
+      if (error) {
+        log.error('syncFromServer', 'is_final migration persist failed', {
+          remixId: remix.id,
+          error: error.message,
+        });
+        // Roll the migrated remix back to the loaded-from-server shape — the
+        // UI will fall back to `resolveFinalCrops` defensive winner pick.
+        set((s) => ({
+          remixes: s.remixes.map((r) =>
+            r.id === remix.id ? { ...r, mixes: remix.mixes } : r,
+          ),
+        }));
+      }
+    }
   },
 
   clearAll: () => {

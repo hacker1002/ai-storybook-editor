@@ -40,6 +40,17 @@ export interface SwapResultCrop {
   geometry: { x: number; y: number; w: number; h: number };
   media_url: string;
   tags: SpreadTag[];
+  /** Cross-batch winner mutex (2026-05-29). Per `(spread_id, id)` layer position,
+   *  EXACTLY 1 crop has `is_final=true` across all batches at steady state.
+   *  Reader: absent / undefined / false → unmarked. ONLY valid when parent
+   *  `swap_results.is_selected=true` (history `is_selected=false` is rubbish).
+   *  Ownership matrix:
+   *    R1 backend (job 05) — auto-promote on swap success + clear cross-batch
+   *    R2 backend         — re-swap same batch = idempotent consequence of R1
+   *    R3 FE store        — orphan reconcile on delete/relayout, fallback highest `batch.order`
+   *    R4 backend         — `force_resweep=false` idempotent skip = no-op
+   *    R5 FE action       — user take-back overrides any rule */
+  is_final?: boolean;
 }
 
 export interface SwapResult {

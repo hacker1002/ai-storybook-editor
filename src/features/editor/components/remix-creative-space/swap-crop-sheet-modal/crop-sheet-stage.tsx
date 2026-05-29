@@ -113,6 +113,20 @@ export interface CropSheetStageProps {
   selectedSwapCropKeys?: ReadonlySet<string>;
   /** Toggle callback fired by per-crop checkboxes; receives the `cropKey`. */
   onToggleSwapCropSelection?: (cropKey: string) => void;
+
+  // ⚡rev7 — Cross-batch ownership overlay (Batches AFTER non-compare only).
+  // Stage gates on the same preconditions as the rev6 selection overlay; the
+  // tab supplies both `getOwnership` (from `useCropOwnership`) and the click
+  // handler that routes into `takeFinalBack`.
+  /** Resolves per-crop ownership. Passed through to `ComposedCropSheet`. */
+  getOwnership?: (
+    spreadId: string,
+    layerId: string,
+  ) => import('./hooks/use-crop-ownership').CropOwnershipState;
+  /** Click handler — receives the `${spread_id}/${id}` cropKey. */
+  onTakeBack?: (cropKey: string) => void;
+  /** Disables the take-back chip (e.g. `anyMixSwapRunning`). */
+  takeBackDisabled?: boolean;
 }
 
 // ── Source helpers — collapse the discriminated union to canvas primitives ───
@@ -184,6 +198,9 @@ export function CropSheetStage({
   selectableSwapCrops,
   selectedSwapCropKeys,
   onToggleSwapCropSelection,
+  getOwnership,
+  onTakeBack,
+  takeBackDisabled,
 }: CropSheetStageProps) {
   // Compare needs an "after" to diff the "before" against.
   const compareDisabled = afterUrlOf(source) === null;
@@ -233,6 +250,9 @@ export function CropSheetStage({
         effectiveSelectable={effectiveSelectable}
         selectedSwapCropKeys={selectedSwapCropKeys}
         onToggleSwapCropSelection={onToggleSwapCropSelection}
+        getOwnership={getOwnership}
+        onTakeBack={onTakeBack}
+        takeBackDisabled={takeBackDisabled}
       />
     </section>
   );
@@ -417,6 +437,15 @@ interface StageCanvasProps {
   effectiveSelectable: boolean;
   selectedSwapCropKeys?: ReadonlySet<string>;
   onToggleSwapCropSelection?: (cropKey: string) => void;
+  // ⚡rev7 — Ownership overlay forwarding (AFTER non-compare only). Gated
+  // upstream by `effectiveSelectable`'s sibling preconditions in
+  // `BatchesCanvasBody`.
+  getOwnership?: (
+    spreadId: string,
+    layerId: string,
+  ) => import('./hooks/use-crop-ownership').CropOwnershipState;
+  onTakeBack?: (cropKey: string) => void;
+  takeBackDisabled?: boolean;
 }
 
 function StageCanvas({
@@ -431,6 +460,9 @@ function StageCanvas({
   effectiveSelectable,
   selectedSwapCropKeys,
   onToggleSwapCropSelection,
+  getOwnership,
+  onTakeBack,
+  takeBackDisabled,
 }: StageCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -502,6 +534,9 @@ function StageCanvas({
               effectiveSelectable={effectiveSelectable}
               selectedSwapCropKeys={selectedSwapCropKeys}
               onToggleSwapCropSelection={onToggleSwapCropSelection}
+              getOwnership={getOwnership}
+              onTakeBack={onTakeBack}
+              takeBackDisabled={takeBackDisabled}
             />
           </div>
         ) : (
@@ -572,6 +607,13 @@ interface BatchesCanvasBodyProps {
   effectiveSelectable: boolean;
   selectedSwapCropKeys?: ReadonlySet<string>;
   onToggleSwapCropSelection?: (cropKey: string) => void;
+  // ⚡rev7 — Ownership overlay forwarding (AFTER non-compare only).
+  getOwnership?: (
+    spreadId: string,
+    layerId: string,
+  ) => import('./hooks/use-crop-ownership').CropOwnershipState;
+  onTakeBack?: (cropKey: string) => void;
+  takeBackDisabled?: boolean;
 }
 
 /** Renders the batches canvas body in 3 modes:
@@ -596,6 +638,9 @@ function BatchesCanvasBody({
   effectiveSelectable,
   selectedSwapCropKeys,
   onToggleSwapCropSelection,
+  getOwnership,
+  onTakeBack,
+  takeBackDisabled,
 }: BatchesCanvasBodyProps) {
   if (compareMode && selectedSwap !== null) {
     return (
@@ -640,6 +685,10 @@ function BatchesCanvasBody({
           selectableSwapCrops={effectiveSelectable}
           selectedSwapCropKeys={selectedSwapCropKeys}
           onToggleSwapCropSelection={onToggleSwapCropSelection}
+          // ⚡rev7 — Ownership overlay; sibling path to the rev6 checkbox.
+          getOwnership={getOwnership}
+          onTakeBack={onTakeBack}
+          takeBackDisabled={takeBackDisabled}
         />
       </div>
     );

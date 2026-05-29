@@ -12,6 +12,10 @@ import {
   relayoutBatchSheets,
   type RelayoutDeps,
 } from '../crop-sheet-layout';
+import {
+  applyTakeFinalBack,
+  reconcileOrphanFinals,
+} from '../selectors/select-final-crops';
 import type { RemixSwapSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -29,6 +33,54 @@ export const createSwapSlice: RemixSliceCreator<RemixSwapSlice> = (
     dimension: useBookStore.getState().currentBook?.dimension ?? null,
     patchRemixCropSheets: get().patchRemixCropSheets,
   });
+
+  // R3 cross-batch `is_final` orphan reconcile — invoked AFTER a destructive
+  // batch mutation (engine already persisted entity sheets/crops). Reads
+  // freshest mixes, runs the pure reconciler, and persists ONLY when the
+  // result actually flips at least one flag (`changed=true`). On persist fail
+  // we roll back to the pre-reconcile in-store snapshot (engine output, which
+  // IS the committed DB state).
+  const reconcileFinalsAfterMutation = async (
+    remixId: string,
+    callerLabel: string,
+  ): Promise<void> => {
+    const remix = get().remixes.find((r) => r.id === remixId);
+    if (!remix) return;
+    const pre = remix.mixes;
+    const result = reconcileOrphanFinals(pre);
+    if (!result.changed) return;
+
+    log.info('reconcileFinalsAfterMutation', `orphan reconcile applied`, {
+      remixId,
+      caller: callerLabel,
+      claimed: result.log.claimed,
+      defensiveCleared: result.log.defensiveCleared,
+      dropped: result.log.dropped,
+    });
+
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === remixId ? { ...r, mixes: result.mixes } : r,
+      ),
+    }));
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ mixes: result.mixes })
+      .eq('id', remixId);
+    if (error) {
+      log.error(
+        'reconcileFinalsAfterMutation',
+        'persist failed — rollback to engine-committed mixes',
+        { remixId, caller: callerLabel, error: error.message },
+      );
+      set((s) => ({
+        remixes: s.remixes.map((r) =>
+          r.id === remixId ? { ...r, mixes: pre } : r,
+        ),
+      }));
+    }
+  };
 
   return {
   // ── Batch lifecycle (modal-driven) ─────────────────────────────────
@@ -75,12 +127,16 @@ export const createSwapSlice: RemixSliceCreator<RemixSwapSlice> = (
 
   removeBatch: async (remixId, batchId) => {
     log.info('removeBatch', 'invoked', { remixId, batchId });
-    return engineRemoveBatch(buildDeps(), remixId, batchId);
+    const ok = await engineRemoveBatch(buildDeps(), remixId, batchId);
+    if (ok) await reconcileFinalsAfterMutation(remixId, 'removeBatch');
+    return ok;
   },
 
   appendBatchSheet: async (remixId, batchId) => {
     log.info('appendBatchSheet', 'invoked', { remixId, batchId });
-    return relayoutBatchSheets(buildDeps(), remixId, batchId, 1);
+    const ok = await relayoutBatchSheets(buildDeps(), remixId, batchId, 1);
+    if (ok) await reconcileFinalsAfterMutation(remixId, 'appendBatchSheet');
+    return ok;
   },
 
   removeBatchSheet: async (remixId, batchId, sheetIndex) => {
@@ -88,7 +144,85 @@ export const createSwapSlice: RemixSliceCreator<RemixSwapSlice> = (
     // re-packs from scratch, so "which" sheet is moot. Delta -1 + SHEET_MIN
     // clamp inside `relayoutBatchSheets` is the guard.
     log.info('removeBatchSheet', 'invoked', { remixId, batchId, sheetIndex });
-    return relayoutBatchSheets(buildDeps(), remixId, batchId, -1);
+    const ok = await relayoutBatchSheets(buildDeps(), remixId, batchId, -1);
+    if (ok) await reconcileFinalsAfterMutation(remixId, 'removeBatchSheet');
+    return ok;
+  },
+
+  // ── R5 user Take-Back (cross-batch `is_final` mutex override) ──────
+  takeFinalBack: async (remixId, spreadId, layerId, fromBatchId) => {
+    log.info('takeFinalBack', 'invoked', {
+      remixId,
+      spreadId,
+      layerId,
+      fromBatchId,
+    });
+
+    // Defense-in-depth: UI already disables the button when a swap is
+    // running. Cross-check via jobs[] (mirror selector logic without
+    // pulling React hooks into store code).
+    const state = get();
+    const swapRunning = state.jobs.some(
+      (j) =>
+        j.phase === 'remix_mix_swap' &&
+        j.remixId === remixId &&
+        (j.status === 'queued' || j.status === 'running'),
+    );
+    if (swapRunning) {
+      log.warn('takeFinalBack', 'gated by anyMixSwapRunning', { remixId });
+      throw new Error(
+        'Cannot take a final crop back while a swap is running for this remix',
+      );
+    }
+
+    const prevRemix = state.remixes.find((r) => r.id === remixId);
+    if (!prevRemix) {
+      log.warn('takeFinalBack', 'remix not found — skip', { remixId });
+      return false;
+    }
+
+    const nextMixes = applyTakeFinalBack(
+      prevRemix.mixes,
+      spreadId,
+      layerId,
+      fromBatchId,
+    );
+    if (nextMixes === null) {
+      log.warn('takeFinalBack', 'target crop or fromBatchId missing — skip', {
+        remixId,
+        fromBatchId,
+        spreadId,
+        layerId,
+      });
+      return false;
+    }
+
+    // Optimistic in-store update.
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === remixId ? { ...r, mixes: nextMixes } : r,
+      ),
+    }));
+    log.debug('takeFinalBack', 'optimistic set applied', { remixId });
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ mixes: nextMixes })
+      .eq('id', remixId);
+
+    if (error) {
+      log.error('takeFinalBack', 'persist failed — rollback', {
+        remixId,
+        error: error.message,
+      });
+      set((s) => ({
+        remixes: s.remixes.map((r) => (r.id === remixId ? prevRemix : r)),
+      }));
+      return false;
+    }
+
+    log.info('takeFinalBack', 'done', { remixId, fromBatchId });
+    return true;
   },
 
   // ── Per-variant visual swap result (persist-writer) ────────────────

@@ -20,6 +20,9 @@ import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { RemixCropSheet, CropEntry, SwapResult } from '@/types/remix';
 import { COMPOSER_FRAME, resolveStrokePx } from '../swap-modal-constants';
+import type { CropOwnershipState } from '../hooks/use-crop-ownership';
+import { StarBadge } from './star-badge';
+import { TakeBackOverlay } from './take-back-overlay';
 
 // Checkerboard background — codebase-standard `repeating-conic-gradient` at a
 // 16px tile (≈8px visible squares). Matches `edit-image-modal`,
@@ -58,6 +61,21 @@ interface ComposedCropSheetProps {
   selectedSwapCropKeys?: ReadonlySet<string>;
   /** Toggle callback fired by the checkbox; receives the `cropKey`. */
   onToggleSwapCropSelection?: (cropKey: string) => void;
+
+  // ⚡rev7 — Cross-batch ownership UI (AFTER non-compare only). When wired
+  // together (`getOwnership` + `onTakeBack`), each crop renders:
+  //   - owned-current → ★ badge top-left + rev6 checkbox top-right (no change)
+  //   - owned-foreign → dim + take-back button top-right (mutex: hides checkbox)
+  //   - uncovered     → default (no badge, no overlay)
+  // Pass `null` / undefined to disable entirely (compare mode + legacy paths).
+  /** Resolves per-crop ownership state. Caller computes via `useCropOwnership`. */
+  getOwnership?: (spreadId: string, layerId: string) => CropOwnershipState;
+  /** Click handler — receives the `${spread_id}/${id}` cropKey. Caller routes
+   *  to `takeFinalBack(remixId, spread_id, layer_id, currentBatchId)`. */
+  onTakeBack?: (cropKey: string) => void;
+  /** When true, take-back buttons render disabled (e.g. `anyMixSwapRunning`).
+   *  The store action also gates defensively. */
+  takeBackDisabled?: boolean;
 }
 
 /** The structural shape that `ComposedCrop` needs from either source. Keeping
@@ -86,6 +104,9 @@ export function ComposedCropSheet({
   selectableSwapCrops = false,
   selectedSwapCropKeys,
   onToggleSwapCropSelection,
+  getOwnership,
+  onTakeBack,
+  takeBackDisabled = false,
 }: ComposedCropSheetProps) {
   const { width: sw, height: sh } = sheet.sheet_geometry;
   const strokePx = resolveStrokePx(zoomLevel);
@@ -106,6 +127,10 @@ export function ComposedCropSheet({
   // the flag by accident.
   const enableSelection =
     isAfter && selectableSwapCrops && !!onToggleSwapCropSelection;
+
+  // ⚡rev7 — Cross-batch ownership UI is AFTER-only (same gate as the rev6
+  // selection overlay). Compare mode passes no handlers → no badges either.
+  const enableOwnership = isAfter && !!getOwnership;
 
   // ── Legacy fallback (AFTER with empty crops but a media_url) ───────────────
   if (isAfter && cropsToRender.length === 0 && selectedSwap?.media_url) {
@@ -144,6 +169,9 @@ export function ComposedCropSheet({
         const isSelected = enableSelection
           ? (selectedSwapCropKeys?.has(cropKey) ?? false)
           : false;
+        const ownership = enableOwnership
+          ? getOwnership!(crop.spread_id, crop.id)
+          : null;
         return (
           <ComposedCrop
             key={`crop-${index}`}
@@ -159,6 +187,9 @@ export function ComposedCropSheet({
             selectable={enableSelection}
             isSelected={isSelected}
             onToggleSelection={onToggleSwapCropSelection}
+            ownership={ownership}
+            onTakeBack={onTakeBack}
+            takeBackDisabled={takeBackDisabled}
           />
         );
       })}
@@ -185,6 +216,13 @@ interface ComposedCropProps {
   isSelected?: boolean;
   /** Toggle callback — receives the `${spread_id}/${id}` cropKey. */
   onToggleSelection?: (cropKey: string) => void;
+
+  // ⚡rev7 — Ownership UI. `ownership=null` disables both badges. The Stage
+  // gates on AFTER+non-compare upstream; we only render based on the resolved
+  // state here.
+  ownership?: CropOwnershipState | null;
+  onTakeBack?: (cropKey: string) => void;
+  takeBackDisabled?: boolean;
 }
 
 /** A single crop placed at `geometry / sheet_geometry * 100%`. Keeps its own
@@ -213,6 +251,9 @@ function ComposedCrop({
   selectable = false,
   isSelected = false,
   onToggleSelection,
+  ownership = null,
+  onTakeBack,
+  takeBackDisabled = false,
 }: ComposedCropProps) {
   const [errored, setErrored] = useState(false);
   const { x, y, w, h } = crop.geometry;
@@ -243,16 +284,34 @@ function ComposedCrop({
     wrapperStyle.boxShadow = '0 0 0 2px rgba(59, 108, 246, 0.35)';
   }
 
-  // Selection checkbox is rendered iff caller wired the toggle handler.
-  const showCheckbox = selectable && !!onToggleSelection;
+  // ⚡rev7 — Ownership-derived visual state. owned-foreign dims via Tailwind
+  // utility classes on the wrapper (composer border + halo stay untouched).
+  const isOwnedCurrent = ownership?.state === 'owned-current';
+  const isOwnedForeign = ownership?.state === 'owned-foreign';
+
+  // ⚡rev7 — Top-right slot mutex. Foreign state → take-back chip ONLY (no
+  // selection checkbox — selecting a foreign crop for a new batch is not a
+  // valid action; user must take-back first). Owned-current / uncovered →
+  // checkbox stays per rev6.
+  const wireTakeBack = isOwnedForeign && !!onTakeBack;
+  const showCheckbox = selectable && !!onToggleSelection && !wireTakeBack;
+
+  const wrapperClasses = cn(
+    'group',
+    isOwnedForeign && 'opacity-40 saturate-50',
+  );
 
   if (errored) {
     return (
       <div
         style={wrapperStyle}
-        className="flex flex-col items-center justify-center gap-1"
+        className={cn(
+          wrapperClasses,
+          'flex flex-col items-center justify-center gap-1',
+        )}
       >
         {ordinal !== null && <OrdinalBadge ordinal={ordinal} />}
+        {isOwnedCurrent && <StarBadge />}
         <ImageOff className="h-6 w-6 text-white/70" />
         <span className="text-[10px] text-white/70">Ảnh lỗi</span>
         {showCheckbox && (
@@ -262,13 +321,22 @@ function ComposedCrop({
             onToggle={onToggleSelection!}
           />
         )}
+        {wireTakeBack && (
+          <TakeBackOverlay
+            cropKey={cropKey}
+            ownerBatchName={ownership!.ownerBatchName}
+            disabled={takeBackDisabled}
+            onTakeBack={onTakeBack!}
+          />
+        )}
       </div>
     );
   }
 
   return (
-    <div style={wrapperStyle}>
+    <div style={wrapperStyle} className={wrapperClasses}>
       {ordinal !== null && <OrdinalBadge ordinal={ordinal} />}
+      {isOwnedCurrent && <StarBadge />}
       <img
         src={crop.media_url}
         alt={crop.name || 'Crop'}
@@ -286,6 +354,14 @@ function ComposedCrop({
           cropKey={cropKey}
           isSelected={isSelected}
           onToggle={onToggleSelection!}
+        />
+      )}
+      {wireTakeBack && (
+        <TakeBackOverlay
+          cropKey={cropKey}
+          ownerBatchName={ownership!.ownerBatchName}
+          disabled={takeBackDisabled}
+          onTakeBack={onTakeBack!}
         />
       )}
     </div>

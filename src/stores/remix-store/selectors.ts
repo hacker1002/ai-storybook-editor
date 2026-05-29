@@ -316,5 +316,6 @@ export const useRemixActions = () =>
       appendBatchSheet: s.appendBatchSheet,
       removeBatchSheet: s.removeBatchSheet,
       setVariantVisualSwapUrl: s.setVariantVisualSwapUrl,
+      takeFinalBack: s.takeFinalBack,
     })),
   );

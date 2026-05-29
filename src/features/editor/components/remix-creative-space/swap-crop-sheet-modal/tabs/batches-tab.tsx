@@ -18,7 +18,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
-import { useRemixVariants, useRemixActions } from '@/stores/remix-store';
+import {
+  useRemixById,
+  useRemixVariants,
+  useRemixActions,
+} from '@/stores/remix-store';
 import type { RemixBatch } from '@/types/remix';
 import { missingCharRefs as resolveMissingCharRefs } from './batch-swap-gating';
 import { CropSheetStage } from '../crop-sheet-stage';
@@ -28,6 +32,7 @@ import {
 } from '../relayout-confirm-dialog';
 import { useCollapseState } from '../sidebar/use-collapse-state';
 import { useSelectedSwapCrops } from '../hooks/use-selected-swap-crops';
+import { useCropOwnership } from '../hooks/use-crop-ownership';
 import { BatchesSidebar } from './batches-sidebar';
 
 const log = createLogger('Editor', 'BatchesTab');
@@ -103,10 +108,63 @@ export function BatchesTab({
     toggle: toggleSwapCropSelection,
     clear: clearSwapCropSelection,
   } = useSelectedSwapCrops();
-  const { addBatch } = useRemixActions();
+  const { addBatch, takeFinalBack } = useRemixActions();
 
   // Read-only variant projection for token → visual_swap_url resolution.
   const variantEntities = useRemixVariants(remixId);
+
+  // ⚡rev7 — Cross-batch ownership resolution for the AFTER pane.
+  const remix = useRemixById(remixId);
+  const currentBatchId = activeBatchRef?.batchId ?? null;
+  const { getOwnership } = useCropOwnership(remix, currentBatchId);
+
+  const handleTakeBack = useCallback(
+    (cropKey: string) => {
+      if (!currentBatchId) {
+        log.warn('handleTakeBack', 'no currentBatchId — ignore', { cropKey });
+        return;
+      }
+      const sepIdx = cropKey.indexOf('/');
+      if (sepIdx < 0) return;
+      const spreadId = cropKey.slice(0, sepIdx);
+      const layerId = cropKey.slice(sepIdx + 1);
+      const ownership = getOwnership(spreadId, layerId);
+      if (ownership.state !== 'owned-foreign') {
+        log.debug('handleTakeBack', 'not foreign-owned — ignore', {
+          cropKey,
+          state: ownership.state,
+        });
+        return;
+      }
+      log.info('handleTakeBack', 'invoking takeFinalBack', {
+        remixId,
+        cropKey,
+        ownerBatchId: ownership.ownerBatchId,
+        targetBatchId: currentBatchId,
+      });
+      // ⚡rev7 fix — 4th arg = batch user is RECLAIMING ownership TO (= the
+      // active/current batch), not the foreign owner. The type field is named
+      // `fromBatchId` for "batch the user is taking back FROM the foreign
+      // owner" — i.e. destination of the new winner. `applyTakeFinalBack`
+      // sets `is_final=true` on the crop matching (spread,layer) inside this
+      // batch and clears every other batch.
+      takeFinalBack(remixId, spreadId, layerId, currentBatchId)
+        .then((ok) => {
+          if (!ok) toast.error('Could not take the final crop back.');
+        })
+        .catch((err) => {
+          log.warn('handleTakeBack', 'rejected', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : 'Could not take the final crop back.',
+          );
+        });
+    },
+    [remixId, currentBatchId, getOwnership, takeFinalBack],
+  );
 
   // ── Derive active batch / sheet / sources (phase-08 §2) ────────────────────
   const batch = useMemo(
@@ -341,6 +399,9 @@ export function BatchesTab({
           selectableSwapCrops={stageSelectable}
           selectedSwapCropKeys={selectedSwapCrops}
           onToggleSwapCropSelection={toggleSwapCropSelection}
+          getOwnership={getOwnership}
+          onTakeBack={handleTakeBack}
+          takeBackDisabled={anyMixSwapRunning}
         />
       ) : (
         <section

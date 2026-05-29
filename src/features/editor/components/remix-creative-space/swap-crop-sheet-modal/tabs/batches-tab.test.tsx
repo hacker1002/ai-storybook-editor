@@ -23,9 +23,11 @@ const mockAddBatch = vi.fn();
 const mockRemoveBatch = vi.fn();
 vi.mock('@/stores/remix-store', () => ({
   useRemixVariants: vi.fn(() => []),
+  useRemixById: vi.fn(() => null),
   useRemixActions: () => ({
     addBatch: mockAddBatch,
     removeBatch: mockRemoveBatch,
+    takeFinalBack: vi.fn(async () => true),
   }),
 }));
 
