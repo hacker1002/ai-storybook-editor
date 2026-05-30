@@ -25,6 +25,7 @@ import { isBookRemixEmpty } from './default-config-builder';
 import type { BookRemix } from '@/types/editor';
 import type {
   EnqueueRemixJobOutcome,
+  InjectResult,
   Remix,
   RemixFilterState,
   SwapCropSheetTarget,
@@ -46,6 +47,8 @@ interface Props {
   onRetryAudio: (remixId: string) => Promise<EnqueueRemixJobOutcome>;
   onCancelAudio: (remixId: string, jobId: string) => Promise<void>;
   onDismissJob: (jobId: string) => void;
+  /** Client-side Inject finalize (from useRemixActions). */
+  onInject: (remixId: string) => Promise<InjectResult>;
 }
 
 export function RemixSidebar({
@@ -62,6 +65,7 @@ export function RemixSidebar({
   onRetryAudio,
   onCancelAudio,
   onDismissJob,
+  onInject,
 }: Props) {
   // Single-expand semantics: only one remix open at a time. Eye-click + chevron
   // toggle + activeRemixId change all funnel through the same id slot.
@@ -205,6 +209,7 @@ export function RemixSidebar({
                 }
               }}
               onDismissJob={onDismissJob}
+              onInject={onInject}
             />
           ))
         )}

@@ -15,6 +15,7 @@ import type {
   RemixVariantNode,
 } from '@/types/remix';
 import { useHumans } from '@/stores/humans-store';
+import { selectCanInject } from './selectors/select-final-crops';
 import { useRemixStore } from './index';
 
 // ── Remix selectors ──────────────────────────────────────────────────────────
@@ -36,6 +37,31 @@ export const useRemixById = (id: string | null | undefined): Remix | null =>
     id ? s.remixes.find((r) => r.id === id) ?? null : null,
   );
 
+/**
+ * Inject gate: true iff the remix has ≥1 batch with a selected `swap_result`
+ * yielding an injectable `is_final` winner crop — i.e.
+ * `resolveFinalCrops(remix).length > 0`. MIRRORS `injectFinalCrops`'s
+ * precondition (which throws `'no final crops to inject'` when finals are
+ * empty), so the button-enabled state and the action precondition cannot drift.
+ *
+ * Perf: subscribes to the narrowest stable raw ref (`mixes` array — stable
+ * across renders unless swap data mutates) and memoizes the allocating
+ * `selectCanInject` / `resolveFinalCrops` derivation keyed on that ref, never
+ * on a freshly-mapped array (memory feedback_zustand_useshallow_nested_arrays).
+ */
+export const useCanInject = (remixId: string): boolean => {
+  const mixes = useRemixStore(
+    (s) => s.remixes.find((r) => r.id === remixId)?.mixes,
+  );
+
+  return useMemo(() => {
+    if (!mixes || mixes.length === 0) return false;
+    // selectCanInject only reads `remix.mixes`; pass a minimal shape keyed on
+    // the stable `mixes` ref. True ⟺ ≥1 batch has an injectable is_final crop.
+    return selectCanInject({ mixes } as Remix);
+  }, [mixes]);
+};
+
 // ── Job selectors ────────────────────────────────────────────────────────────
 
 const EMPTY_JOBS: RemixJob[] = [];
@@ -52,17 +78,6 @@ export const useLatestAudioJob = (remixId: string): RemixJob | null =>
     );
     if (matches.length === 0) return null;
     // Sort DESC by createdAt — latest first.
-    return matches.reduce((latest, cur) =>
-      cur.createdAt > latest.createdAt ? cur : latest,
-    );
-  });
-
-export const useLatestImageJob = (remixId: string): RemixJob | null =>
-  useRemixStore((s) => {
-    const matches = s.jobs.filter(
-      (j) => j.remixId === remixId && j.phase === 'image',
-    );
-    if (matches.length === 0) return null;
     return matches.reduce((latest, cur) =>
       cur.createdAt > latest.createdAt ? cur : latest,
     );
@@ -302,7 +317,7 @@ export const useRemixActions = () =>
       deleteRemix: s.deleteRemix,
       setActiveRemixId: s.setActiveRemixId,
       startAudioJob: s.startAudioJob,
-      startImageJob: s.startImageJob,
+      injectFinalCrops: s.injectFinalCrops,
       cancelJob: s.cancelJob,
       dismissJob: s.dismissJob,
       syncFromServer: s.syncFromServer,

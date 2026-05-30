@@ -1,8 +1,8 @@
 // player-header.tsx — Source picker dropdown for PreviewCreativeSpace.
 // Single-select Popover: "Original" (snapshot retouch data) or one of the remixes.
 // Each RemixListItem self-subscribes useLatestAudioJob(remix.id) so a tick on
-// one remix's job does not re-render the entire header. Phase 3 will mirror
-// useLatestImageJob for inject-related badge variants.
+// one remix's job does not re-render the entire header. (Inject is a synchronous
+// client-side finalize — no job badge needed.)
 "use client";
 
 import { useMemo, useState } from "react";

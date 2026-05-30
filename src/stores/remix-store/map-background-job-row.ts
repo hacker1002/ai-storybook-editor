@@ -17,7 +17,6 @@ const TERMINAL_STATUSES = new Set<RemixJob['status']>([
  *  ABSENT — that type was never enabled in prod (Validation S1, no backward-compat). */
 const JOB_TYPE_TO_PHASE: Record<string, RemixJobPhase> = {
   remix_audio_swap: 'audio',
-  remix_image_swap: 'image',
   remix_character_swap: 'character_swap',
   remix_mix_swap: 'remix_mix_swap',
 };

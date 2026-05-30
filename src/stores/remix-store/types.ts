@@ -6,6 +6,7 @@
 import type { StateCreator } from 'zustand';
 import type {
   EnqueueRemixJobOutcome,
+  InjectResult,
   Remix,
   RemixConfig,
   RemixCropSheet,
@@ -66,7 +67,8 @@ export interface RemixCrudSlice {
   patchRemixCropSheets: (id: string, updates: CropSheetUpdate[]) => void;
 }
 
-/** Remote background_jobs (audio/image/mix swap): enqueue, cancel, dismiss. */
+/** Remote background_jobs (audio/mix swap): enqueue, cancel, dismiss. Plus the
+ *  synchronous client-side Inject finalize (`injectFinalCrops`, no job). */
 export interface RemixJobsSlice {
   jobs: RemixJob[];
 
@@ -74,7 +76,14 @@ export interface RemixJobsSlice {
     remixId: string,
     opts: StartAudioJobOptions,
   ) => Promise<EnqueueRemixJobOutcome>;
-  startImageJob: (remixId: string) => Promise<EnqueueRemixJobOutcome>;
+
+  /** Inject (Phase 3 — client-side finalize). Resolves the is_final winner
+   *  crops, mutates the illustration blob, optimistically updates local state,
+   *  then persists the full `illustration` column in ONE Supabase UPDATE (no
+   *  background job). Rollback via `refetchRemix` on persist failure. Pure:
+   *  returns `InjectResult` or throws (`REMIX_NOT_FOUND` / `no final crops to
+   *  inject` / persist error) — the UI handler owns the toast. */
+  injectFinalCrops: (remixId: string) => Promise<InjectResult>;
 
   /** Modal-driven batch (mix) crop-sheet swap (rev2 — api/jobs/05). POST
    *  `/api/jobs/remix/{id}/mix-swap` + optimistic seed `remix_mix_swap` job.

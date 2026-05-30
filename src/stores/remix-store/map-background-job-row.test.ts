@@ -32,9 +32,13 @@ describe('mapRowToJob — type→phase lookup', () => {
     expect(job.remixId).toBe('r1');
   });
 
-  it('maps audio/image types to their phases', () => {
+  it('maps audio type to audio phase', () => {
     expect(mapRowToJob(row({ type: 'remix_audio_swap' })).phase).toBe('audio');
-    expect(mapRowToJob(row({ type: 'remix_image_swap' })).phase).toBe('image');
+  });
+
+  it('falls back to audio for the retired remix_image_swap type', () => {
+    // `image` phase removed (2026-05-30 — Inject is now client-side finalize).
+    expect(mapRowToJob(row({ type: 'remix_image_swap' })).phase).toBe('audio');
   });
 
   it('falls back to audio for unknown types and leaves characterKey undefined', () => {

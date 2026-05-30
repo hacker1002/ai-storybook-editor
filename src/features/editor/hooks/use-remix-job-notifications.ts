@@ -55,11 +55,9 @@ export function useRemixJobNotifications(): void {
         const label =
           job.phase === 'audio'
             ? 'Audio'
-            : job.phase === 'image'
-              ? 'Inject'
-              : job.phase === 'character_swap'
-                ? 'Swap character'
-                : 'Job';
+            : job.phase === 'character_swap'
+              ? 'Swap character'
+              : 'Job';
         const errorCount = job.result?.errors?.length ?? 0;
         // Character swap reports per-sheet failures via `result.failed_sheets`;
         // other phases only carry `errors[]`. Display the sheet count when present.

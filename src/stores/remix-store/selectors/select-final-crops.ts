@@ -110,6 +110,21 @@ export function needsMigration(mixes: RemixMix[] | null | undefined): boolean {
   return false;
 }
 
+/**
+ * Inject gate predicate (pure). Returns true iff there is ≥1 batch with a
+ * selected `swap_result` yielding an injectable `is_final` winner crop — i.e.
+ * `resolveFinalCrops(remix).length > 0`. Mirrors `injectFinalCrops`'s
+ * precondition exactly so the button-enabled state cannot drift from the
+ * action's "no final crops to inject" throw.
+ *
+ * False when: null remix, no batches, no selected swap_result, or a selected
+ * swap_result whose crops have no `is_final` winner yet (e.g. swap in-progress).
+ */
+export function selectCanInject(remix: Remix | null | undefined): boolean {
+  if (!remix) return false;
+  return resolveFinalCrops(remix).length > 0;
+}
+
 export function resolveFinalCrops(remix: Remix | null | undefined): FinalCropEntry[] {
   if (!remix) {
     log.debug('resolveFinalCrops', 'null remix, returning empty');

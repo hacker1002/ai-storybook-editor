@@ -1,21 +1,25 @@
 // remix-store/slices/jobs-slice.ts — Remote background_jobs slice. Jobs are
-// read-only via realtime + REST enqueue: startAudioJob / startImageJob (POST
-// enqueue + optimistic seed row), cancelJob (optimistic flag), dismissJob.
+// read-only via realtime + REST enqueue: startAudioJob (POST enqueue +
+// optimistic seed row), startMixSwap, cancelJob (optimistic flag), dismissJob.
+// Inject (Phase 3 — client-side finalize) lives here too: injectFinalCrops
+// resolves is_final winner crops, mutates the illustration blob, and persists
+// it in ONE Supabase UPDATE (no background job).
 
+import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import { CLIENT_AUDIO_CHUNK_CAP } from '@/types/remix';
-import type { RemixJob } from '@/types/remix';
+import type { InjectResult, RemixIllustration, RemixJob } from '@/types/remix';
 import {
   enqueueAudioSwap,
-  enqueueImageSwap,
   enqueueRemixMixSwap,
   cancelJobRemote,
-  type EnqueueAudioSwapData,
   type EnqueueAudioSwapEnqueuedData,
   type EnqueueAudioSwapDedupedData,
 } from '@/apis/jobs-api';
 import { useAuthStore } from '../../auth-store';
 import { pruneSupersededJobs } from '../slice-helpers';
+import { resolveFinalCrops } from '../selectors/select-final-crops';
+import { applyFinalCrops } from '../apply-final-crops';
 import type { RemixJobsSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -122,71 +126,71 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
     };
   },
 
-  // ── Image swap enqueue (Phase 3 ready — UI gated, endpoint live) ──
-  startImageJob: async (remixId) => {
-    log.info('startImageJob', 'enqueue', { remixId });
-    const result = await enqueueImageSwap(remixId);
-    if (!result.success) {
-      log.error('startImageJob', 'failed', {
+  // ── Inject (Phase 3 — client-side finalize) ────────────────────────
+  // Synchronous finalize (NO background job): resolve the is_final winner
+  // crops, mutate the illustration blob (pure helper), optimistically set
+  // local state, then persist the full `illustration` column in ONE Supabase
+  // UPDATE. Rollback via refetchRemix on persist failure. Pure: returns
+  // InjectResult or throws — the UI handler owns the toast.
+  injectFinalCrops: async (remixId): Promise<InjectResult> => {
+    log.info('injectFinalCrops', 'inject requested', { remixId });
+
+    const remix = get().remixes.find((r) => r.id === remixId);
+    if (!remix) {
+      log.warn('injectFinalCrops', 'remix not found', { remixId });
+      throw new Error('REMIX_NOT_FOUND');
+    }
+
+    const finals = resolveFinalCrops(remix);
+    if (finals.length === 0) {
+      log.warn('injectFinalCrops', 'no final crops to inject', { remixId });
+      throw new Error('no final crops to inject');
+    }
+
+    const nowISO = new Date().toISOString();
+    const { spreads, appliedCount, collapsedCount, spreadCount } =
+      applyFinalCrops(remix.illustration, finals, nowISO);
+
+    const nextIllustration: RemixIllustration = {
+      ...remix.illustration,
+      spreads,
+    };
+
+    // Optimistic local update (same body as the persisted UPDATE).
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === remixId ? { ...r, illustration: nextIllustration } : r,
+      ),
+    }));
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ illustration: nextIllustration })
+      .eq('id', remixId);
+
+    if (error) {
+      log.error('injectFinalCrops', 'persist failed; rolling back', {
         remixId,
-        error: result.error,
-        httpStatus: result.httpStatus,
+        error: error.message,
       });
-      throw new Error(result.error);
+      // Rollback to authoritative server row, then surface the error.
+      await get().refetchRemix(remixId);
+      throw new Error(error.message);
     }
 
-    const data: EnqueueAudioSwapData = result.data;
-
-    if ('skipped' in data && data.skipped) {
-      return { kind: 'skipped', reason: data.reason };
-    }
-    if ('deduped' in data && data.deduped) {
-      const deduped = data as EnqueueAudioSwapDedupedData;
-      return {
-        kind: 'deduped',
-        jobId: deduped.job_id,
-        status: deduped.status,
-      };
-    }
-
-    const enqueued = data as EnqueueAudioSwapEnqueuedData;
-    const nowIso = new Date().toISOString();
-    const seed: RemixJob = {
-      id: enqueued.job_id,
+    log.info('injectFinalCrops', 'inject complete', {
       remixId,
-      phase: 'image',
-      triggeredBy: 'user',
-      status: 'queued',
-      currentStep: 0,
-      totalSteps: enqueued.total_steps,
-      stepDetails: undefined,
-      result: undefined,
-      cancelRequested: false,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      completedAt: undefined,
-    };
-    set((s) => {
-      if (s.jobs.find((j) => j.id === seed.id)) return s;
-      // Prune so a stale failed sibling of the same lineage clears the moment a
-      // fresh attempt is seeded (no resurrection after the new job dismisses).
-      return { jobs: pruneSupersededJobs([...s.jobs, seed]) };
+      appliedCount,
+      collapsedCount,
+      spreadCount,
     });
-
-    return {
-      kind: 'enqueued',
-      jobId: enqueued.job_id,
-      totalSteps: enqueued.total_steps,
-      chunksToRegen: enqueued.chunks_to_regen,
-      textboxesToRecombine: enqueued.textboxes_to_recombine,
-    };
+    return { appliedCount, collapsedCount, spreadCount };
   },
 
   // ── Batch (mix) crop-sheet swap enqueue (api/jobs/05) ──────────────
-  // Mirrors startAudioJob/startImageJob: POST enqueue + optimistic seed
-  // `remix_mix_swap` row. Cross-type dedup (backend allows 1 swap/remix);
-  // an already-running mix
-  // swap no-ops. `params` (swap model) is v1 collect-only — NOT sent in body.
+  // Mirrors startAudioJob: POST enqueue + optimistic seed `remix_mix_swap`
+  // row. Cross-type dedup (backend allows 1 swap/remix); an already-running
+  // mix swap no-ops. `params` (swap model) is v1 collect-only — NOT sent in body.
   startMixSwap: async (params) => {
     const { remixId, batchId, forceResweep = true } = params;
 

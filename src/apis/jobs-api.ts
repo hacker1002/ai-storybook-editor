@@ -1,6 +1,8 @@
 // jobs-api.ts — Thin wrappers over callImageApi for background job endpoints.
-// Endpoints: /api/jobs/remix/{id}/audio-swap, /api/jobs/remix/{id}/image-swap,
-//            /api/jobs/remix/{id}/character-swap, /api/jobs/{id}/cancel.
+// Endpoints: /api/jobs/remix/{id}/audio-swap, /api/jobs/remix/{id}/mix-swap,
+//            /api/jobs/{id}/cancel.
+// NOTE: image-swap enqueue removed (2026-05-30) — Inject is now a synchronous
+// client-side finalize (see remix-store injectFinalCrops).
 // Auth: X-API-Key (service-to-service) + Bearer JWT (RLS user_id). Both are
 // always sent by callImageApi when a Supabase session is active.
 // Spec: ai-storybook-design/api/jobs/01-enqueue-remix-audio-swap.md
@@ -129,17 +131,6 @@ export async function enqueueAudioSwap(
   return callImageApi<EnqueueJobResponse<EnqueueAudioSwapData>>(
     `/api/jobs/remix/${encodeURIComponent(remixId)}/audio-swap`,
     params,
-  );
-}
-
-/** POST /api/jobs/remix/{remixId}/image-swap (Phase 3 — UI gated but endpoint live) */
-export async function enqueueImageSwap(
-  remixId: string,
-): Promise<EnqueueJobResponse<EnqueueAudioSwapData> | ImageApiFailure> {
-  log.info('enqueueImageSwap', 'request', { remixId });
-  return callImageApi<EnqueueJobResponse<EnqueueAudioSwapData>>(
-    `/api/jobs/remix/${encodeURIComponent(remixId)}/image-swap`,
-    {},
   );
 }
 

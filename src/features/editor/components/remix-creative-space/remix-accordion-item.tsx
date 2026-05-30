@@ -2,16 +2,25 @@
 // + hover-reveal pencil/trash. Delete fires a callback only; parent owns the
 // confirm dialog (per memory rule: sidebars don't own destructive hotkeys).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAudioJobBadgeState } from '@/stores/remix-store';
+import { useAudioJobBadgeState, useCanInject } from '@/stores/remix-store';
 import { cn } from '@/utils/utils';
+import { createLogger } from '@/utils/logger';
 import { RemixInventorySection } from './remix-inventory-section';
 import { InjectButton } from './inject-button';
 import { AudioJobBadge } from './audio-job-badge';
-import type { Remix, SwapCropSheetTarget } from '@/types/remix';
+import type {
+  InjectResult,
+  InjectUiState,
+  Remix,
+  SwapCropSheetTarget,
+} from '@/types/remix';
+
+const log = createLogger('Editor', 'RemixAccordionItem');
 
 interface Props {
   remix: Remix;
@@ -24,6 +33,8 @@ interface Props {
   onRetryAudio: () => Promise<void>;
   onCancelAudio: (jobId: string) => Promise<void>;
   onDismissJob: (jobId: string) => void;
+  /** Client-side Inject finalize for this remix (resolve → mutate → persist). */
+  onInject: (remixId: string) => Promise<InjectResult>;
 }
 
 export function RemixAccordionItem({
@@ -37,11 +48,20 @@ export function RemixAccordionItem({
   onRetryAudio,
   onCancelAudio,
   onDismissJob,
+  onInject,
 }: Props) {
   const audioJobState = useAudioJobBadgeState(remix.id);
+  // Gate the Inject button: enabled only when ≥1 batch has an injectable
+  // is_final winner crop. Mirrors injectFinalCrops's precondition (no drift).
+  const canInject = useCanInject(remix.id);
   const [renameMode, setRenameMode] = useState(false);
   const [renameValue, setRenameValue] = useState(remix.name);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Local Inject UI state (per validation: local-in-accordion, not a sidebar Map).
+  const [injectState, setInjectState] = useState<InjectUiState>({
+    state: 'idle',
+  });
 
   useEffect(() => {
     setRenameValue(remix.name);
@@ -61,6 +81,32 @@ export function RemixAccordionItem({
     setRenameValue(remix.name);
     setRenameMode(false);
   };
+
+  const handleInject = useCallback(async () => {
+    log.info('handleInject', 'inject start', { remixId: remix.id });
+    setInjectState({ state: 'loading' });
+    try {
+      const result = await onInject(remix.id);
+      log.info('handleInject', 'inject done', {
+        remixId: remix.id,
+        appliedCount: result.appliedCount,
+      });
+      setInjectState({
+        state: 'done',
+        appliedCount: result.appliedCount,
+        injectedAt: new Date().toISOString(),
+      });
+      toast.success(`Injected ${result.appliedCount} crops`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Inject failed';
+      log.error('handleInject', 'inject failed', {
+        remixId: remix.id,
+        error: message,
+      });
+      setInjectState({ state: 'error', message });
+      toast.error(message);
+    }
+  }, [remix.id, onInject]);
 
   // Top-level eye opens the swap modal at a default entity (→ Variants tab).
   // Order: character → prop. Batches are accessed via the modal's Batches tab,
@@ -174,7 +220,11 @@ export function RemixAccordionItem({
             onCancel={onCancelAudio}
             onDismiss={onDismissJob}
           />
-          <InjectButton />
+          <InjectButton
+            injectState={injectState}
+            onInject={handleInject}
+            canInject={canInject}
+          />
         </div>
       )}
     </div>

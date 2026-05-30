@@ -151,6 +151,29 @@ export interface RemixIllustration {
   sections: Section[];
 }
 
+// ── Inject (Phase 3 — client-side finalize) ──────────────────────────────────
+// Inject resolves the winning is_final crops, mutates illustration.spreads[]
+// .images[] (set final_hires_media_url + collapse illustrations[]), and persists
+// the full illustration column in ONE Supabase UPDATE. No background job.
+// Spec: api/remix/inject.md (commit 5229b1d — client-side finalize).
+
+/** Result of a successful `injectFinalCrops` call.
+ *  - appliedCount  = layers that received a swapped final_hires_media_url
+ *  - collapsedCount = layers whose illustrations[] were slimmed to 1 element
+ *  - spreadCount   = number of spreads scanned */
+export interface InjectResult {
+  appliedCount: number;
+  collapsedCount: number;
+  spreadCount: number;
+}
+
+/** Local UI state of the Inject button (held in RemixAccordionItem, not store). */
+export type InjectUiState =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'done'; appliedCount: number; injectedAt: string }
+  | { state: 'error'; message: string };
+
 // ── Remix config (user-driven picks) ─────────────────────────────────────────
 
 /** Per-trait toggle inside a character choice. 5 entries (TRAIT_TYPES), cloned
@@ -277,7 +300,9 @@ export interface RemixRow {
 // — keep the type→phase map (map-background-job-row.ts) extensible, not hardcoded.
 // rev2: `remix_mix_swap` = batch-level swap (api/jobs/05). `character_swap` kept
 // until Phase 10 prunes its callers (keep union wide to reduce churn mid-chain).
-export type RemixJobPhase = 'audio' | 'image' | 'character_swap' | 'remix_mix_swap';
+// NOTE: `image` phase removed (2026-05-30) — Inject is now a synchronous
+// client-side finalize (no background job). See InjectResult / injectFinalCrops.
+export type RemixJobPhase = 'audio' | 'character_swap' | 'remix_mix_swap';
 
 export type RemixJobStatus =
   | 'queued'
@@ -288,7 +313,6 @@ export type RemixJobStatus =
 
 export interface RemixJobError {
   // Audio: 'narrate-script' | 'combine-audio-chunks' | 'persist' | 'internal'
-  // Image (Phase 3): 'crop-swap' | 'crop-rasterize' | 'persist' | 'internal'
   // Character swap (api/jobs/04): 'compose' | 'swap' | 'persist' | 'resolve' | 'internal'
   stage: string;
   spreadId?: string;
@@ -343,7 +367,7 @@ export interface RemixJob {
   completedAt?: string;
 }
 
-/** 3-shape result returned by startAudioJob/startImageJob/startMixSwap.
+/** 3-shape result returned by startAudioJob/startMixSwap.
  *  Spec: api/jobs/01 §Result + api/jobs/05 §Result. `characterKey` is set only
  *  on cross-type dedup against an ALREADY-active character-swap job (may differ
  *  from the requested key — see api/jobs/05 §cross-type dedup). */
