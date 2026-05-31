@@ -18,6 +18,10 @@ const SharePreviewPage = lazy(() =>
   import('@/features/share-preview').then((m) => ({ default: m.SharePreviewPage }))
 );
 
+const PrintExportPage = lazy(() =>
+  import('@/features/print-export').then((m) => ({ default: m.PrintExportPage }))
+);
+
 const HumanDetailPage = lazy(() =>
   import('@/features/humans').then((m) => ({ default: m.HumanDetailPage }))
 );
@@ -86,6 +90,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/editor/:bookId" element={<EditorPage />} />
         <Route path="/share/:slug" element={<Suspense fallback={<LoadingScreen />}><SharePreviewPage /></Suspense>} />
+        <Route path="/print/:id" element={<Suspense fallback={<LoadingScreen />}><PrintExportPage /></Suspense>} />
         <Route path="/demo/canvas-spread-view" element={<DemoCanvasSpreadView />} />
         <Route path="/demo/playable-spread-view" element={<DemoPlayableSpreadView />} />
         <Route path="/demo/rive-player" element={<DemoRivePlayer />} />

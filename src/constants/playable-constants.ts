@@ -63,6 +63,16 @@ export const PLAYABLE_ZOOM = {
   STEP: 5,
 } as const;
 
+// === Print/PDF Export DPI + zoom (Feature B — static print render path) ===
+// Print renders at 300 DPI; the editor/player canvas baseline is 75 DPI
+// (= canvas-math-utils PX_PER_MM ≈ 75/25.4). Font/border scale ×4 is achieved
+// purely by driving the global zoom to PRINT_RENDER_ZOOM (Editable* read
+// useZoomLevel() to multiply fontSize/borderWidth) — no per-component scaling.
+export const PRINT_CANVAS_DPI = 300;
+export const EDITOR_CANVAS_DPI = 75;
+export const PRINT_RENDER_ZOOM =
+  PLAYABLE_ZOOM.DEFAULT * (PRINT_CANVAS_DPI / EDITOR_CANVAS_DPI); // 100 × 4 = 400
+
 // === Animation Presets (used by demo mocks and animation editor) ===
 export const ANIMATION_PRESETS = {
   // Entrance effects (2-6)
