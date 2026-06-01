@@ -175,8 +175,15 @@ export function PrintExportPage() {
     );
   }
 
+  // Ready state MUST size to the canvas (not the viewport): the spread renders at
+  // the full-bleed × PRINT_RENDER_ZOOM(400) pixel count (e.g. 5175×2623 @300 DPI).
+  // A `h-screen w-screen overflow-hidden` wrapper would clip it to the headless
+  // viewport (1280×720) and — because clipped overflow does NOT extend document
+  // scroll size — `page.screenshot({ fullPage:true })` would capture only the
+  // viewport. `width:max-content` lets html/body grow to the canvas so fullPage
+  // captures the whole spread. NO overflow/height clamp on this path.
   return (
-    <div className="h-screen w-screen overflow-hidden bg-white">
+    <div className="bg-white" style={{ width: "max-content" }}>
       <PrintSpreadList
         illustration={data.illustration as unknown as IllustrationData}
         languageKey={data.renderConfig.language}
