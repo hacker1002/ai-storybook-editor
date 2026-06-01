@@ -101,7 +101,12 @@ export function PrintSpreadCanvas({
   return (
     <div
       className="print-spread-canvas relative bg-white"
-      style={{ width: scaledWidth, height: scaledHeight }}
+      // overflow:hidden clips items that extend past the full-bleed frame
+      // (e.g. a background image with w>100% / negative x) to the fixed canvas
+      // box — mirrors the player's clip wrapper (player-canvas.tsx). Without it,
+      // the parent uses width:max-content so the overflow would leak into the
+      // document scroll size and fullPage would capture beyond the spread.
+      style={{ width: scaledWidth, height: scaledHeight, overflow: "hidden" }}
     >
       {/* Pages */}
       {spread.pages?.map((page, pageIndex) => (
