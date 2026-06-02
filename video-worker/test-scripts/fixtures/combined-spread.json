@@ -1,0 +1,855 @@
+{
+  "spread": {
+    "id": "fixture-combined-0001",
+    "pages": [
+      {
+        "number": "0-1",
+        "type": "normal_page",
+        "layout": null,
+        "background": {
+          "color": "#FFFFFF",
+          "texture": null
+        }
+      }
+    ],
+    "images": [],
+    "textboxes": [
+      {
+        "id": "a287ac3b-dff7-4128-9ac9-70440b9b7a8a",
+        "z-index": 601,
+        "editor_visible": true,
+        "player_visible": true,
+        "en_US": {
+          "text": "School is closed.\nNo school, no fun!",
+          "geometry": {
+            "x": 70.23581425786445,
+            "y": 12.824718440404968,
+            "w": 23.98462932486238,
+            "h": 12.970414201183434
+          },
+          "typography": {
+            "size": 22,
+            "color": "#000000",
+            "style": "normal",
+            "family": "Nunito",
+            "weight": 400,
+            "textAlign": "left",
+            "decoration": "none",
+            "lineHeight": 1.5,
+            "letterSpacing": 0,
+            "textTransform": "none"
+          },
+          "audio": {
+            "is_sync": true,
+            "combined_audio_url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/narrations/6996b2f66c980cdf8ab9c408512e775c91762768705070f36048d1b19aa15884.mp3",
+            "word_timings": [
+              {
+                "text": "School",
+                "startMs": 251,
+                "endMs": 317,
+                "charStart": 0,
+                "charEnd": 6
+              },
+              {
+                "text": "is",
+                "startMs": 370,
+                "endMs": 476,
+                "charStart": 7,
+                "charEnd": 9
+              },
+              {
+                "text": "closed.",
+                "startMs": 567,
+                "endMs": 1193,
+                "charStart": 10,
+                "charEnd": 17
+              },
+              {
+                "text": "No",
+                "startMs": 1380,
+                "endMs": 1754,
+                "charStart": 18,
+                "charEnd": 20
+              },
+              {
+                "text": "school,",
+                "startMs": 1823,
+                "endMs": 2557,
+                "charStart": 21,
+                "charEnd": 28
+              },
+              {
+                "text": "no",
+                "startMs": 2637,
+                "endMs": 2797,
+                "charStart": 29,
+                "charEnd": 31
+              },
+              {
+                "text": "fun!",
+                "startMs": 2917,
+                "endMs": 3437,
+                "charStart": 32,
+                "charEnd": 36
+              }
+            ],
+            "chunks": [
+              {
+                "voice_id": "56c3d344-c0ec-476b-be8f-418039c2661a",
+                "reader_key": "narrator",
+                "script": "[sad] School is closed. No school, no fun! ",
+                "stability": 0.5,
+                "similarity": 0.75,
+                "exaggeration": 0,
+                "speed": 1,
+                "script_synced": true,
+                "params_synced": true,
+                "results": [
+                  {
+                    "url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/narrations/6996b2f66c980cdf8ab9c408512e775c91762768705070f36048d1b19aa15884.mp3",
+                    "word_timings": [
+                      {
+                        "text": "School",
+                        "startMs": 251,
+                        "endMs": 317,
+                        "charStart": 0,
+                        "charEnd": 6
+                      },
+                      {
+                        "text": "is",
+                        "startMs": 370,
+                        "endMs": 476,
+                        "charStart": 7,
+                        "charEnd": 9
+                      },
+                      {
+                        "text": "closed.",
+                        "startMs": 567,
+                        "endMs": 1193,
+                        "charStart": 10,
+                        "charEnd": 17
+                      },
+                      {
+                        "text": "No",
+                        "startMs": 1380,
+                        "endMs": 1754,
+                        "charStart": 18,
+                        "charEnd": 20
+                      },
+                      {
+                        "text": "school,",
+                        "startMs": 1823,
+                        "endMs": 2557,
+                        "charStart": 21,
+                        "charEnd": 28
+                      },
+                      {
+                        "text": "no",
+                        "startMs": 2637,
+                        "endMs": 2797,
+                        "charStart": 29,
+                        "charEnd": 31
+                      },
+                      {
+                        "text": "fun!",
+                        "startMs": 2917,
+                        "endMs": 3437,
+                        "charStart": 32,
+                        "charEnd": 36
+                      }
+                    ],
+                    "raw_alignment": {
+                      "characters": [],
+                      "character_start_times_seconds": [],
+                      "character_end_times_seconds": []
+                    },
+                    "created_time": "2026-04-29T07:00:59.941Z",
+                    "is_selected": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "ja_JP": {
+          "text": "学校はお休み。\n学校がないと、つまらない！",
+          "geometry": {
+            "x": 60.411162510453366,
+            "y": 12.824718440404968,
+            "w": 33.809281072273464,
+            "h": 12.970414201183434
+          },
+          "typography": {
+            "size": 22,
+            "color": "#000000",
+            "style": "normal",
+            "family": "Nunito",
+            "weight": 400,
+            "textAlign": "left",
+            "decoration": "none",
+            "lineHeight": 1.5,
+            "letterSpacing": 0,
+            "textTransform": "none"
+          },
+          "audio": {
+            "is_sync": true,
+            "combined_audio_url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/narrations/779dca12bd9eff1df6ac49dfd08af1d8e50b454c2cb84cd2017923e3155db4f8.mp3",
+            "word_timings": [
+              {
+                "text": "学",
+                "startMs": 0,
+                "endMs": 240,
+                "charStart": 0,
+                "charEnd": 1
+              },
+              {
+                "text": "校",
+                "startMs": 240,
+                "endMs": 480,
+                "charStart": 1,
+                "charEnd": 2
+              },
+              {
+                "text": "は",
+                "startMs": 480,
+                "endMs": 800,
+                "charStart": 2,
+                "charEnd": 3
+              },
+              {
+                "text": "お",
+                "startMs": 800,
+                "endMs": 880,
+                "charStart": 3,
+                "charEnd": 4
+              },
+              {
+                "text": "休",
+                "startMs": 880,
+                "endMs": 1280,
+                "charStart": 4,
+                "charEnd": 5
+              },
+              {
+                "text": "み",
+                "startMs": 1280,
+                "endMs": 1440,
+                "charStart": 5,
+                "charEnd": 6
+              },
+              {
+                "text": "。",
+                "startMs": 1440,
+                "endMs": 2320,
+                "charStart": 6,
+                "charEnd": 7
+              },
+              {
+                "text": "学",
+                "startMs": 2320,
+                "endMs": 2320,
+                "charStart": 8,
+                "charEnd": 9
+              },
+              {
+                "text": "校",
+                "startMs": 2320,
+                "endMs": 2560,
+                "charStart": 9,
+                "charEnd": 10
+              },
+              {
+                "text": "が",
+                "startMs": 2560,
+                "endMs": 2693,
+                "charStart": 10,
+                "charEnd": 11
+              },
+              {
+                "text": "な",
+                "startMs": 2693,
+                "endMs": 2826,
+                "charStart": 11,
+                "charEnd": 12
+              },
+              {
+                "text": "い",
+                "startMs": 2826,
+                "endMs": 2959,
+                "charStart": 12,
+                "charEnd": 13
+              },
+              {
+                "text": "と",
+                "startMs": 2959,
+                "endMs": 3359,
+                "charStart": 13,
+                "charEnd": 14
+              },
+              {
+                "text": "、",
+                "startMs": 3359,
+                "endMs": 3439,
+                "charStart": 14,
+                "charEnd": 15
+              },
+              {
+                "text": "つ",
+                "startMs": 3439,
+                "endMs": 3519,
+                "charStart": 15,
+                "charEnd": 16
+              },
+              {
+                "text": "ま",
+                "startMs": 3519,
+                "endMs": 3679,
+                "charStart": 16,
+                "charEnd": 17
+              },
+              {
+                "text": "ら",
+                "startMs": 3679,
+                "endMs": 3812,
+                "charStart": 17,
+                "charEnd": 18
+              },
+              {
+                "text": "な",
+                "startMs": 3812,
+                "endMs": 3945,
+                "charStart": 18,
+                "charEnd": 19
+              },
+              {
+                "text": "い",
+                "startMs": 3945,
+                "endMs": 4078,
+                "charStart": 19,
+                "charEnd": 20
+              },
+              {
+                "text": "！",
+                "startMs": 4078,
+                "endMs": 4158,
+                "charStart": 20,
+                "charEnd": 21
+              }
+            ],
+            "chunks": [
+              {
+                "voice_id": "4dca539d-2e80-4c64-9a9a-07090e07e78f",
+                "reader_key": "narrator",
+                "script": "学校はお休み。\n学校がないと、つまらない！",
+                "stability": 0.5,
+                "similarity": 0.82,
+                "exaggeration": 0.85,
+                "speed": 1.25,
+                "script_synced": true,
+                "params_synced": true,
+                "results": [
+                  {
+                    "url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/narrations/779dca12bd9eff1df6ac49dfd08af1d8e50b454c2cb84cd2017923e3155db4f8.mp3",
+                    "word_timings": [
+                      {
+                        "text": "学",
+                        "startMs": 0,
+                        "endMs": 240,
+                        "charStart": 0,
+                        "charEnd": 1
+                      },
+                      {
+                        "text": "校",
+                        "startMs": 240,
+                        "endMs": 480,
+                        "charStart": 1,
+                        "charEnd": 2
+                      },
+                      {
+                        "text": "は",
+                        "startMs": 480,
+                        "endMs": 800,
+                        "charStart": 2,
+                        "charEnd": 3
+                      },
+                      {
+                        "text": "お",
+                        "startMs": 800,
+                        "endMs": 880,
+                        "charStart": 3,
+                        "charEnd": 4
+                      },
+                      {
+                        "text": "休",
+                        "startMs": 880,
+                        "endMs": 1280,
+                        "charStart": 4,
+                        "charEnd": 5
+                      },
+                      {
+                        "text": "み",
+                        "startMs": 1280,
+                        "endMs": 1440,
+                        "charStart": 5,
+                        "charEnd": 6
+                      },
+                      {
+                        "text": "。",
+                        "startMs": 1440,
+                        "endMs": 2320,
+                        "charStart": 6,
+                        "charEnd": 7
+                      },
+                      {
+                        "text": "学",
+                        "startMs": 2320,
+                        "endMs": 2320,
+                        "charStart": 8,
+                        "charEnd": 9
+                      },
+                      {
+                        "text": "校",
+                        "startMs": 2320,
+                        "endMs": 2560,
+                        "charStart": 9,
+                        "charEnd": 10
+                      },
+                      {
+                        "text": "が",
+                        "startMs": 2560,
+                        "endMs": 2693,
+                        "charStart": 10,
+                        "charEnd": 11
+                      },
+                      {
+                        "text": "な",
+                        "startMs": 2693,
+                        "endMs": 2826,
+                        "charStart": 11,
+                        "charEnd": 12
+                      },
+                      {
+                        "text": "い",
+                        "startMs": 2826,
+                        "endMs": 2959,
+                        "charStart": 12,
+                        "charEnd": 13
+                      },
+                      {
+                        "text": "と",
+                        "startMs": 2959,
+                        "endMs": 3359,
+                        "charStart": 13,
+                        "charEnd": 14
+                      },
+                      {
+                        "text": "、",
+                        "startMs": 3359,
+                        "endMs": 3439,
+                        "charStart": 14,
+                        "charEnd": 15
+                      },
+                      {
+                        "text": "つ",
+                        "startMs": 3439,
+                        "endMs": 3519,
+                        "charStart": 15,
+                        "charEnd": 16
+                      },
+                      {
+                        "text": "ま",
+                        "startMs": 3519,
+                        "endMs": 3679,
+                        "charStart": 16,
+                        "charEnd": 17
+                      },
+                      {
+                        "text": "ら",
+                        "startMs": 3679,
+                        "endMs": 3812,
+                        "charStart": 17,
+                        "charEnd": 18
+                      },
+                      {
+                        "text": "な",
+                        "startMs": 3812,
+                        "endMs": 3945,
+                        "charStart": 18,
+                        "charEnd": 19
+                      },
+                      {
+                        "text": "い",
+                        "startMs": 3945,
+                        "endMs": 4078,
+                        "charStart": 19,
+                        "charEnd": 20
+                      },
+                      {
+                        "text": "！",
+                        "startMs": 4078,
+                        "endMs": 4158,
+                        "charStart": 20,
+                        "charEnd": 21
+                      }
+                    ],
+                    "raw_alignment": {
+                      "characters": [],
+                      "character_start_times_seconds": [],
+                      "character_end_times_seconds": []
+                    },
+                    "created_time": "2026-04-29T00:55:42.598Z",
+                    "is_selected": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "vi_VN": {
+          "text": "Trường học đóng cửa rồi.\nKhông đi học, chẳng vui chút nào!",
+          "geometry": {
+            "x": 62.22494437151388,
+            "y": 12.824718440404968,
+            "w": 38.1672704786845,
+            "h": 11.374269887291678
+          },
+          "typography": {
+            "size": 22,
+            "color": "#000000",
+            "style": "normal",
+            "family": "Nunito",
+            "weight": 400,
+            "textAlign": "left",
+            "decoration": "none",
+            "lineHeight": 1.5,
+            "letterSpacing": 0,
+            "textTransform": "none"
+          },
+          "audio": {
+            "is_sync": true,
+            "combined_audio_url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/narrations/244ad2a2a63634a66a87a0fd186f02bf92a1d9a2701660503cb2e3e83e015857.mp3",
+            "word_timings": [
+              {
+                "text": "Trường",
+                "startMs": 0,
+                "endMs": 160,
+                "charStart": 0,
+                "charEnd": 6
+              },
+              {
+                "text": "học",
+                "startMs": 220,
+                "endMs": 400,
+                "charStart": 7,
+                "charEnd": 10
+              },
+              {
+                "text": "đóng",
+                "startMs": 432,
+                "endMs": 560,
+                "charStart": 11,
+                "charEnd": 15
+              },
+              {
+                "text": "cửa",
+                "startMs": 620,
+                "endMs": 800,
+                "charStart": 16,
+                "charEnd": 19
+              },
+              {
+                "text": "rồi.",
+                "startMs": 880,
+                "endMs": 1200,
+                "charStart": 20,
+                "charEnd": 24
+              },
+              {
+                "text": "Không",
+                "startMs": 1200,
+                "endMs": 1680,
+                "charStart": 25,
+                "charEnd": 30
+              },
+              {
+                "text": "đi",
+                "startMs": 1733,
+                "endMs": 1839,
+                "charStart": 31,
+                "charEnd": 33
+              },
+              {
+                "text": "học,",
+                "startMs": 1899,
+                "endMs": 2239,
+                "charStart": 34,
+                "charEnd": 38
+              },
+              {
+                "text": "chẳng",
+                "startMs": 2279,
+                "endMs": 2479,
+                "charStart": 39,
+                "charEnd": 44
+              },
+              {
+                "text": "vui",
+                "startMs": 2519,
+                "endMs": 2639,
+                "charStart": 45,
+                "charEnd": 48
+              },
+              {
+                "text": "chút",
+                "startMs": 2687,
+                "endMs": 2879,
+                "charStart": 49,
+                "charEnd": 53
+              },
+              {
+                "text": "nào!",
+                "startMs": 2939,
+                "endMs": 3199,
+                "charStart": 54,
+                "charEnd": 58
+              }
+            ],
+            "chunks": [
+              {
+                "voice_id": "928a1e5a-dc11-474a-81d4-d18ec228ba0f",
+                "reader_key": "narrator",
+                "script": "Trường học đóng cửa rồi.\nKhông đi học, chẳng vui chút nào!",
+                "stability": 0.5,
+                "similarity": 0.75,
+                "exaggeration": 0,
+                "speed": 1,
+                "script_synced": true,
+                "params_synced": true,
+                "results": [
+                  {
+                    "url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/narrations/244ad2a2a63634a66a87a0fd186f02bf92a1d9a2701660503cb2e3e83e015857.mp3",
+                    "word_timings": [
+                      {
+                        "text": "Trường",
+                        "startMs": 0,
+                        "endMs": 160,
+                        "charStart": 0,
+                        "charEnd": 6
+                      },
+                      {
+                        "text": "học",
+                        "startMs": 220,
+                        "endMs": 400,
+                        "charStart": 7,
+                        "charEnd": 10
+                      },
+                      {
+                        "text": "đóng",
+                        "startMs": 432,
+                        "endMs": 560,
+                        "charStart": 11,
+                        "charEnd": 15
+                      },
+                      {
+                        "text": "cửa",
+                        "startMs": 620,
+                        "endMs": 800,
+                        "charStart": 16,
+                        "charEnd": 19
+                      },
+                      {
+                        "text": "rồi.",
+                        "startMs": 880,
+                        "endMs": 1200,
+                        "charStart": 20,
+                        "charEnd": 24
+                      },
+                      {
+                        "text": "Không",
+                        "startMs": 1200,
+                        "endMs": 1680,
+                        "charStart": 25,
+                        "charEnd": 30
+                      },
+                      {
+                        "text": "đi",
+                        "startMs": 1733,
+                        "endMs": 1839,
+                        "charStart": 31,
+                        "charEnd": 33
+                      },
+                      {
+                        "text": "học,",
+                        "startMs": 1899,
+                        "endMs": 2239,
+                        "charStart": 34,
+                        "charEnd": 38
+                      },
+                      {
+                        "text": "chẳng",
+                        "startMs": 2279,
+                        "endMs": 2479,
+                        "charStart": 39,
+                        "charEnd": 44
+                      },
+                      {
+                        "text": "vui",
+                        "startMs": 2519,
+                        "endMs": 2639,
+                        "charStart": 45,
+                        "charEnd": 48
+                      },
+                      {
+                        "text": "chút",
+                        "startMs": 2687,
+                        "endMs": 2879,
+                        "charStart": 49,
+                        "charEnd": 53
+                      },
+                      {
+                        "text": "nào!",
+                        "startMs": 2939,
+                        "endMs": 3199,
+                        "charStart": 54,
+                        "charEnd": 58
+                      }
+                    ],
+                    "raw_alignment": {
+                      "characters": [],
+                      "character_start_times_seconds": [],
+                      "character_end_times_seconds": []
+                    },
+                    "created_time": "2026-04-30T11:37:33.589Z",
+                    "is_selected": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "shapes": [],
+    "videos": [
+      {
+        "id": "fixture-video-0001",
+        "title": "Demo video",
+        "geometry": {
+          "x": 4,
+          "y": 30,
+          "w": 28,
+          "h": 38
+        },
+        "z-index": 200,
+        "player_visible": true,
+        "editor_visible": true,
+        "media_url": "https://www.w3schools.com/tags/mov_bbb.mp4"
+      }
+    ],
+    "auto_pics": [
+      {
+        "id": "fixture-webp-0001",
+        "title": "Demo animated WebP",
+        "geometry": {
+          "x": 37,
+          "y": 30,
+          "w": 26,
+          "h": 38
+        },
+        "z-index": 210,
+        "player_visible": true,
+        "editor_visible": true,
+        "media_url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/auto-pics/1778122438393-dailyfina-cloud-22006-webp.webp"
+      },
+      {
+        "id": "fixture-lottie-0001",
+        "title": "Demo dotLottie",
+        "geometry": {
+          "x": 68,
+          "y": 30,
+          "w": 28,
+          "h": 38
+        },
+        "z-index": 220,
+        "player_visible": true,
+        "editor_visible": true,
+        "media_url": "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/auto-pics/1777548877878-bored-leela-swing-v2.lottie"
+      }
+    ],
+    "audios": [],
+    "quizzes": [],
+    "animations": [
+      {
+        "type": 0,
+        "order": 0,
+        "effect": {
+          "type": 11,
+          "delay": 0,
+          "duration": 3200
+        },
+        "target": {
+          "id": "a287ac3b-dff7-4128-9ac9-70440b9b7a8a",
+          "type": "textbox"
+        },
+        "trigger_type": "on_next"
+      },
+      {
+        "type": 0,
+        "order": 1,
+        "effect": {
+          "type": 3,
+          "duration": 800,
+          "delay": 0
+        },
+        "target": {
+          "id": "fixture-video-0001",
+          "type": "video"
+        },
+        "trigger_type": "after_previous"
+      },
+      {
+        "type": 0,
+        "order": 2,
+        "effect": {
+          "type": 1,
+          "duration": 8000
+        },
+        "target": {
+          "id": "fixture-video-0001",
+          "type": "video"
+        },
+        "trigger_type": "after_previous"
+      },
+      {
+        "type": 0,
+        "order": 3,
+        "effect": {
+          "type": 3,
+          "duration": 800,
+          "delay": 0
+        },
+        "target": {
+          "id": "fixture-webp-0001",
+          "type": "auto_pic"
+        },
+        "trigger_type": "after_previous"
+      },
+      {
+        "type": 0,
+        "order": 4,
+        "effect": {
+          "type": 3,
+          "duration": 800,
+          "delay": 0
+        },
+        "target": {
+          "id": "fixture-lottie-0001",
+          "type": "auto_pic"
+        },
+        "trigger_type": "after_previous"
+      }
+    ],
+    "manuscript": "Combined: read-along + video + webp + lottie"
+  },
+  "language": "en_US"
+}

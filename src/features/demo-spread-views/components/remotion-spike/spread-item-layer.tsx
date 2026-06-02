@@ -18,7 +18,10 @@ import type {
   SpreadAutoPic,
   Typography,
 } from "@/types/spread-types";
-import { DotLottiePlayer } from "@/features/editor/components/shared-components/auto-pic-players/dot-lottie-player";
+// Deterministic (frame-driven) lottie player — used in BOTH <Player> preview and worker
+// render so lottie pixels match (preview===output). The editor's dot-lottie-player is
+// rAF-driven (freezes on render) + pulls a Vite `?url` WASM that breaks webpack.
+import { DotLottiePlayer } from "@/remotion/lottie/deterministic-lottie-player";
 
 interface SpreadItemLayerProps {
   spread: PlayableSpread;

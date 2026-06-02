@@ -1,0 +1,11 @@
+{
+  "name": "ai-storybook-video-worker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Node Remotion render worker — bundles the shared spread composition (../src/remotion) and renders MP4 (1920x1440, 30fps). Resolves deps from the parent ai-storybook-editor/node_modules.",
+  "scripts": {
+    "preflight": "tsx src/preflight-bundle.ts",
+    "start": "tsx src/server.ts"
+  }
+}

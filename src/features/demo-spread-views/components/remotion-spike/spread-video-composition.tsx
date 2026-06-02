@@ -23,10 +23,12 @@ import { linearizeSpreadTimeline } from "../../utils/linearize-spread-timeline";
 
 const log = createLogger("Demo", "RemotionSpreadComposition");
 
-export interface SpreadVideoCompositionProps {
+// Type alias (not interface): Remotion's <Composition> requires props to satisfy
+// `Record<string, unknown>`, which interfaces don't (no implicit index signature).
+export type SpreadVideoCompositionProps = {
   spread: PlayableSpread;
   language: "en_US" | "vi_VN";
-}
+};
 
 /** Build a (target id → geometry) lookup so LINES/Arcs deltas resolve correctly. */
 function buildGeometryLookup(
