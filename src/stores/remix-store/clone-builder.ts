@@ -191,5 +191,8 @@ export function buildRemixClonePayload(
     characters,
     props,
     mixes,
+    // Lazy-init on first export/toggle (job handler or client). Null = reader
+    // coalesces to DEFAULT — no need to materialize the full shape at create.
+    distribution: null,
   };
 }

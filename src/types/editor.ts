@@ -250,6 +250,51 @@ export type NarratorSettings = NarratorInferenceParams & {
 export type MultiLangName = Record<string, string>;
 
 // Full Book type matching database schema
+// ── Distribution (books.distribution + remixes.distribution JSONB) ──────────
+// Export-artifact state per channel. Additive nullable column (DB-CHANGELOG
+// 2026-06-01). Job handler is single-writer of status/media_url/file_size/
+// exported_at/job_id; client only writes is_enabled. Reader MUST coalesce null
+// → DEFAULT (see distribution-helpers.ts). Design §2.2.
+
+export type ExportStatus =
+  | 'pending'
+  | 'exporting'
+  | 'updated'
+  | 'outdated'
+  | 'failed';
+
+export interface ExportVariantLeaf {
+  is_enabled: boolean;
+  status: ExportStatus;
+  media_url: string | null;
+  file_size: number | null; // bytes
+  exported_at: string | null; // ISO8601
+  job_id: string | null; // soft FK → background_jobs.id (set while exporting)
+}
+
+export type PlayerKey = 'web' | 'mobile' | 'ipad';
+export type DigitalKey = 'epub' | 'pdf';
+export type PrinterKey = '600dpi' | '300dpi';
+export type VideoResKey = 'sd' | 'hd' | 'fhd' | 'qhd';
+export type VideoType = 'classic' | 'dynamic';
+
+export interface VideoDistributionEntry {
+  type: VideoType;
+  sd: ExportVariantLeaf;
+  hd: ExportVariantLeaf;
+  fhd: ExportVariantLeaf;
+  qhd: ExportVariantLeaf;
+}
+
+export interface Distribution {
+  player: Record<PlayerKey, ExportVariantLeaf>;
+  digital: Record<DigitalKey, ExportVariantLeaf>;
+  printer: Record<PrinterKey, ExportVariantLeaf>; // bracket access: dist.printer['300dpi']
+  videos: VideoDistributionEntry[];
+}
+
+export type ChannelKey = 'player' | 'digital' | 'printer' | 'video';
+
 export interface Book {
   id: string;
   title: string;
@@ -277,6 +322,7 @@ export interface Book {
   effects: BookEffectsSettings | null;
   remix: BookRemix | null;
   template_layout: BookTemplateLayout | null;
+  distribution?: Distribution | null; // export-artifact state (additive, optional)
   created_at: string;
   updated_at: string;
 }

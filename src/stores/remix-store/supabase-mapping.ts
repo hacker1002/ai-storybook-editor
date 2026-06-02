@@ -9,6 +9,7 @@ import type {
   RemixMix,
   RemixProp,
 } from '@/types/remix';
+import type { Distribution } from '@/types/editor';
 
 interface RawRemixRow {
   id: string;
@@ -19,6 +20,7 @@ interface RawRemixRow {
   characters?: unknown;
   props?: unknown;
   mixes?: unknown;
+  distribution?: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +43,9 @@ export function mapRowToRemix(row: RawRemixRow): Remix {
     characters: (row.characters as RemixCharacter[] | null) ?? [],
     props: (row.props as RemixProp[] | null) ?? [],
     mixes: (row.mixes as RemixMix[] | null) ?? [],
+    // Nullable JSONB — reader coalesces to DEFAULT at render (KISS: no
+    // normalize at ingress; shape is small + tolerated downstream).
+    distribution: (row.distribution as Distribution | null) ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

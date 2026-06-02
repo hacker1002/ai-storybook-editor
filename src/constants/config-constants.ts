@@ -34,8 +34,7 @@ export type ConfigSection =
   | 'layout'
   | 'effect'
   | 'remix'
-  | 'preview'
-  | 'export'
+  | 'distribution'
   | 'print';
 
 export interface ConfigSectionItem {
@@ -55,8 +54,7 @@ export const CONFIG_SECTIONS: ConfigSectionItem[] = [
   { key: 'layout',         label: 'Layout',           icon: 'LayoutGrid'     },
   { key: 'effect',         label: 'Effect',           icon: 'Sparkles'       },
   { key: 'remix',          label: 'Remix',            icon: 'RefreshCw'      },
-  { key: 'preview',        label: 'Preview',          icon: 'Eye'            },
-  { key: 'export',         label: 'Export',           icon: 'Download'       },
+  { key: 'distribution',   label: 'Distribution',     icon: 'Share2'         },
   { key: 'print',          label: 'Print',            icon: 'Printer'        },
 ];
 

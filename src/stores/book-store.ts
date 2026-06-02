@@ -45,6 +45,7 @@ interface BookStore {
   fetchBook: (bookId: string) => Promise<Book | null>;
   createBook: (params: CreateBookParams) => Promise<Book | null>;
   updateBook: (bookId: string, updates: Partial<Book>) => Promise<boolean>;
+  refetchBookDistribution: (bookId: string) => Promise<void>;
   deleteBook: (bookId: string) => Promise<boolean>;
   setCurrentBook: (book: Book | null) => void;
   clearBooks: () => void;
@@ -242,6 +243,40 @@ export const useBookStore = create<BookStore>()(
           return true;
         },
 
+        // Re-pull ONLY the distribution column (job handler is single-writer of
+        // status/media_url/etc.). Merges into currentBook without clobbering
+        // other fields. Self-heal for stuck EXPORTING on mount + post-job.
+        refetchBookDistribution: async (bookId) => {
+          log.info("refetchBookDistribution", "fetch", { bookId });
+          const { data, error } = await supabase
+            .from("books")
+            .select("distribution")
+            .eq("id", bookId)
+            .maybeSingle();
+
+          if (error) {
+            log.error("refetchBookDistribution", "failed", {
+              bookId,
+              error: error.message,
+            });
+            return;
+          }
+          set((state) =>
+            state.currentBook?.id === bookId
+              ? {
+                  currentBook: {
+                    ...state.currentBook,
+                    distribution: data?.distribution ?? null,
+                  },
+                }
+              : state
+          );
+          log.info("refetchBookDistribution", "done", {
+            bookId,
+            hasDistribution: !!data?.distribution,
+          });
+        },
+
         deleteBook: async (bookId) => {
           log.info("deleteBook", "start", { bookId });
           const previousBooks = get().books;
@@ -420,6 +455,7 @@ export const useBookActions = () =>
       fetchBook: s.fetchBook,
       createBook: s.createBook,
       updateBook: s.updateBook,
+      refetchBookDistribution: s.refetchBookDistribution,
       deleteBook: s.deleteBook,
       setCurrentBook: s.setCurrentBook,
       clearBooks: s.clearBooks,

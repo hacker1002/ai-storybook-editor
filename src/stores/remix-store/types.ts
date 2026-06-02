@@ -15,6 +15,7 @@ import type {
   RemixSpread,
   StartMixSwapParams,
 } from '@/types/remix';
+import type { Distribution } from '@/types/editor';
 
 // ── Patch shape exposed by job/runner helpers ────────────────────────────────
 // Discriminated union — `patch` (legacy single-sheet merge) vs `replaceAll`
@@ -62,6 +63,11 @@ export interface RemixCrudSlice {
   renameRemix: (id: string, name: string) => Promise<boolean>;
   deleteRemix: (id: string) => Promise<boolean>;
   setActiveRemixId: (id: string | null) => void;
+
+  /** Persist `remixes.distribution` (client writes is_enabled only; job handler
+   *  owns status/media). Optimistic full-column set + Supabase PATCH + rollback.
+   *  Mirrors BookStore.updateBook for the book source. */
+  updateRemixDistribution: (id: string, dist: Distribution) => Promise<boolean>;
 
   patchRemixIllustration: (id: string, spreads: RemixSpread[]) => void;
   patchRemixCropSheets: (id: string, updates: CropSheetUpdate[]) => void;

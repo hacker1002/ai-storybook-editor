@@ -163,6 +163,95 @@ export async function enqueueRemixMixSwap(
   return result.data;
 }
 
+// ── Export PDF (api/jobs/06 — book + remix route) ────────────────────────────
+
+export interface StartExportPdfOpts {
+  dpi?: number;
+  color_mode?: 'cmyk' | 'rgb';
+}
+
+export interface EnqueueExportPdfEnqueuedData {
+  job_id: string;
+  status: 'queued';
+  type: 'export_pdf';
+  source: 'book' | 'remix';
+  book_id: string;
+  remix_id?: string;
+  total_steps: number;
+  spreads_to_render: number;
+  estimated_duration_sec: number;
+  estimated_file_size_mb: number;
+  skipped?: false;
+  deduped?: false;
+}
+
+export interface EnqueueExportPdfSkippedData {
+  skipped: true;
+  reason: 'no_interior_spreads' | 'snapshot_empty' | string;
+  spreads_to_render: 0;
+}
+
+export interface EnqueueExportPdfDedupedData {
+  job_id: string;
+  status: 'queued' | 'running';
+  type: 'export_pdf';
+  source: 'book' | 'remix';
+  book_id: string;
+  remix_id?: string;
+  deduped: true;
+}
+
+export type EnqueueExportPdfData =
+  | EnqueueExportPdfEnqueuedData
+  | EnqueueExportPdfSkippedData
+  | EnqueueExportPdfDedupedData;
+
+/** Narrowing guards — `data` is a 3-way union (enqueued | skipped | deduped). */
+export function isExportPdfSkipped(
+  d: EnqueueExportPdfData,
+): d is EnqueueExportPdfSkippedData {
+  return (d as EnqueueExportPdfSkippedData).skipped === true;
+}
+
+export function isExportPdfDeduped(
+  d: EnqueueExportPdfData,
+): d is EnqueueExportPdfDedupedData {
+  return (d as EnqueueExportPdfDedupedData).deduped === true;
+}
+
+/** POST /api/jobs/{bookId}/export-pdf (book source). Path verbatim (FastAPI —
+ *  no kebab flatten). v1 callers pass `{ dpi: 300, color_mode: 'cmyk' }`. */
+export async function enqueueBookExportPdf(
+  bookId: string,
+  opts: StartExportPdfOpts = {},
+): Promise<EnqueueJobResponse<EnqueueExportPdfData> | ImageApiFailure> {
+  log.info('enqueueBookExportPdf', 'request', {
+    bookId,
+    dpi: opts.dpi,
+    colorMode: opts.color_mode,
+  });
+  return callImageApi<EnqueueJobResponse<EnqueueExportPdfData>>(
+    `/api/jobs/${encodeURIComponent(bookId)}/export-pdf`,
+    opts,
+  );
+}
+
+/** POST /api/jobs/remix/{remixId}/export-pdf (remix source). */
+export async function enqueueRemixExportPdf(
+  remixId: string,
+  opts: StartExportPdfOpts = {},
+): Promise<EnqueueJobResponse<EnqueueExportPdfData> | ImageApiFailure> {
+  log.info('enqueueRemixExportPdf', 'request', {
+    remixId,
+    dpi: opts.dpi,
+    colorMode: opts.color_mode,
+  });
+  return callImageApi<EnqueueJobResponse<EnqueueExportPdfData>>(
+    `/api/jobs/remix/${encodeURIComponent(remixId)}/export-pdf`,
+    opts,
+  );
+}
+
 /** POST /api/jobs/{jobId}/cancel */
 export async function cancelJobRemote(
   jobId: string,

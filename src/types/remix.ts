@@ -8,7 +8,7 @@ import type { Prop, PropVariant, Crop } from './prop-types';
 
 // Re-export SpreadTag so swap-modal consumers have a single import point.
 export type { SpreadTag } from './spread-types';
-import type { RemixLanguageCode } from './editor';
+import type { RemixLanguageCode, Distribution } from './editor';
 import type { Human, TraitType } from './human';
 
 // Re-export book-level remix entries so consumers have a single import point.
@@ -268,6 +268,9 @@ export interface Remix {
   characters: RemixCharacter[];
   props: RemixProp[];
   mixes: RemixMix[];
+  /** Export-artifact state (additive, optional). Same shape as Book.distribution.
+   *  Reader coalesces null/undefined → DEFAULT (coalesceDistribution). */
+  distribution?: Distribution | null;
   created_at: string;
   updated_at: string;
 }
@@ -285,6 +288,7 @@ export interface RemixRow {
   characters: RemixCharacter[];
   props: RemixProp[];
   mixes: RemixMix[];
+  distribution?: Distribution | null;
   created_at: string;
   updated_at: string;
 }

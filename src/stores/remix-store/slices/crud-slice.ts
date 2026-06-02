@@ -181,6 +181,37 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
 
   setActiveRemixId: (id) => set({ activeRemixId: id }),
 
+  updateRemixDistribution: async (id, dist) => {
+    const prev = get().remixes.find((r) => r.id === id);
+    if (!prev) {
+      log.warn('updateRemixDistribution', 'remix not found', { id });
+      return false;
+    }
+
+    // Optimistic: full-column set (client owns is_enabled; status/media fields
+    // round-trip unchanged from the coalesced shape the UI rendered).
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === id ? { ...r, distribution: dist } : r,
+      ),
+    }));
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ distribution: dist })
+      .eq('id', id);
+
+    if (error) {
+      log.error('updateRemixDistribution', 'rollback', { id, error: error.message });
+      set((s) => ({
+        remixes: s.remixes.map((r) => (r.id === id ? prev : r)),
+      }));
+      return false;
+    }
+    log.info('updateRemixDistribution', 'done', { id });
+    return true;
+  },
+
   patchRemixIllustration: (id, spreads) =>
     set((s) => ({
       remixes: s.remixes.map((r) =>

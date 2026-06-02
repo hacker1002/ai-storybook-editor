@@ -316,6 +316,8 @@ export const useRemixActions = () =>
       renameRemix: s.renameRemix,
       deleteRemix: s.deleteRemix,
       setActiveRemixId: s.setActiveRemixId,
+      updateRemixDistribution: s.updateRemixDistribution,
+      refetchRemix: s.refetchRemix,
       startAudioJob: s.startAudioJob,
       injectFinalCrops: s.injectFinalCrops,
       cancelJob: s.cancelJob,
