@@ -18,6 +18,7 @@ import {
 } from "@/features/editor/components/shared-components";
 import { PageItem } from "@/features/editor/components/canvas-spread-view/page-item";
 import { PageNumberingOverlay } from "@/features/editor/components/canvas-spread-view/page-numbering-overlay";
+import { TrimGuideOverlay } from "@/features/editor/components/canvas-spread-view/trim-guide-overlay";
 import {
   buildPlayerCompositeContextMap,
   resolveEffectiveZIndex,
@@ -28,7 +29,11 @@ import {
   shouldRenderPrintImage,
   shouldRenderPrintShape,
 } from "../utils/print-spread-items";
-import { useCanvasSize, useSetZoomLevel } from "@/stores/editor-settings-store";
+import {
+  useCanvasSize,
+  useSetZoomLevel,
+  useTrimPct,
+} from "@/stores/editor-settings-store";
 import { PRINT_RENDER_ZOOM } from "@/constants/playable-constants";
 import { LAYER_CONFIG } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";
@@ -56,6 +61,9 @@ export function PrintSpreadCanvas({
   // 'single' page extraction is a raster crop in the export job, not here.
   const { width: canvasWidth, height: canvasHeight } = useCanvasSize();
   const setZoom = useSetZoomLevel();
+  // Bleed geometry (hydrated by PrintExportPage via hydrateBleedCanvas). Drives the
+  // white bleed border at the trim boundary.
+  const trimPct = useTrimPct();
 
   // Drive the global zoom to 400 so Editable* scale fonts/borders ×4. No cleanup
   // (KISS) — the print route never mounts the editor concurrently, and the editor
@@ -197,6 +205,19 @@ export function PrintSpreadCanvas({
           />
         );
       })}
+
+      {/* White bleed border — outlines the trim box at [trimPct, 100-trimPct]; the
+          region OUTSIDE it (bleed) may be cut at the bindery. Content keeps rendering
+          through the bleed (outline only, pointer-events:none). Border width scaled by
+          PRINT_RENDER_ZOOM to stay proportional on the 300-DPI raster. Bakes into the
+          exported PDF as a proof/bleed marker (this surface = screenshot source). */}
+      <TrimGuideOverlay
+        trimPct={trimPct}
+        color="rgba(255, 255, 255, 0.9)"
+        borderStyle="solid"
+        borderWidthPx={1.5 * (PRINT_RENDER_ZOOM / 100)}
+        title="Bleed area — content here may be trimmed when printing"
+      />
     </div>
   );
 }
