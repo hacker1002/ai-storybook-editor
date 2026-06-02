@@ -9,7 +9,7 @@ import { VoicesPage } from '@/features/voices';
 import { SoundsPage } from '@/features/sounds';
 import { MusicsPage } from '@/features/musics';
 import { HumansPage } from '@/features/humans';
-import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer } from '@/features/demo-spread-views';
+import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer, DemoRemotionSpike } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVoicesActions } from '@/stores/voices-store';
 import { useHumansActions } from '@/stores/humans-store';
@@ -94,6 +94,7 @@ export default function App() {
         <Route path="/demo/canvas-spread-view" element={<DemoCanvasSpreadView />} />
         <Route path="/demo/playable-spread-view" element={<DemoPlayableSpreadView />} />
         <Route path="/demo/rive-player" element={<DemoRivePlayer />} />
+        <Route path="/demo/remotion-spike" element={<DemoRemotionSpike />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/voices" element={<VoicesPage />} />
