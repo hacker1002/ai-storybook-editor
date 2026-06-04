@@ -11,7 +11,11 @@
 // (Phase 04); FrameSeek impl lives in the Remotion composition (Phase 03).
 
 import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
-import type { SpreadAnimation } from "@/types/spread-types";
+import type {
+  SpreadAnimation,
+  SpreadTextboxContent,
+  WordTiming,
+} from "@/types/spread-types";
 
 // LinearStep / LinearTimeline are owned by linearize-spread-timeline.ts (the
 // analytic model); re-exported here so consumers import the whole seam from one
@@ -42,41 +46,80 @@ export interface FrameSeekDriver extends PlayClock {
   seek(frame: number, fps: number): void;
 }
 
-// ── Stage media + interactivity seams ────────────────────────────────────────
-// PlayerSpreadStage renders item DOM but injects media + interactivity so the
-// same stage serves live (DOM <img>/<video>/rAF lottie + pointer/onClick) and
-// render (Remotion <Img>/<OffthreadVideo>/ThorVG setFrame, no interaction).
+// ── Stage leaf-renderer + interactivity seams ────────────────────────────────
+// PlayerSpreadStage owns the SHARED structure (0×0 wrapper, data-item-id,
+// registerRef, staging cull, visibility split, composite z-index). It delegates
+// each item's LEAF to an injected per-type renderer so the same stage serves:
+//   • live   → returns <Editable*> (byte-identical to the pre-refactor player DOM)
+//   • render → returns positioned Remotion primitives (<Img>/<OffthreadVideo>/ThorVG)
+// Live/render DOM thus share structure and differ only at the media leaf
+// (normalized away in the Phase 05 parity test).
 
-export interface StageMediaProps {
-  src: string;
-  style?: React.CSSProperties;
+// Item element types are derived from PlayableSpread so the seam never drifts
+// from the data model.
+type ImageItem = NonNullable<PlayableSpread["images"]>[number];
+type ShapeItem = NonNullable<PlayableSpread["shapes"]>[number];
+type VideoItem = NonNullable<PlayableSpread["videos"]>[number];
+type AutoPicItem = NonNullable<PlayableSpread["auto_pics"]>[number];
+type AudioItem = NonNullable<PlayableSpread["audios"]>[number];
+type QuizItem = NonNullable<PlayableSpread["quizzes"]>[number];
+type AutoAudioItem = NonNullable<PlayableSpread["auto_audios"]>[number];
+type PageItemData = PlayableSpread["pages"][number];
+
+/** Resolved textbox content (output of getTextboxContentForLanguage().content). */
+export type StageTextboxContent = SpreadTextboxContent;
+
+export type StagePagePosition = "single" | "left" | "right";
+
+/** Per-item-type leaf renderers injected into PlayerSpreadStage. The stage owns
+ *  filters / culling / wrapper / z-index; these render only the inner visual.
+ *  zIndex nullability mirrors the original player: composite-resolved items
+ *  (image/autoPic) get a concrete number; raw items pass `item['z-index']`
+ *  which may be undefined. */
+export interface StageItemRenderers {
+  page: (page: PageItemData, pageIndex: number, position: StagePagePosition) => React.ReactNode;
+  image: (image: ImageItem, index: number, zIndex: number) => React.ReactNode;
+  shape: (shape: ShapeItem, index: number, zIndex: number | undefined) => React.ReactNode;
+  video: (video: VideoItem, index: number, zIndex: number | undefined) => React.ReactNode;
+  autoPic: (autoPic: AutoPicItem, index: number, zIndex: number) => React.ReactNode;
+  audio: (audio: AudioItem, index: number, zIndex: number | undefined) => React.ReactNode;
+  quiz: (quiz: QuizItem, index: number, zIndex: number | undefined) => React.ReactNode;
+  textbox: (
+    content: StageTextboxContent,
+    index: number,
+    zIndex: number,
+    wordTimings?: WordTiming[]
+  ) => React.ReactNode;
+  autoAudio: (autoAudio: AutoAudioItem, index: number) => React.ReactNode;
 }
 
-export interface StageImageProps extends StageMediaProps {
-  alt?: string;
-  crossOrigin?: "anonymous" | "use-credentials" | "";
+export type StageItemKind =
+  | "image"
+  | "shape"
+  | "video"
+  | "autoPic"
+  | "audio"
+  | "quiz"
+  | "textbox";
+
+/** What the stage tells `getItemInteractivity` about an item so live can apply
+ *  type-specific affordances (autoPic state-machine pass-through, hidden
+ *  audio/quiz click-suppression) without the stage importing live-only rules. */
+export interface ItemInteractivityContext {
+  id: string;
+  kind: StageItemKind;
+  /** The item object — live may inspect it (e.g. isAutoPicInteractive). */
+  item: unknown;
+  /** audio/quiz rendered visibility:hidden → live suppresses the click. */
+  isHidden?: boolean;
 }
 
-export interface StageLottieProps {
-  src: string;
-  /** dotLottie v2 options (theme / state-machine) — opaque to the stage. */
-  options?: unknown;
-  style?: React.CSSProperties;
-}
-
-/** Injected media component set — clock-specific (DOM tags vs Remotion primitives). */
-export interface MediaRenderer {
-  Image: React.ComponentType<StageImageProps>;
-  Video: React.ComponentType<StageMediaProps>;
-  Lottie: React.ComponentType<StageLottieProps>;
-}
-
-/** Live-only per-item interactive affordances. Render mode passes none. */
+/** Live-only per-item interactive affordances. Render mode returns nothing. */
 export interface ItemInteractivity {
-  pointerEvents?: React.CSSProperties["pointerEvents"];
-  /** Class toggled for the click-hint pulse / highlight. */
-  highlightClassName?: string;
-  onClick?: (e: React.MouseEvent<HTMLElement>) => void;
+  /** Pointer + highlight classes applied to the item wrapper. */
+  className?: string;
+  /** onClickCapture handler for the item wrapper. */
+  onClick?: () => void;
 }
 
 // ── buildMasterTimeline args ─────────────────────────────────────────────────
@@ -112,9 +155,11 @@ export interface BuildMasterTimelineArgs {
   containerHeight: number;
   canvasWidth: number;
   canvasHeight: number;
-  composites: PlayableSpread["composites"];
-  textboxes: PlayableSpread["textboxes"];
-  audios: PlayableSpread["audios"];
+  // Optional spread slices — the engine reads these with `?.`, and a spread may
+  // legitimately have none.
+  composites?: PlayableSpread["composites"];
+  textboxes?: PlayableSpread["textboxes"];
+  audios?: PlayableSpread["audios"];
   narrationLangCode: string;
   playEdition: PlayEdition;
   /** Lines/Arcs delta source (original item geometry). */

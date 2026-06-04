@@ -70,7 +70,7 @@ function collectConcurrentTargetIds(
 /** PLAY-on-audio media_length fallback (timeline-progression duration). */
 function resolveAudioMediaLength(
   anim: SpreadAnimation,
-  audios: PlayableSpread["audios"]
+  audios: PlayableSpread["audios"] | undefined
 ): { media_length?: number } {
   if (anim.effect.type !== EFFECT_TYPE.PLAY || anim.target.type !== "audio")
     return {};
@@ -82,7 +82,7 @@ function resolveAudioMediaLength(
 /** READ_ALONG textbox → { wordTimings, audioUrl } for word-level highlight. */
 function resolveReadAlongAudioData(
   anim: SpreadAnimation,
-  textboxes: PlayableSpread["textboxes"],
+  textboxes: PlayableSpread["textboxes"] | undefined,
   narrationLangCode: string
 ): { wordTimings?: WordTiming[]; audioUrl?: string } {
   if (

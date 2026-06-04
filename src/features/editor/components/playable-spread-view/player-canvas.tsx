@@ -14,11 +14,9 @@ import {
 } from "../shared-components";
 import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { useCanvasSize, useSetZoomLevel } from "@/stores/editor-settings-store";
-import { getTextboxContentForLanguage } from "../../utils/textbox-helpers";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { PageItem } from "../canvas-spread-view/page-item";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
-import { LAYER_CONFIG, Z_INDEX } from "@/constants/spread-constants";
 import type {
   PlayableSpread,
   PlayMode,
@@ -30,7 +28,6 @@ import {
   isReplayableClick,
   buildAnimationSteps,
   filterAnimationsForDynamic,
-  isInStaging,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
 import {
@@ -44,18 +41,17 @@ import {
 } from "@/stores/animation-playback-store";
 import { PlayerControlSidebar } from "./player-control-sidebar";
 import type { PageNumberingSettings } from "@/types/editor";
-import { PageNumberingOverlay } from "../canvas-spread-view/page-numbering-overlay";
 import { createLogger } from "@/utils/logger";
-import { isItemPlayerHidden } from "./visibility-utils";
-import {
-  buildPlayerCompositeContextMap,
-  isVariantInAnyComposite,
-  resolveEffectiveZIndex,
-} from "@/features/editor/utils/composite-resolve-helpers";
 import { isAutoPicInteractive } from "../shared-components/auto-pic-players/inspect-auto-pic";
 import { usePlayerOrientation } from "./hooks/use-player-orientation";
 import { useContainerFit } from "./hooks/use-container-fit";
 import { MobileFullPageZoomOverlay } from "./mobile-full-page-zoom-overlay";
+import { PlayerSpreadStage } from "./player-spread-stage";
+import type {
+  StageItemRenderers,
+  ItemInteractivity,
+  ItemInteractivityContext,
+} from "./play-clock";
 
 // === Types ===
 export type FullPageMode = "spread" | "left" | "right";
@@ -178,15 +174,6 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
     }
     return spread.animations;
   }, [spread.animations, playEdition]);
-
-  // Phase 6 — composite resolve map for the player.
-  // Variants matching the active edition get a z-index override entry; variants
-  // belonging to a composite that DON'T match the edition are absent here, so
-  // the consumer can detect "skip this variant" via isVariantInAnyComposite.
-  const playerCompositeCtxMap = useMemo(
-    () => buildPlayerCompositeContextMap({ composites: spread.composites }, playEdition),
-    [spread.composites, playEdition]
-  );
 
   // Auto-fit zoom — overrides prop zoomLevel with computed fit
   // In full page mode, useContainerFit fits half the canvas width (one page)
@@ -486,21 +473,6 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
     return true;
   }, [playMode, phase, currentStepIndex, steps, hasNext]);
 
-  // === Memoized textboxes with resolved language ===
-  const textboxesWithLang = useMemo(() => {
-    if (!spread.textboxes) return [];
-    return spread.textboxes
-      .map((textbox) => {
-        if (textbox.player_visible === false) return null;
-        const result = getTextboxContentForLanguage(textbox, narrationLangCode);
-        if (!result?.content?.geometry) return null;
-        // Skip empty textboxes in player (no "Click to add text" placeholder)
-        if (!result.content.text) return null;
-        return { textbox, langKey: result.langKey, data: result.content };
-      })
-      .filter(Boolean);
-  }, [spread.textboxes, narrationLangCode]);
-
   // === Full page zoom: hidden click target detection ===
   // Determines if the pending on_click target is on the hidden page
   const hiddenPageClickTarget = useMemo((): "left" | "right" | null => {
@@ -537,11 +509,147 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
     return 0;
   }, [fullPageMode, halfScaled]);
 
-  // Hidden style for audio/quiz — keep in DOM for GSAP/modal, but invisible + non-interactive
-  const hiddenStyle = (item: { player_visible?: boolean }) =>
-    isItemPlayerHidden(item)
-      ? ({ visibility: "hidden", pointerEvents: "none" } as const)
-      : undefined;
+  // === Live stage renderers + interactivity (clock = wall-clock) ===
+  // Per-item-type leaf renderers return the SAME <Editable*> the player has
+  // always rendered — so PlayerSpreadStage reproduces the live DOM byte-for-byte.
+  const liveRenderers = useMemo<StageItemRenderers>(
+    () => ({
+      page: (page, pageIndex, position) => (
+        <PageItem
+          key={pageIndex}
+          page={page}
+          pageIndex={pageIndex}
+          spread={spread}
+          spreadId={spread.id}
+          position={position}
+          isSelected={false}
+          onUpdatePage={() => {}}
+          availableLayouts={[]}
+        />
+      ),
+      image: (image, index, zIndex) => (
+        <EditableImage
+          image={image}
+          index={index}
+          zIndex={zIndex}
+          isSelected={false}
+          isEditable={false}
+          onSelect={() => {}}
+        />
+      ),
+      shape: (shape, index, zIndex) => (
+        <EditableShape
+          shape={shape}
+          index={index}
+          zIndex={zIndex}
+          isSelected={false}
+          isEditable={false}
+          onSelect={() => {}}
+        />
+      ),
+      video: (video, index, zIndex) => (
+        <EditableVideo
+          video={video}
+          index={index}
+          zIndex={zIndex}
+          isSelected={false}
+          isEditable={false}
+          onSelect={() => {}}
+        />
+      ),
+      autoPic: (autoPic, index, zIndex) => (
+        <EditableAutoPic
+          autoPic={autoPic}
+          index={index}
+          zIndex={zIndex}
+          isSelected={false}
+          isEditable={false}
+          onSelect={() => {}}
+        />
+      ),
+      audio: (audio, index, zIndex) => (
+        <EditableAudio
+          audio={audio}
+          index={index}
+          zIndex={zIndex}
+          isSelected={false}
+          isEditable={false}
+          onSelect={() => {}}
+        />
+      ),
+      quiz: (quiz, index, zIndex) => (
+        <EditableQuiz
+          quiz={quiz}
+          index={index}
+          zIndex={zIndex}
+          isSelected={false}
+          isEditable={false}
+          onSelect={() => {}}
+        />
+      ),
+      textbox: (data, index, zIndex, wordTimings) => (
+        <EditableTextbox
+          textboxContent={data}
+          index={index}
+          zIndex={zIndex}
+          isSelected={false}
+          isSelectable={false}
+          isEditable={false}
+          onSelect={() => {}}
+          onTextChange={() => {}}
+          onEditingChange={() => {}}
+          wordTimings={wordTimings}
+        />
+      ),
+      autoAudio: (autoAudio, index) => (
+        <EditableAutoAudio
+          key={autoAudio.id}
+          autoAudio={autoAudio}
+          index={index}
+          isSelected={false}
+          isEditable={false}
+          onSelect={() => {}}
+        />
+      ),
+    }),
+    [spread]
+  );
+
+  const getItemInteractivity = useCallback(
+    (ctx: ItemInteractivityContext): ItemInteractivity => {
+      const { id, kind, item, isHidden } = ctx;
+      const highlight = getHighlightClass(id);
+      if (kind === "autoPic") {
+        // Interactive pics (Rive/Lottie state machine) bypass narration
+        // click-loop: pointer events route to the runtime canvas.
+        const interactive = isAutoPicInteractive(
+          item as NonNullable<PlayableSpread["auto_pics"]>[number]
+        );
+        return {
+          className: `${
+            interactive
+              ? "pointer-events-auto cursor-pointer"
+              : getPointerClasses(id)
+          } ${highlight}`,
+          onClick: interactive ? undefined : () => handleItemClick(id),
+        };
+      }
+      if (kind === "audio" || kind === "quiz") {
+        return {
+          className: `${getPointerClasses(id)} ${highlight}`,
+          onClick: () => {
+            if (!isHidden) handleItemClick(id);
+          },
+        };
+      }
+      // image / shape / video / textbox
+      return {
+        className: `${getPointerClasses(id)} ${highlight}`,
+        onClick: () => handleItemClick(id),
+      };
+    },
+    [getPointerClasses, getHighlightClass, handleItemClick]
+  );
 
   // === Render ===
   // Share preview: no padding around canvas, only reserve space for control bar
@@ -590,288 +698,15 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
               }),
             }}
           >
-            {/* Pages */}
-            {spread.pages.map((page, pageIndex) => (
-              <PageItem
-                key={pageIndex}
-                page={page}
-                pageIndex={pageIndex}
-                spread={spread}
-                spreadId={spread.id}
-                position={
-                  spread.pages.length === 1
-                    ? "single"
-                    : pageIndex === 0
-                    ? "left"
-                    : "right"
-                }
-                isSelected={false}
-                onUpdatePage={() => {}}
-                availableLayouts={[]}
-              />
-            ))}
-
-            {/* Page divider — always visible */}
-            <div
-              className="absolute top-0 bottom-0 w-px bg-gray-300"
-              style={{ left: "50%", zIndex: Z_INDEX.PAGE_BACKGROUND }}
+            <PlayerSpreadStage
+              spread={spread}
+              narrationLangCode={narrationLangCode}
+              playEdition={playEdition}
+              registerRef={registerRef}
+              renderers={liveRenderers}
+              getItemInteractivity={getItemInteractivity}
+              pageNumbering={pageNumbering}
             />
-
-            {/* Page Number Overlay */}
-            {pageNumbering && pageNumbering.position !== "none" && (
-              <PageNumberingOverlay
-                pages={spread.pages}
-                position={pageNumbering.position}
-                color={pageNumbering.color}
-                fontFamily={pageNumbering.font_family}
-                fontSize={pageNumbering.font_size}
-              />
-            )}
-
-            {/* Images — skip empty (no resolved URL) and fully outside staging [-50, 150] */}
-            {spread.images?.map((image, index) => {
-              if (image.player_visible === false) return null;
-              if (!isInStaging(image.geometry)) return null;
-              // Phase 6 — composite edition filter: variant in a composite but
-              // off-edition → skip render. On-edition variants take composite
-              // z-index via resolveEffectiveZIndex.
-              const compositeCtx = playerCompositeCtxMap.get(image.id);
-              if (!compositeCtx && isVariantInAnyComposite({ composites: spread.composites }, image.id)) {
-                return null;
-              }
-              const hasUrl =
-                image.final_hires_media_url ||
-                image.illustrations?.some((i) => i.media_url) ||
-                image.media_url;
-              if (!hasUrl) return null;
-              const effectiveZ = resolveEffectiveZIndex(
-                { id: image.id, 'z-index': image['z-index'] },
-                playerCompositeCtxMap
-              );
-              return (
-                <div
-                  key={image.id}
-                  ref={registerRef(image.id)}
-                  data-item-id={image.id}
-                  className={`${getPointerClasses(
-                    image.id
-                  )} ${getHighlightClass(image.id)}`}
-                  onClickCapture={() => handleItemClick(image.id)}
-                >
-                  <EditableImage
-                    image={image}
-                    index={index}
-                    zIndex={effectiveZ}
-                    isSelected={false}
-                    isEditable={false}
-                    onSelect={() => {}}
-                  />
-                </div>
-              );
-            })}
-
-            {/* Shapes */}
-            {spread.shapes?.map((shape, index) => {
-              if (shape.player_visible === false) return null;
-              if (!isInStaging(shape.geometry)) return null;
-              return (
-                <div
-                  key={shape.id}
-                  ref={registerRef(shape.id)}
-                  data-item-id={shape.id}
-                  className={`${getPointerClasses(
-                    shape.id
-                  )} ${getHighlightClass(shape.id)}`}
-                  onClickCapture={() => handleItemClick(shape.id)}
-                >
-                  <EditableShape
-                    shape={shape}
-                    index={index}
-                    zIndex={shape["z-index"]}
-                    isSelected={false}
-                    isEditable={false}
-                    onSelect={() => {}}
-                  />
-                </div>
-              );
-            })}
-
-            {/* Videos — skip empty (no media_url) and fully outside staging [-50, 150] */}
-            {spread.videos?.map((video, index) => {
-              if (video.player_visible === false) return null;
-              if (!isInStaging(video.geometry)) return null;
-              if (!video.media_url) return null;
-              return (
-                <div
-                  key={video.id}
-                  ref={registerRef(video.id)}
-                  data-item-id={video.id}
-                  className={`${getPointerClasses(
-                    video.id
-                  )} ${getHighlightClass(video.id)}`}
-                  onClickCapture={() => handleItemClick(video.id)}
-                >
-                  <EditableVideo
-                    video={video}
-                    index={index}
-                    zIndex={video["z-index"]}
-                    isSelected={false}
-                    isEditable={false}
-                    onSelect={() => {}}
-                  />
-                </div>
-              );
-            })}
-
-            {/* Auto Pics — skip empty (no media_url), auto-loop, and fully outside staging [-50, 150].
-            Interactive pics (Rive/Lottie with state_machine set) bypass narration click-loop:
-            pointer events route directly to the runtime canvas so state machines receive input. */}
-            {spread.auto_pics?.map((autoPic, index) => {
-              if (autoPic.player_visible === false) return null;
-              if (!isInStaging(autoPic.geometry)) return null;
-              if (!autoPic.media_url) return null;
-              // Phase 6 — composite edition filter for auto_pic variants.
-              const compositeCtx = playerCompositeCtxMap.get(autoPic.id);
-              if (!compositeCtx && isVariantInAnyComposite({ composites: spread.composites }, autoPic.id)) {
-                return null;
-              }
-              const effectiveZ = resolveEffectiveZIndex(
-                { id: autoPic.id, 'z-index': autoPic['z-index'] },
-                playerCompositeCtxMap
-              );
-              const interactive = isAutoPicInteractive(autoPic);
-              const pointerClass = interactive
-                ? "pointer-events-auto cursor-pointer"
-                : getPointerClasses(autoPic.id);
-              const onClickCapture = interactive
-                ? undefined
-                : () => handleItemClick(autoPic.id);
-              return (
-                <div
-                  key={autoPic.id}
-                  ref={registerRef(autoPic.id)}
-                  data-item-id={autoPic.id}
-                  className={`${pointerClass} ${getHighlightClass(
-                    autoPic.id
-                  )}`}
-                  onClickCapture={onClickCapture}
-                >
-                  <EditableAutoPic
-                    autoPic={autoPic}
-                    index={index}
-                    zIndex={effectiveZ}
-                    isSelected={false}
-                    isEditable={false}
-                    onSelect={() => {}}
-                  />
-                </div>
-              );
-            })}
-
-            {/* Audios — skip empty (no media_url); player_visible=false → visibility:hidden to keep GSAP .play() working */}
-            {spread.audios?.map((audio, index) => {
-              if (!audio.media_url) return null;
-              return (
-                <div
-                  key={audio.id}
-                  ref={registerRef(audio.id)}
-                  className={`${getPointerClasses(
-                    audio.id
-                  )} ${getHighlightClass(audio.id)}`}
-                  style={hiddenStyle(audio)}
-                  onClickCapture={() =>
-                    !isItemPlayerHidden(audio) && handleItemClick(audio.id)
-                  }
-                >
-                  <EditableAudio
-                    audio={audio}
-                    index={index}
-                    zIndex={audio["z-index"]}
-                    isSelected={false}
-                    isEditable={false}
-                    onSelect={() => {}}
-                  />
-                </div>
-              );
-            })}
-
-            {/* Quizzes — player_visible=false → visibility:hidden so quiz modal can still trigger via GSAP */}
-            {spread.quizzes?.map((quiz, index) => (
-              <div
-                key={quiz.id}
-                ref={registerRef(quiz.id)}
-                className={`${getPointerClasses(quiz.id)} ${getHighlightClass(
-                  quiz.id
-                )}`}
-                style={hiddenStyle(quiz)}
-                onClickCapture={() =>
-                  !isItemPlayerHidden(quiz) && handleItemClick(quiz.id)
-                }
-              >
-                <EditableQuiz
-                  quiz={quiz}
-                  index={index}
-                  zIndex={quiz["z-index"]}
-                  isSelected={false}
-                  isEditable={false}
-                  onSelect={() => {}}
-                />
-              </div>
-            ))}
-
-            {/* Textboxes */}
-            {textboxesWithLang.map((item, index) => {
-              if (!item) return null;
-              const { textbox, data } = item;
-              if (!isInStaging(data.geometry)) return null;
-              // Use top-level word_timings rollup (offsets onto joined chunk script).
-              const wordTimings = data.audio?.word_timings;
-              return (
-                <div
-                  key={textbox.id}
-                  ref={registerRef(textbox.id)}
-                  data-item-id={textbox.id}
-                  className={`${getPointerClasses(
-                    textbox.id
-                  )} ${getHighlightClass(textbox.id)}`}
-                  onClickCapture={() => handleItemClick(textbox.id)}
-                >
-                  <EditableTextbox
-                    textboxContent={data}
-                    index={index}
-                    zIndex={textbox["z-index"] ?? LAYER_CONFIG.TEXT.min + index}
-                    isSelected={false}
-                    isSelectable={false}
-                    isEditable={false}
-                    onSelect={() => {}}
-                    onTextChange={() => {}}
-                    onEditingChange={() => {}}
-                    wordTimings={wordTimings}
-                  />
-                </div>
-              );
-            })}
-
-            {/* Auto Audios — branch (C): BGM-style hidden looping <audio> (imperative play()).
-             *  - player_visible locked false; component owns playback lifecycle.
-             *  - NO ref registration (not animation target).
-             *  - NO geometry wrapper, NO pointer events, NO click handler.
-             *  - Tagged `data-auto-audio="true"` → excluded from GSAP engine's
-             *    pauseAllMedia/resumePausedMedia (BGM continues across step pauses).
-             *  - Volume sync still applies (spreadContainerRef.querySelectorAll('audio,video')). */}
-            {(spread.auto_audios ?? []).map((autoAudio, index) => {
-              if (!autoAudio.media_url) return null;
-              return (
-                <EditableAutoAudio
-                  key={autoAudio.id}
-                  autoAudio={autoAudio}
-                  index={index}
-                  isSelected={false}
-                  isEditable={false}
-                  onSelect={() => {}}
-                />
-              );
-            })}
           </div>
         </div>
         {/* end clip wrapper */}
