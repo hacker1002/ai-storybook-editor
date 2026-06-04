@@ -15,7 +15,7 @@ import {
 } from "../__mocks__/playable-spread-factory";
 import type { PlayableSpread } from "@/types/playable-types";
 import { createCombinedDemoSpread } from "../__mocks__/combined-demo-spread-fixture";
-import { SpreadVideoComposition } from "../components/remotion-spike/spread-video-composition";
+import { SpreadVideoComposition } from "@/remotion/spread-video-composition";
 import "@/remotion/load-fonts"; // Nunito — match worker render so preview===output
 import {
   VIDEO_FPS,

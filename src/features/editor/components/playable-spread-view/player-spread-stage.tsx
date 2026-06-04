@@ -273,7 +273,7 @@ export function PlayerSpreadStage({
             className={it.className}
             onClickCapture={it.onClick}
           >
-            {renderers.textbox(data, index, zIndex, wordTimings)}
+            {renderers.textbox(data, index, zIndex, wordTimings, textbox.id)}
           </div>
         );
       })}

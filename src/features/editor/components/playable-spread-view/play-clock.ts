@@ -88,7 +88,8 @@ export interface StageItemRenderers {
     content: StageTextboxContent,
     index: number,
     zIndex: number,
-    wordTimings?: WordTiming[]
+    wordTimings: WordTiming[] | undefined,
+    textboxId: string
   ) => React.ReactNode;
   autoAudio: (autoAudio: AutoAudioItem, index: number) => React.ReactNode;
 }

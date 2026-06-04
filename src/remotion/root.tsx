@@ -8,7 +8,7 @@ import { Composition } from "remotion";
 import {
   SpreadVideoComposition,
   type SpreadVideoCompositionProps,
-} from "@/features/demo-spread-views/components/remotion-spike/spread-video-composition";
+} from "./spread-video-composition";
 import { createCombinedDemoSpread } from "@/features/demo-spread-views/__mocks__/combined-demo-spread-fixture";
 import {
   SPREAD_COMPOSITION_ID,
