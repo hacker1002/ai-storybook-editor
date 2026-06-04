@@ -10,12 +10,19 @@ import {
   usePlaybackActions,
   type InitializePayload,
 } from "@/stores/animation-playback-store";
+import { useCanvasSize } from "@/stores/editor-settings-store";
+import { AVAILABLE_LANGUAGES } from "@/constants/editor-constants";
+import type { RemixLanguageCode } from "@/types/editor";
 import { PlayerAnimationSidebar } from '@/features/editor/components/preview-creative-space';
 import { useDemoAnimationState } from '../hooks/use-demo-animation-state';
 import {
   createPlayableSpreads,
   type CreatePlayableSpreadOptions,
 } from "../__mocks__/playable-spread-factory";
+import {
+  requestVideoRender,
+  type VideoRenderResult,
+} from "../utils/request-video-render";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -34,7 +41,7 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Settings, RefreshCw } from "lucide-react";
+import { Settings, RefreshCw, Film, Loader2 } from "lucide-react";
 
 // === Mock Options ===
 interface MockOptions {
@@ -44,7 +51,7 @@ interface MockOptions {
   shapeCount: number;
   videoProbability: number;
   audioCount: number;
-  language: "en_US" | "vi_VN";
+  language: RemixLanguageCode;
   isDPS: boolean;
 }
 
@@ -61,6 +68,9 @@ const DEFAULT_MOCK_OPTIONS: MockOptions = {
 
 export function DemoPlayableSpreadView() {
   const { initialize, teardown } = usePlaybackActions();
+  // Design canvas the live player renders at — forwarded to the render worker so the MP4
+  // scales fonts/borders identically (font px is authored relative to this width).
+  const canvasSize = useCanvasSize();
 
   // Monotonic counter — bumped on regenerate to derive a new sessionId so
   // `initialize` re-applies edition & atomic session reset for the new fixture.
@@ -150,6 +160,35 @@ export function DemoPlayableSpreadView() {
     setSelectedSpreadId(spreadId);
   }, []);
 
+  // === MP4 export (selected spread → video-worker /render) ===
+  // Exports the SAME spread object that PlayableSpreadView plays live, so the
+  // rendered MP4 is parity-by-construction (shared PlayerSpreadStage + timeline).
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportResult, setExportResult] = useState<VideoRenderResult | null>(null);
+
+  const handleExport = useCallback(async () => {
+    if (!selectedSpread) return;
+    setExporting(true);
+    setExportError(null);
+    setExportResult(null);
+    try {
+      const result = await requestVideoRender(selectedSpread, mockOptions.language, canvasSize);
+      setExportResult(result);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+    }
+  }, [selectedSpread, mockOptions.language, canvasSize]);
+
+  // Stale export when the target spread changes (selection or regenerate).
+  const exportTargetId = selectedSpread?.id ?? null;
+  useLayoutEffect(() => {
+    setExportResult(null);
+    setExportError(null);
+  }, [exportTargetId]);
+
   return (
     <TooltipProvider>
       <div className="h-screen flex flex-col">
@@ -162,6 +201,26 @@ export function DemoPlayableSpreadView() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Export selected spread → MP4 (video-worker) */}
+            <Button
+              size="sm"
+              onClick={handleExport}
+              disabled={exporting || !selectedSpread}
+              className="h-9 gap-1.5"
+              title={
+                selectedSpread
+                  ? `Export spread ${selectedSpread.id.slice(0, 8)} to MP4`
+                  : "Select a spread to export"
+              }
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Film className="h-4 w-4" />
+              )}
+              {exporting ? "Rendering…" : "Export MP4"}
+            </Button>
+
             {/* Settings Popover */}
             <Popover>
               <PopoverTrigger asChild>
@@ -295,15 +354,18 @@ export function DemoPlayableSpreadView() {
                         <Select
                           value={mockOptions.language}
                           onValueChange={(v) =>
-                            updateMockOption("language", v as "en_US" | "vi_VN")
+                            updateMockOption("language", v as RemixLanguageCode)
                           }
                         >
                           <SelectTrigger className="h-7 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="en_US">English</SelectItem>
-                            <SelectItem value="vi_VN">Vietnamese</SelectItem>
+                            {AVAILABLE_LANGUAGES.map((lang) => (
+                              <SelectItem key={lang.code} value={lang.code}>
+                                {lang.name}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -341,6 +403,51 @@ export function DemoPlayableSpreadView() {
 
           {/* JSON Data Panel */}
           <div className="w-80 border-l bg-muted/30 flex flex-col">
+            {/* Export result — rendered MP4 should match the live playback above */}
+            {(exporting || exportError || exportResult) && (
+              <div className="p-3 border-b bg-background">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  RENDERED MP4 (video-worker)
+                </Label>
+                {exporting && (
+                  <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Rendering on the
+                    worker…
+                  </p>
+                )}
+                {exportError && (
+                  <p className="mt-2 text-xs text-destructive break-words">
+                    Export failed: {exportError}
+                  </p>
+                )}
+                {exportResult && (
+                  <div className="mt-2">
+                    <video
+                      src={exportResult.url}
+                      controls
+                      className="w-full border rounded"
+                      style={{
+                        aspectRatio: `${exportResult.width} / ${exportResult.height}`,
+                      }}
+                    />
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      {exportResult.width}×{exportResult.height} ·{" "}
+                      {exportResult.durationInFrames} frames @ {exportResult.fps}fps ·{" "}
+                      {Math.round(exportResult.elapsedMs / 100) / 10}s ·{" "}
+                      <a
+                        href={exportResult.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        open
+                      </a>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="p-3 border-b bg-background">
               <h3 className="text-sm font-medium">Spread Data</h3>
               <p className="text-xs text-muted-foreground">

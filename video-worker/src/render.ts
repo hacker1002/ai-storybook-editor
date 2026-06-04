@@ -18,9 +18,20 @@ const SPREAD_COMPOSITION_ID = "spread-video";
 const RENDER_TIMEOUT_MS = 120_000;
 const RENDER_CONCURRENCY = 2;
 
+// App's supported narration languages. Mirrors RemixLanguageCode in @/types/editor —
+// duplicated here (not imported) because the worker runs in plain Node and cannot resolve
+// the `@/` path aliases. Keep in sync if the app adds a language.
+export const SUPPORTED_LANGUAGES = ["en_US", "vi_VN", "ja_JP", "ko_KR", "zh_CN"] as const;
+export type RenderLanguage = (typeof SUPPORTED_LANGUAGES)[number];
+
 export interface RenderInput {
   spread: unknown;
-  language: "en_US" | "vi_VN";
+  language: RenderLanguage;
+  // Design canvas size the spread was authored at — forwarded verbatim into the
+  // composition inputProps so render fonts/borders scale to match the live player.
+  // Optional: the composition defaults to 800×600 (editor default) when absent.
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 export interface RenderResult {

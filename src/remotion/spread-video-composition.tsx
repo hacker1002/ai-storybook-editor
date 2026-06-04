@@ -19,6 +19,7 @@ import { buildMasterTimeline } from "@/features/editor/components/playable-sprea
 import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
 import { PlayerSpreadStage } from "@/features/editor/components/playable-spread-view/player-spread-stage";
 import type { SpreadTextbox, SpreadTextboxContent } from "@/types/spread-types";
+import type { RemixLanguageCode } from "@/types/editor";
 import { createLogger } from "@/utils/logger";
 import { deriveActiveWords } from "./derive-active-words";
 import { createRenderStageRenderers } from "./render-stage-renderers";
@@ -29,13 +30,24 @@ const log = createLogger("Demo", "RemotionSpreadComposition");
 // `Record<string, unknown>`, which interfaces don't (no implicit index signature).
 export type SpreadVideoCompositionProps = {
   spread: PlayableSpread;
-  language: "en_US" | "vi_VN";
+  // App-wide supported set (en_US, vi_VN, ja_JP, ko_KR, zh_CN). Textbox content is keyed
+  // by language string, so the render core is language-agnostic — no per-language code.
+  language: RemixLanguageCode;
+  // Design-canvas size the spread was authored against (editor store `canvasSize`).
+  // Drives font/border scaling so render text matches the live player. Defaults to the
+  // editor default canvas (800×600, 4:3 — same ratio as the 1920×1440 output).
+  canvasWidth?: number;
+  canvasHeight?: number;
 };
+
+// Editor default canvas width (DEFAULT_CANVAS_SIZE.width) — fallback when the caller
+// (worker render request / Studio) doesn't supply the design canvas size.
+const DEFAULT_DESIGN_CANVAS_WIDTH = 800;
 
 /** Build a (target id → geometry) lookup so LINES/Arcs deltas resolve correctly. */
 function buildGeometryLookup(
   spread: PlayableSpread,
-  language: "en_US" | "vi_VN"
+  language: RemixLanguageCode
 ): Map<string, { x: number; y: number }> {
   const map = new Map<string, { x: number; y: number }>();
   (spread.images ?? []).forEach((i) => map.set(i.id, { x: i.geometry.x, y: i.geometry.y }));
@@ -51,9 +63,18 @@ function buildGeometryLookup(
   return map;
 }
 
-export function SpreadVideoComposition({ spread, language }: SpreadVideoCompositionProps) {
+export function SpreadVideoComposition({
+  spread,
+  language,
+  canvasWidth = DEFAULT_DESIGN_CANVAS_WIDTH,
+}: SpreadVideoCompositionProps) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
+
+  // Absolute-px scale: compositionWidth / designCanvasWidth. The live player renders the
+  // design canvas at zoom and scales fonts/borders by the same ratio (font/canvasWidth is
+  // the zoom-invariant size/designWidth), so this keeps render text === live text.
+  const fontScale = width / (canvasWidth || DEFAULT_DESIGN_CANVAS_WIDTH);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const refsMapRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -152,9 +173,23 @@ export function SpreadVideoComposition({ spread, language }: SpreadVideoComposit
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [spread, language, fps]);
 
+  // ── Video PLAY-start frames (videoId → frame) from the linearized timeline. A PLAY
+  // step on a video target marks when the live player calls mediaEl.play(); the render
+  // video renderer gates <OffthreadVideo> to start there instead of composition frame 0. ──
+  const videoStartByItem = useMemo(() => {
+    const { steps } = linearizeSpreadTimeline(spread.animations);
+    const map: Record<string, number> = {};
+    for (const s of steps) {
+      if (s.anim.effect.type === EFFECT_TYPE.PLAY && s.anim.target.type === "video") {
+        map[s.anim.target.id] = Math.max(0, Math.round(s.startSec * fps));
+      }
+    }
+    return map;
+  }, [spread, fps]);
+
   // ── Frame-derived read-along highlight → injected into the render textbox renderer. ──
   const activeWordByTextbox = deriveActiveWords(frame, spread, fps, language);
-  const renderers = createRenderStageRenderers(activeWordByTextbox);
+  const renderers = createRenderStageRenderers(activeWordByTextbox, fontScale, videoStartByItem);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#ffffff" }}>

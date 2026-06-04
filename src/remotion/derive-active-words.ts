@@ -7,6 +7,7 @@
 // cleared after the last word ends.
 
 import type { PlayableSpread } from "@/types/playable-types";
+import type { RemixLanguageCode } from "@/types/editor";
 import type { SpreadTextbox, SpreadTextboxContent } from "@/types/spread-types";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
 import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
@@ -15,7 +16,7 @@ export function deriveActiveWords(
   frame: number,
   spread: PlayableSpread,
   fps: number,
-  language: "en_US" | "vi_VN"
+  language: RemixLanguageCode
 ): Record<string, number> {
   const { steps } = linearizeSpreadTimeline(spread.animations);
   const textboxes = (spread.textboxes ?? []) as SpreadTextbox[];

@@ -5,6 +5,7 @@
 
 import { createLogger } from "@/utils/logger";
 import type { PlayableSpread } from "@/types/playable-types";
+import type { RemixLanguageCode } from "@/types/editor";
 
 const log = createLogger("Demo", "RequestVideoRender");
 
@@ -23,11 +24,14 @@ export interface VideoRenderResult {
 
 export async function requestVideoRender(
   spread: PlayableSpread,
-  language: "en_US" | "vi_VN"
+  language: RemixLanguageCode,
+  canvasSize?: { width: number; height: number }
 ): Promise<VideoRenderResult> {
   log.info("requestVideoRender", "POST /render", {
     spreadId: spread.id,
     language,
+    canvasWidth: canvasSize?.width,
+    canvasHeight: canvasSize?.height,
     worker: WORKER_URL,
   });
 
@@ -36,7 +40,14 @@ export async function requestVideoRender(
     res = await fetch(`${WORKER_URL}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spread, language }),
+      // Design canvas size lets the worker scale render fonts/borders to match the live
+      // player (font px is authored relative to this width). Omitted → worker default 800×600.
+      body: JSON.stringify({
+        spread,
+        language,
+        canvasWidth: canvasSize?.width,
+        canvasHeight: canvasSize?.height,
+      }),
     });
   } catch (err) {
     log.error("requestVideoRender", "network error reaching worker", {

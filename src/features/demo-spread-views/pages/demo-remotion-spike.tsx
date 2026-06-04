@@ -14,6 +14,8 @@ import {
   type CreatePlayableSpreadOptions,
 } from "../__mocks__/playable-spread-factory";
 import type { PlayableSpread } from "@/types/playable-types";
+import type { RemixLanguageCode } from "@/types/editor";
+import { AVAILABLE_LANGUAGES } from "@/constants/editor-constants";
 import { createCombinedDemoSpread } from "../__mocks__/combined-demo-spread-fixture";
 import { SpreadVideoComposition } from "@/remotion/spread-video-composition";
 import "@/remotion/load-fonts"; // Nunito — match worker render so preview===output
@@ -136,14 +138,17 @@ export function DemoRemotionSpike() {
           </div>
           <Select
             value={options.language}
-            onValueChange={(v) => updateOption("language", v as "en_US" | "vi_VN")}
+            onValueChange={(v) => updateOption("language", v as RemixLanguageCode)}
           >
             <SelectTrigger className="h-8 w-28 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="en_US">English</SelectItem>
-              <SelectItem value="vi_VN">Vietnamese</SelectItem>
+              {AVAILABLE_LANGUAGES.map((lang) => (
+                <SelectItem key={lang.code} value={lang.code}>
+                  {lang.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" onClick={handleRegenerate} className="h-8 gap-1.5 text-xs">

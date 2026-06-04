@@ -9,7 +9,7 @@
 // spacer (mode:'render'), and pages are drawn by the composition background.
 
 import { Fragment } from "react";
-import { Img, OffthreadVideo } from "remotion";
+import { Img, OffthreadVideo, Sequence } from "remotion";
 import type { Typography } from "@/types/spread-types";
 // Frame-deterministic lottie player (ThorVG via @lottiefiles/dotlottie-web), driven
 // by setFrame + per-frame 'render' gate — used in BOTH <Player> preview and worker
@@ -34,15 +34,23 @@ function geoStyle(geo: { x: number; y: number; w: number; h: number }): React.CS
   };
 }
 
-function typographyStyle(t: Typography): React.CSSProperties {
+/**
+ * Typography → CSS, with absolute-px values (fontSize, letterSpacing) multiplied by
+ * `fontScale` = compositionWidth / designCanvasWidth. The live player scales these by
+ * zoomFactor (= scaledCanvasWidth / designCanvasWidth); since geometry is %-based and
+ * resolution-independent, font/canvas-width is the zoom-invariant `size/designWidth`.
+ * Without this, raw design-px fonts render tiny inside the 1920-wide composition.
+ * lineHeight is unitless (a multiplier) → never scaled.
+ */
+function typographyStyle(t: Typography, fontScale: number): React.CSSProperties {
   return {
-    fontSize: t.size,
+    fontSize: t.size != null ? t.size * fontScale : undefined,
     fontWeight: t.weight,
     fontStyle: t.style,
     fontFamily: t.family,
     color: t.color,
     lineHeight: t.lineHeight,
-    letterSpacing: t.letterSpacing,
+    letterSpacing: t.letterSpacing != null ? t.letterSpacing * fontScale : undefined,
     textAlign: t.textAlign as React.CSSProperties["textAlign"],
     textTransform: t.textTransform as React.CSSProperties["textTransform"],
     textDecoration: t.decoration,
@@ -92,12 +100,18 @@ function resolveImageUrl(image: {
 }
 
 /**
- * Build the render-mode renderer set. `activeWordByTextbox` (id → active word
- * index, recomputed per frame by the composition) drives read-along highlight;
- * the textbox renderer receives the textbox id from the stage to key into it.
+ * Build the render-mode renderer set.
+ * - `activeWordByTextbox` (id → active word index, per frame) drives read-along highlight.
+ * - `fontScale` = compositionWidth / designCanvasWidth — scales absolute-px typography +
+ *   shape borders so text/outlines match the live player's zoom-scaled sizes.
+ * - `videoStartByItem` (videoId → start frame from the PLAY step) gates each <OffthreadVideo>
+ *   inside a <Sequence> so it begins exactly when its PLAY animation fires — not from frame 0
+ *   (which would play the audio immediately and finish before the entrance reveals it).
  */
 export function createRenderStageRenderers(
-  activeWordByTextbox: Record<string, number>
+  activeWordByTextbox: Record<string, number>,
+  fontScale: number,
+  videoStartByItem: Record<string, number>
 ): StageItemRenderers {
   return {
     // Pages drawn by the composition background (white) — same as the validated spike.
@@ -125,24 +139,32 @@ export function createRenderStageRenderers(
             backgroundColor: shape.fill?.is_filled ? shape.fill.color : "transparent",
             opacity,
             border: shape.outline
-              ? `${shape.outline.width}px solid ${shape.outline.color}`
+              ? `${shape.outline.width * fontScale}px solid ${shape.outline.color}`
               : undefined,
-            borderRadius: shape.outline?.radius ?? 0,
+            borderRadius: (shape.outline?.radius ?? 0) * fontScale,
           }}
         />
       );
     },
 
-    video: (video, _index, zIndex) => (
-      <div data-base-opacity={1} style={{ ...geoStyle(video.geometry), zIndex: zIndex ?? 200 }}>
-        {video.media_url ? (
-          <OffthreadVideo
-            src={video.media_url}
-            style={{ width: "100%", height: "100%", objectFit: "contain" }}
-          />
-        ) : null}
-      </div>
-    ),
+    video: (video, _index, zIndex) => {
+      // PLAY-gated start: <Sequence from> shifts the video's internal clock so frame 0
+      // plays at its PLAY-animation frame (live calls mediaEl.play() then). Without a PLAY
+      // step (rare — factory + real data always pair video with PLAY) it falls back to 0.
+      const startFrame = videoStartByItem[video.id] ?? 0;
+      return (
+        <div data-base-opacity={1} style={{ ...geoStyle(video.geometry), zIndex: zIndex ?? 200 }}>
+          {video.media_url ? (
+            <Sequence from={startFrame} layout="none">
+              <OffthreadVideo
+                src={video.media_url}
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
+            </Sequence>
+          ) : null}
+        </div>
+      );
+    },
 
     autoPic: (autoPic, _index, zIndex) => {
       const url = autoPic.media_url?.toLowerCase().split("?")[0] ?? "";
@@ -179,8 +201,7 @@ export function createRenderStageRenderers(
           style={{
             ...geoStyle(content.geometry),
             zIndex: zIndex ?? 200,
-            ...typographyStyle(content.typography),
-            padding: 8,
+            ...typographyStyle(content.typography, fontScale),
             overflow: "hidden",
           }}
         >

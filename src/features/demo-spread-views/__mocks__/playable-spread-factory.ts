@@ -19,6 +19,7 @@ import type {
 type MockPlacement = "background" | "character" | "prop" | "foreground" | "raw" | "other";
 import { ANIMATION_PRESETS } from "@/constants/playable-constants";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
+import type { RemixLanguageCode } from "@/types/editor";
 
 // === Helper: Generate UUID ===
 function generateUUID(): string {
@@ -832,7 +833,8 @@ export interface CreatePlayableSpreadOptions {
   shapeCount: number;
   videoProbability: number;
   audioCount: number;
-  language: "en_US" | "vi_VN";
+  // App's 5 supported languages; ja/ko/zh fall back to English mock text in this factory.
+  language: RemixLanguageCode;
   isDPS?: boolean;
 }
 
@@ -908,7 +910,8 @@ export function createPlayableSpreads(
       audios,
       quizzes,
       animations,
-      manuscript: SAMPLE_TEXTS[language]?.[spreadIndex % 6] || "",
+      manuscript:
+        SAMPLE_TEXTS[language as keyof typeof SAMPLE_TEXTS]?.[spreadIndex % 6] || "",
     };
 
     return spread;

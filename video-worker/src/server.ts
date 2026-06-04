@@ -9,8 +9,21 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { OUT_DIR, WORKER_PORT } from "./paths";
-import { renderSpread, warmup, type RenderInput } from "./render";
+import {
+  renderSpread,
+  warmup,
+  SUPPORTED_LANGUAGES,
+  type RenderInput,
+  type RenderLanguage,
+} from "./render";
 import { classifyRenderError } from "./errors";
+
+/** Narrow an arbitrary body value to a supported language, defaulting to en_US. */
+function coerceLanguage(value: unknown): RenderLanguage {
+  return SUPPORTED_LANGUAGES.includes(value as RenderLanguage)
+    ? (value as RenderLanguage)
+    : "en_US";
+}
 
 const PORT = WORKER_PORT;
 const MAX_KEEP_FILES = 10;
@@ -43,7 +56,7 @@ app.get("/health", (_req: Request, res: Response) => {
 let rendering = false;
 
 app.post("/render", async (req: Request, res: Response) => {
-  const { spread, language } = req.body ?? {};
+  const { spread, language, canvasWidth, canvasHeight } = req.body ?? {};
   if (!spread || typeof spread !== "object") {
     res.status(400).json({ ok: false, code: "INVALID_INPUT", message: "`spread` object required" });
     return;
@@ -53,7 +66,13 @@ app.post("/render", async (req: Request, res: Response) => {
     return;
   }
 
-  const input: RenderInput = { spread, language: language === "vi_VN" ? "vi_VN" : "en_US" };
+  const input: RenderInput = {
+    spread,
+    language: coerceLanguage(language),
+    // Forward only finite positive numbers; otherwise leave undefined → composition default.
+    ...(Number.isFinite(canvasWidth) && canvasWidth > 0 ? { canvasWidth } : {}),
+    ...(Number.isFinite(canvasHeight) && canvasHeight > 0 ? { canvasHeight } : {}),
+  };
   const fileName = `spread-${Date.now()}-${randomUUID().slice(0, 8)}.mp4`;
   rendering = true;
   const start = Date.now();
