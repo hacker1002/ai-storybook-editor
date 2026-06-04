@@ -39,6 +39,13 @@ export interface CameraTweenOptions {
   /** Additional item IDs to exclude from blur (concurrent animations' targets,
    *  resolved through composite → variantId by the caller). */
   excludeIds?: ReadonlyArray<string>;
+  /** Fallback spread dimensions (px) for Zoom In when `spreadEl.offsetWidth/Height`
+   *  measure 0 — which happens in the headless Remotion render where the build
+   *  layout-effect runs before the AbsoluteFill resolves its size. Without this the
+   *  zoom tween hits the zero-dimension guard and is silently skipped → no zoom in
+   *  the rendered MP4 (works in the live player, which always measures >0). */
+  containerWidth?: number;
+  containerHeight?: number;
 }
 
 // Focus tween targets the inner visual layer, NOT the [data-item-id] wrapper.
@@ -144,10 +151,18 @@ export function addCameraTweenToTimeline(
       log.warn('addCameraTween.zoom', 'missing geometry', {});
       return;
     }
-    const spreadW = spreadEl.offsetWidth;
-    const spreadH = spreadEl.offsetHeight;
+    // Prefer the live measured size; fall back to the caller-supplied dims when the
+    // element measures 0 (headless render before layout resolves). offsetWidth of 0
+    // is a valid number, so a plain `||` chain is correct here (0 is falsy).
+    const spreadW = spreadEl.offsetWidth || options?.containerWidth || 0;
+    const spreadH = spreadEl.offsetHeight || options?.containerHeight || 0;
     if (spreadW <= 0 || spreadH <= 0) {
-      log.warn('addCameraTween.zoom', 'spread element has zero dimensions', { spreadW, spreadH });
+      log.warn('addCameraTween.zoom', 'spread element has zero dimensions', {
+        offsetW: spreadEl.offsetWidth,
+        offsetH: spreadEl.offsetHeight,
+        fallbackW: options?.containerWidth,
+        fallbackH: options?.containerHeight,
+      });
       return;
     }
     const scale = 100 / Math.max(0.0001, zg.w);

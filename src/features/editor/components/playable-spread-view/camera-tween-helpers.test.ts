@@ -234,6 +234,33 @@ describe('addCameraTweenToTimeline — Zoom (19)', () => {
     addCameraTweenToTimeline(tl, anim, null, 0);
     expect(tl.getChildren().length).toBe(before);
   });
+
+  // Regression: headless Remotion render measures offsetWidth/Height as 0 (build
+  // layout-effect before layout resolves) → without a fallback the zoom is silently
+  // skipped and the rendered MP4 shows no zoom (works in the live player, >0).
+  it('zero offset + fallback dims → builds the zoom using fallback (not skipped)', () => {
+    const zeroContainer = setupContainer([], { w: 0, h: 0 });
+    const anim = makeAnim(19, { geometry: { x: 25, y: 25, w: 50, h: 50 } });
+    addCameraTweenToTimeline(tl, anim, zeroContainer, 0, undefined, {
+      containerWidth: 1000,
+      containerHeight: 500,
+    });
+    const phase1 = tl.getChildren()[0];
+    expect(phase1).toBeDefined();
+    expect(phase1.vars.scale).toBe(2); // 100/50
+    expect(phase1.vars.x).toBeCloseTo(-500, 5); // uses fallback 1000, not measured 0
+    expect(phase1.vars.y).toBeCloseTo(-250, 5);
+    zeroContainer.remove();
+  });
+
+  it('zero offset + no fallback → still skips (defensive guard intact)', () => {
+    const zeroContainer = setupContainer([], { w: 0, h: 0 });
+    const anim = makeAnim(19);
+    const before = tl.getChildren().length;
+    addCameraTweenToTimeline(tl, anim, zeroContainer, 0);
+    expect(tl.getChildren().length).toBe(before);
+    zeroContainer.remove();
+  });
 });
 
 describe('applyCameraEndState', () => {

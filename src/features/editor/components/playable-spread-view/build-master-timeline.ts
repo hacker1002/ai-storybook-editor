@@ -215,6 +215,8 @@ export function buildMasterTimeline(
         onStart: cbs?.onTweenStart,
         onComplete: cbs?.onTweenComplete,
         excludeIds,
+        containerWidth,
+        containerHeight,
       });
       recordAnimStart(i, childrenBefore);
       return;
