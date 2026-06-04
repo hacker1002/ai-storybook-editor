@@ -22,6 +22,7 @@ import {
   guardedGetState,
 } from "@/stores/animation-playback-store";
 import { addTweenToTimeline } from "../animation-tween-builders";
+import { buildMasterTimeline } from "../build-master-timeline";
 import { restoreBaseRotation } from "../restore-base-rotation";
 import {
   addCameraTweenToTimeline,
@@ -599,202 +600,41 @@ export function usePlayerGsapEngine({
   const buildAndPlayFullTimeline = useCallback(() => {
     killTimeline();
     guardedGetState()?.setActiveAnimationOrders([]);
-    const tl = gsap.timeline({
+    const dims = getContainerDims();
+
+    // Behaviour-preserving swap (ADR-035 Phase 04): the auto-mode timeline is now
+    // built by the SHARED buildMasterTimeline({mode:'live-auto'}) — the same
+    // builder the Remotion render drives — so preview === output by construction.
+    // Position / pacing-delay / quiz-pause / camera / with_previous logic is
+    // identical (proven by the Phase 01 dev-harness identity gate). Interactive
+    // step + click-loop replay paths are intentionally NOT touched.
+    const tl = buildMasterTimeline({
+      animations: editionFilteredAnimations,
+      refsMap: elementRefsMap.current,
+      container: spreadContainerRef.current,
+      containerWidth: dims.containerWidth,
+      containerHeight: dims.containerHeight,
+      canvasWidth,
+      canvasHeight,
+      composites: spread.composites,
+      textboxes: spread.textboxes,
+      audios: spread.audios,
+      narrationLangCode,
+      playEdition,
+      findItemGeometry,
+      mode: "live-auto",
       onComplete: () => {
         // Root component handles auto-advance; we only signal completion
         onSpreadComplete(spread.id);
       },
-    });
-
-    const dims = getContainerDims();
-    const animations = [...editionFilteredAnimations].sort(
-      (a, b) => a.order - b.order
-    );
-
-    // See buildAndPlayStepTimeline note — resolve with_previous via recorded
-    // start times so multi-child anims (camera) don't break the "<" anchor.
-    const animStartTimes: number[] = [];
-    const resolveWithPrevious = (idx: number): number | string => {
-      if (idx <= 0) return 0;
-      const prev = animStartTimes[idx - 1];
-      return prev !== undefined ? prev : "<";
-    };
-    const recordAnimStart = (idx: number, childrenBefore: number) => {
-      const all = tl.getChildren();
-      animStartTimes[idx] =
-        all.length > childrenBefore
-          ? all[childrenBefore].startTime()
-          : tl.duration();
-    };
-
-    animations.forEach((anim, i) => {
-      // Quiz PLAY: pause timeline and invoke callback (auto mode too)
-      if (
-        anim.effect.type === EFFECT_TYPE.PLAY &&
-        anim.target.type === "quiz"
-      ) {
-        let position: number | string;
-        if (i === 0) position = 0;
-        else if (anim.trigger_type === "with_previous")
-          position = resolveWithPrevious(i);
-        else if (anim.trigger_type === "after_previous")
-          position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-        else position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
-        const childrenBefore = tl.getChildren().length;
-        tl.call(
-          () => {
-            guardedGetState()?.addActiveAnimationOrder(anim.order);
-            onQuizPlay?.(anim.target.id);
-          },
-          undefined,
-          position
-        );
-        tl.addPause();
-        // Offset past pause so it only fires after resume
-        tl.call(
-          () => guardedGetState()?.removeActiveAnimationOrder(anim.order),
-          undefined,
-          "+=0.01"
-        );
-        recordAnimStart(i, childrenBefore);
-        return;
-      }
-
-      // Camera animations — early-branch BEFORE composite resolve.
-      if (
-        anim.effect.type === EFFECT_TYPE.FOCUS ||
-        anim.effect.type === EFFECT_TYPE.ZOOM_IN
-      ) {
-        let position: number | string;
-        if (i === 0) position = 0;
-        else if (anim.trigger_type === "with_previous")
-          position = resolveWithPrevious(i);
-        else if (anim.trigger_type === "after_previous")
-          position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-        else position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
-
-        let resolvedId: string | undefined = anim.target.id;
-        if (
-          anim.effect.type === EFFECT_TYPE.FOCUS &&
-          anim.target.type === "composite"
-        ) {
-          const r = resolveAnimationTarget(
-            anim.target,
-            { composites: spread.composites },
-            playEdition
-          );
-          if (!r.variantId) {
-            log.debug(
-              "camera.focus.composite",
-              "no variant for edition — skip",
-              {}
-            );
-            return;
-          }
-          resolvedId = r.variantId;
-        }
-        const cbs = buildAnimCallbacks(anim);
-        const excludeIds = collectConcurrentTargetIds(
-          animations,
-          i,
-          spread.composites,
-          playEdition
-        );
-        const childrenBefore = tl.getChildren().length;
-        addCameraTweenToTimeline(
-          tl,
-          anim,
-          spreadContainerRef.current,
-          position,
-          resolvedId,
-          {
-            onStart: cbs.onTweenStart,
-            onComplete: cbs.onTweenComplete,
-            excludeIds,
-          }
-        );
-        recordAnimStart(i, childrenBefore);
-        return;
-      }
-
-      // Phase 6 — composite target resolution. Narrow shape — see step-timeline note.
-      const resolved = resolveAnimationTarget(
-        anim.target,
-        { composites: spread.composites },
-        playEdition
-      );
-      if (!resolved.variantId) {
-        log.debug(
-          "buildAndPlayFullTimeline",
-          "composite target unresolved — skipping",
-          {
-            targetId: anim.target.id,
-            targetType: anim.target.type,
-            playEdition,
-          }
-        );
-        return;
-      }
-      const el = elementRefsMap.current.get(resolved.variantId);
-      if (!el) {
-        log.warn("buildAndPlayFullTimeline", "element not found", {
-          targetId: resolved.variantId,
-        });
-        return;
-      }
-
-      let position: number | string;
-      if (i === 0) {
-        position = 0;
-      } else if (anim.trigger_type === "with_previous") {
-        position = resolveWithPrevious(i);
-      } else if (anim.trigger_type === "after_previous") {
-        position = `>+=${TRIGGER_DELAY.AFTER_PREVIOUS}`;
-      } else {
-        // on_click or on_next in auto mode → play with delay
-        position = `>+=${TRIGGER_DELAY.ON_CLICK_AUTO}`;
-      }
-
-      // Read-Along: resolve textbox audio data for word-level highlighting
-      let readAlongExtras: {
-        wordTimings?: import("@/types/spread-types").WordTiming[];
-        audioUrl?: string;
-      } = {};
-      if (
-        anim.effect.type === EFFECT_TYPE.READ_ALONG &&
-        anim.target.type === "textbox"
-      ) {
-        const textbox = spread.textboxes?.find(
-          (tb) => tb.id === anim.target.id
-        );
-        if (textbox) {
-          const result = getTextboxContentForLanguage(
-            textbox as Record<string, unknown>,
-            narrationLangCode
-          );
-          const audio = result?.content?.audio;
-          if (audio?.combined_audio_url) {
-            readAlongExtras = {
-              wordTimings: audio.word_timings,
-              audioUrl: audio.combined_audio_url,
-            };
-          }
-        }
-      }
-
-      const childrenBefore = tl.getChildren().length;
-      addTweenToTimeline(tl, anim, el, position, {
-        spreadContainer: spreadContainerRef.current,
-        itemGeometry: findItemGeometry(resolved.variantId),
-        canvasWidth,
-        canvasHeight,
-        ...dims,
-        ...readAlongExtras,
-        ...resolveAudioMediaLength(anim, spread.audios),
-        ...buildAnimCallbacks(anim),
-        bypassMotion: resolved.bypassMotion,
-      });
-      recordAnimStart(i, childrenBefore);
+      buildCallbacks: buildAnimCallbacks,
+      onQuizPlay,
+      setQuizActiveOrder: (order, active) => {
+        const s = guardedGetState();
+        if (!s) return;
+        if (active) s.addActiveAnimationOrder(order);
+        else s.removeActiveAnimationOrder(order);
+      },
     });
 
     timelineRef.current = tl;
