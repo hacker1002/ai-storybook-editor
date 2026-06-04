@@ -1,10 +1,14 @@
 // __mocks__/combined-demo-spread-fixture.ts
-// Single spread combining all spike media demos: read-along textbox + video (PLAY)
-// + animated webp auto_pic + dotLottie auto_pic. Reuses the two source fixtures as
-// building blocks (DRY) and chains every item sequentially (after_previous) so they
-// appear one after another: fly-in entrances → read-along → video (fade + play)
-// → webp → lottie. FLY_IN directions chosen from item geometry so each item enters
-// from its nearest viewport edge.
+// MOTION-PATH test spread: read-along textbox + video + webp auto_pic + dotLottie
+// auto_pic, all VISIBLE from frame 0. ALL other animations are dropped (no
+// read-along, no video fade/play, no camera, no exits). Each item travels along a
+// LINES motion path to an absolute target position, one after another. NOTE: ARCS
+// (17) is deprecated and falls back to LINES at runtime, so we use LINES (16).
+//
+// effect.geometry = ABSOLUTE target position (%); the tween builder converts it to
+// a delta (target − item origin) × container size. Item origins (from the source
+// fixtures): textbox(70,13) · video(4,30) · webp(37,30) · lottie(68,30). cw/ch in
+// the tween builder are container-first → render-safe.
 
 import type { PlayableSpread } from "@/types/playable-types";
 import type { SpreadAnimation } from "@/types/spread-types";
@@ -12,20 +16,22 @@ import { EFFECT_TYPE } from "@/constants/playable-constants";
 import { createReadAlongSpread } from "./read-along-spread-fixture";
 import { createMediaItemsSpread } from "./media-items-spread-fixture";
 
-const FLY_IN_DURATION_MS = 600;
-
-// Hardcoded target IDs — kept in sync with the source fixtures. If a source
-// fixture renames an id, the matching entry here must be updated (validated by
-// the `assertTargetExists` guard below — fails loudly in dev/test).
-const FLY_IN_TARGETS: Array<{
+// Per-item LINES motion path. `geometry` is the ABSOLUTE destination (%); w/h are
+// required by the Geometry type but unused by the path (only x/y drive the delta).
+// Hardcoded ids kept in sync with the source fixtures (validated by the guard).
+const MOTION_TARGETS: Array<{
   id: string;
   type: SpreadAnimation["target"]["type"];
-  direction: "left" | "right" | "up" | "down";
+  effect: SpreadAnimation["effect"];
 }> = [
-  { id: "a287ac3b-dff7-4128-9ac9-70440b9b7a8a", type: "textbox", direction: "right" }, // read-along textbox (right side)
-  // video intentionally excluded — keeps its original FADE_IN → PLAY chain.
-  { id: "fixture-webp-0001", type: "auto_pic", direction: "up" },                       // webp (center)
-  { id: "fixture-lottie-0001", type: "auto_pic", direction: "right" },                  // lottie (right column)
+  // textbox (70,13) → slide left across the top to (10,13)
+  { id: "a287ac3b-dff7-4128-9ac9-70440b9b7a8a", type: "textbox", effect: { type: EFFECT_TYPE.LINES, duration: 1000, geometry: { x: 10, y: 13, w: 24, h: 13 } } },
+  // video (4,30) → slide right to (60,30)
+  { id: "fixture-video-0001", type: "video", effect: { type: EFFECT_TYPE.LINES, duration: 1000, geometry: { x: 60, y: 30, w: 28, h: 38 } } },
+  // webp (37,30) → slide down to (37,75)
+  { id: "fixture-webp-0001", type: "auto_pic", effect: { type: EFFECT_TYPE.LINES, duration: 1000, geometry: { x: 37, y: 75, w: 26, h: 38 } } },
+  // lottie (68,30) → travel diagonally down-left to (10,60)
+  { id: "fixture-lottie-0001", type: "auto_pic", effect: { type: EFFECT_TYPE.LINES, duration: 1000, geometry: { x: 10, y: 60, w: 28, h: 38 } } },
 ];
 
 export function createCombinedDemoSpread(): PlayableSpread {
@@ -37,35 +43,26 @@ export function createCombinedDemoSpread(): PlayableSpread {
     ...(media.videos ?? []).map((v) => v.id),
     ...(media.auto_pics ?? []).map((p) => p.id),
   ]);
-  for (const t of FLY_IN_TARGETS) {
+  for (const t of MOTION_TARGETS) {
     if (!knownIds.has(t.id)) {
       throw new Error(
-        `[combined-demo-spread] FLY_IN target id "${t.id}" not found in source fixtures — update FLY_IN_TARGETS.`
+        `[combined-demo-spread] motion target id "${t.id}" not found in source fixtures — update MOTION_TARGETS.`
       );
     }
   }
 
-  const flyInEntrances: SpreadAnimation[] = FLY_IN_TARGETS.map((t) => ({
+  const motionAnims: SpreadAnimation[] = MOTION_TARGETS.map((t) => ({
     type: 0,
     order: 0,
-    effect: {
-      type: EFFECT_TYPE.FLY_IN,
-      direction: t.direction,
-      duration: FLY_IN_DURATION_MS,
-      delay: 0,
-    },
+    effect: { delay: 0, ...t.effect },
     target: { id: t.id, type: t.type },
     trigger_type: "after_previous",
   }));
 
-  // Sequential reveal: fly-in entrances first, then the original chain. First
-  // animation keeps its source trigger (on_next), everything after chains via
-  // after_previous so the whole spread plays as one auto-stepped sequence.
-  const animations: SpreadAnimation[] = [
-    ...flyInEntrances,
-    ...ra.animations,
-    ...media.animations,
-  ].map((a, i) => ({
+  // ONLY motion paths — read-along / video PLAY / camera / exits intentionally
+  // dropped. Items render visible from frame 0 (motion initial state = visible);
+  // they travel one after another. First animation keeps on_next; rest after_previous.
+  const animations: SpreadAnimation[] = motionAnims.map((a, i) => ({
     ...a,
     order: i,
     trigger_type: i === 0 ? "on_next" : "after_previous",
