@@ -18,10 +18,11 @@ import type {
   SpreadAutoPic,
   Typography,
 } from "@/types/spread-types";
-// Deterministic (frame-driven) lottie player — used in BOTH <Player> preview and worker
-// render so lottie pixels match (preview===output). The editor's dot-lottie-player is
-// rAF-driven (freezes on render) + pulls a Vite `?url` WASM that breaks webpack.
-import { DotLottiePlayer } from "@/remotion/lottie/deterministic-lottie-player";
+// Frame-deterministic lottie player on the SAME engine the editor preview uses (ThorVG via
+// @lottiefiles/dotlottie-web), driven by setFrame + a per-frame 'render' gate instead of
+// rAF — used in BOTH <Player> preview and worker render so lottie pixels match
+// (preview===output), while keeping dotLottie v2 theme / state-machine / embedded fonts.
+import { DotLottiePlayer } from "@/remotion/lottie/thorvg-lottie-player";
 
 interface SpreadItemLayerProps {
   spread: PlayableSpread;
@@ -177,10 +178,10 @@ export function SpreadItemLayer({
         </div>
       ))}
 
-      {/* Auto-pic — .lottie via DotLottieReact, else (.webp/.gif/.webm) via <Img>.
-          NOTE: both are browser/rAF-animated → NOT frame-deterministic under Remotion
-          render (animate in preview, freeze on render). Deterministic path: .lottie →
-          @remotion/lottie (JSON); webp → frame-extract / @remotion/gif-style. */}
+      {/* Auto-pic — .lottie via the ThorVG DotLottiePlayer (frame-driven: setFrame + per-
+          frame 'render' gate → deterministic, theme/state-machine/font-faithful), else
+          (.webp/.gif/.webm) via <Img>. NOTE: the <Img> branch is a single static frame —
+          animated webp/gif aren't frame-deterministic yet (future: frame-extract). */}
       {autoPics.map((pic) => {
         const url = pic.media_url?.toLowerCase().split("?")[0] ?? "";
         const isLottie = url.endsWith(".lottie");

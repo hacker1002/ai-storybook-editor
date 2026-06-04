@@ -7,8 +7,9 @@
 import type { PlayableSpread } from "@/types/playable-types";
 import { linearizeSpreadTimeline } from "@/features/demo-spread-views/utils/linearize-spread-timeline";
 
-/** Output frame rate. 60fps (smoother motion; ~2× render time + larger files vs 30). */
-export const VIDEO_FPS = 60;
+/** Output frame rate. 30fps canonical (matches ADR-034). Halves per-frame ThorVG seeks
+ *  vs the earlier experimental 60 → lower per-frame-gate cost / timeout risk on long spreads. */
+export const VIDEO_FPS = 30;
 
 /**
  * Output dimensions = 1440p at the spreads' native 4:3 ratio (1920×1440).

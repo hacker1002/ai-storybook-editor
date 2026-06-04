@@ -8,11 +8,12 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type NextFunction } from "express";
-import { OUT_DIR } from "./paths";
+import { OUT_DIR, PUBLIC_DIR, WORKER_PORT } from "./paths";
 import { renderSpread, warmup, type RenderInput } from "./render";
+import { ensureWasmAsset } from "./ensure-wasm-asset";
 import { classifyRenderError } from "./errors";
 
-const PORT = Number(process.env.PORT ?? 4000);
+const PORT = WORKER_PORT;
 const MAX_KEEP_FILES = 10;
 
 const app = express();
@@ -31,6 +32,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use("/files", express.static(OUT_DIR));
+// ThorVG WASM (+ any other static asset) fetched by the headless Chromium at render time.
+// Express sets Content-Type: application/wasm from the .wasm extension.
+app.use(express.static(PUBLIC_DIR));
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ ok: true });
@@ -93,6 +97,7 @@ async function pruneOldFiles(): Promise<void> {
 
 async function main() {
   console.log("[server] warming up (browser + bundle)...");
+  await ensureWasmAsset();
   await warmup();
   // Bind loopback only — enforces the dev-only posture (no auth, wildcard CORS).
   app.listen(PORT, "127.0.0.1", () => console.log(`[server] ready on http://localhost:${PORT}`));
