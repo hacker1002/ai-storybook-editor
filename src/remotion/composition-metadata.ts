@@ -5,7 +5,7 @@
 // changes both sides at once; never duplicate the duration formula.
 
 import type { PlayableSpread } from "@/types/playable-types";
-import { linearizeSpreadTimeline } from "@/features/demo-spread-views/utils/linearize-spread-timeline";
+import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
 
 /** Output frame rate. 30fps canonical (matches ADR-034). Halves per-frame ThorVG seeks
  *  vs the earlier experimental 60 → lower per-frame-gate cost / timeout risk on long spreads. */

@@ -19,7 +19,7 @@ import { applyInitialStates } from "@/features/editor/components/playable-spread
 import { addTweenToTimeline } from "@/features/editor/components/playable-spread-view/animation-tween-builders";
 import { createLogger } from "@/utils/logger";
 import { SpreadItemLayer } from "./spread-item-layer";
-import { linearizeSpreadTimeline } from "../../utils/linearize-spread-timeline";
+import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
 
 const log = createLogger("Demo", "RemotionSpreadComposition");
 
