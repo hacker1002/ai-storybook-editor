@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import gsap from 'gsap';
 import type { SpreadAnimation, SpreadComposite } from '@/types/spread-types';
-import { applyInitialStates } from './player-initial-states';
+import { applyInitialStates, resolveInitialState } from './player-initial-states';
 import { EFFECT_TYPE } from '@/constants/playable-constants';
 
 // Track gsap.set calls so we can assert which element was targeted.
@@ -117,5 +117,38 @@ describe('applyInitialStates — composite target resolution (H-1)', () => {
     applyInitialStates([anim], refs, null);
 
     expect(gsapSetSpy).toHaveBeenCalledWith(tbEl, expect.objectContaining({ autoAlpha: 0 }));
+  });
+});
+
+// Regression: headless Remotion render measures the container as 0 in the build
+// layout-effect (AbsoluteFill inset:0 not yet resolved). The FLY_IN offscreen
+// offset must fall back to the explicit canvasSize, else x collapses to 0 and the
+// item "pops in" instead of flying (FADE_IN was immune — opacity-only). Tested at
+// resolveInitialState (pure) so no real gsap/DOM is involved.
+describe('resolveInitialState — zero-measured container falls back to canvasSize (FLY_IN render fix)', () => {
+  function makeContainer(width: number, height: number): HTMLElement {
+    const el = document.createElement('div');
+    el.getBoundingClientRect = () =>
+      ({ width, height, top: 0, left: 0, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    return el;
+  }
+
+  it('container measures 0 → FLY_IN offset uses canvasSize.width (x = 1920), not 0', () => {
+    const anim = makeAnim(1, 'img1', 'image', EFFECT_TYPE.FLY_IN); // direction:'left'
+    const props = resolveInitialState(anim, makeContainer(0, 0), { width: 1920, height: 1440 });
+    // calculateFlyOffset('left') = { x: -cw }; resolveInitialState negates → x = cw.
+    expect(props).toMatchObject({ autoAlpha: 0, x: 1920 });
+  });
+
+  it('container measures >0 → FLY_IN offset uses measured size (x = 893), not canvasSize', () => {
+    const anim = makeAnim(1, 'img1', 'image', EFFECT_TYPE.FLY_IN);
+    const props = resolveInitialState(anim, makeContainer(893, 670), { width: 1920, height: 1440 });
+    expect(props).toMatchObject({ autoAlpha: 0, x: 893 });
+  });
+
+  it('no container → falls back to canvasSize (x = 1920)', () => {
+    const anim = makeAnim(1, 'img1', 'image', EFFECT_TYPE.FLY_IN);
+    const props = resolveInitialState(anim, null, { width: 1920, height: 1440 });
+    expect(props).toMatchObject({ autoAlpha: 0, x: 1920 });
   });
 });

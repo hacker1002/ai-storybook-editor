@@ -51,6 +51,28 @@ export function calculateFloatOffset(direction: string | undefined): Offset {
   }
 }
 
+/**
+ * Resolve container dimensions for offset math. Prefers the live measured rect,
+ * but a measured value of 0 is treated as "unmeasured" and falls back to the
+ * explicit canvasSize (and finally a hard default). Critical for headless
+ * Remotion render: `useLayoutEffect` can fire before the AbsoluteFill resolves
+ * its inset:0 size, so getBoundingClientRect() returns 0 — `?? canvasSize` does
+ * NOT catch that (0 isn't nullish), which collapsed FLY_IN/OUT offsets to 0 and
+ * made items "pop in" instead of flying. Live player measures >0 ⇒ unchanged.
+ */
+function resolveContainerDims(
+  spreadContainer: HTMLElement | null,
+  canvasSize?: CanvasSize,
+): { cw: number; ch: number } {
+  const rect = spreadContainer?.getBoundingClientRect();
+  const measuredW = rect?.width ?? 0;
+  const measuredH = rect?.height ?? 0;
+  return {
+    cw: measuredW > 0 ? measuredW : (canvasSize?.width ?? 800),
+    ch: measuredH > 0 ? measuredH : (canvasSize?.height ?? 600),
+  };
+}
+
 // === Resolve Initial State ===
 
 /**
@@ -65,8 +87,7 @@ export function resolveInitialState(
   baseOpacity: number = 1
 ): gsap.TweenVars {
   const { type } = animation.effect;
-  const cw = spreadContainer?.getBoundingClientRect().width ?? canvasSize?.width ?? 800;
-  const ch = spreadContainer?.getBoundingClientRect().height ?? canvasSize?.height ?? 600;
+  const { cw, ch } = resolveContainerDims(spreadContainer, canvasSize);
 
   switch (type) {
     // Media Play — handled separately (pause + currentTime=0)
@@ -132,8 +153,7 @@ export function resolveAnimationEndState(
   baseOpacity: number = 1
 ): gsap.TweenVars {
   const { type, amount, direction } = animation.effect;
-  const cw = spreadContainer?.getBoundingClientRect().width ?? canvasSize?.width ?? 800;
-  const ch = spreadContainer?.getBoundingClientRect().height ?? canvasSize?.height ?? 600;
+  const { cw, ch } = resolveContainerDims(spreadContainer, canvasSize);
 
   switch (type) {
     case EFFECT_TYPE.PLAY:
