@@ -5,7 +5,7 @@
 //
 // How determinism is achieved (ThorVG paints ASYNCHRONOUSLY via WASM, unlike lottie-web's
 // synchronous paint):
-//   1. setWasmUrl() once at module load — WASM served from the worker origin (Phase 01).
+//   1. setWasmUrl() once at module load — WASM resolved via a `?url` import (see below).
 //   2. autoplay:false + freeze() strips the engine's internal rAF clock.
 //   3. Each Remotion frame: delayRender → setFrame(mappedFrame) → continueRender only after
 //      the instance's 'render' event fires → guarantees the canvas holds THIS frame's pixels
@@ -16,24 +16,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { continueRender, delayRender, useCurrentFrame } from "remotion";
 import { DotLottie } from "@lottiefiles/dotlottie-web";
+// WASM resolved as a bundled asset (same strategy as the editor's dot-lottie-player.tsx),
+// portable across BOTH realms this module loads in:
+//   - Browser (demo <Player> on Vercel): Vite emits a hashed asset served SAME-ORIGIN.
+//   - Worker render bundle (headless Chromium): the webpack catch-all `?url` rule in
+//     video-worker/src/webpack-override.ts maps this to `asset/resource`, served from the
+//     Remotion bundle origin at render time.
+// Removes the prior hardcoded `http://127.0.0.1:4000/...` literal which broke in the browser
+// (loopback = the END USER's machine on Vercel) and pinned the adapter to the worker origin.
+import wasmUrl from "@lottiefiles/dotlottie-web/dotlottie-player.wasm?url";
 import { createLogger } from "@/utils/logger";
 import { VIDEO_FPS } from "@/remotion/composition-metadata";
 import { mapFrameToLottie } from "./thorvg-frame-mapping";
 
 const log = createLogger("Remotion", "ThorVGLottiePlayer");
 
-// WASM URL — constant loopback origin (Validation S1 Q1: no inputProps, KISS). Mirror of
-// the worker's WASM_PUBLIC_URL; the render bundle can't import the Node paths module, so
-// the literal lives here. Single-source caveat: if the worker PORT changes from the
-// dev-only default (4000), update this literal to match (the worker binds the same port).
-const WASM_URL = "http://127.0.0.1:4000/dotlottie-player.wasm";
-
-// NOTE: setWasmUrl is a GLOBAL static on the shared DotLottie class (last writer wins). This
-// adapter must NOT be co-loaded into the same JS realm as the editor's dot-lottie-player.tsx
-// (which registers a Vite `?url` WASM) — they'd clobber each other's origin. Safe today: the
-// worker render bundle and the demo <Player> graph each contain only THIS module.
-DotLottie.setWasmUrl(WASM_URL);
-log.debug("module", "registered ThorVG WASM url", { wasmUrl: WASM_URL });
+// NOTE: setWasmUrl is a GLOBAL static on the shared DotLottie class (last writer wins). Now
+// that BOTH adapters (this one + the editor's dot-lottie-player.tsx) register a bundled
+// `?url` WASM, a same-realm co-load resolves to byte-identical engines — but they still must
+// not be co-loaded with divergent versions. Safe today: the worker render bundle and the
+// demo <Player> graph each contain only THIS module.
+DotLottie.setWasmUrl(wasmUrl);
+log.debug("module", "registered ThorVG WASM url", { wasmUrl });
 
 export interface DotLottiePlayerProps {
   src: string;

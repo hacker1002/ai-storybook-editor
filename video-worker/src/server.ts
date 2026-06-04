@@ -8,9 +8,8 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type NextFunction } from "express";
-import { OUT_DIR, PUBLIC_DIR, WORKER_PORT } from "./paths";
+import { OUT_DIR, WORKER_PORT } from "./paths";
 import { renderSpread, warmup, type RenderInput } from "./render";
-import { ensureWasmAsset } from "./ensure-wasm-asset";
 import { classifyRenderError } from "./errors";
 
 const PORT = WORKER_PORT;
@@ -32,9 +31,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use("/files", express.static(OUT_DIR));
-// ThorVG WASM (+ any other static asset) fetched by the headless Chromium at render time.
-// Express sets Content-Type: application/wasm from the .wasm extension.
-app.use(express.static(PUBLIC_DIR));
+// NOTE: the worker no longer serves the ThorVG WASM. The render adapter resolves it as a
+// bundled `?url` asset (src/remotion/lottie/thorvg-lottie-player.tsx + webpack-override.ts),
+// so the headless Chromium fetches it from the Remotion bundle origin — origin-independent,
+// nothing to host here. Only `/files` (MP4) + `/health` are exposed.
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ ok: true });
@@ -97,7 +97,6 @@ async function pruneOldFiles(): Promise<void> {
 
 async function main() {
   console.log("[server] warming up (browser + bundle)...");
-  await ensureWasmAsset();
   await warmup();
   // Bind loopback only — enforces the dev-only posture (no auth, wildcard CORS).
   app.listen(PORT, "127.0.0.1", () => console.log(`[server] ready on http://localhost:${PORT}`));

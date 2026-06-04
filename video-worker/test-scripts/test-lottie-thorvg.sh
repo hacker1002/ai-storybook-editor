@@ -17,12 +17,9 @@ if [ ! -f "$FIXTURE" ]; then
   echo "❌ fixture missing: $FIXTURE (run: npx tsx test-scripts/gen-fixture-lottie.ts)"; exit 1
 fi
 
-# Sanity: WASM route must serve before any render (headless Chromium fetches it).
-echo "GET $BASE_URL/dotlottie-player.wasm"
-WASM_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/dotlottie-player.wasm")
-WASM_LEN=$(curl -s -o /dev/null -w '%{size_download}' "$BASE_URL/dotlottie-player.wasm")
-echo "  → HTTP $WASM_CODE, ${WASM_LEN} bytes"
-if [ "$WASM_CODE" != "200" ]; then echo "❌ WASM route not 200"; exit 1; fi
+# NOTE: the worker no longer serves the WASM — the render adapter resolves it as a bundled
+# `?url` asset fetched from the Remotion bundle origin. The real gate is a non-blank lottie
+# render below (a failed WASM load → blank/static frames), not a worker WASM route.
 
 echo "POST $BASE_URL/render (fixture $(wc -c < "$FIXTURE") bytes)"
 RESPONSE=$(curl -s -X POST "$BASE_URL/render" -H "Content-Type: application/json" -d @"$FIXTURE")
