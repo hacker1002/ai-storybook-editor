@@ -20,3 +20,14 @@ export const OUT_DIR = path.resolve(here, "../out");
  *  served by the worker (render adapter resolves it as a bundled `?url` asset), so the
  *  port no longer doubles as a WASM origin. */
 export const WORKER_PORT = Number(process.env.PORT ?? 4000);
+
+/** Public base URL of the worker — job-side absolutizes publicUrl → media_url leaf.
+ *  Not used in v1 response (worker returns relative `/files/` path); kept for future. */
+export const VIDEO_WORKER_PUBLIC_URL = process.env.VIDEO_WORKER_PUBLIC_URL ?? "";
+
+/** Optional shared secret protecting /render* routes (POST only).
+ *  Unset → bypass (dev loopback). Set → require X-Worker-Token header match. */
+export const VIDEO_WORKER_TOKEN = process.env.VIDEO_WORKER_TOKEN ?? "";
+
+/** Max bytes to fetch for BGM audio (SSRF + OOM guard). Default: 20 MB. */
+export const BGM_MAX_BYTES = Number(process.env.BGM_MAX_BYTES ?? 20 * 1024 * 1024);

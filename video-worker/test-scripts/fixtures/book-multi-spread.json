@@ -1,0 +1,117 @@
+{
+  "spreads": [
+    {
+      "id": "book-test-spread-0001",
+      "pages": [{ "number": "0-1", "type": "normal_page", "layout": null, "background": { "color": "#E8F4F8", "texture": null } }],
+      "images": [],
+      "textboxes": [
+        {
+          "id": "tb-0001-a",
+          "z-index": 601,
+          "editor_visible": true,
+          "player_visible": true,
+          "en_US": {
+            "text": "Once upon a time...",
+            "geometry": { "x": 10, "y": 10, "w": 80, "h": 15 },
+            "typography": { "size": 28, "color": "#333333", "style": "normal", "family": "Nunito", "weight": 700, "textAlign": "center", "decoration": "none", "lineHeight": 1.5, "letterSpacing": 0, "textTransform": "none" },
+            "audio": null
+          }
+        }
+      ],
+      "shapes": [],
+      "stickers": [],
+      "branch_setting": null,
+      "animations": [
+        {
+          "type": 0,
+          "order": 0,
+          "effect": { "type": 11, "delay": 0, "duration": 1500 },
+          "target": { "id": "tb-0001-a", "type": "textbox" },
+          "trigger_type": "on_next"
+        }
+      ]
+    },
+    {
+      "id": "book-test-spread-0002",
+      "pages": [{ "number": "2-3", "type": "normal_page", "layout": null, "background": { "color": "#F8F4E8", "texture": null } }],
+      "images": [],
+      "textboxes": [
+        {
+          "id": "tb-0002-a",
+          "z-index": 601,
+          "editor_visible": true,
+          "player_visible": true,
+          "en_US": {
+            "text": "In a land far away...",
+            "geometry": { "x": 10, "y": 40, "w": 80, "h": 15 },
+            "typography": { "size": 26, "color": "#555555", "style": "normal", "family": "Nunito", "weight": 400, "textAlign": "center", "decoration": "none", "lineHeight": 1.5, "letterSpacing": 0, "textTransform": "none" },
+            "audio": null
+          }
+        }
+      ],
+      "shapes": [],
+      "stickers": [],
+      "branch_setting": {
+        "branches": [
+          { "id": "branch-a", "section_id": "section-ending", "is_default": true, "label": "Continue" }
+        ]
+      },
+      "animations": [
+        {
+          "type": 0,
+          "order": 0,
+          "effect": { "type": 11, "delay": 0, "duration": 1200 },
+          "target": { "id": "tb-0002-a", "type": "textbox" },
+          "trigger_type": "on_next"
+        }
+      ]
+    },
+    {
+      "id": "book-test-spread-0003",
+      "pages": [{ "number": "4-5", "type": "normal_page", "layout": null, "background": { "color": "#F4E8F8", "texture": null } }],
+      "images": [],
+      "textboxes": [
+        {
+          "id": "tb-0003-a",
+          "z-index": 601,
+          "editor_visible": true,
+          "player_visible": true,
+          "en_US": {
+            "text": "The End.",
+            "geometry": { "x": 30, "y": 45, "w": 40, "h": 10 },
+            "typography": { "size": 32, "color": "#222222", "style": "normal", "family": "Nunito", "weight": 700, "textAlign": "center", "decoration": "none", "lineHeight": 1.5, "letterSpacing": 0, "textTransform": "none" },
+            "audio": null
+          }
+        }
+      ],
+      "shapes": [],
+      "stickers": [],
+      "branch_setting": null,
+      "animations": [
+        {
+          "type": 0,
+          "order": 0,
+          "effect": { "type": 11, "delay": 0, "duration": 1000 },
+          "target": { "id": "tb-0003-a", "type": "textbox" },
+          "trigger_type": "on_next"
+        }
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "section-intro",
+      "start_spread_id": "book-test-spread-0001",
+      "end_spread_id": "book-test-spread-0001",
+      "next_spread_id": null
+    },
+    {
+      "id": "section-ending",
+      "start_spread_id": "book-test-spread-0003",
+      "end_spread_id": "book-test-spread-0003",
+      "next_spread_id": null
+    }
+  ],
+  "edition": "classic",
+  "language": "en_US"
+}
