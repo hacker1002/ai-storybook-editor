@@ -90,7 +90,10 @@ export const V1_EXPORT_CAPABILITY: Record<ChannelKey, ChannelCapability> = {
   player: { exportableLeafKeys: [], disabledLeafKeys: [] },
   digital: { exportableLeafKeys: [], disabledLeafKeys: [] },
   printer: { exportableLeafKeys: ['300dpi'], disabledLeafKeys: ['600dpi'] },
-  video: { exportableLeafKeys: [], disabledLeafKeys: [] },
+  // v1: only QHD (1440p) renders via job 07 (render_book_video); SD/HD/FHD will
+  // be filled by a transcode job (ffmpeg downscale from QHD master) in a later
+  // phase — checkboxes locked until then.
+  video: { exportableLeafKeys: ['qhd'], disabledLeafKeys: ['sd', 'hd', 'fhd'] },
 };
 
 export interface StatusBadgeTone {

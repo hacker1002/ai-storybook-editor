@@ -71,14 +71,19 @@ function buildChannelViews(dist: Distribution): ChannelView[] {
           descriptor,
           leaf: getLeaf(dist, 'video', descriptor.leafKey, entry.type),
         }));
+        const exportable = variants.filter((v) =>
+          cap.exportableLeafKeys.includes(v.descriptor.leafKey),
+        );
+        const anyChecked = exportable.some((v) => v.leaf.is_enabled);
+        const anyExporting = exportable.some((v) => v.leaf.status === 'exporting');
         views.push({
           groupKey: `video-${entry.type}`,
           label: VIDEO_TYPE_LABELS[entry.type],
           channelKey: 'video',
           videoType: entry.type,
           variants,
-          canExport: false, // v1: video not export-able
-          anyExporting: variants.some((v) => v.leaf.status === 'exporting'),
+          canExport: exportable.length > 0 && anyChecked && !anyExporting,
+          anyExporting,
         });
       }
       continue;
@@ -109,8 +114,13 @@ export function ConfigDistributionSettings() {
   const remixes = useRemixes();
   const { updateBook, refetchBookDistribution } = useBookActions();
   const { refetchRemix } = useRemixActions();
-  const { updateRemixDistribution, startBookExportPdf, startRemixExportPdf } =
-    useDistributionActions();
+  const {
+    updateRemixDistribution,
+    startBookExportPdf,
+    startRemixExportPdf,
+    startBookRenderVideo,
+    startRemixRenderVideo,
+  } = useDistributionActions();
 
   const [expandedSources, setExpandedSources] = React.useState<Set<string>>(
     () => new Set(['book']),
@@ -186,16 +196,31 @@ export function ConfigDistributionSettings() {
   );
 
   const handleExportChannel = React.useCallback(
-    async (src: DistSource, channelKey: ChannelKey): Promise<EnqueueExportOutcome> => {
-      if (channelKey !== 'printer') {
-        return { kind: 'skipped', reason: 'channel_not_exportable_v1' };
+    async (
+      src: DistSource,
+      channelKey: ChannelKey,
+      videoType?: VideoType,
+    ): Promise<EnqueueExportOutcome> => {
+      if (channelKey === 'printer') {
+        log.info('handleExportChannel', 'start export-pdf', { kind: src.kind, id: src.id });
+        return src.kind === 'book'
+          ? await startBookExportPdf(src.id, EXPORT_OPTS)
+          : await startRemixExportPdf(src.id, EXPORT_OPTS);
       }
-      log.info('handleExportChannel', 'start export', { kind: src.kind, id: src.id });
-      return src.kind === 'book'
-        ? await startBookExportPdf(src.id, EXPORT_OPTS)
-        : await startRemixExportPdf(src.id, EXPORT_OPTS);
+      if (channelKey === 'video' && videoType) {
+        log.info('handleExportChannel', 'start render-book-video', {
+          kind: src.kind,
+          id: src.id,
+          edition: videoType,
+        });
+        const opts = { edition: videoType } as const;
+        return src.kind === 'book'
+          ? await startBookRenderVideo(src.id, opts)
+          : await startRemixRenderVideo(src.id, opts);
+      }
+      return { kind: 'skipped', reason: 'channel_not_exportable_v1' };
     },
-    [startBookExportPdf, startRemixExportPdf],
+    [startBookExportPdf, startRemixExportPdf, startBookRenderVideo, startRemixRenderVideo],
   );
 
   const handleViewVariant = React.useCallback(
@@ -242,7 +267,7 @@ export function ConfigDistributionSettings() {
                   variants={view.variants}
                   canExport={view.canExport}
                   anyExporting={view.anyExporting}
-                  onExport={() => handleExportChannel(src, view.channelKey)}
+                  onExport={() => handleExportChannel(src, view.channelKey, view.videoType)}
                   onToggleVariant={(leafKey, next) =>
                     handleToggleVariant(src, view.channelKey, leafKey, next, view.videoType)
                   }

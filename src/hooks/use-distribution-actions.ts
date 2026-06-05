@@ -11,10 +11,15 @@ import * as React from 'react';
 import { toast } from 'sonner';
 import {
   enqueueBookExportPdf,
+  enqueueBookRenderVideo,
   enqueueRemixExportPdf,
+  enqueueRemixRenderVideo,
   isExportPdfDeduped,
   isExportPdfSkipped,
+  isRenderVideoDeduped,
+  isRenderVideoSkipped,
   type StartExportPdfOpts,
+  type StartRenderVideoOpts,
 } from '@/apis/jobs-api';
 import { useBookActions } from '@/stores/book-store';
 import { useRemixActions } from '@/stores/remix-store';
@@ -34,6 +39,14 @@ export interface DistributionActions {
   updateRemixDistribution: (remixId: string, dist: Distribution) => Promise<boolean>;
   startBookExportPdf: (bookId: string, opts?: StartExportPdfOpts) => Promise<EnqueueExportOutcome>;
   startRemixExportPdf: (remixId: string, opts?: StartExportPdfOpts) => Promise<EnqueueExportOutcome>;
+  startBookRenderVideo: (
+    bookId: string,
+    opts: StartRenderVideoOpts,
+  ) => Promise<EnqueueExportOutcome>;
+  startRemixRenderVideo: (
+    remixId: string,
+    opts: StartRenderVideoOpts,
+  ) => Promise<EnqueueExportOutcome>;
 }
 
 export function useDistributionActions(): DistributionActions {
@@ -103,6 +116,68 @@ export function useDistributionActions(): DistributionActions {
     [refetchRemix],
   );
 
+  const startBookRenderVideo = React.useCallback(
+    async (bookId: string, opts: StartRenderVideoOpts): Promise<EnqueueExportOutcome> => {
+      log.info('startBookRenderVideo', 'enqueue', { bookId, edition: opts.edition });
+      const result = await enqueueBookRenderVideo(bookId, opts);
+      if (!result.success) {
+        log.error('startBookRenderVideo', 'failed', {
+          bookId,
+          httpStatus: result.httpStatus,
+          errorCode: result.errorCode,
+        });
+        toast.error(`Render failed: ${result.error}`);
+        return { kind: 'failed', message: result.error };
+      }
+      const data = result.data;
+      if (isRenderVideoSkipped(data)) {
+        log.warn('startBookRenderVideo', 'skipped', { bookId, reason: data.reason });
+        toast.info('Nothing to render (empty spread sequence).');
+        return { kind: 'skipped', reason: data.reason };
+      }
+      void refetchBookDistribution(bookId);
+      if (isRenderVideoDeduped(data)) {
+        log.info('startBookRenderVideo', 'deduped', { bookId, jobId: data.job_id });
+        return { kind: 'deduped', jobId: data.job_id };
+      }
+      log.info('startBookRenderVideo', 'enqueued', { bookId, jobId: data.job_id });
+      toast.success('Render started.');
+      return { kind: 'enqueued', jobId: data.job_id };
+    },
+    [refetchBookDistribution],
+  );
+
+  const startRemixRenderVideo = React.useCallback(
+    async (remixId: string, opts: StartRenderVideoOpts): Promise<EnqueueExportOutcome> => {
+      log.info('startRemixRenderVideo', 'enqueue', { remixId, edition: opts.edition });
+      const result = await enqueueRemixRenderVideo(remixId, opts);
+      if (!result.success) {
+        log.error('startRemixRenderVideo', 'failed', {
+          remixId,
+          httpStatus: result.httpStatus,
+          errorCode: result.errorCode,
+        });
+        toast.error(`Render failed: ${result.error}`);
+        return { kind: 'failed', message: result.error };
+      }
+      const data = result.data;
+      if (isRenderVideoSkipped(data)) {
+        log.warn('startRemixRenderVideo', 'skipped', { remixId, reason: data.reason });
+        toast.info('Nothing to render (empty spread sequence).');
+        return { kind: 'skipped', reason: data.reason };
+      }
+      void refetchRemix(remixId);
+      if (isRenderVideoDeduped(data)) {
+        log.info('startRemixRenderVideo', 'deduped', { remixId, jobId: data.job_id });
+        return { kind: 'deduped', jobId: data.job_id };
+      }
+      log.info('startRemixRenderVideo', 'enqueued', { remixId, jobId: data.job_id });
+      toast.success('Render started.');
+      return { kind: 'enqueued', jobId: data.job_id };
+    },
+    [refetchRemix],
+  );
+
   const updateRemixDistributionWrapped = React.useCallback(
     async (remixId: string, dist: Distribution): Promise<boolean> => {
       const ok = await updateRemixDistribution(remixId, dist);
@@ -116,5 +191,7 @@ export function useDistributionActions(): DistributionActions {
     updateRemixDistribution: updateRemixDistributionWrapped,
     startBookExportPdf,
     startRemixExportPdf,
+    startBookRenderVideo,
+    startRemixRenderVideo,
   };
 }

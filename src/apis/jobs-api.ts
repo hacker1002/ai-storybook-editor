@@ -252,6 +252,90 @@ export async function enqueueRemixExportPdf(
   );
 }
 
+// ── Render Book Video (api/jobs/07 — book + remix route) ────────────────────
+
+export interface StartRenderVideoOpts {
+  edition: 'classic' | 'dynamic';
+  language?: string;
+  start_spread_id?: string;
+}
+
+export interface EnqueueRenderVideoEnqueuedData {
+  job_id: string;
+  status: 'queued';
+  type: 'render_book_video';
+  source: 'book' | 'remix';
+  book_id: string;
+  remix_id?: string;
+  edition: 'classic' | 'dynamic';
+  resolution: 'qhd';
+  total_steps: number;
+  spreads_in_sequence: number;
+  estimated_duration_sec: number;
+  skipped?: false;
+  deduped?: false;
+}
+
+export interface EnqueueRenderVideoSkippedData {
+  skipped: true;
+  reason: 'empty_sequence' | 'snapshot_empty' | string;
+  spreads_in_sequence: 0;
+}
+
+export interface EnqueueRenderVideoDedupedData {
+  job_id: string;
+  status: 'queued' | 'running';
+  type: 'render_book_video';
+  source: 'book' | 'remix';
+  book_id: string;
+  remix_id?: string;
+  edition: 'classic' | 'dynamic';
+  deduped: true;
+}
+
+export type EnqueueRenderVideoData =
+  | EnqueueRenderVideoEnqueuedData
+  | EnqueueRenderVideoSkippedData
+  | EnqueueRenderVideoDedupedData;
+
+/** Narrowing guards — 3-way union (enqueued | skipped | deduped). */
+export function isRenderVideoSkipped(
+  d: EnqueueRenderVideoData,
+): d is EnqueueRenderVideoSkippedData {
+  return (d as EnqueueRenderVideoSkippedData).skipped === true;
+}
+
+export function isRenderVideoDeduped(
+  d: EnqueueRenderVideoData,
+): d is EnqueueRenderVideoDedupedData {
+  return (d as EnqueueRenderVideoDedupedData).deduped === true;
+}
+
+/** POST /api/jobs/{bookId}/render-book-video (book source). v1 fixed QHD master;
+ *  body carries `edition` (required) + optional `language` / `start_spread_id`. */
+export async function enqueueBookRenderVideo(
+  bookId: string,
+  opts: StartRenderVideoOpts,
+): Promise<EnqueueJobResponse<EnqueueRenderVideoData> | ImageApiFailure> {
+  log.info('enqueueBookRenderVideo', 'request', { bookId, edition: opts.edition });
+  return callImageApi<EnqueueJobResponse<EnqueueRenderVideoData>>(
+    `/api/jobs/${encodeURIComponent(bookId)}/render-book-video`,
+    opts,
+  );
+}
+
+/** POST /api/jobs/remix/{remixId}/render-book-video (remix source). */
+export async function enqueueRemixRenderVideo(
+  remixId: string,
+  opts: StartRenderVideoOpts,
+): Promise<EnqueueJobResponse<EnqueueRenderVideoData> | ImageApiFailure> {
+  log.info('enqueueRemixRenderVideo', 'request', { remixId, edition: opts.edition });
+  return callImageApi<EnqueueJobResponse<EnqueueRenderVideoData>>(
+    `/api/jobs/remix/${encodeURIComponent(remixId)}/render-book-video`,
+    opts,
+  );
+}
+
 /** POST /api/jobs/{jobId}/cancel */
 export async function cancelJobRemote(
   jobId: string,

@@ -1,12 +1,13 @@
 // use-export-job-watcher.ts — Standalone Supabase realtime watcher for
-// `export_pdf` background jobs (book + remix). Independent of RemixStore's
-// background_jobs subscription (Validation S1 decision — no coupling, active
-// even when no remix exists). Mounted by the Distribution section root.
+// distribution background jobs (`export_pdf` + `render_book_video`, book +
+// remix). Independent of RemixStore's background_jobs subscription (Validation
+// S1 decision — no coupling, active even when no remix exists). Mounted by the
+// Distribution section root.
 //
 // On a watched job transitioning to `running` (first time) → refetch the source
 // distribution so the EXPORTING badge appears; on terminal (completed/failed/
 // cancelled) → refetch again to pull the job handler's updated/failed/outdated
-// leaf. No polling — backend reaper guards permanent stuck (spec 06 finalize).
+// leaf. No polling — backend reaper guards permanent stuck (spec 06/07 finalize).
 
 import * as React from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -20,6 +21,7 @@ import { createLogger } from '@/utils/logger';
 const log = createLogger('Editor', 'ExportJobWatcher');
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+const WATCHED_TYPES = new Set(['export_pdf', 'render_book_video']);
 
 interface ExportJobWatcherArgs {
   bookId: string | null;
@@ -53,11 +55,11 @@ export function useExportJobWatcher({ bookId, remixIds }: ExportJobWatcherArgs):
       return;
     }
 
-    log.info('subscribe', 'open export_pdf watcher', { userId });
+    log.info('subscribe', 'open distribution job watcher', { userId });
     const seenRunning = new Set<string>();
 
     const handle = (row: BackgroundJobRow) => {
-      if (row.type !== 'export_pdf') return;
+      if (!WATCHED_TYPES.has(row.type)) return;
       if (!row.params || typeof row.params !== 'object') return; // malformed row guard
       const params = row.params as {
         source?: 'book' | 'remix';
@@ -125,7 +127,7 @@ export function useExportJobWatcher({ bookId, remixIds }: ExportJobWatcherArgs):
       }
       if (cancelled) return;
 
-      log.info('subscribe', 'open export_pdf watcher', { userId, attempt: rehealAttempts });
+      log.info('subscribe', 'open distribution job watcher', { userId, attempt: rehealAttempts });
       channel = supabase
         .channel(`export-jobs-${userId}`)
         .on(
@@ -175,7 +177,7 @@ export function useExportJobWatcher({ bookId, remixIds }: ExportJobWatcherArgs):
 
     return () => {
       cancelled = true;
-      log.info('subscribe', 'close export_pdf watcher', { userId });
+      log.info('subscribe', 'close distribution job watcher', { userId });
       if (rehealTimer) clearTimeout(rehealTimer);
       if (channel) void supabase.removeChannel(channel);
     };
