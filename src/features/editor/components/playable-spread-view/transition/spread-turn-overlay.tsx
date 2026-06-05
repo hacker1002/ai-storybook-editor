@@ -22,6 +22,7 @@ import {
   PAPER_BG_COLOR,
   PAPER_INNER_SHADOW,
 } from './spread-turn-constants';
+import { PERSPECTIVE_PX, resolveTurnClips } from '../spread-flip-transform';
 import type { TurnSnapshot } from './spread-turn-types';
 
 const log = createLogger('Editor', 'SpreadTurnOverlay');
@@ -168,9 +169,12 @@ export function SpreadTurnOverlay({
   // Behavior is identical across layouts (single-* renders the same way as spread);
   // clip-paths depend only on direction. In fullPageMode the flipping half may be
   // off-screen — accepted as a deliberate trade-off for behavioral consistency.
-  const flippingClip = direction === 'next' ? 'inset(0 0 0 50%)' : 'inset(0 50% 0 0)';
-  const backFlippingClip = direction === 'next' ? 'inset(0 50% 0 0)' : 'inset(0 0 0 50%)';
-  const staticClip = direction === 'next' ? 'inset(0 50% 0 0)' : 'inset(0 0 0 50%)';
+  //
+  // Geometry comes from the SHARED `resolveTurnClips` (single source the Remotion
+  // render side also consumes — render === live clips, byte-for-byte). `frontClip`
+  // = flipping half, `backClip` = inverse half, `staticClip` = pinned half.
+  const { frontClip: flippingClip, backClip: backFlippingClip, staticClip } =
+    resolveTurnClips(direction);
 
   return createPortal(
     <div
@@ -188,8 +192,9 @@ export function SpreadTurnOverlay({
         // the rotating element's own `transform: perspective(...)`), the browser
         // evaluates `backface-visibility` against the composed orientation of
         // each child correctly — fixes the "back face never appears past 90°"
-        // bug seen in screen recording 2026-05-07.
-        perspective: '1200px',
+        // bug seen in screen recording 2026-05-07. Shared with the render side
+        // via PERSPECTIVE_PX (computeFlipTransform returns the same value).
+        perspective: `${PERSPECTIVE_PX}px`,
       }}
     >
       <div

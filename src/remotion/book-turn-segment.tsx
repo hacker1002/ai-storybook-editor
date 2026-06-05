@@ -29,6 +29,11 @@
 // covered by the spread below. Isolating the leaf in a higher-z stacking context fixes
 // both the lift (front above base) and the 90°→180° reveal (back above base).
 //
+// Media freeze: GSAP + read-along are frozen via explicit seekSec/wordFrame props, but
+// OffthreadVideo / ThorVG lottie read Remotion's frame clock — so each BookSpreadCore is
+// wrapped in <Freeze frame> (outgoing → settle frame, incoming → 0) to stop video/lottie
+// from auto-playing across the turn (the turn is a still snapshot, not playback).
+//
 // Seam invariants (verified): progress=0 → viewport = full fromSpread @ settle
 // (matches preceding segment's last held frame); progress=1 → viewport = full toSpread
 // @ 0 (matches next segment's frame 0). Both frozen faces are silent — the page-turn
@@ -37,7 +42,7 @@
 // Flip math + clip geometry come from the SHARED spread-flip-transform (same easing,
 // pivot, opacity-swap, and half-page clips the live player uses) — render === live.
 
-import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Freeze, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import type { PlayableSpread } from "@/types/playable-types";
 import type { RemixLanguageCode } from "@/types/editor";
 import { BookSpreadCore } from "./book-spread-core";
@@ -105,6 +110,14 @@ export function BookTurnSegment({
   // wordFrame (seam parity).
   const frontWordFrame = Math.ceil(fromTotalSec * fps);
 
+  // Media freeze frames. The turn is a FROZEN snapshot, but OffthreadVideo / ThorVG
+  // lottie read Remotion's frame clock (not the GSAP seekSec prop), so without an
+  // explicit <Freeze> they keep playing across the turn's own <Sequence>. Pin each
+  // face's media to the frame matching its frozen seek time: outgoing → settle frame,
+  // incoming → 0 (its videos haven't started → still/blank, seam-matches next segment).
+  const fromFreezeFrame = frontWordFrame;
+  const toFreezeFrame = 0;
+
   const progress = interpolate(localFrame, [0, transitionFrames], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -120,26 +133,38 @@ export function BookTurnSegment({
           stay strictly below the leaf above. */}
       <AbsoluteFill style={{ zIndex: 0 }}>
         {/* Base — incoming spread @ t=0. Right half revealed as the leaf lifts; left
-            half stays covered by Static (and later the leaf's back face). */}
-        <AbsoluteFill>
-          <BookSpreadCore
-            spread={toSpread}
-            language={language}
-            canvasWidth={canvasWidth}
-            seekSec={0}
-            wordFrame={0}
-          />
+            half stays covered by Static (and later the leaf's back face). zIndex:0
+            makes this AbsoluteFill its OWN stacking context so the incoming spread's
+            item z-indexes (a NEW video/shape on the left half) stay TRAPPED inside
+            Base. With z-index:auto here those positioned items escape into the
+            under-layer's context and paint OVER the Static OLD-left below — leaking
+            new content during the turn (the video+shape bleed seen on the left). */}
+        <AbsoluteFill style={{ zIndex: 0 }}>
+          <Freeze frame={toFreezeFrame}>
+            <BookSpreadCore
+              spread={toSpread}
+              language={language}
+              canvasWidth={canvasWidth}
+              seekSec={0}
+              wordFrame={0}
+            />
+          </Freeze>
         </AbsoluteFill>
 
-        {/* Static — outgoing spread's non-flipping half, pinned above Base. */}
-        <AbsoluteFill style={{ clipPath: staticClip, overflow: "hidden" }}>
-          <BookSpreadCore
-            spread={fromSpread}
-            language={language}
-            canvasWidth={canvasWidth}
-            seekSec={fromTotalSec}
-            wordFrame={frontWordFrame}
-          />
+        {/* Static — outgoing spread's non-flipping half, pinned above Base. zIndex:1
+            lifts the WHOLE old-left layer above Base's now-contained stacking context
+            (parity with the live player, where StaticLayer lives in a portal above
+            PlayerCanvas → always wins the left half regardless of item z-index). */}
+        <AbsoluteFill style={{ clipPath: staticClip, overflow: "hidden", zIndex: 1 }}>
+          <Freeze frame={fromFreezeFrame}>
+            <BookSpreadCore
+              spread={fromSpread}
+              language={language}
+              canvasWidth={canvasWidth}
+              seekSec={fromTotalSec}
+              wordFrame={frontWordFrame}
+            />
+          </Freeze>
         </AbsoluteFill>
       </AbsoluteFill>
 
@@ -157,23 +182,27 @@ export function BookTurnSegment({
           }}
         >
           <FlipFace opacity={t.frontOpacity} clipPath={frontClip}>
-            <BookSpreadCore
-              spread={fromSpread}
-              language={language}
-              canvasWidth={canvasWidth}
-              seekSec={fromTotalSec}
-              wordFrame={frontWordFrame}
-            />
+            <Freeze frame={fromFreezeFrame}>
+              <BookSpreadCore
+                spread={fromSpread}
+                language={language}
+                canvasWidth={canvasWidth}
+                seekSec={fromTotalSec}
+                wordFrame={frontWordFrame}
+              />
+            </Freeze>
           </FlipFace>
 
           <FlipFace opacity={t.backOpacity} clipPath={backClip} back>
-            <BookSpreadCore
-              spread={toSpread}
-              language={language}
-              canvasWidth={canvasWidth}
-              seekSec={0}
-              wordFrame={0}
-            />
+            <Freeze frame={toFreezeFrame}>
+              <BookSpreadCore
+                spread={toSpread}
+                language={language}
+                canvasWidth={canvasWidth}
+                seekSec={0}
+                wordFrame={0}
+              />
+            </Freeze>
           </FlipFace>
         </AbsoluteFill>
       </AbsoluteFill>
