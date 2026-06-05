@@ -3,37 +3,29 @@
 // runtime debug flags, and the layout → pivot origin map. Imported by the hook,
 // the overlay, and any caller that needs to override `duration` (spec §6 / §10).
 
-import type { TurnLayout } from './spread-turn-types';
-
-/** Default total turn duration in milliseconds (spec §6). Half-flips at duration/2. */
-export const DEFAULT_TURN_DURATION_MS = 900;
-
-/** Cream-paper background color used for the back face (spec §3.3). */
-export const PAPER_BG_COLOR = '#f4ecd8';
-
-/** Inset shadow recipe applied to the back face — emulates page thickness/curl. */
-export const PAPER_INNER_SHADOW = 'inset 0 0 30px rgba(0,0,0,0.15)';
+// Flip math + paper styling constants now live in the shared, runtime-dep-free
+// `spread-flip-transform.ts` (single source — also imported by the Remotion render
+// bundle in phase 02). Re-exported here to preserve this back-compat import path
+// for the overlay + hook (design 07 §2.2).
+export {
+  DEFAULT_TURN_DURATION_MS,
+  PAPER_BG_COLOR,
+  PAPER_INNER_SHADOW,
+  LAYOUT_PIVOT_MAP,
+} from '../spread-flip-transform';
 
 /** z-index of the portal overlay. Lives below `FirstGestureGate` (z-100) and
  *  above the thumbnail rail (spec §6 layered overlay structure). */
 export const OVERLAY_Z_INDEX = 50;
 
-/** Easing for the first half of the rotateY tween (0 → ±90°). */
+/** Easing for the first half of the rotateY tween (0 → ±90°).
+ *  @deprecated Easing is now baked into `computeFlipTransform`; kept for any
+ *  legacy reference. The hook no longer drives GSAP eases directly. */
 export const EASE_HALF_FIRST = 'power2.in';
 
-/** Easing for the second half of the rotateY tween (±90° → ±180°). */
+/** Easing for the second half of the rotateY tween (±90° → ±180°).
+ *  @deprecated See `EASE_HALF_FIRST`. */
 export const EASE_HALF_SECOND = 'power2.out';
-
-/** Pivot origin for the flipping card. Always at the gutter (50% 50% of the full
- *  spread container). In fullPageMode, the spread container is the same width
- *  as in spread mode — the outer clip-wrapper just hides one half — so the
- *  gutter remains at 50% of the overlay regardless of fullPageMode.
- *  Map kept (instead of constant) so callers / overlay can read by layout key. */
-export const LAYOUT_PIVOT_MAP: Record<TurnLayout, string> = {
-  spread: '50% 50%',
-  'single-left': '50% 50%',
-  'single-right': '50% 50%',
-};
 
 // ── Debug flags (read at startTurn time on `window`) ────────────────────────
 

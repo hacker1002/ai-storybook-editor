@@ -65,9 +65,11 @@ export function effectDurationSec(anim: SpreadAnimation): number {
  * sequencing + scrubber length (the GSAP timeline stays the visual source of truth).
  */
 export function linearizeSpreadTimeline(
-  animations: SpreadAnimation[]
+  animations: SpreadAnimation[] | null | undefined
 ): LinearTimeline {
-  const sorted = [...animations].sort((a, b) => a.order - b.order);
+  // Snapshot spreads may carry `animations: null` (static spread, no animation).
+  // Treat nullish as empty — null→[] is a no-op for valid arrays.
+  const sorted = [...(animations ?? [])].sort((a, b) => a.order - b.order);
   const steps: LinearStep[] = [];
 
   let prevStart = 0;
