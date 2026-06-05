@@ -6,6 +6,6 @@
   "description": "Node Remotion render worker — bundles the shared spread composition (../src/remotion) and renders MP4 (1920x1440, 30fps). Resolves deps from the parent ai-storybook-editor/node_modules.",
   "scripts": {
     "preflight": "tsx src/preflight-bundle.ts",
-    "start": "node --env-file-if-exists=.env --import tsx src/server.ts"
+    "start": "node --env-file=.env --import tsx src/server.ts"
   }
 }
