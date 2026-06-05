@@ -20,10 +20,8 @@ import {
   DEFAULT_TURN_DURATION_MS,
   DEBUG_DISABLE_FLAG,
   DEBUG_SLOW_FLAG,
-  EASE_HALF_FIRST,
-  EASE_HALF_SECOND,
-  LAYOUT_PIVOT_MAP,
 } from '../transition/spread-turn-constants';
+import { computeFlipTransform } from '../spread-flip-transform';
 import type {
   StartTurnParams,
   TurnLayout,
@@ -200,24 +198,6 @@ export function useSpreadTurnTransition(
       });
     }
   }, [resetToIdle]);
-
-  // === Swap midpoint handler ===
-  // The actual `onSwap` (caller's `applySelectedSpreadChange`) was already fired
-  // in `startTurn` so the new spread renders underneath the overlay throughout
-  // the entire flip. This handler now only flips face opacity at the edge-on
-  // beat (-/+90°) and emits a telemetry phase tick.
-  const swapPointHandler = useCallback(() => {
-    const live = stateRef.current;
-    log.debug('swapPoint', 'face flip at edge-on', {
-      elapsed: Math.round(performance.now() - live.startedAt),
-    });
-    if (frontFaceElRef.current) gsap.set(frontFaceElRef.current, { opacity: 0 });
-    if (backFaceElRef.current) gsap.set(backFaceElRef.current, { opacity: 1 });
-    // Mark the brief "swapping" beat for telemetry; immediately back to flipping
-    // for the second-half tween. Two setStates batched by React.
-    setState((prev) => ({ ...prev, phase: 'swapping' }));
-    setState((prev) => ({ ...prev, phase: 'flipping' }));
-  }, []);
 
   // === Cancel ===
   const cancel = useCallback(() => {
@@ -452,49 +432,49 @@ export function useSpreadTurnTransition(
     const baseDuration = duration ?? DEFAULT_TURN_DURATION_MS;
     const effectiveMs = debugSlow ? baseDuration * 4 : baseDuration;
 
-    // Pivot always at gutter (50% 50% of full spread).
     if (!state.layout) {
       log.warn('buildTimeline', 'phase=flipping but layout=null — abort');
       return;
     }
-    const pivotOrigin = LAYOUT_PIVOT_MAP[state.layout];
-    const endRotation = direction === 'next' ? -180 : 180;
+    const layout = state.layout;
+    const frontEl = frontFaceElRef.current;
+    const backEl = backFaceElRef.current;
 
     log.debug('buildTimeline', 'building', {
       direction,
-      layout: state.layout,
+      layout,
       durationMs: effectiveMs,
-      pivotOrigin,
-      endRotation,
     });
 
-    gsap.set(flippingEl, {
-      transformOrigin: pivotOrigin,
-      // perspective lives on the overlay portal positioner (parent) so the
-      // composed orientation of FrontFace / BackFace is evaluated by the
-      // browser in a proper 3D context. backfaceVisibility on the FlippingCard
-      // itself is irrelevant — only the faces are flipped.
-      rotationY: 0,
-    });
+    // Single-source flip driver: a linear progress proxy (p: 0 → 1, ease 'none')
+    // whose `onUpdate` applies `computeFlipTransform`. Easing (power2.in/out) and
+    // the midpoint hard face-swap (front 1→0, back 0→1 at p=0.5) are baked into
+    // `computeFlipTransform` — same math the Remotion render side uses (design 07
+    // §3) so player === render. Replaces the old 2-phase `tl.to().call().to()`.
+    const applyFlip = (p: number) => {
+      const t = computeFlipTransform(p, direction, layout);
+      gsap.set(flippingEl, {
+        transformOrigin: t.transformOrigin,
+        rotationY: t.rotateY_deg,
+      });
+      if (frontEl) gsap.set(frontEl, { opacity: t.frontOpacity });
+      if (backEl) gsap.set(backEl, { opacity: t.backOpacity });
+    };
 
-    const halfSec = effectiveMs / 2 / 1000;
+    // Seed the initial (p=0) state imperatively before the tween's first tick.
+    applyFlip(0);
+
+    const proxy = { p: 0 };
     const tl = gsap.timeline({
       onComplete: () => {
         settleHandler();
       },
     });
-    tl.to(flippingEl, {
-      rotationY: endRotation / 2,
-      duration: halfSec,
-      ease: EASE_HALF_FIRST,
-    });
-    tl.call(() => {
-      swapPointHandler();
-    });
-    tl.to(flippingEl, {
-      rotationY: endRotation,
-      duration: halfSec,
-      ease: EASE_HALF_SECOND,
+    tl.to(proxy, {
+      p: 1,
+      duration: effectiveMs / 1000,
+      ease: 'none',
+      onUpdate: () => applyFlip(proxy.p),
     });
 
     timelineRef.current = tl;
@@ -508,7 +488,7 @@ export function useSpreadTurnTransition(
         timelineRef.current = null;
       }
     };
-  }, [state.phase, state.direction, state.layout, duration, settleHandler, swapPointHandler]);
+  }, [state.phase, state.direction, state.layout, duration, settleHandler]);
 
   // === Cleanup on unmount ===
   // Reset isMountedRef on every mount — under StrictMode (and HMR remount) the
