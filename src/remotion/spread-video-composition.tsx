@@ -8,23 +8,18 @@
 //     (audio is declarative <Audio>; read-along highlight is frame-derived).
 //   • media leaves are Remotion primitives (Img / OffthreadVideo / ThorVG lottie)
 //     via createRenderStageRenderers — geometry/z-index identical to live.
+//
+// Phase 02: the visual stage + GSAP timeline + read-along highlight now live in
+// the shared <BookSpreadCore> (also used by the full-book composition). This
+// 1-spread wrapper just supplies the global frame as the seek/word clock and
+// emits its own <Audio> (offset 0). The exported component + props are unchanged.
 
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { AbsoluteFill, Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
-import gsap from "gsap";
 import type { PlayableSpread } from "@/types/playable-types";
-import { EFFECT_TYPE } from "@/constants/playable-constants";
-import { applyInitialStates } from "@/features/editor/components/playable-spread-view/player-initial-states";
-import { buildMasterTimeline } from "@/features/editor/components/playable-spread-view/build-master-timeline";
-import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
-import { PlayerSpreadStage } from "@/features/editor/components/playable-spread-view/player-spread-stage";
-import type { SpreadTextbox, SpreadTextboxContent } from "@/types/spread-types";
 import type { RemixLanguageCode } from "@/types/editor";
-import { createLogger } from "@/utils/logger";
-import { deriveActiveWords } from "./derive-active-words";
-import { createRenderStageRenderers } from "./render-stage-renderers";
-
-const log = createLogger("Demo", "RemotionSpreadComposition");
+import { BookSpreadCore } from "./book-spread-core";
+import { buildSpreadAudioSequences } from "./build-spread-audio-sequences";
 
 // Type alias (not interface): Remotion's <Composition> requires props to satisfy
 // `Record<string, unknown>`, which interfaces don't (no implicit index signature).
@@ -40,168 +35,30 @@ export type SpreadVideoCompositionProps = {
   canvasHeight?: number;
 };
 
-// Editor default canvas width (DEFAULT_CANVAS_SIZE.width) — fallback when the caller
-// (worker render request / Studio) doesn't supply the design canvas size.
-const DEFAULT_DESIGN_CANVAS_WIDTH = 800;
-
-/** Build a (target id → geometry) lookup so LINES/Arcs deltas resolve correctly. */
-function buildGeometryLookup(
-  spread: PlayableSpread,
-  language: RemixLanguageCode
-): Map<string, { x: number; y: number }> {
-  const map = new Map<string, { x: number; y: number }>();
-  (spread.images ?? []).forEach((i) => map.set(i.id, { x: i.geometry.x, y: i.geometry.y }));
-  (spread.shapes ?? []).forEach((s) => map.set(s.id, { x: s.geometry.x, y: s.geometry.y }));
-  (spread.videos ?? []).forEach((v) => map.set(v.id, { x: v.geometry.x, y: v.geometry.y }));
-  (spread.auto_pics ?? []).forEach((a) => map.set(a.id, { x: a.geometry.x, y: a.geometry.y }));
-  (spread.textboxes ?? []).forEach((tb) => {
-    const c = tb[language];
-    if (c && typeof c === "object" && "geometry" in c) {
-      map.set(tb.id, { x: c.geometry.x, y: c.geometry.y });
-    }
-  });
-  return map;
-}
-
 export function SpreadVideoComposition({
   spread,
   language,
-  canvasWidth = DEFAULT_DESIGN_CANVAS_WIDTH,
+  canvasWidth,
 }: SpreadVideoCompositionProps) {
   const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
+  const { fps } = useVideoConfig();
 
-  // Absolute-px scale: compositionWidth / designCanvasWidth. The live player renders the
-  // design canvas at zoom and scales fonts/borders by the same ratio (font/canvasWidth is
-  // the zoom-invariant size/designWidth), so this keeps render text === live text.
-  const fontScale = width / (canvasWidth || DEFAULT_DESIGN_CANVAS_WIDTH);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const refsMapRef = useRef<Map<string, HTMLElement>>(new Map());
-  const timelineRef = useRef<gsap.core.Timeline | null>(null);
-
-  // registerRef grabs the wrapper's firstElementChild (the positioned visual) so
-  // GSAP drives the geometry-bearing element — identical to the live engine's
-  // registerRef, so the SAME tweens produce the SAME transforms.
-  const registerRef = useCallback(
-    (id: string) => (el: HTMLElement | null) => {
-      if (el) {
-        const visualChild = el.firstElementChild as HTMLElement;
-        refsMapRef.current.set(id, visualChild ?? el);
-      } else {
-        refsMapRef.current.delete(id);
-      }
-    },
-    []
+  // Single-spread: seek time === composition time (the comp's own duration already
+  // carries the tail pad), so no settle clamp here. Read-along uses the same frame.
+  const audioSequences = useMemo(
+    () => buildSpreadAudioSequences(spread, language, fps, 0),
+    [spread, language, fps]
   );
-
-  // ── Build the master timeline once per spread (paused). Runs after DOM commit
-  // so item refs are populated. Caller owns applyInitialStates (entrance items →
-  // offscreen anchors); buildMasterTimeline appends each tween. ──
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    const refsMap = refsMapRef.current;
-    if (!container) return;
-
-    gsap.ticker.lagSmoothing(0);
-    applyInitialStates(spread.animations, refsMap, container, { width, height }, spread, "interactive");
-
-    const geoLookup = buildGeometryLookup(spread, language);
-    const tl = buildMasterTimeline({
-      animations: spread.animations,
-      refsMap,
-      container,
-      containerWidth: width,
-      containerHeight: height,
-      canvasWidth: width,
-      canvasHeight: height,
-      composites: spread.composites,
-      textboxes: spread.textboxes,
-      audios: spread.audios,
-      narrationLangCode: language,
-      playEdition: "interactive",
-      findItemGeometry: (id) => geoLookup.get(id),
-      mode: "render",
-    });
-
-    timelineRef.current = tl;
-    log.info("buildTimeline", "render master timeline built", {
-      spreadId: spread.id,
-      gsapSec: Math.round(tl.duration() * 100) / 100,
-    });
-
-    return () => {
-      tl.kill();
-      timelineRef.current = null;
-    };
-  }, [spread, language, width, height]);
-
-  // ── Drive the timeline from the frame clock (FrameSeekDriver). ──
-  useLayoutEffect(() => {
-    const tl = timelineRef.current;
-    if (tl) tl.seek(frame / fps);
-  }, [frame, fps]);
-
-  // ── Declarative audio (render-mode replacement for PLAY/READ_ALONG side-effects). ──
-  const audioSequences = useMemo(() => {
-    const { steps } = linearizeSpreadTimeline(spread.animations);
-    const textboxes = (spread.textboxes ?? []) as SpreadTextbox[];
-    const tbContent = (id: string): SpreadTextboxContent | undefined => {
-      const c = textboxes.find((t) => t.id === id)?.[language];
-      return c && typeof c === "object" && "text" in c ? (c as SpreadTextboxContent) : undefined;
-    };
-    const audioById = new Map((spread.audios ?? []).map((a) => [a.id, a]));
-    return steps
-      .filter((s) => s.isMedia)
-      .map((s) => {
-        let url: string | null | undefined;
-        if (s.anim.target.type === "audio") {
-          url = audioById.get(s.anim.target.id)?.media_url;
-        } else if (
-          s.anim.effect.type === EFFECT_TYPE.READ_ALONG &&
-          s.anim.target.type === "textbox"
-        ) {
-          url = tbContent(s.anim.target.id)?.audio?.combined_audio_url;
-        }
-        if (!url) return null;
-        return {
-          key: `${s.anim.target.id}-${s.startSec}`,
-          from: Math.max(0, Math.round(s.startSec * fps)),
-          url,
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [spread, language, fps]);
-
-  // ── Video PLAY-start frames (videoId → frame) from the linearized timeline. A PLAY
-  // step on a video target marks when the live player calls mediaEl.play(); the render
-  // video renderer gates <OffthreadVideo> to start there instead of composition frame 0. ──
-  const videoStartByItem = useMemo(() => {
-    const { steps } = linearizeSpreadTimeline(spread.animations);
-    const map: Record<string, number> = {};
-    for (const s of steps) {
-      if (s.anim.effect.type === EFFECT_TYPE.PLAY && s.anim.target.type === "video") {
-        map[s.anim.target.id] = Math.max(0, Math.round(s.startSec * fps));
-      }
-    }
-    return map;
-  }, [spread, fps]);
-
-  // ── Frame-derived read-along highlight → injected into the render textbox renderer. ──
-  const activeWordByTextbox = deriveActiveWords(frame, spread, fps, language);
-  const renderers = createRenderStageRenderers(activeWordByTextbox, fontScale, videoStartByItem);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#ffffff" }}>
-      <AbsoluteFill ref={containerRef} style={{ position: "relative", overflow: "hidden" }}>
-        <PlayerSpreadStage
-          spread={spread}
-          narrationLangCode={language}
-          playEdition="interactive"
-          registerRef={registerRef}
-          renderers={renderers}
-        />
-      </AbsoluteFill>
+      <BookSpreadCore
+        spread={spread}
+        language={language}
+        canvasWidth={canvasWidth}
+        seekSec={frame / fps}
+        wordFrame={frame}
+      />
 
       {audioSequences.map((a) => (
         <Sequence key={a.key} from={a.from}>
