@@ -13,6 +13,7 @@ import {
 import { useCanvasSize } from "@/stores/editor-settings-store";
 import { AVAILABLE_LANGUAGES } from "@/constants/editor-constants";
 import type { RemixLanguageCode } from "@/types/editor";
+import type { SpreadShape, SpreadTextbox } from "@/types/spread-types";
 import { PlayerAnimationSidebar } from '@/features/editor/components/preview-creative-space';
 import { useDemoAnimationState } from '../hooks/use-demo-animation-state';
 import {
@@ -20,8 +21,8 @@ import {
   type CreatePlayableSpreadOptions,
 } from "../__mocks__/playable-spread-factory";
 import {
-  requestVideoRender,
-  type VideoRenderResult,
+  requestBookVideoRender,
+  type BookVideoRenderResult,
 } from "../utils/request-video-render";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -53,6 +54,83 @@ interface MockOptions {
   audioCount: number;
   language: RemixLanguageCode;
   isDPS: boolean;
+}
+
+// Demo has no book.sound configured (mock spreads), so the page-turn SFX is supplied
+// explicitly to the render to demonstrate it. In production this URL is resolved from
+// book.sound.transition_id via useSoundMediaUrl (same source the live player feeds to
+// playTransitionSfx) — the demo is the only place it's hardcoded.
+const DEMO_TRANSITION_SFX_URL =
+  "https://kiprvibenjkhvzekbkrw.supabase.co/storage/v1/object/public/storybook-assets/sound-effects/431dc4cfd00bd23d44b0b74ed4aa5657a0af020b1a9660eb15471762765871bf.mp3";
+
+// Keep the first 2 spreads light (~3-4 animations each) so the 2-spread page-turn
+// export is quick to render + easy to inspect. Items whose entrance is trimmed render
+// statically visible — applyInitialStates only hides items that have an animation.
+const DEMO_FIRST_SPREADS_ANIM_LIMIT = 4;
+const DEMO_TRIMMED_SPREAD_COUNT = 2;
+
+// Distinct, animation-free marker items for the first 2 spreads so each page is
+// instantly identifiable during the turn (no entrance effect — applyInitialStates only
+// hides items that have an animation, so these render statically visible). Colors +
+// corner positions differ per spread, and a big "SPREAD N" label removes all ambiguity.
+const DEMO_MARKER_PALETTES = [
+  { a: "#e11d48", b: "#2563eb" }, // spread 1 — rose / blue
+  { a: "#16a34a", b: "#f59e0b" }, // spread 2 — green / amber
+] as const;
+
+function buildSpreadMarkerItems(
+  spreadIndex: number,
+  language: RemixLanguageCode
+): { shapes: SpreadShape[]; textboxes: SpreadTextbox[] } {
+  const n = spreadIndex + 1;
+  const palette = DEMO_MARKER_PALETTES[spreadIndex % DEMO_MARKER_PALETTES.length];
+  const isFirst = spreadIndex % 2 === 0;
+
+  const mkShape = (
+    suffix: string,
+    color: string,
+    geo: { x: number; y: number; w: number; h: number }
+  ): SpreadShape => ({
+    id: `demo-marker-${n}-${suffix}`,
+    type: "rectangle",
+    title: `Marker ${n}${suffix}`,
+    geometry: { ...geo },
+    fill: { is_filled: true, color, opacity: 0.9 },
+    outline: { color: "#1f2937", width: 2, radius: 8, type: 0 },
+    "z-index": 400,
+    player_visible: true,
+    editor_visible: true,
+  });
+
+  // Mirror corners between spread 1 and 2 so they read differently at a glance.
+  const shapeA = mkShape("a", palette.a, isFirst ? { x: 6, y: 10, w: 16, h: 18 } : { x: 78, y: 10, w: 16, h: 18 });
+  const shapeB = mkShape("b", palette.b, isFirst ? { x: 78, y: 72, w: 16, h: 18 } : { x: 6, y: 72, w: 16, h: 18 });
+
+  const label: SpreadTextbox = {
+    id: `demo-marker-${n}-label`,
+    title: `Spread ${n} label`,
+    "z-index": 401,
+    player_visible: true,
+    editor_visible: true,
+    [language]: {
+      text: `SPREAD ${n}`,
+      geometry: { x: 28, y: 3, w: 44, h: 14 },
+      typography: {
+        size: 48,
+        weight: 800,
+        style: "normal",
+        family: "Nunito",
+        color: "#0f172a",
+        lineHeight: 1.2,
+        letterSpacing: 0,
+        decoration: "none",
+        textAlign: "center",
+        textTransform: "uppercase",
+      },
+    },
+  };
+
+  return { shapes: [shapeA, shapeB], textboxes: [label] };
 }
 
 const DEFAULT_MOCK_OPTIONS: MockOptions = {
@@ -92,7 +170,20 @@ export function DemoPlayableSpreadView() {
       language: opts.language,
       isDPS: opts.isDPS,
     };
-    return createPlayableSpreads(factoryOpts);
+    const all = createPlayableSpreads(factoryOpts);
+    // First N spreads (the default export window): trim animations so the page-turn
+    // export stays short (slice keeps the lowest-order anims = entrances), and add
+    // distinct animation-free marker items so each page is identifiable during the turn.
+    return all.map((s, i) => {
+      if (i >= DEMO_TRIMMED_SPREAD_COUNT) return s;
+      const markers = buildSpreadMarkerItems(i, opts.language);
+      return {
+        ...s,
+        animations: s.animations.slice(0, DEMO_FIRST_SPREADS_ANIM_LIMIT),
+        shapes: [...(s.shapes ?? []), ...markers.shapes],
+        textboxes: [...(s.textboxes ?? []), ...markers.textboxes],
+      };
+    });
   }, []);
 
   // Spreads state
@@ -160,34 +251,53 @@ export function DemoPlayableSpreadView() {
     setSelectedSpreadId(spreadId);
   }, []);
 
-  // === MP4 export (selected spread → video-worker /render) ===
-  // Exports the SAME spread object that PlayableSpreadView plays live, so the
-  // rendered MP4 is parity-by-construction (shared PlayerSpreadStage + timeline).
+  // === MP4 export (2-spread book render → video-worker /render-book) ===
+  // Renders the selected spread + its neighbour through the BOOK composition so the
+  // MP4 exercises the page-turn segment (book-turn-segment) between the two — the
+  // single-spread /render path can't show a turn. Spreads are the SAME objects
+  // PlayableSpreadView plays live (shared PlayerSpreadStage + timeline), so each
+  // spread's content stays parity-by-construction; only the render-side turn DOM
+  // differs from the live overlay (acceptable — different stacks, same flip math).
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [exportResult, setExportResult] = useState<VideoRenderResult | null>(null);
+  const [exportResult, setExportResult] = useState<BookVideoRenderResult | null>(null);
+
+  // 2-spread window anchored on the selection. Clamp so the selected spread is always
+  // included and a full pair fits; degrades to a single spread (no turn) only when
+  // the book has <2 spreads.
+  const exportPair = useMemo(() => {
+    if (spreads.length === 0) return [] as PlayableSpread[];
+    const idx = Math.max(0, spreads.findIndex((s) => s.id === selectedSpreadId));
+    const start = Math.min(idx, Math.max(0, spreads.length - 2));
+    return spreads.slice(start, start + 2);
+  }, [spreads, selectedSpreadId]);
 
   const handleExport = useCallback(async () => {
-    if (!selectedSpread) return;
+    if (exportPair.length === 0) return;
     setExporting(true);
     setExportError(null);
     setExportResult(null);
     try {
-      const result = await requestVideoRender(selectedSpread, mockOptions.language, canvasSize);
+      const result = await requestBookVideoRender(
+        exportPair,
+        mockOptions.language,
+        canvasSize,
+        DEMO_TRANSITION_SFX_URL
+      );
       setExportResult(result);
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err));
     } finally {
       setExporting(false);
     }
-  }, [selectedSpread, mockOptions.language, canvasSize]);
+  }, [exportPair, mockOptions.language, canvasSize]);
 
-  // Stale export when the target spread changes (selection or regenerate).
-  const exportTargetId = selectedSpread?.id ?? null;
+  // Stale export when the target window changes (selection or regenerate).
+  const exportTargetKey = exportPair.map((s) => s.id).join("|");
   useLayoutEffect(() => {
     setExportResult(null);
     setExportError(null);
-  }, [exportTargetId]);
+  }, [exportTargetKey]);
 
   return (
     <TooltipProvider>
@@ -205,12 +315,16 @@ export function DemoPlayableSpreadView() {
             <Button
               size="sm"
               onClick={handleExport}
-              disabled={exporting || !selectedSpread}
+              disabled={exporting || exportPair.length === 0}
               className="h-9 gap-1.5"
               title={
-                selectedSpread
-                  ? `Export spread ${selectedSpread.id.slice(0, 8)} to MP4`
-                  : "Select a spread to export"
+                exportPair.length >= 2
+                  ? `Export 2-spread page-turn MP4 (${exportPair
+                      .map((s) => s.id.slice(0, 8))
+                      .join(" → ")})`
+                  : exportPair.length === 1
+                    ? "Only one spread — no page-turn (add a spread to see the turn)"
+                    : "Select a spread to export"
               }
             >
               {exporting ? (
@@ -218,7 +332,7 @@ export function DemoPlayableSpreadView() {
               ) : (
                 <Film className="h-4 w-4" />
               )}
-              {exporting ? "Rendering…" : "Export MP4"}
+              {exporting ? "Rendering…" : "Export MP4 (2-spread turn)"}
             </Button>
 
             {/* Settings Popover */}
@@ -407,7 +521,7 @@ export function DemoPlayableSpreadView() {
             {(exporting || exportError || exportResult) && (
               <div className="p-3 border-b bg-background">
                 <Label className="text-xs font-medium text-muted-foreground">
-                  RENDERED MP4 (video-worker)
+                  RENDERED MP4 — 2 spreads · page-turn (video-worker)
                 </Label>
                 {exporting && (
                   <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1.5">
@@ -431,6 +545,7 @@ export function DemoPlayableSpreadView() {
                       }}
                     />
                     <p className="mt-1.5 text-xs text-muted-foreground">
+                      {exportResult.spreadsRendered} spreads ·{" "}
                       {exportResult.width}×{exportResult.height} ·{" "}
                       {exportResult.durationInFrames} frames @ {exportResult.fps}fps ·{" "}
                       {Math.round(exportResult.elapsedMs / 100) / 10}s ·{" "}
@@ -442,6 +557,11 @@ export function DemoPlayableSpreadView() {
                       >
                         open
                       </a>
+                      {exportResult.warnings.length > 0 && (
+                        <span className="text-amber-600">
+                          {" "}· {exportResult.warnings.join(", ")}
+                        </span>
+                      )}
                     </p>
                   </div>
                 )}

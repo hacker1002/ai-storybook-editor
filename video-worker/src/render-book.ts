@@ -52,6 +52,13 @@ export interface BookRenderInput {
   language: string;
   startSpreadId?: string;
   bgm?: BgmInput | null;
+  /** Design-canvas size the spreads were authored at — scales render font/border px to
+   *  match the live player. Omitted → BookSpreadCore default (800). */
+  canvasWidth?: number;
+  canvasHeight?: number;
+  /** Page-turn SFX URL (book.sound.transition_id resolved upstream). When set, the
+   *  composition plays it at each turn segment's start frame. */
+  transitionSfxUrl?: string | null;
 }
 
 export interface BookRenderResult {
@@ -117,6 +124,9 @@ export async function renderBook(
     language: input.language,
     startSpreadId: input.startSpreadId,
     resolution,
+    ...(input.canvasWidth ? { canvasWidth: input.canvasWidth } : {}),
+    ...(input.canvasHeight ? { canvasHeight: input.canvasHeight } : {}),
+    ...(input.transitionSfxUrl ? { transitionSfxUrl: input.transitionSfxUrl } : {}),
   } as unknown as Record<string, unknown>;
 
   // ── 4. selectComposition → durationInFrames (calculateMetadata in bundle) ──

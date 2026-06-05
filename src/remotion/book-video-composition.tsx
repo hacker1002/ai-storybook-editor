@@ -6,9 +6,13 @@
 // chunked frameRanges via plan-chunks).
 //
 //   • Spread-segment → BookSpreadSegment (anim → settle hold).
-//   • Turn-segment   → BookTurnSegment (frozen flip, silent).
+//   • Turn-segment   → BookTurnSegment (frozen flip; the segment itself emits no audio).
 //   • Per-spread audio (0:a, committed v1) → re-emitted at the spread-segment's
-//     book-level frame offset. Transition windows carry NO audio.
+//     book-level frame offset.
+//   • Page-turn SFX → one <Audio> per turn segment at its start frame, ONLY when a
+//     `transitionSfxUrl` is supplied (resolved from book.sound.transition_id upstream,
+//     same data-driven source the live player uses via playTransitionSfx). The flip
+//     SEGMENT stays audio-free; the SFX is composed here at the book level.
 //
 // BGM is NOT an input here — it is book-level and muxed post-concat at the worker
 // (phase 03). This composition is BGM-agnostic by design.
@@ -39,6 +43,10 @@ export type BookVideoInputProps = {
   canvasWidth?: number;
   canvasHeight?: number;
   resolution: ResolutionKey;
+  /** Page-turn SFX URL — resolved upstream from book.sound.transition_id (soft FK →
+   *  sounds.id), same source the live player feeds to playTransitionSfx. When set, one
+   *  <Audio> plays at each turn segment's start frame; null/omitted → silent turns. */
+  transitionSfxUrl?: string | null;
 };
 
 export function BookVideoComposition({
@@ -48,6 +56,7 @@ export function BookVideoComposition({
   language,
   startSpreadId,
   canvasWidth,
+  transitionSfxUrl,
 }: BookVideoInputProps) {
   // Resolve the SAME sequence calculateMetadata used (same props) → no drift.
   const sequence = useMemo(
@@ -114,12 +123,26 @@ export function BookVideoComposition({
       )}
 
       {/* Per-spread audio (0:a). Each <Audio> sits in its own <Sequence from> at the
-          book-level frame; transition windows have none → silent by construction. */}
+          book-level frame. */}
       {audioSequences.map((a) => (
         <Sequence key={a.key} from={a.from}>
           <Audio src={a.url} />
         </Sequence>
       ))}
+
+      {/* Page-turn SFX (data-driven) — one clip per turn segment at its book-level
+          start frame, only when a transitionSfxUrl is supplied (book.sound.transition_id
+          resolved upstream; same source the live player uses). No durationInFrames →
+          the short clip rings out naturally past the 0.9s flip window. */}
+      {transitionSfxUrl
+        ? layout.segments.map((seg) =>
+            seg.kind === "turn" ? (
+              <Sequence key={`turn-sfx-${seg.fromOrderIndex}`} from={seg.startFrame}>
+                <Audio src={transitionSfxUrl} />
+              </Sequence>
+            ) : null
+          )
+        : null}
     </AbsoluteFill>
   );
 }

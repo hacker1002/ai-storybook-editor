@@ -55,6 +55,39 @@ export const LAYOUT_PIVOT_MAP: Record<TurnLayout, string> = {
   'single-right': '50% 50%',
 };
 
+// ── Page-turn clip-path geometry (shared by render; mirrors the live overlay) ───
+
+/** Right-half clip — keeps the right page, clips the left. */
+const CLIP_RIGHT_HALF = 'inset(0 0 0 50%)';
+/** Left-half clip — keeps the left page, clips the right. */
+const CLIP_LEFT_HALF = 'inset(0 50% 0 0)';
+
+/** The three clip-paths a spread page-turn needs (single source for the half-page
+ *  geometry the live `spread-turn-overlay` hardcodes inline — see its §3.5 comment). */
+export interface TurnClips {
+  /** Pinned non-flipping half (StaticLayer). */
+  staticClip: string;
+  /** The lifting half on the flip card's FRONT face. */
+  frontClip: string;
+  /** Incoming half on the flip card's BACK face — the INVERSE half of `frontClip`.
+   *  With the back's own `rotateY(180)` composed with the card's parent rotation
+   *  (pivots coincide at 50% 50%), the net orientation is identity, so the back
+   *  content lands on the INCOMING half rather than snapping back to the outgoing
+   *  half. `staticClip` always pins that same incoming half. */
+  backClip: string;
+}
+
+/**
+ * Resolve the page-turn clip set for a direction. `next` = the right page lifts and
+ * folds left over the spine; `prev` mirrors it. Values are byte-identical to the
+ * overlay's `flippingClip`/`backFlippingClip`/`staticClip` so render === live geometry.
+ */
+export function resolveTurnClips(direction: TurnDirection): TurnClips {
+  return direction === 'next'
+    ? { frontClip: CLIP_RIGHT_HALF, backClip: CLIP_LEFT_HALF, staticClip: CLIP_LEFT_HALF }
+    : { frontClip: CLIP_LEFT_HALF, backClip: CLIP_RIGHT_HALF, staticClip: CLIP_RIGHT_HALF };
+}
+
 /**
  * Compute the flip transform at a given normalized progress.
  *

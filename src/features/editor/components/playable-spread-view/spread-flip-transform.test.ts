@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeFlipTransform,
+  resolveTurnClips,
   PERSPECTIVE_PX,
   LAYOUT_PIVOT_MAP,
 } from './spread-flip-transform';
@@ -66,5 +67,32 @@ describe('computeFlipTransform', () => {
   it('clamps out-of-range progress', () => {
     expect(computeFlipTransform(-1, 'next', 'spread').rotateY_deg).toBeCloseTo(0, 6);
     expect(computeFlipTransform(2, 'next', 'spread').rotateY_deg).toBeCloseTo(-180, 6);
+  });
+});
+
+describe('resolveTurnClips', () => {
+  const RIGHT = 'inset(0 0 0 50%)';
+  const LEFT = 'inset(0 50% 0 0)';
+
+  it('next: front=right half, static=left half, back=inverse(front)=left half', () => {
+    const c = resolveTurnClips('next');
+    expect(c.frontClip).toBe(RIGHT);
+    expect(c.staticClip).toBe(LEFT);
+    expect(c.backClip).toBe(LEFT);
+  });
+
+  it('prev mirrors next', () => {
+    const c = resolveTurnClips('prev');
+    expect(c.frontClip).toBe(LEFT);
+    expect(c.staticClip).toBe(RIGHT);
+    expect(c.backClip).toBe(RIGHT);
+  });
+
+  it('back is the inverse half of front; static pins the half the back lands on', () => {
+    for (const dir of ['next', 'prev'] as const) {
+      const c = resolveTurnClips(dir);
+      expect(c.backClip).not.toBe(c.frontClip); // inverse halves
+      expect(c.staticClip).toBe(c.backClip);    // static + back share the incoming half
+    }
   });
 });

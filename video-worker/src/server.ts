@@ -137,7 +137,16 @@ app.post("/render", requireToken, async (req: Request, res: Response) => {
 // ── POST /render-book — full-book chunked render ──────────────────────────────
 app.post("/render-book", requireToken, async (req: Request, res: Response) => {
   const body = req.body ?? {};
-  const { illustration, edition, language, startSpreadId, bgm } = body;
+  const {
+    illustration,
+    edition,
+    language,
+    startSpreadId,
+    bgm,
+    canvasWidth,
+    canvasHeight,
+    transitionSfxUrl,
+  } = body;
 
   // ── Validation ────────────────────────────────────────────────────────────
   if (!illustration || typeof illustration !== "object") {
@@ -191,6 +200,13 @@ app.post("/render-book", requireToken, async (req: Request, res: Response) => {
     language: coerceLanguage(language),
     startSpreadId: typeof startSpreadId === "string" ? startSpreadId : undefined,
     bgm: bgmInput,
+    // Forward only finite positive numbers; otherwise leave undefined → composition default.
+    // Threads the design-canvas size through so render font/border px match the live player
+    // (parity the 1-spread /render path already had).
+    ...(Number.isFinite(canvasWidth) && canvasWidth > 0 ? { canvasWidth } : {}),
+    ...(Number.isFinite(canvasHeight) && canvasHeight > 0 ? { canvasHeight } : {}),
+    // Page-turn SFX (book.sound.transition_id resolved upstream). Only forward non-empty strings.
+    ...(typeof transitionSfxUrl === "string" && transitionSfxUrl ? { transitionSfxUrl } : {}),
   };
 
   try {

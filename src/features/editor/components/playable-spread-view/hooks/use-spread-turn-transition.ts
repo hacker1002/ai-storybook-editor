@@ -388,7 +388,9 @@ export function useSpreadTurnTransition(
         });
       }, delayMs);
     },
-    [enabled, spreadContainerGetter],
+    // `duration` is read inside (back-snapshot clamp) — include it so the callback
+    // reflects per-call duration overrides (also satisfies preserve-manual-memoization).
+    [enabled, spreadContainerGetter, duration],
   );
 
   // Keep latest startTurn in ref for the queue-drain microtask.
