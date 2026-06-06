@@ -15,7 +15,10 @@ import type { Typography } from "@/types/spread-types";
 // by setFrame + per-frame 'render' gate — used in BOTH <Player> preview and worker
 // render so lottie pixels match (preview===output). WASM resolved via bundled ?url.
 import { DotLottiePlayer } from "@/remotion/lottie/thorvg-lottie-player";
+import { createLogger } from "@/utils/logger";
 import type { StageItemRenderers } from "@/features/editor/components/playable-spread-view/play-clock";
+
+const log = createLogger("Remotion", "RenderStageRenderers");
 
 const ACTIVE_WORD_STYLE: React.CSSProperties = {
   backgroundColor: "#ffe58a",
@@ -131,16 +134,30 @@ export function createRenderStageRenderers(
     // Pages drawn by the composition background (white) — same as the validated spike.
     page: () => null,
 
-    image: (image, _index, zIndex) => (
-      <div data-base-opacity={1} style={{ ...geoStyle(image.geometry), zIndex: zIndex ?? 100 }}>
-        <img
-          src={resolveImageUrl(image)}
-          alt={image.title ?? ""}
-          crossOrigin="anonymous"
-          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-        />
-      </div>
-    ),
+    // Remotion <Img> registers delayRender() on mount; pauseWhenLoading blocks the
+    // frame snapshot until decode() resolves — without it, plain <img> lets Remotion
+    // capture the frame before the bitmap is decoded → white flash + fade-in in the
+    // output video. See design spec 03-14-player-render-core §2.3.
+    image: (image, _index, zIndex) => {
+      const src = resolveImageUrl(image);
+      return (
+        <div data-base-opacity={1} style={{ ...geoStyle(image.geometry), zIndex: zIndex ?? 100 }}>
+          <Img
+            src={src}
+            crossOrigin="anonymous"
+            pauseWhenLoading
+            onError={(e) => {
+              log.warn("renderImage", "image decode failed in render", {
+                src: src.split("?")[0],
+                itemId: image.id,
+                err: String(e),
+              });
+            }}
+            style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+          />
+        </div>
+      );
+    },
 
     shape: (shape, _index, zIndex) => {
       const opacity = shape.fill?.opacity ?? 1;
