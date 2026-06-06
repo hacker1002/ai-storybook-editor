@@ -34,7 +34,7 @@ import {
 } from "@/remotion/composition-metadata";
 
 import { getBundle } from "./render.js";
-import { OUT_DIR } from "./paths.js";
+import { OUT_DIR, tierOutDir, MASTER_TIER } from "./paths.js";
 import { muxBgm, type BgmInput } from "./mux-bgm.js";
 
 // Per-chunk timeout. Book chunks don't share the 120s /render cap.
@@ -178,7 +178,10 @@ export async function renderBook(
   await Promise.all(chunkPaths.map((p) => fs.unlink(p).catch(() => undefined)));
 
   // ── 8. BGM mux (optional, degrade on fail) ───────────────────────────────
-  const finalPath = path.join(OUT_DIR, fileName);
+  // Final master is filed under the qhd tier (out/qhd) for storage classification.
+  const masterDir = tierOutDir(MASTER_TIER);
+  await fs.mkdir(masterDir, { recursive: true });
+  const finalPath = path.join(masterDir, fileName);
 
   if (input.bgm?.url) {
     const muxResult = await muxBgm(concatPath, finalPath, input.bgm, durationInFrames, fps);
@@ -199,7 +202,7 @@ export async function renderBook(
   return {
     fileName,
     outputLocation: finalPath,
-    publicUrl: `/files/${fileName}`,
+    publicUrl: `/files/${MASTER_TIER}/${fileName}`,
     width,
     height,
     fps,

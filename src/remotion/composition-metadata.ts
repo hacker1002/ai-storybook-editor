@@ -75,12 +75,18 @@ export const BOOK_COMPOSITION_ID = "book-video";
  * worker renders at 1920×1440 and returns width:1920, height:1440 in the response.
  * Note: this is NOT the conventional 2560×1440 QHD — it is the book-native 4:3
  * canvas dimension used as the "high quality" export tier (see design 06 §3).
- * `fhd` is a future downscale transcode target (below-native).
+ *
+ * `fhd`/`hd`/`sd` are downscale transcode targets (below-native, 4:3 preserved).
+ * Single source of truth for the worker `POST /transcode` scale dims (design
+ * service/video-worker/08-transcode-downscale.md §1) — the Python job passes only
+ * the resolution key and the worker reads the W×H here, so these MUST match the
+ * spec downscale table (fhd 1440×1080, hd 960×720, sd 640×480). Only `qhd` is
+ * rendered by Remotion; the rest are produced by ffmpeg downscale.
  */
 export const RESOLUTION_DIMS = {
   qhd: { width: 1920, height: 1440 },
-  fhd: { width: 1920, height: 1440 },
-  hd: { width: 1280, height: 960 },
+  fhd: { width: 1440, height: 1080 },
+  hd: { width: 960, height: 720 },
   sd: { width: 640, height: 480 },
 } as const;
 

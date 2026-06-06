@@ -13,11 +13,19 @@
 //   /render 1-spread     → prune spread-* only, keep 10 most-recent
 //   /render-book         → NEVER prune (book files are durable artifacts)
 
+import os from "node:os";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type NextFunction } from "express";
-import { OUT_DIR, WORKER_PORT, VIDEO_WORKER_TOKEN } from "./paths.js";
+import {
+  OUT_DIR,
+  WORKER_PORT,
+  VIDEO_WORKER_TOKEN,
+  TRANSCODE_SRC_MAX_BYTES,
+  tierOutDir,
+  MASTER_TIER,
+} from "./paths.js";
 import {
   renderSpread,
   warmup,
@@ -26,7 +34,14 @@ import {
   type RenderLanguage,
 } from "./render.js";
 import { renderBook, type BookRenderInput } from "./render-book.js";
-import { classifyRenderError, ERROR_STATUS } from "./errors.js";
+import { classifyRenderError, classifyTranscodeError, ERROR_STATUS } from "./errors.js";
+import {
+  transcodeDownscale,
+  TRANSCODE_TARGETS,
+  type TranscodeTarget,
+} from "./transcode.js";
+import { probeEncoder, getEncoderProfile } from "./encoder-probe.js";
+import { assertSsrfSafe } from "./ssrf-guard.js";
 import type { BgmInput } from "./mux-bgm.js";
 
 /** Narrow an arbitrary body value to a supported language, defaulting to en_US. */
@@ -246,6 +261,133 @@ app.post("/render-book", requireToken, async (req: Request, res: Response) => {
   }
 });
 
+// ── POST /transcode — downscale QHD master → fhd/hd/sd (design 08) ────────────
+app.post("/transcode", requireToken, async (req: Request, res: Response) => {
+  const body = req.body ?? {};
+  const sourceFileNameRaw = typeof body.sourceFileName === "string" ? body.sourceFileName.trim() : "";
+  const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : "";
+  const targetsRaw = Array.isArray(body.targets) ? body.targets : null;
+
+  // ── Validate targets (non-empty, subset {fhd,hd,sd}, dedup, reject qhd) ────
+  if (!targetsRaw || targetsRaw.length === 0) {
+    res.status(400).json({ ok: false, code: "INVALID_INPUT", message: "`targets` non-empty array required" });
+    return;
+  }
+  const seen = new Set<string>();
+  const targets: TranscodeTarget[] = [];
+  for (const t of targetsRaw) {
+    if (typeof t !== "string" || !TRANSCODE_TARGETS.includes(t as TranscodeTarget)) {
+      res.status(400).json({
+        ok: false, code: "INVALID_INPUT",
+        message: `\`targets\` must be a subset of [${TRANSCODE_TARGETS.join(",")}] (got: ${String(t)})`,
+      });
+      return;
+    }
+    if (!seen.has(t)) {
+      seen.add(t);
+      targets.push(t as TranscodeTarget);
+    }
+  }
+  if (!sourceFileNameRaw && !sourceUrl) {
+    res.status(400).json({ ok: false, code: "INVALID_INPUT", message: "one of `sourceFileName` or `sourceUrl` required" });
+    return;
+  }
+  // Path-traversal guard: sourceFileName must be a bare basename.
+  if (sourceFileNameRaw && (sourceFileNameRaw.includes("/") || sourceFileNameRaw.includes("\\") || sourceFileNameRaw.includes(".."))) {
+    res.status(400).json({ ok: false, code: "INVALID_INPUT", message: "`sourceFileName` must be a basename (no path separators)" });
+    return;
+  }
+
+  if (rendering) {
+    res.status(429).json({ ok: false, code: "BUSY", message: "another render in progress" });
+    return;
+  }
+  rendering = true;
+  const start = Date.now();
+
+  // Resolve the master: local OUT_DIR file (primary) or SSRF-guarded fetch (fallback).
+  let masterPath = "";
+  let tempPath: string | null = null;
+  // Output naming base: prefer sourceFileName, else derive from the URL path.
+  let baseName = sourceFileNameRaw;
+
+  try {
+    if (sourceFileNameRaw) {
+      // The QHD master is filed under out/qhd (render-book output tier).
+      const localPath = path.join(tierOutDir(MASTER_TIER), path.basename(sourceFileNameRaw));
+      const exists = await fs.access(localPath).then(() => true).catch(() => false);
+      if (exists) {
+        masterPath = localPath;
+      } else if (!sourceUrl) {
+        res.status(404).json({ ok: false, code: "SOURCE_NOT_FOUND", message: "source file not found in OUT_DIR" });
+        return;
+      }
+    }
+    if (!masterPath) {
+      // sourceUrl fallback (future split-worker). SSRF-guarded + size-capped.
+      if (!sourceUrl) {
+        res.status(404).json({ ok: false, code: "SOURCE_NOT_FOUND", message: "source file not found in OUT_DIR" });
+        return;
+      }
+      try {
+        tempPath = await fetchMasterToTemp(sourceUrl);
+        masterPath = tempPath;
+        if (!baseName) baseName = path.basename(new URL(sourceUrl).pathname) || `master-${randomUUID().slice(0, 8)}.mp4`;
+      } catch (err) {
+        console.error(`[transcode] source fetch failed: ${String(err).slice(0, 200)}`);
+        res.status(502).json({ ok: false, code: "SOURCE_FETCH_FAILED", message: "failed to fetch sourceUrl" });
+        return;
+      }
+    }
+
+    const profile = getEncoderProfile();
+    console.log(`[transcode] start base=${baseName} targets=[${targets.join(",")}] encoder=${profile.name}`);
+
+    const result = await transcodeDownscale(masterPath, baseName, targets, profile);
+    const elapsedMs = Date.now() - start;
+    console.log(
+      `[transcode] done encoder=${profile.name} ${elapsedMs}ms ` +
+      `perRes=[${result.outputs.map((o) => `${o.resolution}:${o.fileSizeBytes}`).join(",")}]`
+    );
+
+    res.json({
+      ok: true,
+      outputs: result.outputs,
+      fps: result.fps,
+      durationInFrames: result.durationInFrames,
+      elapsedMs,
+    });
+  } catch (err) {
+    const c = classifyTranscodeError(err);
+    console.error(`[transcode] failed code=${c.code}: ${c.message.slice(0, 200)}`);
+    res.status(c.status).json({ ok: false, code: c.code, message: c.message });
+  } finally {
+    if (tempPath) await fs.unlink(tempPath).catch(() => undefined);
+    rendering = false;
+  }
+});
+
+/** Fetch `sourceUrl` (SSRF-guarded, size-capped) to a temp file. Throws on any
+ *  failure (caller maps to 502 SOURCE_FETCH_FAILED). */
+async function fetchMasterToTemp(sourceUrl: string): Promise<string> {
+  await assertSsrfSafe(sourceUrl);
+  const resp = await fetch(sourceUrl);
+  if (!resp.ok || !resp.body) {
+    throw new Error(`fetch returned ${resp.status}`);
+  }
+  const cl = Number(resp.headers.get("content-length") ?? 0);
+  if (cl && cl > TRANSCODE_SRC_MAX_BYTES) {
+    throw new Error(`source exceeds cap (${cl} > ${TRANSCODE_SRC_MAX_BYTES})`);
+  }
+  const tmp = path.join(os.tmpdir(), `transcode-src-${randomUUID().slice(0, 8)}.mp4`);
+  const buf = Buffer.from(await resp.arrayBuffer());
+  if (buf.byteLength > TRANSCODE_SRC_MAX_BYTES) {
+    throw new Error(`source exceeds cap (${buf.byteLength} > ${TRANSCODE_SRC_MAX_BYTES})`);
+  }
+  await fs.writeFile(tmp, buf);
+  return tmp;
+}
+
 // ── Prune helpers ─────────────────────────────────────────────────────────────
 
 /** Keep only the most-recent MAX_KEEP_SPREAD_FILES spread-* MP4s (ephemeral preview). */
@@ -264,6 +406,8 @@ async function pruneSpreadFiles(): Promise<void> {
 async function main() {
   console.log("[server] warming up (browser + bundle)...");
   await warmup();
+  // Probe the transcode encoder once (nvenc→qsv→cpu) and cache (design 08 §3.1).
+  await probeEncoder();
   // Bind loopback only — enforces the dev-only posture (no auth, wildcard CORS).
   app.listen(PORT, "127.0.0.1", () => console.log(`[server] ready on http://localhost:${PORT}`));
 }
