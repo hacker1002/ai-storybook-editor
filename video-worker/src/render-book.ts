@@ -140,7 +140,10 @@ export async function renderBook(
   console.log(`[render-book] composition id=${BOOK_COMPOSITION_ID} frames=${durationInFrames} ${width}x${height}@${fps}`);
 
   // ── 5. Plan chunks (Node-side, same pure function as worker-side plan) ────
-  const chunks = planChunks(sequence, fps);
+  // Edition MUST match selectComposition above — otherwise spread durations
+  // diverge from the composition's durationInFrames (classic filters animations
+  // → shorter spreads) and the last chunk overruns. Bug 2026-06-06.
+  const chunks = planChunks(sequence, fps, input.edition);
   console.log(`[render-book] ${spreadsRendered} spreads → ${chunks.length} chunks (truncByCycle=${sequence.truncatedByCycle} truncByCap=${sequence.truncatedByCap})`);
 
   // ── 6. Render each chunk ──────────────────────────────────────────────────

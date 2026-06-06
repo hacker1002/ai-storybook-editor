@@ -17,6 +17,7 @@
 // Grouping: ~CHUNK_SPREADS spread-segments per chunk. The final chunk also carries
 // the endPad.
 
+import type { PlayEdition } from "@/types/playable-types";
 import type { BookLayoutSequence } from "./book-segment-layout";
 import { buildBookSegmentLayout } from "./book-segment-layout";
 import { CHUNK_SPREADS, VIDEO_FPS } from "./composition-metadata";
@@ -32,15 +33,20 @@ export interface RenderChunk {
  *
  * @param sequence resolved book sequence (same one passed to the composition).
  * @param fps composition fps.
+ * @param edition MUST match what the composition was selected with (classic vs
+ *   interactive). Otherwise spread durations diverge from
+ *   `getBookDurationInFrames` and the final chunk's `end` overruns the
+ *   composition's `durationInFrames` (worker error 2026-06-06 on classic).
  * @param chunkSpreads target spreads per chunk (default CHUNK_SPREADS).
  * @returns ordered, contiguous, non-overlapping chunks covering [0, totalFrames).
  */
 export function planChunks(
   sequence: BookLayoutSequence,
   fps = VIDEO_FPS,
+  edition: PlayEdition = "interactive",
   chunkSpreads = CHUNK_SPREADS
 ): RenderChunk[] {
-  const layout = buildBookSegmentLayout(sequence, fps);
+  const layout = buildBookSegmentLayout(sequence, fps, edition);
   const segments = layout.segments;
 
   // Empty book → single 1-frame chunk (composition is floored to 1 frame).

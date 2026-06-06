@@ -71,7 +71,7 @@ describe("planChunks", () => {
   it("covers [0, totalFrames) contiguously with no gaps or overlaps", () => {
     const seq = linearSequence(12);
     const total = buildBookSegmentLayout(seq, VIDEO_FPS).totalFrames;
-    const chunks = planChunks(seq, VIDEO_FPS, 5);
+    const chunks = planChunks(seq, VIDEO_FPS, "interactive", 5);
 
     expect(chunks[0].start).toBe(0);
     expect(chunks[chunks.length - 1].end).toBe(total);
@@ -84,7 +84,7 @@ describe("planChunks", () => {
   it("every chunk end is transition-complete (turn-segment end) or composition end", () => {
     const seq = linearSequence(13);
     const valid = validBoundaries(seq);
-    const chunks = planChunks(seq, VIDEO_FPS, 5);
+    const chunks = planChunks(seq, VIDEO_FPS, "interactive", 5);
     for (const c of chunks) {
       expect(valid.has(c.end)).toBe(true);
     }
@@ -93,7 +93,7 @@ describe("planChunks", () => {
   it("no chunk boundary falls mid-spread or mid-flip", () => {
     const seq = linearSequence(11);
     const intervals = openIntervals(seq);
-    const chunks = planChunks(seq, VIDEO_FPS, 4);
+    const chunks = planChunks(seq, VIDEO_FPS, "interactive", 4);
     const boundaries = chunks.flatMap((c) => [c.start, c.end]);
     for (const b of boundaries) {
       for (const [start, end] of intervals) {
@@ -105,7 +105,7 @@ describe("planChunks", () => {
 
   it("groups ~CHUNK_SPREADS spreads per chunk (count sanity)", () => {
     const seq = linearSequence(12);
-    const chunks = planChunks(seq, VIDEO_FPS, 5);
+    const chunks = planChunks(seq, VIDEO_FPS, "interactive", 5);
     // 12 spreads / 5 per chunk → 3 chunks (5 + 5 + 2). The flip out of each group's
     // last spread sits in that group's chunk tail.
     expect(chunks.length).toBe(3);
@@ -114,7 +114,7 @@ describe("planChunks", () => {
   it("single-spread book → one chunk covering the whole composition", () => {
     const seq = linearSequence(1);
     const total = buildBookSegmentLayout(seq, VIDEO_FPS).totalFrames;
-    const chunks = planChunks(seq, VIDEO_FPS, 5);
+    const chunks = planChunks(seq, VIDEO_FPS, "interactive", 5);
     expect(chunks).toEqual([{ start: 0, end: total }]);
   });
 
@@ -122,7 +122,7 @@ describe("planChunks", () => {
     // 6 spreads, group size 3 → chunk 0 = spreads 0,1,2 + flip 2→3; chunk 1 = rest.
     const seq = linearSequence(6);
     const layout = buildBookSegmentLayout(seq, VIDEO_FPS);
-    const chunks = planChunks(seq, VIDEO_FPS, 3);
+    const chunks = planChunks(seq, VIDEO_FPS, "interactive", 3);
 
     // The turn-segment between spread index 2 and 3:
     const turn2 = layout.segments.find(
@@ -133,9 +133,26 @@ describe("planChunks", () => {
     expect(chunks[0].end).toBe(turn2End);
   });
 
+  it("chunker total === getBookDurationInFrames for the SAME edition (regression: classic vs interactive drift, bug 2026-06-06)", () => {
+    // Reproduce the failure mode: composition uses `classic`, planChunks defaulted
+    // to `interactive` → last chunk's `end` overran composition.durationInFrames
+    // and Remotion threw "frame range … not inbetween 0-N".
+    const seq = linearSequence(6);
+    const classicTotal = buildBookSegmentLayout(seq, VIDEO_FPS, "classic").totalFrames;
+    const interactiveTotal = buildBookSegmentLayout(seq, VIDEO_FPS, "interactive").totalFrames;
+    // Sanity: classic filters animations → totalSec=0 per spread → strictly shorter.
+    expect(classicTotal).toBeLessThan(interactiveTotal);
+
+    const chunksClassic = planChunks(seq, VIDEO_FPS, "classic", 5);
+    expect(chunksClassic[chunksClassic.length - 1].end).toBe(classicTotal);
+
+    const chunksInteractive = planChunks(seq, VIDEO_FPS, "interactive", 5);
+    expect(chunksInteractive[chunksInteractive.length - 1].end).toBe(interactiveTotal);
+  });
+
   it("empty book → single chunk of the floored composition length", () => {
     const seq: BookLayoutSequence = { ordered: [] };
-    const chunks = planChunks(seq, VIDEO_FPS, 5);
+    const chunks = planChunks(seq, VIDEO_FPS, "interactive", 5);
     expect(chunks.length).toBe(1);
     expect(chunks[0].start).toBe(0);
     expect(chunks[0].end).toBeGreaterThanOrEqual(1);
