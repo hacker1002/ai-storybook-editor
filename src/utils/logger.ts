@@ -21,7 +21,14 @@ interface Logger {
   error: (fn: string, message: string, data?: LogData) => void
 }
 
-const IS_DEV = import.meta.env.DEV
+// `import.meta.env` is injected by Vite in the browser bundle. This shared logger
+// also runs under plain Node (the video-worker imports it via tsx), where
+// `import.meta.env` is undefined — reading `.DEV` off it throws. Guard the access so
+// the same module is safe in both runtimes (worker → IS_DEV false → info/debug off;
+// warn/error stay active). Cast keeps it type-safe where vite/client types are absent.
+const IS_DEV = Boolean(
+  (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV
+)
 
 function formatPrefix(feature: string, module: string, fn: string): string {
   return `[${feature}][${module}][${fn}]`
