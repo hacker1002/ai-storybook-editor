@@ -27,11 +27,11 @@ export type RenderLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export interface RenderInput {
   spread: unknown;
   language: RenderLanguage;
-  // Design canvas size the spread was authored at — forwarded verbatim into the
-  // composition inputProps so render fonts/borders scale to match the live player.
-  // Optional: the composition defaults to 800×600 (editor default) when absent.
-  canvasWidth?: number;
-  canvasHeight?: number;
+  // Book sizing forwarded into the composition inputProps: the design-canvas width
+  // (which scales render fonts/borders to match the live player) is derived from
+  // dimension (+ bleed). Optional — absent → composition 800×600 fallback (demo).
+  dimension?: number;
+  bleedMm?: number;
 }
 
 export interface RenderResult {

@@ -24,14 +24,11 @@ export interface VideoRenderResult {
 
 export async function requestVideoRender(
   spread: PlayableSpread,
-  language: RemixLanguageCode,
-  canvasSize?: { width: number; height: number }
+  language: RemixLanguageCode
 ): Promise<VideoRenderResult> {
   log.info("requestVideoRender", "POST /render", {
     spreadId: spread.id,
     language,
-    canvasWidth: canvasSize?.width,
-    canvasHeight: canvasSize?.height,
     worker: WORKER_URL,
   });
 
@@ -40,14 +37,9 @@ export async function requestVideoRender(
     res = await fetch(`${WORKER_URL}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // Design canvas size lets the worker scale render fonts/borders to match the live
-      // player (font px is authored relative to this width). Omitted → worker default 800×600.
-      body: JSON.stringify({
-        spread,
-        language,
-        canvasWidth: canvasSize?.width,
-        canvasHeight: canvasSize?.height,
-      }),
+      // Demo client: no book sizing → worker derives nothing → 800×600 fallback (accepted).
+      // The production job (image-api) supplies dimension/bleedMm directly to the worker.
+      body: JSON.stringify({ spread, language }),
     });
   } catch (err) {
     log.error("requestVideoRender", "network error reaching worker", {
@@ -103,14 +95,12 @@ interface BookRenderResponse {
 export async function requestBookVideoRender(
   spreads: PlayableSpread[],
   language: RemixLanguageCode,
-  canvasSize?: { width: number; height: number },
   transitionSfxUrl?: string | null
 ): Promise<BookVideoRenderResult> {
   log.info("requestBookVideoRender", "POST /render-book", {
     spreadCount: spreads.length,
     spreadIds: spreads.map((s) => s.id.slice(0, 8)),
     language,
-    canvasWidth: canvasSize?.width,
     hasTransitionSfx: Boolean(transitionSfxUrl),
     worker: WORKER_URL,
   });
@@ -122,13 +112,12 @@ export async function requestBookVideoRender(
       headers: { "Content-Type": "application/json" },
       // Worker reads spreads/sections off `illustration`; empty sections → linear walk
       // (each spread.turnToNext='next' except the last) so 2 spreads yield exactly 1 turn.
+      // Demo client: no book sizing → 800×600 fallback (production job supplies it).
       body: JSON.stringify({
         illustration: { spreads, sections: [] },
         edition: "classic",
         language,
         startSpreadId: spreads[0]?.id,
-        canvasWidth: canvasSize?.width,
-        canvasHeight: canvasSize?.height,
         transitionSfxUrl: transitionSfxUrl ?? undefined,
       }),
     });

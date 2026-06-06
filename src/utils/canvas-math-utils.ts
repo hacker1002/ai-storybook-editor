@@ -59,5 +59,23 @@ export function resolveBleedCanvasSize(
   return { full, trim, trimPct };
 }
 
+/**
+ * Single design-canvas-width resolver for the video render path (ADR-035 font parity).
+ * The render scales absolute-px typography by `compositionWidth/designCanvasWidth`, so
+ * `designCanvasWidth` MUST equal the width the live player renders against
+ * (`bleedCanvas.full.width`). Derived purely from `dimension` (+ `bleedMm`) via the SAME
+ * table the player uses ⇒ no duplication in Python. The job path always supplies
+ * `dimension`/`bleedMm`; the demo client omits them → legacy 800×600 fallback (accepted).
+ */
+export function resolveDesignCanvasWidth(opts: {
+  dimension?: number | null;
+  bleedMm?: number | null;
+}): number {
+  if (opts.dimension != null) {
+    return resolveBleedCanvasSize(opts.dimension, opts.bleedMm ?? 3).full.width;
+  }
+  return DEFAULT_CANVAS_SIZE.width;
+}
+
 // Re-export DIMENSION_PAGE_SIZE for consumers that need page-level sizing
 export { DIMENSION_PAGE_SIZE };

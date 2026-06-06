@@ -24,6 +24,17 @@ const ACTIVE_WORD_STYLE: React.CSSProperties = {
   WebkitBoxDecorationBreak: "clone",
 };
 
+// Mirrors the live EditableTextbox inner wrapper (`whitespace-pre-wrap break-words`):
+// preserves authored newlines + wraps long words identically ⇒ same line count and
+// block height as the player. Without this, plain (non-read-along) text collapses
+// newlines (white-space:normal) and the rendered box height diverges from preview.
+const TEXT_BLOCK_STYLE: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  whiteSpace: "pre-wrap",
+  overflowWrap: "break-word",
+};
+
 function geoStyle(geo: { x: number; y: number; w: number; h: number }): React.CSSProperties {
   return {
     position: "absolute",
@@ -49,7 +60,10 @@ function typographyStyle(t: Typography, fontScale: number): React.CSSProperties 
     fontStyle: t.style,
     fontFamily: t.family,
     color: t.color,
-    lineHeight: t.lineHeight,
+    // Mirror live EditableTextbox fallback (`typography?.lineHeight || 1.5`): a
+    // missing/0 lineHeight renders at 1.5 in the player; without this the render
+    // falls to the browser default (~1.2) → shorter lines, different wrap/height.
+    lineHeight: t.lineHeight || 1.5,
     letterSpacing: t.letterSpacing != null ? t.letterSpacing * fontScale : undefined,
     textAlign: t.textAlign as React.CSSProperties["textAlign"],
     textTransform: t.textTransform as React.CSSProperties["textTransform"],
@@ -205,7 +219,9 @@ export function createRenderStageRenderers(
             overflow: "hidden",
           }}
         >
-          {isReadAlong ? renderWordSpans(content.text, activeIndex) : content.text}
+          <div style={TEXT_BLOCK_STYLE}>
+            {isReadAlong ? renderWordSpans(content.text, activeIndex) : content.text}
+          </div>
         </div>
       );
     },

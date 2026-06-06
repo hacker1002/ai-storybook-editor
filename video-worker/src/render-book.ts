@@ -28,7 +28,6 @@ import { resolveBookSequence } from "@/features/editor/components/playable-sprea
 import { planChunks } from "@/remotion/plan-chunks";
 import {
   BOOK_COMPOSITION_ID,
-  VIDEO_FPS,
   CHUNK_RETRY,
   MAX_BOOK_SPREADS,
   type ResolutionKey,
@@ -52,10 +51,11 @@ export interface BookRenderInput {
   language: string;
   startSpreadId?: string;
   bgm?: BgmInput | null;
-  /** Design-canvas size the spreads were authored at — scales render font/border px to
-   *  match the live player. Omitted → BookSpreadCore default (800). */
-  canvasWidth?: number;
-  canvasHeight?: number;
+  /** Book sizing (job 07 supplies these): the composition derives the design-canvas
+   *  width — which scales render font/border px to match the live player — from
+   *  dimension (+ bleed) via the player's table. Omitted → 800×600 fallback. */
+  dimension?: number;
+  bleedMm?: number;
   /** Page-turn SFX URL (book.sound.transition_id resolved upstream). When set, the
    *  composition plays it at each turn segment's start frame. */
   transitionSfxUrl?: string | null;
@@ -124,8 +124,8 @@ export async function renderBook(
     language: input.language,
     startSpreadId: input.startSpreadId,
     resolution,
-    ...(input.canvasWidth ? { canvasWidth: input.canvasWidth } : {}),
-    ...(input.canvasHeight ? { canvasHeight: input.canvasHeight } : {}),
+    ...(input.dimension != null ? { dimension: input.dimension } : {}),
+    ...(input.bleedMm != null ? { bleedMm: input.bleedMm } : {}),
     ...(input.transitionSfxUrl ? { transitionSfxUrl: input.transitionSfxUrl } : {}),
   } as unknown as Record<string, unknown>;
 

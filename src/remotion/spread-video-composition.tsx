@@ -18,6 +18,7 @@ import { useMemo } from "react";
 import { AbsoluteFill, Audio, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import type { PlayableSpread } from "@/types/playable-types";
 import type { RemixLanguageCode } from "@/types/editor";
+import { resolveDesignCanvasWidth } from "@/utils/canvas-math-utils";
 import { BookSpreadCore } from "./book-spread-core";
 import { buildSpreadAudioSequences } from "./build-spread-audio-sequences";
 
@@ -28,20 +29,26 @@ export type SpreadVideoCompositionProps = {
   // App-wide supported set (en_US, vi_VN, ja_JP, ko_KR, zh_CN). Textbox content is keyed
   // by language string, so the render core is language-agnostic — no per-language code.
   language: RemixLanguageCode;
-  // Design-canvas size the spread was authored against (editor store `canvasSize`).
-  // Drives font/border scaling so render text matches the live player. Defaults to the
-  // editor default canvas (800×600, 4:3 — same ratio as the 1920×1440 output).
-  canvasWidth?: number;
-  canvasHeight?: number;
+  // Book sizing the spread was authored against. Drives font/border scaling so render
+  // text matches the live player: the design-canvas width is derived from dimension
+  // (+ bleed) via the SAME table the player uses. Omitted (demo) → 800×600 fallback.
+  dimension?: number | null;
+  bleedMm?: number | null;
 };
 
 export function SpreadVideoComposition({
   spread,
   language,
-  canvasWidth,
+  dimension,
+  bleedMm,
 }: SpreadVideoCompositionProps) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+
+  const designCanvasWidth = useMemo(
+    () => resolveDesignCanvasWidth({ dimension, bleedMm }),
+    [dimension, bleedMm]
+  );
 
   // Single-spread: seek time === composition time (the comp's own duration already
   // carries the tail pad), so no settle clamp here. Read-along uses the same frame.
@@ -55,7 +62,7 @@ export function SpreadVideoComposition({
       <BookSpreadCore
         spread={spread}
         language={language}
-        canvasWidth={canvasWidth}
+        canvasWidth={designCanvasWidth}
         seekSec={frame / fps}
         wordFrame={frame}
       />

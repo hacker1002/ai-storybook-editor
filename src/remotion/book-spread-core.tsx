@@ -28,12 +28,16 @@ import type { RemixLanguageCode } from "@/types/editor";
 import { createLogger } from "@/utils/logger";
 import { deriveActiveWords } from "./derive-active-words";
 import { createRenderStageRenderers } from "./render-stage-renderers";
+import {
+  DEFAULT_DESIGN_CANVAS_WIDTH,
+  computeFontScale,
+  hasValidDesignCanvasWidth,
+} from "./font-scale";
 
 const log = createLogger("Demo", "BookSpreadCore");
 
-/** Editor default canvas width (DEFAULT_CANVAS_SIZE.width) — fallback when the
- *  caller doesn't supply the design canvas size the spread was authored against. */
-export const DEFAULT_DESIGN_CANVAS_WIDTH = 800;
+// Re-export for back-compat (consumers historically imported it from here).
+export { DEFAULT_DESIGN_CANVAS_WIDTH } from "./font-scale";
 
 export interface BookSpreadCoreProps {
   spread: PlayableSpread;
@@ -103,12 +107,15 @@ function useVideoStartByItem(
 export function BookSpreadCore({
   spread,
   language,
-  canvasWidth = DEFAULT_DESIGN_CANVAS_WIDTH,
+  canvasWidth,
   seekSec,
   wordFrame,
 }: BookSpreadCoreProps) {
   const { width, height, fps } = useVideoConfig();
-  const fontScale = width / (canvasWidth || DEFAULT_DESIGN_CANVAS_WIDTH);
+  // Font/border parity hinges on canvasWidth === live store `bleedCanvas.full.width`.
+  // Don't silently default to 800 (legacy) — that overshoots fontScale by
+  // realFullWidth/800 and inflates every textbox. Fall back but WARN loudly.
+  const fontScale = computeFontScale(width, canvasWidth);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const refsMapRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -133,6 +140,22 @@ export function BookSpreadCore({
     const container = containerRef.current;
     const refsMap = refsMapRef.current;
     if (!container) return;
+
+    // Fail-loud (once per spread, not per-frame): a missing/invalid design width
+    // means font + border scale is reconstructed against the legacy 800 fallback
+    // instead of the live full-bleed canvas → textboxes render oversized.
+    if (!hasValidDesignCanvasWidth(canvasWidth)) {
+      log.warn(
+        "fontScale",
+        "canvasWidth missing/invalid — font & border parity will drift; using legacy fallback width",
+        {
+          spreadId: spread.id,
+          received: canvasWidth ?? null,
+          fallbackWidth: DEFAULT_DESIGN_CANVAS_WIDTH,
+          compositionWidth: width,
+        }
+      );
+    }
 
     gsap.ticker.lagSmoothing(0);
     const spreadAnimations = spread.animations ?? [];
@@ -166,7 +189,7 @@ export function BookSpreadCore({
       tl.kill();
       timelineRef.current = null;
     };
-  }, [spread, language, width, height]);
+  }, [spread, language, width, height, canvasWidth]);
 
   // ── Drive the timeline from the EXPLICIT seek time (frozen for flip faces). ──
   useLayoutEffect(() => {

@@ -88,7 +88,7 @@ let rendering = false;
 
 // ── POST /render — 1-spread render ───────────────────────────────────────────
 app.post("/render", requireToken, async (req: Request, res: Response) => {
-  const { spread, language, canvasWidth, canvasHeight } = req.body ?? {};
+  const { spread, language, dimension, bleedMm } = req.body ?? {};
   if (!spread || typeof spread !== "object") {
     res.status(400).json({ ok: false, code: "INVALID_INPUT", message: "`spread` object required" });
     return;
@@ -101,9 +101,10 @@ app.post("/render", requireToken, async (req: Request, res: Response) => {
   const input: RenderInput = {
     spread,
     language: coerceLanguage(language),
-    // Forward only finite positive numbers; otherwise leave undefined → composition default.
-    ...(Number.isFinite(canvasWidth) && canvasWidth > 0 ? { canvasWidth } : {}),
-    ...(Number.isFinite(canvasHeight) && canvasHeight > 0 ? { canvasHeight } : {}),
+    // Forward book sizing → composition derives the design-canvas width (font parity).
+    // Absent (demo) → composition 800×600 fallback.
+    ...(Number.isFinite(dimension) ? { dimension } : {}),
+    ...(Number.isFinite(bleedMm) && bleedMm > 0 ? { bleedMm } : {}),
   };
   const fileName = `spread-${Date.now()}-${randomUUID().slice(0, 8)}.mp4`;
   rendering = true;
@@ -143,8 +144,8 @@ app.post("/render-book", requireToken, async (req: Request, res: Response) => {
     language,
     startSpreadId,
     bgm,
-    canvasWidth,
-    canvasHeight,
+    dimension,
+    bleedMm,
     transitionSfxUrl,
   } = body;
 
@@ -200,11 +201,10 @@ app.post("/render-book", requireToken, async (req: Request, res: Response) => {
     language: coerceLanguage(language),
     startSpreadId: typeof startSpreadId === "string" ? startSpreadId : undefined,
     bgm: bgmInput,
-    // Forward only finite positive numbers; otherwise leave undefined → composition default.
-    // Threads the design-canvas size through so render font/border px match the live player
-    // (parity the 1-spread /render path already had).
-    ...(Number.isFinite(canvasWidth) && canvasWidth > 0 ? { canvasWidth } : {}),
-    ...(Number.isFinite(canvasHeight) && canvasHeight > 0 ? { canvasHeight } : {}),
+    // Book sizing → composition derives the design-canvas width (font/border parity).
+    // Job 07 always supplies these; absent → composition 800×600 fallback.
+    ...(Number.isFinite(dimension) ? { dimension } : {}),
+    ...(Number.isFinite(bleedMm) && bleedMm > 0 ? { bleedMm } : {}),
     // Page-turn SFX (book.sound.transition_id resolved upstream). Only forward non-empty strings.
     ...(typeof transitionSfxUrl === "string" && transitionSfxUrl ? { transitionSfxUrl } : {}),
   };

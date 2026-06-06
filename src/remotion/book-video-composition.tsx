@@ -24,6 +24,7 @@ import type { Section } from "@/types/illustration-types";
 import type { RemixLanguageCode } from "@/types/editor";
 import { createLogger } from "@/utils/logger";
 import { resolveBookSequence } from "@/features/editor/components/playable-spread-view/resolve-book-sequence";
+import { resolveDesignCanvasWidth } from "@/utils/canvas-math-utils";
 import { VIDEO_FPS, type ResolutionKey } from "./composition-metadata";
 import { buildBookSegmentLayout } from "./book-segment-layout";
 import { buildSpreadAudioSequences } from "./build-spread-audio-sequences";
@@ -40,8 +41,11 @@ export type BookVideoInputProps = {
   edition: "classic" | "dynamic";
   language: RemixLanguageCode;
   startSpreadId?: string;
-  canvasWidth?: number;
-  canvasHeight?: number;
+  /** Book sizing (job 07 supplies these): the design-canvas width is derived from
+   *  dimension (+ bleed) via the SAME table the player uses (font parity). Omitted
+   *  (demo) → 800×600 fallback. */
+  dimension?: number | null;
+  bleedMm?: number | null;
   resolution: ResolutionKey;
   /** Page-turn SFX URL — resolved upstream from book.sound.transition_id (soft FK →
    *  sounds.id), same source the live player feeds to playTransitionSfx. When set, one
@@ -55,9 +59,17 @@ export function BookVideoComposition({
   edition,
   language,
   startSpreadId,
-  canvasWidth,
+  dimension,
+  bleedMm,
   transitionSfxUrl,
 }: BookVideoInputProps) {
+  // Single design-width resolve from dimension (+ bleed) → one value flows to every
+  // segment ⇒ font parity. Omitted (demo) → 800 fallback.
+  const designCanvasWidth = useMemo(
+    () => resolveDesignCanvasWidth({ dimension, bleedMm }),
+    [dimension, bleedMm]
+  );
+
   // Resolve the SAME sequence calculateMetadata used (same props) → no drift.
   const sequence = useMemo(
     () => resolveBookSequence(spreads, sections, { startSpreadId, edition }),
@@ -99,7 +111,7 @@ export function BookVideoComposition({
             <BookSpreadSegment
               spread={seg.spread}
               language={language}
-              canvasWidth={canvasWidth}
+              canvasWidth={designCanvasWidth}
               totalSec={seg.totalSec}
               animFrames={seg.animFrames}
             />
@@ -115,7 +127,7 @@ export function BookVideoComposition({
               fromTotalSec={seg.fromTotalSec}
               toSpread={seg.toSpread}
               language={language}
-              canvasWidth={canvasWidth}
+              canvasWidth={designCanvasWidth}
               transitionFrames={seg.durationFrames}
             />
           </Sequence>

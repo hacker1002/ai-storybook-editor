@@ -74,6 +74,8 @@ export function DemoRemotionSpike() {
     [selectedSpread]
   );
 
+  // Demo: no book sizing → composition 800×600 fallback (preview === render at 800).
+  // The production job supplies dimension/bleedMm to the worker directly.
   const inputProps = useMemo(
     () => (selectedSpread ? { spread: selectedSpread, language: options.language } : null),
     [selectedSpread, options.language]

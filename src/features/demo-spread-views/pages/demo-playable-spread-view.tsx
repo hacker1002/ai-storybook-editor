@@ -10,7 +10,6 @@ import {
   usePlaybackActions,
   type InitializePayload,
 } from "@/stores/animation-playback-store";
-import { useCanvasSize } from "@/stores/editor-settings-store";
 import { AVAILABLE_LANGUAGES } from "@/constants/editor-constants";
 import type { RemixLanguageCode } from "@/types/editor";
 import type { SpreadShape, SpreadTextbox } from "@/types/spread-types";
@@ -146,9 +145,6 @@ const DEFAULT_MOCK_OPTIONS: MockOptions = {
 
 export function DemoPlayableSpreadView() {
   const { initialize, teardown } = usePlaybackActions();
-  // Design canvas the live player renders at — forwarded to the render worker so the MP4
-  // scales fonts/borders identically (font px is authored relative to this width).
-  const canvasSize = useCanvasSize();
 
   // Monotonic counter — bumped on regenerate to derive a new sessionId so
   // `initialize` re-applies edition & atomic session reset for the new fixture.
@@ -281,7 +277,6 @@ export function DemoPlayableSpreadView() {
       const result = await requestBookVideoRender(
         exportPair,
         mockOptions.language,
-        canvasSize,
         DEMO_TRANSITION_SFX_URL
       );
       setExportResult(result);
@@ -290,7 +285,7 @@ export function DemoPlayableSpreadView() {
     } finally {
       setExporting(false);
     }
-  }, [exportPair, mockOptions.language, canvasSize]);
+  }, [exportPair, mockOptions.language]);
 
   // Stale export when the target window changes (selection or regenerate).
   const exportTargetKey = exportPair.map((s) => s.id).join("|");
