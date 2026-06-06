@@ -31,7 +31,7 @@ export const TRANSCODE_TARGETS: readonly TranscodeTarget[] = ["fhd", "hd", "sd"]
 
 export interface TranscodeOutput {
   resolution: TranscodeTarget;
-  url: string;            // relative `/files/{fileName}`
+  url: string;            // relative `/files/{tier}/{fileName}`
   fileName: string;
   width: number;
   height: number;

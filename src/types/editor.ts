@@ -88,6 +88,20 @@ export interface BookBranch {
 export type RemixLanguageCode = 'en_US' | 'vi_VN' | 'ja_JP' | 'ko_KR' | 'zh_CN';
 
 /**
+ * Runtime canonical list of supported narration languages — the single source the
+ * video-worker (`render.ts`) imports for input validation instead of mirroring the
+ * literal array. `satisfies readonly RemixLanguageCode[]` makes the compiler reject
+ * any drift from the type above (add a code here AND to the type, or it won't build).
+ */
+export const REMIX_LANGUAGE_CODES = [
+  'en_US',
+  'vi_VN',
+  'ja_JP',
+  'ko_KR',
+  'zh_CN',
+] as const satisfies readonly RemixLanguageCode[];
+
+/**
  * @deprecated Book-config remix dropped the `body`/`custom` character type in
  * favour of per-trait `traits[]` (see RemixCharacterEntry). Kept only until any
  * remix_config follow-up confirms it is unused. Do not use for new code.

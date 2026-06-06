@@ -23,6 +23,7 @@ import {
 } from "@/stores/animation-playback-store";
 import { addTweenToTimeline } from "../animation-tween-builders";
 import { buildMasterTimeline } from "../build-master-timeline";
+import { TRIGGER_DELAY as SHARED_TRIGGER_DELAY } from "../linearize-spread-timeline";
 import { restoreBaseRotation } from "../restore-base-rotation";
 import {
   addCameraTweenToTimeline,
@@ -129,9 +130,12 @@ function resolveReadAlongAudioData(
 }
 
 // === Constants ===
+// Shared keys (AFTER_PREVIOUS, ON_CLICK_AUTO) come from the analytic linearizer —
+// the single source of truth that build-master-timeline + audio sequencing also
+// use, so the live engine can never drift from the render timing. FIRST_ANIMATION
+// and AUTO_SPREAD_COMPLETE are player-only pacing (no analytic-model equivalent).
 const TRIGGER_DELAY = {
-  AFTER_PREVIOUS: 0,
-  ON_CLICK_AUTO: 1.0,
+  ...SHARED_TRIGGER_DELAY,
   FIRST_ANIMATION: 0.5,
   AUTO_SPREAD_COMPLETE: 1.0,
 } as const;

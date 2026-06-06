@@ -220,7 +220,7 @@ export function BookSpreadCore({
   }, [seekSec]);
 
   const videoStartByItem = useVideoStartByItem(editionAnimations, fps);
-  const activeWordByTextbox = deriveActiveWords(wordFrame, spread, fps, language);
+  const activeWordByTextbox = deriveActiveWords(wordFrame, spread, fps, language, edition);
   const renderers = createRenderStageRenderers(activeWordByTextbox, fontScale, videoStartByItem);
 
   return (

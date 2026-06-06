@@ -64,7 +64,7 @@ export interface BookRenderInput {
 export interface BookRenderResult {
   fileName: string;
   outputLocation: string;
-  publicUrl: string;           // relative: "/files/{fileName}"
+  publicUrl: string;           // relative: "/files/{tier}/{fileName}" (MASTER_TIER=qhd)
   width: number;
   height: number;
   fps: number;

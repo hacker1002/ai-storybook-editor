@@ -1,28 +1,26 @@
 // video-worker/src/render.ts
 // Core render pipeline: bundle (cached once), select composition (duration derived in-
 // bundle via calculateMetadata), renderMedia → MP4 in OUT_DIR. Blocking/CPU-bound; the
-// server serialises calls. Worker intentionally does NOT import frontend `@/` modules at
-// runtime (tsx can't resolve those aliases) — only the entry path + composition id string.
+// server serialises calls. `@/` frontend modules resolve at runtime because the worker
+// launches via tsx (video-worker/tsconfig.json paths: "@/*" → "../src/*") — same as
+// render-book.ts — so canonical consts are imported, never mirrored.
 
 import path from "node:path";
 import fs from "node:fs/promises";
 import { bundle } from "@remotion/bundler";
 import { ensureBrowser, renderMedia, selectComposition } from "@remotion/renderer";
+import { SPREAD_COMPOSITION_ID } from "@/remotion/composition-metadata";
+import { REMIX_LANGUAGE_CODES, type RemixLanguageCode } from "@/types/editor";
 import { REMOTION_ENTRY, OUT_DIR } from "./paths";
 import { webpackOverride } from "./webpack-override";
-
-// Mirror of SPREAD_COMPOSITION_ID in src/remotion/composition-metadata.ts (single string;
-// not imported to avoid pulling the whole `@/`-aliased graph into the Node runtime).
-const SPREAD_COMPOSITION_ID = "spread-video";
 
 const RENDER_TIMEOUT_MS = 120_000;
 const RENDER_CONCURRENCY = 2;
 
-// App's supported narration languages. Mirrors RemixLanguageCode in @/types/editor —
-// duplicated here (not imported) because the worker runs in plain Node and cannot resolve
-// the `@/` path aliases. Keep in sync if the app adds a language.
-export const SUPPORTED_LANGUAGES = ["en_US", "vi_VN", "ja_JP", "ko_KR", "zh_CN"] as const;
-export type RenderLanguage = (typeof SUPPORTED_LANGUAGES)[number];
+// App's supported narration languages — canonical list lives in @/types/editor;
+// imported (not mirrored) so a new app language is recognised without touching the worker.
+export const SUPPORTED_LANGUAGES = REMIX_LANGUAGE_CODES;
+export type RenderLanguage = RemixLanguageCode;
 
 export interface RenderInput {
   spread: unknown;

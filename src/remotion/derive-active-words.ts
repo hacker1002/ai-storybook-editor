@@ -6,19 +6,26 @@
 // stay locked to the tween). Active word = latest word whose startMs has elapsed,
 // cleared after the last word ends.
 
-import type { PlayableSpread } from "@/types/playable-types";
+import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
 import type { RemixLanguageCode } from "@/types/editor";
 import type { SpreadTextbox, SpreadTextboxContent } from "@/types/spread-types";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
 import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
+import { filterAnimationsForEdition } from "@/features/editor/components/playable-spread-view/player-utils";
 
 export function deriveActiveWords(
   frame: number,
   spread: PlayableSpread,
   fps: number,
-  language: RemixLanguageCode
+  language: RemixLanguageCode,
+  // REQUIRED (parity-by-construction): linearize over the SAME edition-filtered
+  // animation set that build-spread-audio-sequences + buildMasterTimeline use.
+  // Without this, classic (read-along-only) would derive word startSec from the
+  // unfiltered timeline → highlight drifts behind the narration audio.
+  edition: PlayEdition
 ): Record<string, number> {
-  const { steps } = linearizeSpreadTimeline(spread.animations);
+  const animations = filterAnimationsForEdition(spread.animations ?? [], edition);
+  const { steps } = linearizeSpreadTimeline(animations);
   const textboxes = (spread.textboxes ?? []) as SpreadTextbox[];
   const tbContent = (id: string): SpreadTextboxContent | undefined => {
     const c = textboxes.find((t) => t.id === id)?.[language];
