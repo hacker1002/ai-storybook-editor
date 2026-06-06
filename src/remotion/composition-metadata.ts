@@ -4,8 +4,9 @@
 // demo page <Player> — so preview === output by construction. Changing these here
 // changes both sides at once; never duplicate the duration formula.
 
-import type { PlayableSpread } from "@/types/playable-types";
+import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
 import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
+import { filterAnimationsForEdition } from "@/features/editor/components/playable-spread-view/player-utils";
 
 /** Output frame rate. 30fps canonical (matches ADR-034). Halves per-frame ThorVG seeks
  *  vs the earlier experimental 60 → lower per-frame-gate cost / timeout risk on long spreads. */
@@ -29,9 +30,18 @@ export const DURATION_PAD_SEC = 2;
 /**
  * Total animated seconds of a spread, derived from the linearized timeline.
  * Pure function → safe to call in calculateMetadata and in render bodies.
+ *
+ * `edition` MUST match what BookSpreadCore renders (filtered animations) or the
+ * settle hold drifts — classic only counts read-along, so its segment is far
+ * shorter than dynamic. Defaults to `interactive` (full timeline) for the
+ * single-spread demo composition which is edition-agnostic.
  */
-export function getSpreadTotalSec(spread: PlayableSpread): number {
-  const { totalSec } = linearizeSpreadTimeline(spread.animations);
+export function getSpreadTotalSec(
+  spread: PlayableSpread,
+  edition: PlayEdition = "interactive"
+): number {
+  const animations = filterAnimationsForEdition(spread.animations ?? [], edition);
+  const { totalSec } = linearizeSpreadTimeline(animations);
   return totalSec;
 }
 
@@ -39,8 +49,12 @@ export function getSpreadTotalSec(spread: PlayableSpread): number {
  * durationInFrames for a spread. Floor of 1 frame so an animation-less spread still
  * produces a valid (1-frame) composition instead of crashing Remotion.
  */
-export function getSpreadDurationInFrames(spread: PlayableSpread, fps = VIDEO_FPS): number {
-  const totalSec = getSpreadTotalSec(spread);
+export function getSpreadDurationInFrames(
+  spread: PlayableSpread,
+  fps = VIDEO_FPS,
+  edition: PlayEdition = "interactive"
+): number {
+  const totalSec = getSpreadTotalSec(spread, edition);
   return Math.max(1, Math.ceil((totalSec + DURATION_PAD_SEC) * fps));
 }
 
@@ -122,6 +136,7 @@ export interface BookDurationSequence {
 export function getBookDurationInFrames(
   sequence: BookDurationSequence,
   fps = VIDEO_FPS,
+  edition: PlayEdition = "interactive",
 ): number {
   const settleFrames = Math.round(AUTO_SPREAD_SETTLE_SEC * fps);
   const transitionFrames = Math.round(TRANSITION_SEC * fps);
@@ -129,7 +144,7 @@ export function getBookDurationInFrames(
 
   let total = 0;
   for (const item of sequence.ordered) {
-    const animFrames = Math.ceil(getSpreadTotalSec(item.spread) * fps);
+    const animFrames = Math.ceil(getSpreadTotalSec(item.spread, edition) * fps);
     total += animFrames + settleFrames;
     if (item.turnToNext === 'next') total += transitionFrames;
   }

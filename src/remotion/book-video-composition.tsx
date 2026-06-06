@@ -76,19 +76,25 @@ export function BookVideoComposition({
     [spreads, sections, startSpreadId, edition]
   );
 
-  const layout = useMemo(() => buildBookSegmentLayout(sequence, VIDEO_FPS), [sequence]);
+  const layout = useMemo(
+    () => buildBookSegmentLayout(sequence, VIDEO_FPS, edition),
+    [sequence, edition]
+  );
 
   // Per-spread audio at book-level offsets. Built once per spread-segment from the
   // segment's startFrame so audio never overlaps the previous settle or the silent
   // transition that follows (offsets compose by a single addition — see helper).
+  // Edition-gated: classic emits read-along narration only (no PLAY sound-effects).
   const audioSequences = useMemo(() => {
     const out: ReturnType<typeof buildSpreadAudioSequences> = [];
     for (const seg of layout.segments) {
       if (seg.kind !== "spread") continue;
-      out.push(...buildSpreadAudioSequences(seg.spread, language, VIDEO_FPS, seg.startFrame));
+      out.push(
+        ...buildSpreadAudioSequences(seg.spread, language, VIDEO_FPS, seg.startFrame, edition)
+      );
     }
     return out;
-  }, [layout, language]);
+  }, [layout, language, edition]);
 
   log.info("render", "book composition layout", {
     spreads: sequence.ordered.length,
@@ -111,6 +117,7 @@ export function BookVideoComposition({
             <BookSpreadSegment
               spread={seg.spread}
               language={language}
+              edition={edition}
               canvasWidth={designCanvasWidth}
               totalSec={seg.totalSec}
               animFrames={seg.animFrames}
@@ -127,6 +134,7 @@ export function BookVideoComposition({
               fromTotalSec={seg.fromTotalSec}
               toSpread={seg.toSpread}
               language={language}
+              edition={edition}
               canvasWidth={designCanvasWidth}
               transitionFrames={seg.durationFrames}
             />

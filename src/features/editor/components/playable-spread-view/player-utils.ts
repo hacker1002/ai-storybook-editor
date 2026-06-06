@@ -1,7 +1,8 @@
 // player-utils.ts - Utility functions for building and navigating animation steps
 
 import type { SpreadAnimation, Geometry } from '@/types/spread-types';
-import type { AnimationStep } from '@/types/playable-types';
+import type { AnimationStep, PlayEdition } from '@/types/playable-types';
+import { EFFECT_TYPE } from '@/constants/playable-constants';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Player', 'GsapEngine');
@@ -232,6 +233,29 @@ function filterOutClickChains<T>(
  */
 export function filterAnimationsForDynamic(animations: SpreadAnimation[]): SpreadAnimation[] {
   return filterOutClickChains(animations, (a) => a.order, (a) => a.trigger_type);
+}
+
+/**
+ * Edition-aware animation filter — THE single source the live player AND the
+ * Remotion video render both call, so the two never diverge (ADR-035 goal: reuse
+ * player logic in render). Filtering happens at the animations[] layer (NOT inside
+ * the timeline builder), which is what keeps buildMasterTimeline byte-identical
+ * across live/render:
+ *   • classic     → only READ_ALONG narration over static items (no entrance/emphasis/exit/camera/quiz)
+ *   • dynamic     → drop on_click chains (auto-play only)
+ *   • interactive → all animations
+ */
+export function filterAnimationsForEdition(
+  animations: SpreadAnimation[],
+  edition: PlayEdition,
+): SpreadAnimation[] {
+  if (edition === 'classic') {
+    return animations.filter((a) => a.effect.type === EFFECT_TYPE.READ_ALONG);
+  }
+  if (edition === 'dynamic') {
+    return filterAnimationsForDynamic(animations);
+  }
+  return animations;
 }
 
 /**

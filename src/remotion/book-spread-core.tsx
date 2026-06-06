@@ -18,10 +18,12 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { AbsoluteFill, useVideoConfig } from "remotion";
 import gsap from "gsap";
-import type { PlayableSpread } from "@/types/playable-types";
+import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
+import type { SpreadAnimation } from "@/types/spread-types";
 import { applyInitialStates } from "@/features/editor/components/playable-spread-view/player-initial-states";
 import { buildMasterTimeline } from "@/features/editor/components/playable-spread-view/build-master-timeline";
 import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
+import { filterAnimationsForEdition } from "@/features/editor/components/playable-spread-view/player-utils";
 import { PlayerSpreadStage } from "@/features/editor/components/playable-spread-view/player-spread-stage";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
 import type { RemixLanguageCode } from "@/types/editor";
@@ -42,6 +44,15 @@ export { DEFAULT_DESIGN_CANVAS_WIDTH } from "./font-scale";
 export interface BookSpreadCoreProps {
   spread: PlayableSpread;
   language: RemixLanguageCode;
+  /**
+   * Play edition — gates which animations render, mirroring the live player
+   * (`filterAnimationsForEdition`). Classic = static items + read-along only;
+   * dynamic = no on_click chains; interactive = everything. Defaults to
+   * `interactive` so the edition-agnostic single-spread demo composition is
+   * unchanged. The caller (book composition) MUST pass the same edition it used
+   * to compute segment duration/audio or the render drifts from the timeline.
+   */
+  edition?: PlayEdition;
   /** Design-canvas width the spread was authored against (font/border scale). */
   canvasWidth?: number;
   /**
@@ -85,11 +96,11 @@ function buildGeometryLookup(
  * relative to the spread's own timeline (caller's seek decides what's on screen).
  */
 function useVideoStartByItem(
-  spread: PlayableSpread,
+  animations: SpreadAnimation[],
   fps: number
 ): Record<string, number> {
   return useMemo(() => {
-    const { steps } = linearizeSpreadTimeline(spread.animations);
+    const { steps } = linearizeSpreadTimeline(animations);
     const map: Record<string, number> = {};
     for (const s of steps) {
       if (s.anim.effect.type === EFFECT_TYPE.PLAY && s.anim.target.type === "video") {
@@ -97,7 +108,7 @@ function useVideoStartByItem(
       }
     }
     return map;
-  }, [spread, fps]);
+  }, [animations, fps]);
 }
 
 /**
@@ -107,11 +118,21 @@ function useVideoStartByItem(
 export function BookSpreadCore({
   spread,
   language,
+  edition = "interactive",
   canvasWidth,
   seekSec,
   wordFrame,
 }: BookSpreadCoreProps) {
   const { width, height, fps } = useVideoConfig();
+
+  // Edition gate — THE shared seam with the live player. Filter once; the SAME
+  // list drives applyInitialStates, buildMasterTimeline AND the video start map,
+  // so visual / pacing / audio all agree with the segment duration the layout
+  // computed for this edition. Classic ⇒ read-along only over static items.
+  const editionAnimations = useMemo(
+    () => filterAnimationsForEdition(spread.animations ?? [], edition),
+    [spread.animations, edition]
+  );
   // Font/border parity hinges on canvasWidth === live store `bleedCanvas.full.width`.
   // Don't silently default to 800 (legacy) — that overshoots fontScale by
   // realFullWidth/800 and inflates every textbox. Fall back but WARN loudly.
@@ -158,12 +179,11 @@ export function BookSpreadCore({
     }
 
     gsap.ticker.lagSmoothing(0);
-    const spreadAnimations = spread.animations ?? [];
-    applyInitialStates(spreadAnimations, refsMap, container, { width, height }, spread, "interactive");
+    applyInitialStates(editionAnimations, refsMap, container, { width, height }, spread, edition);
 
     const geoLookup = buildGeometryLookup(spread, language);
     const tl = buildMasterTimeline({
-      animations: spreadAnimations,
+      animations: editionAnimations,
       refsMap,
       container,
       containerWidth: width,
@@ -174,7 +194,7 @@ export function BookSpreadCore({
       textboxes: spread.textboxes,
       audios: spread.audios,
       narrationLangCode: language,
-      playEdition: "interactive",
+      playEdition: edition,
       findItemGeometry: (id) => geoLookup.get(id),
       mode: "render",
     });
@@ -182,6 +202,8 @@ export function BookSpreadCore({
     timelineRef.current = tl;
     log.info("buildTimeline", "render master timeline built", {
       spreadId: spread.id,
+      edition,
+      animCount: editionAnimations.length,
       gsapSec: Math.round(tl.duration() * 100) / 100,
     });
 
@@ -189,7 +211,7 @@ export function BookSpreadCore({
       tl.kill();
       timelineRef.current = null;
     };
-  }, [spread, language, width, height, canvasWidth]);
+  }, [spread, language, editionAnimations, edition, width, height, canvasWidth]);
 
   // ── Drive the timeline from the EXPLICIT seek time (frozen for flip faces). ──
   useLayoutEffect(() => {
@@ -197,7 +219,7 @@ export function BookSpreadCore({
     if (tl) tl.seek(seekSec);
   }, [seekSec]);
 
-  const videoStartByItem = useVideoStartByItem(spread, fps);
+  const videoStartByItem = useVideoStartByItem(editionAnimations, fps);
   const activeWordByTextbox = deriveActiveWords(wordFrame, spread, fps, language);
   const renderers = createRenderStageRenderers(activeWordByTextbox, fontScale, videoStartByItem);
 
@@ -207,7 +229,7 @@ export function BookSpreadCore({
         <PlayerSpreadStage
           spread={spread}
           narrationLangCode={language}
-          playEdition="interactive"
+          playEdition={edition}
           registerRef={registerRef}
           renderers={renderers}
         />

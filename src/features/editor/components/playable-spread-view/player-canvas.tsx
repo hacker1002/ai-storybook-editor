@@ -16,7 +16,6 @@ import { getScaledDimensions } from "../../utils/coordinate-utils";
 import { useCanvasSize, useSetZoomLevel } from "@/stores/editor-settings-store";
 import { useNarrationLanguage } from "@/stores/animation-playback-store";
 import { PageItem } from "../canvas-spread-view/page-item";
-import { EFFECT_TYPE } from "@/constants/playable-constants";
 import type {
   PlayableSpread,
   PlayMode,
@@ -27,7 +26,7 @@ import type { Geometry } from "@/types/spread-types";
 import {
   isReplayableClick,
   buildAnimationSteps,
-  filterAnimationsForDynamic,
+  filterAnimationsForEdition,
 } from "./player-utils";
 import { usePlayerGsapEngine } from "./hooks/use-player-gsap-engine";
 import {
@@ -159,21 +158,11 @@ export const PlayerCanvas = forwardRef<PlayerCanvasHandle, PlayerCanvasProps>(fu
     setActiveQuizId(quizId);
   }, []);
 
-  // === Edition-filtered animations ===
-  // Classic: only READ_ALONG animations (effect type 11)
-  // Dynamic: all animations except on_click trigger chains
-  // Interactive: all animations
-  const filteredAnimations = useMemo(() => {
-    if (playEdition === "classic") {
-      return spread.animations.filter(
-        (a) => a.effect.type === EFFECT_TYPE.READ_ALONG
-      );
-    }
-    if (playEdition === "dynamic") {
-      return filterAnimationsForDynamic(spread.animations);
-    }
-    return spread.animations;
-  }, [spread.animations, playEdition]);
+  // === Edition-filtered animations (shared seam with the video render) ===
+  const filteredAnimations = useMemo(
+    () => filterAnimationsForEdition(spread.animations, playEdition),
+    [spread.animations, playEdition]
+  );
 
   // Auto-fit zoom — overrides prop zoomLevel with computed fit
   // In full page mode, useContainerFit fits half the canvas width (one page)

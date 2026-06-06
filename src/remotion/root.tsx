@@ -76,7 +76,7 @@ export function RemotionRoot() {
           });
           const dims = RESOLUTION_DIMS[props.resolution] ?? QHD;
           return {
-            durationInFrames: getBookDurationInFrames(sequence, VIDEO_FPS),
+            durationInFrames: getBookDurationInFrames(sequence, VIDEO_FPS, props.edition),
             width: dims.width,
             height: dims.height,
           };

@@ -11,11 +11,12 @@
 // Design: 06-book-render.md §9.1 (per-spread audio 0:a, committed v1) +
 // 03-timeline-linearization.md §9.
 
-import type { PlayableSpread } from "@/types/playable-types";
+import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
 import type { RemixLanguageCode } from "@/types/editor";
 import type { SpreadTextbox, SpreadTextboxContent } from "@/types/spread-types";
 import { EFFECT_TYPE } from "@/constants/playable-constants";
 import { linearizeSpreadTimeline } from "@/features/editor/components/playable-spread-view/linearize-spread-timeline";
+import { filterAnimationsForEdition } from "@/features/editor/components/playable-spread-view/player-utils";
 
 export interface SpreadAudioSequence {
   /** Stable React key — unique within the spread (target id + local start). */
@@ -35,14 +36,20 @@ export interface SpreadAudioSequence {
  *   book frame axis. 0 for the single-spread composition. The book composition
  *   passes the spread-segment's offset so per-spread audio never overlaps the
  *   previous spread's settle hold or the silent transition that follows.
+ * @param edition play edition — gates which media audio is emitted, MUST match
+ *   the rendered timeline. Classic emits ONLY read-along narration (no PLAY
+ *   sound-effects); dynamic drops on_click-chained audio. Defaults to
+ *   `interactive` (all media) for the edition-agnostic single-spread composition.
  */
 export function buildSpreadAudioSequences(
   spread: PlayableSpread,
   language: RemixLanguageCode,
   fps: number,
-  segmentStartFrame = 0
+  segmentStartFrame = 0,
+  edition: PlayEdition = "interactive"
 ): SpreadAudioSequence[] {
-  const { steps } = linearizeSpreadTimeline(spread.animations);
+  const animations = filterAnimationsForEdition(spread.animations ?? [], edition);
+  const { steps } = linearizeSpreadTimeline(animations);
   const textboxes = (spread.textboxes ?? []) as SpreadTextbox[];
   const tbContent = (id: string): SpreadTextboxContent | undefined => {
     const c = textboxes.find((t) => t.id === id)?.[language];

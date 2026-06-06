@@ -12,13 +12,15 @@
 // one addition at the composition level (no double counting).
 
 import { useCurrentFrame, useVideoConfig } from "remotion";
-import type { PlayableSpread } from "@/types/playable-types";
+import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
 import type { RemixLanguageCode } from "@/types/editor";
 import { BookSpreadCore } from "./book-spread-core";
 
 export interface BookSpreadSegmentProps {
   spread: PlayableSpread;
   language: RemixLanguageCode;
+  /** Play edition — forwarded to the render core so classic plays read-along only. */
+  edition?: PlayEdition;
   canvasWidth?: number;
   /** Total animated seconds (from linearizeSpreadTimeline) — clamp ceiling. */
   totalSec: number;
@@ -34,6 +36,7 @@ export interface BookSpreadSegmentProps {
 export function BookSpreadSegment({
   spread,
   language,
+  edition,
   canvasWidth,
   totalSec,
   animFrames,
@@ -50,6 +53,7 @@ export function BookSpreadSegment({
     <BookSpreadCore
       spread={spread}
       language={language}
+      edition={edition}
       canvasWidth={canvasWidth}
       seekSec={seekSec}
       wordFrame={wordFrame}

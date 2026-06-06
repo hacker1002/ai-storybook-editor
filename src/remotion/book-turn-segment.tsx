@@ -43,7 +43,7 @@
 // pivot, opacity-swap, and half-page clips the live player uses) — render === live.
 
 import { AbsoluteFill, Freeze, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import type { PlayableSpread } from "@/types/playable-types";
+import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
 import type { RemixLanguageCode } from "@/types/editor";
 import { BookSpreadCore } from "./book-spread-core";
 import {
@@ -59,6 +59,9 @@ export interface BookTurnSegmentProps {
   /** Incoming spread (base + back face) — frozen at initial state (t=0). */
   toSpread: PlayableSpread;
   language: RemixLanguageCode;
+  /** Play edition — forwarded to both frozen faces so a classic turn freezes the
+   *  static (read-along-only) render of each spread, matching its spread-segment. */
+  edition?: PlayEdition;
   canvasWidth?: number;
   /** Flip duration in frames = round(TRANSITION_SEC*fps). */
   transitionFrames: number;
@@ -100,6 +103,7 @@ export function BookTurnSegment({
   fromTotalSec,
   toSpread,
   language,
+  edition,
   canvasWidth,
   transitionFrames,
 }: BookTurnSegmentProps) {
@@ -144,6 +148,7 @@ export function BookTurnSegment({
             <BookSpreadCore
               spread={toSpread}
               language={language}
+              edition={edition}
               canvasWidth={canvasWidth}
               seekSec={0}
               wordFrame={0}
@@ -160,6 +165,7 @@ export function BookTurnSegment({
             <BookSpreadCore
               spread={fromSpread}
               language={language}
+              edition={edition}
               canvasWidth={canvasWidth}
               seekSec={fromTotalSec}
               wordFrame={frontWordFrame}
@@ -186,6 +192,7 @@ export function BookTurnSegment({
               <BookSpreadCore
                 spread={fromSpread}
                 language={language}
+                edition={edition}
                 canvasWidth={canvasWidth}
                 seekSec={fromTotalSec}
                 wordFrame={frontWordFrame}
@@ -198,6 +205,7 @@ export function BookTurnSegment({
               <BookSpreadCore
                 spread={toSpread}
                 language={language}
+                edition={edition}
                 canvasWidth={canvasWidth}
                 seekSec={0}
                 wordFrame={0}

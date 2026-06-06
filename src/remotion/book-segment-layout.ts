@@ -11,7 +11,7 @@
 // Per turn-segment length    = transitionFrames (only when turnToNext==='next').
 // endPad is appended once after the last spread-segment.
 
-import type { PlayableSpread } from "@/types/playable-types";
+import type { PlayableSpread, PlayEdition } from "@/types/playable-types";
 import {
   AUTO_SPREAD_SETTLE_SEC,
   TRANSITION_SEC,
@@ -77,7 +77,8 @@ export interface BookSegmentLayout {
  */
 export function buildBookSegmentLayout(
   sequence: BookLayoutSequence,
-  fps = VIDEO_FPS
+  fps = VIDEO_FPS,
+  edition: PlayEdition = "interactive"
 ): BookSegmentLayout {
   const settleFrames = Math.round(AUTO_SPREAD_SETTLE_SEC * fps);
   const transitionFrames = Math.round(TRANSITION_SEC * fps);
@@ -87,7 +88,7 @@ export function buildBookSegmentLayout(
   let cursor = 0;
 
   sequence.ordered.forEach((item, i) => {
-    const totalSec = getSpreadTotalSec(item.spread);
+    const totalSec = getSpreadTotalSec(item.spread, edition);
     const animFrames = Math.ceil(totalSec * fps);
     const spreadDuration = animFrames + settleFrames;
 

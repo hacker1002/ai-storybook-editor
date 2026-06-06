@@ -47,9 +47,12 @@ export interface ResolveBookSequenceOptions {
   /** Optional starting spread. Falls back to `spreads[0].id` (player parity — see body). */
   startSpreadId?: string;
   /**
-   * Edition reserved for future edition-aware filtering. v1 walker does NOT branch
-   * on edition — edition-filtering happens at the `animations[]` linearize layer
-   * (phase 02), not in the spread walk. Accepted so callers wire it through once.
+   * Edition does NOT affect the spread WALK — the playlist of spreads is identical
+   * for classic/dynamic (same branch/auto-mode navigation). Edition-aware filtering
+   * happens at the `animations[]` linearize layer instead: `getSpreadTotalSec` /
+   * `buildBookSegmentLayout` (duration), `buildSpreadAudioSequences` (audio) and
+   * `BookSpreadCore` (visual) all run `filterAnimationsForEdition`. Kept here so the
+   * single sequence resolve still receives it for parity-of-call with the player.
    */
   edition: 'classic' | 'dynamic';
 }
