@@ -15,21 +15,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { createLogger } from '@/utils/logger';
 import { usePlaybackActions } from '@/stores/animation-playback-store';
-import { takeSnapshot } from '../transition/spread-turn-snapshot';
+import { takeSnapshot } from './spread-turn-snapshot';
 import {
   DEFAULT_TURN_DURATION_MS,
   DEBUG_DISABLE_FLAG,
   DEBUG_SLOW_FLAG,
-} from '../transition/spread-turn-constants';
-import { computeFlipTransform } from '../spread-flip-transform';
+} from './spread-turn-constants';
+import { computeFlipTransform } from './spread-flip-transform';
 import type {
   StartTurnParams,
   TurnLayout,
   TurnSnapshot,
   TurnState,
   UseSpreadTurnTransitionParams,
-} from '../transition/spread-turn-types';
-import type { SpreadTurnOverlayProps } from '../transition/spread-turn-overlay';
+} from './spread-turn-types';
+import type { SpreadTurnOverlayProps } from './spread-turn-overlay';
 
 const log = createLogger('Editor', 'useSpreadTurnTransition');
 

@@ -37,10 +37,10 @@ import { useMusicMediaUrl } from "./audio/use-music-media-url";
 import { useSoundMediaUrl } from "./audio/use-sound-media-url";
 import { createMixedAudio } from "./audio/create-mixed-audio";
 import type { BookAudioSettings } from "./audio/audio-mixer-types";
-import { useSpreadTurnTransition } from "./hooks/use-spread-turn-transition";
-import { resolveTransitionStrategy } from "./transition/spread-turn-strategy";
-import { SpreadTurnOverlay } from "./transition/spread-turn-overlay";
-import type { TurnDirection } from "./transition/spread-turn-types";
+import { useSpreadTurnTransition } from "./page-turn-transition/use-spread-turn-transition";
+import { resolveTransitionStrategy } from "./page-turn-transition/spread-turn-strategy";
+import { SpreadTurnOverlay } from "./page-turn-transition/spread-turn-overlay";
+import type { TurnDirection } from "./page-turn-transition/spread-turn-types";
 
 // === Types ===
 

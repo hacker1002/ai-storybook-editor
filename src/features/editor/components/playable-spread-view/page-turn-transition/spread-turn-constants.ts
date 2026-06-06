@@ -12,7 +12,7 @@ export {
   PAPER_BG_COLOR,
   PAPER_INNER_SHADOW,
   LAYOUT_PIVOT_MAP,
-} from '../spread-flip-transform';
+} from './spread-flip-transform';
 
 /** z-index of the portal overlay. Lives below `FirstGestureGate` (z-100) and
  *  above the thumbnail rail (spec §6 layered overlay structure). */
