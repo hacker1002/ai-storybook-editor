@@ -179,8 +179,14 @@ export function TurnLeafSkeleton({
         ref={cardRef}
         data-testid="spread-turn-flipping-card"
         style={{
-          width: '100%',
-          height: '100%',
+          // position:absolute REQUIRED — z-index is ignored on static-positioned
+          // elements (CSS spec). In render mode (hasBase=true) we set zIndex:1 to
+          // sit above base(z=0); without position:absolute that zIndex silently
+          // dropped and the card slipped to level-6 (z-auto SC from preserve-3d/
+          // will-change/transform), painting BENEATH base — the back-face NEW-
+          // left page reveal (p≥0.5) was buried (regression 2026-06-06).
+          position: 'absolute',
+          inset: 0,
           transformStyle: 'preserve-3d',
           transformOrigin: pivotOrigin,
           // Only declare `transform` when the caller drives it declaratively

@@ -178,5 +178,18 @@ describe('TurnLeafSkeleton — attribute parity', () => {
       expect(card.style.transformOrigin).toBe('50% 50%');
       expect(card.style.willChange).toBe('transform');
     });
+
+    it('position:absolute + inset:0 — REQUIRED so zIndex:1 (render mode) takes effect; static-positioned elements ignore z-index and the card slips beneath base+static (regression 2026-06-06: NEW-left back-face reveal invisible)', () => {
+      const { getByTestId } = render(
+        <TurnLeafSkeleton
+          direction="next"
+          positioner="fill"
+          baseSlot={<div />}
+        />,
+      );
+      const card = getByTestId(TID.card);
+      expect(card.style.position).toBe('absolute');
+      expect(card.style.inset).toBe('0px');
+    });
   });
 });
