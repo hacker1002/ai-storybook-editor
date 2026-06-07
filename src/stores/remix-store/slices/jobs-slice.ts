@@ -1,23 +1,22 @@
-// remix-store/slices/jobs-slice.ts — Remote background_jobs slice. Jobs are
-// read-only via realtime + REST enqueue: startAudioJob (POST enqueue +
-// optimistic seed row), startMixSwap, cancelJob (optimistic flag), dismissJob.
-// Inject (Phase 3 — client-side finalize) lives here too: injectFinalCrops
-// resolves is_final winner crops, mutates the illustration blob, and persists
-// it in ONE Supabase UPDATE (no background job).
+// remix-store/slices/jobs-slice.ts — Remix enqueue slice (ADR-037 consumer).
+// Enqueue via REST + optimistic seed into the unified BackgroundJobsStore
+// (`seed`), which fans the row back as a remix-swap event → `jobs[]` projection.
+// cancelJob delegates to the shared generic action. Inject (client-side
+// finalize) lives here too: injectFinalCrops resolves is_final winner crops,
+// mutates the illustration blob, and persists it in ONE Supabase UPDATE.
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import { CLIENT_AUDIO_CHUNK_CAP } from '@/types/remix';
-import type { InjectResult, RemixIllustration, RemixJob } from '@/types/remix';
+import type { InjectResult, RemixIllustration } from '@/types/remix';
 import {
   enqueueAudioSwap,
   enqueueRemixMixSwap,
-  cancelJobRemote,
   type EnqueueAudioSwapEnqueuedData,
   type EnqueueAudioSwapDedupedData,
 } from '@/apis/jobs-api';
 import { useAuthStore } from '../../auth-store';
-import { pruneSupersededJobs } from '../slice-helpers';
+import { useBackgroundJobsStore } from '../../background-jobs-store';
 import { resolveFinalCrops } from '../selectors/select-final-crops';
 import { applyFinalCrops } from '../apply-final-crops';
 import type { RemixJobsSlice, RemixSliceCreator } from '../types';
@@ -71,12 +70,11 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
         jobId: deduped.job_id,
         status: deduped.status,
       });
-      // Ensure job row is present in store; if missing, top-up by re-fetching.
+      // Ensure job row is present locally; reconcile from the shared store if
+      // its channel already ingested the deduped job (else realtime fills it).
       if (!get().jobs.find((j) => j.id === deduped.job_id)) {
-        const userId = useAuthStore.getState().user?.id;
-        if (userId) {
-          void get().syncJobsFromServer(userId).catch(() => undefined);
-        }
+        const shared = useBackgroundJobsStore.getState().jobsById[deduped.job_id];
+        if (shared) get().onRemixJobEvent({ job: shared, prev: null, transition: 'appeared' });
       }
       return {
         kind: 'deduped',
@@ -92,29 +90,24 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       totalSteps: enqueued.total_steps,
     });
 
-    // Optimistic merge: synthesize partial RemixJob row so badge appears
-    // immediately. Realtime UPDATE fills current_step/step_details next.
+    // Optimistic seed into the unified store (single ingest path). The remix
+    // consumer callback upserts it into `jobs[]` ('appeared'); realtime UPDATE
+    // reconciles by id next.
     const nowIso = new Date().toISOString();
-    const seed: RemixJob = {
+    useBackgroundJobsStore.getState().seed({
       id: enqueued.job_id,
-      remixId,
-      phase: 'audio',
-      triggeredBy: opts.triggeredBy,
+      type: 'remix_audio_swap',
+      bookId: null,
+      userId: useAuthStore.getState().user?.id ?? '',
       status: 'queued',
       currentStep: 0,
       totalSteps: enqueued.total_steps,
-      stepDetails: undefined,
-      result: undefined,
+      stepDetails: null,
+      params: { remix_id: remixId, triggered_by: opts.triggeredBy },
+      result: null,
       cancelRequested: false,
       createdAt: nowIso,
       updatedAt: nowIso,
-      completedAt: undefined,
-    };
-    set((s) => {
-      if (s.jobs.find((j) => j.id === seed.id)) return s;
-      // Prune so a stale failed sibling of the same lineage clears the moment a
-      // fresh attempt is seeded (no resurrection after the new job dismisses).
-      return { jobs: pruneSupersededJobs([...s.jobs, seed]) };
     });
 
     return {
@@ -228,13 +221,11 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
         jobId: data.job_id,
         status: data.status,
       });
-      // Active job may be a char-swap (cross-type dedup). Top-up jobs[] if the
-      // row isn't mirrored locally yet.
+      // Active job may be a char-swap (cross-type dedup). Reconcile jobs[] from
+      // the shared store if the row isn't mirrored locally yet.
       if (!get().jobs.find((j) => j.id === data.job_id)) {
-        const userId = useAuthStore.getState().user?.id;
-        if (userId) {
-          void get().syncJobsFromServer(userId).catch(() => undefined);
-        }
+        const shared = useBackgroundJobsStore.getState().jobsById[data.job_id];
+        if (shared) get().onRemixJobEvent({ job: shared, prev: null, transition: 'appeared' });
       }
       return {
         kind: 'deduped',
@@ -250,28 +241,22 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       totalSteps: data.total_steps,
     });
 
-    // Optimistic seed — overlay appears immediately; realtime fills
-    // current_step/result next. Merge by id so realtime doesn't duplicate.
+    // Optimistic seed into the unified store — consumer callback upserts jobs[].
     const nowIso = new Date().toISOString();
-    const seed: RemixJob = {
+    useBackgroundJobsStore.getState().seed({
       id: data.job_id,
-      remixId,
-      phase: 'remix_mix_swap',
-      batchId,
-      triggeredBy: 'user',
+      type: 'remix_mix_swap',
+      bookId: null,
+      userId: useAuthStore.getState().user?.id ?? '',
       status: 'queued',
       currentStep: 0,
       totalSteps: data.total_steps,
-      stepDetails: undefined,
-      result: undefined,
+      stepDetails: null,
+      params: { remix_id: remixId, batch_id: batchId },
+      result: null,
       cancelRequested: false,
       createdAt: nowIso,
       updatedAt: nowIso,
-      completedAt: undefined,
-    };
-    set((s) => {
-      if (s.jobs.find((j) => j.id === seed.id)) return s;
-      return { jobs: pruneSupersededJobs([...s.jobs, seed]) };
     });
 
     return {
@@ -282,35 +267,11 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
   },
 
   cancelJob: async (jobId) => {
-    log.info('cancelJob', 'request', { jobId });
-    // Optimistic flip cancelRequested=true. Authoritative cancelled status
-    // arrives via realtime UPDATE.
-    set((s) => ({
-      jobs: s.jobs.map((j) =>
-        j.id === jobId ? { ...j, cancelRequested: true } : j,
-      ),
-    }));
-
-    const result = await cancelJobRemote(jobId);
-    if (!result.success) {
-      log.error('cancelJob', 'failed', {
-        jobId,
-        error: result.error,
-        httpStatus: result.httpStatus,
-      });
-      // Rollback optimistic flag so user can retry.
-      set((s) => ({
-        jobs: s.jobs.map((j) =>
-          j.id === jobId ? { ...j, cancelRequested: false } : j,
-        ),
-      }));
-      throw new Error(result.error);
-    }
-
-    log.debug('cancelJob', 'flag set', {
-      jobId,
-      status: result.data.current_status,
-    });
+    // Delegate to the generic shared action. The shared store applies the
+    // optimistic cancelRequested flag + rollback and fans an 'updated' event
+    // back to `onRemixJobEvent`, so the `jobs[]` projection reflects it.
+    log.info('cancelJob', 'delegate to background-jobs store', { jobId });
+    await useBackgroundJobsStore.getState().cancelJob(jobId);
   },
 
   dismissJob: (jobId) => {

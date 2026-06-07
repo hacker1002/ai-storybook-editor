@@ -13,6 +13,8 @@ import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer, DemoRemot
 import { useAuthStore } from '@/stores/auth-store';
 import { useVoicesActions } from '@/stores/voices-store';
 import { useHumansActions } from '@/stores/humans-store';
+import { useBackgroundJobsStore } from '@/stores/background-jobs-store';
+import { useJobNotifications } from '@/features/editor/hooks/use-job-notifications';
 
 const SharePreviewPage = lazy(() =>
   import('@/features/share-preview').then((m) => ({ default: m.SharePreviewPage }))
@@ -64,6 +66,7 @@ function LoadingScreen() {
 
 export default function App() {
   const { initialize, isInitialized, isAuthenticated } = useAuthStore();
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const { fetchVoices } = useVoicesActions();
   const { fetchHumans } = useHumansActions();
 
@@ -77,6 +80,19 @@ export default function App() {
       void fetchHumans();
     }
   }, [isInitialized, isAuthenticated, fetchVoices, fetchHumans]);
+
+  // Unified background-jobs channel (ADR-037) — app-root singleton. Open when
+  // auth resolves with a user; teardown lives in auth-store.logout(). `init` is
+  // idempotent per userId and self-heals user switches.
+  useEffect(() => {
+    if (isInitialized && isAuthenticated && userId) {
+      useBackgroundJobsStore.getState().init(userId);
+    }
+  }, [isInitialized, isAuthenticated, userId]);
+
+  // App-root toast hook for ALL background jobs (remix swap + export/render/
+  // transcode). Fires even outside the editor (ADR-037 §6.3).
+  useJobNotifications();
 
   if (!isInitialized) {
     return <LoadingScreen />;

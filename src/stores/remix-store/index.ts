@@ -15,9 +15,9 @@ import {
   type CLIENT_AUDIO_CHUNK_CAP as CapType,
 } from '@/types/remix';
 import {
-  subscribeBackgroundJobs,
-  unsubscribeBackgroundJobs,
-} from './realtime';
+  REMIX_SWAP_TYPES,
+  useBackgroundJobsStore,
+} from '../background-jobs-store';
 import { useSnapshotStore } from '../snapshot-store';
 import { useAuthStore } from '../auth-store';
 import { createCrudSlice } from './slices/crud-slice';
@@ -59,64 +59,50 @@ useSnapshotStore.subscribe(
   },
 );
 
-// ── Module-level background_jobs realtime subscription ───────────────────────
-// Subscribe per-user; tear down + re-open when the active user id changes.
+// ── BackgroundJobsStore consumer (ADR-037) ───────────────────────────────────
+// RemixStore is now a CONSUMER of the unified store: instead of owning its own
+// `bg-jobs-` channel, it registers a `subscribeJobs` listener for the 3 remix
+// swap types and derives the `jobs[]` projection from those events. The shared
+// store owns the single channel + reheal + poll + top-up. Re-register when the
+// active user changes; the shared store clears all listeners on logout teardown.
 
-let activeJobSubscription:
-  | { userId: string; sub: ReturnType<typeof subscribeBackgroundJobs> }
-  | null = null;
-let lastSubscribedUserId: string | null = null;
+let remixJobConsumerUnsub: (() => void) | null = null;
+let lastConsumerUserId: string | null = null;
 
-function ensureJobsSubscription(userId: string | null | undefined): void {
-  if (userId === lastSubscribedUserId) return;
+function ensureRemixJobConsumer(userId: string | null | undefined): void {
+  if (userId === lastConsumerUserId) return;
+  lastConsumerUserId = userId ?? null;
 
-  if (activeJobSubscription) {
-    log.info('ensureJobsSubscription', 'tear down previous', {
-      userId: activeJobSubscription.userId,
-    });
-    unsubscribeBackgroundJobs(activeJobSubscription.sub);
-    activeJobSubscription = null;
+  if (remixJobConsumerUnsub) {
+    remixJobConsumerUnsub();
+    remixJobConsumerUnsub = null;
   }
-  lastSubscribedUserId = userId ?? null;
 
   if (!userId) {
-    log.info('ensureJobsSubscription', 'no user — cleared jobs');
+    log.info('ensureRemixJobConsumer', 'no user — cleared jobs');
     useRemixStore.setState({ jobs: [] });
     return;
   }
 
-  log.info('ensureJobsSubscription', 'subscribe', { userId });
-  void useRemixStore
+  log.info('ensureRemixJobConsumer', 'subscribe remix swap jobs', { userId });
+  remixJobConsumerUnsub = useBackgroundJobsStore
     .getState()
-    .syncJobsFromServer(userId)
-    .catch((err) => {
-      log.warn('ensureJobsSubscription', 'initial sync failed', {
-        userId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
-
-  const sub = subscribeBackgroundJobs(
-    userId,
-    (event) => useRemixStore.getState().applyServerEvent(event),
-    () => {
-      void useRemixStore.getState().syncJobsFromServer(userId);
-    },
-  );
-  activeJobSubscription = { userId, sub };
+    .subscribeJobs({ types: [...REMIX_SWAP_TYPES] }, (event) =>
+      useRemixStore.getState().onRemixJobEvent(event),
+    );
 }
 
 // Listen for auth user changes (auth-store doesn't use subscribeWithSelector
 // so we read full state and check userId-changed manually).
 useAuthStore.subscribe((state) => {
-  ensureJobsSubscription(state.user?.id ?? null);
+  ensureRemixJobConsumer(state.user?.id ?? null);
 });
 
-// Kick off subscription if auth is already initialized at module load time.
+// Register if auth is already initialized at module load time.
 {
   const initialUserId = useAuthStore.getState().user?.id ?? null;
   if (initialUserId) {
-    ensureJobsSubscription(initialUserId);
+    ensureRemixJobConsumer(initialUserId);
   }
 }
 

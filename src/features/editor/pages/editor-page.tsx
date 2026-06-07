@@ -33,7 +33,6 @@ import { InteractionLayerProvider } from '../contexts';
 import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
-import { useRemixJobNotifications } from '../hooks/use-remix-job-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useFlushOnHidden } from '../hooks/use-flush-on-hidden';
 
@@ -66,11 +65,10 @@ export function EditorPage() {
   const { setCurrentStep, resetSettings, rememberLanguageForBook, rememberStepForBook } =
     useEditorSettingsActions();
 
-  // Global toast notifications for background image tasks
+  // Global toast notifications for background image tasks (ADR-017 client queue —
+  // distinct from background_jobs). Remix/export/render/transcode job toasts now
+  // live in the app-root useJobNotifications() (ADR-037).
   useImageTaskNotifications();
-
-  // Global toast notifications for remix audio/image swap jobs
-  useRemixJobNotifications();
 
   // Local UI state
   const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('doc');

@@ -323,7 +323,6 @@ export const useRemixActions = () =>
       cancelJob: s.cancelJob,
       dismissJob: s.dismissJob,
       syncFromServer: s.syncFromServer,
-      syncJobsFromServer: s.syncJobsFromServer,
       patchRemixIllustration: s.patchRemixIllustration,
       patchRemixCropSheets: s.patchRemixCropSheets,
       startMixSwap: s.startMixSwap,

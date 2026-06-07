@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { mapSupabaseUser } from '@/types/auth';
 import { useBookStore } from './book-store';
 import { useSnapshotStore } from './snapshot-store';
+import { useBackgroundJobsStore } from './background-jobs-store';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'AuthStore');
@@ -99,6 +100,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
     // Clear all data stores
     useBookStore.getState().clearBooks();
     useSnapshotStore.getState().resetSnapshot();
+    // Close the unified background-jobs channel (ADR-037 app-root singleton).
+    useBackgroundJobsStore.getState().teardown();
 
     log.info('logout', 'done');
     set({ user: null, session: null, isAuthenticated: false });

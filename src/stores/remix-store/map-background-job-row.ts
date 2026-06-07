@@ -2,7 +2,8 @@
 // row (snake_case, DB enum) to `RemixJob` camelCase domain shape consumed by
 // the store + selectors.
 
-import type { BackgroundJobRow, RemixJob, RemixJobPhase } from '@/types/remix';
+import type { BackgroundJobRow, RemixJob, RemixJobPhase, RemixJobResult } from '@/types/remix';
+import type { BackgroundJob } from '@/stores/background-jobs-store';
 
 const TERMINAL_STATUSES = new Set<RemixJob['status']>([
   'completed',
@@ -59,5 +60,38 @@ export function mapRowToJob(row: BackgroundJobRow): RemixJob {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     completedAt: TERMINAL_STATUSES.has(row.status) ? row.updated_at : undefined,
+  };
+}
+
+/** Map a camel-cased `BackgroundJob` (from the unified BackgroundJobsStore) →
+ *  `RemixJob`. ADR-037 consumer adapter — avoids a snake-case round-trip. Only
+ *  ever receives the 3 remix swap types (the consumer predicate filters), so the
+ *  `'audio'` fallback never matches a foreign type. */
+export function mapBackgroundJobToRemixJob(job: BackgroundJob): RemixJob {
+  const phase: RemixJobPhase = JOB_TYPE_TO_PHASE[job.type] ?? 'audio';
+  const params = job.params ?? {};
+
+  const triggeredBy = params.triggered_by === 'auto-create' ? 'auto-create' : 'user';
+  const remixId = typeof params.remix_id === 'string' ? params.remix_id : '';
+  const characterKey =
+    typeof params.character_key === 'string' ? params.character_key : undefined;
+  const batchId = typeof params.batch_id === 'string' ? params.batch_id : undefined;
+
+  return {
+    id: job.id,
+    remixId,
+    phase,
+    characterKey,
+    batchId,
+    triggeredBy,
+    status: job.status,
+    currentStep: job.currentStep,
+    totalSteps: job.totalSteps,
+    stepDetails: (job.stepDetails as RemixJob['stepDetails']) ?? undefined,
+    result: (job.result as RemixJobResult | null) ?? undefined,
+    cancelRequested: job.cancelRequested,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    completedAt: TERMINAL_STATUSES.has(job.status) ? job.updatedAt : undefined,
   };
 }

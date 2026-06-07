@@ -11,11 +11,11 @@ import type {
   RemixConfig,
   RemixCropSheet,
   RemixJob,
-  RemixServerEvent,
   RemixSpread,
   StartMixSwapParams,
 } from '@/types/remix';
 import type { Distribution } from '@/types/editor';
+import type { JobEvent } from '@/stores/background-jobs-store';
 
 // ── Patch shape exposed by job/runner helpers ────────────────────────────────
 // Discriminated union — `patch` (legacy single-sheet merge) vs `replaceAll`
@@ -194,8 +194,11 @@ export interface RemixSyncSlice {
   syncFromServer: (snapshotId: string) => Promise<void>;
   clearAll: () => void;
 
-  applyServerEvent: (event: RemixServerEvent) => void;
-  syncJobsFromServer: (userId: string) => Promise<void>;
+  /** ADR-037 consumer hook — receives every remix-swap job event from the
+   *  unified BackgroundJobsStore (predicate-filtered to the 3 remix types).
+   *  Derives the `jobs[]` projection (upsert + prune lineage) and fires a
+   *  targeted `refetchRemix` on the terminal transition. */
+  onRemixJobEvent: (event: JobEvent) => void;
   /** Targeted single-remix refetch. Triggered when a background job for
    *  that remix transitions to a terminal status — DB row may have new
    *  illustration/audio chunk URLs the local copy doesn't reflect. */

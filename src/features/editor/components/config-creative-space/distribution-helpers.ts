@@ -81,7 +81,11 @@ const VIDEO_TYPES: VideoType[] = ['classic', 'dynamic'];
 
 export interface ChannelCapability {
   exportableLeafKeys: string[]; // leaves actually export-able in v1
-  disabledLeafKeys: string[]; // checkbox is_enabled disabled (no toggle)
+  /** Leaves whose is_enabled checkbox + Export button are LOCKED (no user
+   *  trigger). ADR-037: this gates ONLY the toggle/export controls — the status
+   *  badge (EXPORTING → UPDATED) still renders for these leaves, so the
+   *  auto-chained transcode (08) progress on sd/hd/fhd is visible. */
+  disabledLeafKeys: string[];
 }
 
 // Single scope-widening point: add a leafKey to exportableLeafKeys (+ wire its
@@ -90,9 +94,10 @@ export const V1_EXPORT_CAPABILITY: Record<ChannelKey, ChannelCapability> = {
   player: { exportableLeafKeys: [], disabledLeafKeys: [] },
   digital: { exportableLeafKeys: [], disabledLeafKeys: [] },
   printer: { exportableLeafKeys: ['300dpi'], disabledLeafKeys: ['600dpi'] },
-  // v1: only QHD (1440p) renders via job 07 (render_book_video); SD/HD/FHD will
-  // be filled by a transcode job (ffmpeg downscale from QHD master) in a later
-  // phase — checkboxes locked until then.
+  // v1: only QHD (1440p) renders via job 07 (render_book_video); SD/HD/FHD are
+  // auto-filled by the chained transcode job 08 (ffmpeg downscale from the QHD
+  // master, ADR-037). Their checkboxes/Export stay LOCKED (no manual trigger),
+  // but their status badge still renders live while 08 runs.
   video: { exportableLeafKeys: ['qhd'], disabledLeafKeys: ['sd', 'hd', 'fhd'] },
 };
 

@@ -1,43 +1,59 @@
-// use-export-job-watcher.ts — Standalone Supabase realtime watcher for
-// distribution background jobs (`export_pdf` + `render_book_video`, book +
-// remix). Independent of RemixStore's background_jobs subscription (Validation
-// S1 decision — no coupling, active even when no remix exists). Mounted by the
-// Distribution section root.
+// use-export-job-watcher.ts — Distribution background-job watcher. CONSUMER of
+// the unified BackgroundJobsStore (ADR-037): no own channel/reheal/poll — it
+// subscribes to EXPORT_TYPES (export_pdf + render_book_video + transcode_video)
+// via `subscribeJobs` and refetches the affected source's distribution so the
+// EXPORTING → UPDATED badge surfaces.
 //
-// On a watched job transitioning to `running` (first time) → refetch the source
-// distribution so the EXPORTING badge appears; on terminal (completed/failed/
-// cancelled) → refetch again to pull the job handler's updated/failed/outdated
-// leaf. No polling — backend reaper guards permanent stuck (spec 06/07 finalize).
+// Auto-chain (07 render → 08 transcode): both jobs land on the same single
+// channel (08 inherits the owner's user_id). On 07 terminal we refetch, which
+// pulls sd/hd/fhd leaves now carrying job_id=08 ('exporting') into the registry;
+// 08's own events then resolve to the same source and refetch again. No
+// re-subscribe, no extra user action.
+//
+// Drive-badge model = refetch-once (Validation S1): first running event per job
+// → one refetch (parity with the legacy seenRunning gate); terminal → debounced
+// refetch + registry rebuild. Overlay (0-refetch via step_details) is deferred.
 
 import * as React from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '@/apis/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { useBookActions } from '@/stores/book-store';
-import { useRemixActions } from '@/stores/remix-store';
-import type { BackgroundJobRow } from '@/types/remix';
+import { useBookActions, useBookStore } from '@/stores/book-store';
+import { useRemixActions, useRemixStore } from '@/stores/remix-store';
+import {
+  EXPORT_TYPES,
+  TERMINAL_STATUSES,
+  useBackgroundJobsStore,
+  type JobEvent,
+} from '@/stores/background-jobs-store';
+import { coalesceDistribution } from '@/features/editor/components/config-creative-space/distribution-helpers';
+import {
+  rebuildRegistryForSource,
+  resolveSource,
+  type LeafRef,
+  type ResolvedSource,
+} from './export-job-registry';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'ExportJobWatcher');
 
-const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
-const WATCHED_TYPES = new Set(['export_pdf', 'render_book_video']);
+const EXPORT_TYPE_SET = new Set<string>(EXPORT_TYPES);
+const TERMINAL_DEBOUNCE_MS = 250;
+const REBUILD_DELAY_MS = 300; // let the refetch land before rescanning leaves
 
 interface ExportJobWatcherArgs {
   bookId: string | null;
   remixIds: string[];
 }
 
-/** Subscribe to `background_jobs` (type=export_pdf) for the current user; refetch
- *  the affected source's distribution on running/terminal transitions. */
+/** Subscribe to distribution export jobs; refetch the affected source on
+ *  running/terminal transitions + self-heal stuck EXPORTING leaves on mount. */
 export function useExportJobWatcher({ bookId, remixIds }: ExportJobWatcherArgs): void {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const { refetchBookDistribution } = useBookActions();
   const { refetchRemix } = useRemixActions();
 
-  // Keep latest target ids + actions in refs so the channel effect only
-  // re-subscribes on userId change (not on every remix-list / action ref churn).
-  // Assign in an effect (NOT render body) — repo lints ref writes in render.
+  // Latest targets + actions in refs so the subscription effect only re-runs on
+  // userId change (not on remix-list / action ref churn). Assign in an effect —
+  // the repo lints ref writes in the render body.
   const bookIdRef = React.useRef(bookId);
   const remixIdsRef = React.useRef(remixIds);
   const refetchBookRef = React.useRef(refetchBookDistribution);
@@ -54,132 +70,106 @@ export function useExportJobWatcher({ bookId, remixIds }: ExportJobWatcherArgs):
       log.debug('subscribe', 'no user — skip');
       return;
     }
+    log.info('subscribe', 'open distribution job watcher (consumer)', { userId });
 
-    log.info('subscribe', 'open distribution job watcher', { userId });
-    const seenRunning = new Set<string>();
+    const registry = new Map<string, LeafRef[]>();
+    const refetchedForJob = new Set<string>(); // first-running refetch gate (parity seenRunning)
+    const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-    const handle = (row: BackgroundJobRow) => {
-      if (!WATCHED_TYPES.has(row.type)) return;
-      if (!row.params || typeof row.params !== 'object') return; // malformed row guard
-      const params = row.params as {
-        source?: 'book' | 'remix';
-        book_id?: string;
-        remix_id?: string;
-      };
-      const source = params.source ?? (params.remix_id ? 'remix' : 'book');
-      const isRunning = row.status === 'running';
-      const isTerminal = TERMINAL.has(row.status);
-
-      // First running event → show EXPORTING; terminal → pull final leaf. Skip
-      // repeated running step-updates (only the first per job triggers refetch).
-      if (isRunning) {
-        if (seenRunning.has(row.id)) return;
-        seenRunning.add(row.id);
-      } else if (!isTerminal) {
-        return; // queued — leaf not written yet
-      }
-
-      if (source === 'remix') {
-        const remixId = params.remix_id;
-        if (!remixId || !remixIdsRef.current.includes(remixId)) return;
-        log.info('handle', 'refetch remix distribution', {
-          remixId,
-          jobId: row.id,
-          status: row.status,
-        });
-        void refetchRemixRef.current(remixId);
-      } else {
-        const targetBook = bookIdRef.current;
-        if (!targetBook || (params.book_id && params.book_id !== targetBook)) return;
-        log.info('handle', 'refetch book distribution', {
-          bookId: targetBook,
-          jobId: row.id,
-          status: row.status,
-        });
-        void refetchBookRef.current(targetBook);
-      }
+    const refetchSource = (src: ResolvedSource) => {
+      if (src.kind === 'remix') void refetchRemixRef.current(src.id);
+      else void refetchBookRef.current(src.id);
     };
 
-    // Self-healing subscribe loop. Realtime can drop the channel on auth-token
-    // rotation, network blip, or server-side timeout WITHOUT the React effect
-    // tearing down. The status callback is our only hook into that path; on
-    // terminal statuses we rebuild as long as the effect owner hasn't been
-    // cancelled. Auth is set BEFORE channel.subscribe() to avoid first-attempt
-    // TIMED_OUT (JOIN message races setAuth on the connection).
-    let cancelled = false;
-    let channel: RealtimeChannel | null = null;
-    let rehealTimer: ReturnType<typeof setTimeout> | null = null;
-    let rehealAttempts = 0;
-    const REHEAL_BASE_MS = 1000;
-    const REHEAL_MAX_MS = 15_000;
-
-    const subscribe = async () => {
-      if (cancelled) return;
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (cancelled) return;
-        const token = data.session?.access_token;
-        if (token) supabase.realtime.setAuth(token);
-      } catch (err) {
-        log.warn('subscribe', 'realtime auth set failed', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      if (cancelled) return;
-
-      log.info('subscribe', 'open distribution job watcher', { userId, attempt: rehealAttempts });
-      channel = supabase
-        .channel(`export-jobs-${userId}`)
-        .on(
-          'postgres_changes' as never,
-          {
-            event: '*',
-            schema: 'public',
-            table: 'background_jobs',
-            filter: `user_id=eq.${userId}`,
-          },
-          (payload: { new?: BackgroundJobRow }) => {
-            if (cancelled) return;
-            const row = payload.new;
-            if (row) handle(row);
-          },
-        )
-        .subscribe((status, err) => {
-          log.debug('subscribe', 'status', {
-            userId,
-            status,
-            err: err?.message ?? null,
-          });
-          if (cancelled) return;
-          if (status === 'SUBSCRIBED') {
-            rehealAttempts = 0;
-            return;
-          }
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            const dead = channel;
-            channel = null;
-            if (dead) void supabase.removeChannel(dead);
-            if (rehealTimer) clearTimeout(rehealTimer);
-            rehealAttempts += 1;
-            const delay = Math.min(REHEAL_BASE_MS * 2 ** (rehealAttempts - 1), REHEAL_MAX_MS);
-            log.warn('subscribe', 'channel down, rehealing', {
-              userId,
-              status,
-              attempt: rehealAttempts,
-              delayMs: delay,
-            });
-            rehealTimer = setTimeout(() => void subscribe(), delay);
-          }
-        });
+    const refetchDebounced = (src: ResolvedSource) => {
+      const key = `${src.kind}:${src.id}`;
+      const existing = debounceTimers.get(key);
+      if (existing) clearTimeout(existing);
+      debounceTimers.set(
+        key,
+        setTimeout(() => {
+          debounceTimers.delete(key);
+          refetchSource(src);
+          // Rebuild the registry after the refetch has had time to land so the
+          // newest leaf statuses (incl. auto-chain 08 leaves) are captured.
+          setTimeout(() => rebuildRegistry(src), REBUILD_DELAY_MS);
+        }, TERMINAL_DEBOUNCE_MS),
+      );
     };
 
-    void subscribe();
+    const distributionFor = (src: ResolvedSource) => {
+      if (src.kind === 'book') {
+        return coalesceDistribution(useBookStore.getState().currentBook?.distribution);
+      }
+      const remix = useRemixStore.getState().remixes.find((r) => r.id === src.id);
+      return coalesceDistribution(remix?.distribution);
+    };
+
+    const rebuildRegistry = (src: ResolvedSource) => {
+      rebuildRegistryForSource(registry, src.kind, src.id, distributionFor(src));
+    };
+
+    const onJobEvent = (e: JobEvent) => {
+      const src = resolveSource(e.job, bookIdRef.current, remixIdsRef.current);
+      if (!src) return;
+
+      if (e.transition === 'terminal') {
+        log.info('onJobEvent', 'terminal → refetch source', {
+          jobId: e.job.id,
+          type: e.job.type,
+          src,
+        });
+        refetchDebounced(src);
+        return;
+      }
+
+      // Non-terminal drive badge: refetch once on the first running observation
+      // per job (queued is skipped — leaf not written yet). Overlay deferred.
+      if (e.job.status !== 'running') return;
+      if (refetchedForJob.has(e.job.id)) return;
+      refetchedForJob.add(e.job.id);
+      log.info('onJobEvent', 'first running → refetch source', {
+        jobId: e.job.id,
+        type: e.job.type,
+        src,
+      });
+      refetchSource(src);
+      setTimeout(() => rebuildRegistry(src), REBUILD_DELAY_MS);
+    };
+
+    const unsubscribe = useBackgroundJobsStore
+      .getState()
+      .subscribeJobs({ types: [...EXPORT_TYPES] }, onJobEvent);
+
+    // Mount reconcile (Validation S1): the store already topped-up jobsById, so
+    // seed the registry from current distributions + self-heal any job that went
+    // terminal while the user was away (leaf stuck 'exporting').
+    const seedSources: ResolvedSource[] = [];
+    if (bookIdRef.current) seedSources.push({ kind: 'book', id: bookIdRef.current });
+    for (const id of remixIdsRef.current) seedSources.push({ kind: 'remix', id });
+    for (const src of seedSources) rebuildRegistry(src);
+
+    const jobsById = useBackgroundJobsStore.getState().jobsById;
+    for (const job of Object.values(jobsById)) {
+      if (!EXPORT_TYPE_SET.has(job.type)) continue;
+      const src = resolveSource(job, bookIdRef.current, remixIdsRef.current);
+      if (!src) continue;
+      if (TERMINAL_STATUSES.has(job.status)) {
+        log.info('mountReconcile', 'terminal-while-away → self-heal refetch', {
+          jobId: job.id,
+          src,
+        });
+        refetchDebounced(src);
+      }
+    }
 
     return () => {
-      cancelled = true;
       log.info('subscribe', 'close distribution job watcher', { userId });
-      if (rehealTimer) clearTimeout(rehealTimer);
-      if (channel) void supabase.removeChannel(channel);
+      unsubscribe();
+      for (const t of debounceTimers.values()) clearTimeout(t);
+      debounceTimers.clear();
+      registry.clear();
+      refetchedForJob.clear();
     };
   }, [userId]);
 }
