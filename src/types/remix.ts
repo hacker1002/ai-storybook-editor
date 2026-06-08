@@ -23,9 +23,9 @@ export type {
   CharacterRemixType,
 } from './editor';
 
-// ── CropSheet (remix variant) ────────────────────────────────────────────────
-// Base CropSheet from prop-types.ts has `{title, image_url, crops[]}`.
-// Remix variant adds `swap_results[]` to record AI-driven swap output.
+// ── RemixCropSheet (batch-level) ─────────────────────────────────────────────
+// Crop sheet carried by a batch (RemixMix). Adds `swap_results[]` to record
+// AI-driven swap output and `crops[]` (CropEntry — multi-subject tags).
 
 // ── Swap modal tabs (rev2) ───────────────────────────────────────────────────
 /** Top-level tab of SwapCropSheetModal (rev2 — replaces Characters/Props/Mixes). */
@@ -116,13 +116,11 @@ export type RemixPropVariant = PropVariant & {
   visual_swap_url?: string | null;
 };
 
-export type RemixCharacter = Omit<Character, 'crop_sheets' | 'variants'> & {
-  crop_sheets: RemixCropSheet[];
+export type RemixCharacter = Omit<Character, 'variants'> & {
   variants: RemixCharacterVariant[];
 };
 
-export type RemixProp = Omit<Prop, 'crop_sheets' | 'sounds' | 'variants'> & {
-  crop_sheets: RemixCropSheet[];
+export type RemixProp = Omit<Prop, 'sounds' | 'variants'> & {
   variants: RemixPropVariant[];
 };
 
@@ -298,15 +296,14 @@ export interface RemixRow {
 // failed|cancelled). `partial` is a derived UI state (status='completed' AND
 // result.errors.length > 0). Spec: ai-storybook-design/component/stores/remix-store.md §2.
 
-// `character_swap` (renamed from `entity_swap`, design 2026-05-22) = bulk swap
-// of every crop sheet × variant of ONE character via the character-swap job.
-// Prop/mix swap will ship later under distinct phases (`prop_swap`/`mix_swap`)
-// — keep the type→phase map (map-background-job-row.ts) extensible, not hardcoded.
-// rev2: `remix_mix_swap` = batch-level swap (api/jobs/05). `character_swap` kept
-// until Phase 10 prunes its callers (keep union wide to reduce churn mid-chain).
+// `remix_mix_swap` = batch-level swap (api/jobs/05) — the live swap phase.
 // NOTE: `image` phase removed (2026-05-30) — Inject is now a synchronous
 // client-side finalize (no background job). See InjectResult / injectFinalCrops.
-export type RemixJobPhase = 'audio' | 'character_swap' | 'remix_mix_swap';
+// NOTE: `character_swap` phase removed (2026-06-08) — job type
+// `remix_character_swap` (api/jobs/04) deleted server-side, superseded by the
+// `remix_mix_swap` batch model. The synchronous visual character swap
+// (`base_image_url`, run-character-swap.ts) is UNRELATED and not a job phase.
+export type RemixJobPhase = 'audio' | 'remix_mix_swap';
 
 export type RemixJobStatus =
   | 'queued'
@@ -354,9 +351,8 @@ export interface RemixJob {
   phase: RemixJobPhase;
   triggeredBy: 'auto-create' | 'user';
   status: RemixJobStatus;
-  /** Set for `character_swap` jobs only — mirrors `params.character_key`. Lets
-   *  selectors match the running swap to its character row. Undefined for
-   *  audio/image phases. */
+  /** Mirrors `params.character_key` when present. Lets selectors fold the swap
+   *  lineage by character (see slice-helpers.ts). Undefined for audio jobs. */
   characterKey?: string;
   /** Set for `remix_mix_swap` jobs only — mirrors `params.batch_id`. Lets
    *  selectors match the running swap to its batch. Undefined otherwise. */
@@ -393,7 +389,7 @@ export type AudioJobBadgeState =
 /** Raw shape of public.background_jobs row returned by Supabase select + realtime payload. */
 export interface BackgroundJobRow {
   id: string;
-  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_character_swap' | 'remix_mix_swap' | string;
+  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_mix_swap' | string;
   user_id: string;
   book_id: string | null;
   status: RemixJobStatus;
@@ -404,7 +400,7 @@ export interface BackgroundJobRow {
   params: {
     remix_id: string;
     triggered_by?: 'auto-create' | 'user';
-    /** Present on `remix_character_swap` rows — the swapped character key. */
+    /** Present on swap-job rows that carry a single character key. */
     character_key?: string;
     /** Present on `remix_mix_swap` rows — the swapped batch id (api/jobs/05). */
     batch_id?: string;

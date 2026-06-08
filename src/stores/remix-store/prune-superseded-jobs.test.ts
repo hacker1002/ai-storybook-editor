@@ -11,7 +11,7 @@ function job(overrides: Partial<RemixJob> = {}): RemixJob {
   return {
     id: 'j1',
     remixId: 'r1',
-    phase: 'character_swap',
+    phase: 'remix_mix_swap',
     characterKey: 'leela',
     triggeredBy: 'user',
     status: 'completed' as RemixJobStatus,

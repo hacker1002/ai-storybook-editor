@@ -94,8 +94,8 @@ export interface EnqueueMixSwapSkippedData {
 export interface EnqueueMixSwapDedupedData {
   job_id: string;
   status: 'queued' | 'running';
-  /** Active job may be a char-swap (cross-type dedup — strictly 1 swap/remix). */
-  type: 'remix_mix_swap' | 'remix_character_swap';
+  /** Strictly 1 active swap/remix — dedup target is always the mix-swap job. */
+  type: 'remix_mix_swap';
   remix_id: string;
   active_swap_key: string;
   deduped: true;

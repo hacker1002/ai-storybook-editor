@@ -59,7 +59,6 @@ function buildNewProp(name: string, key: string, order: number): Prop {
       },
     ],
     sounds: [],
-    crop_sheets: [],
   };
 }
 

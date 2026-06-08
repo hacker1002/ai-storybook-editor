@@ -70,8 +70,8 @@ interface RemixOpts {
 function makeRemix(o: RemixOpts = {}): Remix {
   return {
     id: 'remix-1',
-    characters: (o.charKeys ?? []).map((k) => ({ key: k, name: k, crop_sheets: [], variants: [] })),
-    props: (o.propKeys ?? []).map((k) => ({ key: k, name: k, crop_sheets: [], variants: [] })),
+    characters: (o.charKeys ?? []).map((k) => ({ key: k, name: k, variants: [] })),
+    props: (o.propKeys ?? []).map((k) => ({ key: k, name: k, variants: [] })),
     illustration: { spreads: o.spreads ?? [], sections: [] },
   } as unknown as Remix;
 }

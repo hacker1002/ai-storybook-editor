@@ -83,7 +83,6 @@ export const ACTIVE_STATUSES: ReadonlySet<JobStatus> = new Set(['queued', 'runni
  *  render/transcode/pdf never leak into the remix `jobs[]` (phantom-job fix). */
 export const REMIX_SWAP_TYPES = [
   'remix_audio_swap',
-  'remix_character_swap',
   'remix_mix_swap',
 ] as const;
 

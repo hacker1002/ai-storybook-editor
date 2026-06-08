@@ -1,6 +1,6 @@
 // character-types.ts - TypeScript interfaces for Character entities (matches DB schema)
 
-import type { Illustration, ImageReference, CropSheet } from './prop-types';
+import type { Illustration, ImageReference } from './prop-types';
 
 /** 0 = base variant, 1 = user-created variant */
 export type CharacterVariantType = 0 | 1;
@@ -80,5 +80,4 @@ export interface Character {
   personality: CharacterPersonality;
   variants: CharacterVariant[];
   voice_setting: CharacterVoiceSetting | null;
-  crop_sheets: CropSheet[];
 }

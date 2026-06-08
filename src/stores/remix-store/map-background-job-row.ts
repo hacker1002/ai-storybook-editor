@@ -12,13 +12,13 @@ const TERMINAL_STATUSES = new Set<RemixJob['status']>([
 ]);
 
 /** Extensible job-type → phase lookup. Add a new entry per job type — do NOT
- *  reintroduce if/else. Prop/mix swap will ship under distinct types
- *  (`remix_prop_swap`/`remix_mix_swap`) → one new line each. Unknown types fall
- *  back to `'audio'` (legacy default). NOTE: `remix_entity_swap` is intentionally
- *  ABSENT — that type was never enabled in prod (Validation S1, no backward-compat). */
+ *  reintroduce if/else. Unknown types fall back to `'audio'` (legacy default).
+ *  NOTE: `remix_entity_swap` + `remix_character_swap` are intentionally ABSENT —
+ *  entity-swap was never enabled in prod; character-swap (api/jobs/04) was
+ *  deleted server-side, superseded by `remix_mix_swap` (Validation S1, no
+ *  backward-compat). */
 const JOB_TYPE_TO_PHASE: Record<string, RemixJobPhase> = {
   remix_audio_swap: 'audio',
-  remix_character_swap: 'character_swap',
   remix_mix_swap: 'remix_mix_swap',
 };
 
@@ -32,8 +32,8 @@ export function mapRowToJob(row: BackgroundJobRow): RemixJob {
   const remixId =
     typeof row.params?.remix_id === 'string' ? row.params.remix_id : '';
 
-  // Surface `params.character_key` onto the domain shape for character_swap
-  // jobs so selectors can match the running swap to its character row.
+  // Surface `params.character_key` onto the domain shape when present so
+  // selectors can fold the swap lineage by character.
   const characterKey =
     typeof row.params?.character_key === 'string'
       ? row.params.character_key

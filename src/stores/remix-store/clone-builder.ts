@@ -140,11 +140,8 @@ export function buildRemixClonePayload(
     .filter((c) => enabledCharKeys.has(c.key))
     .map((c) => {
       const cloned = structuredClone(c) as Character;
-      // rev2: crops live on the batch (mixes[]), not on the entity. Entity
-      // `crop_sheets` is an empty array (kept for backward-compat type shape).
-      const { crop_sheets: _unused, ...rest } = cloned;
-      void _unused;
-      const remixChar = { ...rest, crop_sheets: [] } as RemixCharacter;
+      // rev2: crops live on the batch (mixes[]), not on the entity.
+      const remixChar = { ...cloned } as RemixCharacter;
 
       // Live-swap result: copy config.characters[].base_image_url onto the base
       // variant (type=0) as `visual_swap_url` (Option A — Validation S1b). The
@@ -163,11 +160,10 @@ export function buildRemixClonePayload(
     .filter((p) => enabledPropKeys.has(p.key))
     .map((p) => {
       const cloned = structuredClone(p) as Prop;
-      const { crop_sheets: _cs, sounds: _sounds, ...rest } = cloned;
-      void _cs;
+      const { sounds: _sounds, ...rest } = cloned;
       void _sounds;
-      // rev2: entity crop_sheets empty — crops live on the batch.
-      return { ...rest, crop_sheets: [] } as RemixProp;
+      // rev2: crops live on the batch (mixes[]), not on the entity.
+      return { ...rest } as RemixProp;
     });
 
   const illustration = cloneIllustration(input.illustration);

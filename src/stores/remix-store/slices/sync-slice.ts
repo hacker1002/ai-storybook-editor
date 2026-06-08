@@ -28,8 +28,8 @@ const log = createLogger('Store', 'RemixStore');
 
 /** Detect a remix still on the legacy (pre-batch) shape. Idempotent guard for
  *  `migrateLegacyRemixToBatch` — true when there's no batch, a batch is missing
- *  its uuid `id`, a batch still carries the legacy `keys[]` lineup, or crops are
- *  still attached to entity `crop_sheets[]`. */
+ *  its uuid `id`, or a batch still carries the legacy `keys[]` lineup.
+ *  (Per-entity `crop_sheets[]` removed 2026-05-26 — no longer a migration trigger.) */
 function needsBatchMigration(remix: Remix): boolean {
   if (remix.mixes.length === 0) return true;
   if (
@@ -39,10 +39,7 @@ function needsBatchMigration(remix: Remix): boolean {
   ) {
     return true;
   }
-  const hasEntityCrops = [...remix.characters, ...remix.props].some((e) =>
-    (e.crop_sheets ?? []).some((s) => (s.crops ?? []).length > 0),
-  );
-  return hasEntityCrops;
+  return false;
 }
 
 export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
@@ -242,8 +239,8 @@ export const createSyncSlice: RemixSliceCreator<RemixSyncSlice> = (
           ? {
               ...r,
               mixes: [batch],
-              characters: r.characters.map((c) => ({ ...c, crop_sheets: [] })),
-              props: r.props.map((p) => ({ ...p, crop_sheets: [] })),
+              characters: r.characters,
+              props: r.props,
             }
           : r,
       ),

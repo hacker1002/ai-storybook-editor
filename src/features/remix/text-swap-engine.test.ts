@@ -104,7 +104,6 @@ function makeRemixChar(key: string, name: string): RemixCharacter {
     name,
     description: '',
     variants: [],
-    crop_sheets: [],
   } as unknown as RemixCharacter;
 }
 

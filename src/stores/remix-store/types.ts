@@ -24,18 +24,21 @@ import type { JobEvent } from '@/stores/background-jobs-store';
 // be expressed as N independent index-based patches (sheet count + ordering
 // both change atomically).
 
+// rev2: crop sheets live ONLY on the batch (mix); per-entity crop_sheets
+// removed (2026-05-26). `entityType` is therefore always `'mix'` and
+// `entityKey` is the batch uuid (`mixes[].id`).
 export type CropSheetUpdate =
   | {
       kind: 'patch';
-      entityType: 'character' | 'prop' | 'mix';
+      entityType: 'mix';
       entityKey: string;
-      /** Index into entity.crop_sheets[]. */
+      /** Index into batch.crop_sheets[]. */
       sheetIndex: number;
       patch: Partial<RemixCropSheet>;
     }
   | {
       kind: 'replaceAll';
-      entityType: 'character' | 'prop' | 'mix';
+      entityType: 'mix';
       entityKey: string;
       sheets: RemixCropSheet[];
     };

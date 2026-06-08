@@ -48,11 +48,9 @@ function remixCopy(job: BackgroundJob): ToastCopy {
   const label =
     job.type === 'remix_audio_swap'
       ? 'Audio'
-      : job.type === 'remix_character_swap'
-        ? 'Swap character'
-        : job.type === 'remix_mix_swap'
-          ? 'Batch swap'
-          : 'Job';
+      : job.type === 'remix_mix_swap'
+        ? 'Batch swap'
+        : 'Job';
 
   const result = (job.result ?? {}) as { errors?: { message?: string }[]; failed_sheets?: number };
   const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;

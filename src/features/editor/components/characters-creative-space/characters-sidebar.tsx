@@ -81,7 +81,6 @@ function buildNewCharacter(name: string, key: string, order: number): Character 
       },
     ],
     voice_setting: null,
-    crop_sheets: [],
   };
 }
 

@@ -438,9 +438,6 @@ export const useSnapshotActions = () =>
       addPropSound: s.addPropSound,
       updatePropSound: s.updatePropSound,
       deletePropSound: s.deletePropSound,
-      addPropCropSheet: s.addPropCropSheet,
-      updatePropCropSheet: s.updatePropCropSheet,
-      deletePropCropSheet: s.deletePropCropSheet,
       // Characters
       setCharacters: s.setCharacters,
       addCharacter: s.addCharacter,
@@ -451,9 +448,6 @@ export const useSnapshotActions = () =>
       updateCharacterVariant: s.updateCharacterVariant,
       deleteCharacterVariant: s.deleteCharacterVariant,
       updateCharacterVoiceSetting: s.updateCharacterVoiceSetting,
-      addCharacterCropSheet: s.addCharacterCropSheet,
-      updateCharacterCropSheet: s.updateCharacterCropSheet,
-      deleteCharacterCropSheet: s.deleteCharacterCropSheet,
       // Stages
       setStages: s.setStages,
       addStage: s.addStage,

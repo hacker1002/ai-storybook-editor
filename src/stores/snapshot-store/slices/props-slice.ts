@@ -136,36 +136,4 @@ export const createPropsSlice: StateCreator<
         state.sync.isDirty = true;
       }
     }),
-
-  // --- Nested: CropSheets (index-based like RetouchAnimation) ---
-
-  addPropCropSheet: (propKey, cropSheet) =>
-    set((state) => {
-      const prop = state.props.find((p) => p.key === propKey);
-      if (prop) {
-        log.debug('addPropCropSheet', 'add', { propKey, title: cropSheet.title });
-        prop.crop_sheets.push(cropSheet);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  updatePropCropSheet: (propKey, cropSheetIndex, updates) =>
-    set((state) => {
-      const prop = state.props.find((p) => p.key === propKey);
-      if (prop && cropSheetIndex >= 0 && cropSheetIndex < prop.crop_sheets.length) {
-        log.debug('updatePropCropSheet', 'update', { propKey, cropSheetIndex, fields: Object.keys(updates) });
-        Object.assign(prop.crop_sheets[cropSheetIndex], updates);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  deletePropCropSheet: (propKey, cropSheetIndex) =>
-    set((state) => {
-      const prop = state.props.find((p) => p.key === propKey);
-      if (prop && cropSheetIndex >= 0 && cropSheetIndex < prop.crop_sheets.length) {
-        log.debug('deletePropCropSheet', 'delete', { propKey, cropSheetIndex });
-        prop.crop_sheets.splice(cropSheetIndex, 1);
-        state.sync.isDirty = true;
-      }
-    }),
 });

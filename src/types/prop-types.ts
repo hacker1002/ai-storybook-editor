@@ -54,12 +54,6 @@ export interface Crop {
   'z-index': number;
 }
 
-export interface CropSheet {
-  title: string;
-  image_url: string;
-  crops: Crop[];
-}
-
 /** asset_categories row from DB. type: 1=human, 2=animal, 3=plant, 4=item */
 export interface AssetCategory {
   id: string;
@@ -76,5 +70,4 @@ export interface Prop {
   type: PropType;
   variants: PropVariant[];
   sounds: PropSound[];
-  crop_sheets: CropSheet[];
 }

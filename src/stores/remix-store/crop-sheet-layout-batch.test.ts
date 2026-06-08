@@ -105,7 +105,7 @@ function makeBatch(
 function makeRemix(mixes: RemixMix[]): Remix {
   return {
     id: 'remix-1',
-    characters: [{ key: 'c1', name: 'C1', crop_sheets: [], variants: [] }],
+    characters: [{ key: 'c1', name: 'C1', variants: [] }],
     props: [],
     mixes,
     illustration: {

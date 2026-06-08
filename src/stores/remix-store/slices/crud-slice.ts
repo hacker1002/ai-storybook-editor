@@ -230,20 +230,11 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
         if (r.id !== id) return r;
         const next = { ...r };
         for (const u of updates) {
-          if (u.entityType === 'character') {
-            next.characters = next.characters.map((c) =>
-              c.key === u.entityKey ? applySheetPatch(c, u) : c,
-            );
-          } else if (u.entityType === 'prop') {
-            next.props = next.props.map((p) =>
-              p.key === u.entityKey ? applySheetPatch(p, u) : p,
-            );
-          } else {
-            // rev2: batch (mix) identity is `id` (uuid). entityKey === batchId.
-            next.mixes = next.mixes.map((m) =>
-              m.id === u.entityKey ? applySheetPatch(m, u) : m,
-            );
-          }
+          // rev2: crop sheets live only on the batch (mix). Identity is `id`
+          // (uuid). entityKey === batchId.
+          next.mixes = next.mixes.map((m) =>
+            m.id === u.entityKey ? applySheetPatch(m, u) : m,
+          );
         }
         return next;
       }),

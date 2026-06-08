@@ -1,6 +1,6 @@
 // clone-builder.test.ts — Unit tests for buildRemixClonePayload pure transform.
-// rev2 (batch model, Phase 03): entities carry an EMPTY `crop_sheets: []`
-// (crops live on the batch now), and exactly ONE empty batch skeleton is
+// rev2 (batch model, Phase 03): crops live on the batch now (entities no longer
+// carry `crop_sheets`), and exactly ONE empty batch skeleton is
 // produced (`makeBatchSkeleton(0,'Batch 1')`). The crop population +
 // single-subject/mix enumeration that the legacy builder did is gone — crops
 // are filled by `computeCropSheets` (layout engine over `groupCropsForBatch`)
@@ -22,7 +22,6 @@ function makeChar(key: string, name: string): Character {
     name,
     description: '',
     variants: [],
-    crop_sheets: [],
   } as unknown as Character;
 }
 
@@ -32,7 +31,6 @@ function makeProp(key: string, name: string): Prop {
     name,
     description: '',
     variants: [],
-    crop_sheets: [],
     sounds: [],
   } as unknown as Prop;
 }
@@ -118,16 +116,15 @@ describe('buildRemixClonePayload — rev2 batch model', () => {
     expect(typeof r.mixes[0].id).toBe('string');
   });
 
-  it('clones enabled entities with an EMPTY crop_sheets[] (crops live on the batch)', () => {
+  it('clones enabled entities (crops live on the batch, not the entity)', () => {
     const r = build({
       characters: [makeChar('c1', 'Miu')],
       props: [makeProp('p1', 'Sword')],
     });
     expect(r.characters).toHaveLength(1);
     expect(r.characters[0].key).toBe('c1');
-    expect(r.characters[0].crop_sheets).toEqual([]);
     expect(r.props).toHaveLength(1);
-    expect(r.props[0].crop_sheets).toEqual([]);
+    expect(r.props[0].key).toBe('p1');
   });
 
   it('excludes config-disabled char/prop keys from the payload', () => {
@@ -174,7 +171,6 @@ function makeCharWithBaseVariant(key: string, name: string): Character {
       },
     ],
     voice_setting: null,
-    crop_sheets: [],
   } as unknown as Character;
 }
 

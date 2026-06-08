@@ -114,36 +114,4 @@ export const createCharactersSlice: StateCreator<
         state.sync.isDirty = true;
       }
     }),
-
-  // --- Nested: CropSheets (index-based) ---
-
-  addCharacterCropSheet: (key, cropSheet) =>
-    set((state) => {
-      const char = state.characters.find((c) => c.key === key);
-      if (char) {
-        log.debug('addCharacterCropSheet', 'add', { key, title: cropSheet.title });
-        char.crop_sheets.push(cropSheet);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  updateCharacterCropSheet: (key, cropSheetIndex, updates) =>
-    set((state) => {
-      const char = state.characters.find((c) => c.key === key);
-      if (char && cropSheetIndex >= 0 && cropSheetIndex < char.crop_sheets.length) {
-        log.debug('updateCharacterCropSheet', 'update', { key, cropSheetIndex, fields: Object.keys(updates) });
-        Object.assign(char.crop_sheets[cropSheetIndex], updates);
-        state.sync.isDirty = true;
-      }
-    }),
-
-  deleteCharacterCropSheet: (key, cropSheetIndex) =>
-    set((state) => {
-      const char = state.characters.find((c) => c.key === key);
-      if (char && cropSheetIndex >= 0 && cropSheetIndex < char.crop_sheets.length) {
-        log.debug('deleteCharacterCropSheet', 'delete', { key, cropSheetIndex });
-        char.crop_sheets.splice(cropSheetIndex, 1);
-        state.sync.isDirty = true;
-      }
-    }),
 });

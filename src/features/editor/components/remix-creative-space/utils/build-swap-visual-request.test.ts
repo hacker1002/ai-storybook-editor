@@ -56,7 +56,6 @@ const snapshotChars: Character[] = [
       },
     ],
     voice_setting: null,
-    crop_sheets: [],
   } as unknown as Character,
 ];
 
