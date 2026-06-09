@@ -29,12 +29,19 @@ const log = createLogger('Editor', 'SwapParametersSidebar');
 interface SwapParametersSidebarProps {
   params: SwapModelParams;
   onChange: (next: SwapModelParams) => void;
+  /** Active modal tab. On `variants` (sprite-swap, job 02) only the Swap Model
+   *  selector is rendered — Upscale Model + Scale are hidden (job 02 hardcodes
+   *  the model and has no upscale step; Validation S1). */
+  activeTab?: 'variants' | 'batches' | 'lotties';
 }
 
 export function SwapParametersSidebar({
   params,
   onChange,
+  activeTab,
 }: SwapParametersSidebarProps) {
+  // Variants (sprite) tab: model selector only.
+  const showUpscaleAndScale = activeTab !== 'variants';
   const handleSwapModelChange = (value: string) => {
     log.debug('handleSwapModelChange', 'swap model selected', { value });
     onChange({ ...params, swapModel: value });
@@ -93,42 +100,44 @@ export function SwapParametersSidebar({
         </Select>
       </ParamField>
 
-      <ParamField label="Upscale Model" htmlFor="upscale-model-select">
-        <Select
-          value={params.upscaleModel}
-          onValueChange={handleUpscaleModelChange}
-        >
-          <SelectTrigger
-            id="upscale-model-select"
-            className={DARK_TRIGGER_CLASS}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {UPSCALE_MODEL_OPTIONS.map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {opt}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </ParamField>
+      {showUpscaleAndScale && (
+        <>
+          <ParamField label="Upscale Model" htmlFor="upscale-model-select">
+            <Select
+              value={params.upscaleModel}
+              onValueChange={handleUpscaleModelChange}
+            >
+              <SelectTrigger
+                id="upscale-model-select"
+                className={DARK_TRIGGER_CLASS}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UPSCALE_MODEL_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ParamField>
 
-      <ParamField label="Scale">
-        {/* Dark stepper override (Phase 07): NumberStepper is a shared
-            component using `bg-background` / `text-muted-foreground` tokens
-            tuned for the global light theme. Scoping descendant overrides
-            via Tailwind arbitrary variants keeps the shared component
-            untouched while painting it dark inside this modal only. */}
-        <NumberStepper
-          value={params.scale}
-          min={SCALE.min}
-          max={SCALE.max}
-          step={SCALE.step}
-          onChange={handleScaleChange}
-          className="[&_button]:border-[var(--swap-modal-border-strong)] [&_button]:bg-[var(--swap-modal-surface-hover)] [&_button]:text-[var(--swap-modal-text-muted)] [&_button:hover]:bg-[var(--swap-modal-surface-hover-strong)] [&_button:hover]:text-[var(--swap-modal-text-primary)] [&_input]:border-[var(--swap-modal-border-strong)] [&_input]:bg-[var(--swap-modal-surface-hover)] [&_input]:text-[var(--swap-modal-text-primary)]"
-        />
-      </ParamField>
+          <ParamField label="Scale">
+            {/* Dark stepper override: NumberStepper is a shared component using
+                light-theme tokens; scoped descendant overrides paint it dark
+                inside this modal only. */}
+            <NumberStepper
+              value={params.scale}
+              min={SCALE.min}
+              max={SCALE.max}
+              step={SCALE.step}
+              onChange={handleScaleChange}
+              className="[&_button]:border-[var(--swap-modal-border-strong)] [&_button]:bg-[var(--swap-modal-surface-hover)] [&_button]:text-[var(--swap-modal-text-muted)] [&_button:hover]:bg-[var(--swap-modal-surface-hover-strong)] [&_button:hover]:text-[var(--swap-modal-text-primary)] [&_input]:border-[var(--swap-modal-border-strong)] [&_input]:bg-[var(--swap-modal-surface-hover)] [&_input]:text-[var(--swap-modal-text-primary)]"
+            />
+          </ParamField>
+        </>
+      )}
 
         <p className="mt-auto text-[11px] leading-relaxed text-[var(--swap-modal-text-muted)]">
           Tham số v1 chỉ thu thập ở UI — chưa nối API.

@@ -106,6 +106,48 @@ export type EnqueueMixSwapData =
   | EnqueueMixSwapSkippedData
   | EnqueueMixSwapDedupedData;
 
+// ── Sprite swap (api/jobs/02 — sprite-level swap, Variants tab) ──────────────
+
+export interface EnqueueSpriteSwapBody {
+  sprite_id: string;
+  force_resweep?: boolean;
+}
+
+export interface EnqueueSpriteSwapEnqueuedData {
+  job_id: string;
+  status: 'queued';
+  type: 'remix_sprite_swap';
+  remix_id: string;
+  sprite_id: string;
+  object_count: number;
+  total_steps: number;
+  sheets_to_process: number;
+  estimated_duration_sec: number;
+  skipped?: false;
+  deduped?: false;
+}
+
+export interface EnqueueSpriteSwapSkippedData {
+  skipped: true;
+  reason: 'all_sheets_already_swapped' | 'no_crop_sheets' | string;
+  sheets_to_process: 0;
+}
+
+export interface EnqueueSpriteSwapDedupedData {
+  job_id: string;
+  status: 'queued' | 'running';
+  type: 'remix_sprite_swap';
+  remix_id: string;
+  /** Sprite-swap dedup key = sprite_id (INDEPENDENT of mix-swap — disjoint). */
+  active_swap_key: string;
+  deduped: true;
+}
+
+export type EnqueueSpriteSwapData =
+  | EnqueueSpriteSwapEnqueuedData
+  | EnqueueSpriteSwapSkippedData
+  | EnqueueSpriteSwapDedupedData;
+
 /** Error thrown by enqueue wrappers on non-2xx so callers can branch on the
  *  backend `code` (e.g. MISSING_VARIANT_REFERENCE) — a plain `Error` would lose
  *  it. `code`/`httpStatus` mirror the `ImageApiFailure` fields. */
@@ -154,6 +196,36 @@ export async function enqueueRemixMixSwap(
   if (!result.success) {
     const failure = result as ImageApiFailure;
     log.error('enqueueRemixMixSwap', 'failed', {
+      remixId,
+      httpStatus: failure.httpStatus,
+      errorCode: failure.errorCode,
+    });
+    throw new EnqueueJobError(failure.error, failure.httpStatus, failure.errorCode);
+  }
+  return result.data;
+}
+
+/** POST /api/jobs/remix/{remixId}/sprite-swap (api/jobs/02 — sprite-level swap).
+ *  Returns parsed `data` on 2xx (enqueued/skipped/deduped); throws
+ *  `EnqueueJobError` (with backend `code`) on non-2xx so the modal can
+ *  distinguish 422 NO_SWAP_OBJECTS / MISSING_OBJECT_CONFIG / 404 SPRITE_NOT_FOUND
+ *  from a generic failure. Body carries only `sprite_id` + `force_resweep`
+ *  (job 02 hardcodes the swap model — no `model_params` v1). */
+export async function enqueueRemixSpriteSwap(
+  remixId: string,
+  body: EnqueueSpriteSwapBody,
+): Promise<EnqueueSpriteSwapData> {
+  log.info('enqueueRemixSpriteSwap', 'request', {
+    remixId,
+    forceResweep: body.force_resweep ?? true,
+  });
+  const result = await callImageApi<EnqueueJobResponse<EnqueueSpriteSwapData>>(
+    `/api/jobs/remix/${encodeURIComponent(remixId)}/sprite-swap`,
+    { sprite_id: body.sprite_id, force_resweep: body.force_resweep ?? true },
+  );
+  if (!result.success) {
+    const failure = result as ImageApiFailure;
+    log.error('enqueueRemixSpriteSwap', 'failed', {
       remixId,
       httpStatus: failure.httpStatus,
       errorCode: failure.errorCode,

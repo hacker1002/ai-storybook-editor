@@ -128,7 +128,7 @@ export function BatchesTab({
       if (sepIdx < 0) return;
       const spreadId = cropKey.slice(0, sepIdx);
       const layerId = cropKey.slice(sepIdx + 1);
-      const ownership = getOwnership(spreadId, layerId);
+      const ownership = getOwnership(cropKey);
       if (ownership.state !== 'owned-foreign') {
         log.debug('handleTakeBack', 'not foreign-owned — ignore', {
           cropKey,

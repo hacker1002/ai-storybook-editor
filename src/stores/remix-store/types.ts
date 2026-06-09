@@ -13,6 +13,7 @@ import type {
   RemixJob,
   RemixSpread,
   StartMixSwapParams,
+  StartSpriteSwapParams,
 } from '@/types/remix';
 import type { Distribution } from '@/types/editor';
 import type { JobEvent } from '@/stores/background-jobs-store';
@@ -105,8 +106,81 @@ export interface RemixJobsSlice {
     params: StartMixSwapParams,
   ) => Promise<EnqueueRemixJobOutcome>;
 
+  /** Modal-driven sprite (Variants) crop-sheet swap (api/jobs/02). POST
+   *  `/api/jobs/remix/{id}/sprite-swap` + optimistic seed `remix_sprite_swap`
+   *  job. Guard: an already-running sprite swap for the same sprite no-ops to
+   *  `skipped`. Independent of mix-swap (disjoint dedup key). Throws
+   *  `EnqueueJobError` (with `code`) on 422/non-2xx so the modal can toast
+   *  NO_SWAP_OBJECTS / MISSING_OBJECT_CONFIG distinctly. */
+  startSpriteSwap: (
+    params: StartSpriteSwapParams,
+  ) => Promise<EnqueueRemixJobOutcome>;
+
+  /** Auto-apply sprite-swap finals (NON-destructive — unlike mix Inject). Awaits
+   *  the authoritative remix refetch, resolves the is_final winner per cell, and
+   *  writes `characters`/`props` `variants[].visual_swap_url` in ONE Supabase
+   *  UPDATE (rollback on failure). Idempotent (re-run = no-op when finals
+   *  unchanged). Resolves the number of variants patched. Called on job-terminal
+   *  (toast hook), take-back, and orphan reconcile. */
+  applySpriteFinals: (remixId: string) => Promise<number>;
+
   cancelJob: (jobId: string) => Promise<void>;
   dismissJob: (jobId: string) => void;
+}
+
+/** Sprite lifecycle (Variants tab — add/remove sprite + append/remove sprite
+ *  sheet + lazy seed). Mirror of the batch lifecycle on the `sprites[]` plane.
+ *  Persists ONLY the `sprites` column (disjoint from `mixes`/`characters`). */
+export interface RemixSpriteSlice {
+  /** Appends a NEW sprite as a SUBSET clone of the active sprite (modal "Add as
+   *  Sprite" with per-cell selection). `selectedCellKeys` = a set of
+   *  `${type}/${object_key}/${variant_key}` keys identifying the PRE-SWAP cells
+   *  the user picked off the active sprite. K=1 sheet packed from the subset;
+   *  new sprite ordered `max(order)+1`. Optimistic push + `sprites` persist with
+   *  rollback. THROWS on empty selection / zero match (stale). Resolves the new
+   *  sprite id on success, `null` on guard miss / persist failure. */
+  addSprite: (
+    remixId: string,
+    activeSpriteId: string,
+    selectedCellKeys: ReadonlySet<string>,
+  ) => Promise<string | null>;
+
+  /** Removes a sprite by id. Guarded so the last sprite (`SPRITE_MIN`) cannot be
+   *  removed. Optimistic + rollback. Resolves `true` on success. */
+  removeSprite: (remixId: string, spriteId: string) => Promise<boolean>;
+
+  /** Appends one crop sheet to a sprite (clamped to `SHEET_MAX`). Re-packs the
+   *  sprite's cells at K+1. DESTRUCTIVE: clears `swap_results` — caller MUST
+   *  gate. Optimistic with rollback. */
+  appendSpriteSheet: (remixId: string, spriteId: string) => Promise<boolean>;
+
+  /** Removes one crop sheet from a sprite (clamped to `SHEET_MIN`). `sheetIndex`
+   *  is accepted for caller-API parity but unused (engine re-packs from
+   *  scratch). DESTRUCTIVE: clears `swap_results` — caller MUST gate. */
+  removeSpriteSheet: (
+    remixId: string,
+    spriteId: string,
+    sheetIndex: number,
+  ) => Promise<boolean>;
+
+  /** Lazy seed of `sprites[]` for a remix opened in the modal — guards
+   *  `sprites.length >= 1` and seeds a K=1 sprite from all enabled-character
+   *  variants (idempotent). Resolves `true` when a sprite was seeded. */
+  ensureRemixSpriteSeed: (remixId: string) => Promise<boolean>;
+
+  /** R5 user take-back — set `is_final=true` on the cell `(type, objectKey,
+   *  variantKey)` inside `fromSpriteId` AND clear it on every other sprite
+   *  (cross-sprite mutex). Persists `sprites` then re-applies finals to
+   *  `characters`/`props`. Gated when `anySpriteSwapRunning` (defense-in-depth;
+   *  UI already disables). Throws on gate reject; resolves `false` on guard miss
+   *  / persist failure. */
+  takeSpriteFinalBack: (
+    remixId: string,
+    type: 'character' | 'prop',
+    objectKey: string,
+    variantKey: string,
+    fromSpriteId: string,
+  ) => Promise<boolean>;
 }
 
 /** Batch lifecycle (add/remove batch + append/remove batch sheet) + per-variant
@@ -173,7 +247,13 @@ export interface RemixSwapSlice {
     fromBatchId: string,
   ) => Promise<boolean>;
 
-  /** Persist-writer for a per-variant swap result. Writes
+  /** @deprecated Legacy per-variant Generate writer — UNUSED since the
+   *  sprite-swap redesign removed `run-variant-swap.ts` (the only caller).
+   *  `applySpriteFinals` is now the sole writer of
+   *  `characters[].variants[].visual_swap_url`. Kept (un-wired) for backward
+   *  compat; do not add new callers.
+   *
+   *  Persist-writer for a per-variant swap result. Writes
    *  `characters[charKey].variants[variantKey].visual_swap_url` and persists
    *  the whole `characters` JSONB column. Optimistic with full-remix snapshot
    *  rollback on error (single-writer assumption). `imageUrl=null` clears the
@@ -221,6 +301,7 @@ export interface RemixSyncSlice {
 export type RemixStore = RemixCrudSlice &
   RemixJobsSlice &
   RemixSwapSlice &
+  RemixSpriteSlice &
   RemixSyncSlice;
 
 /** Middleware tuple matching `index.ts` — `subscribeWithSelector` wraps the

@@ -64,6 +64,7 @@ function makeRemix(mixes: RemixMix[]): Remix {
     characters: [],
     props: [],
     mixes,
+    sprites: [],
     created_at: '2026-05-29T00:00:00Z',
     updated_at: '2026-05-29T00:00:00Z',
   };
@@ -73,7 +74,7 @@ describe('useCropOwnership', () => {
   it('T1: null remix → empty map, getOwnership returns uncovered', () => {
     const { result } = renderHook(() => useCropOwnership(null, null));
     expect(result.current.ownerMap.size).toBe(0);
-    expect(result.current.getOwnership('s1', 'l1')).toEqual({
+    expect(result.current.getOwnership('s1/l1')).toEqual({
       state: 'uncovered',
     });
   });
@@ -84,13 +85,13 @@ describe('useCropOwnership', () => {
     ]);
 
     const currentMatch = renderHook(() => useCropOwnership(remix, 'b1')).result.current;
-    expect(currentMatch.getOwnership('s1', 'l1')).toMatchObject({
+    expect(currentMatch.getOwnership('s1/l1')).toMatchObject({
       state: 'owned-current',
       ownerBatchId: 'b1',
     });
 
     const currentMiss = renderHook(() => useCropOwnership(remix, 'b9')).result.current;
-    expect(currentMiss.getOwnership('s1', 'l1')).toMatchObject({
+    expect(currentMiss.getOwnership('s1/l1')).toMatchObject({
       state: 'owned-foreign',
       ownerBatchId: 'b1',
     });
@@ -103,14 +104,14 @@ describe('useCropOwnership', () => {
     ]);
 
     const fromA = renderHook(() => useCropOwnership(remix, 'A')).result.current;
-    expect(fromA.getOwnership('s1', 'l1')).toMatchObject({
+    expect(fromA.getOwnership('s1/l1')).toMatchObject({
       state: 'owned-foreign',
       ownerBatchId: 'B',
       ownerBatchName: 'Batch 2',
     });
 
     const fromB = renderHook(() => useCropOwnership(remix, 'B')).result.current;
-    expect(fromB.getOwnership('s1', 'l1')).toMatchObject({
+    expect(fromB.getOwnership('s1/l1')).toMatchObject({
       state: 'owned-current',
       ownerBatchId: 'B',
     });
@@ -121,7 +122,7 @@ describe('useCropOwnership', () => {
       makeBatch('b1', 1, [makeSheet([makeSwapResult([makeCrop('s1', 'l1', true)])])]),
     ]);
     const { result } = renderHook(() => useCropOwnership(remix, null));
-    expect(result.current.getOwnership('s1', 'l1')).toMatchObject({
+    expect(result.current.getOwnership('s1/l1')).toMatchObject({
       state: 'owned-foreign',
     });
   });
@@ -131,6 +132,6 @@ describe('useCropOwnership', () => {
       makeBatch('b1', 1, [makeSheet([makeSwapResult([makeCrop('s1', 'l1', true)])])]),
     ]);
     const { result } = renderHook(() => useCropOwnership(remix, 'b1'));
-    expect(result.current.getOwnership('sX', 'lX')).toEqual({ state: 'uncovered' });
+    expect(result.current.getOwnership('sX/lX')).toEqual({ state: 'uncovered' });
   });
 });

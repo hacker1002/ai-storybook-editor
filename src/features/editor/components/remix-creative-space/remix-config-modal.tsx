@@ -1,11 +1,10 @@
 // remix-config-modal.tsx — Create-only remix configuration modal (tabbed).
 // Edit mode was removed (config is frozen after create). Four tabs:
-// Characters (with live appearance swap) / Props / Voices / Languages.
+// Characters (config-only) / Props / Voices / Languages.
 //
-// The modal owns `draft` (RemixConfig), `name`, `dirty`, and ephemeral
-// `swapTasks` (per-character live-swap preview state). Switching tabs never
-// resets draft/swapTasks. OK is disabled while any swap is loading so a remix
-// is never created mid-swap (Validation S1).
+// The modal owns `draft` (RemixConfig), `name`, `dirty`. Switching tabs never
+// resets the draft. The appearance swap is an async background job (api/jobs/02)
+// triggered from the swap crop-sheet modal — NOT from this create modal.
 
 import { useMemo, useState } from 'react';
 import {
@@ -28,11 +27,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useHumans } from '@/stores/humans-store';
-import { useCharacters } from '@/stores/snapshot-store/selectors';
 import { createLogger } from '@/utils/logger';
 import { TRAIT_TYPES } from '@/constants/trait-constants';
 import type { BookRemix } from '@/types/editor';
-import type { Human } from '@/types/human';
 import {
   REMIX_NAME_DEFAULT,
   type RemixCharacterChoice,
@@ -40,14 +37,11 @@ import {
   type RemixLanguageChoice,
   type RemixPropChoice,
   type RemixVoiceChoice,
-  type SwapPreviewState,
 } from '@/types/remix';
 import { CharactersTab } from './tabs/characters-tab';
 import { PropsTab } from './tabs/props-tab';
 import { VoicesTab } from './tabs/voices-tab';
 import { LanguagesTab } from './tabs/languages-tab';
-import { resolveBaseSheetUrl } from './utils/resolve-base-sheet-url';
-import { runCharacterSwap } from './utils/run-character-swap';
 
 const log = createLogger('Editor', 'RemixConfigModal');
 
@@ -77,10 +71,8 @@ export function RemixConfigModal({
   const [name, setName] = useState('');
   const [dirty, setDirty] = useState(false);
   const [showDiscard, setShowDiscard] = useState(false);
-  const [swapTasks, setSwapTasks] = useState<Record<string, SwapPreviewState>>({});
 
   const humans = useHumans();
-  const snapshotChars = useCharacters();
 
   const allowedChars = useMemo(
     () => bookRemix.characters.filter((c) => c.is_enabled),
@@ -155,44 +147,6 @@ export function RemixConfigModal({
     setDirty(true);
   };
 
-  // ── Live character swap orchestration (testable helper, injected deps) ────
-  const humansMap = useMemo<Record<string, Human>>(
-    () => Object.fromEntries(humans.map((h) => [h.id, h])),
-    [humans],
-  );
-
-  const setTask = (key: string, state: SwapPreviewState) =>
-    setSwapTasks((prev) => ({ ...prev, [key]: state }));
-
-  // Current (pre-swap) base-sheet visual per allowed character — shown in the
-  // accordion body even before any swap so the user sees the existing art.
-  const currentVisualUrls = useMemo<Record<string, string | null>>(
-    () =>
-      Object.fromEntries(
-        allowedChars.map((c) => [c.key, resolveBaseSheetUrl(c.key, snapshotChars)]),
-      ),
-    [allowedChars, snapshotChars],
-  );
-
-  const handleSwapCharacter = (charKey: string) => {
-    const entry = draft.characters.find((c) => c.key === charKey);
-    if (!entry) {
-      log.warn('handleSwapCharacter', 'no draft entry', { charKey });
-      return;
-    }
-    const beforeUrl = resolveBaseSheetUrl(charKey, snapshotChars);
-    log.debug('handleSwapCharacter', 'invoke', { charKey, hasBeforeUrl: !!beforeUrl });
-    void runCharacterSwap(
-      charKey,
-      entry,
-      beforeUrl,
-      humansMap,
-      snapshotChars,
-      setTask,
-      upsertCharacter,
-    );
-  };
-
   // ── Validation / gating ───────────────────────────────────────────────────
   const isValidDraft = useMemo(() => {
     return (
@@ -203,12 +157,7 @@ export function RemixConfigModal({
     );
   }, [draft]);
 
-  const anySwapLoading = useMemo(
-    () => Object.values(swapTasks).some((t) => t.status === 'loading'),
-    [swapTasks],
-  );
-
-  const canSave = isValidDraft && !anySwapLoading;
+  const canSave = isValidDraft;
   const everyTabEmpty =
     allowedChars.length === 0 &&
     allowedProps.length === 0 &&
@@ -296,10 +245,7 @@ export function RemixConfigModal({
                     allowedChars={allowedChars}
                     draftCharacters={draft.characters}
                     humans={humans}
-                    swapTasks={swapTasks}
-                    currentVisualUrls={currentVisualUrls}
                     onUpsert={upsertCharacter}
-                    onSwap={handleSwapCharacter}
                   />
                 </TabsContent>
                 <TabsContent value="props">
@@ -331,7 +277,6 @@ export function RemixConfigModal({
               disabled={!canSave}
               aria-disabled={!canSave}
               onClick={handleSave}
-              title={anySwapLoading ? 'Waiting for swap to finish' : undefined}
             >
               Create
             </Button>

@@ -1,42 +1,27 @@
 // characters-tab.tsx — Characters section of the remix config modal.
 // Renders one CharacterSwapRow per book-allowed character; derives per-row
-// Human/Visual options; owns the single-open accordion state. Swap orchestration
-// lives in the parent modal (handleSwapCharacter) — this tab only forwards.
+// Human/Visual options. Config-only (human/visual/traits) — the appearance swap
+// itself is an async job triggered from the swap crop-sheet modal, not here.
 
-import { useState } from 'react';
 import type { SearchableDropdownOption } from '@/components/ui/searchable-dropdown';
 import type { Human, TraitType } from '@/types/human';
 import type { RemixCharacterEntry } from '@/types/editor';
-import type { RemixCharacterChoice, SwapPreviewState } from '@/types/remix';
+import type { RemixCharacterChoice } from '@/types/remix';
 import { CharacterSwapRow } from './character-swap-row';
-
-const IDLE_SWAP: SwapPreviewState = {
-  status: 'idle',
-  beforeUrl: null,
-  afterUrl: null,
-};
 
 interface Props {
   allowedChars: RemixCharacterEntry[];
   draftCharacters: RemixCharacterChoice[];
   humans: Human[];
-  swapTasks: Record<string, SwapPreviewState>;
-  currentVisualUrls: Record<string, string | null>;
   onUpsert: (key: string, patch: Partial<RemixCharacterChoice>) => void;
-  onSwap: (key: string) => void;
 }
 
 export function CharactersTab({
   allowedChars,
   draftCharacters,
   humans,
-  swapTasks,
-  currentVisualUrls,
   onUpsert,
-  onSwap,
 }: Props) {
-  const [openKey, setOpenKey] = useState<string | null>(null);
-
   const humanOptions: SearchableDropdownOption[] = humans.map((h) => ({
     value: h.id,
     label: h.sourceName || h.id,
@@ -51,9 +36,9 @@ export function CharactersTab({
     );
   };
 
-  // Traits the selected visual profile can actually swap = traits with a
-  // non-empty description (mirrors build-swap-visual-request filter). null when
-  // no human/visual is picked yet. Unsupported traits get disabled in the row.
+  // Traits the selected visual profile can configure = traits with a non-empty
+  // description. null when no human/visual is picked yet. Unsupported traits get
+  // disabled in the row.
   const supportedTraitsFor = (
     humanId: string | null,
     visualName: string | null,
@@ -93,23 +78,12 @@ export function CharactersTab({
               entry?.human_id ?? null,
               entry?.visual ?? null,
             )}
-            swapState={swapTasks[bookChar.key] ?? IDLE_SWAP}
-            currentVisualUrl={currentVisualUrls[bookChar.key] ?? null}
-            isOpen={openKey === bookChar.key}
-            onToggleOpen={() =>
-              setOpenKey((prev) => (prev === bookChar.key ? null : bookChar.key))
-            }
             onUpsert={(patch) => onUpsert(bookChar.key, patch)}
             onChangeHuman={(humanId) =>
-              // Cascade: changing the human clears the visual AND invalidates any
-              // prior swap result so a stale base_image_url is never persisted.
-              onUpsert(bookChar.key, {
-                human_id: humanId,
-                visual: null,
-                base_image_url: null,
-              })
+              // Cascade: changing the human clears the visual (visual options
+              // depend on the selected human).
+              onUpsert(bookChar.key, { human_id: humanId, visual: null })
             }
-            onSwap={() => onSwap(bookChar.key)}
           />
         );
       })}

@@ -84,6 +84,7 @@ export const ACTIVE_STATUSES: ReadonlySet<JobStatus> = new Set(['queued', 'runni
 export const REMIX_SWAP_TYPES = [
   'remix_audio_swap',
   'remix_mix_swap',
+  'remix_sprite_swap',
 ] as const;
 
 /** Distribution export job types — export watcher subscribes to these. Includes

@@ -38,13 +38,16 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type {
-  RemixCropSheet,
   SwapPreviewState,
   BatchSwapTaskStatus,
-  SwapResult,
 } from '@/types/remix';
 import { ZOOM, HEADER_HEIGHT_PX } from './swap-modal-constants';
 import { ComposedCropSheet } from './crop-sheet-stage/composed-crop-sheet';
+import type {
+  RenderableCrop,
+  StageSheet,
+  StageSwapResult,
+} from './crop-sheet-stage/composed-crop-sheet';
 import { useStageZoom } from './crop-sheet-stage/use-stage-zoom';
 
 const log = createLogger('Editor', 'CropSheetStage');
@@ -73,12 +76,15 @@ export interface StageHeaderPrimary {
  *  the array (not just the URL). The legacy `media_url` is reached via
  *  `selectedSwap.media_url` (used by the compare-slider key + the legacy
  *  single-image fallback when `crops[]` is empty). */
+// `batches` mode is reused by BOTH the Batches (mix) and Variants (sprite) tabs
+// — the sheet/swap shapes are the shared generic base (`StageSheet`/
+// `StageSwapResult`), so `RemixCropSheet`/`RemixSpriteCropSheet` both assign.
 export type StageSource =
   | { mode: 'variants'; beforeUrl: string | null; afterUrl: string | null }
   | {
       mode: 'batches';
-      sheet: RemixCropSheet | null;
-      selectedSwap: SwapResult | null;
+      sheet: StageSheet | null;
+      selectedSwap: StageSwapResult | null;
     };
 
 export interface CropSheetStageProps {
@@ -109,23 +115,26 @@ export interface CropSheetStageProps {
    *  can mark crops for re-swap (e.g. swap completed, not submitting, not
    *  running). Stage re-gates on its own preconditions. */
   selectableSwapCrops?: boolean;
-  /** Set of `${spread_id}/${id}` keys currently selected by the user. */
+  /** Set of cropKeys currently selected by the user (scheme = `cropKeyOf`). */
   selectedSwapCropKeys?: ReadonlySet<string>;
   /** Toggle callback fired by per-crop checkboxes; receives the `cropKey`. */
   onToggleSwapCropSelection?: (cropKey: string) => void;
+  /** Per-crop key accessor forwarded to `ComposedCropSheet`. Absent → mix key
+   *  `${spread_id}/${id}` (Batches default, backward compatible). The Variants
+   *  tab passes `${type}/${object_key}/${variant_key}`. */
+  cropKeyOf?: (crop: RenderableCrop) => string;
 
-  // ⚡rev7 — Cross-batch ownership overlay (Batches AFTER non-compare only).
-  // Stage gates on the same preconditions as the rev6 selection overlay; the
-  // tab supplies both `getOwnership` (from `useCropOwnership`) and the click
-  // handler that routes into `takeFinalBack`.
-  /** Resolves per-crop ownership. Passed through to `ComposedCropSheet`. */
+  // ⚡rev7 — Cross-plane ownership overlay (AFTER non-compare only). Stage gates
+  // on the same preconditions as the rev6 selection overlay; the tab supplies
+  // both `getOwnership` (from `useCropOwnership` / `useSpriteOwnership`) and the
+  // click handler that routes into `takeFinalBack` / `takeSpriteFinalBack`.
+  /** Resolves per-crop ownership by cropKey. Passed through to ComposedCropSheet. */
   getOwnership?: (
-    spreadId: string,
-    layerId: string,
+    cropKey: string,
   ) => import('./hooks/use-crop-ownership').CropOwnershipState;
-  /** Click handler — receives the `${spread_id}/${id}` cropKey. */
+  /** Click handler — receives the cropKey (scheme = `cropKeyOf`). */
   onTakeBack?: (cropKey: string) => void;
-  /** Disables the take-back chip (e.g. `anyMixSwapRunning`). */
+  /** Disables the take-back chip (e.g. `anyMixSwapRunning` / `anySpriteSwapRunning`). */
   takeBackDisabled?: boolean;
 }
 
@@ -198,6 +207,7 @@ export function CropSheetStage({
   selectableSwapCrops,
   selectedSwapCropKeys,
   onToggleSwapCropSelection,
+  cropKeyOf,
   getOwnership,
   onTakeBack,
   takeBackDisabled,
@@ -250,6 +260,7 @@ export function CropSheetStage({
         effectiveSelectable={effectiveSelectable}
         selectedSwapCropKeys={selectedSwapCropKeys}
         onToggleSwapCropSelection={onToggleSwapCropSelection}
+        cropKeyOf={cropKeyOf}
         getOwnership={getOwnership}
         onTakeBack={onTakeBack}
         takeBackDisabled={takeBackDisabled}
@@ -437,12 +448,12 @@ interface StageCanvasProps {
   effectiveSelectable: boolean;
   selectedSwapCropKeys?: ReadonlySet<string>;
   onToggleSwapCropSelection?: (cropKey: string) => void;
+  cropKeyOf?: (crop: RenderableCrop) => string;
   // ⚡rev7 — Ownership overlay forwarding (AFTER non-compare only). Gated
   // upstream by `effectiveSelectable`'s sibling preconditions in
   // `BatchesCanvasBody`.
   getOwnership?: (
-    spreadId: string,
-    layerId: string,
+    cropKey: string,
   ) => import('./hooks/use-crop-ownership').CropOwnershipState;
   onTakeBack?: (cropKey: string) => void;
   takeBackDisabled?: boolean;
@@ -460,6 +471,7 @@ function StageCanvas({
   effectiveSelectable,
   selectedSwapCropKeys,
   onToggleSwapCropSelection,
+  cropKeyOf,
   getOwnership,
   onTakeBack,
   takeBackDisabled,
@@ -534,6 +546,7 @@ function StageCanvas({
               effectiveSelectable={effectiveSelectable}
               selectedSwapCropKeys={selectedSwapCropKeys}
               onToggleSwapCropSelection={onToggleSwapCropSelection}
+              cropKeyOf={cropKeyOf}
               getOwnership={getOwnership}
               onTakeBack={onTakeBack}
               takeBackDisabled={takeBackDisabled}
@@ -594,10 +607,10 @@ function StageCanvas({
 // ── BatchesCanvasBody — composed sheet (before) ↔ composed swap (after) ──────
 
 interface BatchesCanvasBodyProps {
-  sheet: RemixCropSheet;
+  sheet: StageSheet;
   /** rev6 — full SwapResult so AFTER side can compose from `crops[]`. Null
    *  when nothing has been swapped yet (renders BEFORE only). */
-  selectedSwap: SwapResult | null;
+  selectedSwap: StageSwapResult | null;
   compareMode: boolean;
   dividerPosition: number;
   zoomLevel: number;
@@ -607,10 +620,10 @@ interface BatchesCanvasBodyProps {
   effectiveSelectable: boolean;
   selectedSwapCropKeys?: ReadonlySet<string>;
   onToggleSwapCropSelection?: (cropKey: string) => void;
+  cropKeyOf?: (crop: RenderableCrop) => string;
   // ⚡rev7 — Ownership overlay forwarding (AFTER non-compare only).
   getOwnership?: (
-    spreadId: string,
-    layerId: string,
+    cropKey: string,
   ) => import('./hooks/use-crop-ownership').CropOwnershipState;
   onTakeBack?: (cropKey: string) => void;
   takeBackDisabled?: boolean;
@@ -638,6 +651,7 @@ function BatchesCanvasBody({
   effectiveSelectable,
   selectedSwapCropKeys,
   onToggleSwapCropSelection,
+  cropKeyOf,
   getOwnership,
   onTakeBack,
   takeBackDisabled,
@@ -681,6 +695,7 @@ function BatchesCanvasBody({
           zoomLevel={zoomLevel}
           cropsSource="after"
           selectedSwap={selectedSwap}
+          cropKeyOf={cropKeyOf}
           // rev6 — only the AFTER non-compare path opts into per-crop overlays.
           selectableSwapCrops={effectiveSelectable}
           selectedSwapCropKeys={selectedSwapCropKeys}

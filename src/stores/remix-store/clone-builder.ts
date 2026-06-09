@@ -187,6 +187,9 @@ export function buildRemixClonePayload(
     characters,
     props,
     mixes,
+    // Sprite plane (Variants tab) — seeded lazily on modal open (Phase 03
+    // ensureRemixSpriteSeed); create-time payload starts empty.
+    sprites: [],
     // Lazy-init on first export/toggle (job handler or client). Null = reader
     // coalesces to DEFAULT — no need to materialize the full shape at create.
     distribution: null,

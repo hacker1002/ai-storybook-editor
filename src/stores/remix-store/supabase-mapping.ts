@@ -8,6 +8,7 @@ import type {
   RemixIllustration,
   RemixMix,
   RemixProp,
+  RemixSpriteEntry,
 } from '@/types/remix';
 import type { Distribution } from '@/types/editor';
 
@@ -20,6 +21,7 @@ interface RawRemixRow {
   characters?: unknown;
   props?: unknown;
   mixes?: unknown;
+  sprites?: unknown;
   distribution?: unknown;
   created_at: string;
   updated_at: string;
@@ -43,6 +45,8 @@ export function mapRowToRemix(row: RawRemixRow): Remix {
     characters: (row.characters as RemixCharacter[] | null) ?? [],
     props: (row.props as RemixProp[] | null) ?? [],
     mixes: (row.mixes as RemixMix[] | null) ?? [],
+    // Sprite plane (Variants tab) — additive JSONB; legacy rows omit it.
+    sprites: (row.sprites as RemixSpriteEntry[] | null) ?? [],
     // Nullable JSONB — reader coalesces to DEFAULT at render (KISS: no
     // normalize at ingress; shape is small + tolerated downstream).
     distribution: (row.distribution as Distribution | null) ?? null,

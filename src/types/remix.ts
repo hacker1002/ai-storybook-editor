@@ -53,13 +53,35 @@ export interface SwapResultCrop {
   is_final?: boolean;
 }
 
-export interface SwapResult {
+// ── Shared crop-sheet skeleton (Validation S1 — DRY base) ────────────────────
+// `mixes[]` (Batches) and `sprites[]` (Variants) carry structurally identical
+// sheet/swap-result skeletons; only the crop entry shape differs (multi-subject
+// `CropEntry` vs single-subject `SpriteCrop`). The generic base lets us change
+// the `is_final` / sheet shape in ONE place. `RemixCropSheet`/`SwapResult` below
+// are the mix specializations (shape byte-compatible with the pre-refactor
+// interfaces — purely additive generic, no runtime change).
+export interface SwapResultBase<TSwapCrop> {
   media_url: string;
   created_time: string;
   is_selected: boolean;
-  /** rev2 — re-cut output (backend deferred). FE v1 does not consume. */
-  crops: SwapResultCrop[];
+  crops: TSwapCrop[];
 }
+
+export interface CropSheetBase<TCrop, TSwapCrop> {
+  title: string;
+  /** Sheet frame size (px) — computed by crop-sheet-layout-engine. Additive
+   *  JSONB field (DB-CHANGELOG 2026-05-19), no migration needed. */
+  sheet_geometry: { width: number; height: number };
+  /** @deprecated build API removed (2026-05-19) — usually empty ''. Kept for
+   *  backward-compat; client now composes the sheet from crops + sheet_geometry. */
+  image_url: string;
+  swap_results: SwapResultBase<TSwapCrop>[];
+  crops: TCrop[];
+}
+
+/** Mix swap-result (rev2 — re-cut output, backend deferred). FE v1 does not
+ *  consume `crops[]`, only `media_url`. = `SwapResultBase<SwapResultCrop>`. */
+export type SwapResult = SwapResultBase<SwapResultCrop>;
 
 /** Re-export of crop entry shape from prop-types for consumer convenience. */
 export type RemixCrop = Crop;
@@ -80,19 +102,9 @@ export interface CropEntry {
   geometry: { x: number; y: number; w: number; h: number };
 }
 
-export interface RemixCropSheet {
-  title: string;
-  /** Sheet frame size (px) — computed by crop-sheet-layout-engine. Additive
-   *  JSONB field (DB-CHANGELOG 2026-05-19), no migration needed. */
-  sheet_geometry: { width: number; height: number };
-  /** @deprecated build API removed (2026-05-19) — usually empty ''. Kept for
-   *  backward-compat; client now composes the sheet from crops + sheet_geometry. */
-  image_url: string;
-  swap_results: SwapResult[];
-  /** rev2 — crops carry multi-subject `tags[]` (CropEntry), replacing the legacy
-   *  per-variant `Crop` shape. Relayout no longer groups by variant. */
-  crops: CropEntry[];
-}
+/** Crop sheet carried by a batch (RemixMix). rev2 — crops carry multi-subject
+ *  `tags[]` (CropEntry). = `CropSheetBase<CropEntry, SwapResultCrop>`. */
+export type RemixCropSheet = CropSheetBase<CropEntry, SwapResultCrop>;
 
 // ── Cloned entity snapshots (DB JSONB columns) ───────────────────────────────
 // Mirror snapshot Character/Prop shape but replace `crop_sheets` with the
@@ -133,6 +145,78 @@ export interface RemixMix {
   /** Display name e.g. "Batch 1". */
   name: string;
   crop_sheets: RemixCropSheet[];
+}
+
+// ── Sprite plane (Variants tab — sprite-swap batch model) ────────────────────
+// Mirror of the mix plane on the `remixes.sprites[]` column, but single-subject:
+// each crop is ONE character/prop variant artwork (not a multi-subject spread
+// crop). Used by the redesigned Variants tab (batch sprite-swap, api/jobs/02).
+// cellKey = `${type}/${object_key}/${variant_key}`.
+
+/** Pre-swap crop on a sprite sheet — one variant's ORIGINAL artwork.
+ *  `media_url` is the source variant illustration (never `visual_swap_url` —
+ *  avoids re-swap compounding). `geometry` is the engine OUTPUT (px,
+ *  sheet-relative). */
+export interface SpriteCrop {
+  type: 'character' | 'prop';
+  object_key: string;
+  variant_key: string;
+  media_url: string;
+  geometry: { x: number; y: number; w: number; h: number };
+}
+
+/** Re-cut crop produced by the sprite-swap job (api/jobs/02). Cross-sprite
+ *  winner mutex: per `(type, object_key, variant_key)`, EXACTLY 1 crop has
+ *  `is_final=true` across all sprites at steady state (mirror SwapResultCrop —
+ *  see ownership matrix R1/R3/R5). ONLY valid when parent
+ *  `swap_results.is_selected=true`. */
+export interface SwapResultSpriteCrop {
+  type: 'character' | 'prop';
+  object_key: string;
+  variant_key: string;
+  geometry: { x: number; y: number; w: number; h: number };
+  media_url: string;
+  is_final?: boolean;
+}
+
+/** Crop sheet carried by a sprite. = `CropSheetBase<SpriteCrop, SwapResultSpriteCrop>`. */
+export type RemixSpriteCropSheet = CropSheetBase<SpriteCrop, SwapResultSpriteCrop>;
+
+/** Persisted `remixes.sprites[]` entry — mirror `RemixMix` on the sprite plane.
+ *  Identity = `id` (uuid). NO derived `swapTask` (that's the projection below). */
+export interface RemixSpriteEntry {
+  id: string;
+  order: number;
+  /** Display name e.g. "Sprite 1". */
+  name: string;
+  crop_sheets: RemixSpriteCropSheet[];
+}
+
+/** Sprite-level swap task progress (mirror BatchSwapTaskStatus, sprite-scoped). */
+export type SpriteSwapTaskStatus =
+  | { state: 'idle' }
+  | { state: 'running'; current: number; total: number }
+  | { state: 'error'; message: string; failedSheets: number };
+
+/** Variants-tab projection of one `remixes.sprites[]` entry + its derived swap
+ *  task (mirror RemixBatch). `swapTask` is DERIVED from `jobs[]` — NOT persisted. */
+export interface RemixSprite {
+  id: string;
+  order: number;
+  name: string;
+  crop_sheets: RemixSpriteCropSheet[];
+  swapTask: SpriteSwapTaskStatus;
+}
+
+/** Args for the sprite-level swap enqueue (api/jobs/02). `params` (swap model)
+ *  carries only `swapModel` at the Variants tab (no upscale/scale — Validation
+ *  S1). v1 is collect-only on the FE; job 02 hardcodes the model server-side. */
+export interface StartSpriteSwapParams {
+  remixId: string;
+  spriteId: string;
+  params: SwapModelParams;
+  /** When true (default), clear + re-swap every sheet of the sprite (api/jobs/02). */
+  forceResweep?: boolean;
 }
 
 // ── Spread (display-only subset of BaseSpread) ───────────────────────────────
@@ -266,6 +350,9 @@ export interface Remix {
   characters: RemixCharacter[];
   props: RemixProp[];
   mixes: RemixMix[];
+  /** Sprite plane (Variants tab — sprite-swap batch model). Additive JSONB
+   *  column (DB-CHANGELOG 2026-06-08). Reader coalesces undefined → []. */
+  sprites: RemixSpriteEntry[];
   /** Export-artifact state (additive, optional). Same shape as Book.distribution.
    *  Reader coalesces null/undefined → DEFAULT (coalesceDistribution). */
   distribution?: Distribution | null;
@@ -286,6 +373,9 @@ export interface RemixRow {
   characters: RemixCharacter[];
   props: RemixProp[];
   mixes: RemixMix[];
+  /** Sprite plane — additive JSONB column. Optional on the raw row (legacy rows
+   *  omit it); reader coalesces undefined → [] on mapping. */
+  sprites?: RemixSpriteEntry[];
   distribution?: Distribution | null;
   created_at: string;
   updated_at: string;
@@ -301,9 +391,12 @@ export interface RemixRow {
 // client-side finalize (no background job). See InjectResult / injectFinalCrops.
 // NOTE: `character_swap` phase removed (2026-06-08) — job type
 // `remix_character_swap` (api/jobs/04) deleted server-side, superseded by the
-// `remix_mix_swap` batch model. The synchronous visual character swap
-// (`base_image_url`, run-character-swap.ts) is UNRELATED and not a job phase.
-export type RemixJobPhase = 'audio' | 'remix_mix_swap';
+// `remix_mix_swap` batch model. The old synchronous create-modal visual swap
+// (POST /api/remix/swap-character-visual) was also removed; appearance swap is
+// now exclusively the async sprite-swap job below.
+// `remix_sprite_swap` = sprite-level swap (api/jobs/02) — Variants tab batch
+// sprite-swap. Independent of `remix_mix_swap` (disjoint dedup key).
+export type RemixJobPhase = 'audio' | 'remix_mix_swap' | 'remix_sprite_swap';
 
 export type RemixJobStatus =
   | 'queued'
@@ -357,6 +450,9 @@ export interface RemixJob {
   /** Set for `remix_mix_swap` jobs only — mirrors `params.batch_id`. Lets
    *  selectors match the running swap to its batch. Undefined otherwise. */
   batchId?: string;
+  /** Set for `remix_sprite_swap` jobs only — mirrors `params.sprite_id`. Lets
+   *  selectors match the running swap to its sprite. Undefined otherwise. */
+  spriteId?: string;
   currentStep: number;
   totalSteps: number;
   stepDetails?: { spreads: Record<string, RemixJobStepDetail> };
@@ -389,7 +485,12 @@ export type AudioJobBadgeState =
 /** Raw shape of public.background_jobs row returned by Supabase select + realtime payload. */
 export interface BackgroundJobRow {
   id: string;
-  type: 'remix_audio_swap' | 'remix_image_swap' | 'remix_mix_swap' | string;
+  type:
+    | 'remix_audio_swap'
+    | 'remix_image_swap'
+    | 'remix_mix_swap'
+    | 'remix_sprite_swap'
+    | string;
   user_id: string;
   book_id: string | null;
   status: RemixJobStatus;
@@ -404,6 +505,8 @@ export interface BackgroundJobRow {
     character_key?: string;
     /** Present on `remix_mix_swap` rows — the swapped batch id (api/jobs/05). */
     batch_id?: string;
+    /** Present on `remix_sprite_swap` rows — the swapped sprite id (api/jobs/02). */
+    sprite_id?: string;
     [k: string]: unknown;
   };
   result: RemixJobResult | null;

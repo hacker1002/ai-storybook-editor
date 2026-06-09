@@ -12,6 +12,7 @@ import type { InjectResult, RemixIllustration } from '@/types/remix';
 import {
   enqueueAudioSwap,
   enqueueRemixMixSwap,
+  enqueueRemixSpriteSwap,
   type EnqueueAudioSwapEnqueuedData,
   type EnqueueAudioSwapDedupedData,
 } from '@/apis/jobs-api';
@@ -19,6 +20,10 @@ import { useAuthStore } from '../../auth-store';
 import { useBackgroundJobsStore } from '../../background-jobs-store';
 import { resolveFinalCrops } from '../selectors/select-final-crops';
 import { applyFinalCrops } from '../apply-final-crops';
+import {
+  resolveSpriteFinals,
+  applySpriteFinalsToVariants,
+} from '../apply-sprite-finals';
 import type { RemixJobsSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -264,6 +269,148 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       jobId: data.job_id,
       totalSteps: data.total_steps,
     };
+  },
+
+  // ── Sprite (Variants) crop-sheet swap enqueue (api/jobs/02) ────────
+  // Mirrors startMixSwap: POST enqueue + optimistic seed `remix_sprite_swap`
+  // row. INDEPENDENT of mix-swap (disjoint dedup key = sprite_id); an
+  // already-running swap for the SAME sprite no-ops. Body carries only
+  // `sprite_id` + `force_resweep` (job 02 hardcodes the model — no model_params).
+  startSpriteSwap: async (params) => {
+    const { remixId, spriteId, forceResweep = true } = params;
+
+    const alreadyRunning = get().jobs.some(
+      (j) =>
+        j.phase === 'remix_sprite_swap' &&
+        j.remixId === remixId &&
+        j.spriteId === spriteId &&
+        (j.status === 'queued' || j.status === 'running'),
+    );
+    if (alreadyRunning) {
+      log.debug('startSpriteSwap', 'swap already running — no-op', {
+        remixId,
+        spriteId,
+      });
+      return { kind: 'skipped', reason: 'busy' };
+    }
+
+    log.info('startSpriteSwap', 'enqueue', { remixId, spriteId, forceResweep });
+    // Throws EnqueueJobError on non-2xx (incl. 422 NO_SWAP_OBJECTS /
+    // MISSING_OBJECT_CONFIG, 404 SPRITE_NOT_FOUND) — caller (modal) toasts on `code`.
+    const data = await enqueueRemixSpriteSwap(remixId, {
+      sprite_id: spriteId,
+      force_resweep: forceResweep,
+    });
+
+    if ('skipped' in data && data.skipped) {
+      log.info('startSpriteSwap', 'skipped', { remixId, reason: data.reason });
+      return { kind: 'skipped', reason: data.reason };
+    }
+
+    if ('deduped' in data && data.deduped) {
+      log.info('startSpriteSwap', 'deduped', {
+        remixId,
+        jobId: data.job_id,
+        status: data.status,
+      });
+      if (!get().jobs.find((j) => j.id === data.job_id)) {
+        const shared = useBackgroundJobsStore.getState().jobsById[data.job_id];
+        if (shared) get().onRemixJobEvent({ job: shared, prev: null, transition: 'appeared' });
+      }
+      return { kind: 'deduped', jobId: data.job_id, status: data.status };
+    }
+
+    log.info('startSpriteSwap', 'enqueued', {
+      remixId,
+      spriteId,
+      jobId: data.job_id,
+      totalSteps: data.total_steps,
+    });
+
+    // Optimistic seed into the unified store — consumer callback upserts jobs[].
+    const nowIso = new Date().toISOString();
+    useBackgroundJobsStore.getState().seed({
+      id: data.job_id,
+      type: 'remix_sprite_swap',
+      bookId: null,
+      userId: useAuthStore.getState().user?.id ?? '',
+      status: 'queued',
+      currentStep: 0,
+      totalSteps: data.total_steps,
+      stepDetails: null,
+      params: { remix_id: remixId, sprite_id: spriteId },
+      result: null,
+      cancelRequested: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+
+    return {
+      kind: 'enqueued',
+      jobId: data.job_id,
+      totalSteps: data.total_steps,
+    };
+  },
+
+  // ── Sprite finals auto-apply (NON-destructive — visual_swap_url writer) ──
+  // The job sets is_final on the sprite plane; the FE reflects each winner onto
+  // its variant's `visual_swap_url`. Awaits the authoritative refetch first
+  // (realtime may still be landing the sprites blob), resolves finals, patches
+  // characters/props, and persists those two columns in ONE UPDATE. Rollback to
+  // the pre-apply snapshot on persist failure. Idempotent (no-op when unchanged).
+  applySpriteFinals: async (remixId): Promise<number> => {
+    log.info('applySpriteFinals', 'apply requested', { remixId });
+
+    // Pull the authoritative remix row — the swap job just wrote sprites[].
+    await get().refetchRemix(remixId);
+
+    const remix = get().remixes.find((r) => r.id === remixId);
+    if (!remix) {
+      log.warn('applySpriteFinals', 'remix not found — skip', { remixId });
+      return 0;
+    }
+
+    const finals = resolveSpriteFinals(remix);
+    if (finals.length === 0) {
+      log.debug('applySpriteFinals', 'no sprite finals — skip', { remixId });
+      return 0;
+    }
+
+    const { characters, props, appliedCount } = applySpriteFinalsToVariants(
+      remix,
+      finals,
+    );
+    if (appliedCount === 0) {
+      log.debug('applySpriteFinals', 'finals already applied — no-op', { remixId });
+      return 0;
+    }
+
+    const prevRemix = remix;
+    // Optimistic local update (same body as the persisted UPDATE).
+    set((s) => ({
+      remixes: s.remixes.map((r) =>
+        r.id === remixId ? { ...r, characters, props } : r,
+      ),
+    }));
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ characters, props })
+      .eq('id', remixId);
+
+    if (error) {
+      log.error('applySpriteFinals', 'persist failed — rollback', {
+        remixId,
+        error: error.message,
+      });
+      set((s) => ({
+        remixes: s.remixes.map((r) => (r.id === remixId ? prevRemix : r)),
+      }));
+      return 0;
+    }
+
+    log.info('applySpriteFinals', 'done', { remixId, appliedCount });
+    return appliedCount;
   },
 
   cancelJob: async (jobId) => {

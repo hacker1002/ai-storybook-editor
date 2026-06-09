@@ -10,9 +10,12 @@ import type {
   Remix,
   RemixBatch,
   RemixJob,
+  RemixSprite,
+  RemixSpriteEntry,
   RemixTraitChoice,
   RemixVariantEntity,
   RemixVariantNode,
+  SpriteSwapTaskStatus,
 } from '@/types/remix';
 import { useHumans } from '@/stores/humans-store';
 import { selectCanInject } from './selectors/select-final-crops';
@@ -92,11 +95,10 @@ export const useHasPendingJob = (): boolean =>
  *  Returned shape feeds the Generate gating + swap request build in Phase 03:
  *    - `human_id`, `visual`, `traits[]` — read verbatim from the FROZEN
  *      `remix_config.characters[charKey]` (the create-time staging values).
- *    - `converted_image` — joined from the humans cache (same source the CREATE
- *      modal feeds into `runCharacterSwap`: `useHumans()` → `Human[]`, keyed by
- *      id, resolved via `visualProfiles.find(vp.name === visual).convertedImage`,
- *      mirroring `buildSwapVisualCoreRequest`). Camel-case domain shape — NOT
- *      the snake_case DB row.
+ *    - `converted_image` — joined from the humans cache (`useHumans()` →
+ *      `Human[]`, keyed by id, resolved via
+ *      `visualProfiles.find(vp.name === visual).convertedImage`). Camel-case
+ *      domain shape — NOT the snake_case DB row.
  *
  *  Returns `null` when the remix is missing, or `charKey` is not present in
  *  `remix_config.characters` (prop / unknown key). `converted_image` is `null`
@@ -307,6 +309,126 @@ export const useAnyMixSwapRunning = (
     ),
   );
 
+// ── Sprite selectors (Variants tab — sprite-swap plane) ──────────────────────
+
+/** Derive a sprite's swap task from `jobs[]` (mirror deriveBatchSwapTask).
+ *  Latest `remix_sprite_swap` job for (remixId, spriteId); maps status → UI. */
+export function deriveSpriteSwapTask(
+  jobs: RemixJob[],
+  remixId: string,
+  spriteId: string,
+): SpriteSwapTaskStatus {
+  const matches = jobs.filter(
+    (j) =>
+      j.phase === 'remix_sprite_swap' &&
+      j.remixId === remixId &&
+      j.spriteId === spriteId,
+  );
+  if (matches.length === 0) return { state: 'idle' };
+  const job = matches.reduce((latest, cur) =>
+    cur.createdAt > latest.createdAt ? cur : latest,
+  );
+
+  if (job.status === 'queued' || job.status === 'running') {
+    return { state: 'running', current: job.currentStep, total: job.totalSteps };
+  }
+
+  const failedSheets =
+    typeof job.result?.failed_sheets === 'number' ? job.result.failed_sheets : 0;
+
+  if (job.status === 'failed' || job.status === 'cancelled') {
+    return {
+      state: 'error',
+      message: job.result?.errors?.[0]?.message ?? 'Swap failed',
+      failedSheets,
+    };
+  }
+
+  const errors = job.result?.errors ?? [];
+  if (errors.length > 0) {
+    return {
+      state: 'error',
+      message: errors[0]?.message ?? 'Swap partially failed',
+      failedSheets: failedSheets || errors.length,
+    };
+  }
+  return { state: 'idle' };
+}
+
+/**
+ * Projects a remix's `sprites[]` into `RemixSprite[]` (id/order/name/crop_sheets
+ * + derived swapTask), sorted by `order`. Mirror of `useRemixBatches`.
+ *
+ * RE-RENDER NOTE — useMemo deps = `[remix, jobs]` (stable raw refs). The
+ * projection arrays are fresh each call; shallow compare would loop
+ * (memory feedback_zustand_useshallow_nested_arrays).
+ */
+export const useRemixSprites = (
+  remixId: string | null | undefined,
+): RemixSprite[] => {
+  const remix = useRemixStore(
+    (s) => (remixId ? s.remixes.find((r) => r.id === remixId) ?? null : null),
+  );
+  const jobs = useJobsForRemix(remixId ?? '');
+
+  return useMemo<RemixSprite[]>(() => {
+    if (!remix) return [];
+    return remix.sprites
+      .map((sp) => ({
+        id: sp.id,
+        order: sp.order,
+        name: sp.name,
+        crop_sheets: sp.crop_sheets,
+        swapTask: deriveSpriteSwapTask(jobs, remix.id, sp.id),
+      }))
+      .sort((a, b) => a.order - b.order);
+  }, [remix, jobs]);
+};
+
+/** True when ANY `remix_sprite_swap` job of the remix is queued/running. Guards
+ *  the modal against firing a second sprite swap. Independent of mix-swap. */
+export const useAnySpriteSwapRunning = (
+  remixId: string | null | undefined,
+): boolean =>
+  useRemixStore((s) =>
+    !!remixId &&
+    s.jobs.some(
+      (j) =>
+        j.phase === 'remix_sprite_swap' &&
+        j.remixId === remixId &&
+        (j.status === 'queued' || j.status === 'running'),
+    ),
+  );
+
+/** Distinct character object_keys present on a sprite (lineup). Drives gating —
+ *  every lineup object must have a complete swap config before Swap enables. */
+export function spriteLineupObjects(
+  sprite: RemixSprite | RemixSpriteEntry,
+): string[] {
+  const keys = new Set<string>();
+  for (const sheet of sprite.crop_sheets) {
+    for (const crop of sheet.crops) {
+      if (crop.type === 'character') keys.add(crop.object_key);
+    }
+  }
+  return [...keys];
+}
+
+/** Precondition for a character to be sprite-swappable (job 02): a picked human,
+ *  a picked visual, a resolved converted image, and ≥1 enabled trait. Pure —
+ *  feeds the Variants-tab gating (`canSwapSprite`). */
+export function hasCompleteSwapConfig(
+  view: RemixConfigCharacterView | null,
+): boolean {
+  if (!view) return false;
+  return (
+    !!view.human_id &&
+    !!view.visual &&
+    !!view.converted_image &&
+    view.traits.some((t) => t.is_enabled)
+  );
+}
+
 // ── Action bundle ────────────────────────────────────────────────────────────
 
 export const useRemixActions = () =>
@@ -333,5 +455,13 @@ export const useRemixActions = () =>
       removeBatchSheet: s.removeBatchSheet,
       setVariantVisualSwapUrl: s.setVariantVisualSwapUrl,
       takeFinalBack: s.takeFinalBack,
+      startSpriteSwap: s.startSpriteSwap,
+      applySpriteFinals: s.applySpriteFinals,
+      addSprite: s.addSprite,
+      removeSprite: s.removeSprite,
+      appendSpriteSheet: s.appendSpriteSheet,
+      removeSpriteSheet: s.removeSpriteSheet,
+      ensureRemixSpriteSeed: s.ensureRemixSpriteSeed,
+      takeSpriteFinalBack: s.takeSpriteFinalBack,
     })),
   );

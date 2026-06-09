@@ -18,7 +18,7 @@ import { useState } from 'react';
 import { Check, ImageOff } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
-import type { RemixCropSheet, CropEntry, SwapResult } from '@/types/remix';
+import type { CropSheetBase, SwapResultBase } from '@/types/remix';
 import { COMPOSER_FRAME, resolveStrokePx } from '../swap-modal-constants';
 import type { CropOwnershipState } from '../hooks/use-crop-ownership';
 import { StarBadge } from './star-badge';
@@ -34,9 +34,41 @@ const CHECKERBOARD_BACKGROUND_SIZE = '16px 16px';
 
 const log = createLogger('Editor', 'ComposedCropSheet');
 
+/** The structural shape `ComposedCrop` needs from EITHER plane's crop entry.
+ *  Plane-discriminant fields are optional so both the mix crops
+ *  (`CropEntry`/`SwapResultCrop` — carry `spread_id`/`id`) and the sprite crops
+ *  (`SpriteCrop`/`SwapResultSpriteCrop` — carry `type`/`object_key`/`variant_key`)
+ *  structurally assign. The cropKey is derived via the `cropKeyOf` prop, NOT a
+ *  hardcoded field combo. */
+export type RenderableCrop = {
+  geometry: { x: number; y: number; w: number; h: number };
+  media_url: string;
+  /** Alt text — `CropEntry` has it, swap crops do not. Falls back to 'Crop'. */
+  name?: string;
+  // ── mix plane discriminants ──
+  spread_id?: string;
+  id?: string;
+  // ── sprite plane discriminants ──
+  type?: string;
+  object_key?: string;
+  variant_key?: string;
+};
+
+/** Stage sheet/swap shapes — accept BOTH planes (mix + sprite) via the shared
+ *  generic base over `RenderableCrop`. `RemixCropSheet`/`RemixSpriteCropSheet`
+ *  (and their swap-result types) both assign structurally. */
+export type StageSheet = CropSheetBase<RenderableCrop, RenderableCrop>;
+export type StageSwapResult = SwapResultBase<RenderableCrop>;
+
+/** Default cropKey accessor — mix plane `${spread_id}/${id}` (backward
+ *  compatible: callers that omit `cropKeyOf` keep the exact mix key). Internal —
+ *  not exported (react-refresh: component files export components/types only). */
+const defaultMixCropKey = (crop: RenderableCrop): string =>
+  `${crop.spread_id ?? ''}/${crop.id ?? ''}`;
+
 interface ComposedCropSheetProps {
   /** Sheet (BEFORE) geometry + crops source. AFTER uses sheet geometry only. */
-  sheet: RemixCropSheet;
+  sheet: StageSheet;
   /** Current zoom % — drives the parity stroke width (sheet-px × zoom/100). */
   zoomLevel: number;
   /** ⚡rev6 — which crops to compose. 'before' uses `sheet.crops[]`; 'after'
@@ -46,7 +78,11 @@ interface ComposedCropSheetProps {
   cropsSource?: 'before' | 'after';
   /** Required when `cropsSource === 'after'`. Provides the per-crop array AND
    *  the legacy `media_url` for the fallback path. */
-  selectedSwap?: SwapResult | null;
+  selectedSwap?: StageSwapResult | null;
+  /** Per-crop key accessor — `${spread_id}/${id}` (mix, default) or
+   *  `${type}/${object_key}/${variant_key}` (sprite). Drives selection set
+   *  lookup, ownership lookup, and the checkbox/take-back cropKey. */
+  cropKeyOf?: (crop: RenderableCrop) => string;
   /** ⚡rev6 — show ordinal badge in left gutter. Defaults to true (BEFORE).
    *  AFTER hides this — the output sheet does not need 1-based nav indices. */
   showOrdinal?: boolean;
@@ -57,7 +93,8 @@ interface ComposedCropSheetProps {
   /** When true, each composed crop renders a top-right checkbox overlay and a
    *  selected-state outline halo. */
   selectableSwapCrops?: boolean;
-  /** Set of `${spread_id}/${id}` keys currently selected (re-swap targets). */
+  /** Set of cropKeys currently selected (re-swap / subset targets). Key scheme
+   *  matches `cropKeyOf`. */
   selectedSwapCropKeys?: ReadonlySet<string>;
   /** Toggle callback fired by the checkbox; receives the `cropKey`. */
   onToggleSwapCropSelection?: (cropKey: string) => void;
@@ -68,27 +105,16 @@ interface ComposedCropSheetProps {
   //   - owned-foreign → dim + take-back button top-right (mutex: hides checkbox)
   //   - uncovered     → default (no badge, no overlay)
   // Pass `null` / undefined to disable entirely (compare mode + legacy paths).
-  /** Resolves per-crop ownership state. Caller computes via `useCropOwnership`. */
-  getOwnership?: (spreadId: string, layerId: string) => CropOwnershipState;
-  /** Click handler — receives the `${spread_id}/${id}` cropKey. Caller routes
-   *  to `takeFinalBack(remixId, spread_id, layer_id, currentBatchId)`. */
+  /** Resolves per-crop ownership state by cropKey. Caller computes via
+   *  `useCropOwnership` (mix) / `useSpriteOwnership` (sprite). */
+  getOwnership?: (cropKey: string) => CropOwnershipState;
+  /** Click handler — receives the cropKey (scheme matches `cropKeyOf`). Caller
+   *  routes to `takeFinalBack` (mix) / `takeSpriteFinalBack` (sprite). */
   onTakeBack?: (cropKey: string) => void;
   /** When true, take-back buttons render disabled (e.g. `anyMixSwapRunning`).
    *  The store action also gates defensively. */
   takeBackDisabled?: boolean;
 }
-
-/** The structural shape that `ComposedCrop` needs from either source. Keeping
- *  this internal lets us feed both `CropEntry` and `SwapResultCrop` without a
- *  runtime adapter — TS verifies the field set is a subset of both.
- *
- *  rev6 — `spread_id` + `id` added to derive `cropKey = ${spread_id}/${id}` for
- *  the selection overlay. Both source types already carry these fields. */
-type RenderableCrop = Pick<CropEntry, 'spread_id' | 'id' | 'geometry' | 'media_url'> & {
-  /** Optional — `CropEntry` has it, `SwapResultCrop` does not. Used as alt
-   *  text + falls back to 'Crop'. */
-  name?: string;
-};
 
 /** Composes a crop sheet over a frame sized by `sheet.sheet_geometry`. Branches
  *  on `cropsSource`:
@@ -100,6 +126,7 @@ export function ComposedCropSheet({
   zoomLevel,
   cropsSource = 'before',
   selectedSwap = null,
+  cropKeyOf = defaultMixCropKey,
   showOrdinal,
   selectableSwapCrops = false,
   selectedSwapCropKeys,
@@ -165,17 +192,16 @@ export function ComposedCropSheet({
         // Compute per-crop selection state. Defensive: if a key in
         // `selectedSwapCropKeys` does not match any crop here, we simply skip
         // it (the modal owns pruning the set on add-batch).
-        const cropKey = `${crop.spread_id}/${crop.id}`;
+        const cropKey = cropKeyOf(crop);
         const isSelected = enableSelection
           ? (selectedSwapCropKeys?.has(cropKey) ?? false)
           : false;
-        const ownership = enableOwnership
-          ? getOwnership!(crop.spread_id, crop.id)
-          : null;
+        const ownership = enableOwnership ? getOwnership!(cropKey) : null;
         return (
           <ComposedCrop
             key={`crop-${index}`}
             crop={crop}
+            cropKey={cropKey}
             // 1-based index — drawn as a badge for navigation. Order matches
             // `req.crops` (the order the composer processes + reports `skipped[]`
             // by), so the preview numbering lines up with the composed sheet.
@@ -201,6 +227,9 @@ export function ComposedCropSheet({
 
 interface ComposedCropProps {
   crop: RenderableCrop;
+  /** Pre-derived cropKey (via `cropKeyOf`) — selection set lookup + checkbox /
+   *  take-back callback payload. */
+  cropKey: string;
   /** 1-based ordinal shown as a badge in the left gutter; null hides it
    *  (AFTER render mode does not show per-crop nav indices). */
   ordinal: number | null;
@@ -244,6 +273,7 @@ interface ComposedCropProps {
  *  `outline` paints outside `border`), preserving composer parity. */
 function ComposedCrop({
   crop,
+  cropKey,
   ordinal,
   sheetWidth,
   sheetHeight,
@@ -257,7 +287,6 @@ function ComposedCrop({
 }: ComposedCropProps) {
   const [errored, setErrored] = useState(false);
   const { x, y, w, h } = crop.geometry;
-  const cropKey = `${crop.spread_id}/${crop.id}`;
 
   const stroke = strokePx;
   const wrapperStyle: React.CSSProperties = {

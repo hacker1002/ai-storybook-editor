@@ -20,6 +20,7 @@ const TERMINAL_STATUSES = new Set<RemixJob['status']>([
 const JOB_TYPE_TO_PHASE: Record<string, RemixJobPhase> = {
   remix_audio_swap: 'audio',
   remix_mix_swap: 'remix_mix_swap',
+  remix_sprite_swap: 'remix_sprite_swap',
 };
 
 /** Map raw background_jobs row → RemixJob. Pure, no I/O. */
@@ -44,12 +45,18 @@ export function mapRowToJob(row: BackgroundJobRow): RemixJob {
   const batchId =
     typeof row.params?.batch_id === 'string' ? row.params.batch_id : undefined;
 
+  // Surface `params.sprite_id` for remix_sprite_swap jobs so selectors can match
+  // the running swap to its sprite.
+  const spriteId =
+    typeof row.params?.sprite_id === 'string' ? row.params.sprite_id : undefined;
+
   return {
     id: row.id,
     remixId,
     phase,
     characterKey,
     batchId,
+    spriteId,
     triggeredBy,
     status: row.status,
     currentStep: row.current_step ?? 0,
@@ -76,6 +83,7 @@ export function mapBackgroundJobToRemixJob(job: BackgroundJob): RemixJob {
   const characterKey =
     typeof params.character_key === 'string' ? params.character_key : undefined;
   const batchId = typeof params.batch_id === 'string' ? params.batch_id : undefined;
+  const spriteId = typeof params.sprite_id === 'string' ? params.sprite_id : undefined;
 
   return {
     id: job.id,
@@ -83,6 +91,7 @@ export function mapBackgroundJobToRemixJob(job: BackgroundJob): RemixJob {
     phase,
     characterKey,
     batchId,
+    spriteId,
     triggeredBy,
     status: job.status,
     currentStep: job.currentStep,

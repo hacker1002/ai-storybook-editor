@@ -17,7 +17,10 @@ export type CropOwnershipState =
 
 export interface CropOwnership {
   ownerMap: ReadonlyMap<string, { ownerBatchId: string; ownerBatchName: string }>;
-  getOwnership: (spreadId: string, layerId: string) => CropOwnershipState;
+  /** Resolve ownership by cropKey (`${spread_id}/${layer_id}` for the mix plane,
+   *  matching `defaultMixCropKey`). The sprite plane has its own hook
+   *  (`useSpriteOwnership`) keyed by `${type}/${object_key}/${variant_key}`. */
+  getOwnership: (cropKey: string) => CropOwnershipState;
 }
 
 const UNCOVERED: CropOwnershipState = { state: 'uncovered' };
@@ -49,9 +52,8 @@ export function useCropOwnership(
   }, [remix, batchNameById]);
 
   const getOwnership = useMemo(() => {
-    return (spreadId: string, layerId: string): CropOwnershipState => {
-      const key = `${spreadId}/${layerId}`;
-      const owner = ownerMap.get(key);
+    return (cropKey: string): CropOwnershipState => {
+      const owner = ownerMap.get(cropKey);
       if (!owner) return UNCOVERED;
       if (currentBatchId && owner.ownerBatchId === currentBatchId) {
         return {

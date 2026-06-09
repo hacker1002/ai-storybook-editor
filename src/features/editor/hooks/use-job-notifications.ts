@@ -50,7 +50,9 @@ function remixCopy(job: BackgroundJob): ToastCopy {
       ? 'Audio'
       : job.type === 'remix_mix_swap'
         ? 'Batch swap'
-        : 'Job';
+        : job.type === 'remix_sprite_swap'
+          ? 'Variant swap'
+          : 'Job';
 
   const result = (job.result ?? {}) as { errors?: { message?: string }[]; failed_sheets?: number };
   const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
@@ -126,6 +128,26 @@ export function useJobNotifications(): void {
         tone: copy.tone,
       });
       toast[copy.tone](copy.message);
+
+      // Sprite-swap finals are NON-destructive — auto-apply on terminal so the
+      // variant `visual_swap_url` lands even when the modal is closed / a
+      // non-active sprite finished. The action awaits the authoritative refetch
+      // internally; fire-and-forget (toast already shown).
+      if (e.job.type === 'remix_sprite_swap' && e.job.status === 'completed') {
+        const remixId =
+          typeof e.job.params?.remix_id === 'string' ? e.job.params.remix_id : undefined;
+        if (remixId) {
+          void useRemixStore
+            .getState()
+            .applySpriteFinals(remixId)
+            .catch((err) =>
+              log.warn('applySpriteFinals', 'auto-apply failed', {
+                remixId,
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+        }
+      }
 
       if (copy.autoDismiss) {
         const id = setTimeout(() => {

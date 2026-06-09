@@ -23,6 +23,7 @@ import { useAuthStore } from '../auth-store';
 import { createCrudSlice } from './slices/crud-slice';
 import { createJobsSlice } from './slices/jobs-slice';
 import { createSwapSlice } from './slices/swap-slice';
+import { createSpriteSlice } from './slices/sprite-slice';
 import { createSyncSlice } from './slices/sync-slice';
 import type { RemixStore } from './types';
 
@@ -39,6 +40,7 @@ export const useRemixStore = create<RemixStore>()(
       ...createCrudSlice(...a),
       ...createJobsSlice(...a),
       ...createSwapSlice(...a),
+      ...createSpriteSlice(...a),
       ...createSyncSlice(...a),
     })),
     { name: 'remix-store' },

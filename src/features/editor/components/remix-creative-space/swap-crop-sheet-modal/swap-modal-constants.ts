@@ -48,6 +48,9 @@ export const SHEET_MAX = 10;
 /** A remix must keep at least this many batches. */
 export const BATCH_MIN = 1;
 
+/** A remix must keep at least this many sprites (Variants tab). */
+export const SPRITE_MIN = 1;
+
 /** Composer parity — colours mirror `DEFAULT_FRAME_*` in
  *  `ai-storybook-image-api/src/models/requests/build_crop_sheet.py`. The
  *  client-side preview (`ComposedCropSheet`) reproduces the PNG the Python

@@ -44,15 +44,18 @@ export interface RelayoutConfirmDialogProps {
 }
 
 function describe(kind: RelayoutConfirmKind, batchName: string): string {
+  // `batchName` carries the group label verbatim (e.g. "Batch 1" / "Sprite 1"),
+  // so the copy stays plane-neutral — reused by both the Batches and Variants
+  // (sprite) tabs.
   const tail = 'This action cannot be undone.';
   switch (kind) {
     case 'remove-batch':
-      return `Batch "${batchName}" has swapped sheets. Deleting it will remove all swap results of this batch. ${tail}`;
+      return `"${batchName}" has swapped sheets. Deleting it will remove all of its swap results. ${tail}`;
     case 'add-sheet':
-      return `Adding a sheet to "${batchName}" will recompute the entire batch layout and clear all existing swap results. ${tail}`;
+      return `Adding a sheet to "${batchName}" will recompute its entire layout and clear all existing swap results. ${tail}`;
     case 'remove-sheet':
     default:
-      return `Removing a sheet from "${batchName}" will recompute the entire batch layout and clear all existing swap results. ${tail}`;
+      return `Removing a sheet from "${batchName}" will recompute its entire layout and clear all existing swap results. ${tail}`;
   }
 }
 
@@ -65,7 +68,7 @@ export function RelayoutConfirmDialog({
   onConfirm,
   onCancel,
 }: RelayoutConfirmDialogProps) {
-  const title = kind === 'remove-batch' ? 'Delete batch?' : 'Recompute layout?';
+  const title = kind === 'remove-batch' ? 'Delete?' : 'Recompute layout?';
 
   // Resolve the enclosing modal as the portal target (see file header). Callback
   // ref instead of useEffect+setState (React 19 lint). The marker renders in-place

@@ -1,23 +1,20 @@
 // swap-crop-sheet-modal.tsx — Full-screen workspace for the remix swap modal
-// (design 05-swap-crop-sheet-modal.md, batch-model rev2).
+// (design 05-swap-crop-sheet-modal.md, batch-model).
 //
-// Phase 06 root rewrite — the root is now a thin CONTAINER that owns only
-// SHARED state + selectors + action wiring, then renders the active tab:
+// Thin CONTAINER that owns only SHARED state + selectors + action wiring, then
+// renders the active tab:
 //   • Header   — RemixModalHeader (3-tab pill group: Variants / Batches / Lotties)
 //   • Body     — one of VariantsTab | BatchesTab | LottiesTab (tab owns its own
-//                sidebar + CropSheetStage; the stage is NOT rendered by the root)
-//                + SwapParametersSidebar (right — collect-only swap params)
+//                sidebar + CropSheetStage) + SwapParametersSidebar (right)
 //
-// Shared state held here (lives across tab/variant/batch switches):
-//   activeTab, activeVariantRef, variantSwapTasks, activeBatchRef, compareMode,
-//   zoomLevel, dividerPosition, params, submittingBatchId.
+// Both the Variants (sprite plane) and Batches (mix plane) tabs drive a BATCH
+// background swap job:
+//   • Variants → `sprites[]` + sprite-swap (api/jobs/02). Per-variant synchronous
+//     Generate is GONE (sprite-swap redesign).
+//   • Batches  → `mixes[]` + mix-swap (api/jobs/05).
 //
-// Built on shadcn `Dialog` overridden to full-screen (inset-0, max-w-none,
-// h-screen) — free focus-trap + Esc dismissal. Dark theme tokens applied via
-// inline CSS variables on DialogContent.
-//
-// On mount the root fires the idempotent legacy→batch migration once, and an
-// effect closes the modal when the underlying remix disappears (realtime).
+// On mount the root fires the idempotent legacy→batch migration AND lazily seeds
+// the initial sprite; an effect closes the modal when the remix disappears.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,25 +26,21 @@ import {
 import { toast } from 'sonner';
 import {
   useRemixById,
-  useRemixVariants,
+  useRemixSprites,
   useRemixBatches,
   useAnyMixSwapRunning,
+  useAnySpriteSwapRunning,
   useRemixActions,
   useRemixStore,
 } from '@/stores/remix-store';
-import type { RemixConfigCharacterView } from '@/stores/remix-store/selectors';
-import { useHumansStore } from '@/stores/humans-store';
-import { useSnapshotStore } from '@/stores/snapshot-store';
 import { useInteractionLayer } from '@/features/editor/contexts';
 import { EnqueueJobError } from '@/apis/jobs-api';
 import { createLogger } from '@/utils/logger';
-import type { Human } from '@/types/human';
 import type {
   SwapCropSheetTarget,
-  RemixVariantEntity,
   RemixBatch,
+  RemixSprite,
   SwapModelParams,
-  SwapPreviewState,
 } from '@/types/remix';
 import { RemixModalHeader, type RemixModalTab } from './remix-modal-header';
 import { SwapParametersSidebar } from './swap-parameters-sidebar';
@@ -55,7 +48,6 @@ import { VariantsTab } from './tabs/variants-tab';
 import { BatchesTab } from './tabs/batches-tab';
 import { LottiesTab } from './tabs/lotties-tab';
 import { SelectionProvider } from './hooks/use-selected-swap-crops';
-import { runVariantSwap } from '../utils/run-variant-swap';
 import { DEFAULT_SWAP_PARAMS, SWAP_MODAL_TOKENS, Z_INDEX, ZOOM } from './swap-modal-constants';
 
 const log = createLogger('Editor', 'SwapCropSheetModal');
@@ -65,12 +57,10 @@ interface Props {
   onClose: () => void;
 }
 
-/** Active variant pointer for the Variants tab. Null when the remix has no
- *  char/prop entities yet. `${entityKey}/${variantKey}` is also the
- *  `variantSwapTasks` map key. */
-interface ActiveVariantRef {
-  entityKey: string;
-  variantKey: string;
+/** Active sprite+sheet pointer for the Variants tab. */
+interface ActiveSpriteRef {
+  spriteId: string;
+  sheetIndex: number;
 }
 
 /** Active batch+sheet pointer for the Batches tab. */
@@ -80,31 +70,18 @@ interface ActiveBatchRef {
 }
 
 /** Default tab from the opener target — a `mix` (= batch) opener lands on the
- *  Batches tab, everything else on Variants. */
+ *  Batches tab, a character/prop opener on Variants. */
 function defaultTab(target: SwapCropSheetTarget): RemixModalTab {
   return target.type === 'mix' ? 'batches' : 'variants';
 }
 
-/** First active-variant pointer when the modal opens. Anchors to the opener's
- *  entity (if it is a char/prop) + its first variant (base first by selector
- *  ordering); else the first entity/variant; null when no char/prop entities. */
-function initialVariantRef(
-  target: SwapCropSheetTarget,
-  entities: RemixVariantEntity[],
-): ActiveVariantRef | null {
-  if (entities.length === 0) return null;
-  const opener =
-    target.type !== 'mix'
-      ? entities.find((e) => e.key === target.key)
-      : undefined;
-  const entity = opener ?? entities[0];
-  const firstVariant = entity.variants[0];
-  if (!firstVariant) return null;
-  return { entityKey: entity.key, variantKey: firstVariant.variantKey };
+/** First active-sprite pointer — first sprite, sheet 0. Null pre-seed. */
+function initialSpriteRef(sprites: RemixSprite[]): ActiveSpriteRef | null {
+  if (sprites.length === 0) return null;
+  return { spriteId: sprites[0].id, sheetIndex: 0 };
 }
 
-/** First active-batch pointer when the modal opens — first batch, sheet 0.
- *  Null when the remix has no batches yet (pre-migration frame). */
+/** First active-batch pointer — first batch, sheet 0. Null pre-migration. */
 function initialBatchRef(batches: RemixBatch[]): ActiveBatchRef | null {
   if (batches.length === 0) return null;
   return { batchId: batches[0].id, sheetIndex: 0 };
@@ -124,52 +101,38 @@ function mapMixSwapError(code: string | undefined): string {
   }
 }
 
-/** Resolves the frozen `remix_config` character view for `charKey` from the
- *  store + humans cache without a hook — mirrors `useRemixConfigCharacter`
- *  so the Generate handler can run inside an event callback. Returns null for
- *  props / missing config. */
-function resolveConfigCharacter(
-  remixId: string,
-  charKey: string,
-): RemixConfigCharacterView | null {
-  const configChar =
-    useRemixStore
-      .getState()
-      .remixes.find((r) => r.id === remixId)
-      ?.remix_config.characters.find((c) => c.key === charKey) ?? null;
-  if (!configChar) return null;
-
-  let convertedImage: string | null = null;
-  if (configChar.human_id && configChar.visual) {
-    const human = useHumansStore
-      .getState()
-      .humans.find((h) => h.id === configChar.human_id);
-    convertedImage =
-      human?.visualProfiles.find((vp) => vp.name === configChar.visual)
-        ?.convertedImage ?? null;
+/** Maps a sprite-swap enqueue error code (api/jobs/02) to a toast message. */
+function mapSpriteSwapError(code: string | undefined): string {
+  switch (code) {
+    case 'MISSING_OBJECT_CONFIG':
+      return 'Finish the swap config (human + visual + extract + ≥1 trait) for every character first';
+    case 'NO_SWAP_OBJECTS':
+      return 'This sprite has no variants to swap';
+    case 'SPRITE_NOT_FOUND':
+      return 'This sprite no longer exists — reopen the modal';
+    default:
+      return "Couldn't start swap — try again";
   }
-  return {
-    human_id: configChar.human_id,
-    visual: configChar.visual,
-    traits: configChar.traits,
-    converted_image: convertedImage,
-  };
 }
 
 export function SwapCropSheetModal({ target, onClose }: Props) {
   const remix = useRemixById(target.remixId);
-  const variants = useRemixVariants(target.remixId);
+  const sprites = useRemixSprites(target.remixId);
   const batches = useRemixBatches(target.remixId);
   const anyMixSwapRunning = useAnyMixSwapRunning(target.remixId);
+  const anySpriteSwapRunning = useAnySpriteSwapRunning(target.remixId);
   const {
-    setVariantVisualSwapUrl,
     removeBatch,
     appendBatchSheet,
     removeBatchSheet,
     startMixSwap,
+    startSpriteSwap,
+    removeSprite,
+    appendSpriteSheet,
+    removeSpriteSheet,
+    ensureRemixSpriteSeed,
   } = useRemixActions();
-  // `migrateLegacyRemixToBatch` lives on the sync slice (not in the
-  // `useRemixActions` bundle) — pull it directly.
+  // `migrateLegacyRemixToBatch` lives on the sync slice — pull it directly.
   const migrateLegacyRemixToBatch = useRemixStore(
     (s) => s.migrateLegacyRemixToBatch,
   );
@@ -178,11 +141,12 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const [activeTab, setActiveTab] = useState<RemixModalTab>(() =>
     defaultTab(target),
   );
-  const [activeVariantRef, setActiveVariantRef] =
-    useState<ActiveVariantRef | null>(() => initialVariantRef(target, variants));
-  const [variantSwapTasks, setVariantSwapTasks] = useState<
-    Record<string, SwapPreviewState>
-  >({});
+  const [activeSpriteRef, setActiveSpriteRef] = useState<ActiveSpriteRef | null>(
+    () => initialSpriteRef(sprites),
+  );
+  const [submittingSpriteId, setSubmittingSpriteId] = useState<string | null>(
+    null,
+  );
   const [activeBatchRef, setActiveBatchRef] = useState<ActiveBatchRef | null>(
     () => initialBatchRef(batches),
   );
@@ -217,8 +181,6 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     },
     onClickOutside: handleEscOrClickOutside,
     captureClickOutside: true,
-    // Radix Select / Popper / Tooltip portals targeted inside this modal — treat
-    // clicks inside them as "click inside this layer".
     portalSelectors: [
       '[data-radix-popper-content-wrapper]',
       '[data-radix-select-content]',
@@ -226,20 +188,17 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     ],
   });
 
-  // ── Migration on-mount (idempotent) ─────────────────────────────────────────
-  // Fire the legacy→batch migration exactly once. Deps `[target.remixId]` only
-  // (React 19 lint — memory feedback_react19_set_state_in_effect). The action is
-  // a no-op for already-migrated remixes and persists immediately.
+  // ── On-mount one-shots (idempotent) ──────────────────────────────────────────
+  // Legacy→batch migration + lazy sprite seed. Deps `[target.remixId]` only
+  // (React 19 lint — memory feedback_react19_set_state_in_effect). Both actions
+  // are no-ops when nothing is needed and persist immediately.
   useEffect(() => {
     void migrateLegacyRemixToBatch(target.remixId);
+    void ensureRemixSpriteSeed(target.remixId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.remixId]);
 
   // ── Auto-close when the remix disappears (realtime delete) ───────────────────
-  // `useRemixById` returns null only when the remix is gone (selectors return []
-  // for empty variants/batches — so a null remix is the unambiguous "deleted"
-  // signal). Closing via the onClose callback prop is the only side-effect (not
-  // an arbitrary in-effect setState).
   useEffect(() => {
     if (remix === null) {
       log.warn('autoClose', 'remix resolved null — closing modal', {
@@ -256,16 +215,16 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     setActiveTab(tab);
     setCompareMode(false);
     setDividerPosition(50);
-    if (tab === 'variants' && !activeVariantRef) {
-      setActiveVariantRef(initialVariantRef(target, variants));
+    if (tab === 'variants' && !activeSpriteRef) {
+      setActiveSpriteRef(initialSpriteRef(sprites));
     } else if (tab === 'batches' && !activeBatchRef) {
       setActiveBatchRef(initialBatchRef(batches));
     }
   };
 
-  const handleSelectVariant = (entityKey: string, variantKey: string) => {
-    log.debug('handleSelectVariant', 'select variant', { entityKey, variantKey });
-    setActiveVariantRef({ entityKey, variantKey });
+  const handleSelectSpriteSheet = (spriteId: string, sheetIndex: number) => {
+    log.debug('handleSelectSpriteSheet', 'select sheet', { spriteId, sheetIndex });
+    setActiveSpriteRef({ spriteId, sheetIndex });
     setCompareMode(false);
     setDividerPosition(50);
   };
@@ -287,57 +246,36 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [],
   );
 
-  // ── onRunGenerate (Variants tab) ─────────────────────────────────────────────
-  // Orchestrates a single per-variant re-swap via `run-variant-swap.ts`. The
-  // helper's `setTask` keys by the value passed as its first arg; the modal map
-  // is keyed `${entityKey}/${variantKey}`, so we pass the composite key as the
-  // task identity while the persist target still uses the bare `variantKey`.
-  const handleRunGenerate = useCallback(
-    (entityKey: string, variantKey: string) => {
-      const entity = variants.find((e) => e.key === entityKey);
-      const variant = entity?.variants.find((v) => v.variantKey === variantKey);
-      if (!entity || !variant) {
-        log.warn('handleRunGenerate', 'entity/variant not found — skip', {
-          entityKey,
-          variantKey,
+  // ── onSwapSprite (Variants tab) ──────────────────────────────────────────────
+  const handleSwapSprite = useCallback(
+    async (spriteId: string) => {
+      setSubmittingSpriteId(spriteId);
+      try {
+        const outcome = await startSpriteSwap({
+          remixId: target.remixId,
+          spriteId,
+          params,
+          forceResweep: true,
         });
-        return;
+        log.info('handleSwapSprite', 'enqueue outcome', {
+          spriteId,
+          kind: outcome.kind,
+        });
+        if (outcome.kind === 'deduped') {
+          toast.info('A sprite swap is already running for this remix');
+        } else if (outcome.kind === 'enqueued') {
+          toast.success('Swap started');
+        }
+        // 'skipped' (busy) is silent — gating already disables the button.
+      } catch (err) {
+        const code = err instanceof EnqueueJobError ? err.code : undefined;
+        log.error('handleSwapSprite', 'enqueue failed', { spriteId, code });
+        toast.error(mapSpriteSwapError(code));
+      } finally {
+        setSubmittingSpriteId(null);
       }
-
-      const cfgChar = resolveConfigCharacter(target.remixId, entityKey);
-      const baseSwapUrl =
-        entity.variants.find((v) => v.isBase)?.visualSwapUrl ?? null;
-      const humanImageUrlOverride = variant.isBase ? null : baseSwapUrl;
-
-      const humansMap: Record<string, Human> = Object.fromEntries(
-        useHumansStore.getState().humans.map((h) => [h.id, h]),
-      );
-      const snapChars = useSnapshotStore.getState().characters ?? [];
-
-      const taskKey = `${entityKey}/${variantKey}`;
-      const setTask = (_key: string, state: SwapPreviewState) =>
-        setVariantSwapTasks((prev) => ({ ...prev, [taskKey]: state }));
-
-      log.info('handleRunGenerate', 'start variant swap', {
-        entityKey,
-        variantKey,
-        isBase: variant.isBase,
-        reuseBaseSwap: humanImageUrlOverride != null,
-      });
-
-      void runVariantSwap(
-        variantKey,
-        cfgChar,
-        variant.illustrationUrl,
-        humanImageUrlOverride,
-        humansMap,
-        snapChars,
-        entityKey,
-        setTask,
-        (img) => setVariantVisualSwapUrl(target.remixId, entityKey, variantKey, img),
-      );
     },
-    [variants, target.remixId, setVariantVisualSwapUrl],
+    [startSpriteSwap, target.remixId, params],
   );
 
   // ── onSwapBatch (Batches tab) ────────────────────────────────────────────────
@@ -360,7 +298,6 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         } else if (outcome.kind === 'enqueued') {
           toast.success('Swap started');
         }
-        // 'skipped' (busy) is silent — gating already disables the button.
       } catch (err) {
         const code = err instanceof EnqueueJobError ? err.code : undefined;
         log.error('handleSwapBatch', 'enqueue failed', { batchId, code });
@@ -372,11 +309,24 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [startMixSwap, target.remixId, params],
   );
 
+  // ── Sprite sidebar action callbacks (thin store delegates) ───────────────────
+  // `handleAddSprite` lives in `VariantsTab` (reads selection from
+  // `useSelectedSwapCrops()`); the modal owns only `onActivateSprite`.
+  const handleRemoveSprite = useCallback(
+    (spriteId: string) => void removeSprite(target.remixId, spriteId),
+    [removeSprite, target.remixId],
+  );
+  const handleAddSpriteSheet = useCallback(
+    (spriteId: string) => void appendSpriteSheet(target.remixId, spriteId),
+    [appendSpriteSheet, target.remixId],
+  );
+  const handleRemoveSpriteSheet = useCallback(
+    (spriteId: string, sheetIndex: number) =>
+      void removeSpriteSheet(target.remixId, spriteId, sheetIndex),
+    [removeSpriteSheet, target.remixId],
+  );
+
   // ── Batch sidebar action callbacks (thin store delegates) ────────────────────
-  // Note: `handleAddBatch` lives in `BatchesTab` (rev6 — phase 04 + 05) because
-  // it must read selection state from `useSelectedSwapCrops()`. The modal owns
-  // only the `onActivateBatch` setter that BatchesTab calls after a successful
-  // add (auto-select the newly created batch).
   const handleRemoveBatch = useCallback(
     (batchId: string) => void removeBatch(target.remixId, batchId),
     [removeBatch, target.remixId],
@@ -391,20 +341,31 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [removeBatchSheet, target.remixId],
   );
 
-  // ── Selection reset key (rev6 — phase 04) ───────────────────────────────────
-  // `SelectionProvider` below wraps `BatchesTab` and holds the per-crop checkbox
-  // selection state. We remount it (→ fresh `new Set()`) by changing its `key`
-  // prop, NOT by `useEffect` + `setState` (React 19 lint — memory
-  // feedback_react19_set_state_in_effect).
-  //
-  // CRITICAL: `activeBatchTotalSwapResultsCount` is the SUM across all sheets in
-  // the active batch (NOT a per-sheet media_url). Switching sheets within the
-  // same batch keeps the sum stable → key stable → selection persists. A
-  // completed swap pushes new `swap_results` entries → sum increases → key
-  // changes → selection resets. See phase-04 gotcha #1.
-  //
-  // Hooks must run before the `if (remix === null) return null` early-return
-  // below — Rules of Hooks.
+  // ── Selection reset keys ─────────────────────────────────────────────────────
+  // `SelectionProvider` is remounted (→ fresh `new Set()`) by changing its `key`
+  // — NOT useEffect+setState (React 19 lint). The reset key is the active sprite/
+  // batch id + the SUM of swap_results across its sheets (a completed swap pushes
+  // results → sum increases → key changes → selection resets; switching SHEETS
+  // within the same sprite/batch keeps the sum stable → selection persists).
+  const activeSprite = useMemo(
+    () =>
+      activeSpriteRef
+        ? sprites.find((s) => s.id === activeSpriteRef.spriteId) ?? null
+        : null,
+    [sprites, activeSpriteRef],
+  );
+  const activeSpriteSwapResultsCount = useMemo(
+    () =>
+      activeSprite
+        ? activeSprite.crop_sheets.reduce(
+            (acc, s) => acc + s.swap_results.length,
+            0,
+          )
+        : 0,
+    [activeSprite],
+  );
+  const spriteSelectionResetKey = `${activeSpriteRef?.spriteId ?? '__none__'}::${activeSpriteSwapResultsCount}`;
+
   const activeBatch = useMemo(
     () =>
       activeBatchRef
@@ -412,7 +373,6 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         : null,
     [batches, activeBatchRef],
   );
-
   const activeBatchTotalSwapResultsCount = useMemo(
     () =>
       activeBatch
@@ -423,8 +383,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         : 0,
     [activeBatch],
   );
-
-  const selectionResetKey = `${activeBatchRef?.batchId ?? '__none__'}::${activeBatchTotalSwapResultsCount}`;
+  const batchSelectionResetKey = `${activeBatchRef?.batchId ?? '__none__'}::${activeBatchTotalSwapResultsCount}`;
 
   // entity selectors return [] when the remix is gone; the null-remix close is
   // handled by the effect above. Render null for that single frame.
@@ -449,7 +408,6 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
       <DialogContent
         ref={dialogContentRef}
         aria-labelledby="swap-crop-sheet-modal-title"
-        // Suppress Radix auto-dismiss — ILS owns Esc + click-outside routing.
         onEscapeKeyDown={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
@@ -459,8 +417,6 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
             zIndex: Z_INDEX.swapModal,
           } as React.CSSProperties
         }
-        // Full-screen override + dark tokens; hide the built-in close button —
-        // the header owns the close control.
         className="inset-0 left-0 top-0 flex h-screen max-h-screen w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-[var(--swap-modal-bg)] p-0 text-[var(--swap-modal-text-primary)] [&>button]:hidden"
       >
         <DialogTitle className="sr-only">Remix — quản lý crop sheet</DialogTitle>
@@ -477,25 +433,28 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
 
         <div className="flex min-h-0 flex-1">
           {activeTab === 'variants' && (
-            <VariantsTab
-              remixId={target.remixId}
-              entities={variants}
-              activeVariantRef={activeVariantRef}
-              variantSwapTasks={variantSwapTasks}
-              onSelectVariant={handleSelectVariant}
-              onRunGenerate={handleRunGenerate}
-              {...sharedStageProps}
-            />
+            // Keyed remount → per-cell selection inside `SelectionProvider`
+            // resets on sprite switch / new swap_results (no useEffect+setState).
+            <SelectionProvider key={spriteSelectionResetKey}>
+              <VariantsTab
+                remixId={target.remixId}
+                sprites={sprites}
+                activeSpriteRef={activeSpriteRef}
+                submittingSpriteId={submittingSpriteId}
+                anySpriteSwapRunning={anySpriteSwapRunning}
+                onSelectSpriteSheet={handleSelectSpriteSheet}
+                onActivateSprite={setActiveSpriteRef}
+                onRemoveSprite={handleRemoveSprite}
+                onAddSheet={handleAddSpriteSheet}
+                onRemoveSheet={handleRemoveSpriteSheet}
+                onSwapSprite={handleSwapSprite}
+                {...sharedStageProps}
+              />
+            </SelectionProvider>
           )}
 
           {activeTab === 'batches' && (
-            // Keyed remount → selection state inside `SelectionProvider` resets
-            // automatically when `selectionResetKey` changes (batch switch OR
-            // new swap_results pushed). NO useEffect+setState pair — React 19
-            // lint clean by construction. Provider lives at modal scope so tab
-            // switches (variants ↔ batches) preserve identity; only key change
-            // unmounts the subtree.
-            <SelectionProvider key={selectionResetKey}>
+            <SelectionProvider key={batchSelectionResetKey}>
               <BatchesTab
                 remixId={target.remixId}
                 batches={batches}
@@ -515,7 +474,11 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
 
           {activeTab === 'lotties' && <LottiesTab remixId={target.remixId} />}
 
-          <SwapParametersSidebar params={params} onChange={setParams} />
+          <SwapParametersSidebar
+            params={params}
+            onChange={setParams}
+            activeTab={activeTab}
+          />
         </div>
       </DialogContent>
     </Dialog>
