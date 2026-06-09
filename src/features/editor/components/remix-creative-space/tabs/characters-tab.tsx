@@ -8,6 +8,7 @@ import type { Human, TraitType } from '@/types/human';
 import type { RemixCharacterEntry } from '@/types/editor';
 import type { RemixCharacterChoice } from '@/types/remix';
 import { CharacterSwapRow } from './character-swap-row';
+import type { VisualProfileOption } from './visual-profile-dropdown';
 
 interface Props {
   allowedChars: RemixCharacterEntry[];
@@ -27,12 +28,15 @@ export function CharactersTab({
     label: h.sourceName || h.id,
   }));
 
-  const visualOptionsFor = (humanId: string | null): SearchableDropdownOption[] => {
+  const visualOptionsFor = (humanId: string | null): VisualProfileOption[] => {
     if (!humanId) return [];
     const human = humans.find((h) => h.id === humanId);
     return (
-      human?.visualProfiles.map((vp) => ({ value: vp.name, label: vp.name })) ??
-      []
+      human?.visualProfiles.map((vp) => ({
+        value: vp.name,
+        label: vp.name,
+        thumbnail: vp.convertedImage ?? vp.nobgImage ?? vp.rawImages[0] ?? null,
+      })) ?? []
     );
   };
 

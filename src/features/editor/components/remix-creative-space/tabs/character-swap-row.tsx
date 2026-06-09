@@ -14,6 +14,10 @@ import {
   SearchableDropdown,
   type SearchableDropdownOption,
 } from '@/components/ui/searchable-dropdown';
+import {
+  VisualProfileDropdown,
+  type VisualProfileOption,
+} from './visual-profile-dropdown';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import { TRAIT_TYPES, TRAIT_LABELS } from '@/constants/trait-constants';
@@ -27,7 +31,7 @@ interface Props {
   bookChar: RemixCharacterEntry;
   entry: RemixCharacterChoice | undefined;
   humanOptions: SearchableDropdownOption[];
-  visualOptions: SearchableDropdownOption[];
+  visualOptions: VisualProfileOption[];
   /** Traits the selected visual can swap (non-empty description); null = no visual yet. */
   supportedTraits: Set<TraitType> | null;
   onUpsert: (patch: Partial<RemixCharacterChoice>) => void;
@@ -94,7 +98,7 @@ export function CharacterSwapRow({
           disabled={!enabled}
           className="w-[108px] shrink-0"
         />
-        <SearchableDropdown
+        <VisualProfileDropdown
           options={visualOptions}
           value={visual}
           onChange={(v) => onUpsert({ visual: v })}
