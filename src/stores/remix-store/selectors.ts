@@ -453,7 +453,6 @@ export const useRemixActions = () =>
       removeBatch: s.removeBatch,
       appendBatchSheet: s.appendBatchSheet,
       removeBatchSheet: s.removeBatchSheet,
-      setVariantVisualSwapUrl: s.setVariantVisualSwapUrl,
       takeFinalBack: s.takeFinalBack,
       startSpriteSwap: s.startSpriteSwap,
       applySpriteFinals: s.applySpriteFinals,

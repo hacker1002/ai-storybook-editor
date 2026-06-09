@@ -111,8 +111,9 @@ export type RemixCropSheet = CropSheetBase<CropEntry, SwapResultCrop>;
 // remix variant carrying `swap_results`. Prop also drops `sounds` (not used).
 
 /** Character variant extended for remix — adds `visual_swap_url`, the per-variant
- *  output of `/api/remix/swap-character-visual`. Populated at clone time on the
- *  base variant (type=0) from `remix_config.characters[].base_image_url`
+ *  swapped appearance (now written by the async sprite-swap job via
+ *  `applySpriteFinals`). Populated at clone time on the base variant (type=0)
+ *  from `remix_config.characters[].base_image_url`
  *  (DB-CHANGELOG 2026-05-20 / Validation S1b). Optional → legacy rows omit it.
  *  NOTE: this is distinct from `RemixCharacterChoice.base_image_url`, which is
  *  the modal staging value; the variant field is the persisted result. */
@@ -272,8 +273,8 @@ export interface RemixCharacterChoice {
   /** 5 trait toggles; only enabled traits (with a human description) are sent
    *  to the swap endpoint. */
   traits: RemixTraitChoice[];
-  /** Result of live base-variant swap (`/api/remix/swap-character-visual`).
-   *  Copied into the cloned variant `visual_swap_url` at create time. */
+  /** Base-variant swapped appearance staged in the create modal. Copied into
+   *  the cloned variant `visual_swap_url` at create time. */
   base_image_url: string | null;
   is_enabled: boolean;
 }
