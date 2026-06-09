@@ -71,8 +71,6 @@ export function BatchesSidebar({
   onAddSheet,
   onRemoveSheet,
 }: BatchesSidebarProps) {
-  const canRemoveBatch = batches.length > BATCH_MIN;
-
   // ⚡rev6 — Wrap the `[+]` button in a Tooltip only when there's gating text
   // to surface (avoid an empty-content popover on the happy path).
   const addBatchButton = (
@@ -146,14 +144,16 @@ export function BatchesSidebar({
           aria-label="Batches tree"
           className="min-h-0 flex-1 overflow-y-auto py-1"
         >
-          {batches.map((batch) => (
+          {batches.map((batch, index) => (
             <BatchNode
               key={batch.id}
               batch={batch}
               activeBatchRef={activeBatchRef}
               collapsed={isCollapsed(batch.id)}
               anyMixSwapRunning={anyMixSwapRunning}
-              canRemoveBatch={canRemoveBatch}
+              // First BATCH_MIN batches are permanent (the seed batch at index
+              // 0); only later batches expose the delete affordance.
+              canRemoveBatch={index >= BATCH_MIN}
               onToggleCollapse={onToggleCollapse}
               onSelectBatchSheet={onSelectBatchSheet}
               onRemoveBatch={onRemoveBatch}

@@ -68,8 +68,6 @@ export function SpritesSidebar({
   onAddSheet,
   onRemoveSheet,
 }: SpritesSidebarProps) {
-  const canRemoveSprite = sprites.length > SPRITE_MIN;
-
   const addSpriteButton = (
     <button
       type="button"
@@ -138,14 +136,16 @@ export function SpritesSidebar({
           aria-label="Sprites tree"
           className="min-h-0 flex-1 overflow-y-auto py-1"
         >
-          {sprites.map((sprite) => (
+          {sprites.map((sprite, index) => (
             <SpriteNode
               key={sprite.id}
               sprite={sprite}
               activeSpriteRef={activeSpriteRef}
               collapsed={isCollapsed(sprite.id)}
               anySpriteSwapRunning={anySpriteSwapRunning}
-              canRemoveSprite={canRemoveSprite}
+              // First SPRITE_MIN sprites are permanent (the seed sprite at
+              // index 0); only later sprites expose the delete affordance.
+              canRemoveSprite={index >= SPRITE_MIN}
               onToggleCollapse={onToggleCollapse}
               onSelectSpriteSheet={onSelectSpriteSheet}
               onRemoveSprite={onRemoveSprite}
