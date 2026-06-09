@@ -1,4 +1,4 @@
-// apply-sprite-finals.test.ts — Pure sprite-swap finalize helpers.
+// apply-sprite-finals.test.ts — Pure sprite-swap finals resolver.
 
 import { describe, it, expect } from 'vitest';
 import type {
@@ -6,10 +6,7 @@ import type {
   RemixSpriteEntry,
   SwapResultSpriteCrop,
 } from '@/types/remix';
-import {
-  resolveSpriteFinals,
-  applySpriteFinalsToVariants,
-} from './apply-sprite-finals';
+import { resolveSpriteFinals } from './apply-sprite-finals';
 
 function swapCrop(
   objectKey: string,
@@ -99,55 +96,5 @@ describe('resolveSpriteFinals', () => {
     expect(finals).toHaveLength(1);
     expect(finals[0].media_url).toBe('high');
     expect(finals[0].sprite_id).toBe('s2');
-  });
-});
-
-// ── applySpriteFinalsToVariants ──────────────────────────────────────────────
-
-function charEntity(key: string, variantKeys: string[]) {
-  return {
-    order: 0,
-    name: key,
-    key,
-    basic_info: {} as never,
-    personality: {} as never,
-    variants: variantKeys.map((vk) => ({
-      name: vk,
-      key: vk,
-      type: 1 as const,
-      appearance: {} as never,
-      visual_description: '',
-      illustrations: [],
-      image_references: [],
-      visual_swap_url: null,
-    })),
-    voice_setting: null,
-  };
-}
-
-describe('applySpriteFinalsToVariants', () => {
-  it('writes visual_swap_url onto the matching variant', () => {
-    const remix = makeRemix([], [charEntity('c', ['v1', 'v2'])] as never);
-    const { characters, appliedCount } = applySpriteFinalsToVariants(remix, [
-      { type: 'character', object_key: 'c', variant_key: 'v1', media_url: 'swapped', sprite_id: 's1' },
-    ]);
-    expect(appliedCount).toBe(1);
-    const c = characters.find((x) => x.key === 'c')!;
-    expect(c.variants.find((v) => v.key === 'v1')?.visual_swap_url).toBe('swapped');
-    expect(c.variants.find((v) => v.key === 'v2')?.visual_swap_url).toBeNull();
-  });
-
-  it('idempotent — no change counted when url already set', () => {
-    const remix = makeRemix([], [charEntity('c', ['v1'])] as never);
-    const finals = [
-      { type: 'character' as const, object_key: 'c', variant_key: 'v1', media_url: 'x', sprite_id: 's1' },
-    ];
-    const first = applySpriteFinalsToVariants(remix, finals);
-    expect(first.appliedCount).toBe(1);
-    const second = applySpriteFinalsToVariants(
-      { ...remix, characters: first.characters },
-      finals,
-    );
-    expect(second.appliedCount).toBe(0);
   });
 });

@@ -110,22 +110,19 @@ export type RemixCropSheet = CropSheetBase<CropEntry, SwapResultCrop>;
 // Mirror snapshot Character/Prop shape but replace `crop_sheets` with the
 // remix variant carrying `swap_results`. Prop also drops `sounds` (not used).
 
-/** Character variant extended for remix — adds `visual_swap_url`, the per-variant
- *  swapped appearance (now written by the async sprite-swap job via
- *  `applySpriteFinals`). Populated at clone time on the base variant (type=0)
- *  from `remix_config.characters[].base_image_url`
- *  (DB-CHANGELOG 2026-05-20 / Validation S1b). Optional → legacy rows omit it.
- *  NOTE: this is distinct from `RemixCharacterChoice.base_image_url`, which is
- *  the modal staging value; the variant field is the persisted result. */
+/** Character variant extended for remix. The optional `visual_swap_url` mirrors
+ *  the (now dead) DB column kept for back-compat with existing rows. */
 export type RemixCharacterVariant = CharacterVariant & {
+  /** @deprecated — DB dead column, stop populating; reference resolves from
+   *  sprite finals (`resolveSpriteFinals` → `useRemixVariants.visualSwapUrl`). */
   visual_swap_url?: string | null;
 };
 
 /** Prop variant extended for remix — mirrors `RemixCharacterVariant` so the
- *  cloned prop variants match the DB schema (`props[].variants[].visual_swap_url`).
- *  Char-only feature: props never get a Generate action, but the field must
- *  exist on the type for parity with the persisted JSONB column. */
+ *  cloned prop variants match the DB schema. */
 export type RemixPropVariant = PropVariant & {
+  /** @deprecated — DB dead column, stop populating; reference resolves from
+   *  sprite finals (`resolveSpriteFinals` → `useRemixVariants.visualSwapUrl`). */
   visual_swap_url?: string | null;
 };
 

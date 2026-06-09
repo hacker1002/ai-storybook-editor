@@ -129,19 +129,20 @@ export function useJobNotifications(): void {
       });
       toast[copy.tone](copy.message);
 
-      // Sprite-swap finals are NON-destructive — auto-apply on terminal so the
-      // variant `visual_swap_url` lands even when the modal is closed / a
-      // non-active sprite finished. The action awaits the authoritative refetch
-      // internally; fire-and-forget (toast already shown).
+      // Sprite-swap terminal — refetch the authoritative remix so the updated
+      // `sprites` blob (carrying is_final winners) lands even when the modal is
+      // closed / a non-active sprite finished. Display `visualSwapUrl` then
+      // re-derives client-side (`useRemixVariants` → `resolveSpriteFinals`); the
+      // FE no longer writes the dead `visual_swap_url` column. Fire-and-forget.
       if (e.job.type === 'remix_sprite_swap' && e.job.status === 'completed') {
         const remixId =
           typeof e.job.params?.remix_id === 'string' ? e.job.params.remix_id : undefined;
         if (remixId) {
           void useRemixStore
             .getState()
-            .applySpriteFinals(remixId)
+            .refetchRemix(remixId)
             .catch((err) =>
-              log.warn('applySpriteFinals', 'auto-apply failed', {
+              log.warn('refetchRemix', 'sprite-swap terminal refetch failed', {
                 remixId,
                 error: err instanceof Error ? err.message : String(err),
               }),

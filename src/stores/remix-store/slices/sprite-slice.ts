@@ -1,12 +1,13 @@
 // remix-store/slices/sprite-slice.ts — Sprite lifecycle (Variants tab —
 // add/remove sprite + append/remove sprite sheet + lazy seed) + R5 take-back.
 // Mirror of swap-slice.ts (the mix/batch plane) on the `sprites[]` plane. The
-// sprite-swap ENQUEUE (`startSpriteSwap`) + finals auto-apply (`applySpriteFinals`)
-// live in jobs-slice.ts.
+// sprite-swap ENQUEUE (`startSpriteSwap`) lives in jobs-slice.ts.
 //
 // Cross-sprite `is_final` ownership: destructive mutations (remove sprite /
 // relayout sheets) can orphan a winner cell — `reconcileSpriteFinalsAfterMutation`
-// re-claims it (persists `sprites`) then re-applies finals to `characters`/`props`.
+// re-claims it (persists `sprites`). Display `visualSwapUrl` is DERIVED from the
+// sprites column client-side (`selectors.ts::useRemixVariants`), so no
+// characters/props write is needed after reconcile.
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
@@ -39,8 +40,8 @@ export const createSpriteSlice: RemixSliceCreator<RemixSpriteSlice> = (
 
   // R3 cross-sprite orphan reconcile — invoked AFTER a destructive sprite
   // mutation. Reads freshest sprites, runs the pure reconciler, and persists
-  // `sprites` ONLY when a flag flips. Then re-applies finals to characters/props
-  // (a removed/relaid winner may shift `visual_swap_url` to a new owner).
+  // `sprites` ONLY when a flag flips. Display `visualSwapUrl` re-derives from the
+  // updated `sprites` column client-side (no characters/props write needed).
   const reconcileSpriteFinalsAfterMutation = async (
     remixId: string,
     callerLabel: string,
@@ -80,8 +81,6 @@ export const createSpriteSlice: RemixSliceCreator<RemixSpriteSlice> = (
         return;
       }
     }
-    // Re-apply finals → characters/props (refetch is internal + idempotent).
-    await get().applySpriteFinals(remixId);
   };
 
   return {
@@ -190,8 +189,8 @@ export const createSpriteSlice: RemixSliceCreator<RemixSpriteSlice> = (
         return false;
       }
 
-      // New owner → reflect visual_swap_url on characters/props.
-      await get().applySpriteFinals(remixId);
+      // New owner → display `visualSwapUrl` re-derives from the updated sprites
+      // column client-side (`useRemixVariants`); no characters/props write.
       log.info('takeSpriteFinalBack', 'done', { remixId, fromSpriteId });
       return true;
     },

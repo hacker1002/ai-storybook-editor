@@ -19,6 +19,7 @@ import type {
 } from '@/types/remix';
 import { useHumans } from '@/stores/humans-store';
 import { selectCanInject } from './selectors/select-final-crops';
+import { resolveSpriteFinals } from './apply-sprite-finals';
 import { useRemixStore } from './index';
 
 // ── Remix selectors ──────────────────────────────────────────────────────────
@@ -161,19 +162,25 @@ function pickIllustration(
 }
 
 /** Project one char/prop variant → `RemixVariantNode` for the Variants tab.
- *  Accepts the structural shape shared by char/prop remix variants. */
-function toVariantNode(v: {
-  key: string;
-  name?: string;
-  type: number;
-  illustrations?: { media_url: string; is_selected: boolean }[];
-  visual_swap_url?: string | null;
-}): RemixVariantNode {
+ *  Accepts the structural shape shared by char/prop remix variants. `visualSwapUrl`
+ *  is DERIVED from the sprite finals map (key `${type}/${objectKey}/${variantKey}`),
+ *  NOT read from the dead `visual_swap_url` column. */
+function toVariantNode(
+  v: {
+    key: string;
+    name?: string;
+    type: number;
+    illustrations?: { media_url: string; is_selected: boolean }[];
+  },
+  finalsMap: Map<string, string>,
+  entityType: 'character' | 'prop',
+  entityKey: string,
+): RemixVariantNode {
   return {
     variantKey: v.key,
     name: v.name ?? v.key,
     illustrationUrl: pickIllustration(v),
-    visualSwapUrl: v.visual_swap_url ?? null,
+    visualSwapUrl: finalsMap.get(`${entityType}/${entityKey}/${v.key}`) ?? null,
     isBase: v.type === 0,
   };
 }
@@ -183,9 +190,14 @@ function toVariantNode(v: {
  * Variants tab. Pure derive from the remix row.
  *
  * RE-RENDER NOTE — useMemo deps = `[remix]` ONLY (stable raw row ref). The
- * `.map()` arrays are fresh each call so a shallow compare would loop
- * (memory feedback_zustand_useshallow_nested_arrays). The selector reads the
- * raw remix ref directly — ref-stable until an action replaces the row.
+ * `.map()` arrays AND the sprite finals map are built INSIDE the memo, so a
+ * shallow compare would loop (memory feedback_zustand_useshallow_nested_arrays).
+ * `remix.sprites` lives inside the raw remix ref → the finals derive is stable
+ * by the same `[remix]` key. The selector reads the raw remix ref directly —
+ * ref-stable until an action replaces the row.
+ *
+ * `visualSwapUrl` is DERIVED client-side from sprite finals (`resolveSpriteFinals`)
+ * — the FE no longer reads/writes the dead `visual_swap_url` DB column.
  */
 export const useRemixVariants = (
   remixId: string | null | undefined,
@@ -196,13 +208,20 @@ export const useRemixVariants = (
 
   return useMemo<RemixVariantEntity[]>(() => {
     if (!remix) return [];
+    // Build the finals map ONCE per remix ref: `${type}/${object_key}/${variant_key}` → media_url.
+    const finalsMap = new Map<string, string>();
+    for (const f of resolveSpriteFinals(remix)) {
+      finalsMap.set(`${f.type}/${f.object_key}/${f.variant_key}`, f.media_url);
+    }
     const out: RemixVariantEntity[] = [];
     for (const c of remix.characters) {
       out.push({
         type: 'character',
         key: c.key,
         name: c.name,
-        variants: (c.variants ?? []).map(toVariantNode),
+        variants: (c.variants ?? []).map((v) =>
+          toVariantNode(v, finalsMap, 'character', c.key),
+        ),
       });
     }
     for (const p of remix.props) {
@@ -210,7 +229,9 @@ export const useRemixVariants = (
         type: 'prop',
         key: p.key,
         name: p.name,
-        variants: (p.variants ?? []).map(toVariantNode),
+        variants: (p.variants ?? []).map((v) =>
+          toVariantNode(v, finalsMap, 'prop', p.key),
+        ),
       });
     }
     return out;
@@ -455,7 +476,6 @@ export const useRemixActions = () =>
       removeBatchSheet: s.removeBatchSheet,
       takeFinalBack: s.takeFinalBack,
       startSpriteSwap: s.startSpriteSwap,
-      applySpriteFinals: s.applySpriteFinals,
       addSprite: s.addSprite,
       removeSprite: s.removeSprite,
       appendSpriteSheet: s.appendSpriteSheet,

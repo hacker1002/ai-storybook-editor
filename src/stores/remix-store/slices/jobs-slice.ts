@@ -20,10 +20,6 @@ import { useAuthStore } from '../../auth-store';
 import { useBackgroundJobsStore } from '../../background-jobs-store';
 import { resolveFinalCrops } from '../selectors/select-final-crops';
 import { applyFinalCrops } from '../apply-final-crops';
-import {
-  resolveSpriteFinals,
-  applySpriteFinalsToVariants,
-} from '../apply-sprite-finals';
 import type { RemixJobsSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -350,67 +346,6 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       jobId: data.job_id,
       totalSteps: data.total_steps,
     };
-  },
-
-  // ── Sprite finals auto-apply (NON-destructive — visual_swap_url writer) ──
-  // The job sets is_final on the sprite plane; the FE reflects each winner onto
-  // its variant's `visual_swap_url`. Awaits the authoritative refetch first
-  // (realtime may still be landing the sprites blob), resolves finals, patches
-  // characters/props, and persists those two columns in ONE UPDATE. Rollback to
-  // the pre-apply snapshot on persist failure. Idempotent (no-op when unchanged).
-  applySpriteFinals: async (remixId): Promise<number> => {
-    log.info('applySpriteFinals', 'apply requested', { remixId });
-
-    // Pull the authoritative remix row — the swap job just wrote sprites[].
-    await get().refetchRemix(remixId);
-
-    const remix = get().remixes.find((r) => r.id === remixId);
-    if (!remix) {
-      log.warn('applySpriteFinals', 'remix not found — skip', { remixId });
-      return 0;
-    }
-
-    const finals = resolveSpriteFinals(remix);
-    if (finals.length === 0) {
-      log.debug('applySpriteFinals', 'no sprite finals — skip', { remixId });
-      return 0;
-    }
-
-    const { characters, props, appliedCount } = applySpriteFinalsToVariants(
-      remix,
-      finals,
-    );
-    if (appliedCount === 0) {
-      log.debug('applySpriteFinals', 'finals already applied — no-op', { remixId });
-      return 0;
-    }
-
-    const prevRemix = remix;
-    // Optimistic local update (same body as the persisted UPDATE).
-    set((s) => ({
-      remixes: s.remixes.map((r) =>
-        r.id === remixId ? { ...r, characters, props } : r,
-      ),
-    }));
-
-    const { error } = await supabase
-      .from('remixes')
-      .update({ characters, props })
-      .eq('id', remixId);
-
-    if (error) {
-      log.error('applySpriteFinals', 'persist failed — rollback', {
-        remixId,
-        error: error.message,
-      });
-      set((s) => ({
-        remixes: s.remixes.map((r) => (r.id === remixId ? prevRemix : r)),
-      }));
-      return 0;
-    }
-
-    log.info('applySpriteFinals', 'done', { remixId, appliedCount });
-    return appliedCount;
   },
 
   cancelJob: async (jobId) => {

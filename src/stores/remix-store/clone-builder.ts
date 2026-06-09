@@ -141,19 +141,10 @@ export function buildRemixClonePayload(
     .map((c) => {
       const cloned = structuredClone(c) as Character;
       // rev2: crops live on the batch (mixes[]), not on the entity.
-      const remixChar = { ...cloned } as RemixCharacter;
-
-      // Live-swap result: copy config.characters[].base_image_url onto the base
-      // variant (type=0) as `visual_swap_url` (Option A — Validation S1b). The
-      // config field is modal staging; the variant field is the persisted
-      // per-variant swap visual. Downstream (Phase 3 crop-sheet inject) reads
-      // `visual_swap_url` when present, else the original base sheet.
-      const cfg = config.characters.find((x) => x.key === c.key);
-      if (cfg?.base_image_url) {
-        const base = remixChar.variants.find((v) => v.type === 0);
-        if (base) base.visual_swap_url = cfg.base_image_url;
-      }
-      return remixChar;
+      // NOTE: no `visual_swap_url` base seed — the column is dead; the base
+      // variant's swap reference is DERIVED from sprite finals client-side
+      // (`useRemixVariants`). A base mix-swap requires running sprite-swap first.
+      return { ...cloned } as RemixCharacter;
     });
 
   const props: RemixProp[] = input.props

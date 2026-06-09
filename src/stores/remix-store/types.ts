@@ -116,14 +116,6 @@ export interface RemixJobsSlice {
     params: StartSpriteSwapParams,
   ) => Promise<EnqueueRemixJobOutcome>;
 
-  /** Auto-apply sprite-swap finals (NON-destructive — unlike mix Inject). Awaits
-   *  the authoritative remix refetch, resolves the is_final winner per cell, and
-   *  writes `characters`/`props` `variants[].visual_swap_url` in ONE Supabase
-   *  UPDATE (rollback on failure). Idempotent (re-run = no-op when finals
-   *  unchanged). Resolves the number of variants patched. Called on job-terminal
-   *  (toast hook), take-back, and orphan reconcile. */
-  applySpriteFinals: (remixId: string) => Promise<number>;
-
   cancelJob: (jobId: string) => Promise<void>;
   dismissJob: (jobId: string) => void;
 }

@@ -1,20 +1,18 @@
-// apply-sprite-finals.ts — Pure helpers for sprite-swap finalize (auto-apply).
+// apply-sprite-finals.ts — Pure resolver for the sprite-swap is_final winners.
 //
 // The sprite-swap job (api/jobs/02) sets `is_final` on the winning swapped crop
 // per `(type, object_key, variant_key)` cell across all sprites (R1, backend).
-// The FE is the WRITER of `characters[].variants[].visual_swap_url` /
-// `props[].variants[].visual_swap_url` — it resolves the is_final winners and
-// reflects each onto its variant. NON-DESTRUCTIVE (only a reference url is set —
-// unlike mix Inject which rewrites the illustration), so it auto-applies on job
-// terminal.
+// `resolveSpriteFinals` reads those winners off the `sprites` column. The FE
+// DERIVES each variant's display `visualSwapUrl` from this resolver client-side
+// (`selectors.ts::useRemixVariants`) — it no longer writes the dead
+// `visual_swap_url` DB column (cross-stack refactor: derive, do not persist).
 //
-// Writer separation (Validation S1): job writes the `sprites` column (is_final);
-// FE-final writes `characters` / `props` (visual_swap_url) — DIFFERENT columns
-// from mix Inject (`illustration`), so no lost-update across planes.
+// Still used for: Variants-tab display, Batches-tab swap gating, and orphan
+// reconcile (`sprite-ownership.ts`, sprites column only).
 //
-// PURE: no I/O, no React. The store action owns persistence + rollback.
+// PURE: no I/O, no React.
 
-import type { Remix, RemixCharacter, RemixProp } from '@/types/remix';
+import type { Remix } from '@/types/remix';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'ApplySpriteFinals');
@@ -88,66 +86,4 @@ export function resolveSpriteFinals(
   }
   log.debug('resolveSpriteFinals', 'done', { finalCount: result.size });
   return Array.from(result.values(), (v) => v.entry);
-}
-
-export interface SpriteFinalsPatch {
-  characters: RemixCharacter[];
-  props: RemixProp[];
-  /** Number of variants whose `visual_swap_url` was set/changed. */
-  appliedCount: number;
-}
-
-/**
- * Apply resolved sprite finals onto fresh `characters` / `props` arrays
- * (visual_swap_url = winner media_url). Pure — returns NEW arrays (clones only
- * the touched entities/variants); unchanged entities keep their ref. Idempotent
- * — a final equal to the current value is not counted as applied.
- */
-export function applySpriteFinalsToVariants(
-  remix: Remix,
-  finals: SpriteFinalEntry[],
-): SpriteFinalsPatch {
-  // Group finals by (type, object_key) → Map<variant_key, media_url>.
-  const charFinals = new Map<string, Map<string, string>>();
-  const propFinals = new Map<string, Map<string, string>>();
-  for (const f of finals) {
-    const target = f.type === 'character' ? charFinals : propFinals;
-    let vm = target.get(f.object_key);
-    if (!vm) {
-      vm = new Map();
-      target.set(f.object_key, vm);
-    }
-    vm.set(f.variant_key, f.media_url);
-  }
-
-  let appliedCount = 0;
-
-  const patchEntities = <T extends { key: string; variants: { key: string; visual_swap_url?: string | null }[] }>(
-    entities: T[],
-    finalsByObj: Map<string, Map<string, string>>,
-  ): T[] =>
-    entities.map((e) => {
-      const vm = finalsByObj.get(e.key);
-      if (!vm) return e;
-      let changed = false;
-      const variants = e.variants.map((v) => {
-        if (!vm.has(v.key)) return v;
-        const url = vm.get(v.key)!;
-        if (v.visual_swap_url === url) return v;
-        changed = true;
-        appliedCount += 1;
-        return { ...v, visual_swap_url: url };
-      });
-      return changed ? { ...e, variants } : e;
-    });
-
-  const characters = patchEntities(remix.characters, charFinals);
-  const props = patchEntities(remix.props, propFinals);
-
-  log.info('applySpriteFinalsToVariants', 'patched', {
-    remixId: remix.id,
-    finalsCount: finals.length,
-    appliedCount,
-  });
-  return { characters, props, appliedCount };
 }
