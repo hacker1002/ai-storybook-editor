@@ -25,6 +25,7 @@ interface ImgOpts {
   w?: number;
   h?: number;
   mediaUrl?: string;
+  annotation?: { description?: string };
 }
 function img(o: ImgOpts) {
   return {
@@ -34,6 +35,7 @@ function img(o: ImgOpts) {
     geometry: { x: 0, y: 0, w: o.w ?? 100, h: o.h ?? 100 },
     'z-index': 0,
     tags: o.tags,
+    ...(o.annotation ? { annotation: o.annotation } : {}),
   };
 }
 function autoPic(id: string, tags: SpreadTag[]) {
@@ -163,6 +165,44 @@ describe('groupCropsForBatch — dedup + multi-subject tags[]', () => {
     });
     const { cropInputs } = groupCropsForBatch(r);
     expect(cropInputs.filter((c) => c.id === 'i1')).toHaveLength(1);
+  });
+});
+
+describe('groupCropsForBatch — annotation pass-through', () => {
+  it('forwards the layer annotation (dynamic-state description) onto the crop', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [
+        spread({
+          id: 's1',
+          pageNumber: 1,
+          images: [img({ id: 'i1', tags: [tag('character', 'c1')], annotation: { description: 'waving, mid-stride' } })],
+        }),
+      ],
+    });
+    expect(groupCropsForBatch(r).cropMetaById['i1'].annotation).toEqual({ description: 'waving, mid-stride' });
+  });
+
+  it('omits annotation when the layer has none', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [spread({ id: 's1', pageNumber: 1, images: [img({ id: 'i1', tags: [tag('character', 'c1')] })] })],
+    });
+    expect(groupCropsForBatch(r).cropMetaById['i1'].annotation).toBeUndefined();
+  });
+
+  it('omits annotation when description is blank/whitespace (cleared)', () => {
+    const r = makeRemix({
+      charKeys: ['c1'],
+      spreads: [
+        spread({
+          id: 's1',
+          pageNumber: 1,
+          images: [img({ id: 'i1', tags: [tag('character', 'c1')], annotation: { description: '   ' } })],
+        }),
+      ],
+    });
+    expect(groupCropsForBatch(r).cropMetaById['i1'].annotation).toBeUndefined();
   });
 });
 

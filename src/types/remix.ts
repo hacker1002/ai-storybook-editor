@@ -1,7 +1,7 @@
 // remix.ts — Domain types for Remix feature (DB row + ephemeral inject job state)
 // DB row JSONB structure: snapshot illustration/characters/props snapshot + remix_config + mixes.
 
-import type { BaseSpread, SpreadTag } from './spread-types';
+import type { BaseSpread, SpreadTag, SpreadImageAnnotation } from './spread-types';
 import type { IllustrationData, Section } from './illustration-types';
 import type { Character, CharacterVariant } from './character-types';
 import type { Prop, PropVariant, Crop } from './prop-types';
@@ -100,6 +100,11 @@ export interface CropEntry {
   tags: SpreadTag[];
   media_url: string;
   geometry: { x: number; y: number; w: number; h: number };
+  /** Per-crop dynamic-state annotation (pose/action/expression), cloned from the
+   *  source layer's `annotation` (enhance-annotation flow). Folded into the swap
+   *  crop_manifest sent to Gemini (BE: services/remix/crop_manifest.py — reserved
+   *  number/geometry keys stripped). Omitted when the layer has no annotation. */
+  annotation?: SpreadImageAnnotation;
 }
 
 /** Crop sheet carried by a batch (RemixMix). rev2 — crops carry multi-subject

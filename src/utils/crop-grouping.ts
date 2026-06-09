@@ -140,6 +140,14 @@ export function groupCropsForBatch(remix: Remix): GroupCropsResult {
       }
 
       const primary = subjectTags[0];
+      // Dynamic-state annotation (pose/action/expression) authored in Objects
+      // space (enhance-annotation flow). Only forward when non-empty so the swap
+      // manifest doesn't ship a cleared/blank description key to Gemini.
+      const layerAnnotation = (layer as { annotation?: { description?: string } }).annotation;
+      const annotation =
+        layerAnnotation?.description?.trim()
+          ? { description: layerAnnotation.description }
+          : undefined;
       collected.push({
         entityIdx: entityOrder.get(primary.object_key) ?? Number.MAX_SAFE_INTEGER,
         input: {
@@ -159,6 +167,7 @@ export function groupCropsForBatch(remix: Remix): GroupCropsResult {
           media_url: url,
           // Placeholder — overwritten with engine placement geometry in Phase 03.
           geometry: { x: 0, y: 0, w: 0, h: 0 },
+          ...(annotation ? { annotation } : {}),
         },
       });
     }
