@@ -87,6 +87,36 @@ function initialBatchRef(batches: RemixBatch[]): ActiveBatchRef | null {
   return { batchId: batches[0].id, sheetIndex: 0 };
 }
 
+/** Sprite to re-select after deleting `removedId`. Returns null when no move is
+ *  needed (the removed sprite wasn't active, or it doesn't exist). Prefers the
+ *  previous sibling; falls back to the next when removing the first sprite.
+ *  Caller must pass the pre-removal `sprites` array. */
+function spriteRefAfterRemoval(
+  sprites: RemixSprite[],
+  activeRef: ActiveSpriteRef | null,
+  removedId: string,
+): ActiveSpriteRef | null {
+  if (!activeRef || activeRef.spriteId !== removedId) return null;
+  const idx = sprites.findIndex((s) => s.id === removedId);
+  if (idx === -1) return null;
+  const sibling = sprites[idx - 1] ?? sprites[idx + 1] ?? null;
+  return sibling ? { spriteId: sibling.id, sheetIndex: 0 } : null;
+}
+
+/** Batch to re-select after deleting `removedId`. Mirror of
+ *  {@link spriteRefAfterRemoval} on the batch plane. */
+function batchRefAfterRemoval(
+  batches: RemixBatch[],
+  activeRef: ActiveBatchRef | null,
+  removedId: string,
+): ActiveBatchRef | null {
+  if (!activeRef || activeRef.batchId !== removedId) return null;
+  const idx = batches.findIndex((b) => b.id === removedId);
+  if (idx === -1) return null;
+  const sibling = batches[idx - 1] ?? batches[idx + 1] ?? null;
+  return sibling ? { batchId: sibling.id, sheetIndex: 0 } : null;
+}
+
 /** Maps a mix-swap enqueue error code to a user-facing toast message. */
 function mapMixSwapError(code: string | undefined): string {
   switch (code) {
@@ -222,19 +252,25 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     }
   };
 
-  const handleSelectSpriteSheet = (spriteId: string, sheetIndex: number) => {
-    log.debug('handleSelectSpriteSheet', 'select sheet', { spriteId, sheetIndex });
-    setActiveSpriteRef({ spriteId, sheetIndex });
-    setCompareMode(false);
-    setDividerPosition(50);
-  };
+  const handleSelectSpriteSheet = useCallback(
+    (spriteId: string, sheetIndex: number) => {
+      log.debug('handleSelectSpriteSheet', 'select sheet', { spriteId, sheetIndex });
+      setActiveSpriteRef({ spriteId, sheetIndex });
+      setCompareMode(false);
+      setDividerPosition(50);
+    },
+    [],
+  );
 
-  const handleSelectBatchSheet = (batchId: string, sheetIndex: number) => {
-    log.debug('handleSelectBatchSheet', 'select sheet', { batchId, sheetIndex });
-    setActiveBatchRef({ batchId, sheetIndex });
-    setCompareMode(false);
-    setDividerPosition(50);
-  };
+  const handleSelectBatchSheet = useCallback(
+    (batchId: string, sheetIndex: number) => {
+      log.debug('handleSelectBatchSheet', 'select sheet', { batchId, sheetIndex });
+      setActiveBatchRef({ batchId, sheetIndex });
+      setCompareMode(false);
+      setDividerPosition(50);
+    },
+    [],
+  );
 
   const handleToggleCompare = useCallback(
     () => setCompareMode((prev) => !prev),
@@ -313,8 +349,24 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   // `handleAddSprite` lives in `VariantsTab` (reads selection from
   // `useSelectedSwapCrops()`); the modal owns only `onActivateSprite`.
   const handleRemoveSprite = useCallback(
-    (spriteId: string) => void removeSprite(target.remixId, spriteId),
-    [removeSprite, target.remixId],
+    (spriteId: string) => {
+      // Capture the reselection target against the pre-removal list, then move
+      // selection to the previous sibling once the delete actually lands.
+      const nextRef = spriteRefAfterRemoval(sprites, activeSpriteRef, spriteId);
+      void removeSprite(target.remixId, spriteId)
+        .then((ok) => {
+          if (ok && nextRef) {
+            handleSelectSpriteSheet(nextRef.spriteId, nextRef.sheetIndex);
+          }
+        })
+        .catch((err) => {
+          log.warn('handleRemoveSprite', 'removeSprite rejected', {
+            spriteId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    },
+    [removeSprite, target.remixId, sprites, activeSpriteRef, handleSelectSpriteSheet],
   );
   const handleAddSpriteSheet = useCallback(
     (spriteId: string) => void appendSpriteSheet(target.remixId, spriteId),
@@ -328,8 +380,22 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
 
   // ── Batch sidebar action callbacks (thin store delegates) ────────────────────
   const handleRemoveBatch = useCallback(
-    (batchId: string) => void removeBatch(target.remixId, batchId),
-    [removeBatch, target.remixId],
+    (batchId: string) => {
+      const nextRef = batchRefAfterRemoval(batches, activeBatchRef, batchId);
+      void removeBatch(target.remixId, batchId)
+        .then((ok) => {
+          if (ok && nextRef) {
+            handleSelectBatchSheet(nextRef.batchId, nextRef.sheetIndex);
+          }
+        })
+        .catch((err) => {
+          log.warn('handleRemoveBatch', 'removeBatch rejected', {
+            batchId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    },
+    [removeBatch, target.remixId, batches, activeBatchRef, handleSelectBatchSheet],
   );
   const handleAddSheet = useCallback(
     (batchId: string) => void appendBatchSheet(target.remixId, batchId),
