@@ -38,16 +38,45 @@ const log = createLogger('Store', 'SpriteLayout');
  *  removed (caller also hides the affordance). */
 export const SPRITE_MIN = 1;
 
-/** Synthetic SQUARE spread fed to the layout engine for sprites. Variant
- *  artwork is standalone (not relative to the book canvas), so we pack against
- *  a fixed square frame — the Stage scales the composed sheet to fit anyway.
- *  Combined with a uniform square `SPRITE_CELL_PCT` this yields evenly-sized,
- *  non-overlapping square cells. */
-const SPRITE_SPREAD = { width: 1000, height: 1000 } as const;
-/** Each variant cell = this % of the synthetic square spread on BOTH axes →
- *  ~220px square cells. Absolute size is cosmetic (Stage rescales); uniformity
- *  is what matters for a clean grid. */
-const SPRITE_CELL_PCT = 22;
+/**
+ * Per-cell SQUARE dimension (px) for the sprite layout, chosen by how many cells
+ * share ONE sheet. This dimension is NOT cosmetic — it is BOTH:
+ *   (a) the build-crop-sheet composition box → Gemini swap INPUT fidelity, and
+ *   (b) the post-swap resize target in image-api `sprite_cut.py` (each swapped
+ *       piece is resized DOWN to its `crop.geometry`) → the RESOLUTION CEILING
+ *       of the final swapped variant artwork.
+ * Fewer cells → larger cells (each gets more of Gemini's ~4K output budget);
+ * more cells → smaller cells so the composed sheet stays under the swap
+ * endpoint's sheet caps (clamped defensively in `buildSpriteSheetsFromLayout`).
+ * Tiers (cells-per-sheet → px): 1→2000, 2→1000, 3→800, ≥4→600.
+ */
+function spriteCellDim(cellsPerSheet: number): number {
+  if (cellsPerSheet <= 1) return 2000;
+  if (cellsPerSheet === 2) return 1000;
+  if (cellsPerSheet === 3) return 800;
+  return 600;
+}
+
+/** Padding (px) on EACH side of every sprite cell, EQUAL on both axes → the gap
+ *  between adjacent cells is `2·SPRITE_GUTTER = 64px` horizontally AND
+ *  vertically. Square cells look lopsided under the engine's asymmetric default
+ *  (gutterX=32 / gutterY=8); 64px each way is uniform and still wide enough for
+ *  the ordinal badge baked into the left gutter (cap ≤50px). */
+const SPRITE_GUTTER = 32;
+
+/** Uniform OUTER margin (px) on all four sides after re-framing (see
+ *  `buildSpriteSheetsFromLayout`). Equal on every side so a square cell grid
+ *  frames to a 1:1 sheet; the left side still needs ≥ the ordinal badge width
+ *  (~50px), hence 64. */
+const SPRITE_MARGIN = 64;
+
+/** Sheet caps mirrored from image-api `build_crop_sheet.py` (MAX_SHEET_DIM /
+ *  MAX_SHEET_PIXELS — reused by the swap-sprite-sheet endpoint). The endpoint
+ *  REJECTS any sheet exceeding either, so we clamp the layout here: a
+ *  many-variant sheet degrades resolution gracefully instead of failing the
+ *  swap job later. Keep in sync with the Python constants. */
+const MAX_SHEET_DIM = 8192;
+const MAX_SHEET_PIXELS = 32_000_000;
 
 /** Pre-geometry sprite cell (engine input meta) — a `SpriteCrop` minus the
  *  engine-computed `geometry`. */
@@ -133,24 +162,89 @@ export function groupVariantsForSprite(remix: Remix): SpriteCell[] {
  *  geometry (px, sheet-relative — engine output) is attached to the matching
  *  cell. `image_url` always '' (client composes from crops); `swap_results`
  *  always [] (fresh layout → any prior swap is stale geometry). */
+/** Down-scale factor bringing a sheet within BOTH caps (1 = already within).
+ *  Uses sqrt for the pixel cap so area scales linearly with the factor. */
+function capScaleFactor(width: number, height: number): number {
+  if (width <= 0 || height <= 0) return 1;
+  const dimF = Math.min(1, MAX_SHEET_DIM / width, MAX_SHEET_DIM / height);
+  const pxF =
+    width * height > MAX_SHEET_PIXELS
+      ? Math.sqrt(MAX_SHEET_PIXELS / (width * height))
+      : 1;
+  return Math.min(dimF, pxF);
+}
+
 function buildSpriteSheetsFromLayout(
   layout: CropSheetLayoutResult,
   cellByKey: Record<string, SpriteCell>,
 ): RemixSpriteCropSheet[] {
-  return layout.sheets.map((sheet) => ({
-    title: sheetTitle(sheet.index),
-    sheet_geometry: sheet.sheetGeometry,
-    image_url: '',
-    swap_results: [],
-    crops: sheet.placements
-      .map((p) => {
-        const cell = cellByKey[p.id];
-        if (!cell) return null;
-        const crop: SpriteCrop = { ...cell, geometry: p.geometry };
-        return crop;
-      })
-      .filter((c): c is SpriteCrop => c !== null),
-  }));
+  return layout.sheets.map((sheet) => {
+    const placed = sheet.placements.filter((p) => cellByKey[p.id]);
+    if (placed.length === 0) {
+      return {
+        title: sheetTitle(sheet.index),
+        sheet_geometry: sheet.sheetGeometry,
+        image_url: '',
+        swap_results: [],
+        crops: [],
+      };
+    }
+
+    // 1. Re-frame: hug the packed content with an EQUAL SPRITE_MARGIN on all
+    //    sides. The engine snaps each sheet to one of its allowed ratios, which
+    //    stretches one axis (a square 2×2[2,1] grid → a 4:3 sheet with a wide
+    //    empty right strip). Tightening to content + symmetric margins removes
+    //    that waste → a square cell grid yields a 1:1 sheet, while keeping the
+    //    badge's left-gutter room (margin ≥ badge width).
+    const minX = Math.min(...placed.map((p) => p.geometry.x));
+    const minY = Math.min(...placed.map((p) => p.geometry.y));
+    const maxR = Math.max(...placed.map((p) => p.geometry.x + p.geometry.w));
+    const maxB = Math.max(...placed.map((p) => p.geometry.y + p.geometry.h));
+    const dx = SPRITE_MARGIN - minX;
+    const dy = SPRITE_MARGIN - minY;
+    let width = maxR - minX + 2 * SPRITE_MARGIN;
+    let height = maxB - minY + 2 * SPRITE_MARGIN;
+    let geoms = placed.map((p) => ({
+      id: p.id,
+      x: p.geometry.x + dx,
+      y: p.geometry.y + dy,
+      w: p.geometry.w,
+      h: p.geometry.h,
+    }));
+
+    // 2. Cap guard on the tightened sheet — floor sheet + floor crops keeps every
+    //    crop within the (smaller) sheet and strictly under both caps:
+    //    floor(x·f)+floor(w·f) ≤ floor((x+w)·f) ≤ sheetW.
+    const f = capScaleFactor(width, height);
+    if (f < 1) {
+      log.warn('buildSpriteSheetsFromLayout', 'sheet exceeds caps — scaling down', {
+        sheetIndex: sheet.index,
+        width,
+        height,
+        factor: Number(f.toFixed(4)),
+      });
+      width = Math.floor(width * f);
+      height = Math.floor(height * f);
+      geoms = geoms.map((g) => ({
+        id: g.id,
+        x: Math.floor(g.x * f),
+        y: Math.floor(g.y * f),
+        w: Math.max(1, Math.floor(g.w * f)),
+        h: Math.max(1, Math.floor(g.h * f)),
+      }));
+    }
+
+    return {
+      title: sheetTitle(sheet.index),
+      sheet_geometry: { width, height },
+      image_url: '',
+      swap_results: [],
+      crops: geoms.map((g) => ({
+        ...cellByKey[g.id],
+        geometry: { x: g.x, y: g.y, w: g.w, h: g.h },
+      })),
+    };
+  });
 }
 
 /**
@@ -162,28 +256,35 @@ export function partitionByObjectAffinity(
   cells: SpriteCell[],
   k: number,
 ): RemixSpriteCropSheet[] {
+  const sheetCount = Math.max(1, k);
+  // Cell dimension keys off how many cells share ONE sheet (≈ even split), so a
+  // sprite re-laid-out across more sheets gets larger, higher-res cells.
+  const cellsPerSheet = Math.ceil(cells.length / sheetCount);
+  const cellDim = spriteCellDim(cellsPerSheet);
+
   const cellByKey: Record<string, SpriteCell> = {};
   const inputs: CropInput[] = [];
   for (const cell of cells) {
     const id = spriteCellKey(cell);
     cellByKey[id] = cell;
-    inputs.push({
-      id,
-      widthPct: SPRITE_CELL_PCT,
-      heightPct: SPRITE_CELL_PCT,
-      objectKey: cell.object_key,
-    });
+    // widthPct/heightPct=100 against a `cellDim`-square spread → every cell is
+    // exactly `cellDim`×`cellDim` px (uniform squares).
+    inputs.push({ id, widthPct: 100, heightPct: 100, objectKey: cell.object_key });
   }
   const layout = computeCropSheetLayout(inputs, {
-    sheetCount: Math.max(1, k),
-    spread: SPRITE_SPREAD,
-    // Sprite cells are UNIFORM SQUARES and the sheet is NOT canvas-bound, so the
-    // engine's default landscape bias (τ=0.08) is wrong here — it would override
-    // the genuinely-best-fill SQUARE sheet with a wider landscape one (e.g. 5
-    // square cells: square 1:1 → 2 cols [2,2,1] has higher fill than 21:9 → 3
-    // cols [3,2], yet the bias picks 21:9). τ=0 picks the true best-fill ratio,
-    // which for square cells is the near-square grid the user expects.
-    landscapeTolerance: 0,
+    sheetCount,
+    spread: { width: cellDim, height: cellDim },
+    // Equal padding on both axes → uniform 64px gaps between square cells (the
+    // engine default gutterY=8 made vertical gaps 4× tighter than horizontal).
+    // The ordinal badge still fits the 64px left gutter.
+    gutterX: SPRITE_GUTTER,
+    gutterY: SPRITE_GUTTER,
+    // τ=0.1: accept a landscape grid when within 10% fill of the best ratio.
+    // Without it, square cells snap tighter to portrait ratios → 2–3 cells pack
+    // into a TALL single-column 9:16 stack (lopsided). 0.1 gives N=2 → 2-col row
+    // and N=3 → 2-col [2,1], while leaving perfect-fill grids (N=1 1:1, N=4 2×2,
+    // N=6 3:2) intact; 0.2+ starts degrading those (1 cell → 5:4).
+    landscapeTolerance: 0.1,
   });
   return buildSpriteSheetsFromLayout(layout, cellByKey);
 }

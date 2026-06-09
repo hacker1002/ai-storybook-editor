@@ -154,27 +154,122 @@ describe('partitionByObjectAffinity', () => {
     expect(new Set([sheetOf('b', '1'), sheetOf('b', '2')]).size).toBe(1);
   });
 
-  it('packs 5 uniform square cells into a SQUARE 2-column grid, not a landscape 3-col one', () => {
-    // Sprite cells are square → the engine must pick the best-fill SQUARE sheet
-    // (2 cols: [2,2,1]) NOT the landscape-biased 3-col one ([3,2]). Guards the
-    // `landscapeTolerance: 0` override in partitionByObjectAffinity.
+  // Column counts below depend on `landscapeTolerance: 0.1` in the sprite layout
+  // — square cells would otherwise stack into a tall single column for 2–3 cells.
+  it('packs 2 cells into a 2-col single row (not a vertical stack)', () => {
+    const cells = [cell('a', '1'), cell('a', '2')];
+    const crops = partitionByObjectAffinity(cells, 1).flatMap((s) => s.crops);
+    expect(new Set(crops.map((c) => c.geometry.x)).size).toBe(2); // 2 columns
+    expect(new Set(crops.map((c) => c.geometry.y)).size).toBe(1); // 1 row
+  });
+
+  it('packs 3 cells into a 2-col [2,1] grid (not a vertical stack)', () => {
+    const cells = [cell('a', '1'), cell('a', '2'), cell('a', '3')];
+    const crops = partitionByObjectAffinity(cells, 1).flatMap((s) => s.crops);
+    expect(new Set(crops.map((c) => c.geometry.x)).size).toBe(2); // 2 columns
+    expect(new Set(crops.map((c) => c.geometry.y)).size).toBe(2); // 2 rows [2,1]
+  });
+
+  it('packs 5 cells into a 3-col × 2-row landscape grid', () => {
     const cells = [
       cell('a', '1'), cell('a', '2'), cell('a', '3'), cell('a', '4'), cell('a', '5'),
     ];
     const sheets = partitionByObjectAffinity(cells, 1);
     expect(sheets).toHaveLength(1);
-    const xs = sheets[0].crops.map((c) => c.geometry.x);
-    // Distinct x-positions == column count. Square layout → exactly 2 columns.
-    expect(new Set(xs).size).toBe(2);
-    // Rows × cols sanity: 2 columns over 5 cells → 3 rows (2,2,1).
-    const ys = sheets[0].crops.map((c) => c.geometry.y);
-    expect(new Set(ys).size).toBe(3);
+    expect(new Set(sheets[0].crops.map((c) => c.geometry.x)).size).toBe(3);
+    expect(new Set(sheets[0].crops.map((c) => c.geometry.y)).size).toBe(2);
+  });
+
+  it('frames a square cell grid to a 1:1 sheet (N=3 [2,1] and N=4 2×2)', () => {
+    // Square content + equal re-frame margins → square sheet. Guards against the
+    // engine's ratio snap (which would stretch the 2×2[2,1] sheet to 4:3).
+    for (const n of [3, 4]) {
+      const cells = Array.from({ length: n }, (_, i) => cell('a', String(i)));
+      const sheet = partitionByObjectAffinity(cells, 1)[0];
+      expect(sheet.sheet_geometry.width).toBe(sheet.sheet_geometry.height);
+    }
+  });
+
+  it('spaces cells EVENLY — horizontal gap === vertical gap (2·gutter = 64px)', () => {
+    // 4 cells @600 → 2×2 grid. Equal gutters → identical gaps on both axes.
+    const cells = Array.from({ length: 4 }, (_, i) => cell('a', String(i)));
+    const crops = partitionByObjectAffinity(cells, 1).flatMap((s) => s.crops);
+    const w = crops[0].geometry.w;
+    const h = crops[0].geometry.h;
+    const xs = [...new Set(crops.map((c) => c.geometry.x))].sort((a, b) => a - b);
+    const ys = [...new Set(crops.map((c) => c.geometry.y))].sort((a, b) => a - b);
+    expect(xs).toHaveLength(2);
+    expect(ys).toHaveLength(2);
+    const gapX = xs[1] - (xs[0] + w);
+    const gapY = ys[1] - (ys[0] + h);
+    expect(gapX).toBe(64);
+    expect(gapY).toBe(64);
+    expect(gapX).toBe(gapY);
   });
 
   it('swap_results always empty + image_url empty on fresh layout', () => {
     const sheets = partitionByObjectAffinity([cell('a', '1')], 1);
     expect(sheets[0].swap_results).toEqual([]);
     expect(sheets[0].image_url).toBe('');
+  });
+});
+
+// ── cell dimension (resolution ceiling) + sheet cap guard ────────────────────
+
+const MAX_SHEET_DIM = 8192;
+const MAX_SHEET_PIXELS = 32_000_000;
+
+describe('partitionByObjectAffinity — cell dimension by cells-per-sheet', () => {
+  it.each([
+    [1, 2000],
+    [2, 1000],
+    [3, 800],
+    [4, 600],
+    [8, 600],
+  ])('%i cell(s)/sheet → %ipx square cells', (n, dim) => {
+    const cells = Array.from({ length: n }, (_, i) => cell('a', String(i)));
+    const crops = partitionByObjectAffinity(cells, 1).flatMap((s) => s.crops);
+    expect(crops).toHaveLength(n);
+    for (const c of crops) {
+      expect(c.geometry.w).toBe(dim);
+      expect(c.geometry.h).toBe(dim);
+    }
+  });
+
+  it('keys off PER-SHEET count: 4 cells over K=2 → 2 cells/sheet → 1000px', () => {
+    const cells = [cell('a', '1'), cell('a', '2'), cell('b', '1'), cell('b', '2')];
+    const crops = partitionByObjectAffinity(cells, 2).flatMap((s) => s.crops);
+    for (const c of crops) expect(c.geometry.w).toBe(1000);
+  });
+});
+
+describe('partitionByObjectAffinity — sheet cap guard', () => {
+  it('clamps an over-cap sheet within both caps, crops stay in-bounds + scaled', () => {
+    // Far more cells than fit at 600px on K=1 → sheet overflows 8192px / 32 MP →
+    // guard must scale the whole sheet down rather than emit an un-swappable one.
+    const cells = Array.from({ length: 150 }, (_, i) => cell('a', String(i)));
+    const sheets = partitionByObjectAffinity(cells, 1);
+    expect(sheets).toHaveLength(1);
+    const sheet = sheets[0];
+    const { width, height } = sheet.sheet_geometry;
+    expect(width).toBeLessThanOrEqual(MAX_SHEET_DIM);
+    expect(height).toBeLessThanOrEqual(MAX_SHEET_DIM);
+    expect(width * height).toBeLessThanOrEqual(MAX_SHEET_PIXELS);
+    // Clamp genuinely engaged → cells shrank below their 600px tier.
+    expect(sheet.crops[0].geometry.w).toBeLessThan(600);
+    for (const c of sheet.crops) {
+      expect(c.geometry.x).toBeGreaterThanOrEqual(0);
+      expect(c.geometry.y).toBeGreaterThanOrEqual(0);
+      expect(c.geometry.x + c.geometry.w).toBeLessThanOrEqual(width);
+      expect(c.geometry.y + c.geometry.h).toBeLessThanOrEqual(height);
+    }
+  });
+
+  it('within-cap sheets are NOT clamped (cells keep their full tier dimension)', () => {
+    const cells = Array.from({ length: 8 }, (_, i) => cell('a', String(i)));
+    const crops = partitionByObjectAffinity(cells, 1).flatMap((s) => s.crops);
+    // 8 cells @600px well under caps → exact 600, no down-scale.
+    for (const c of crops) expect(c.geometry.w).toBe(600);
   });
 });
 
