@@ -27,9 +27,14 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /** Optional portal target — e.g. portal INTO an enclosing full-screen modal
+     *  so its click-outside routing keeps treating this dialog as "inside"
+     *  (same contract as AlertDialogContent.container). */
+    container?: HTMLElement | null;
+  }
+>(({ className, children, container, ...props }, ref) => (
+  <DialogPortal container={container ?? undefined}>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}

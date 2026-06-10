@@ -19,8 +19,9 @@
 // SECURITY: never log media_url / swap URLs / human config.
 
 import { useCallback, useMemo, useState } from 'react';
-import { Loader2, Repeat } from 'lucide-react';
+import { Loader2, Repeat, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import {
   useRemixById,
@@ -42,6 +43,7 @@ import {
 import { useCollapseState } from '../sidebar/use-collapse-state';
 import { useSelectedSwapCrops } from '../hooks/use-selected-swap-crops';
 import { useSpriteOwnership } from '../hooks/use-sprite-ownership';
+import { SwapConfigReviewModal } from '../swap-config-review-modal';
 import { SpritesSidebar } from './sprites-sidebar';
 
 const log = createLogger('Editor', 'VariantsTab');
@@ -107,6 +109,8 @@ export function VariantsTab({
 }: VariantsTabProps) {
   const { isCollapsed, toggle: toggleCollapse } = useCollapseState();
   const [pending, setPending] = useState<PendingAction | null>(null);
+  // Read-only review of the frozen remix_config (characters + props).
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const {
     keys: selectedSwapCells,
@@ -389,6 +393,24 @@ export function VariantsTab({
             busy: isSubmitting || isRunning,
             onClick: handleSwap,
           }}
+          headerActions={
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => {
+                log.debug('onClick', 'open config review modal', {});
+                setReviewOpen(true);
+              }}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors',
+                'border-[var(--swap-modal-border)] text-[var(--swap-modal-text-muted)]',
+                'hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]',
+              )}
+            >
+              <Settings2 className="h-4 w-4" aria-hidden="true" />
+              Settings
+            </button>
+          }
           compareMode={compareMode}
           zoomLevel={zoomLevel}
           dividerPosition={dividerPosition}
@@ -433,6 +455,15 @@ export function VariantsTab({
         onConfirm={confirmPending}
         onCancel={cancelPending}
       />
+
+      {remix && (
+        <SwapConfigReviewModal
+          open={reviewOpen}
+          remix={remix}
+          humans={humans}
+          onClose={() => setReviewOpen(false)}
+        />
+      )}
     </>
   );
 }

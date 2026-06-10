@@ -91,6 +91,10 @@ export interface CropSheetStageProps {
   source: StageSource;
   /** Primary action button (Generate | Swap) — tab-supplied. */
   headerPrimary: StageHeaderPrimary;
+  /** Optional extra header actions rendered AFTER the Compare toggle (e.g. the
+   *  Sprites tab's read-only "Settings" review button). Tab-supplied node so the
+   *  Stage stays presentational. */
+  headerActions?: React.ReactNode;
   // Shared view state (owned by the modal root, passed through the tab):
   compareMode: boolean;
   zoomLevel: number;
@@ -196,6 +200,7 @@ function resolveOverlay(
 export function CropSheetStage({
   source,
   headerPrimary,
+  headerActions,
   compareMode,
   zoomLevel,
   dividerPosition,
@@ -241,6 +246,7 @@ export function CropSheetStage({
     >
       <StageHeader
         headerPrimary={headerPrimary}
+        headerActions={headerActions}
         compareMode={compareMode}
         compareDisabled={compareDisabled}
         zoomLevel={zoomLevel}
@@ -273,6 +279,7 @@ export function CropSheetStage({
 
 interface StageHeaderProps {
   headerPrimary: StageHeaderPrimary;
+  headerActions?: React.ReactNode;
   compareMode: boolean;
   compareDisabled: boolean;
   zoomLevel: number;
@@ -282,6 +289,7 @@ interface StageHeaderProps {
 
 function StageHeader({
   headerPrimary,
+  headerActions,
   compareMode,
   compareDisabled,
   zoomLevel,
@@ -330,6 +338,8 @@ function StageHeader({
             )}
           </Tooltip>
         </TooltipProvider>
+
+        {headerActions}
       </div>
 
       <div className="flex items-center gap-2 text-[var(--swap-modal-text-primary)]">

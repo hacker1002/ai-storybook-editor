@@ -123,6 +123,9 @@ export const SWAP_MODAL_TOKENS = {
 export const Z_INDEX = {
   swapModal: 4000,
   confirmDialog: 4100,
+  /** Read-only remix-settings review dialog (Sprites tab header) — same layer
+   *  constraint as confirmDialog: must paint ABOVE the full-screen swap modal. */
+  reviewModal: 4100,
   variantsModal: 5000,
 } as const;
 
