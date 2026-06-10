@@ -341,3 +341,133 @@ describe('computeCropSheetLayout — entity affinity (partitionByEntityAffinity)
     expect(second).toEqual(first);
   });
 });
+
+// ── preserveInputOrder — cluster appearance order (sheet assignment, K≥2) ────
+
+describe('computeCropSheetLayout — preserveInputOrder flag', () => {
+  // 3 clusters so the big one stays within budget (not oversized-split):
+  // leena appears first (1 crop, 400u²-ish), didi has the LARGEST total area
+  // (2 crops), momo last. budget = total/2 > didi's area → didi stays whole.
+  const orderingCrops = [
+    entityCrop('leena/base', 'leena', 20, 20),
+    entityCrop('didi/base', 'didi', 15, 15),
+    entityCrop('didi/v1', 'didi', 15, 15),
+    entityCrop('momo/base', 'momo', 20, 20),
+  ];
+
+  it('flag-off (explicit false) is byte-identical to the omitted default (golden parity)', () => {
+    const omitted = computeCropSheetLayout(orderingCrops, config(2));
+    const explicit = computeCropSheetLayout(
+      orderingCrops,
+      config(2, { preserveInputOrder: false }),
+    );
+    expect(explicit).toEqual(omitted);
+  });
+
+  it('default (flag off): the largest-area cluster (didi) is bucketed first → sheet 0', () => {
+    const { sheets } = computeCropSheetLayout(orderingCrops, config(2));
+    expect(sheetOf(sheets, 'didi/base')).toBe(0);
+    expect(sheetOf(sheets, 'leena/base')).toBe(1);
+  });
+
+  it('flag-on: clusters are bucketed in APPEARANCE order — leena (first in input) lands sheet 0, didi does NOT jump ahead on area', () => {
+    const { sheets } = computeCropSheetLayout(
+      orderingCrops,
+      config(2, { preserveInputOrder: true }),
+    );
+    expect(sheetOf(sheets, 'leena/base')).toBe(0);
+    expect(sheetOf(sheets, 'didi/base')).toBe(1);
+    expect(sheetOf(sheets, 'didi/v1')).toBe(1);
+    // NOTE: no assertion on placements order WITHIN a sheet here — potpack
+    // still size-sorts unequal boxes (fill optimization); input order only
+    // breaks EQUAL-metric ties (see the equal-size tie-break tests below).
+    for (const s of sheets) assertNoOverlap(s);
+  });
+
+  it('flag-on keeps clusters whole and every crop placed exactly once', () => {
+    const { sheets } = computeCropSheetLayout(
+      orderingCrops,
+      config(2, { preserveInputOrder: true }),
+    );
+    const ids = sheets.flatMap((s) => s.placements.map((p) => p.id)).sort();
+    expect(ids).toEqual(['didi/base', 'didi/v1', 'leena/base', 'momo/base']);
+    expect(sheetOf(sheets, 'didi/base')).toBe(sheetOf(sheets, 'didi/v1'));
+  });
+
+  it('flag-on is deterministic — same input twice → deep-equal', () => {
+    const first = computeCropSheetLayout(
+      orderingCrops,
+      config(2, { preserveInputOrder: true }),
+    );
+    const second = computeCropSheetLayout(
+      orderingCrops,
+      config(2, { preserveInputOrder: true }),
+    );
+    expect(second).toEqual(first);
+  });
+
+  it('flag-on with K=1 is a no-op (single bucket either way)', () => {
+    const flagOff = computeCropSheetLayout(orderingCrops, config(1));
+    const flagOn = computeCropSheetLayout(
+      orderingCrops,
+      config(1, { preserveInputOrder: true }),
+    );
+    expect(flagOn).toEqual(flagOff);
+  });
+});
+
+// ── preserveInputOrder — potpack equal-size tie-break (in-sheet placement) ───
+
+describe('computeCropSheetLayout — preserveInputOrder potpack tie-break', () => {
+  // Sprite regression fixture: 3 EQUAL square cells whose ids sort
+  // alphabetically AGAINST input order — `didi` < `leela` but didi comes LAST
+  // in input (remix.characters order). Pre-fix, the id-alphabetical tie-break
+  // packed didi first → top-left cell carried ordinal badge 3.
+  const equalCells = [
+    entityCrop('character/leela/edited', 'leela', 30, 30),
+    entityCrop('character/leela/school', 'leela', 30, 30),
+    entityCrop('character/didi/base', 'didi', 30, 30),
+  ];
+
+  /** Placement ids sorted in visual reading order (top → bottom, left → right). */
+  function readingOrder(sheet: SheetLayout): string[] {
+    return [...sheet.placements]
+      .sort((a, b) => a.geometry.y - b.geometry.y || a.geometry.x - b.geometry.x)
+      .map((p) => p.id);
+  }
+
+  it('flag-on: equal-size cells place in INPUT order — first crop lands top-left', () => {
+    const { sheets } = computeCropSheetLayout(
+      equalCells,
+      config(1, { preserveInputOrder: true }),
+    );
+    expect(readingOrder(sheets[0])).toEqual([
+      'character/leela/edited',
+      'character/leela/school',
+      'character/didi/base',
+    ]);
+    assertNoOverlap(sheets[0]);
+  });
+
+  it('flag-off: equal-size tie-break stays id-alphabetical — didi (alphabetically first) lands top-left (mix-plane golden parity)', () => {
+    const { sheets } = computeCropSheetLayout(equalCells, config(1));
+    expect(readingOrder(sheets[0])[0]).toBe('character/didi/base');
+    assertNoOverlap(sheets[0]);
+  });
+
+  it('flag-on: unequal boxes still pack size-sorted — input order only breaks ties', () => {
+    // didi is the LARGEST box and last in input → still placed first (top-left).
+    const mixed = [
+      entityCrop('character/leela/edited', 'leela', 20, 20),
+      entityCrop('character/leela/school', 'leela', 20, 20),
+      entityCrop('character/didi/base', 'didi', 40, 40),
+    ];
+    const { sheets } = computeCropSheetLayout(
+      mixed,
+      config(1, { preserveInputOrder: true }),
+    );
+    const first = readingOrder(sheets[0])[0];
+    expect(first).toBe('character/didi/base');
+    assertNoOverlap(sheets[0]);
+  });
+});

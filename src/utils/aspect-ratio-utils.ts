@@ -107,3 +107,30 @@ export function getImageNaturalDimensions(
     img.src = url;
   });
 }
+
+/** Read a remote image's natural dimensions via an in-memory <img>. Reading
+ *  naturalWidth/Height does not require pixel access, so no crossOrigin is set
+ *  — adding it would make the load fail outright on hosts without ACAO headers
+ *  for no benefit. Rejects on load failure or after `timeoutMs` (a stalled
+ *  load never fires onload/onerror) — callers own the fallback. */
+export function getImageNaturalDimensionsFromUrl(
+  url: string,
+  timeoutMs = 10_000,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const timer = setTimeout(() => {
+      img.src = ''; // abort the in-flight load
+      reject(new Error(`Timed out reading image dimensions after ${timeoutMs}ms`));
+    }, timeoutMs);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error('Failed to read image dimensions from URL'));
+    };
+    img.src = url;
+  });
+}

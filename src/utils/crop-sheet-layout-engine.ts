@@ -47,6 +47,15 @@ export interface LayoutConfig {
   gutterY?: number;
   /** τ — landscape-ratio preference threshold. Default DEFAULTS.landscapeTolerance. */
   landscapeTolerance?: number;
+  /** When true, input order wins every tie the packing pipeline would
+   *  otherwise break arbitrarily: (a) `partitionByEntityAffinity` assigns
+   *  entity clusters to sheets in first-APPEARANCE order instead of
+   *  total-area-desc, and (b) potpack breaks EQUAL-size-metric ties by input
+   *  index instead of id-alphabetical — so uniformly-sized crops are placed
+   *  top-left → bottom-right in `crops[]` order. Packing of unequal boxes
+   *  stays size-sorted (fill optimization untouched). Default false — the
+   *  mix/Batches plane never sets it → byte-identical output there. */
+  preserveInputOrder?: boolean;
 }
 
 /** Crop position + size within a sheet — px, integer, sheet-relative. */
@@ -122,6 +131,9 @@ interface PxCrop {
   id: string;
   w: number;
   h: number;
+  /** Position in the sanitized input array — potpack tie-break rank when
+   *  `preserveInputOrder` is on. */
+  inputIndex: number;
   /** Primary subject affinity key — echoed from CropInput.objectKey. */
   objectKey?: string;
 }
@@ -133,6 +145,10 @@ interface PackBox {
   h: number;
   x: number;
   y: number;
+  /** Input-order tie-break rank. ONLY set when `preserveInputOrder` — its
+   *  presence switches potpack's equal-metric tie-break from id-alphabetical
+   *  to input order (absence keeps the mix plane byte-identical). */
+  order?: number;
 }
 
 interface PackResult {
@@ -180,14 +196,15 @@ export function computeCropSheetLayout(
   const gutterX = config.gutterX ?? DEFAULTS.gutterX;
   const gutterY = config.gutterY ?? DEFAULTS.gutterY;
   const landscapeTolerance = config.landscapeTolerance ?? DEFAULTS.landscapeTolerance;
+  const preserveInputOrder = config.preserveInputOrder ?? false;
 
   // Silently drop crops with non-positive dimensions (caller logs warnings).
   const sanitized = crops.filter((c) => c.widthPct > 0 && c.heightPct > 0);
   const pxCrops = toPixels(sanitized, spread);
-  const groups = partitionByEntityAffinity(pxCrops, sheetCount);
+  const groups = partitionByEntityAffinity(pxCrops, sheetCount, preserveInputOrder);
 
   const sheets = groups.map((group, index) =>
-    packOneSheet(group, index, gutterX, gutterY, landscapeTolerance),
+    packOneSheet(group, index, gutterX, gutterY, landscapeTolerance, preserveInputOrder),
   );
 
   return { sheets };
@@ -196,10 +213,11 @@ export function computeCropSheetLayout(
 // ── Step 1: % → real pixels (spec §5.1) ──────────────────────────────────────
 
 function toPixels(crops: CropInput[], spread: { width: number; height: number }): PxCrop[] {
-  return crops.map((c) => ({
+  return crops.map((c, i) => ({
     id: c.id,
     w: (c.widthPct / 100) * spread.width,
     h: (c.heightPct / 100) * spread.height,
+    inputIndex: i,
     objectKey: c.objectKey,
   }));
 }
@@ -215,8 +233,14 @@ const NONE_CLUSTER = '__none__';
  * split crop-by-crop into the smallest buckets (simple heuristic — engine §9
  * open, rare). Deterministic: clusters keep first-appearance order, sorted by
  * (total area desc, appearance order asc); ties pick the lowest bucket index.
+ * With `preserveInputOrder` the area-desc sort is skipped — clusters are
+ * bucketed in pure appearance order (assignment mechanics unchanged).
  */
-function partitionByEntityAffinity(pxCrops: PxCrop[], k: number): PxCrop[][] {
+function partitionByEntityAffinity(
+  pxCrops: PxCrop[],
+  k: number,
+  preserveInputOrder: boolean,
+): PxCrop[][] {
   if (k <= 1) return [pxCrops];
 
   // Group by objectKey, preserving first-appearance order.
@@ -248,14 +272,17 @@ function partitionByEntityAffinity(pxCrops: PxCrop[], k: number): PxCrop[][] {
     return target;
   };
 
-  // Sort clusters by total area desc, tie-break appearance order asc.
+  // Sort clusters by total area desc, tie-break appearance order asc — unless
+  // the caller asked to preserve input order (appearance order as-is).
   const clusterArea = (ck: string) => clusters.get(ck)!.reduce((s, c) => s + areaOf(c), 0);
   const appearance = new Map(order.map((ck, i) => [ck, i]));
-  const sorted = [...order].sort((a, b) => {
-    const diff = clusterArea(b) - clusterArea(a);
-    if (diff !== 0) return diff;
-    return appearance.get(a)! - appearance.get(b)!;
-  });
+  const sorted = preserveInputOrder
+    ? order
+    : [...order].sort((a, b) => {
+        const diff = clusterArea(b) - clusterArea(a);
+        if (diff !== 0) return diff;
+        return appearance.get(a)! - appearance.get(b)!;
+      });
 
   for (const ck of sorted) {
     const cluster = clusters.get(ck)!;
@@ -285,6 +312,7 @@ function packOneSheet(
   gutterX: number,
   gutterY: number,
   landscapeTolerance: number,
+  preserveInputOrder: boolean,
 ): SheetLayout {
   if (group.length === 0) {
     return {
@@ -298,13 +326,15 @@ function packOneSheet(
   }
 
   // Inflate each crop by 2*gutterX horizontally / 2*gutterY vertically
-  // (asymmetric padding around the crop).
+  // (asymmetric padding around the crop). `order` only under
+  // preserveInputOrder — its presence flips potpack's tie-break.
   const inflated: PackBox[] = group.map((c) => ({
     id: c.id,
     w: c.w + 2 * gutterX,
     h: c.h + 2 * gutterY,
     x: 0,
     y: 0,
+    ...(preserveInputOrder ? { order: c.inputIndex } : {}),
   }));
   const totalArea = inflated.reduce((sum, b) => sum + b.w * b.h, 0);
   // Widest inflated box — the bin width MUST never seed below this, else a box
@@ -354,10 +384,14 @@ function packOneSheet(
  * the origin (still deterministic, geometry stays consistent).
  */
 function potpack(boxes: PackBox[], startWidth: number, sortKey: SortKey): PackResult {
-  // Sort descending by sortKey, tie-break id ascending — deterministic.
+  // Sort descending by sortKey. Tie-break: input order ascending when carried
+  // (`preserveInputOrder` boxes — equal-size cells place in crops[] order so
+  // ordinal badges read top-left → bottom-right), else id ascending —
+  // deterministic either way.
   boxes.sort((a, b) => {
     const diff = sortMetric(b, sortKey) - sortMetric(a, sortKey);
     if (diff !== 0) return diff;
+    if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 

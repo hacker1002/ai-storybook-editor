@@ -124,6 +124,13 @@ export interface RemixJobsSlice {
  *  sheet + lazy seed). Mirror of the batch lifecycle on the `sprites[]` plane.
  *  Persists ONLY the `sprites` column (disjoint from `mixes`/`characters`). */
 export interface RemixSpriteSlice {
+  /** remixId → count of in-flight sprite LAYOUT computations (seed / relayout /
+   *  add-subset). Layout measures every cell artwork's natural dimensions
+   *  (`measureCellDims` image loads) — seconds on a cold cache — so the modal
+   *  shows a loading state instead of an empty Sprites tab. Counted (not
+   *  boolean) so overlapping ops don't clear each other's pending flag. */
+  spriteLayoutPendingByRemix: Record<string, number>;
+
   /** Appends a NEW sprite as a SUBSET clone of the active sprite (modal "Add as
    *  Sprite" with per-cell selection). `selectedCellKeys` = a set of
    *  `${type}/${object_key}/${variant_key}` keys identifying the PRE-SWAP cells

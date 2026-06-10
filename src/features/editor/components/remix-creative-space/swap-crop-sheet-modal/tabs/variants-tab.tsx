@@ -19,10 +19,14 @@
 // SECURITY: never log media_url / swap URLs / human config.
 
 import { useCallback, useMemo, useState } from 'react';
-import { Repeat } from 'lucide-react';
+import { Loader2, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
-import { useRemixById, useRemixActions } from '@/stores/remix-store';
+import {
+  useRemixById,
+  useRemixActions,
+  useSpriteLayoutPending,
+} from '@/stores/remix-store';
 import { useHumans } from '@/stores/humans-store';
 import type { RemixSprite } from '@/types/remix';
 import {
@@ -110,6 +114,11 @@ export function VariantsTab({
     clear: clearSwapCellSelection,
   } = useSelectedSwapCrops();
   const { addSprite, takeSpriteFinalBack } = useRemixActions();
+
+  // Sprite layout in flight (seed on first open / relayout) — artwork
+  // dimension measurement takes seconds on a cold cache; drive loading states
+  // instead of a confusing empty tab.
+  const layoutPending = useSpriteLayoutPending(remixId);
 
   // Swap-config gating: resolve every character's config view once (frozen
   // remix_config + live humans cache for converted_image).
@@ -361,6 +370,7 @@ export function VariantsTab({
         canAddSprite={canAddSprite}
         addSpriteTooltip={addSpriteTooltip}
         selectionSize={selectionSize}
+        layoutPending={layoutPending}
         onSelectSpriteSheet={onSelectSpriteSheet}
         onAddSprite={handleAddSprite}
         onRemoveSprite={handleRemoveSprite}
@@ -397,12 +407,22 @@ export function VariantsTab({
         />
       ) : (
         <section
-          className="flex h-full min-w-0 flex-1 items-center justify-center bg-[var(--swap-modal-bg)] p-8 text-center"
+          className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-[var(--swap-modal-bg)] p-8 text-center"
           aria-label="Sprites stage"
+          aria-busy={layoutPending}
         >
-          <p className="text-sm text-[var(--swap-modal-text-muted)]">
-            Thêm một sprite để bắt đầu.
-          </p>
+          {layoutPending ? (
+            <>
+              <Loader2 className="h-7 w-7 animate-spin text-[var(--swap-modal-accent)]" />
+              <p className="text-sm text-[var(--swap-modal-text-muted)]">
+                Đang dựng sprite — đo kích thước ảnh variant…
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--swap-modal-text-muted)]">
+              Thêm một sprite để bắt đầu.
+            </p>
+          )}
         </section>
       )}
 

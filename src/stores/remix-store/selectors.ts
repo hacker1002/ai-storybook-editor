@@ -421,6 +421,17 @@ export const useAnySpriteSwapRunning = (
     ),
   );
 
+/** True while a sprite LAYOUT computation (seed / relayout / add-subset) is
+ *  in flight for the remix. Layout measures every cell artwork's natural
+ *  dimensions via image loads — seconds on a cold cache — so the modal shows a
+ *  loading state instead of an empty Sprites tab. */
+export const useSpriteLayoutPending = (
+  remixId: string | null | undefined,
+): boolean =>
+  useRemixStore(
+    (s) => !!remixId && (s.spriteLayoutPendingByRemix[remixId] ?? 0) > 0,
+  );
+
 /** Distinct character object_keys present on a sprite (lineup). Drives gating —
  *  every lineup object must have a complete swap config before Swap enables. */
 export function spriteLineupObjects(

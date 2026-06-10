@@ -10,7 +10,7 @@
 // for destructive relayout lives in the tab). Disabled states are computed here
 // from props for a11y; the tab also guards before mutating.
 
-import { ChevronDown, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Minus, Plus, X } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { RemixSprite } from '@/types/remix';
@@ -46,6 +46,10 @@ interface SpritesSidebarProps {
   addSpriteTooltip: string;
   /** Number of cells currently ticked — drives the `(N sel)` badge + aria. */
   selectionSize: number;
+  /** True while a sprite layout computes (seed / relayout — artwork dimension
+   *  measurement, seconds on a cold cache). Empty state becomes a loading
+   *  state; header shows a small spinner while sprites are visible. */
+  layoutPending: boolean;
   onSelectSpriteSheet: (spriteId: string, sheetIndex: number) => void;
   onAddSprite: () => void;
   /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces SPRITE_MIN. */
@@ -65,6 +69,7 @@ export function SpritesSidebar({
   canAddSprite,
   addSpriteTooltip,
   selectionSize,
+  layoutPending,
   onSelectSpriteSheet,
   onAddSprite,
   onRemoveSprite,
@@ -100,6 +105,12 @@ export function SpritesSidebar({
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]">
             Sprites
           </p>
+          {layoutPending && sprites.length > 0 && (
+            <Loader2
+              aria-label="Đang tính lại layout sprite"
+              className="h-3 w-3 animate-spin text-[var(--swap-modal-text-muted)]"
+            />
+          )}
           {selectionSize > 0 && (
             <span
               aria-hidden="true"
@@ -128,10 +139,22 @@ export function SpritesSidebar({
       </div>
 
       {sprites.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center px-4 text-center">
-          <p className="text-sm text-[var(--swap-modal-text-muted)]">
-            Chưa có sprite nào.
-          </p>
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center"
+          aria-busy={layoutPending}
+        >
+          {layoutPending ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin text-[var(--swap-modal-text-muted)]" />
+              <p className="text-sm text-[var(--swap-modal-text-muted)]">
+                Đang dựng sprite — đo kích thước ảnh variant…
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--swap-modal-text-muted)]">
+              Chưa có sprite nào.
+            </p>
+          )}
         </div>
       ) : (
         <div

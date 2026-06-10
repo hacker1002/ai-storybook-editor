@@ -10,12 +10,16 @@
 // reuse it VERBATIM for sprites rather than extracting a separate `pack` util +
 // refactoring the mix engine: the engine IS the shared pack, so DRY is already
 // satisfied and the mix path stays byte-for-byte untouched (zero Batches
-// regression risk — golden test trivially passes). Sprite cells are uniform
-// squares (variant artwork ≈ square) packed against a synthetic SQUARE spread
-// (sprite sheets are NOT tied to the book canvas dimension).
+// regression risk — golden test trivially passes). Sprite cells use the
+// variant artwork's NATURAL dimensions (measured client-side per layout, never
+// persisted) against a synthetic SQUARE cap-sized spread (sprite sheets are
+// NOT tied to the book canvas dimension); a single global factor down-scales
+// every cell together when the longest edge exceeds the cap, preserving the
+// TRUE relative proportions between variants.
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
+import { getImageNaturalDimensionsFromUrl } from '@/utils/aspect-ratio-utils';
 import { newUuid } from '@/utils/uuid';
 import type {
   Remix,
@@ -39,22 +43,21 @@ const log = createLogger('Store', 'SpriteLayout');
 export const SPRITE_MIN = 1;
 
 /**
- * Per-cell SQUARE dimension (px) for the sprite layout, chosen by how many cells
- * share ONE sheet. This dimension is NOT cosmetic — it is BOTH:
+ * Per-cell LONGEST-EDGE cap (px) for the sprite layout, chosen by how many
+ * cells share ONE sheet. This cap is NOT cosmetic — it bounds BOTH:
  *   (a) the build-crop-sheet composition box → Gemini swap INPUT fidelity, and
  *   (b) the post-swap resize target in image-api `sprite_cut.py` (each swapped
  *       piece is resized DOWN to its `crop.geometry`) → the RESOLUTION CEILING
  *       of the final swapped variant artwork.
- * Fewer cells → larger cells (each gets more of Gemini's ~4K output budget);
- * more cells → smaller cells so the composed sheet stays under the swap
+ * Fewer cells → a larger cap (each gets more of Gemini's ~4K output budget);
+ * more cells → a smaller cap so the composed sheet stays under the swap
  * endpoint's sheet caps (clamped defensively in `buildSpriteSheetsFromLayout`).
- * Tiers (cells-per-sheet → px): 1→2000, 2→1000, 3→800, ≥4→600.
+ * Cells keep their NATURAL aspect — the cap only bounds the longest edge via a
+ * single global factor across all cells (see `partitionByObjectAffinity`).
+ * Tiers (cells-per-sheet → px): ≤2→2000, >2→1000.
  */
-function spriteCellDim(cellsPerSheet: number): number {
-  if (cellsPerSheet <= 1) return 2000;
-  if (cellsPerSheet === 2) return 1000;
-  if (cellsPerSheet === 3) return 800;
-  return 600;
+function spriteCapDim(cellsPerSheet: number): number {
+  return cellsPerSheet <= 2 ? 2000 : 1000;
 }
 
 /** Padding (px) on EACH side of every sprite cell, EQUAL on both axes → the gap
@@ -79,8 +82,16 @@ const MAX_SHEET_DIM = 8192;
 const MAX_SHEET_PIXELS = 32_000_000;
 
 /** Pre-geometry sprite cell (engine input meta) — a `SpriteCrop` minus the
- *  engine-computed `geometry`. */
-export type SpriteCell = Omit<SpriteCrop, 'geometry'>;
+ *  engine-computed `geometry`, plus the artwork's measured natural dimensions.
+ *  `width`/`height` are TRANSIENT engine input only — measured per layout and
+ *  stripped before persisting (`toSpriteCrop`); the persisted `SpriteCrop`
+ *  schema is unchanged. */
+export type SpriteCell = Omit<SpriteCrop, 'geometry'> & {
+  /** Natural artwork width (px) — transient, engine input only. */
+  width?: number;
+  /** Natural artwork height (px) — transient, engine input only. */
+  height?: number;
+};
 
 /** Stable per-cell key — `${type}/${object_key}/${variant_key}`. Single source
  *  of truth for selection sets, ownership keys, and engine `CropInput.id`. */
@@ -174,12 +185,64 @@ function capScaleFactor(width: number, height: number): number {
   return Math.min(dimF, pxF);
 }
 
+/** Persisted-schema projection: picks ONLY `SpriteCrop` fields off a cell,
+ *  stripping the transient measured `width`/`height` (a naive spread would
+ *  leak them into the persisted `sprites` column). */
+function toSpriteCrop(
+  cell: SpriteCell,
+  geometry: SpriteCrop['geometry'],
+): SpriteCrop {
+  return {
+    type: cell.type,
+    object_key: cell.object_key,
+    variant_key: cell.variant_key,
+    media_url: cell.media_url,
+    geometry,
+  };
+}
+
+/** Measure every cell's natural artwork dimensions in parallel. Per-cell
+ *  isolation: a failed/degenerate read logs a warning and yields null — the
+ *  caller falls back to a square cap-sized cell so one bad image never sinks
+ *  the whole layout. Re-measured on every layout (browser-cached → cheap);
+ *  dimensions are never persisted. */
+async function measureCellDims(
+  cells: SpriteCell[],
+): Promise<Map<string, { width: number; height: number } | null>> {
+  const entries = await Promise.all(
+    cells.map(async (cell) => {
+      const key = spriteCellKey(cell);
+      try {
+        const dim = await getImageNaturalDimensionsFromUrl(cell.media_url);
+        if (dim.width <= 0 || dim.height <= 0) {
+          throw new Error(`degenerate dimensions ${dim.width}×${dim.height}`);
+        }
+        return [key, dim] as const;
+      } catch (e) {
+        log.warn('measureCellDims', 'dim read failed — fallback square cell', {
+          cellKey: key,
+          url: cell.media_url,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return [key, null] as const;
+      }
+    }),
+  );
+  return new Map(entries);
+}
+
 function buildSpriteSheetsFromLayout(
   layout: CropSheetLayoutResult,
   cellByKey: Record<string, SpriteCell>,
+  inputIndex: Record<string, number>,
 ): RemixSpriteCropSheet[] {
   return layout.sheets.map((sheet) => {
-    const placed = sheet.placements.filter((p) => cellByKey[p.id]);
+    // Sort by INPUT order (remix.characters order) so `crops[]` — and thus the
+    // 1..N ordinal badges — follow character order even though potpack places
+    // boxes size-sorted (geometric position is fill-optimized, not ordered).
+    const placed = sheet.placements
+      .filter((p) => cellByKey[p.id])
+      .sort((a, b) => (inputIndex[a.id] ?? 0) - (inputIndex[b.id] ?? 0));
     if (placed.length === 0) {
       return {
         title: sheetTitle(sheet.index),
@@ -239,54 +302,114 @@ function buildSpriteSheetsFromLayout(
       sheet_geometry: { width, height },
       image_url: '',
       swap_results: [],
-      crops: geoms.map((g) => ({
-        ...cellByKey[g.id],
-        geometry: { x: g.x, y: g.y, w: g.w, h: g.h },
-      })),
+      crops: geoms.map((g) =>
+        toSpriteCrop(cellByKey[g.id], { x: g.x, y: g.y, w: g.w, h: g.h }),
+      ),
     };
   });
+}
+
+/** Re-group cells so variants of one `object_key` sit ADJACENT, keeping the
+ *  object_keys' first-appearance order and the original order within a group.
+ *  Stored sheet order can interleave characters — a K≥2 layout splits an
+ *  over-budget cluster crop-by-crop across sheets, and the next relayout reads
+ *  cells back in sheet order (e.g. [leela/e, didi/b, leela/s]). Without this
+ *  normalization that interleaving leaks into `crops[]` → ordinals AND
+ *  (equal-size) placement stop grouping a character's variants together. */
+function groupCellsByObjectKey(cells: SpriteCell[]): SpriteCell[] {
+  const order: string[] = [];
+  const groups = new Map<string, SpriteCell[]>();
+  for (const c of cells) {
+    let g = groups.get(c.object_key);
+    if (!g) {
+      g = [];
+      groups.set(c.object_key, g);
+      order.push(c.object_key);
+    }
+    g.push(c);
+  }
+  return order.flatMap((key) => groups.get(key)!);
 }
 
 /**
  * Partition sprite cells into K sheets via the shared layout engine. Affinity
  * key = `object_key` (variants of one character stay on the same sheet where
- * possible). Uniform square cells against the synthetic square spread.
+ * possible). Input is normalized via `groupCellsByObjectKey` first — variants
+ * of one character are ALWAYS adjacent in `crops[]`/ordinals, whatever order
+ * the caller carried (seed order is already grouped; relayout/subset order may
+ * be interleaved by a prior multi-sheet split). Cells carry the artwork's
+ * NATURAL dimensions (measured per layout from `media_url`), capped on the
+ * longest edge by a SINGLE global factor so the relative proportions between
+ * variants stay true; measurement failure falls back to a square cap-sized
+ * cell. Async — callers await.
  */
-export function partitionByObjectAffinity(
+export async function partitionByObjectAffinity(
   cells: SpriteCell[],
   k: number,
-): RemixSpriteCropSheet[] {
+): Promise<RemixSpriteCropSheet[]> {
+  cells = groupCellsByObjectKey(cells);
   const sheetCount = Math.max(1, k);
-  // Cell dimension keys off how many cells share ONE sheet (≈ even split), so a
-  // sprite re-laid-out across more sheets gets larger, higher-res cells.
+  // Cap keys off how many cells share ONE sheet (≈ even split), so a sprite
+  // re-laid-out across more sheets gets larger, higher-res cells.
   const cellsPerSheet = Math.ceil(cells.length / sheetCount);
-  const cellDim = spriteCellDim(cellsPerSheet);
+  const cap = spriteCapDim(cellsPerSheet);
+
+  const dims = await measureCellDims(cells);
+  const sized = cells.map((cell) => {
+    const d = dims.get(spriteCellKey(cell));
+    return d ? { cell, w: d.width, h: d.height } : { cell, w: cap, h: cap };
+  });
+
+  // ONE global factor for ALL cells, keyed off the single longest edge — keeps
+  // every variant's size relative to the others true. Never upscales (≤ 1).
+  const longest = sized.reduce((m, s) => Math.max(m, s.w, s.h), 0);
+  const factor = longest > cap ? cap / longest : 1;
+  if (factor < 1) {
+    log.debug('partitionByObjectAffinity', 'global down-scale to cap', {
+      longest,
+      cap,
+      factor: Number(factor.toFixed(4)),
+    });
+  }
 
   const cellByKey: Record<string, SpriteCell> = {};
-  const inputs: CropInput[] = [];
-  for (const cell of cells) {
+  const inputIndex: Record<string, number> = {};
+  const inputs: CropInput[] = sized.map(({ cell, w, h }, i) => {
     const id = spriteCellKey(cell);
     cellByKey[id] = cell;
-    // widthPct/heightPct=100 against a `cellDim`-square spread → every cell is
-    // exactly `cellDim`×`cellDim` px (uniform squares).
-    inputs.push({ id, widthPct: 100, heightPct: 100, objectKey: cell.object_key });
-  }
+    inputIndex[id] = i;
+    // % of the synthetic `cap`-square spread → engine emits w·factor × h·factor
+    // px. factor already pins the longest edge ≤ cap, so pct ≤ 100 (the min is
+    // defensive only).
+    return {
+      id,
+      widthPct: Math.min(100, ((w * factor) / cap) * 100),
+      heightPct: Math.min(100, ((h * factor) / cap) * 100),
+      objectKey: cell.object_key,
+    };
+  });
   const layout = computeCropSheetLayout(inputs, {
     sheetCount,
-    spread: { width: cellDim, height: cellDim },
-    // Equal padding on both axes → uniform 64px gaps between square cells (the
-    // engine default gutterY=8 made vertical gaps 4× tighter than horizontal).
-    // The ordinal badge still fits the 64px left gutter.
+    spread: { width: cap, height: cap },
+    // Equal padding on both axes → uniform 64px gaps between cells (the engine
+    // default gutterY=8 made vertical gaps 4× tighter than horizontal). The
+    // ordinal badge still fits the 64px left gutter.
     gutterX: SPRITE_GUTTER,
     gutterY: SPRITE_GUTTER,
     // τ=0.1: accept a landscape grid when within 10% fill of the best ratio.
-    // Without it, square cells snap tighter to portrait ratios → 2–3 cells pack
-    // into a TALL single-column 9:16 stack (lopsided). 0.1 gives N=2 → 2-col row
-    // and N=3 → 2-col [2,1], while leaving perfect-fill grids (N=1 1:1, N=4 2×2,
-    // N=6 3:2) intact; 0.2+ starts degrading those (1 cell → 5:4).
+    // Without it, near-square cells snap tighter to portrait ratios → 2–3 cells
+    // pack into a TALL single-column 9:16 stack (lopsided). 0.1 gives N=2 →
+    // 2-col row and N=3 → 2-col [2,1], while leaving perfect-fill grids (N=1
+    // 1:1, N=4 2×2, N=6 3:2) intact; 0.2+ starts degrading those (1 cell → 5:4).
     landscapeTolerance: 0.1,
+    // Cluster (sheet-assignment) order follows remix.characters appearance
+    // instead of area-desc, AND potpack breaks equal-size ties by input order
+    // (equal cells place top-left → bottom-right in character order, matching
+    // the ordinal badges). Ordinal order itself comes from the inputIndex sort
+    // in buildSpriteSheetsFromLayout. Mix plane never sets this flag.
+    preserveInputOrder: true,
   });
-  return buildSpriteSheetsFromLayout(layout, cellByKey);
+  return buildSpriteSheetsFromLayout(layout, cellByKey, inputIndex);
 }
 
 /** Distinct (deduped) cells currently living on a sprite — reads ONLY pre-swap
@@ -309,10 +432,10 @@ export function currentCellsOfSprite(sprite: RemixSpriteEntry): SpriteCrop[] {
  *  sprite's cells (modal "Add as Sprite"). `media_url` is the ORIGINAL artwork
  *  carried on the active sprite's pre-swap crops. Returns [] when nothing
  *  matched (caller throws on stale selection). */
-export function addSpriteSubset(
+export async function addSpriteSubset(
   activeSprite: RemixSpriteEntry,
   selectedCellKeys: ReadonlySet<string>,
-): RemixSpriteCropSheet[] {
+): Promise<RemixSpriteCropSheet[]> {
   const subset: SpriteCell[] = currentCellsOfSprite(activeSprite)
     .filter((c) => selectedCellKeys.has(spriteCellKey(c)))
     .map((c) => ({
@@ -336,7 +459,7 @@ export function makeSpriteSkeleton(order: number, name: string): RemixSpriteEntr
  * `sprites.length >= 1`. Returns the seeded entry, or null when already seeded
  * / no cells to lay out.
  */
-export function buildSeedSprite(remix: Remix): RemixSpriteEntry | null {
+export async function buildSeedSprite(remix: Remix): Promise<RemixSpriteEntry | null> {
   if (remix.sprites.length >= 1) return null;
   const cells = groupVariantsForSprite(remix);
   if (cells.length === 0) {
@@ -347,7 +470,7 @@ export function buildSeedSprite(remix: Remix): RemixSpriteEntry | null {
   }
   const entry: RemixSpriteEntry = {
     ...makeSpriteSkeleton(0, 'Sprite 1'),
-    crop_sheets: partitionByObjectAffinity(cells, 1),
+    crop_sheets: await partitionByObjectAffinity(cells, 1),
   };
   log.info('buildSeedSprite', 'seeded', {
     remixId: remix.id,
@@ -441,7 +564,7 @@ export async function relayoutSpriteSheets(
     log.warn('relayoutSpriteSheets', 'no cells to layout — abort', { remixId, spriteId });
     return false;
   }
-  const newSheets = partitionByObjectAffinity(cells, nextCount);
+  const newSheets = await partitionByObjectAffinity(cells, nextCount);
 
   set((s) => ({
     remixes: s.remixes.map((r) =>
@@ -509,7 +632,7 @@ export async function addSprite(
     return null;
   }
 
-  const newSheets = addSpriteSubset(activeSprite, selectedCellKeys);
+  const newSheets = await addSpriteSubset(activeSprite, selectedCellKeys);
   if (newSheets.length === 0) {
     log.warn('addSprite', 'selection has zero matches in active sprite — throw', {
       remixId,
@@ -611,14 +734,28 @@ export async function seedInitialSpriteIfMissing(
     });
     return false;
   }
-  const entry = buildSeedSprite(prevRemix);
+  const entry = await buildSeedSprite(prevRemix);
   if (!entry) return false;
 
+  // Re-check emptiness inside the updater — the await above (async dim
+  // measurement) opens a window where a concurrent mount could already have
+  // seeded; seeding twice would orphan a sprite. The loser must also skip
+  // persist: persisting would be a duplicate write, and its failure path would
+  // roll back to prevRemix (sprites: []), transiently wiping the winner.
+  let applied = false;
   set((s) => ({
-    remixes: s.remixes.map((r) =>
-      r.id === remixId ? { ...r, sprites: [entry] } : r,
-    ),
+    remixes: s.remixes.map((r) => {
+      if (r.id !== remixId || r.sprites.length !== 0) return r;
+      applied = true;
+      return { ...r, sprites: [entry] };
+    }),
   }));
+  if (!applied) {
+    log.debug('seedInitialSpriteIfMissing', 'lost seed race — skip persist', {
+      remixId,
+    });
+    return false;
+  }
 
   log.info('seedInitialSpriteIfMissing', 'optimistic seed', {
     remixId,

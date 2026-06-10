@@ -38,6 +38,34 @@ export const createSpriteSlice: RemixSliceCreator<RemixSpriteSlice> = (
     patchRemixCropSheets: get().patchRemixCropSheets,
   });
 
+  // Pending-counter bracket around layout-heavy ops (seed / relayout /
+  // add-subset): each measures cell artwork dimensions via image loads —
+  // seconds on a cold cache — so the UI needs a loading state. Counted so
+  // overlapping ops on one remix don't clear each other's flag; `finally`
+  // guarantees decrement on throw/rollback paths.
+  const withSpriteLayoutPending = async <T>(
+    remixId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> => {
+    set((s) => ({
+      spriteLayoutPendingByRemix: {
+        ...s.spriteLayoutPendingByRemix,
+        [remixId]: (s.spriteLayoutPendingByRemix[remixId] ?? 0) + 1,
+      },
+    }));
+    try {
+      return await fn();
+    } finally {
+      set((s) => {
+        const count = (s.spriteLayoutPendingByRemix[remixId] ?? 1) - 1;
+        const next = { ...s.spriteLayoutPendingByRemix };
+        if (count <= 0) delete next[remixId];
+        else next[remixId] = count;
+        return { spriteLayoutPendingByRemix: next };
+      });
+    }
+  };
+
   // R3 cross-sprite orphan reconcile — invoked AFTER a destructive sprite
   // mutation. Reads freshest sprites, runs the pure reconciler, and persists
   // `sprites` ONLY when a flag flips. Display `visualSwapUrl` re-derives from the
@@ -84,13 +112,17 @@ export const createSpriteSlice: RemixSliceCreator<RemixSpriteSlice> = (
   };
 
   return {
+    spriteLayoutPendingByRemix: {},
+
     addSprite: async (remixId, activeSpriteId, selectedCellKeys) => {
       log.info('addSprite', 'invoked', {
         remixId,
         activeSpriteId,
         selectionSize: selectedCellKeys.size,
       });
-      return engineAddSprite(buildDeps(), remixId, activeSpriteId, selectedCellKeys);
+      return withSpriteLayoutPending(remixId, () =>
+        engineAddSprite(buildDeps(), remixId, activeSpriteId, selectedCellKeys),
+      );
     },
 
     removeSprite: async (remixId, spriteId) => {
@@ -102,7 +134,9 @@ export const createSpriteSlice: RemixSliceCreator<RemixSpriteSlice> = (
 
     appendSpriteSheet: async (remixId, spriteId) => {
       log.info('appendSpriteSheet', 'invoked', { remixId, spriteId });
-      const ok = await relayoutSpriteSheets(buildDeps(), remixId, spriteId, 1);
+      const ok = await withSpriteLayoutPending(remixId, () =>
+        relayoutSpriteSheets(buildDeps(), remixId, spriteId, 1),
+      );
       if (ok) await reconcileSpriteFinalsAfterMutation(remixId, 'appendSpriteSheet');
       return ok;
     },
@@ -111,14 +145,18 @@ export const createSpriteSlice: RemixSliceCreator<RemixSpriteSlice> = (
       // `sheetIndex` accepted for caller-API parity but unused — the engine
       // re-packs from scratch (delta -1 + SHEET_MIN clamp is the guard).
       log.info('removeSpriteSheet', 'invoked', { remixId, spriteId, sheetIndex });
-      const ok = await relayoutSpriteSheets(buildDeps(), remixId, spriteId, -1);
+      const ok = await withSpriteLayoutPending(remixId, () =>
+        relayoutSpriteSheets(buildDeps(), remixId, spriteId, -1),
+      );
       if (ok) await reconcileSpriteFinalsAfterMutation(remixId, 'removeSpriteSheet');
       return ok;
     },
 
     ensureRemixSpriteSeed: async (remixId) => {
       log.info('ensureRemixSpriteSeed', 'invoked', { remixId });
-      return seedInitialSpriteIfMissing(buildDeps(), remixId);
+      return withSpriteLayoutPending(remixId, () =>
+        seedInitialSpriteIfMissing(buildDeps(), remixId),
+      );
     },
 
     // ── R5 user Take-Back (cross-sprite is_final mutex override) ──────
