@@ -27,7 +27,7 @@ interface TabDef {
 
 // Order is the keyboard navigation order for ←/→.
 const TABS: TabDef[] = [
-  { id: 'variants', label: 'Variants', Icon: SplitSquareHorizontal },
+  { id: 'variants', label: 'Sprites', Icon: SplitSquareHorizontal },
   { id: 'batches', label: 'Batches', Icon: LayoutGrid },
   { id: 'lotties', label: 'Lotties', Icon: Sparkles },
 ];

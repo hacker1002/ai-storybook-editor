@@ -30,6 +30,9 @@ import {
 
 const log = createLogger('Editor', 'BatchesSidebar');
 
+// Delete-batch affordance hidden by product decision; flip to re-enable.
+const SHOW_REMOVE_BATCH: boolean = false;
+
 interface BatchesSidebarProps {
   batches: RemixBatch[];
   activeBatchRef: { batchId: string; sheetIndex: number } | null;
@@ -284,7 +287,7 @@ function BatchNode({
         </div>
 
         {/* [✕] remove batch — only when above BATCH_MIN */}
-        {canRemoveBatch && (
+        {SHOW_REMOVE_BATCH && canRemoveBatch && (
           <button
             type="button"
             aria-label={`Xoá ${batch.name}`}

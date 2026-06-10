@@ -30,6 +30,9 @@ import { spriteLineupObjects } from '@/stores/remix-store';
 
 const log = createLogger('Editor', 'SpritesSidebar');
 
+// Delete-sprite affordance hidden by product decision; flip to re-enable.
+const SHOW_REMOVE_SPRITE: boolean = false;
+
 interface SpritesSidebarProps {
   sprites: RemixSprite[];
   activeSpriteRef: { spriteId: string; sheetIndex: number } | null;
@@ -275,7 +278,7 @@ function SpriteNode({
           </button>
         </div>
 
-        {canRemoveSprite && (
+        {SHOW_REMOVE_SPRITE && canRemoveSprite && (
           <button
             type="button"
             aria-label={`Xoá ${sprite.name}`}
