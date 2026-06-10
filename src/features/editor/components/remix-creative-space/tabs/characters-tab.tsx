@@ -4,9 +4,13 @@
 // itself is an async job triggered from the swap crop-sheet modal, not here.
 
 import type { SearchableDropdownOption } from '@/components/ui/searchable-dropdown';
-import type { Human, TraitType } from '@/types/human';
+import type { Human } from '@/types/human';
 import type { RemixCharacterEntry } from '@/types/editor';
 import type { RemixCharacterChoice } from '@/types/remix';
+import {
+  maxTraitChoicesFor,
+  supportedTraitSetFor,
+} from '../remix-config-normalize';
 import { CharacterSwapRow } from './character-swap-row';
 import type { VisualProfileOption } from './visual-profile-dropdown';
 
@@ -40,25 +44,6 @@ export function CharactersTab({
     );
   };
 
-  // Traits the selected visual profile can configure = traits with a non-empty
-  // description. null when no human/visual is picked yet. Unsupported traits get
-  // disabled in the row.
-  const supportedTraitsFor = (
-    humanId: string | null,
-    visualName: string | null,
-  ): Set<TraitType> | null => {
-    if (!humanId || !visualName) return null;
-    const profile = humans
-      .find((h) => h.id === humanId)
-      ?.visualProfiles.find((vp) => vp.name === visualName);
-    if (!profile) return null;
-    return new Set(
-      profile.traits
-        .filter((t) => typeof t.description === 'string' && t.description.length > 0)
-        .map((t) => t.type),
-    );
-  };
-
   if (allowedChars.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -78,15 +63,35 @@ export function CharactersTab({
             entry={entry}
             humanOptions={humanOptions}
             visualOptions={visualOptionsFor(entry?.human_id ?? null)}
-            supportedTraits={supportedTraitsFor(
+            // Shared predicate (remix-config-normalize) — the same support set
+            // masks traits when the draft is normalized on save (WYSIWYG).
+            supportedTraits={supportedTraitSetFor(
+              humans,
               entry?.human_id ?? null,
               entry?.visual ?? null,
             )}
             onUpsert={(patch) => onUpsert(bookChar.key, patch)}
             onChangeHuman={(humanId) =>
               // Cascade: changing the human clears the visual (visual options
-              // depend on the selected human).
-              onUpsert(bookChar.key, { human_id: humanId, visual: null })
+              // depend on the selected human) AND resets traits to the maximum
+              // checkable set (no profile yet → book gate only). Prior ticks
+              // are discarded by design (product call 2026-06-10).
+              onUpsert(bookChar.key, {
+                human_id: humanId,
+                visual: null,
+                traits: maxTraitChoicesFor(bookChar, null),
+              })
+            }
+            onChangeVisual={(visual) =>
+              // Picking a visual resets traits to everything that profile can
+              // swap (∧ book gate) — default-max, prior ticks discarded.
+              onUpsert(bookChar.key, {
+                visual,
+                traits: maxTraitChoicesFor(
+                  bookChar,
+                  supportedTraitSetFor(humans, entry?.human_id ?? null, visual),
+                ),
+              })
             }
           />
         );

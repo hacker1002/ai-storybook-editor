@@ -24,6 +24,7 @@ import { TRAIT_TYPES, TRAIT_LABELS } from '@/constants/trait-constants';
 import type { TraitType } from '@/types/human';
 import type { RemixCharacterEntry } from '@/types/editor';
 import type { RemixCharacterChoice, RemixTraitChoice } from '@/types/remix';
+import { bookTraitGate } from '../remix-config-normalize';
 
 const log = createLogger('Editor', 'CharacterSwapRow');
 
@@ -36,11 +37,9 @@ interface Props {
   supportedTraits: Set<TraitType> | null;
   onUpsert: (patch: Partial<RemixCharacterChoice>) => void;
   onChangeHuman: (humanId: string) => void;
-}
-
-/** Book-level gate per trait — a trait the book disabled cannot be configured. */
-function bookGateOf(bookChar: RemixCharacterEntry, type: TraitType): boolean {
-  return bookChar.traits.find((t) => t.type === type)?.is_enabled ?? true;
+  /** Visual pick routes through the tab (not a bare upsert) — it also resets
+   *  traits to the profile's maximum checkable set. */
+  onChangeVisual: (visual: string) => void;
 }
 
 export function CharacterSwapRow({
@@ -51,6 +50,7 @@ export function CharacterSwapRow({
   supportedTraits,
   onUpsert,
   onChangeHuman,
+  onChangeVisual,
 }: Props) {
   const enabled = entry?.is_enabled ?? false;
   const humanId = entry?.human_id ?? null;
@@ -101,7 +101,7 @@ export function CharacterSwapRow({
         <VisualProfileDropdown
           options={visualOptions}
           value={visual}
-          onChange={(v) => onUpsert({ visual: v })}
+          onChange={onChangeVisual}
           placeholder={humanId ? 'Visual' : 'Pick Human'}
           disabled={!enabled || !humanId}
           className="w-[108px] shrink-0"
@@ -110,7 +110,9 @@ export function CharacterSwapRow({
         {/* Trait checkboxes — canonical order; book-gated-off = disabled. */}
         <div className="flex shrink-0 items-center gap-x-2.5">
           {TRAIT_TYPES.map((type) => {
-            const gated = bookGateOf(bookChar, type);
+            // Shared predicate (remix-config-normalize) — the same gate is
+            // applied when the draft is normalized on save (WYSIWYG).
+            const gated = bookTraitGate(bookChar, type);
             const supported = visualSupports(type);
             const checked = traits.find((t) => t.type === type)?.is_enabled ?? false;
             const disabled = !traitsInteractive || !gated || !supported;

@@ -38,6 +38,7 @@ import {
   type RemixPropChoice,
   type RemixVoiceChoice,
 } from '@/types/remix';
+import { normalizeRemixConfigTraits } from './remix-config-normalize';
 import { CharactersTab } from './tabs/characters-tab';
 import { PropsTab } from './tabs/props-tab';
 import { VoicesTab } from './tabs/voices-tab';
@@ -174,7 +175,12 @@ export function RemixConfigModal({
 
   const handleSave = async () => {
     log.info('handleSave', 'submitting', { name });
-    await onSave(draft, name.trim() || REMIX_NAME_DEFAULT);
+    // WYSIWYG safety net: persist the DISPLAYED trait state (is_enabled ∧
+    // bookGate ∧ profileSupported). Traits already reset to the profile's max
+    // on every human/visual change (CharactersTab), so this is usually a
+    // no-op — it guards seeds/paths that bypass that reset.
+    const normalized = normalizeRemixConfigTraits(draft, allowedChars, humans);
+    await onSave(normalized, name.trim() || REMIX_NAME_DEFAULT);
   };
 
   // Keyboard: ←/→ cycle tabs (ignore when typing); Enter = OK (when valid).
