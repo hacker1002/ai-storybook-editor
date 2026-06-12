@@ -1,18 +1,21 @@
 // composed-crop-sheet.tsx — Renders a crop sheet client-side by composing each
 // crop as an absolutely-positioned <img> inside a frame sized by the sheet's
-// `sheet_geometry` (design 05-05-crop-sheet-layout-engine.md §7).
+// `sheet_geometry` (design 05-05 §7 + 05-03 §4.1).
 //
-// The build API was removed (2026-05-19): `sheet.image_url` is now usually
-// empty. The frame fills its container 100% — StageCanvas's canvas-inner owns
-// the real pixel size (sheet_geometry × zoom). Each crop's box is positioned
-// in percent so the whole sheet scales uniformly with the frame.
-//
-// rev6 — parametrized via `cropsSource`:
-//   - 'before': render `sheet.crops[]` (CropEntry — same as before).
-//   - 'after':  render `selectedSwap.crops[]` (SwapResultCrop, structurally
-//     compatible — same `geometry` + `media_url`). When `selectedSwap.crops`
-//     is empty but `selectedSwap.media_url` is present, fall back to a single
-//     legacy <img> + English banner so older swap results still render.
+// ⚡2026-06-12 (pipeline 3 stage):
+//   - `composeMode` ('ordinal' | 'plain') — BEFORE treatment. `ordinal` keeps
+//     the composer-parity stroke + ordinal badges (Gemini needs the numbers);
+//     `plain` renders bare crops (parity with job 09's plain compose).
+//   - `afterComposeMode` — AFTER source priority per stage:
+//       'crops-or-sheet' (mixes/Sprites): compose crops; legacy 1-img fallback.
+//       'sheet-or-crops' (rmbgs): persisted sheet RGBA 1-img FAST PATH wins;
+//         selection/ownership overlays render as transparent geometry boxes.
+//       'crops-only' (upscales): always compose crops (`media_url` null);
+//         print-dim pieces FIT-IN-BOX (object-contain), never stretched.
+//   - Lean join: swap crops carry NO geometry/tags — AFTER joins
+//     `sheet.original_crops[]` by `(spread_id, id)`; orphans skip + warn.
+//     (Sprite swap crops still carry geometry — used directly when present.)
+//   - Checkerboard is DARK on every tab (validation S1).
 
 import { useState } from 'react';
 import { Check, ImageOff } from 'lucide-react';
@@ -20,14 +23,19 @@ import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { CropSheetBase, SwapResultBase } from '@/types/remix';
 import { COMPOSER_FRAME, resolveStrokePx } from '../swap-modal-constants';
+import type {
+  StageAfterComposeMode,
+  StageComposeMode,
+} from '../stage-tab-config';
 import type { CropOwnershipState } from '../hooks/use-crop-ownership';
 import { StarBadge } from './star-badge';
 import { TakeBackOverlay } from './take-back-overlay';
 
-// Checkerboard background — codebase-standard `repeating-conic-gradient` at a
-// 16px tile (≈8px visible squares). Matches `edit-image-modal`,
-// `segment-layer-modal`, `erase-image-modal`, `image-zoom-preview`. Zoom-
-// independent (modal scales via width/height, not `transform`).
+// Checkerboard background behind every crop (⚡2026-06-12, validation S1:
+// every tab; essential for RGBA review on the rmbg/upscale stages). LIGHT
+// gray-white caro — the app-wide standard pattern (image-zoom-preview /
+// edit-image / erase-image / segment-layer modals), 16px tile.
+// Zoom-independent (modal scales via width/height, not `transform`).
 const CHECKERBOARD_BACKGROUND_IMAGE =
   'repeating-conic-gradient(#e5e7eb 0% 25%, #f9fafb 0% 50%)';
 const CHECKERBOARD_BACKGROUND_SIZE = '16px 16px';
@@ -38,12 +46,12 @@ const log = createLogger('Editor', 'ComposedCropSheet');
  *  Plane-discriminant fields are optional so both the mix crops
  *  (`CropEntry`/`SwapResultCrop` — carry `spread_id`/`id`) and the sprite crops
  *  (`SpriteCrop`/`SwapResultSpriteCrop` — carry `type`/`object_key`/`variant_key`)
- *  structurally assign. The cropKey is derived via the `cropKeyOf` prop, NOT a
- *  hardcoded field combo. */
+ *  structurally assign. `geometry` is optional: LEAN mix swap crops carry none
+ *  — the AFTER renderer joins `original_crops[]` by cropKey instead. */
 export type RenderableCrop = {
-  geometry: { x: number; y: number; w: number; h: number };
+  geometry?: { x: number; y: number; w: number; h: number };
   media_url: string;
-  /** Alt text — `CropEntry` has it, swap crops do not. Falls back to 'Crop'. */
+  /** Alt text — swap crops do not carry names. Falls back to 'Crop'. */
   name?: string;
   // ── mix plane discriminants ──
   spread_id?: string;
@@ -55,78 +63,64 @@ export type RenderableCrop = {
 };
 
 /** Stage sheet/swap shapes — accept BOTH planes (mix + sprite) via the shared
- *  generic base over `RenderableCrop`. `RemixCropSheet`/`RemixSpriteCropSheet`
- *  (and their swap-result types) both assign structurally. */
+ *  generic base over `RenderableCrop`. */
 export type StageSheet = CropSheetBase<RenderableCrop, RenderableCrop>;
 export type StageSwapResult = SwapResultBase<RenderableCrop>;
 
 /** Default cropKey accessor — mix plane `${spread_id}/${id}` (backward
- *  compatible: callers that omit `cropKeyOf` keep the exact mix key). Internal —
- *  not exported (react-refresh: component files export components/types only). */
+ *  compatible: callers that omit `cropKeyOf` keep the exact mix key). */
 const defaultMixCropKey = (crop: RenderableCrop): string =>
   `${crop.spread_id ?? ''}/${crop.id ?? ''}`;
+
+/** A swap crop resolved against the sheet's original_crops — render-ready. */
+interface ResolvedAfterCrop {
+  crop: RenderableCrop;
+  cropKey: string;
+  geometry: { x: number; y: number; w: number; h: number };
+}
 
 interface ComposedCropSheetProps {
   /** Sheet (BEFORE) geometry + crops source. AFTER uses sheet geometry only. */
   sheet: StageSheet;
   /** Current zoom % — drives the parity stroke width (sheet-px × zoom/100). */
   zoomLevel: number;
-  /** ⚡rev6 — which crops to compose. 'before' uses `sheet.crops[]`; 'after'
-   *  uses `selectedSwap.crops[]`. Legacy fallback: 'after' with empty crops →
-   *  single <img> covering the canvas-inner. Defaults to 'before' for callers
-   *  not yet updated. */
+  /** ⚡rev6 — which crops to compose. 'before' uses `sheet.original_crops[]`;
+   *  'after' uses `selectedSwap.crops[]` ⋈ original. Defaults to 'before'. */
   cropsSource?: 'before' | 'after';
-  /** Required when `cropsSource === 'after'`. Provides the per-crop array AND
-   *  the legacy `media_url` for the fallback path. */
+  /** Required when `cropsSource === 'after'`. */
   selectedSwap?: StageSwapResult | null;
   /** Per-crop key accessor — `${spread_id}/${id}` (mix, default) or
-   *  `${type}/${object_key}/${variant_key}` (sprite). Drives selection set
-   *  lookup, ownership lookup, and the checkbox/take-back cropKey. */
+   *  `${type}/${object_key}/${variant_key}` (sprite). Drives the lean AFTER
+   *  join, selection set lookup, ownership lookup, and callback payloads. */
   cropKeyOf?: (crop: RenderableCrop) => string;
-  /** ⚡rev6 — show ordinal badge in left gutter. Defaults to true (BEFORE).
-   *  AFTER hides this — the output sheet does not need 1-based nav indices. */
+  /** ⚡2026-06-12 — BEFORE treatment per stage (`STAGE_TAB_CONFIG`).
+   *  Default 'ordinal' (mixes/Sprites parity). */
+  composeMode?: StageComposeMode;
+  /** ⚡2026-06-12 — AFTER source priority per stage. Default 'crops-or-sheet'. */
+  afterComposeMode?: StageAfterComposeMode;
+  /** Show ordinal badges (BEFORE default under 'ordinal'); AFTER hides them. */
   showOrdinal?: boolean;
 
-  // ⚡rev6 — Per-crop selection overlay (AFTER-only). The Stage gates this via
-  // `effectiveSelectable` so we just forward; renderer only shows the checkbox
-  // when `cropsSource === 'after'` AND `selectableSwapCrops === true`.
-  /** When true, each composed crop renders a top-right checkbox overlay and a
-   *  selected-state outline halo. */
+  // ⚡rev6 — Per-crop selection overlay (AFTER-only).
   selectableSwapCrops?: boolean;
-  /** Set of cropKeys currently selected (re-swap / subset targets). Key scheme
-   *  matches `cropKeyOf`. */
   selectedSwapCropKeys?: ReadonlySet<string>;
-  /** Toggle callback fired by the checkbox; receives the `cropKey`. */
   onToggleSwapCropSelection?: (cropKey: string) => void;
 
-  // ⚡rev7 — Cross-batch ownership UI (AFTER non-compare only). When wired
-  // together (`getOwnership` + `onTakeBack`), each crop renders:
-  //   - owned-current → ★ badge top-left + rev6 checkbox top-right (no change)
-  //   - owned-foreign → dim + take-back button top-right (mutex: hides checkbox)
-  //   - uncovered     → default (no badge, no overlay)
-  // Pass `null` / undefined to disable entirely (compare mode + legacy paths).
-  /** Resolves per-crop ownership state by cropKey. Caller computes via
-   *  `useCropOwnership` (mix) / `useSpriteOwnership` (sprite). */
+  // ⚡rev7 — Ownership UI (AFTER non-compare only) — see ComposedCrop.
   getOwnership?: (cropKey: string) => CropOwnershipState;
-  /** Click handler — receives the cropKey (scheme matches `cropKeyOf`). Caller
-   *  routes to `takeFinalBack` (mix) / `takeSpriteFinalBack` (sprite). */
   onTakeBack?: (cropKey: string) => void;
-  /** When true, take-back buttons render disabled (e.g. `anyMixSwapRunning`).
-   *  The store action also gates defensively. */
   takeBackDisabled?: boolean;
 }
 
-/** Composes a crop sheet over a frame sized by `sheet.sheet_geometry`. Branches
- *  on `cropsSource`:
- *  - 'before' → `sheet.crops[]`, ordinal badges shown by default.
- *  - 'after'  → `selectedSwap.crops[]`. When that array is empty AND a legacy
- *    `selectedSwap.media_url` exists, render the single-image fallback. */
+/** Composes a crop sheet over a frame sized by `sheet.sheet_geometry`. */
 export function ComposedCropSheet({
   sheet,
   zoomLevel,
   cropsSource = 'before',
   selectedSwap = null,
   cropKeyOf = defaultMixCropKey,
+  composeMode = 'ordinal',
+  afterComposeMode = 'crops-or-sheet',
   showOrdinal,
   selectableSwapCrops = false,
   selectedSwapCropKeys,
@@ -136,89 +130,261 @@ export function ComposedCropSheet({
   takeBackDisabled = false,
 }: ComposedCropSheetProps) {
   const { width: sw, height: sh } = sheet.sheet_geometry;
-  const strokePx = resolveStrokePx(zoomLevel);
+  const isPlain = composeMode === 'plain';
+  // Plain mode: no composer stroke (job 09 parity — strokes would read as part
+  // of the RGBA foreground).
+  const strokePx = isPlain ? 0 : resolveStrokePx(zoomLevel);
 
-  // ── Resolve crops to render based on `cropsSource` ─────────────────────────
   const isAfter = cropsSource === 'after';
-  const cropsToRender: RenderableCrop[] = isAfter
-    ? (selectedSwap?.crops ?? [])
-    : sheet.crops;
+  // Ordinal badges: only in 'ordinal' compose mode, BEFORE renders by default.
+  const renderOrdinal = (showOrdinal ?? !isAfter) && !isPlain;
 
-  // Default: BEFORE shows ordinal, AFTER hides ordinal (per design — AFTER is
-  // the output, no per-crop nav indices needed).
-  const renderOrdinal = showOrdinal ?? !isAfter;
-
-  // ⚡rev6 — Selection overlay is AFTER-only. The Stage gates via
-  // `effectiveSelectable` (mode='batches' + non-compare + selectedSwap.crops>0)
-  // but we re-gate here to keep BEFORE renders clean even if a caller forwards
-  // the flag by accident.
   const enableSelection =
     isAfter && selectableSwapCrops && !!onToggleSwapCropSelection;
-
-  // ⚡rev7 — Cross-batch ownership UI is AFTER-only (same gate as the rev6
-  // selection overlay). Compare mode passes no handlers → no badges either.
   const enableOwnership = isAfter && !!getOwnership;
 
-  // ── Legacy fallback (AFTER with empty crops but a media_url) ───────────────
-  if (isAfter && cropsToRender.length === 0 && selectedSwap?.media_url) {
-    log.debug('render', 'after legacy fallback — empty crops, single img', {
-      hasCrops: false,
-    });
-    return <LegacySingleImageFallback url={selectedSwap.media_url} />;
+  // ── AFTER: resolve swap crops against original_crops (lean join) ───────────
+  const afterEntries: ResolvedAfterCrop[] = [];
+  if (isAfter) {
+    const originalByKey = new Map<string, RenderableCrop>();
+    for (const o of sheet.original_crops) originalByKey.set(cropKeyOf(o), o);
+    for (const crop of selectedSwap?.crops ?? []) {
+      const cropKey = cropKeyOf(crop);
+      // Sprite swap crops still carry geometry; lean mix/stage crops join.
+      const geometry = crop.geometry ?? originalByKey.get(cropKey)?.geometry;
+      if (!geometry) {
+        log.warn('render', 'orphan swap crop — no original geometry, skip', {
+          cropKey,
+        });
+        continue;
+      }
+      afterEntries.push({ crop, cropKey, geometry });
+    }
   }
 
-  // Degenerate guard: empty crops OR invalid sheet geometry.
-  if (cropsToRender.length === 0 || sw <= 0 || sh <= 0) {
-    log.debug('render', 'empty or degenerate sheet — placeholder', {
-      cropsSource,
-      crops: cropsToRender.length,
-      sw,
-      sh,
-    });
+  // Degenerate sheet guard (both render modes).
+  if (sw <= 0 || sh <= 0) {
+    log.debug('render', 'degenerate sheet geometry — placeholder', { sw, sh });
+    return <EmptySheetPlaceholder isAfter={isAfter} afterComposeMode={afterComposeMode} />;
+  }
+
+  if (isAfter) {
+    // 'sheet-or-crops' (rmbgs): persisted sheet RGBA wins as a 1-img fast
+    // path. Selection/ownership overlays render as TRANSPARENT geometry boxes
+    // (no child <img>) so per-crop affordances still work on the flat sheet.
+    if (afterComposeMode === 'sheet-or-crops' && selectedSwap?.media_url) {
+      return (
+        <SheetImageFastPath
+          url={selectedSwap.media_url}
+          entries={afterEntries}
+          sheetWidth={sw}
+          sheetHeight={sh}
+          enableSelection={enableSelection}
+          selectedSwapCropKeys={selectedSwapCropKeys}
+          onToggleSwapCropSelection={onToggleSwapCropSelection}
+          getOwnership={enableOwnership ? getOwnership : undefined}
+          onTakeBack={onTakeBack}
+          takeBackDisabled={takeBackDisabled}
+        />
+      );
+    }
+
+    // 'crops-or-sheet' legacy fallback: empty crops + a media_url → 1 img.
+    if (
+      afterComposeMode === 'crops-or-sheet' &&
+      afterEntries.length === 0 &&
+      selectedSwap?.media_url
+    ) {
+      log.debug('render', 'after legacy fallback — empty crops, single img', {});
+      return <LegacySingleImageFallback url={selectedSwap.media_url} />;
+    }
+
+    if (afterEntries.length === 0) {
+      return (
+        <EmptySheetPlaceholder isAfter afterComposeMode={afterComposeMode} />
+      );
+    }
+
+    // 'crops-only' (upscales): print dims ≠ layout box → fit-in-box.
+    const fitInBox = afterComposeMode === 'crops-only';
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-8 text-center">
-        <ImageOff className="h-10 w-10 text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">Sheet trống</p>
-        <p className="text-xs text-muted-foreground">
-          {isAfter ? 'Swap result chưa có crop nào' : 'Sheet này chưa có crop nào'}
-        </p>
+      <div className="relative h-full w-full">
+        {afterEntries.map(({ crop, cropKey, geometry }) => {
+          const isSelected = enableSelection
+            ? (selectedSwapCropKeys?.has(cropKey) ?? false)
+            : false;
+          const ownership = enableOwnership ? getOwnership!(cropKey) : null;
+          return (
+            <ComposedCrop
+              key={cropKey}
+              crop={crop}
+              cropKey={cropKey}
+              geometry={geometry}
+              ordinal={null}
+              sheetWidth={sw}
+              sheetHeight={sh}
+              strokePx={strokePx}
+              fitInBox={fitInBox}
+              selectable={enableSelection}
+              isSelected={isSelected}
+              onToggleSelection={onToggleSwapCropSelection}
+              ownership={ownership}
+              onTakeBack={onTakeBack}
+              takeBackDisabled={takeBackDisabled}
+            />
+          );
+        })}
       </div>
     );
   }
 
+  // ── BEFORE: compose original_crops (ordinal parity / plain per stage) ─────
+  if (sheet.original_crops.length === 0) {
+    return <EmptySheetPlaceholder isAfter={false} afterComposeMode={afterComposeMode} />;
+  }
   return (
     <div className="relative h-full w-full">
-      {cropsToRender.map((crop, index) => {
-        // Compute per-crop selection state. Defensive: if a key in
-        // `selectedSwapCropKeys` does not match any crop here, we simply skip
-        // it (the modal owns pruning the set on add-batch).
-        const cropKey = cropKeyOf(crop);
-        const isSelected = enableSelection
-          ? (selectedSwapCropKeys?.has(cropKey) ?? false)
-          : false;
-        const ownership = enableOwnership ? getOwnership!(cropKey) : null;
-        return (
-          <ComposedCrop
-            key={`crop-${index}`}
-            crop={crop}
-            cropKey={cropKey}
-            // 1-based index — drawn as a badge for navigation. Order matches
-            // `req.crops` (the order the composer processes + reports `skipped[]`
-            // by), so the preview numbering lines up with the composed sheet.
-            // AFTER renders pass `ordinal=null` to hide the badge.
-            ordinal={renderOrdinal ? index + 1 : null}
-            sheetWidth={sw}
-            sheetHeight={sh}
-            strokePx={strokePx}
-            selectable={enableSelection}
-            isSelected={isSelected}
-            onToggleSelection={onToggleSwapCropSelection}
-            ownership={ownership}
-            onTakeBack={onTakeBack}
-            takeBackDisabled={takeBackDisabled}
-          />
-        );
-      })}
+      {sheet.original_crops.map((crop, index) => (
+        <ComposedCrop
+          key={cropKeyOf(crop)}
+          crop={crop}
+          cropKey={cropKeyOf(crop)}
+          geometry={crop.geometry ?? { x: 0, y: 0, w: 0, h: 0 }}
+          // 1-based index — drawn as a badge for navigation. Order matches
+          // `req.crops` so preview numbering lines up with the composed sheet.
+          ordinal={renderOrdinal ? index + 1 : null}
+          sheetWidth={sw}
+          sheetHeight={sh}
+          strokePx={strokePx}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── EmptySheetPlaceholder ────────────────────────────────────────────────────
+
+function EmptySheetPlaceholder({
+  isAfter,
+  afterComposeMode,
+}: {
+  isAfter: boolean;
+  afterComposeMode: StageAfterComposeMode;
+}) {
+  const detail = !isAfter
+    ? 'Sheet này chưa có crop nào'
+    : afterComposeMode === 'crops-only'
+      ? 'No upscale result yet'
+      : 'Swap result chưa có crop nào';
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-8 text-center">
+      <ImageOff className="h-10 w-10 text-muted-foreground" />
+      <p className="text-sm font-medium text-foreground">Sheet trống</p>
+      <p className="text-xs text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+// ── SheetImageFastPath — rmbgs AFTER (persisted RGBA sheet, 1 img) ───────────
+
+interface SheetImageFastPathProps {
+  url: string;
+  entries: ResolvedAfterCrop[];
+  sheetWidth: number;
+  sheetHeight: number;
+  enableSelection: boolean;
+  selectedSwapCropKeys?: ReadonlySet<string>;
+  onToggleSwapCropSelection?: (cropKey: string) => void;
+  getOwnership?: (cropKey: string) => CropOwnershipState;
+  onTakeBack?: (cropKey: string) => void;
+  takeBackDisabled?: boolean;
+}
+
+/** Full-sheet RGBA <img> + transparent per-crop overlay boxes (geometry from
+ *  the lean join) carrying the selection checkbox / ownership affordances.
+ *  The boxes render NO child image — the flat sheet already shows the art. */
+function SheetImageFastPath({
+  url,
+  entries,
+  sheetWidth,
+  sheetHeight,
+  enableSelection,
+  selectedSwapCropKeys,
+  onToggleSwapCropSelection,
+  getOwnership,
+  onTakeBack,
+  takeBackDisabled = false,
+}: SheetImageFastPathProps) {
+  const [errored, setErrored] = useState(false);
+  const showOverlays = enableSelection || !!getOwnership;
+
+  return (
+    <div className="relative h-full w-full">
+      {errored ? (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-1">
+          <ImageOff className="h-8 w-8 text-white/70" />
+          <span className="text-xs text-white/70">Ảnh lỗi</span>
+        </div>
+      ) : (
+        <img
+          src={url}
+          alt=""
+          onError={() => {
+            log.warn('SheetImageFastPath', 'sheet image failed to load', {
+              urlTail: url.slice(url.lastIndexOf('/') + 1),
+            });
+            setErrored(true);
+          }}
+          className="absolute inset-0 h-full w-full"
+        />
+      )}
+      {showOverlays &&
+        entries.map(({ cropKey, geometry }) => {
+          const isSelected = enableSelection
+            ? (selectedSwapCropKeys?.has(cropKey) ?? false)
+            : false;
+          const ownership = getOwnership ? getOwnership(cropKey) : null;
+          const isOwnedCurrent = ownership?.state === 'owned-current';
+          const isOwnedForeign = ownership?.state === 'owned-foreign';
+          const wireTakeBack = isOwnedForeign && !!onTakeBack;
+          const showCheckbox =
+            enableSelection && !!onToggleSwapCropSelection && !wireTakeBack;
+          const style: React.CSSProperties = {
+            position: 'absolute',
+            left: `${(geometry.x / sheetWidth) * 100}%`,
+            top: `${(geometry.y / sheetHeight) * 100}%`,
+            width: `${(geometry.w / sheetWidth) * 100}%`,
+            height: `${(geometry.h / sheetHeight) * 100}%`,
+          };
+          if (isSelected) {
+            style.outline = '2px solid #3b6cf6';
+            style.boxShadow = '0 0 0 2px rgba(59, 108, 246, 0.35)';
+          }
+          return (
+            <div
+              key={cropKey}
+              style={style}
+              className={cn('group', isOwnedForeign && 'opacity-40 saturate-50')}
+            >
+              {isOwnedCurrent && <StarBadge />}
+              {showCheckbox && (
+                <SelectionCheckbox
+                  cropKey={cropKey}
+                  isSelected={isSelected}
+                  onToggle={onToggleSwapCropSelection!}
+                />
+              )}
+              {wireTakeBack && (
+                <TakeBackOverlay
+                  cropKey={cropKey}
+                  ownerBatchName={ownership!.ownerBatchName}
+                  disabled={takeBackDisabled}
+                  onTakeBack={onTakeBack!}
+                />
+              )}
+            </div>
+          );
+        })}
     </div>
   );
 }
@@ -227,28 +393,24 @@ export function ComposedCropSheet({
 
 interface ComposedCropProps {
   crop: RenderableCrop;
-  /** Pre-derived cropKey (via `cropKeyOf`) — selection set lookup + checkbox /
-   *  take-back callback payload. */
+  /** Pre-derived cropKey (via `cropKeyOf`). */
   cropKey: string;
-  /** 1-based ordinal shown as a badge in the left gutter; null hides it
-   *  (AFTER render mode does not show per-crop nav indices). */
+  /** Resolved geometry (own — sprite plane — or joined from original_crops). */
+  geometry: { x: number; y: number; w: number; h: number };
+  /** 1-based ordinal in the left gutter; null hides it (AFTER / plain). */
   ordinal: number | null;
   sheetWidth: number;
   sheetHeight: number;
-  /** Zoom-scaled stroke width (CSS px) — drives both border + inflate. */
+  /** Zoom-scaled stroke width (CSS px); 0 = plain mode (no composer border). */
   strokePx: number;
+  /** ⚡2026-06-12 (upscales) — img object-contain inside the layout box (print
+   *  dims ≠ box; never stretch). Default false (fill). */
+  fitInBox?: boolean;
   // ⚡rev6 — Selection overlay. All optional; absent → no checkbox, no outline.
-  /** When true, render a top-right `SelectionCheckbox`. Gated upstream by
-   *  `enableSelection` (cropsSource='after' && selectableSwapCrops). */
   selectable?: boolean;
-  /** Drives `aria-checked` + accent visuals + wrapper outline halo. */
   isSelected?: boolean;
-  /** Toggle callback — receives the `${spread_id}/${id}` cropKey. */
   onToggleSelection?: (cropKey: string) => void;
-
-  // ⚡rev7 — Ownership UI. `ownership=null` disables both badges. The Stage
-  // gates on AFTER+non-compare upstream; we only render based on the resolved
-  // state here.
+  // ⚡rev7 — Ownership UI. `ownership=null` disables both badges.
   ownership?: CropOwnershipState | null;
   onTakeBack?: (cropKey: string) => void;
   takeBackDisabled?: boolean;
@@ -257,27 +419,19 @@ interface ComposedCropProps {
 /** A single crop placed at `geometry / sheet_geometry * 100%`. Keeps its own
  *  error state so a 404 shows a per-crop placeholder without breaking siblings.
  *
- *  Wrapper inflates the crop slot by `cellStrokeWidthPx` on every side and
- *  draws a same-width `cellStrokeColor` border (border-box), reproducing the
- *  composer's per-cell outer stroke. The wrapper background is a CSS
- *  checkerboard (`CHECKERBOARD_*`) so transparent PNG areas read as the tiled
- *  pattern — this INTENTIONALLY diverges from the composer's flat
- *  `gutterColor` bake to let editors visually distinguish transparent crops in
- *  the preview. The ordinal badge sits in the left gutter strip (see
- *  `OrdinalBadge`).
- *
- *  rev6 — When `selectable` + `onToggleSelection` are both supplied, renders a
- *  top-right `SelectionCheckbox` (fixed 22×22 px, zoom-independent) and adds
- *  an accent outline + halo around the wrapper while `isSelected`. The accent
- *  outline does NOT replace the composer border — it sits OUTSIDE it (CSS
- *  `outline` paints outside `border`), preserving composer parity. */
+ *  In 'ordinal' mode the wrapper inflates by the stroke width and draws the
+ *  composer-parity border; 'plain' mode (strokePx 0) renders bare. The wrapper
+ *  background is the DARK CSS checkerboard so transparent PNG areas read as
+ *  the tiled pattern on every stage. */
 function ComposedCrop({
   crop,
   cropKey,
+  geometry,
   ordinal,
   sheetWidth,
   sheetHeight,
   strokePx,
+  fitInBox = false,
   selectable = false,
   isSelected = false,
   onToggleSelection,
@@ -286,7 +440,7 @@ function ComposedCrop({
   takeBackDisabled = false,
 }: ComposedCropProps) {
   const [errored, setErrored] = useState(false);
-  const { x, y, w, h } = crop.geometry;
+  const { x, y, w, h } = geometry;
 
   const stroke = strokePx;
   const wrapperStyle: React.CSSProperties = {
@@ -295,33 +449,26 @@ function ComposedCrop({
     top: `calc(${(y / sheetHeight) * 100}% - ${stroke}px)`,
     width: `calc(${(w / sheetWidth) * 100}% + ${stroke * 2}px)`,
     height: `calc(${(h / sheetHeight) * 100}% + ${stroke * 2}px)`,
-    // CropEntry (rev2) / SwapResultCrop has no per-crop z-index/variant — crops
-    // are stacked in array order (later crops paint on top via DOM order).
     boxSizing: 'border-box',
-    borderStyle: 'solid',
-    borderWidth: stroke,
-    borderColor: COMPOSER_FRAME.cellStrokeColor,
     backgroundImage: CHECKERBOARD_BACKGROUND_IMAGE,
     backgroundSize: CHECKERBOARD_BACKGROUND_SIZE,
   };
+  if (stroke > 0) {
+    wrapperStyle.borderStyle = 'solid';
+    wrapperStyle.borderWidth = stroke;
+    wrapperStyle.borderColor = COMPOSER_FRAME.cellStrokeColor;
+  }
 
-  // rev6 — Selected-state outline halo. Paints OUTSIDE the composer border, so
-  // the per-cell stroke parity is preserved. Hex matches `--swap-modal-accent`
-  // for visual consistency with the primary action button.
+  // rev6 — Selected-state outline halo (paints OUTSIDE the composer border).
   if (isSelected) {
     wrapperStyle.outline = '2px solid #3b6cf6';
     wrapperStyle.boxShadow = '0 0 0 2px rgba(59, 108, 246, 0.35)';
   }
 
-  // ⚡rev7 — Ownership-derived visual state. owned-foreign dims via Tailwind
-  // utility classes on the wrapper (composer border + halo stay untouched).
   const isOwnedCurrent = ownership?.state === 'owned-current';
   const isOwnedForeign = ownership?.state === 'owned-foreign';
 
-  // ⚡rev7 — Top-right slot mutex. Foreign state → take-back chip ONLY (no
-  // selection checkbox — selecting a foreign crop for a new batch is not a
-  // valid action; user must take-back first). Owned-current / uncovered →
-  // checkbox stays per rev6.
+  // ⚡rev7 — Top-right slot mutex: foreign → take-back chip ONLY.
   const wireTakeBack = isOwnedForeign && !!onTakeBack;
   const showCheckbox = selectable && !!onToggleSelection && !wireTakeBack;
 
@@ -376,7 +523,8 @@ function ComposedCrop({
           });
           setErrored(true);
         }}
-        className="h-full w-full"
+        // fit-in-box (upscales): print dims ≠ layout box — contain + center.
+        className={cn('h-full w-full', fitInBox && 'object-contain')}
       />
       {showCheckbox && (
         <SelectionCheckbox
@@ -406,13 +554,8 @@ interface SelectionCheckboxProps {
 }
 
 /** Fixed 22×22 px checkbox overlay (zoom-independent — `canvas-inner` uses
- *  `width/height`, NOT `transform: scale`, so CSS px stay constant at every
- *  zoom). Padding 2px gives a ~26px hit target (≥24 a11y guideline).
- *
- *  a11y: `role="checkbox"` + `aria-checked` + `aria-label`; keyboard `Space`
- *  and `Enter` both call `preventDefault()` then toggle. `tabIndex=0` puts the
- *  checkbox in the natural DOM-order tab cycle (which matches the on-screen
- *  crop array order). */
+ *  `width/height`, NOT `transform: scale`). Padding 2px gives a ~26px hit
+ *  target. a11y: role=checkbox + aria-checked; Space/Enter toggle. */
 function SelectionCheckbox({
   cropKey,
   isSelected,
@@ -429,7 +572,6 @@ function SelectionCheckbox({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === ' ' || e.key === 'Enter') {
-      // Block page scroll on Space and form-submit semantics on Enter.
       e.preventDefault();
       handleToggle();
     }
@@ -440,17 +582,13 @@ function SelectionCheckbox({
       type="button"
       role="checkbox"
       aria-checked={isSelected}
-      aria-label="Mark this crop to re-swap"
+      aria-label="Mark this crop to re-run"
       tabIndex={0}
       onClick={(e) => {
-        // Don't bubble — the wrapper has no listener today but future-proof
-        // against ancestor click handlers (e.g. select-spread).
         e.stopPropagation();
         handleToggle();
       }}
       onKeyDown={handleKeyDown}
-      // padding inflates the hit area to 26px while keeping the visible chip
-      // exactly 22×22 px (Tailwind h-[22px] / w-[22px]).
       style={{ padding: 2 }}
       className={cn(
         'absolute right-1 top-1 z-30 flex h-[22px] w-[22px]',
@@ -468,13 +606,8 @@ function SelectionCheckbox({
 // ── OrdinalBadge — crop index, in the left gutter, top-aligned ────────────────
 
 /** Frontend-only crop index (the composer bakes no ordinals). FIXED size,
- *  zoom-independent — the modal scales the sheet via container width/height,
- *  not `transform`, so `text-sm`/`px-1.5` stay constant at every zoom.
- *
- *  Always rendered in the left separating strip (`-translate-x-full` lifts it
- *  fully out of the cell) so it never overlaps artwork. The layout engine's
- *  widened left margin guarantees gutter room for the first column, so even
- *  column-1 badges stay inside the sheet without clipping. */
+ *  zoom-independent. Always rendered in the left separating strip
+ *  (`-translate-x-full`) so it never overlaps artwork. */
 function OrdinalBadge({ ordinal }: { ordinal: number }) {
   return (
     <span
@@ -488,13 +621,9 @@ function OrdinalBadge({ ordinal }: { ordinal: number }) {
 
 // ── LegacySingleImageFallback — AFTER render mode, pre-rev6 swap results ─────
 
-/** Legacy fallback for an AFTER render when `selectedSwap.crops[]` is empty
- *  but `selectedSwap.media_url` is present (pre-rev6 swap results that pre-date
- *  the per-crop re-cut pipeline). Renders the single image full-size with an
- *  English banner explaining per-crop selection is unavailable.
- *
- *  Banner copy locked by Validation Session 1 Q4 — keep ENGLISH:
- *    `Legacy swap — per-crop selection unavailable` */
+/** Legacy fallback for a 'crops-or-sheet' AFTER when `selectedSwap.crops[]` is
+ *  empty but a `media_url` exists (pre-rev6 results). Banner copy locked by
+ *  Validation S1 Q4 — keep ENGLISH. */
 function LegacySingleImageFallback({ url }: { url: string }) {
   const [errored, setErrored] = useState(false);
 
@@ -519,9 +648,6 @@ function LegacySingleImageFallback({ url }: { url: string }) {
         />
       )}
       <span
-        // English banner — locked copy per Validation S1 Q4. Card-bg token over
-        // the image for legibility; same surface treatment as Before/After
-        // badges in CompareBody.
         className="pointer-events-none absolute left-2 top-2 z-10 rounded bg-[var(--swap-modal-card-bg)]/85 px-2 py-0.5 text-xs text-[var(--swap-modal-text-secondary)]"
       >
         Legacy swap — per-crop selection unavailable

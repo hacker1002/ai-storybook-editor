@@ -1,4 +1,6 @@
-// batches-sidebar.tsx — Batch→Sheet tree for the rev2 BatchesTab (Phase 08).
+// batches-sidebar.tsx — Batch→Sheet tree shared by the 3 stage tabs
+// (⚡2026-06-12 stage-generic — Crops / Remove BG / Upscale; title `BATCHES`
+// is uniform across tabs per validation S1).
 //
 // Two-level ARIA tree (role=tree → batch treeitem → sheet treeitem). Header
 // `BATCHES` + [+] addBatch. Each batch row: caret (collapse, owned by the tab
@@ -8,13 +10,13 @@
 // PRESENTATIONAL only: the tab passes already-guarded callbacks. The confirm
 // dialog (destructive relayout when swap_results present) is mounted + driven by
 // the tab — this component just invokes the callbacks it receives. Disabled
-// states (SHEET_MIN/MAX, BATCH_MIN, anyMixSwapRunning) are computed here from
+// states (SHEET_MIN/MAX, BATCH_MIN, anyJobRunning) are computed here from
 // props for correct a11y, but the tab also guards before mutating.
 
 import { ChevronDown, ChevronRight, Minus, Plus, X } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
-import type { RemixBatch } from '@/types/remix';
+import type { RemixStageBatch } from '@/types/remix';
 import {
   Tooltip,
   TooltipContent,
@@ -34,14 +36,17 @@ const log = createLogger('Editor', 'BatchesSidebar');
 const SHOW_REMOVE_BATCH: boolean = false;
 
 interface BatchesSidebarProps {
-  batches: RemixBatch[];
+  batches: RemixStageBatch[];
   activeBatchRef: { batchId: string; sheetIndex: number } | null;
   isCollapsed: (batchId: string) => boolean;
   onToggleCollapse: (batchId: string) => void;
-  /** Steppers/add/remove globally locked while any mix swap is running. */
-  anyMixSwapRunning: boolean;
+  /** Steppers/add/remove globally locked while a job of THIS stage runs. */
+  anyJobRunning: boolean;
+  /** ⚡2026-06-12 — rmbgs/upscales allow removing down to 0 batches; mixes
+   *  keeps the first BATCH_MIN batches permanent. */
+  allowZeroBatch?: boolean;
   /** ⚡rev6 — [+] button disabled when false (no selection OR busy). The tab
-   *  derives the full predicate including `anyMixSwapRunning`. */
+   *  derives the full predicate including `anyJobRunning`. */
   canAddBatch: boolean;
   /** ⚡rev6 — explanatory tooltip when `[+]` is disabled. Empty string when
    *  enabled — avoids rendering an empty Tooltip wrapper. */
@@ -64,7 +69,8 @@ export function BatchesSidebar({
   activeBatchRef,
   isCollapsed,
   onToggleCollapse,
-  anyMixSwapRunning,
+  anyJobRunning,
+  allowZeroBatch = false,
   canAddBatch,
   addBatchTooltip,
   selectionSize,
@@ -153,10 +159,10 @@ export function BatchesSidebar({
               batch={batch}
               activeBatchRef={activeBatchRef}
               collapsed={isCollapsed(batch.id)}
-              anyMixSwapRunning={anyMixSwapRunning}
-              // First BATCH_MIN batches are permanent (the seed batch at index
-              // 0); only later batches expose the delete affordance.
-              canRemoveBatch={index >= BATCH_MIN}
+              anyJobRunning={anyJobRunning}
+              // mixes: first BATCH_MIN batches are permanent (the seed batch);
+              // rmbgs/upscales (allowZeroBatch): every batch is removable.
+              canRemoveBatch={allowZeroBatch || index >= BATCH_MIN}
               onToggleCollapse={onToggleCollapse}
               onSelectBatchSheet={onSelectBatchSheet}
               onRemoveBatch={onRemoveBatch}
@@ -171,10 +177,10 @@ export function BatchesSidebar({
 }
 
 interface BatchNodeProps {
-  batch: RemixBatch;
+  batch: RemixStageBatch;
   activeBatchRef: { batchId: string; sheetIndex: number } | null;
   collapsed: boolean;
-  anyMixSwapRunning: boolean;
+  anyJobRunning: boolean;
   canRemoveBatch: boolean;
   onToggleCollapse: (batchId: string) => void;
   onSelectBatchSheet: (batchId: string, sheetIndex: number) => void;
@@ -187,7 +193,7 @@ function BatchNode({
   batch,
   activeBatchRef,
   collapsed,
-  anyMixSwapRunning,
+  anyJobRunning,
   canRemoveBatch,
   onToggleCollapse,
   onSelectBatchSheet,
@@ -197,12 +203,12 @@ function BatchNode({
 }: BatchNodeProps) {
   const sheetCount = batch.crop_sheets.length;
   const isActiveBatch = activeBatchRef?.batchId === batch.id;
-  const removeSheetDisabled = anyMixSwapRunning || sheetCount <= SHEET_MIN;
-  const addSheetDisabled = anyMixSwapRunning || sheetCount >= SHEET_MAX;
+  const removeSheetDisabled = anyJobRunning || sheetCount <= SHEET_MIN;
+  const addSheetDisabled = anyJobRunning || sheetCount >= SHEET_MAX;
   // ⚡rev6 — Tiny muted "· N crops" badge after the name. Derived inline
   // (O(sheets) reduce, cheap — no memo). Skip when 0 to avoid noise.
   const cropCount = batch.crop_sheets.reduce(
-    (acc, s) => acc + s.crops.length,
+    (acc, s) => acc + s.original_crops.length,
     0,
   );
 
@@ -291,7 +297,7 @@ function BatchNode({
           <button
             type="button"
             aria-label={`Xoá ${batch.name}`}
-            disabled={anyMixSwapRunning}
+            disabled={anyJobRunning}
             onClick={() => {
               log.debug('onRemoveBatch', 'remove batch', { batchId: batch.id });
               onRemoveBatch(batch.id);

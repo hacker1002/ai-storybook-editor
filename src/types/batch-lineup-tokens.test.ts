@@ -12,13 +12,10 @@ function tag(objectKey: string, variantKey: string): SpreadTag {
 }
 
 function crop(id: string, tags: SpreadTag[]): CropEntry {
+  // LEAN CropEntry (⚡2026-06-12) — 5 fields only.
   return {
     spread_id: 's1',
     id,
-    layer_kind: 'image',
-    spread_number: 1,
-    aspect_ratio: '1:1',
-    name: '',
     tags,
     media_url: `https://cdn/${id}.png`,
     geometry: { x: 0, y: 0, w: 10, h: 10 },
@@ -35,7 +32,7 @@ function batch(crops: CropEntry[][]): RemixBatch {
       sheet_geometry: { width: 100, height: 100 },
       image_url: '',
       swap_results: [],
-      crops: sheetCrops,
+      original_crops: sheetCrops,
     })),
     swapTask: { state: 'idle' },
   };

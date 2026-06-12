@@ -20,17 +20,17 @@
  * itself in useShallow.
  */
 
-import type { Remix, RemixMix, SpreadTag } from '@/types/remix';
+import type { Remix, RemixMix } from '@/types/remix';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'RemixFinalSelectors');
 
+/** ⚡LEAN 2026-06-12 — swap crops no longer carry geometry/tags; Inject only
+ *  needs the winner's media_url per layer position. */
 export interface FinalCropEntry {
   spread_id: string;
   layer_id: string;
   media_url: string;
-  geometry: { x: number; y: number; w: number; h: number };
-  tags: SpreadTag[];
   batch_id: string;
 }
 
@@ -117,21 +117,25 @@ export function needsMigration(mixes: RemixMix[] | null | undefined): boolean {
  * precondition exactly so the button-enabled state cannot drift from the
  * action's "no final crops to inject" throw.
  *
- * False when: null remix, no batches, no selected swap_result, or a selected
- * swap_result whose crops have no `is_final` winner yet (e.g. swap in-progress).
+ * ⚡2026-06-12 — Inject reads `upscales[]` STRICT (see resolveFinalCrops).
  */
 export function selectCanInject(remix: Remix | null | undefined): boolean {
   if (!remix) return false;
   return resolveFinalCrops(remix).length > 0;
 }
 
-export function resolveFinalCrops(remix: Remix | null | undefined): FinalCropEntry[] {
-  if (!remix) {
-    log.debug('resolveFinalCrops', 'null remix, returning empty');
-    return [];
-  }
-  const mixes = remix.mixes ?? [];
-  log.info('resolveFinalCrops', 'entry', { mixCount: mixes.length });
+/**
+ * Winner finals of ONE stage column (row-generic). 1 entry per
+ * `(spread_id, layer_id)`. Defensive on invariant breach (>1 final per key):
+ * highest `batch.order` wins, lex tie-break on id, logs.error.
+ *
+ * Used by `resolveFinalCrops` (Inject — `remix.upscales`) AND per-stage
+ * ownership (`useCropOwnership(remix, stage, …)` — mutex is per-stage).
+ */
+export function resolveFinalCropsOfRows(
+  rows: RemixMix[] | null | undefined,
+): FinalCropEntry[] {
+  const batches = rows ?? [];
 
   interface PendingEntry {
     entry: FinalCropEntry;
@@ -140,7 +144,7 @@ export function resolveFinalCrops(remix: Remix | null | undefined): FinalCropEnt
   const result = new Map<string, PendingEntry>();
   let invariantBreaches = 0;
 
-  for (const batch of mixes) {
+  for (const batch of batches) {
     if (!batch?.crop_sheets) continue;
     for (const sheet of batch.crop_sheets) {
       const selected = sheet?.swap_results?.find((r) => r?.is_selected);
@@ -149,18 +153,14 @@ export function resolveFinalCrops(remix: Remix | null | undefined): FinalCropEnt
         if (crop?.is_final !== true) continue;
         const key = makeKey(crop.spread_id, crop.id);
         const existing = result.get(key);
+        const entry: FinalCropEntry = {
+          spread_id: crop.spread_id,
+          layer_id: crop.id,
+          media_url: crop.media_url,
+          batch_id: batch.id,
+        };
         if (!existing) {
-          result.set(key, {
-            entry: {
-              spread_id: crop.spread_id,
-              layer_id: crop.id,
-              media_url: crop.media_url,
-              geometry: crop.geometry,
-              tags: crop.tags,
-              batch_id: batch.id,
-            },
-            order: batch.order,
-          });
+          result.set(key, { entry, order: batch.order });
         } else {
           invariantBreaches += 1;
           // Defensive winner: highest order wins; lex tie-break on id.
@@ -168,19 +168,9 @@ export function resolveFinalCrops(remix: Remix | null | undefined): FinalCropEnt
             batch.order > existing.order ||
             (batch.order === existing.order && batch.id < existing.entry.batch_id);
           if (challengerWins) {
-            result.set(key, {
-              entry: {
-                spread_id: crop.spread_id,
-                layer_id: crop.id,
-                media_url: crop.media_url,
-                geometry: crop.geometry,
-                tags: crop.tags,
-                batch_id: batch.id,
-              },
-              order: batch.order,
-            });
+            result.set(key, { entry, order: batch.order });
           }
-          log.warn('resolveFinalCrops', 'invariant breach (>1 final)', {
+          log.warn('resolveFinalCropsOfRows', 'invariant breach (>1 final)', {
             key,
             challengerOrder: batch.order,
             challengerId: batch.id,
@@ -191,22 +181,39 @@ export function resolveFinalCrops(remix: Remix | null | undefined): FinalCropEnt
   }
 
   if (invariantBreaches > 0) {
-    log.error('resolveFinalCrops', 'invariant breaches detected', {
+    log.error('resolveFinalCropsOfRows', 'invariant breaches detected', {
       count: invariantBreaches,
     });
   }
-
-  log.info('resolveFinalCrops', 'done', {
-    finalCount: result.size,
-    invariantBreaches,
-  });
   return Array.from(result.values(), (v) => v.entry);
+}
+
+/**
+ * Inject Phase 3 source resolver — ⚡2026-06-12 STRICT `upscales[]`-only
+ * (validation S1): NO fallback to mixes/rmbgs. A crop that hasn't completed
+ * all 3 stages has no final here → Inject keeps the original layer (slim only,
+ * uncovered never blocks).
+ */
+export function resolveFinalCrops(remix: Remix | null | undefined): FinalCropEntry[] {
+  if (!remix) {
+    log.debug('resolveFinalCrops', 'null remix, returning empty');
+    return [];
+  }
+  const finals = resolveFinalCropsOfRows(remix.upscales ?? []);
+  log.info('resolveFinalCrops', 'done (upscales-strict)', {
+    batchCount: remix.upscales?.length ?? 0,
+    finalCount: finals.length,
+  });
+  return finals;
 }
 
 export function findUncoveredLayers(remix: Remix | null | undefined): UncoveredLayer[] {
   if (!remix) return [];
-  const mixes = remix.mixes ?? [];
-  log.info('findUncoveredLayers', 'entry', { mixCount: mixes.length });
+  // ⚡2026-06-12 — uncovered = candidates of the INJECT source stage
+  // (`upscales[]`) without a winner. Inject does not consume this (uncovered
+  // never blocks); kept for preflight/diagnostics.
+  const mixes = remix.upscales ?? [];
+  log.info('findUncoveredLayers', 'entry', { batchCount: mixes.length });
 
   const allKeys = new Map<string, string[]>();
   for (const batch of mixes) {

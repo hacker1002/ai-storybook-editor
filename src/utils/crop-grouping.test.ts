@@ -91,7 +91,6 @@ describe('groupCropsForBatch — image-only crop selection', () => {
     expect(cropInputs[0].objectKey).toBe('c1');
     expect(cropMetaById['i1'].media_url).toBe('https://cdn/i1.png');
     expect(cropMetaById['i1'].spread_id).toBe('s1');
-    expect(cropMetaById['i1'].spread_number).toBe(1);
   });
 
   it('ignores auto_pic (animated) layers even when subject-tagged', () => {
@@ -168,8 +167,8 @@ describe('groupCropsForBatch — dedup + multi-subject tags[]', () => {
   });
 });
 
-describe('groupCropsForBatch — annotation pass-through', () => {
-  it('forwards the layer annotation (dynamic-state description) onto the crop', () => {
+describe('groupCropsForBatch — lean CropEntry shape (⚡2026-06-12)', () => {
+  it('emits ONLY the 5 lean fields — annotation/layer_kind/spread_number are gone', () => {
     const r = makeRemix({
       charKeys: ['c1'],
       spreads: [
@@ -180,29 +179,8 @@ describe('groupCropsForBatch — annotation pass-through', () => {
         }),
       ],
     });
-    expect(groupCropsForBatch(r).cropMetaById['i1'].annotation).toEqual({ description: 'waving, mid-stride' });
-  });
-
-  it('omits annotation when the layer has none', () => {
-    const r = makeRemix({
-      charKeys: ['c1'],
-      spreads: [spread({ id: 's1', pageNumber: 1, images: [img({ id: 'i1', tags: [tag('character', 'c1')] })] })],
-    });
-    expect(groupCropsForBatch(r).cropMetaById['i1'].annotation).toBeUndefined();
-  });
-
-  it('omits annotation when description is blank/whitespace (cleared)', () => {
-    const r = makeRemix({
-      charKeys: ['c1'],
-      spreads: [
-        spread({
-          id: 's1',
-          pageNumber: 1,
-          images: [img({ id: 'i1', tags: [tag('character', 'c1')], annotation: { description: '   ' } })],
-        }),
-      ],
-    });
-    expect(groupCropsForBatch(r).cropMetaById['i1'].annotation).toBeUndefined();
+    const meta = groupCropsForBatch(r).cropMetaById['i1'];
+    expect(Object.keys(meta).sort()).toEqual(['geometry', 'id', 'media_url', 'spread_id', 'tags']);
   });
 });
 

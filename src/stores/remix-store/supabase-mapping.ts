@@ -9,8 +9,12 @@ import type {
   RemixMix,
   RemixProp,
   RemixSpriteEntry,
+  RemixStageBatchRow,
 } from '@/types/remix';
 import type { Distribution } from '@/types/editor';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Store', 'SupabaseMapping');
 
 interface RawRemixRow {
   id: string;
@@ -21,6 +25,8 @@ interface RawRemixRow {
   characters?: unknown;
   props?: unknown;
   mixes?: unknown;
+  rmbgs?: unknown;
+  upscales?: unknown;
   sprites?: unknown;
   distribution?: unknown;
   created_at: string;
@@ -35,6 +41,37 @@ const EMPTY_CONFIG: RemixConfig = {
   languages: [],
 };
 
+/**
+ * Read-time shim for pre-2026-06-12 JSONB rows: `crop_sheets[].crops[]` was
+ * renamed to `original_crops[]` on every batch column (mixes/rmbgs/upscales/
+ * sprites) with NO data migration — shape change only (DB-CHANGELOG
+ * 2026-06-12). Rename the key at ingress so downstream readers never see the
+ * legacy shape; the row self-heals on its next full-column persist.
+ */
+function normalizeLegacyCropSheets<T>(rows: unknown, column: string): T[] {
+  if (!Array.isArray(rows)) return [];
+  let migrated = 0;
+  for (const row of rows) {
+    const sheets = (row as { crop_sheets?: unknown }).crop_sheets;
+    if (!Array.isArray(sheets)) continue;
+    for (const sheet of sheets) {
+      const s = sheet as { original_crops?: unknown; crops?: unknown };
+      if (s.original_crops === undefined && Array.isArray(s.crops)) {
+        s.original_crops = s.crops;
+        delete s.crops;
+        migrated += 1;
+      }
+    }
+  }
+  if (migrated > 0) {
+    log.warn('normalizeLegacyCropSheets', 'renamed legacy crops[] key at read', {
+      column,
+      sheets: migrated,
+    });
+  }
+  return rows as T[];
+}
+
 export function mapRowToRemix(row: RawRemixRow): Remix {
   return {
     id: row.id,
@@ -44,9 +81,13 @@ export function mapRowToRemix(row: RawRemixRow): Remix {
     illustration: (row.illustration as RemixIllustration | null) ?? EMPTY_ILLUSTRATION,
     characters: (row.characters as RemixCharacter[] | null) ?? [],
     props: (row.props as RemixProp[] | null) ?? [],
-    mixes: (row.mixes as RemixMix[] | null) ?? [],
+    mixes: normalizeLegacyCropSheets<RemixMix>(row.mixes, 'mixes'),
+    // Stage 2/3 pipeline columns (⚡2026-06-12) — additive JSONB; legacy rows
+    // omit them. Same row shape as mixes[].
+    rmbgs: normalizeLegacyCropSheets<RemixStageBatchRow>(row.rmbgs, 'rmbgs'),
+    upscales: normalizeLegacyCropSheets<RemixStageBatchRow>(row.upscales, 'upscales'),
     // Sprite plane (Variants tab) — additive JSONB; legacy rows omit it.
-    sprites: (row.sprites as RemixSpriteEntry[] | null) ?? [],
+    sprites: normalizeLegacyCropSheets<RemixSpriteEntry>(row.sprites, 'sprites'),
     // Nullable JSONB — reader coalesces to DEFAULT at render (KISS: no
     // normalize at ingress; shape is small + tolerated downstream).
     distribution: (row.distribution as Distribution | null) ?? null,

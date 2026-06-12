@@ -7,11 +7,11 @@
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
-import { CLIENT_AUDIO_CHUNK_CAP } from '@/types/remix';
+import { CLIENT_AUDIO_CHUNK_CAP, STAGE_JOB_CONFIG } from '@/types/remix';
 import type { InjectResult, RemixIllustration } from '@/types/remix';
 import {
   enqueueAudioSwap,
-  enqueueRemixMixSwap,
+  enqueueRemixStageJob,
   enqueueRemixSpriteSwap,
   type EnqueueAudioSwapEnqueuedData,
   type EnqueueAudioSwapDedupedData,
@@ -181,49 +181,58 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
     return { appliedCount, collapsedCount, spreadCount };
   },
 
-  // ── Batch (mix) crop-sheet swap enqueue (api/jobs/05) ──────────────
-  // Mirrors startAudioJob: POST enqueue + optimistic seed `remix_mix_swap`
-  // row. Cross-type dedup (backend allows 1 swap/remix); an already-running
-  // mix swap no-ops. `params` (swap model) is v1 collect-only — NOT sent in body.
-  startMixSwap: async (params) => {
-    const { remixId, batchId, forceResweep = true } = params;
+  // ── Stage-batch job enqueue (⚡2026-06-12 generic — jobs 05/09/10) ──
+  // Mirrors startAudioJob: POST enqueue + optimistic seed of the stage's job
+  // type. Backend dedups PER-TYPE (1 job per remix+stage; the 3 stages run
+  // concurrently — disjoint JSONB columns). `params` (model group) is v1
+  // collect-only — NOT sent in the body.
+  startStageJob: async (p) => {
+    const { remixId, stage, batchId, forceResweep = true } = p;
+    const { phase, endpointSegment } = STAGE_JOB_CONFIG[stage];
 
+    // Guard within THE stage only — other stages stay unblocked.
     const alreadyRunning = get().jobs.some(
       (j) =>
-        j.phase === 'remix_mix_swap' &&
+        j.phase === phase &&
         j.remixId === remixId &&
-        j.batchId === batchId &&
         (j.status === 'queued' || j.status === 'running'),
     );
     if (alreadyRunning) {
-      log.debug('startMixSwap', 'swap already running — no-op', {
+      log.debug('startStageJob', 'stage job already running — no-op', {
         remixId,
+        stage,
         batchId,
       });
       return { kind: 'skipped', reason: 'busy' };
     }
 
-    log.info('startMixSwap', 'enqueue', { remixId, batchId, forceResweep });
-    // Throws EnqueueJobError on non-2xx (incl. 422 MISSING_VARIANT_REFERENCE /
-    // TOO_MANY_SWAP_TARGETS / NO_SWAP_TARGETS) — caller (modal) toasts on `code`.
-    const data = await enqueueRemixMixSwap(remixId, {
+    log.info('startStageJob', 'enqueue', {
+      remixId,
+      stage,
+      batchId,
+      forceResweep,
+    });
+    // Throws EnqueueJobError on non-2xx (e.g. 422 MISSING_VARIANT_REFERENCE on
+    // mix-swap) — caller (modal) toasts on `code`.
+    const data = await enqueueRemixStageJob(remixId, endpointSegment, {
       batch_id: batchId,
       force_resweep: forceResweep,
     });
 
     if ('skipped' in data && data.skipped) {
-      log.info('startMixSwap', 'skipped', { remixId, reason: data.reason });
+      log.info('startStageJob', 'skipped', { remixId, stage, reason: data.reason });
       return { kind: 'skipped', reason: data.reason };
     }
 
     if ('deduped' in data && data.deduped) {
-      log.info('startMixSwap', 'deduped', {
+      log.info('startStageJob', 'deduped', {
         remixId,
+        stage,
         jobId: data.job_id,
         status: data.status,
       });
-      // Active job may be a char-swap (cross-type dedup). Reconcile jobs[] from
-      // the shared store if the row isn't mirrored locally yet.
+      // Reconcile jobs[] from the shared store if the active row isn't
+      // mirrored locally yet (realtime fills it otherwise).
       if (!get().jobs.find((j) => j.id === data.job_id)) {
         const shared = useBackgroundJobsStore.getState().jobsById[data.job_id];
         if (shared) get().onRemixJobEvent({ job: shared, prev: null, transition: 'appeared' });
@@ -235,8 +244,9 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       };
     }
 
-    log.info('startMixSwap', 'enqueued', {
+    log.info('startStageJob', 'enqueued', {
       remixId,
+      stage,
       batchId,
       jobId: data.job_id,
       totalSteps: data.total_steps,
@@ -246,7 +256,7 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
     const nowIso = new Date().toISOString();
     useBackgroundJobsStore.getState().seed({
       id: data.job_id,
-      type: 'remix_mix_swap',
+      type: data.type,
       bookId: null,
       userId: useAuthStore.getState().user?.id ?? '',
       status: 'queued',

@@ -16,6 +16,13 @@ export const SWAP_MODEL_OPTIONS = [
   'bytedance/seedream-4.5',
 ] as const;
 
+/** AI remove-background model options (right sidebar, tab Remove BG —
+ *  ⚡2026-06-12 placeholder, job 09 takes no `model_params` v1). */
+export const RMBG_MODEL_OPTIONS = [
+  'bria/remove-background',
+  '851-labs/background-remover',
+] as const;
+
 /** AI upscale model options (right sidebar — v1 collect-only). */
 export const UPSCALE_MODEL_OPTIONS = [
   'nightmareai/real-esrgan',
@@ -23,11 +30,14 @@ export const UPSCALE_MODEL_OPTIONS = [
   'alexgenovese/upscaler',
 ] as const;
 
-/** Default right-sidebar params — re-applied on every modal open (ephemeral). */
+/** Default right-sidebar params — re-applied on every modal open (ephemeral).
+ *  ⚡2026-06-12: per-tab groups (swap / rmbg / upscale + noise); `scale`
+ *  removed — job 10 derives PRINT 300 DPI from the layer geometry itself. */
 export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
   swapModel: 'google/nano-banana-pro',
+  rmbgModel: 'bria/remove-background',
   upscaleModel: 'nightmareai/real-esrgan',
-  scale: 4,
+  noise: 1.5,
 };
 
 /** Zoom slider range — applied as the stage canvas-inner `width/height`
@@ -36,8 +46,9 @@ export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
  *  can fit-to-canvas inside a narrow viewport (design 05-03 §4.2/§4.6). */
 export const ZOOM = { min: 10, max: 400, step: 5, default: 100 } as const;
 
-/** Scale stepper range (right sidebar). */
-export const SCALE = { min: 2, max: 10, step: 1, default: 4 } as const;
+/** Noise stepper range (right sidebar, tab Upscale — ⚡2026-06-12 placeholder,
+ *  ephemeral; NOT sent to job 10 v1). */
+export const NOISE = { min: 0, max: 10, step: 0.1, default: 1.5 } as const;
 
 /** Each batch must keep at least this many crop sheets. */
 export const SHEET_MIN = 1;
@@ -45,7 +56,8 @@ export const SHEET_MIN = 1;
 /** Upper bound on crop sheets per batch (relayout K clamp). */
 export const SHEET_MAX = 10;
 
-/** A remix must keep at least this many batches. */
+/** A remix must keep at least this many batches — ⚡2026-06-12 CHỈ stage
+ *  `'mixes'` (auto-seeded); rmbgs/upscales allow 0 batches (empty-state CTA). */
 export const BATCH_MIN = 1;
 
 /** A remix must keep at least this many sprites (Variants tab). */

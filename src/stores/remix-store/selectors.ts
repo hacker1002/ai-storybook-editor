@@ -5,20 +5,24 @@
 
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { STAGE_JOB_CONFIG } from '@/types/remix';
 import type {
   BatchSwapTaskStatus,
   Remix,
-  RemixBatch,
   RemixJob,
+  RemixJobPhase,
   RemixSprite,
   RemixSpriteEntry,
+  RemixStageBatch,
   RemixTraitChoice,
   RemixVariantEntity,
   RemixVariantNode,
   SpriteSwapTaskStatus,
+  StageKind,
 } from '@/types/remix';
 import { useHumans } from '@/stores/humans-store';
 import { selectCanInject } from './selectors/select-final-crops';
+import { collectStageFinals, type ImportFinalEntry } from './stage-finals';
 import { resolveSpriteFinals } from './apply-sprite-finals';
 import { useRemixStore } from './index';
 
@@ -42,28 +46,26 @@ export const useRemixById = (id: string | null | undefined): Remix | null =>
   );
 
 /**
- * Inject gate: true iff the remix has ≥1 batch with a selected `swap_result`
- * yielding an injectable `is_final` winner crop — i.e.
- * `resolveFinalCrops(remix).length > 0`. MIRRORS `injectFinalCrops`'s
+ * Inject gate: true iff the remix has ≥1 injectable `is_final` winner crop —
+ * i.e. `resolveFinalCrops(remix).length > 0`. MIRRORS `injectFinalCrops`'s
  * precondition (which throws `'no final crops to inject'` when finals are
  * empty), so the button-enabled state and the action precondition cannot drift.
  *
- * Perf: subscribes to the narrowest stable raw ref (`mixes` array — stable
- * across renders unless swap data mutates) and memoizes the allocating
- * `selectCanInject` / `resolveFinalCrops` derivation keyed on that ref, never
+ * ⚡2026-06-12 — Inject reads `upscales[]` STRICT (stage 3 finals, validation
+ * S1): subscribes to the stable `upscales` raw ref and memoizes on it, never
  * on a freshly-mapped array (memory feedback_zustand_useshallow_nested_arrays).
  */
 export const useCanInject = (remixId: string): boolean => {
-  const mixes = useRemixStore(
-    (s) => s.remixes.find((r) => r.id === remixId)?.mixes,
+  const upscales = useRemixStore(
+    (s) => s.remixes.find((r) => r.id === remixId)?.upscales,
   );
 
   return useMemo(() => {
-    if (!mixes || mixes.length === 0) return false;
-    // selectCanInject only reads `remix.mixes`; pass a minimal shape keyed on
-    // the stable `mixes` ref. True ⟺ ≥1 batch has an injectable is_final crop.
-    return selectCanInject({ mixes } as Remix);
-  }, [mixes]);
+    if (!upscales || upscales.length === 0) return false;
+    // selectCanInject only reads `remix.upscales`; pass a minimal shape keyed
+    // on the stable raw ref.
+    return selectCanInject({ upscales } as Remix);
+  }, [upscales]);
 };
 
 // ── Job selectors ────────────────────────────────────────────────────────────
@@ -238,17 +240,19 @@ export const useRemixVariants = (
   }, [remix]);
 };
 
-/** Derive a batch's swap task from `jobs[]` (single source of truth — no
- *  separate ephemeral map). Latest `remix_mix_swap` job for (remixId, batchId);
- *  maps status → UI task. */
+/** Derive a stage batch's job task from `jobs[]` (single source of truth — no
+ *  separate ephemeral map). Latest job of `phase` for (remixId, batchId);
+ *  maps status → UI task. ⚡2026-06-12 — `phase` parameterized so the same
+ *  derivation serves all 3 stage columns. */
 export function deriveBatchSwapTask(
   jobs: RemixJob[],
   remixId: string,
   batchId: string,
+  phase: RemixJobPhase,
 ): BatchSwapTaskStatus {
   const matches = jobs.filter(
     (j) =>
-      j.phase === 'remix_mix_swap' &&
+      j.phase === phase &&
       j.remixId === remixId &&
       j.batchId === batchId,
   );
@@ -285,50 +289,77 @@ export function deriveBatchSwapTask(
 }
 
 /**
- * Projects a remix's `mixes[]` into `RemixBatch[]` (id/order/name/crop_sheets +
- * derived swapTask), sorted by `order`. Pure derive from `remix` + `jobs`.
+ * Projects a remix's `remix[stage][]` into `RemixStageBatch[]` (id/order/name/
+ * crop_sheets + derived swapTask), sorted by `order` (⚡2026-06-12 — replaces
+ * useRemixBatches; validation S1 no alias). Pure derive from `remix[stage]` +
+ * `jobs`; swapTask matches the STAGE's job phase.
  *
- * RE-RENDER NOTE — useMemo deps = `[remix, jobs]` (both stable raw refs). The
- * projection arrays are fresh each call; shallow compare would loop. `jobs` is
- * the per-remix filtered slice from `useJobsForRemix` (its own useShallow guard
- * keeps the ref stable across unrelated job updates).
+ * RE-RENDER NOTE — useMemo deps = `[rows, jobs, remixId, stage]` (raw stage
+ * column ref + per-remix jobs slice). The projection arrays are fresh each
+ * call; shallow compare would loop. `jobs` is the per-remix filtered slice
+ * from `useJobsForRemix` (its own useShallow guard keeps the ref stable
+ * across unrelated job updates).
  */
-export const useRemixBatches = (
+export const useRemixStageBatches = (
   remixId: string | null | undefined,
-): RemixBatch[] => {
-  const remix = useRemixStore(
-    (s) => (remixId ? s.remixes.find((r) => r.id === remixId) ?? null : null),
+  stage: StageKind,
+): RemixStageBatch[] => {
+  const rows = useRemixStore((s) =>
+    remixId ? s.remixes.find((r) => r.id === remixId)?.[stage] : undefined,
   );
   const jobs = useJobsForRemix(remixId ?? '');
 
-  return useMemo<RemixBatch[]>(() => {
-    if (!remix) return [];
-    return remix.mixes
+  return useMemo<RemixStageBatch[]>(() => {
+    if (!rows || !remixId) return [];
+    const phase = STAGE_JOB_CONFIG[stage].phase;
+    return rows
       .map((m) => ({
         id: m.id,
         order: m.order,
         name: m.name,
         crop_sheets: m.crop_sheets,
-        swapTask: deriveBatchSwapTask(jobs, remix.id, m.id),
+        swapTask: deriveBatchSwapTask(jobs, remixId, m.id, phase),
       }))
       .sort((a, b) => a.order - b.order);
-  }, [remix, jobs]);
+  }, [rows, jobs, remixId, stage]);
 };
 
-/** True when ANY `remix_mix_swap` job of the remix is queued/running. Guards the
- *  modal against firing a second swap. Boolean primitive — ref-stable by value. */
-export const useAnyMixSwapRunning = (
+/** True when ANY job of the STAGE's phase is queued/running for the remix
+ *  (⚡2026-06-12 — replaces useAnyMixSwapRunning). Guards only WITHIN the
+ *  stage — the 3 stages run concurrently (disjoint columns). Boolean
+ *  primitive — ref-stable by value. */
+export const useAnyStageJobRunning = (
   remixId: string | null | undefined,
+  stage: StageKind,
 ): boolean =>
   useRemixStore((s) =>
     !!remixId &&
     s.jobs.some(
       (j) =>
-        j.phase === 'remix_mix_swap' &&
+        j.phase === STAGE_JOB_CONFIG[stage].phase &&
         j.remixId === remixId &&
         (j.status === 'queued' || j.status === 'running'),
     ),
   );
+
+/** Finals of ONE stage column (collectStageFinals) — the ImportBatchModal list
+ *  (source stage = PREV_STAGE of the import target) + Import gating.
+ *  Memoized on the raw stage-column ref (fresh arrays inside the memo only —
+ *  memory feedback_zustand_useshallow_nested_arrays). */
+export const useStageFinals = (
+  remixId: string | null | undefined,
+  stage: StageKind,
+): ImportFinalEntry[] => {
+  const rows = useRemixStore((s) =>
+    remixId ? s.remixes.find((r) => r.id === remixId)?.[stage] : undefined,
+  );
+  return useMemo<ImportFinalEntry[]>(() => {
+    if (!rows || rows.length === 0) return [];
+    // collectStageFinals only reads `remix[stage]`; minimal shape keyed on the
+    // stable raw column ref.
+    return collectStageFinals({ [stage]: rows } as unknown as Remix, stage);
+  }, [rows, stage]);
+};
 
 // ── Sprite selectors (Variants tab — sprite-swap plane) ──────────────────────
 
@@ -439,7 +470,7 @@ export function spriteLineupObjects(
 ): string[] {
   const keys = new Set<string>();
   for (const sheet of sprite.crop_sheets) {
-    for (const crop of sheet.crops) {
+    for (const crop of sheet.original_crops) {
       if (crop.type === 'character') keys.add(crop.object_key);
     }
   }
@@ -479,12 +510,13 @@ export const useRemixActions = () =>
       syncFromServer: s.syncFromServer,
       patchRemixIllustration: s.patchRemixIllustration,
       patchRemixCropSheets: s.patchRemixCropSheets,
-      startMixSwap: s.startMixSwap,
-      addBatch: s.addBatch,
+      startStageJob: s.startStageJob,
+      addStageBatch: s.addStageBatch,
+      importStageBatch: s.importStageBatch,
       seedInitialBatchIfMissing: s.seedInitialBatchIfMissing,
-      removeBatch: s.removeBatch,
-      appendBatchSheet: s.appendBatchSheet,
-      removeBatchSheet: s.removeBatchSheet,
+      removeStageBatch: s.removeStageBatch,
+      appendStageBatchSheet: s.appendStageBatchSheet,
+      removeStageBatchSheet: s.removeStageBatchSheet,
       takeFinalBack: s.takeFinalBack,
       startSpriteSwap: s.startSpriteSwap,
       addSprite: s.addSprite,

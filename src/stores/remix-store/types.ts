@@ -12,7 +12,8 @@ import type {
   RemixCropSheet,
   RemixJob,
   RemixSpread,
-  StartMixSwapParams,
+  StageKind,
+  StartStageJobParams,
   StartSpriteSwapParams,
 } from '@/types/remix';
 import type { Distribution } from '@/types/editor';
@@ -25,13 +26,13 @@ import type { JobEvent } from '@/stores/background-jobs-store';
 // be expressed as N independent index-based patches (sheet count + ordering
 // both change atomically).
 
-// rev2: crop sheets live ONLY on the batch (mix); per-entity crop_sheets
-// removed (2026-05-26). `entityType` is therefore always `'mix'` and
-// `entityKey` is the batch uuid (`mixes[].id`).
+// ⚡2026-06-12: crop sheets live on STAGE batches (`mixes`/`rmbgs`/`upscales`
+// columns — same row shape). `stage` selects the column; `entityKey` is the
+// batch uuid within that column.
 export type CropSheetUpdate =
   | {
       kind: 'patch';
-      entityType: 'mix';
+      stage: StageKind;
       entityKey: string;
       /** Index into batch.crop_sheets[]. */
       sheetIndex: number;
@@ -39,7 +40,7 @@ export type CropSheetUpdate =
     }
   | {
       kind: 'replaceAll';
-      entityType: 'mix';
+      stage: StageKind;
       entityKey: string;
       sheets: RemixCropSheet[];
     };
@@ -95,15 +96,16 @@ export interface RemixJobsSlice {
    *  inject` / persist error) — the UI handler owns the toast. */
   injectFinalCrops: (remixId: string) => Promise<InjectResult>;
 
-  /** Modal-driven batch (mix) crop-sheet swap (rev2 — api/jobs/05). POST
-   *  `/api/jobs/remix/{id}/mix-swap` + optimistic seed `remix_mix_swap` job.
-   *  Guards: an already-running mix swap for the remix no-ops to `skipped`.
-   *  Throws `EnqueueJobError` (with `code`) on 422/non-2xx so the modal can
-   *  toast MISSING_VARIANT_REFERENCE / TOO_MANY_SWAP_TARGETS / NO_SWAP_TARGETS
-   *  distinctly. The swap LOOP runs backend; the client only enqueues + reflects
+  /** Modal-driven stage-batch job enqueue (⚡2026-06-12 generic — jobs
+   *  05/09/10, replaces startMixSwap; validation S1 no alias). POST
+   *  `/api/jobs/remix/{id}/{mix-swap|rmbg|upscale}` + optimistic seed of the
+   *  stage's job phase. Guard: an already-running job of the SAME stage no-ops
+   *  to `skipped` (3 stages are independent — disjoint JSONB columns). Throws
+   *  `EnqueueJobError` (with `code`) on non-2xx so the modal can toast
+   *  per-code. The job LOOP runs backend; the client only enqueues + reflects
    *  realtime job_upsert into `jobs[]`. */
-  startMixSwap: (
-    params: StartMixSwapParams,
+  startStageJob: (
+    params: StartStageJobParams,
   ) => Promise<EnqueueRemixJobOutcome>;
 
   /** Modal-driven sprite (Variants) crop-sheet swap (api/jobs/02). POST
@@ -182,70 +184,81 @@ export interface RemixSpriteSlice {
   ) => Promise<boolean>;
 }
 
-/** Batch lifecycle (add/remove batch + append/remove batch sheet) + per-variant
- *  visual-swap persist (rev2 — batch model). */
+/** Stage-batch lifecycle (⚡2026-06-12 STAGE-GENERIC — validation S1: replaces
+ *  the mix-only addBatch/removeBatch/appendBatchSheet/removeBatchSheet, NO
+ *  alias). One generic engine resolves the column by `stage`. */
 export interface RemixSwapSlice {
-  /** Appends a NEW batch as a SUBSET clone of the active batch (rev6 — modal
-   *  "Add as Batch" with per-crop selection). `selectedCropKeys` is a set of
-   *  `${spread_id}/${id}` keys identifying the PRE-SWAP crops
-   *  (`sheet.crops[]`, never `swap_results[].crops[]`) the user picked off the
-   *  active batch. K=1 sheets packed from the subset; new batch ordered as
-   *  `max(order)+1`. Optimistic push + `mixes` persist with full-remix
-   *  rollback.
-   *
-   *  THROWS on empty selection OR zero match against the active batch lineup
-   *  (stale keys) — caller must surface the error as a toast. Resolves the
-   *  NEW batch id on persist success so the caller can auto-select it; `null`
-   *  on guard miss / persist failure. */
-  addBatch: (
+  /** Appends a NEW batch to `remix[stage]` as a SUBSET clone of the active
+   *  batch (rev6 tick-flow — ALL 3 stages). `selectedCropKeys` is a set of
+   *  `${spread_id}/${id}` keys identifying the PRE-JOB crops
+   *  (`sheet.original_crops[]`, never `swap_results[].crops[]`) the user
+   *  picked off the active batch. K=1 sheets packed from the subset (mixes:
+   *  source-% re-scan; rmbgs/upscales: native px). THROWS on empty selection
+   *  OR zero match (stale). Resolves the NEW batch id on persist success;
+   *  `null` on guard miss / persist failure. */
+  addStageBatch: (
     remixId: string,
+    stage: StageKind,
     activeBatchId: string,
     selectedCropKeys: ReadonlySet<string>,
   ) => Promise<string | null>;
 
+  /** Imports the PREVIOUS stage's finals into a NEW batch of `stage` (Import
+   *  flow, rmbgs/upscales ONLY — 05-14). Copy-on-build snapshot, K=1,
+   *  native-px dims. THROWS on empty/stale selection. Resolves the new batch
+   *  id; `null` on guard miss / persist failure. */
+  importStageBatch: (
+    remixId: string,
+    stage: 'rmbgs' | 'upscales',
+    selectedFinalKeys: ReadonlySet<string>,
+  ) => Promise<string | null>;
+
   /** Lazy seed of `mixes[]` for a remix opened in the modal — guards
    *  `mixes.length >= 1` and delegates to `migrateLegacyRemixToBatch`
-   *  (idempotent). Resolves `true` when a batch was seeded, `false` when the
-   *  remix already has ≥1 batch or guard missed. Thin alias kept on the swap
-   *  slice so modal callers don't need to reach into sync-slice. */
+   *  (idempotent). Stage 'mixes' ONLY — rmbgs/upscales never seed. */
   seedInitialBatchIfMissing: (remixId: string) => Promise<boolean>;
 
-  /** Removes a batch by id. Guarded so the last batch (`mixes.length ===
-   *  BATCH_MIN`) cannot be removed. Optimistic + rollback. Resolves `true` on
-   *  success. */
-  removeBatch: (remixId: string, batchId: string) => Promise<boolean>;
-
-  /** Appends one crop sheet to a batch (clamped to `SHEET_MAX`). Re-groups ALL
-   *  crops from the frozen illustration and re-packs at K+1 via the layout
-   *  engine, then `replaceAll` on the batch's `crop_sheets[]`. DESTRUCTIVE:
-   *  clears `swap_results` of the batch — caller MUST gate. Optimistic with
-   *  rollback. */
-  appendBatchSheet: (remixId: string, batchId: string) => Promise<boolean>;
-
-  /** Removes one crop sheet from a batch (clamped to `SHEET_MIN`). `sheetIndex`
-   *  is accepted for caller-API parity but unused (engine re-packs from
-   *  scratch). DESTRUCTIVE: clears `swap_results` of the batch — caller MUST
-   *  gate. Optimistic with rollback. */
-  removeBatchSheet: (
+  /** Removes a batch from a stage column. `BATCH_MIN` guard applies to stage
+   *  'mixes' only; rmbgs/upscales may drop to 0 batches (empty-state CTA).
+   *  Optimistic + rollback. Resolves `true` on success. */
+  removeStageBatch: (
     remixId: string,
+    stage: StageKind,
+    batchId: string,
+  ) => Promise<boolean>;
+
+  /** Appends one crop sheet to a stage batch (clamped to `SHEET_MAX`) —
+   *  re-packs the batch's crops at K+1. DESTRUCTIVE: clears the batch's
+   *  `swap_results` — caller MUST gate (confirm dialog). */
+  appendStageBatchSheet: (
+    remixId: string,
+    stage: StageKind,
+    batchId: string,
+  ) => Promise<boolean>;
+
+  /** Removes one crop sheet (clamped to `SHEET_MIN`). `sheetIndex` accepted
+   *  for caller-API parity but unused (engine re-packs from scratch).
+   *  DESTRUCTIVE: clears the batch's `swap_results` — caller MUST gate. */
+  removeStageBatchSheet: (
+    remixId: string,
+    stage: StageKind,
     batchId: string,
     sheetIndex: number,
   ) => Promise<boolean>;
 
   /** R5 user take-back — set `is_final=true` on the crop matching
    *  `(spreadId, layerId)` inside `fromBatchId` AND clear `is_final` on every
-   *  other batch's crop with the same key (cross-batch mutex, mirrors backend
-   *  helper `_promote_is_final_for_sheet`). Gated when `anyMixSwapRunning`
-   *  (defense-in-depth — UI already disables the affordance). Throws on gate
-   *  reject; resolves `false` on guard miss (remix/crop not found) or persist
+   *  other batch's crop with the same key. ⚡2026-06-12: the mutex is
+   *  PER-STAGE — `stage` selects the column; gated when a job of THAT stage is
+   *  running. Throws on gate reject; resolves `false` on guard miss or persist
    *  failure (rolled back). */
   takeFinalBack: (
     remixId: string,
+    stage: StageKind,
     spreadId: string,
     layerId: string,
     fromBatchId: string,
   ) => Promise<boolean>;
-
 }
 
 /** Server sync: snapshot remix load, realtime event apply, targeted refetch. */

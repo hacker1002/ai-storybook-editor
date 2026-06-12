@@ -21,6 +21,11 @@ const JOB_TYPE_TO_PHASE: Record<string, RemixJobPhase> = {
   remix_audio_swap: 'audio',
   remix_mix_swap: 'remix_mix_swap',
   remix_sprite_swap: 'remix_sprite_swap',
+  // ⚡2026-06-12 — stage 2/3 pipeline jobs (api/jobs/09 + 10). Missing entries
+  // here mean the job never reaches the mirror → swapTask silently never
+  // derives — keep in lockstep with REMIX_SWAP_TYPES.
+  remix_rmbg: 'remix_rmbg',
+  remix_upscale: 'remix_upscale',
 };
 
 /** Map raw background_jobs row → RemixJob. Pure, no I/O. */

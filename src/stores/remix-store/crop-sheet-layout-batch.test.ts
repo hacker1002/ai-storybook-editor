@@ -1,10 +1,12 @@
-// crop-sheet-layout-batch.test.ts — Unit tests for the rev2 batch lifecycle +
-// relayout engine helpers (addBatch / removeBatch / relayoutBatchSheets) and the
-// pure deriveBatchSwapTask selector helper.
+// crop-sheet-layout-batch.test.ts — Unit tests for the ⚡2026-06-12
+// STAGE-GENERIC batch lifecycle + relayout engine helpers (addStageBatch /
+// removeStageBatch / relayoutStageBatchSheets / importStageBatch) and the pure
+// deriveBatchSwapTask selector helper.
 //
-// The engine helpers take a decoupled `RelayoutDeps` (set/get over an in-memory
-// `{ remixes }` + a faithful `patchRemixCropSheets` replaceAll-mix impl) and
-// persist via `@/apis/supabase`, which is mocked to a resolved no-error update.
+// The engine helpers take a decoupled `RelayoutDeps` (set/get over an
+// in-memory `{ remixes }` + a faithful stage-keyed `patchRemixCropSheets`
+// replaceAll impl) and persist via `@/apis/supabase`, which is mocked to a
+// resolved no-error update.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -17,9 +19,10 @@ vi.mock('@/apis/supabase', () => ({
 }));
 
 import {
-  addBatch,
-  removeBatch,
-  relayoutBatchSheets,
+  addStageBatch,
+  importStageBatch,
+  removeStageBatch,
+  relayoutStageBatchSheets,
   currentCropsOfBatch,
   type RelayoutDeps,
 } from './crop-sheet-layout';
@@ -54,26 +57,20 @@ function spreadWithCrop(id: string, page: number, layerId: string, objectKey: st
   };
 }
 
-/** Build a CropEntry matching the spread fixture (`spreadWithCrop`). Used to
- *  populate a batch lineup so `currentCropsOfBatch` returns non-empty subsets
- *  (rev6 `addBatch` subset path + `relayoutBatchSheets` per-batch scope). */
+/** Build a LEAN CropEntry matching the spread fixture (`spreadWithCrop`).
+ *  `geometry` carries non-zero dims so the stage-2/3 native path has inputs. */
 function makeCropEntry(spreadId: string, layerId: string, objectKey: string): CropEntry {
   return {
     spread_id: spreadId,
     id: layerId,
-    layer_kind: 'image',
-    spread_number: spreadId === 's1' ? 1 : 2,
-    aspect_ratio: '1:1',
-    name: 'v1',
     tags: [tag(objectKey)],
     media_url: `https://cdn/${layerId}.png`,
-    geometry: { x: 0, y: 0, w: 0, h: 0 },
+    geometry: { x: 0, y: 0, w: 320, h: 240 },
   };
 }
 
-/** A batch fixture that can carry a real `crops[]` lineup so rev6 subset filters
- *  + per-batch relayout have something to work with. `cropIds` defaults to the
- *  illustration's full set (`i1`, `i2`). Pass `[]` to simulate an empty batch. */
+/** A batch fixture that can carry a real `original_crops[]` lineup so rev6
+ *  subset filters + per-batch relayout have something to work with. */
 function makeBatch(
   id: string,
   order: number,
@@ -94,20 +91,34 @@ function makeBatch(
         sheet_geometry: { width: 100, height: 100 },
         image_url: '',
         swap_results: withSwap
-          ? [{ media_url: 'https://cdn/swap.png', created_time: 't', is_selected: true, crops: [] }]
+          ? [
+              {
+                media_url: 'https://cdn/swap.png',
+                created_time: 't',
+                is_selected: true,
+                crops: cropIds.map((c) => ({
+                  spread_id: c.spreadId,
+                  id: c.layerId,
+                  media_url: `https://cdn/swap-${c.layerId}.png`,
+                  is_final: true,
+                })),
+              },
+            ]
           : [],
-        crops: cropIds.map((c) => makeCropEntry(c.spreadId, c.layerId, c.objectKey)),
+        original_crops: cropIds.map((c) => makeCropEntry(c.spreadId, c.layerId, c.objectKey)),
       },
     ],
   };
 }
 
-function makeRemix(mixes: RemixMix[]): Remix {
+function makeRemix(mixes: RemixMix[], rmbgs: RemixMix[] = [], upscales: RemixMix[] = []): Remix {
   return {
     id: 'remix-1',
     characters: [{ key: 'c1', name: 'C1', variants: [] }],
     props: [],
     mixes,
+    rmbgs,
+    upscales,
     illustration: {
       spreads: [spreadWithCrop('s1', 1, 'i1', 'c1'), spreadWithCrop('s2', 2, 'i2', 'c1')],
       sections: [],
@@ -115,8 +126,8 @@ function makeRemix(mixes: RemixMix[]): Remix {
   } as unknown as Remix;
 }
 
-/** In-memory deps over a mutable `{ remixes }` with a faithful replaceAll-mix
- *  patchRemixCropSheets (mirrors crud-slice mix branch keyed on batch id). */
+/** In-memory deps over a mutable `{ remixes }` with a faithful stage-keyed
+ *  replaceAll patchRemixCropSheets (mirrors crud-slice keyed on batch id). */
 function makeDeps(remix: Remix): RelayoutDeps & { state: { remixes: Remix[] } } {
   const state = { remixes: [remix] };
   return {
@@ -130,13 +141,15 @@ function makeDeps(remix: Remix): RelayoutDeps & { state: { remixes: Remix[] } } 
     patchRemixCropSheets: (remixId: string, updates: CropSheetUpdate[]) => {
       state.remixes = state.remixes.map((r) => {
         if (r.id !== remixId) return r;
-        let mixes = r.mixes;
+        const next = { ...r };
         for (const u of updates) {
-          if (u.kind === 'replaceAll' && u.entityType === 'mix') {
-            mixes = mixes.map((m) => (m.id === u.entityKey ? { ...m, crop_sheets: u.sheets } : m));
+          if (u.kind === 'replaceAll') {
+            next[u.stage] = (next[u.stage] ?? []).map((m) =>
+              m.id === u.entityKey ? { ...m, crop_sheets: u.sheets } : m,
+            );
           }
         }
-        return { ...r, mixes };
+        return next;
       });
     },
   };
@@ -161,7 +174,7 @@ describe('currentCropsOfBatch', () => {
           sheet_geometry: { width: 100, height: 100 },
           image_url: '',
           swap_results: [],
-          crops: [makeCropEntry('s1', 'i1', 'c1'), makeCropEntry('s2', 'i2', 'c1')],
+          original_crops: [makeCropEntry('s1', 'i1', 'c1'), makeCropEntry('s2', 'i2', 'c1')],
         },
         {
           // Duplicate (s1/i1) on a second sheet — must collapse to ONE entry.
@@ -169,7 +182,7 @@ describe('currentCropsOfBatch', () => {
           sheet_geometry: { width: 100, height: 100 },
           image_url: '',
           swap_results: [],
-          crops: [makeCropEntry('s1', 'i1', 'c1')],
+          original_crops: [makeCropEntry('s1', 'i1', 'c1')],
         },
       ],
     };
@@ -182,16 +195,16 @@ describe('currentCropsOfBatch', () => {
   });
 });
 
-// ── addBatch (rev6 — subset signature) ─────────────────────────────────────
+// ── addStageBatch (rev6 — subset, stage-generic) ────────────────────────────
 
-describe('addBatch (rev6 subset)', () => {
-  it('appends a new batch packed from the SELECTED subset (K=1) + returns new id', async () => {
+describe('addStageBatch (rev6 subset)', () => {
+  it("stage 'mixes': appends a new batch packed from the SELECTED subset (K=1) + returns new id", async () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
 
     // Pick only the s1/i1 crop — the new batch must contain ONLY that crop.
     const selection = new Set<string>(['s1/i1']);
-    const newId = await addBatch(deps, 'remix-1', 'b1', selection);
+    const newId = await addStageBatch(deps, 'remix-1', 'mixes', 'b1', selection);
 
     expect(newId).not.toBeNull();
     expect(typeof newId).toBe('string');
@@ -204,20 +217,48 @@ describe('addBatch (rev6 subset)', () => {
     expect(added.order).toBe(1);
     expect(added.crop_sheets).toHaveLength(1);
     // Subset filter actually narrowed the lineup.
-    const addedKeys = added.crop_sheets[0].crops.map(
+    const addedKeys = added.crop_sheets[0].original_crops.map(
       (c) => `${c.spread_id}/${c.id}`,
     );
     expect(addedKeys).toEqual(['s1/i1']);
     expect(updateEq).toHaveBeenCalledTimes(1);
   });
 
+  it("stage 'rmbgs': subset packs from the batch's OWN crops at native px — no illustration re-pull", async () => {
+    const rmbgBatch = makeBatch('rb1', 0, 'Batch 1');
+    const remix = makeRemix([], [rmbgBatch]);
+    const deps = makeDeps(remix);
+
+    const newId = await addStageBatch(
+      deps,
+      'remix-1',
+      'rmbgs',
+      'rb1',
+      new Set<string>(['s2/i2']),
+    );
+    expect(newId).not.toBeNull();
+
+    const rows = deps.state.remixes[0].rmbgs;
+    expect(rows).toHaveLength(2);
+    const addedKeys = rows[1].crop_sheets[0].original_crops.map(
+      (c) => `${c.spread_id}/${c.id}`,
+    );
+    expect(addedKeys).toEqual(['s2/i2']);
+    // Native-px path: the placed crop keeps its native dims (320×240).
+    const placed = rows[1].crop_sheets[0].original_crops[0];
+    expect(placed.geometry.w).toBe(320);
+    expect(placed.geometry.h).toBe(240);
+    // mixes column untouched.
+    expect(deps.state.remixes[0].mixes).toHaveLength(0);
+  });
+
   it('throws on empty selection (no UI bug should ever call this with empty)', async () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
 
-    await expect(addBatch(deps, 'remix-1', 'b1', new Set())).rejects.toThrow(
-      /non-empty/i,
-    );
+    await expect(
+      addStageBatch(deps, 'remix-1', 'mixes', 'b1', new Set()),
+    ).rejects.toThrow(/non-empty/i);
     // No optimistic push, no persist.
     expect(deps.state.remixes[0].mixes).toHaveLength(1);
     expect(updateEq).not.toHaveBeenCalled();
@@ -228,9 +269,9 @@ describe('addBatch (rev6 subset)', () => {
     const deps = makeDeps(remix);
 
     const stale = new Set<string>(['s9/i9', 's8/i8']);
-    await expect(addBatch(deps, 'remix-1', 'b1', stale)).rejects.toThrow(
-      /stale|match/i,
-    );
+    await expect(
+      addStageBatch(deps, 'remix-1', 'mixes', 'b1', stale),
+    ).rejects.toThrow(/stale|match/i);
     expect(deps.state.remixes[0].mixes).toHaveLength(1);
     expect(updateEq).not.toHaveBeenCalled();
   });
@@ -240,9 +281,10 @@ describe('addBatch (rev6 subset)', () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
 
-    const newId = await addBatch(
+    const newId = await addStageBatch(
       deps,
       'remix-1',
+      'mixes',
       'b1',
       new Set<string>(['s1/i1']),
     );
@@ -254,9 +296,10 @@ describe('addBatch (rev6 subset)', () => {
   it('returns null when the remix is missing', async () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
-    const newId = await addBatch(
+    const newId = await addStageBatch(
       deps,
       'unknown-remix',
+      'mixes',
       'b1',
       new Set<string>(['s1/i1']),
     );
@@ -265,38 +308,84 @@ describe('addBatch (rev6 subset)', () => {
   });
 });
 
-// ── removeBatch ───────────────────────────────────────────────────────────────
+// ── importStageBatch (Import finals of the previous stage) ──────────────────
 
-describe('removeBatch', () => {
-  it('removes a batch by id + persists', async () => {
-    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1'), makeBatch('b2', 1, 'Batch 2')]);
+describe('importStageBatch', () => {
+  it("builds a 'rmbgs' batch from the SELECTED finals of mixes[] (K=1, native px)", async () => {
+    // mixes batch with a selected swap_result whose crops are ALL final.
+    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1', /* withSwap */ true)]);
     const deps = makeDeps(remix);
 
-    const ok = await removeBatch(deps, 'remix-1', 'b1');
-    expect(ok).toBe(true);
-    expect(deps.state.remixes[0].mixes.map((m) => m.id)).toEqual(['b2']);
+    const newId = await importStageBatch(
+      deps,
+      'remix-1',
+      'rmbgs',
+      new Set<string>(['s1/i1']),
+    );
+    expect(newId).not.toBeNull();
+
+    const rows = deps.state.remixes[0].rmbgs;
+    expect(rows).toHaveLength(1);
+    const sheet = rows[0].crop_sheets[0];
+    expect(sheet.original_crops.map((c) => `${c.spread_id}/${c.id}`)).toEqual(['s1/i1']);
+    // media_url = the PREVIOUS stage's OUTPUT piece (the swapped cut).
+    expect(sheet.original_crops[0].media_url).toBe('https://cdn/swap-i1.png');
+    expect(sheet.swap_results).toEqual([]);
+    expect(updateEq).toHaveBeenCalledTimes(1);
   });
 
-  it('refuses to remove the last batch (BATCH_MIN guard)', async () => {
-    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
+  it('throws when no fresh final matches the selection (stale)', async () => {
+    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1', false)]); // no finals at all
     const deps = makeDeps(remix);
-
-    const ok = await removeBatch(deps, 'remix-1', 'b1');
-    expect(ok).toBe(false);
-    expect(deps.state.remixes[0].mixes.map((m) => m.id)).toEqual(['b1']);
+    await expect(
+      importStageBatch(deps, 'remix-1', 'rmbgs', new Set<string>(['s1/i1'])),
+    ).rejects.toThrow(/stale/i);
     expect(updateEq).not.toHaveBeenCalled();
   });
 });
 
-// ── relayoutBatchSheets ───────────────────────────────────────────────────────
+// ── removeStageBatch ──────────────────────────────────────────────────────────
 
-describe('relayoutBatchSheets', () => {
+describe('removeStageBatch', () => {
+  it('removes a batch by id + persists', async () => {
+    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1'), makeBatch('b2', 1, 'Batch 2')]);
+    const deps = makeDeps(remix);
+
+    const ok = await removeStageBatch(deps, 'remix-1', 'mixes', 'b1');
+    expect(ok).toBe(true);
+    expect(deps.state.remixes[0].mixes.map((m) => m.id)).toEqual(['b2']);
+  });
+
+  it("refuses to remove the last 'mixes' batch (BATCH_MIN guard)", async () => {
+    const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
+    const deps = makeDeps(remix);
+
+    const ok = await removeStageBatch(deps, 'remix-1', 'mixes', 'b1');
+    expect(ok).toBe(false);
+    expect(deps.state.remixes[0].mixes.map((m) => m.id)).toEqual(['b1']);
+    expect(updateEq).not.toHaveBeenCalled();
+  });
+
+  it("allows removing the LAST 'rmbgs' batch (allowZeroBatch stage)", async () => {
+    const remix = makeRemix([], [makeBatch('rb1', 0, 'Batch 1')]);
+    const deps = makeDeps(remix);
+
+    const ok = await removeStageBatch(deps, 'remix-1', 'rmbgs', 'rb1');
+    expect(ok).toBe(true);
+    expect(deps.state.remixes[0].rmbgs).toEqual([]);
+    expect(updateEq).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── relayoutStageBatchSheets ──────────────────────────────────────────────────
+
+describe('relayoutStageBatchSheets', () => {
   it('changes K (delta) and clears swap_results on every rebuilt sheet', async () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1', /* withSwap */ true)]);
     const deps = makeDeps(remix);
     expect(remix.mixes[0].crop_sheets[0].swap_results).toHaveLength(1); // precondition
 
-    const ok = await relayoutBatchSheets(deps, 'remix-1', 'b1', +1); // K: 1 → 2
+    const ok = await relayoutStageBatchSheets(deps, 'remix-1', 'mixes', 'b1', +1); // K: 1 → 2
     expect(ok).toBe(true);
 
     const sheets = deps.state.remixes[0].mixes[0].crop_sheets;
@@ -311,7 +400,7 @@ describe('relayoutBatchSheets', () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
 
-    const ok = await relayoutBatchSheets(deps, 'remix-1', 'b1', -1);
+    const ok = await relayoutStageBatchSheets(deps, 'remix-1', 'mixes', 'b1', -1);
     expect(ok).toBe(false);
     expect(updateEq).not.toHaveBeenCalled();
   });
@@ -319,7 +408,7 @@ describe('relayoutBatchSheets', () => {
   it('returns false for an unknown batch', async () => {
     const remix = makeRemix([makeBatch('b1', 0, 'Batch 1')]);
     const deps = makeDeps(remix);
-    expect(await relayoutBatchSheets(deps, 'remix-1', 'nope', +1)).toBe(false);
+    expect(await relayoutStageBatchSheets(deps, 'remix-1', 'mixes', 'nope', +1)).toBe(false);
   });
 
   it('rev6: uses PER-BATCH scope (subset) instead of full illustration', async () => {
@@ -332,14 +421,33 @@ describe('relayoutBatchSheets', () => {
     const remix = makeRemix([subsetBatch]);
     const deps = makeDeps(remix);
 
-    const ok = await relayoutBatchSheets(deps, 'remix-1', 'b1', +1); // K: 1 → 2
+    const ok = await relayoutStageBatchSheets(deps, 'remix-1', 'mixes', 'b1', +1); // K: 1 → 2
     expect(ok).toBe(true);
 
     const sheets = deps.state.remixes[0].mixes[0].crop_sheets;
     // Union of crop ids across the rebuilt sheets — must be the subset {i1}.
     const ids = new Set<string>();
-    for (const s of sheets) for (const c of s.crops) ids.add(`${c.spread_id}/${c.id}`);
+    for (const s of sheets) for (const c of s.original_crops) ids.add(`${c.spread_id}/${c.id}`);
     expect([...ids].sort()).toEqual(['s1/i1']);
+  });
+
+  it("stage 'rmbgs': re-packs the batch's own crops at native px and persists the rmbgs column", async () => {
+    const rmbgBatch = makeBatch('rb1', 0, 'Batch 1');
+    const remix = makeRemix([], [rmbgBatch]);
+    const deps = makeDeps(remix);
+
+    const ok = await relayoutStageBatchSheets(deps, 'remix-1', 'rmbgs', 'rb1', +1); // K: 1 → 2
+    expect(ok).toBe(true);
+
+    const sheets = deps.state.remixes[0].rmbgs[0].crop_sheets;
+    expect(sheets).toHaveLength(2);
+    // Native-px dims preserved on the re-pack.
+    const all = sheets.flatMap((s) => s.original_crops);
+    expect(all).toHaveLength(2);
+    for (const c of all) {
+      expect(c.geometry.w).toBe(320);
+      expect(c.geometry.h).toBe(240);
+    }
   });
 });
 
@@ -362,20 +470,38 @@ function job(over: Partial<RemixJob>): RemixJob {
 }
 
 describe('deriveBatchSwapTask', () => {
-  it('idle when no matching remix_mix_swap job for (remix, batch)', () => {
-    expect(deriveBatchSwapTask([], 'remix-1', 'b1')).toEqual({ state: 'idle' });
+  it('idle when no matching job of the phase for (remix, batch)', () => {
+    expect(deriveBatchSwapTask([], 'remix-1', 'b1', 'remix_mix_swap')).toEqual({ state: 'idle' });
     // A job for a DIFFERENT batch does not count.
-    expect(deriveBatchSwapTask([job({ batchId: 'other' })], 'remix-1', 'b1')).toEqual({
-      state: 'idle',
-    });
+    expect(
+      deriveBatchSwapTask([job({ batchId: 'other' })], 'remix-1', 'b1', 'remix_mix_swap'),
+    ).toEqual({ state: 'idle' });
+    // ⚡stage isolation: a remix_rmbg job never matches the mixes phase.
+    expect(
+      deriveBatchSwapTask([job({ phase: 'remix_rmbg' })], 'remix-1', 'b1', 'remix_mix_swap'),
+    ).toEqual({ state: 'idle' });
   });
 
   it('running with current/total while queued or running', () => {
-    expect(deriveBatchSwapTask([job({ status: 'running', currentStep: 2, totalSteps: 5 })], 'remix-1', 'b1')).toEqual({
-      state: 'running',
-      current: 2,
-      total: 5,
-    });
+    expect(
+      deriveBatchSwapTask(
+        [job({ status: 'running', currentStep: 2, totalSteps: 5 })],
+        'remix-1',
+        'b1',
+        'remix_mix_swap',
+      ),
+    ).toEqual({ state: 'running', current: 2, total: 5 });
+  });
+
+  it("matches the STAGE phase — remix_rmbg job derives via phase 'remix_rmbg'", () => {
+    expect(
+      deriveBatchSwapTask(
+        [job({ phase: 'remix_rmbg', status: 'running', currentStep: 1, totalSteps: 2 })],
+        'remix-1',
+        'b1',
+        'remix_rmbg',
+      ),
+    ).toEqual({ state: 'running', current: 1, total: 2 });
   });
 
   it('error for failed/cancelled jobs (failedSheets from result)', () => {
@@ -383,6 +509,7 @@ describe('deriveBatchSwapTask', () => {
       [job({ status: 'failed', result: { failed_sheets: 2, errors: [{ message: 'boom' }] } as RemixJob['result'] })],
       'remix-1',
       'b1',
+      'remix_mix_swap',
     );
     expect(t.state).toBe('error');
     if (t.state === 'error') {
@@ -392,13 +519,19 @@ describe('deriveBatchSwapTask', () => {
   });
 
   it('idle for a clean completed job; error for a completed job with errors', () => {
-    expect(deriveBatchSwapTask([job({ status: 'completed', result: { errors: [] } as RemixJob['result'] })], 'remix-1', 'b1')).toEqual({
-      state: 'idle',
-    });
+    expect(
+      deriveBatchSwapTask(
+        [job({ status: 'completed', result: { errors: [] } as RemixJob['result'] })],
+        'remix-1',
+        'b1',
+        'remix_mix_swap',
+      ),
+    ).toEqual({ state: 'idle' });
     const partial = deriveBatchSwapTask(
       [job({ status: 'completed', result: { errors: [{ message: 'one sheet failed' }] } as RemixJob['result'] })],
       'remix-1',
       'b1',
+      'remix_mix_swap',
     );
     expect(partial.state).toBe('error');
   });
@@ -406,7 +539,7 @@ describe('deriveBatchSwapTask', () => {
   it('picks the LATEST job by createdAt', () => {
     const older = job({ id: 'old', status: 'failed', createdAt: '2026-05-27T00:00:00.000Z', result: { errors: [{ message: 'x' }] } as RemixJob['result'] });
     const newer = job({ id: 'new', status: 'running', currentStep: 1, totalSteps: 4, createdAt: '2026-05-27T01:00:00.000Z' });
-    expect(deriveBatchSwapTask([older, newer], 'remix-1', 'b1')).toEqual({
+    expect(deriveBatchSwapTask([older, newer], 'remix-1', 'b1', 'remix_mix_swap')).toEqual({
       state: 'running',
       current: 1,
       total: 4,

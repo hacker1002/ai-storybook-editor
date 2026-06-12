@@ -40,7 +40,7 @@ function sprite(
         title: 'sheet 1',
         sheet_geometry: { width: 100, height: 100 },
         image_url: '',
-        crops: [],
+        original_crops: [],
         swap_results: [
           { media_url: 'u', created_time: '', is_selected: isSelected, crops },
         ],
@@ -59,6 +59,8 @@ function makeRemix(sprites: RemixSpriteEntry[], characters: Remix['characters'] 
     characters,
     props: [],
     mixes: [],
+    rmbgs: [],
+    upscales: [],
     sprites,
     created_at: '',
     updated_at: '',

@@ -1,7 +1,7 @@
 // remix.ts — Domain types for Remix feature (DB row + ephemeral inject job state)
 // DB row JSONB structure: snapshot illustration/characters/props snapshot + remix_config + mixes.
 
-import type { BaseSpread, SpreadTag, SpreadImageAnnotation } from './spread-types';
+import type { BaseSpread, SpreadTag } from './spread-types';
 import type { IllustrationData, Section } from './illustration-types';
 import type { Character, CharacterVariant } from './character-types';
 import type { Prop, PropVariant, Crop } from './prop-types';
@@ -27,29 +27,51 @@ export type {
 // Crop sheet carried by a batch (RemixMix). Adds `swap_results[]` to record
 // AI-driven swap output and `crops[]` (CropEntry — multi-subject tags).
 
-// ── Swap modal tabs (rev2) ───────────────────────────────────────────────────
-/** Top-level tab of SwapCropSheetModal (rev2 — replaces Characters/Props/Mixes). */
-export type RemixModalTab = 'variants' | 'batches' | 'lotties';
+// ── Swap modal tabs (pipeline 2026-06-12) ────────────────────────────────────
+/** Top-level tab of SwapCropSheetModal — 4-tab pipeline (Sprites › Crops ›
+ *  Remove BG › Upscale). Tab ids are stable and ≠ display labels; `'lotties'`
+ *  removed 2026-06-12 (Lottie swap deferred to its own modal). */
+export type RemixModalTab = 'variants' | 'batches' | 'rmbg' | 'upscale';
 
-/** Re-cut crop produced by the mix-swap job (api/jobs/05). Backend service that
- *  emits these is deferred — FE v1 declares the type for realtime parity but
- *  does NOT render from `crops[]` (only `swap_results[].media_url`). */
+/** The 3 crop-pipeline stage columns on the remixes row (⚡2026-06-12) —
+ *  matches the DB JSONB column names: swap → remove-bg → upscale. */
+export type StageKind = 'mixes' | 'rmbgs' | 'upscales';
+
+/** StageKind → background-job phase + enqueue endpoint segment
+ *  (`POST /api/jobs/remix/{id}/{segment}` — jobs 05/09/10). Store-facing
+ *  mapping; UI config (labels, compose modes) lives in the modal's
+ *  `stage-tab-config.ts`. */
+export const STAGE_JOB_CONFIG = {
+  mixes: { phase: 'remix_mix_swap', endpointSegment: 'mix-swap' },
+  rmbgs: { phase: 'remix_rmbg', endpointSegment: 'rmbg' },
+  upscales: { phase: 'remix_upscale', endpointSegment: 'upscale' },
+} as const satisfies Record<
+  StageKind,
+  { phase: RemixJobPhase; endpointSegment: string }
+>;
+
+/** Pipeline predecessor per stage — the stage whose FINALS feed this stage's
+ *  Import (rmbgs ← mixes, upscales ← rmbgs). */
+export const PREV_STAGE: Record<'rmbgs' | 'upscales', StageKind> = {
+  rmbgs: 'mixes',
+  upscales: 'rmbgs',
+};
+
+/** Per-crop output piece of a stage job (⚡LEAN 2026-06-12 — jobs 05/09/10).
+ *  `geometry`/`tags[]` dropped: readers join `original_crops[]` of the SAME
+ *  sheet by `(spread_id, id)` — the join key is invariant across the pipeline.
+ *  `media_url` per stage: mixes = swapped cut (native dim); rmbgs = RGBA piece;
+ *  upscales = print-dim piece.
+ *
+ *  `is_final` = winner mutex PER-STAGE (per `(spread_id, id)` within ONE stage
+ *  column; ⚡2026-06-12 semantics: finals mixes feed rmbgs, finals rmbgs feed
+ *  upscales, finals upscales = the Inject Phase 3 source). ONLY valid when the
+ *  parent `swap_results.is_selected=true`. Ownership matrix R1–R5 applies
+ *  per-stage (R1/R2/R4 backend, R3 FE orphan reconcile, R5 user take-back). */
 export interface SwapResultCrop {
   spread_id: string;
   id: string;
-  geometry: { x: number; y: number; w: number; h: number };
   media_url: string;
-  tags: SpreadTag[];
-  /** Cross-batch winner mutex (2026-05-29). Per `(spread_id, id)` layer position,
-   *  EXACTLY 1 crop has `is_final=true` across all batches at steady state.
-   *  Reader: absent / undefined / false → unmarked. ONLY valid when parent
-   *  `swap_results.is_selected=true` (history `is_selected=false` is rubbish).
-   *  Ownership matrix:
-   *    R1 backend (job 05) — auto-promote on swap success + clear cross-batch
-   *    R2 backend         — re-swap same batch = idempotent consequence of R1
-   *    R3 FE store        — orphan reconcile on delete/relayout, fallback highest `batch.order`
-   *    R4 backend         — `force_resweep=false` idempotent skip = no-op
-   *    R5 FE action       — user take-back overrides any rule */
   is_final?: boolean;
 }
 
@@ -61,7 +83,10 @@ export interface SwapResultCrop {
 // are the mix specializations (shape byte-compatible with the pre-refactor
 // interfaces — purely additive generic, no runtime change).
 export interface SwapResultBase<TSwapCrop> {
-  media_url: string;
+  /** ⚡2026-06-12 nullable per stage: mixes = real Gemini sheet; rmbgs =
+   *  persisted RGBA sheet; upscales = NULL (per-crop job — UI composes the
+   *  AFTER view on demand from `crops[]`). */
+  media_url: string | null;
   created_time: string;
   is_selected: boolean;
   crops: TSwapCrop[];
@@ -76,7 +101,9 @@ export interface CropSheetBase<TCrop, TSwapCrop> {
    *  backward-compat; client now composes the sheet from crops + sheet_geometry. */
   image_url: string;
   swap_results: SwapResultBase<TSwapCrop>[];
-  crops: TCrop[];
+  /** ⚡RENAME 2026-06-12 (was `crops[]`) — the stage's INPUT crops, single
+   *  source of geometry + tags. `swap_results[].crops[]` stays named `crops`. */
+  original_crops: TCrop[];
 }
 
 /** Mix swap-result (rev2 — re-cut output, backend deferred). FE v1 does not
@@ -86,25 +113,20 @@ export type SwapResult = SwapResultBase<SwapResultCrop>;
 /** Re-export of crop entry shape from prop-types for consumer convenience. */
 export type RemixCrop = Crop;
 
-/** Crop entry stored on a batch crop sheet (rev2). Replaces the legacy `Crop`
- *  shape: carries multi-subject `tags[]` instead of `object_key`/`variant`.
+/** Crop entry stored on a stage batch crop sheet (⚡LEAN 2026-06-12). 5 fields
+ *  only — `layer_kind`/`spread_number`/`aspect_ratio`/`name`/`annotation`
+ *  dropped (no consumer; annotation resolves at runtime from
+ *  `illustration.spreads[].images[].annotation` by `(spread_id, id)`).
  *  Affinity primary subject = `tags[0].object_key`; `geometry` is the engine
- *  OUTPUT (px, sheet-relative — placeholder until layout runs in Phase 03). */
+ *  OUTPUT (px, sheet-relative). `media_url` per stage: mixes = source layer
+ *  crop; rmbgs = swapped piece (finals mixes); upscales = RGBA piece (finals
+ *  rmbgs) — both at native dim. */
 export interface CropEntry {
   spread_id: string;
   id: string;
-  layer_kind: string;
-  spread_number: number;
-  aspect_ratio: string;
-  name: string;
-  tags: SpreadTag[];
   media_url: string;
+  tags: SpreadTag[];
   geometry: { x: number; y: number; w: number; h: number };
-  /** Per-crop dynamic-state annotation (pose/action/expression), cloned from the
-   *  source layer's `annotation` (enhance-annotation flow). Folded into the swap
-   *  crop_manifest sent to Gemini (BE: services/remix/crop_manifest.py — reserved
-   *  number/geometry keys stripped). Omitted when the layer has no annotation. */
-  annotation?: SpreadImageAnnotation;
 }
 
 /** Crop sheet carried by a batch (RemixMix). rev2 — crops carry multi-subject
@@ -149,6 +171,10 @@ export interface RemixMix {
   name: string;
   crop_sheets: RemixCropSheet[];
 }
+
+/** ⚡2026-06-12 — DB row shape shared by ALL 3 stage columns
+ *  (`mixes[]`/`rmbgs[]`/`upscales[]`). Same shape as the historical mix entry. */
+export type RemixStageBatchRow = RemixMix;
 
 // ── Sprite plane (Variants tab — sprite-swap batch model) ────────────────────
 // Mirror of the mix plane on the `remixes.sprites[]` column, but single-subject:
@@ -353,6 +379,13 @@ export interface Remix {
   characters: RemixCharacter[];
   props: RemixProp[];
   mixes: RemixMix[];
+  /** ⚡NEW 2026-06-12 — stage 2 (remove-bg) batches. Same row shape as
+   *  `mixes[]`; `original_crops[]` = finals of `mixes[]` (Import,
+   *  copy-on-build snapshot). Reader coalesces undefined → []. */
+  rmbgs: RemixStageBatchRow[];
+  /** ⚡NEW 2026-06-12 — stage 3 (upscale) batches; `original_crops[]` = finals
+   *  of `rmbgs[]`. Finals of THIS column are the Inject Phase 3 source. */
+  upscales: RemixStageBatchRow[];
   /** Sprite plane (Variants tab — sprite-swap batch model). Additive JSONB
    *  column (DB-CHANGELOG 2026-06-08). Reader coalesces undefined → []. */
   sprites: RemixSpriteEntry[];
@@ -376,6 +409,10 @@ export interface RemixRow {
   characters: RemixCharacter[];
   props: RemixProp[];
   mixes: RemixMix[];
+  /** Stage 2/3 pipeline columns — additive JSONB (DB-CHANGELOG 2026-06-12);
+   *  legacy rows omit them, reader coalesces undefined → []. */
+  rmbgs?: RemixStageBatchRow[];
+  upscales?: RemixStageBatchRow[];
   /** Sprite plane — additive JSONB column. Optional on the raw row (legacy rows
    *  omit it); reader coalesces undefined → [] on mapping. */
   sprites?: RemixSpriteEntry[];
@@ -399,7 +436,15 @@ export interface RemixRow {
 // now exclusively the async sprite-swap job below.
 // `remix_sprite_swap` = sprite-level swap (api/jobs/02) — Variants tab batch
 // sprite-swap. Independent of `remix_mix_swap` (disjoint dedup key).
-export type RemixJobPhase = 'audio' | 'remix_mix_swap' | 'remix_sprite_swap';
+// `remix_rmbg` / `remix_upscale` = stage 2/3 pipeline jobs (api/jobs/09 + 10,
+// ⚡2026-06-12). Dedup is PER-TYPE + the 3 stage JSONB columns are disjoint →
+// the 3 stage jobs can run concurrently without blocking each other.
+export type RemixJobPhase =
+  | 'audio'
+  | 'remix_mix_swap'
+  | 'remix_sprite_swap'
+  | 'remix_rmbg'
+  | 'remix_upscale';
 
 export type RemixJobStatus =
   | 'queued'
@@ -450,8 +495,9 @@ export interface RemixJob {
   /** Mirrors `params.character_key` when present. Lets selectors fold the swap
    *  lineage by character (see slice-helpers.ts). Undefined for audio jobs. */
   characterKey?: string;
-  /** Set for `remix_mix_swap` jobs only — mirrors `params.batch_id`. Lets
-   *  selectors match the running swap to its batch. Undefined otherwise. */
+  /** Set for stage jobs (`remix_mix_swap`/`remix_rmbg`/`remix_upscale`) —
+   *  mirrors `params.batch_id`. Lets selectors match the running job to its
+   *  batch per stage. Undefined otherwise. */
   batchId?: string;
   /** Set for `remix_sprite_swap` jobs only — mirrors `params.sprite_id`. Lets
    *  selectors match the running swap to its sprite. Undefined otherwise. */
@@ -493,6 +539,8 @@ export interface BackgroundJobRow {
     | 'remix_image_swap'
     | 'remix_mix_swap'
     | 'remix_sprite_swap'
+    | 'remix_rmbg'
+    | 'remix_upscale'
     | string;
   user_id: string;
   book_id: string | null;
@@ -572,8 +620,9 @@ export type BatchSwapTaskStatus =
   | { state: 'running'; current: number; total: number }
   | { state: 'error'; message: string; failedSheets: number };
 
-/** Batches-tab projection of one `remix.mixes[]` entry + its derived swap task. */
-export interface RemixBatch {
+/** Stage-tab projection of one `remix[stage][]` entry + its derived job task
+ *  (⚡2026-06-12 — renamed from `RemixBatch`, generic across the 3 stages). */
+export interface RemixStageBatch {
   id: string;
   order: number;
   name: string;
@@ -581,13 +630,17 @@ export interface RemixBatch {
   swapTask: BatchSwapTaskStatus;
 }
 
+/** Historical name (stage `'mixes'`) — pure TYPE alias, NOT a store-API alias. */
+export type RemixBatch = RemixStageBatch;
+
 /** Variant-qualified lineup tokens of a batch — `${object_key}/${variant_key}`
  *  per distinct subject tag across all sheets. Replaces the legacy `mixes[].keys[]`
  *  identity (now derived from crop tags, not persisted). */
-export function batchLineupTokens(batch: RemixBatch): string[] {
+export function batchLineupTokens(batch: RemixStageBatch): string[] {
   const tokens = new Set<string>();
   for (const sheet of batch.crop_sheets) {
-    for (const crop of sheet.crops) {
+    // Defensive `?? []` — stale pre-rename rows degrade to empty, not crash.
+    for (const crop of sheet.original_crops ?? []) {
       for (const tag of crop.tags) {
         tokens.add(`${tag.object_key}/${tag.variant_key}`);
       }
@@ -613,23 +666,28 @@ export interface ReferenceImage {
   mimeType: string;
 }
 
-/** Swap model / upscale params collected by the right-sidebar.
- *  v1: collect-only — not yet wired to any API (see plan §unresolved #2). */
+/** Right-sidebar AI model params — per-tab groups (⚡2026-06-12: swap / rmbg /
+ *  upscale + Noise; `scale` dropped — job 10 derives PRINT 300 DPI itself).
+ *  v1: collect-only placeholder — NOT forwarded to any API (jobs 09/10 take no
+ *  `model_params`). */
 export interface SwapModelParams {
   swapModel: string;
+  rmbgModel: string;
   upscaleModel: string;
-  scale: number; // 2..10
+  noise: number; // 0..10 step 0.1 — ephemeral placeholder (semantics OQ)
 }
 
-/** Args for the batch-level mix-swap enqueue (rev2 — api/jobs/05). `params`
- *  (swap model) is v1 collect-only — NOT forwarded to the API yet. */
-export interface StartMixSwapParams {
+/** Args for the stage-job enqueue (⚡2026-06-12 generic — jobs 05/09/10,
+ *  replaces StartMixSwapParams; validation S1 no alias). `params` is v1
+ *  collect-only — NOT forwarded to the API. */
+export interface StartStageJobParams {
   remixId: string;
+  stage: StageKind;
   batchId: string;
-  /** v1 collect-only — not forwarded to the swap API yet. */
+  /** v1 collect-only — not forwarded to the job API yet. */
   params: SwapModelParams;
-  /** When true (default), clear + re-swap every sheet of the batch; false is
-   *  idempotent — backend skips sheets that already carry a swap (api/jobs/05). */
+  /** When true (default), clear + re-run every sheet of the batch; false is
+   *  idempotent — backend skips sheets already carrying a result. */
   forceResweep?: boolean;
 }
 

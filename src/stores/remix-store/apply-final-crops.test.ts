@@ -35,13 +35,12 @@ function finalCrop(
   layerId: string,
   mediaUrl: string,
 ): FinalCropEntry {
+  // LEAN FinalCropEntry (⚡2026-06-12) — Inject only consumes media_url.
   return {
     spread_id: spreadId,
     layer_id: layerId,
     media_url: mediaUrl,
     batch_id: 'b1',
-    geometry: { x: 0, y: 0, w: 1, h: 1 },
-    tags: [],
   };
 }
 

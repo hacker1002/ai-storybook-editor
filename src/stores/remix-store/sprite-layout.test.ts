@@ -90,6 +90,8 @@ function makeRemix(opts: {
     })) as never,
     props: [],
     mixes: [],
+  rmbgs: [],
+  upscales: [],
     sprites: [],
     created_at: '',
     updated_at: '',
@@ -154,7 +156,7 @@ describe('partitionByObjectAffinity', () => {
     const cells = [cell('a', '1'), cell('a', '2'), cell('b', '1')];
     const sheets = await partitionByObjectAffinity(cells, 1);
     expect(sheets).toHaveLength(1);
-    const crops = sheets[0].crops;
+    const crops = sheets[0].original_crops;
     expect(crops).toHaveLength(3);
     // No overlapping geometry.
     for (let i = 0; i < crops.length; i++) {
@@ -176,7 +178,7 @@ describe('partitionByObjectAffinity', () => {
     const sheets = await partitionByObjectAffinity(cells, 2);
     expect(sheets).toHaveLength(2);
     const sheetOf = (obj: string, vk: string) =>
-      sheets.findIndex((s) => s.crops.some((c) => c.object_key === obj && c.variant_key === vk));
+      sheets.findIndex((s) => s.original_crops.some((c) => c.object_key === obj && c.variant_key === vk));
     expect(new Set([sheetOf('a', '1'), sheetOf('a', '2')]).size).toBe(1);
     expect(new Set([sheetOf('b', '1'), sheetOf('b', '2')]).size).toBe(1);
   });
@@ -185,14 +187,14 @@ describe('partitionByObjectAffinity', () => {
   // — square cells would otherwise stack into a tall single column for 2–3 cells.
   it('packs 2 square cells into a 2-col single row (not a vertical stack)', async () => {
     const cells = [cell('a', '1'), cell('a', '2')];
-    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.crops);
+    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.original_crops);
     expect(new Set(crops.map((c) => c.geometry.x)).size).toBe(2); // 2 columns
     expect(new Set(crops.map((c) => c.geometry.y)).size).toBe(1); // 1 row
   });
 
   it('packs 3 square cells into a 2-col [2,1] grid (not a vertical stack)', async () => {
     const cells = [cell('a', '1'), cell('a', '2'), cell('a', '3')];
-    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.crops);
+    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.original_crops);
     expect(new Set(crops.map((c) => c.geometry.x)).size).toBe(2); // 2 columns
     expect(new Set(crops.map((c) => c.geometry.y)).size).toBe(2); // 2 rows [2,1]
   });
@@ -203,8 +205,8 @@ describe('partitionByObjectAffinity', () => {
     ];
     const sheets = await partitionByObjectAffinity(cells, 1);
     expect(sheets).toHaveLength(1);
-    expect(new Set(sheets[0].crops.map((c) => c.geometry.x)).size).toBe(3);
-    expect(new Set(sheets[0].crops.map((c) => c.geometry.y)).size).toBe(2);
+    expect(new Set(sheets[0].original_crops.map((c) => c.geometry.x)).size).toBe(3);
+    expect(new Set(sheets[0].original_crops.map((c) => c.geometry.y)).size).toBe(2);
   });
 
   it('frames a square cell grid to a 1:1 sheet (N=3 [2,1] and N=4 2×2)', async () => {
@@ -220,7 +222,7 @@ describe('partitionByObjectAffinity', () => {
   it('spaces square cells EVENLY — horizontal gap === vertical gap (2·gutter = 64px)', async () => {
     // 4 square cells → 2×2 grid. Equal gutters → identical gaps on both axes.
     const cells = Array.from({ length: 4 }, (_, i) => cell('a', String(i)));
-    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.crops);
+    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.original_crops);
     const w = crops[0].geometry.w;
     const h = crops[0].geometry.h;
     const xs = [...new Set(crops.map((c) => c.geometry.x))].sort((a, b) => a - b);
@@ -249,7 +251,7 @@ const MAX_SHEET_PIXELS = 32_000_000;
 /** geometry of one cell, looked up by cellKey across all sheets. */
 function geometryOf(sheets: RemixSpriteCropSheet[], key: string) {
   for (const s of sheets) {
-    for (const c of s.crops) {
+    for (const c of s.original_crops) {
       if (spriteCellKey(c) === key) return c.geometry;
     }
   }
@@ -294,7 +296,7 @@ describe('partitionByObjectAffinity — natural dims (non-square cells)', () => 
     const cells = [cell('a', '1'), cell('a', '2'), cell('b', '1'), cell('b', '2')];
     for (const c of cells) mockDims.set(c.media_url, { width: 4000, height: 4000 });
     const sheets = await partitionByObjectAffinity(cells, 2);
-    const crops = sheets.flatMap((s) => s.crops);
+    const crops = sheets.flatMap((s) => s.original_crops);
     for (const c of crops) expect(c.geometry.w).toBe(2000);
   });
 
@@ -346,7 +348,7 @@ describe('partitionByObjectAffinity — ordering (ordinal = input order)', () =>
     const cells = [cell('leena', 'base'), cell('didi', 'base'), cell('didi', 'v1')];
     const sheets = await partitionByObjectAffinity(cells, 1);
     expect(sheets).toHaveLength(1);
-    expect(sheets[0].crops.map((c) => spriteCellKey(c))).toEqual([
+    expect(sheets[0].original_crops.map((c) => spriteCellKey(c))).toEqual([
       'character/leena/base',
       'character/didi/base',
       'character/didi/v1',
@@ -364,8 +366,8 @@ describe('partitionByObjectAffinity — ordering (ordinal = input order)', () =>
     const cells = [cell('leena', 'base'), cell('didi', 'base'), cell('didi', 'v1')];
     const sheets = await partitionByObjectAffinity(cells, 2);
     expect(sheets).toHaveLength(2);
-    expect(sheets[0].crops.map((c) => spriteCellKey(c))).toEqual(['character/leena/base']);
-    expect(sheets[1].crops.map((c) => spriteCellKey(c))).toEqual([
+    expect(sheets[0].original_crops.map((c) => spriteCellKey(c))).toEqual(['character/leena/base']);
+    expect(sheets[1].original_crops.map((c) => spriteCellKey(c))).toEqual([
       'character/didi/base',
       'character/didi/v1',
     ]);
@@ -385,8 +387,8 @@ describe('partitionByObjectAffinity — ordering (ordinal = input order)', () =>
       'character/leena/school',
       'character/didi/base',
     ];
-    expect(sheets[0].crops.map((c) => spriteCellKey(c))).toEqual(grouped);
-    const readingOrder = [...sheets[0].crops]
+    expect(sheets[0].original_crops.map((c) => spriteCellKey(c))).toEqual(grouped);
+    const readingOrder = [...sheets[0].original_crops]
       .sort((a, b) => a.geometry.y - b.geometry.y || a.geometry.x - b.geometry.x)
       .map((c) => spriteCellKey(c));
     expect(readingOrder).toEqual(grouped);
@@ -400,7 +402,7 @@ describe('partitionByObjectAffinity — ordering (ordinal = input order)', () =>
       cell('leena', 'school'),
     ];
     const sheets = await partitionByObjectAffinity(cells, 1);
-    expect(sheets[0].crops.map((c) => spriteCellKey(c))).toEqual([
+    expect(sheets[0].original_crops.map((c) => spriteCellKey(c))).toEqual([
       'character/momo/v2',
       'character/momo/v1',
       'character/leena/base',
@@ -414,7 +416,7 @@ describe('partitionByObjectAffinity — ordering (ordinal = input order)', () =>
 describe('partitionByObjectAffinity — persisted SpriteCrop schema', () => {
   it('crops carry ONLY SpriteCrop fields (transient width/height stripped)', async () => {
     const sheets = await partitionByObjectAffinity([cell('a', '1')], 1);
-    const crop = sheets[0].crops[0];
+    const crop = sheets[0].original_crops[0];
     expect(Object.keys(crop).sort()).toEqual([
       'geometry',
       'media_url',
@@ -441,8 +443,8 @@ describe('partitionByObjectAffinity — sheet cap guard', () => {
     expect(height).toBeLessThanOrEqual(MAX_SHEET_DIM);
     expect(width * height).toBeLessThanOrEqual(MAX_SHEET_PIXELS);
     // Clamp genuinely engaged → cells shrank below their natural 1000px.
-    expect(sheet.crops[0].geometry.w).toBeLessThan(1000);
-    for (const c of sheet.crops) {
+    expect(sheet.original_crops[0].geometry.w).toBeLessThan(1000);
+    for (const c of sheet.original_crops) {
       expect(c.geometry.x).toBeGreaterThanOrEqual(0);
       expect(c.geometry.y).toBeGreaterThanOrEqual(0);
       expect(c.geometry.x + c.geometry.w).toBeLessThanOrEqual(width);
@@ -452,7 +454,7 @@ describe('partitionByObjectAffinity — sheet cap guard', () => {
 
   it('within-cap sheets are NOT clamped (cells keep their natural dimension)', async () => {
     const cells = Array.from({ length: 8 }, (_, i) => cell('a', String(i)));
-    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.crops);
+    const crops = (await partitionByObjectAffinity(cells, 1)).flatMap((s) => s.original_crops);
     // 8 cells @1000px well under caps → exact 1000, no down-scale.
     for (const c of crops) expect(c.geometry.w).toBe(1000);
   });
@@ -479,7 +481,7 @@ describe('currentCellsOfSprite + addSpriteSubset', () => {
     const sprite = await spriteFrom([cell('a', '1'), cell('a', '2'), cell('b', '1')]);
     const sel = new Set([spriteCellKey(cell('a', '1')), spriteCellKey(cell('b', '1'))]);
     const sheets = await addSpriteSubset(sprite, sel);
-    const keys = sheets.flatMap((s) => s.crops.map((c) => spriteCellKey(c)));
+    const keys = sheets.flatMap((s) => s.original_crops.map((c) => spriteCellKey(c)));
     expect(new Set(keys)).toEqual(sel);
   });
 
@@ -498,7 +500,7 @@ describe('buildSeedSprite', () => {
     });
     const seed = await buildSeedSprite(remix);
     expect(seed?.name).toBe('Sprite 1');
-    expect(seed?.crop_sheets[0].crops).toHaveLength(1);
+    expect(seed?.crop_sheets[0].original_crops).toHaveLength(1);
 
     const seeded = { ...remix, sprites: [seed!] };
     expect(await buildSeedSprite(seeded)).toBeNull();

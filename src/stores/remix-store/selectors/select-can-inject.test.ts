@@ -20,12 +20,11 @@ function makeCrop(
   layerId: string,
   isFinal?: boolean,
 ): SwapResultCrop {
+  // LEAN swap crop (⚡2026-06-12) — no geometry/tags.
   const base: SwapResultCrop = {
     spread_id: spreadId,
     id: layerId,
-    geometry: { x: 0, y: 0, w: 10, h: 10 },
     media_url: `u://${spreadId}/${layerId}`,
-    tags: [],
   };
   if (isFinal !== undefined) base.is_final = isFinal;
   return base;
@@ -46,7 +45,7 @@ function makeSheet(swapResults: SwapResult[] = []): RemixCropSheet {
     sheet_geometry: { width: 100, height: 100 },
     image_url: '',
     swap_results: swapResults,
-    crops: [],
+    original_crops: [],
   };
 }
 
@@ -54,9 +53,10 @@ function makeBatch(id: string, order: number, sheets: RemixCropSheet[]): RemixMi
   return { id, order, name: `Batch ${order}`, crop_sheets: sheets };
 }
 
-// Only `mixes` is read by the gate; cast the minimal shape.
-function makeRemix(mixes: RemixMix[]): Remix {
-  return { mixes } as Remix;
+// Only `upscales` is read by the gate (⚡2026-06-12 Inject strict source);
+// cast the minimal shape.
+function makeRemix(rows: RemixMix[]): Remix {
+  return { upscales: rows } as Remix;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

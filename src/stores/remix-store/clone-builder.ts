@@ -178,6 +178,10 @@ export function buildRemixClonePayload(
     characters,
     props,
     mixes,
+    // Stage 2/3 pipeline columns (⚡2026-06-12) — NEVER auto-seeded; batches
+    // arrive via Import (finals of the previous stage) in the modal.
+    rmbgs: [],
+    upscales: [],
     // Sprite plane (Variants tab) — seeded lazily on modal open (Phase 03
     // ensureRemixSpriteSeed); create-time payload starts empty.
     sprites: [],

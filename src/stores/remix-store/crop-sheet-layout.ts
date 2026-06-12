@@ -1,54 +1,62 @@
 // crop-sheet-layout.ts — Client-side crop-sheet layout helpers for the remix
-// store (rev2 — batch model). Two entry points:
-//   - `computeCropSheets`   — runs at create time, mutates an insert payload IN
-//     PLACE so `mixes[0].crop_sheets[]` (with geometry) lands in the same
-//     INSERT. ONE batch, K=1 sheet, entity-affinity partition.
-//   - `relayoutBatchSheets` — runs on append/remove sheet of a batch; re-groups
-//     ALL crops from the (frozen) illustration via `groupCropsForBatch`, re-packs
-//     at K±1 sheets, then persists via `patchRemixCropSheets({ kind:'replaceAll',
-//     entityType:'mix', entityKey: batchId })` with optimistic rollback.
+// store (⚡2026-06-12 — STAGE-GENERIC over the 3 pipeline columns
+// `mixes`/`rmbgs`/`upscales`). Entry points:
+//   - `computeCropSheets`        — create-time seed (stage 'mixes' ONLY): mutates
+//     the insert payload IN PLACE so `mixes[0].crop_sheets[]` lands in the INSERT.
+//   - `relayoutStageBatchSheets` — K±1 stepper relayout, scoped to ONE batch of
+//     ONE stage column.
+//   - `addStageBatch`            — rev6 tick-subset add (all 3 stages).
+//   - `removeStageBatch`         — BATCH_MIN guard only on 'mixes'.
+//   - `importStageBatch`         — Import finals of the previous stage into a
+//     new batch (rmbgs/upscales only — copy-on-build snapshot, 05-14).
 //
-// Divergence note (Validation S1): post-create `crops[].geometry` is px
-// sheet-relative (engine output) — it no longer carries source (%) geometry the
-// engine needs. The illustration is frozen after create, so re-scan via
-// `groupCropsForBatch` is the single source of truth. Same path as
-// `computeCropSheets` → DRY.
+// Source-dim resolution differs per stage (the ONLY divergence):
+//   - 'mixes'           : % of spread, re-scanned from the frozen illustration
+//                         via `groupCropsForBatch` (single source of truth).
+//   - 'rmbgs'/'upscales': NATIVE piece px (original_crops[].geometry.{w,h} —
+//                         the import-time estimate), packed with `absolutePx`.
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import type {
+  CropEntry,
   InsertableRemixRow,
   Remix,
   RemixCropSheet,
+  RemixMix,
+  StageKind,
 } from '@/types/remix';
+import { PREV_STAGE } from '@/types/remix';
 import {
   DIMENSION_CANVAS_SIZE,
   DEFAULT_CANVAS_SIZE,
 } from '@/constants/canvas-dimension-constants';
-import { computeCropSheetLayout } from '@/utils/crop-sheet-layout-engine';
-import type { CropSheetLayoutResult } from '@/utils/crop-sheet-layout-engine';
+import {
+  computeCropSheetLayout,
+  sheetExceedsPixelCap,
+} from '@/utils/crop-sheet-layout-engine';
+import type {
+  CropInput,
+  CropSheetLayoutResult,
+} from '@/utils/crop-sheet-layout-engine';
 import { groupCropsForBatch } from '@/utils/crop-grouping';
-import type { CropEntry, RemixMix } from '@/types/remix';
 import { makeBatchSkeleton } from './clone-builder';
+import { collectStageFinals, buildStageBatchInput } from './stage-finals';
 import type { CropSheetUpdate } from './types';
 
 /**
  * Returns the de-duplicated crops currently living in a batch (per-batch
- * scope — rev6). Reads ONLY the pre-swap `sheet.crops[]` lineup (never
- * `swap_results[].crops[]`, which is post-swap output). Dedup key
- * `(spread_id, id)` — a layer that ended up on multiple sheets of the same
- * batch collapses to one entry (first occurrence wins).
- *
- * Used by:
- *   - `addBatch` rev6 subset filter (selected crops ∈ active batch lineup).
- *   - `relayoutBatchSheets` per-batch scope (do NOT re-pull the full remix —
- *     subset batches carry a subset of the illustration's crops).
+ * scope — rev6). Reads ONLY the pre-swap `sheet.original_crops[]` lineup
+ * (never `swap_results[].crops[]`, which is post-job output). Dedup key
+ * `(spread_id, id)` — first occurrence wins.
  */
 export function currentCropsOfBatch(batch: RemixMix): CropEntry[] {
   const seen = new Set<string>();
   const out: CropEntry[] = [];
   for (const sheet of batch.crop_sheets) {
-    for (const crop of sheet.crops) {
+    // Defensive `?? []` — a stale pre-rename row (legacy `crops` key) must
+    // degrade to empty, not crash (hard cutover sanctioned, crash is not).
+    for (const crop of sheet.original_crops ?? []) {
       const dedupKey = `${crop.spread_id}/${crop.id}`;
       if (seen.has(dedupKey)) continue;
       seen.add(dedupKey);
@@ -58,14 +66,13 @@ export function currentCropsOfBatch(batch: RemixMix): CropEntry[] {
   return out;
 }
 
-/** Minimum number of batches a remix must keep. The last batch cannot be
- *  removed (caller also hides the affordance). */
+/** Minimum number of batches — applies to stage 'mixes' ONLY (auto-seeded);
+ *  rmbgs/upscales may go down to 0 batches (empty-state CTA Import). */
 export const BATCH_MIN = 1;
 
 const log = createLogger('Store', 'CropSheetLayout');
 
-/** Minimum / maximum crop sheets a batch can hold. Relayout clamps to this
- *  range so a batch always has ≥1 sheet and never exceeds the engine budget. */
+/** Minimum / maximum crop sheets a batch can hold (relayout clamp). */
 export const SHEET_MIN = 1;
 export const SHEET_MAX = 10;
 
@@ -84,14 +91,29 @@ function sheetTitle(index: number): string {
   return `sheet ${index + 1}`;
 }
 
+/** 32MP soft-cap check (warn-only v1 — chốt 2026-06-12): native-dim sheets of
+ *  stage 2/3 can exceed the cap; we log + still build (no auto-split). */
+function warnOversizeSheets(
+  layout: CropSheetLayoutResult,
+  ctx: { stage: StageKind; action: string },
+): void {
+  for (const sheet of layout.sheets) {
+    if (sheetExceedsPixelCap(sheet)) {
+      log.warn(ctx.action, 'sheet exceeds 32MP soft cap — warn-only v1', {
+        stage: ctx.stage,
+        sheetIndex: sheet.index,
+        width: sheet.sheetGeometry.width,
+        height: sheet.sheetGeometry.height,
+      });
+    }
+  }
+}
+
 /**
- * Materializes engine output into `RemixCropSheet[]` (rev2 — batch model).
- *
- * Each placement's `geometry` (px, sheet-relative — engine output) overwrites
- * the placeholder geometry on the matching `CropEntry` metadata (which carries
- * `tags[]`). `image_url` is always '' (build API removed — client composes from
- * crops) and `swap_results` is always [] (geometry changed → any prior swap is
- * stale). No per-variant `variant_key` (dropped in rev2).
+ * Materializes engine output into `RemixCropSheet[]`. Each placement's
+ * `geometry` (px, sheet-relative) overwrites the placeholder geometry on the
+ * matching LEAN `CropEntry` metadata. `image_url` is always '' (client
+ * composes) and `swap_results` is always [] (geometry changed → stale).
  */
 export function buildSheetsFromLayout(
   layout: CropSheetLayoutResult,
@@ -102,7 +124,7 @@ export function buildSheetsFromLayout(
     sheet_geometry: sheet.sheetGeometry,
     image_url: '',
     swap_results: [],
-    crops: sheet.placements
+    original_crops: sheet.placements
       .map((p) => {
         const meta = cropMetaById[p.id];
         if (!meta) return null;
@@ -112,14 +134,36 @@ export function buildSheetsFromLayout(
   }));
 }
 
+/** Engine inputs for a stage-2/3 batch from its OWN lean crops: native piece
+ *  px (geometry.{w,h}) + affinity key. Pack with `absolutePx: true`. */
+function stageNativeInputs(crops: CropEntry[]): {
+  cropInputs: CropInput[];
+  cropMetaById: Record<string, CropEntry>;
+} {
+  const cropInputs: CropInput[] = [];
+  const cropMetaById: Record<string, CropEntry> = {};
+  for (const c of crops) {
+    if (c.geometry.w <= 0 || c.geometry.h <= 0) {
+      log.warn('stageNativeInputs', 'crop has degenerate dims — skip', {
+        id: c.id,
+      });
+      continue;
+    }
+    cropInputs.push({
+      id: c.id,
+      widthPct: c.geometry.w, // absolute px under absolutePx:true
+      heightPct: c.geometry.h,
+      objectKey: c.tags[0]?.object_key,
+    });
+    cropMetaById[c.id] = c;
+  }
+  return { cropInputs, cropMetaById };
+}
+
 /**
- * Computes crop sheets for the single batch of an insert payload and writes
- * them back IN PLACE — called inside `createRemix` BEFORE the Supabase INSERT
- * so `mixes[0].crop_sheets[]` is persisted in one round-trip.
- *
- * Reads the WHOLE payload (`groupCropsForBatch` needs `illustration` +
- * `characters`/`props` for the enabled set + order), packs at K=1 with
- * entity-affinity partition. Entity `crop_sheets` stay empty (rev2).
+ * Computes crop sheets for the single seed batch of an insert payload and
+ * writes them back IN PLACE — called inside `createRemix` BEFORE the Supabase
+ * INSERT. Stage 'mixes' ONLY (rmbgs/upscales start empty — Import-driven).
  */
 export function computeCropSheets(
   payload: InsertableRemixRow,
@@ -159,7 +203,7 @@ export function computeCropSheets(
   });
 }
 
-// ── relayout (batch-scoped append / remove sheet) ────────────────────────────
+// ── Stage-generic deps + persistence ─────────────────────────────────────────
 
 /** Narrow store-accessor pair so this module stays decoupled from the full
  *  zustand store type (avoids a circular import with index.ts). */
@@ -173,40 +217,77 @@ export interface RelayoutDeps {
   patchRemixCropSheets: (remixId: string, updates: CropSheetUpdate[]) => void;
 }
 
-/**
- * Re-layouts ALL crop sheets of ONE batch at `currentSheetCount + delta`,
- * clamped to `[SHEET_MIN, SHEET_MAX]`. Re-groups every enabled-subject crop
- * from the frozen illustration (`groupCropsForBatch`) and re-packs.
- *
- * Returns `false` on any guard hit (missing remix/batch, no-op count change,
- * empty crop inputs, persist error rolled back); `true` after the relayout
- * persists.
- *
- * SWAP-RESULTS CONTRACT (callers MUST gate): a successful re-layout REBUILDS the
- * batch's sheets via `buildSheetsFromLayout`, which hardcodes `swap_results: []`
- * on every sheet — i.e. it DESTROYS swap_results of the batch. The store does
- * NOT warn. Any caller of `appendBatchSheet`/`removeBatchSheet` MUST gate on
- * existing `swap_results` before invoking (P08 confirm dialog).
- */
-export async function relayoutBatchSheets(
+/** Persist ONE stage column with the freshest in-store value, rolling back to
+ *  `prevRemix` on error. Full-column write (parity with the legacy persistMixes
+ *  — single-writer v1 assumption). Returns `true` on success. */
+async function persistStageColumn(
   deps: RelayoutDeps,
   remixId: string,
+  stage: StageKind,
+  prevRemix: Remix,
+  action: string,
+): Promise<boolean> {
+  const { set, get } = deps;
+  const remixAfter = get().remixes.find((r) => r.id === remixId);
+  if (!remixAfter) {
+    log.warn(action, 'remix gone before persist — skip', { remixId, stage });
+    return false;
+  }
+  const { error } = await supabase
+    .from('remixes')
+    .update({ [stage]: remixAfter[stage] })
+    .eq('id', remixId);
+  if (error) {
+    log.error(action, 'persist failed — rollback', {
+      remixId,
+      stage,
+      error: error.message,
+    });
+    // ROLLBACK LIMITATION (v1 single-writer assumption): restore the whole
+    // remix snapshot. Concurrent realtime writes during the persist window are
+    // clobbered — acceptable in v1 (modal is sole writer).
+    set((s) => ({
+      remixes: s.remixes.map((r) => (r.id === remixId ? prevRemix : r)),
+    }));
+    return false;
+  }
+  return true;
+}
+
+// ── relayout (stage-scoped append / remove sheet) ────────────────────────────
+
+/**
+ * Re-layouts ALL crop sheets of ONE batch of ONE stage at
+ * `currentSheetCount + delta`, clamped to `[SHEET_MIN, SHEET_MAX]`.
+ *
+ * Stage 'mixes' re-groups from the frozen illustration (source-% geometry);
+ * rmbgs/upscales re-pack the batch's OWN crops at native px (`absolutePx`).
+ *
+ * SWAP-RESULTS CONTRACT (callers MUST gate): a successful re-layout REBUILDS
+ * the batch's sheets via `buildSheetsFromLayout` (hardcodes `swap_results: []`)
+ * — it DESTROYS the batch's results. Callers gate with the confirm dialog.
+ */
+export async function relayoutStageBatchSheets(
+  deps: RelayoutDeps,
+  remixId: string,
+  stage: StageKind,
   batchId: string,
   delta: number,
 ): Promise<boolean> {
-  const { set, get, dimension, patchRemixCropSheets } = deps;
-  log.info('relayoutBatchSheets', 'start', { remixId, batchId, delta });
+  const { get, dimension, patchRemixCropSheets } = deps;
+  log.info('relayoutStageBatchSheets', 'start', { remixId, stage, batchId, delta });
 
   const prevRemix = get().remixes.find((r) => r.id === remixId);
   if (!prevRemix) {
-    log.warn('relayoutBatchSheets', 'remix not found — abort', { remixId });
+    log.warn('relayoutStageBatchSheets', 'remix not found — abort', { remixId });
     return false;
   }
 
-  const batch = prevRemix.mixes.find((m) => m.id === batchId);
+  const batch = (prevRemix[stage] ?? []).find((m) => m.id === batchId);
   if (!batch) {
-    log.warn('relayoutBatchSheets', 'batch not found — abort', {
+    log.warn('relayoutStageBatchSheets', 'batch not found — abort', {
       remixId,
+      stage,
       batchId,
     });
     return false;
@@ -215,38 +296,46 @@ export async function relayoutBatchSheets(
   const currentCount = batch.crop_sheets.length;
   const nextCount = Math.min(SHEET_MAX, Math.max(SHEET_MIN, currentCount + delta));
   if (nextCount === currentCount) {
-    log.debug('relayoutBatchSheets', 'no count change — skip', {
+    log.debug('relayoutStageBatchSheets', 'no count change — skip', {
       remixId,
+      stage,
       batchId,
       currentCount,
     });
     return false;
   }
 
-  // Re-group from the frozen illustration — single source of truth for the
-  // source (%) geometry the engine needs (post-create crop geometry is px).
-  // ⚡rev6: scope per-batch — subset batches carry a strict subset of the
-  // illustration's crops, so we filter the full grouping down to the batch's
-  // (spread_id, id) lineup (`currentCropsOfBatch`). For a full-set batch (e.g.
-  // seeded batch[0]) this collapses to the same result as groupCropsForBatch.
-  const grouped = groupCropsForBatch(prevRemix);
-  const batchCropKeys = new Set(
-    currentCropsOfBatch(batch).map((c) => `${c.spread_id}/${c.id}`),
-  );
-  const cropInputs = grouped.cropInputs.filter((ci) => {
-    const meta = grouped.cropMetaById[ci.id];
-    if (!meta) return false;
-    return batchCropKeys.has(`${meta.spread_id}/${meta.id}`);
-  });
-  const cropMetaById: Record<string, CropEntry> = {};
-  for (const ci of cropInputs) {
-    cropMetaById[ci.id] = grouped.cropMetaById[ci.id];
+  // Resolve engine inputs per stage (see module header).
+  let cropInputs: CropInput[];
+  let cropMetaById: Record<string, CropEntry>;
+  let absolutePx = false;
+  if (stage === 'mixes') {
+    // Re-group from the frozen illustration, filtered to the batch's lineup
+    // (subset batches carry a strict subset of the illustration's crops).
+    const grouped = groupCropsForBatch(prevRemix);
+    const batchCropKeys = new Set(
+      currentCropsOfBatch(batch).map((c) => `${c.spread_id}/${c.id}`),
+    );
+    cropInputs = grouped.cropInputs.filter((ci) => {
+      const meta = grouped.cropMetaById[ci.id];
+      if (!meta) return false;
+      return batchCropKeys.has(`${meta.spread_id}/${meta.id}`);
+    });
+    cropMetaById = {};
+    for (const ci of cropInputs) {
+      cropMetaById[ci.id] = grouped.cropMetaById[ci.id];
+    }
+  } else {
+    // Stage 2/3 — the batch's own snapshot crops at native px.
+    ({ cropInputs, cropMetaById } = stageNativeInputs(currentCropsOfBatch(batch)));
+    absolutePx = true;
   }
+
   if (cropInputs.length === 0) {
-    log.warn('relayoutBatchSheets', 'no crops to layout — abort', {
+    log.warn('relayoutStageBatchSheets', 'no crops to layout — abort', {
       remixId,
+      stage,
       batchId,
-      batchSize: batchCropKeys.size,
     });
     return false;
   }
@@ -255,242 +344,196 @@ export async function relayoutBatchSheets(
   const layout = computeCropSheetLayout(cropInputs, {
     sheetCount: nextCount,
     spread,
+    ...(absolutePx ? { absolutePx } : {}),
   });
+  warnOversizeSheets(layout, { stage, action: 'relayoutStageBatchSheets' });
   const newSheets = buildSheetsFromLayout(layout, cropMetaById);
 
-  log.debug('relayoutBatchSheets', 'optimistic replaceAll', {
+  log.debug('relayoutStageBatchSheets', 'optimistic replaceAll', {
     remixId,
+    stage,
     batchId,
     currentCount,
     nextCount,
     cropCount: cropInputs.length,
   });
 
-  // Optimistic in-store update via CRUD slice's `patchRemixCropSheets`.
   patchRemixCropSheets(remixId, [
-    {
-      kind: 'replaceAll',
-      entityType: 'mix',
-      entityKey: batchId,
-      sheets: newSheets,
-    },
+    { kind: 'replaceAll', stage, entityKey: batchId, sheets: newSheets },
   ]);
 
-  // Persist the `mixes` column with the freshest in-store value.
-  const remixAfter = get().remixes.find((r) => r.id === remixId);
-  if (!remixAfter) {
-    log.warn('relayoutBatchSheets', 'remix gone before persist — skip', {
-      remixId,
-    });
-    return false;
+  const ok = await persistStageColumn(
+    deps,
+    remixId,
+    stage,
+    prevRemix,
+    'relayoutStageBatchSheets',
+  );
+  if (ok) {
+    log.info('relayoutStageBatchSheets', 'done', { remixId, stage, batchId, nextCount });
   }
-
-  const { error } = await supabase
-    .from('remixes')
-    .update({ mixes: remixAfter.mixes })
-    .eq('id', remixId);
-
-  if (error) {
-    log.error('relayoutBatchSheets', 'persist failed — rollback', {
-      remixId,
-      batchId,
-      error: error.message,
-    });
-    // ROLLBACK LIMITATION (v1 single-writer assumption): restore the whole
-    // remix snapshot pre-relayout. Concurrent realtime writes during the
-    // persist window are clobbered — acceptable in v1 (modal is sole writer).
-    set((s) => ({
-      remixes: s.remixes.map((r) => (r.id === remixId ? prevRemix : r)),
-    }));
-    return false;
-  }
-
-  log.info('relayoutBatchSheets', 'done', { remixId, batchId, nextCount });
-  return true;
+  return ok;
 }
 
-// ── add / remove batch (whole-batch lifecycle) ───────────────────────────────
-
-/** Persist the `mixes` column with the freshest in-store value, rolling back to
- *  `prevRemix` on error. Shared by add/remove batch. Returns `true` on success. */
-async function persistMixes(
-  deps: RelayoutDeps,
-  remixId: string,
-  prevRemix: Remix,
-  action: string,
-): Promise<boolean> {
-  const { set, get } = deps;
-  const remixAfter = get().remixes.find((r) => r.id === remixId);
-  if (!remixAfter) {
-    log.warn(action, 'remix gone before persist — skip', { remixId });
-    return false;
-  }
-  const { error } = await supabase
-    .from('remixes')
-    .update({ mixes: remixAfter.mixes })
-    .eq('id', remixId);
-  if (error) {
-    log.error(action, 'persist failed — rollback', { remixId, error: error.message });
-    set((s) => ({
-      remixes: s.remixes.map((r) => (r.id === remixId ? prevRemix : r)),
-    }));
-    return false;
-  }
-  return true;
-}
+// ── add / remove / import batch (whole-batch lifecycle) ──────────────────────
 
 /**
- * Appends a NEW batch to a remix as a SUBSET clone of the active batch
- * (rev6 — modal-driven "Add as Batch" with per-crop selection).
+ * Appends a NEW batch to a stage column as a SUBSET clone of the active batch
+ * (rev6 tick-flow — ALL 3 stages). `selectedCropKeys` = `${spread_id}/${id}`
+ * keys ticked off the active batch's PRE-JOB `original_crops[]` (input
+ * media_url of THAT stage — never the stage's own output). Packed at K=1.
  *
- * `selectedCropKeys` is the set of `${spread_id}/${id}` keys the user picked
- * from the ACTIVE batch's pre-swap crops (`sheet.crops[]`, NOT
- * `swap_results[].crops[]`). The new batch is packed at K=1 from that
- * subset, then ordered as `max(order)+1`. Optimistic push + `mixes` persist
- * with full-remix rollback.
- *
- * Throws (caller catches + toasts) when:
- *   - `selectedCropKeys.size === 0` — empty selection is a UI bug.
- *   - The selection has zero matches against the active batch's lineup —
- *     stale keys (e.g. modal stayed open across a swap that rebuilt crops).
- *
- * Returns the new batch's id on persist success, `null` on guard miss / persist
- * error (callers can auto-select the new batch on success).
+ * Throws on empty selection / zero match (stale). Returns the new batch id on
+ * persist success, `null` on guard miss / persist error.
  */
-export async function addBatch(
+export async function addStageBatch(
   deps: RelayoutDeps,
   remixId: string,
+  stage: StageKind,
   activeBatchId: string,
   selectedCropKeys: ReadonlySet<string>,
 ): Promise<string | null> {
   const { set, get, dimension } = deps;
-  log.info('addBatch', 'start', {
+  log.info('addStageBatch', 'start', {
     remixId,
+    stage,
     activeBatchId,
     selectionSize: selectedCropKeys.size,
   });
 
   if (selectedCropKeys.size === 0) {
-    log.warn('addBatch', 'empty selection — throw', { remixId, activeBatchId });
-    throw new Error('addBatch requires a non-empty crop selection');
+    log.warn('addStageBatch', 'empty selection — throw', { remixId, stage });
+    throw new Error('addStageBatch requires a non-empty crop selection');
   }
 
   const prevRemix = get().remixes.find((r) => r.id === remixId);
   if (!prevRemix) {
-    log.warn('addBatch', 'remix not found — abort', { remixId });
+    log.warn('addStageBatch', 'remix not found — abort', { remixId });
     return null;
   }
 
-  const activeBatch =
-    prevRemix.mixes.find((m) => m.id === activeBatchId) ?? prevRemix.mixes[0];
+  const rows = prevRemix[stage] ?? [];
+  const activeBatch = rows.find((m) => m.id === activeBatchId) ?? rows[0];
   if (!activeBatch) {
-    log.warn('addBatch', 'no active batch — abort', { remixId, activeBatchId });
+    log.warn('addStageBatch', 'no active batch — abort', {
+      remixId,
+      stage,
+      activeBatchId,
+    });
     return null;
   }
 
-  // Pre-swap lineup of the active batch (sheet.crops[], NOT swap_results).
-  const activeCrops = currentCropsOfBatch(activeBatch);
-  const subsetKeys = new Set<string>();
-  for (const crop of activeCrops) {
-    const key = `${crop.spread_id}/${crop.id}`;
-    if (selectedCropKeys.has(key)) subsetKeys.add(key);
-  }
-
-  if (subsetKeys.size === 0) {
-    log.warn('addBatch', 'selection has zero matches in active batch — throw', {
+  // Pre-job lineup of the active batch, filtered to the ticked keys.
+  const subset = currentCropsOfBatch(activeBatch).filter((c) =>
+    selectedCropKeys.has(`${c.spread_id}/${c.id}`),
+  );
+  if (subset.length === 0) {
+    log.warn('addStageBatch', 'selection has zero matches — throw', {
       remixId,
+      stage,
       activeBatchId,
       selectionSize: selectedCropKeys.size,
-      activeBatchSize: activeCrops.length,
     });
     throw new Error(
-      'addBatch: selection does not match any crop of the active batch (stale)',
+      'No selected crops match the active batch — selection stale',
     );
   }
 
-  // Re-derive engine inputs (source-% geometry) from the frozen illustration
-  // and filter to the subset. CropEntry.geometry is px sheet-relative (engine
-  // output) — we cannot feed it back into the engine, so we use the full
-  // grouping as the canonical source-% lookup keyed by `(spread_id, id)`.
-  const grouped = groupCropsForBatch(prevRemix);
-  const cropInputs = grouped.cropInputs.filter((ci) => {
-    const meta = grouped.cropMetaById[ci.id];
-    if (!meta) return false;
-    return subsetKeys.has(`${meta.spread_id}/${meta.id}`);
-  });
-  const cropMetaById: Record<string, CropEntry> = {};
-  for (const ci of cropInputs) {
-    cropMetaById[ci.id] = grouped.cropMetaById[ci.id];
+  let cropInputs: CropInput[];
+  let cropMetaById: Record<string, CropEntry>;
+  let absolutePx = false;
+  if (stage === 'mixes') {
+    // Re-derive source-% inputs from the frozen illustration (CropEntry
+    // geometry is engine OUTPUT px — cannot feed it back).
+    const subsetKeys = new Set(subset.map((c) => `${c.spread_id}/${c.id}`));
+    const grouped = groupCropsForBatch(prevRemix);
+    cropInputs = grouped.cropInputs.filter((ci) => {
+      const meta = grouped.cropMetaById[ci.id];
+      if (!meta) return false;
+      return subsetKeys.has(`${meta.spread_id}/${meta.id}`);
+    });
+    cropMetaById = {};
+    for (const ci of cropInputs) {
+      cropMetaById[ci.id] = grouped.cropMetaById[ci.id];
+    }
+  } else {
+    ({ cropInputs, cropMetaById } = stageNativeInputs(subset));
+    absolutePx = true;
   }
 
   if (cropInputs.length === 0) {
-    log.warn('addBatch', 'subset resolved to no engine inputs — abort', {
+    log.warn('addStageBatch', 'subset resolved to no engine inputs — abort', {
       remixId,
-      activeBatchId,
-      subsetSize: subsetKeys.size,
+      stage,
+      subsetSize: subset.length,
     });
     return null;
   }
 
   const spread = resolveSpread(dimension);
-  const layout = computeCropSheetLayout(cropInputs, { sheetCount: 1, spread });
+  const layout = computeCropSheetLayout(cropInputs, {
+    sheetCount: 1,
+    spread,
+    ...(absolutePx ? { absolutePx } : {}),
+  });
+  warnOversizeSheets(layout, { stage, action: 'addStageBatch' });
 
-  const order =
-    prevRemix.mixes.reduce((max, m) => Math.max(max, m.order), -1) + 1;
+  const order = rows.reduce((max, m) => Math.max(max, m.order), -1) + 1;
   const newBatch: RemixMix = {
-    ...makeBatchSkeleton(order, `Batch ${prevRemix.mixes.length + 1}`),
+    ...makeBatchSkeleton(order, `Batch ${rows.length + 1}`),
     crop_sheets: buildSheetsFromLayout(layout, cropMetaById),
   };
 
   set((s) => ({
     remixes: s.remixes.map((r) =>
-      r.id === remixId ? { ...r, mixes: [...r.mixes, newBatch] } : r,
+      r.id === remixId ? { ...r, [stage]: [...(r[stage] ?? []), newBatch] } : r,
     ),
   }));
 
-  log.debug('addBatch', 'optimistic push', {
+  log.debug('addStageBatch', 'optimistic push', {
     remixId,
-    activeBatchId,
+    stage,
     batchId: newBatch.id,
     order,
     sheetCount: newBatch.crop_sheets.length,
-    subsetSize: subsetKeys.size,
     cropCount: cropInputs.length,
   });
 
-  const ok = await persistMixes(deps, remixId, prevRemix, 'addBatch');
+  const ok = await persistStageColumn(deps, remixId, stage, prevRemix, 'addStageBatch');
   if (!ok) return null;
-  log.info('addBatch', 'done', { remixId, batchId: newBatch.id });
+  log.info('addStageBatch', 'done', { remixId, stage, batchId: newBatch.id });
   return newBatch.id;
 }
 
 /**
- * Removes a batch by id. Guarded so the last batch can never be removed
- * (`mixes.length > BATCH_MIN`). Optimistic filter + `mixes` persist with
- * full-remix rollback. Returns `true` on success.
+ * Removes a batch from a stage column. `BATCH_MIN` guard applies to stage
+ * 'mixes' ONLY — rmbgs/upscales may drop to 0 batches (empty-state CTA).
+ * Optimistic filter + full-column persist with rollback.
  */
-export async function removeBatch(
+export async function removeStageBatch(
   deps: RelayoutDeps,
   remixId: string,
+  stage: StageKind,
   batchId: string,
 ): Promise<boolean> {
   const { set, get } = deps;
-  log.info('removeBatch', 'start', { remixId, batchId });
+  log.info('removeStageBatch', 'start', { remixId, stage, batchId });
 
   const prevRemix = get().remixes.find((r) => r.id === remixId);
   if (!prevRemix) {
-    log.warn('removeBatch', 'remix not found — abort', { remixId });
+    log.warn('removeStageBatch', 'remix not found — abort', { remixId });
     return false;
   }
-  if (!prevRemix.mixes.some((m) => m.id === batchId)) {
-    log.warn('removeBatch', 'batch not found — abort', { remixId, batchId });
+  const rows = prevRemix[stage] ?? [];
+  if (!rows.some((m) => m.id === batchId)) {
+    log.warn('removeStageBatch', 'batch not found — abort', { remixId, stage, batchId });
     return false;
   }
-  if (prevRemix.mixes.length <= BATCH_MIN) {
-    log.warn('removeBatch', 'cannot remove last batch — abort', {
+  if (stage === 'mixes' && rows.length <= BATCH_MIN) {
+    log.warn('removeStageBatch', 'cannot remove last mixes batch — abort', {
       remixId,
       batchId,
-      count: prevRemix.mixes.length,
+      count: rows.length,
     });
     return false;
   }
@@ -498,11 +541,104 @@ export async function removeBatch(
   set((s) => ({
     remixes: s.remixes.map((r) =>
       r.id === remixId
-        ? { ...r, mixes: r.mixes.filter((m) => m.id !== batchId) }
+        ? { ...r, [stage]: (r[stage] ?? []).filter((m) => m.id !== batchId) }
         : r,
     ),
   }));
 
-  log.debug('removeBatch', 'optimistic remove', { remixId, batchId });
-  return persistMixes(deps, remixId, prevRemix, 'removeBatch');
+  log.debug('removeStageBatch', 'optimistic remove', { remixId, stage, batchId });
+  return persistStageColumn(deps, remixId, stage, prevRemix, 'removeStageBatch');
+}
+
+/**
+ * Imports the PREVIOUS stage's finals into a NEW batch of `stage` (rmbgs /
+ * upscales only — 05-14). Copy-on-build snapshot: later finals changes never
+ * reconcile into the built batch. Packed at K=1 with native-px dims.
+ *
+ * Throws on empty selection / zero match against the fresh finals (stale).
+ * Returns the new batch id, `null` on guard miss / persist error.
+ */
+export async function importStageBatch(
+  deps: RelayoutDeps,
+  remixId: string,
+  stage: 'rmbgs' | 'upscales',
+  selectedFinalKeys: ReadonlySet<string>,
+): Promise<string | null> {
+  const { set, get, dimension } = deps;
+  log.info('importStageBatch', 'start', {
+    remixId,
+    stage,
+    selectionSize: selectedFinalKeys.size,
+  });
+
+  if (selectedFinalKeys.size === 0) {
+    log.warn('importStageBatch', 'empty selection — throw', { remixId, stage });
+    throw new Error('importStageBatch requires a non-empty finals selection');
+  }
+
+  const prevRemix = get().remixes.find((r) => r.id === remixId);
+  if (!prevRemix) {
+    log.warn('importStageBatch', 'remix not found — abort', { remixId });
+    return null;
+  }
+
+  // Fresh finals of the previous stage — stale ticked keys are pruned here.
+  const finals = collectStageFinals(prevRemix, PREV_STAGE[stage]);
+  const { cropInputs, selected } = buildStageBatchInput(finals, selectedFinalKeys);
+  if (selected.length === 0) {
+    log.warn('importStageBatch', 'no finals match selection — throw', {
+      remixId,
+      stage,
+      selectionSize: selectedFinalKeys.size,
+      finalsCount: finals.length,
+    });
+    throw new Error('Selection is stale — finals changed');
+  }
+
+  const spread = resolveSpread(dimension);
+  const layout = computeCropSheetLayout(cropInputs, {
+    sheetCount: 1,
+    spread,
+    absolutePx: true,
+  });
+  warnOversizeSheets(layout, { stage, action: 'importStageBatch' });
+
+  // Lean CropEntry meta from the finals — media_url = previous stage's OUTPUT
+  // piece; geometry placeholder is overwritten by the placement.
+  const cropMetaById: Record<string, CropEntry> = {};
+  for (const f of selected) {
+    cropMetaById[f.id] = {
+      spread_id: f.spread_id,
+      id: f.id,
+      media_url: f.media_url,
+      tags: f.tags,
+      geometry: { x: 0, y: 0, w: 0, h: 0 },
+    };
+  }
+
+  const rows = prevRemix[stage] ?? [];
+  const order = rows.reduce((max, m) => Math.max(max, m.order), -1) + 1;
+  const newBatch: RemixMix = {
+    ...makeBatchSkeleton(order, `Batch ${rows.length + 1}`),
+    crop_sheets: buildSheetsFromLayout(layout, cropMetaById),
+  };
+
+  set((s) => ({
+    remixes: s.remixes.map((r) =>
+      r.id === remixId ? { ...r, [stage]: [...(r[stage] ?? []), newBatch] } : r,
+    ),
+  }));
+
+  log.debug('importStageBatch', 'optimistic push', {
+    remixId,
+    stage,
+    batchId: newBatch.id,
+    order,
+    importedCount: selected.length,
+  });
+
+  const ok = await persistStageColumn(deps, remixId, stage, prevRemix, 'importStageBatch');
+  if (!ok) return null;
+  log.info('importStageBatch', 'done', { remixId, stage, batchId: newBatch.id });
+  return newBatch.id;
 }

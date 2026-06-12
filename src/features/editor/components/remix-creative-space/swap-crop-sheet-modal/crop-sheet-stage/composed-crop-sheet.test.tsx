@@ -11,26 +11,23 @@ import type { RemixCropSheet, CropEntry, SwapResult, SwapResultCrop } from '@/ty
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 function makeCropEntry(spreadId: string, layerId: string): CropEntry {
+  // LEAN CropEntry (⚡2026-06-12) — 5 fields only.
   return {
     spread_id: spreadId,
     id: layerId,
-    layer_kind: 'image',
-    spread_number: 1,
-    aspect_ratio: '1:1',
-    name: 'Test Crop',
     tags: [],
     media_url: `https://cdn/${layerId}.png`,
     geometry: { x: 10, y: 10, w: 80, h: 80 },
   };
 }
 
-function makeSheet(crops: CropEntry[]): RemixCropSheet {
+function makeSheet(originalCrops: CropEntry[]): RemixCropSheet {
   return {
     title: 'Sheet 1',
     sheet_geometry: { width: 100, height: 100 },
     image_url: '',
     swap_results: [],
-    crops,
+    original_crops: originalCrops,
   };
 }
 
@@ -42,12 +39,11 @@ function makeSwapResult(
     media_url: mediaUrl,
     created_time: 'now',
     is_selected: true,
+    // LEAN swap crops (⚡2026-06-12) — geometry joins from original_crops[].
     crops: crops.map((c) => ({
       spread_id: c.spread_id,
       id: c.id,
-      geometry: { x: 10, y: 10, w: 80, h: 80 },
       media_url: `https://cdn/${c.id}.png`,
-      tags: [],
     } as SwapResultCrop)),
   };
 }
@@ -57,7 +53,7 @@ function makeSwapResult(
 describe('ComposedCropSheet', () => {
   // ── BEFORE mode tests ──────────────────────────────────────────────────────
 
-  it('renders BEFORE crops from sheet.crops[]', () => {
+  it('renders BEFORE crops from sheet.original_crops[]', () => {
     const crops = [makeCropEntry('s1', 'i1'), makeCropEntry('s2', 'i2')];
     const sheet = makeSheet(crops);
 
@@ -85,8 +81,11 @@ describe('ComposedCropSheet', () => {
 
   // ── AFTER mode tests ──────────────────────────────────────────────────────
 
-  it('renders AFTER crops from selectedSwap.crops[]', () => {
-    const sheet = makeSheet([]);
+  it('renders AFTER crops from selectedSwap.crops[] ⋈ original_crops[] (lean join)', () => {
+    const sheet = makeSheet([
+      makeCropEntry('s1', 'swap1'),
+      makeCropEntry('s2', 'swap2'),
+    ]);
     const selectedSwap = makeSwapResult('https://cdn/swap.png', [
       { spread_id: 's1', id: 'swap1' },
       { spread_id: 's2', id: 'swap2' },
@@ -188,7 +187,7 @@ describe('ComposedCropSheet', () => {
     const selectedSwap = makeSwapResult('https://cdn/swap.png', [
       { spread_id: 's1', id: 'i1' },
     ]);
-    const sheet = makeSheet([]);
+    const sheet = makeSheet([makeCropEntry('s1', 'i1')]);
 
     render(
       <ComposedCropSheet
@@ -219,7 +218,7 @@ describe('ComposedCropSheet', () => {
     const selectedSwap = makeSwapResult('https://cdn/swap.png', [
       { spread_id: 's1', id: 'i1' },
     ]);
-    const sheet = makeSheet([]);
+    const sheet = makeSheet([makeCropEntry('s1', 'i1')]);
 
     render(
       <ComposedCropSheet
@@ -249,7 +248,7 @@ describe('ComposedCropSheet', () => {
     const selectedSwap = makeSwapResult('https://cdn/swap.png', [
       { spread_id: 's1', id: 'i1' },
     ]);
-    const sheet = makeSheet([]);
+    const sheet = makeSheet([makeCropEntry('s1', 'i1')]);
 
     render(
       <ComposedCropSheet
@@ -280,7 +279,7 @@ describe('ComposedCropSheet', () => {
     const selectedSwap = makeSwapResult('https://cdn/swap.png', [
       { spread_id: 's1', id: 'i1' },
     ]);
-    const sheet = makeSheet([]);
+    const sheet = makeSheet([makeCropEntry('s1', 'i1')]);
     const selectedKeys = new Set(['s1/i1']);
 
     render(
@@ -309,6 +308,84 @@ describe('ComposedCropSheet', () => {
     }
   });
 
+  // ── ⚡2026-06-12 stage modes ───────────────────────────────────────────────
+
+  it('orphan swap crop (no matching original) is skipped — siblings still render', () => {
+    const sheet = makeSheet([makeCropEntry('s1', 'i1')]); // i2 missing → orphan
+    const selectedSwap = makeSwapResult('https://cdn/swap.png', [
+      { spread_id: 's1', id: 'i1' },
+      { spread_id: 's2', id: 'i2' },
+    ]);
+    render(
+      <ComposedCropSheet
+        sheet={sheet}
+        zoomLevel={100}
+        cropsSource="after"
+        selectedSwap={selectedSwap}
+      />,
+    );
+    const cropImages = screen
+      .getAllByRole('img')
+      .filter((img) => (img as HTMLImageElement).src.includes('i1.png'));
+    expect(cropImages).toHaveLength(1);
+    expect(
+      screen.queryAllByRole('img').filter((img) => (img as HTMLImageElement).src.includes('i2.png')),
+    ).toHaveLength(0);
+  });
+
+  it("'crops-only' (upscales): media_url null → composes crops; empty crops → placeholder", () => {
+    const sheet = makeSheet([makeCropEntry('s1', 'i1')]);
+    const withCrops: SwapResult = {
+      ...makeSwapResult('ignored', [{ spread_id: 's1', id: 'i1' }]),
+      media_url: null,
+    };
+    const { rerender } = render(
+      <ComposedCropSheet
+        sheet={sheet}
+        zoomLevel={100}
+        cropsSource="after"
+        afterComposeMode="crops-only"
+        selectedSwap={withCrops}
+      />,
+    );
+    expect(
+      screen.getAllByRole('img').filter((img) => (img as HTMLImageElement).src.includes('i1.png')),
+    ).toHaveLength(1);
+
+    const empty: SwapResult = { ...makeSwapResult('ignored', []), media_url: null };
+    rerender(
+      <ComposedCropSheet
+        sheet={sheet}
+        zoomLevel={100}
+        cropsSource="after"
+        afterComposeMode="crops-only"
+        selectedSwap={empty}
+      />,
+    );
+    expect(screen.getByText(/No upscale result yet/)).toBeInTheDocument();
+  });
+
+  it("'sheet-or-crops' (rmbgs): persisted sheet media_url wins as the 1-img fast path", () => {
+    const sheet = makeSheet([makeCropEntry('s1', 'i1')]);
+    const selectedSwap = makeSwapResult('https://cdn/rgba-sheet.png', [
+      { spread_id: 's1', id: 'i1' },
+    ]);
+    const { container } = render(
+      <ComposedCropSheet
+        sheet={sheet}
+        zoomLevel={100}
+        cropsSource="after"
+        afterComposeMode="sheet-or-crops"
+        selectedSwap={selectedSwap}
+      />,
+    );
+    // The sheet img has alt="" (PII) → role=presentation; query the tag.
+    const imgs = [...container.querySelectorAll('img')];
+    expect(imgs.filter((img) => img.src.includes('rgba-sheet.png'))).toHaveLength(1);
+    // No per-crop <img> on the fast path (overlays are transparent boxes).
+    expect(imgs.filter((img) => img.src.includes('i1.png'))).toHaveLength(0);
+  });
+
   // ── a11y: aria-checked reflects selection state ──────────────────────────
 
   it('checkbox aria-checked reflects selection state', () => {
@@ -316,7 +393,7 @@ describe('ComposedCropSheet', () => {
       { spread_id: 's1', id: 'i1' },
       { spread_id: 's2', id: 'i2' },
     ]);
-    const sheet = makeSheet([]);
+    const sheet = makeSheet([makeCropEntry('s1', 'i1'), makeCropEntry('s2', 'i2')]);
 
     const { rerender } = render(
       <ComposedCropSheet

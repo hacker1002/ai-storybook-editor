@@ -31,7 +31,7 @@ function sprite(id: string, order: number, crops: SwapResultSpriteCrop[]): Remix
         title: 'sheet 1',
         sheet_geometry: { width: 100, height: 100 },
         image_url: '',
-        crops: [],
+        original_crops: [],
         swap_results: [{ media_url: 'u', created_time: '', is_selected: true, crops }],
       },
     ],

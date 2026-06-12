@@ -207,7 +207,7 @@ export function VariantsTab({
   const lineupCount = useMemo(
     () =>
       sprite
-        ? sprite.crop_sheets.reduce((acc, s) => acc + s.crops.length, 0)
+        ? sprite.crop_sheets.reduce((acc, s) => acc + s.original_crops.length, 0)
         : 0,
     [sprite],
   );

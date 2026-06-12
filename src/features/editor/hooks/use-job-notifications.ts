@@ -41,23 +41,34 @@ function resolveRemixName(remixId: string | undefined): string {
   return remix?.name || 'Remix';
 }
 
+/** Human label per remix job type — ⚡2026-06-12 += stage 2/3 pipeline jobs. */
+const REMIX_JOB_LABELS: Record<string, string> = {
+  remix_audio_swap: 'Audio',
+  remix_mix_swap: 'Batch swap',
+  remix_sprite_swap: 'Variant swap',
+  remix_rmbg: 'Remove BG',
+  remix_upscale: 'Upscale',
+};
+
 function remixCopy(job: BackgroundJob): ToastCopy {
   const params = job.params ?? {};
   const remixId = typeof params.remix_id === 'string' ? params.remix_id : undefined;
   const name = resolveRemixName(remixId);
-  const label =
-    job.type === 'remix_audio_swap'
-      ? 'Audio'
-      : job.type === 'remix_mix_swap'
-        ? 'Batch swap'
-        : job.type === 'remix_sprite_swap'
-          ? 'Variant swap'
-          : 'Job';
+  const label = REMIX_JOB_LABELS[job.type] ?? 'Job';
 
-  const result = (job.result ?? {}) as { errors?: { message?: string }[]; failed_sheets?: number };
+  const result = (job.result ?? {}) as {
+    errors?: { message?: string }[];
+    failed_sheets?: number;
+    upscale_skipped_count?: number;
+  };
   const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
   const failedSheets =
     typeof result.failed_sheets === 'number' ? result.failed_sheets : errorCount;
+  // ⚡job 10 graceful fallback (NOT an error): N crops kept at pre-upscale dims.
+  const upscaleSkipped =
+    job.type === 'remix_upscale' && typeof result.upscale_skipped_count === 'number'
+      ? result.upscale_skipped_count
+      : 0;
 
   switch (job.status) {
     case 'completed':
@@ -65,6 +76,12 @@ function remixCopy(job: BackgroundJob): ToastCopy {
         return {
           tone: 'warning',
           message: `${label} finished with ${failedSheets} warnings for "${name}" — check sidebar`,
+        };
+      }
+      if (upscaleSkipped > 0) {
+        return {
+          tone: 'warning',
+          message: `${label} done for "${name}" — ${upscaleSkipped} crops kept pre-upscale`,
         };
       }
       return { tone: 'success', message: `${label} updated for "${name}"`, autoDismiss: true };

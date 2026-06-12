@@ -19,13 +19,14 @@
 
 // ── Public types (engine input/output contract) ─────────────────────────────
 
-/** 1 crop = 1 image, geometry relative (%) to the spread. */
+/** 1 crop = 1 image, geometry relative (%) to the spread — or absolute px
+ *  when `LayoutConfig.absolutePx` is set (stage 2/3 native pieces). */
 export interface CropInput {
   /** layer/crop id — opaque, echoed verbatim into output. */
   id: string;
-  /** (0, 100] — width as % of spread width. */
+  /** (0, 100] — width as % of spread width. ⚡`absolutePx`: absolute px. */
   widthPct: number;
-  /** (0, 100] — height as % of spread height. */
+  /** (0, 100] — height as % of spread height. ⚡`absolutePx`: absolute px. */
   heightPct: number;
   /** Primary subject affinity key (= `tags[0].object_key`). Metadata only —
    *  NOT used by packing; only groups crops of the same entity onto one sheet
@@ -56,6 +57,22 @@ export interface LayoutConfig {
    *  stays size-sorted (fill optimization untouched). Default false — the
    *  mix/Batches plane never sets it → byte-identical output there. */
   preserveInputOrder?: boolean;
+  /** ⚡2026-06-12 — when true, `CropInput.widthPct/heightPct` are ABSOLUTE px
+   *  (native piece dims of stage 2/3 inputs) and the %→px spread scaling is
+   *  skipped. Default false — mixes plane stays byte-identical. */
+  absolutePx?: boolean;
+}
+
+/** Soft cap on a single sheet's pixel area (32MP). Stage 2/3 sheets pack
+ *  NATIVE-dim pieces, which can exceed what browsers/compose pipelines handle.
+ *  v1 policy (chốt 2026-06-12): WARN-ONLY — callers log + still build the
+ *  sheet; auto-split K is a later iteration. The pure engine never logs —
+ *  check via `sheetExceedsPixelCap`. */
+export const MAX_SHEET_PIXELS = 32_000_000;
+
+/** True when a packed sheet exceeds the 32MP soft cap (warn-only v1). */
+export function sheetExceedsPixelCap(sheet: SheetLayout): boolean {
+  return sheet.sheetGeometry.width * sheet.sheetGeometry.height > MAX_SHEET_PIXELS;
 }
 
 /** Crop position + size within a sheet — px, integer, sheet-relative. */
@@ -197,10 +214,11 @@ export function computeCropSheetLayout(
   const gutterY = config.gutterY ?? DEFAULTS.gutterY;
   const landscapeTolerance = config.landscapeTolerance ?? DEFAULTS.landscapeTolerance;
   const preserveInputOrder = config.preserveInputOrder ?? false;
+  const absolutePx = config.absolutePx ?? false;
 
   // Silently drop crops with non-positive dimensions (caller logs warnings).
   const sanitized = crops.filter((c) => c.widthPct > 0 && c.heightPct > 0);
-  const pxCrops = toPixels(sanitized, spread);
+  const pxCrops = toPixels(sanitized, spread, absolutePx);
   const groups = partitionByEntityAffinity(pxCrops, sheetCount, preserveInputOrder);
 
   const sheets = groups.map((group, index) =>
@@ -212,11 +230,16 @@ export function computeCropSheetLayout(
 
 // ── Step 1: % → real pixels (spec §5.1) ──────────────────────────────────────
 
-function toPixels(crops: CropInput[], spread: { width: number; height: number }): PxCrop[] {
+function toPixels(
+  crops: CropInput[],
+  spread: { width: number; height: number },
+  absolutePx: boolean,
+): PxCrop[] {
   return crops.map((c, i) => ({
     id: c.id,
-    w: (c.widthPct / 100) * spread.width,
-    h: (c.heightPct / 100) * spread.height,
+    // ⚡absolutePx (stage 2/3): dims are already native px — no spread scaling.
+    w: absolutePx ? c.widthPct : (c.widthPct / 100) * spread.width,
+    h: absolutePx ? c.heightPct : (c.heightPct / 100) * spread.height,
     inputIndex: i,
     objectKey: c.objectKey,
   }));

@@ -217,7 +217,7 @@ function SpriteNode({
   // `· N variants` badge — distinct character object_keys on this sprite (cheap
   // O(crops) reduce; skip when 0 to avoid noise).
   const variantCount = sprite.crop_sheets.reduce(
-    (acc, s) => acc + s.crops.length,
+    (acc, s) => acc + s.original_crops.length,
     0,
   );
   const objectCount = spriteLineupObjects(sprite).length;

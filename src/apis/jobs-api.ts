@@ -63,48 +63,55 @@ export interface EnqueueAudioSwapParams {
   max_concurrent_chunks_per_textbox: number;
 }
 
-// ── Mix swap (api/jobs/05 — batch-level swap) ────────────────────────────────
+// ── Stage jobs (api/jobs/05 mix-swap + 09 rmbg + 10 upscale — batch-level) ───
+// ⚡2026-06-12 — one generic wrapper, parameterized by the endpoint segment
+// (replaces the mix-only enqueueRemixMixSwap; validation S1 no alias). The 3
+// responses share the fields the FE consumes; job-specific extras (e.g. job
+// 05's target_count) ride in the index signature.
 
-export interface EnqueueMixSwapBody {
+export interface EnqueueStageJobBody {
   batch_id: string;
   force_resweep?: boolean;
 }
 
-export interface EnqueueMixSwapEnqueuedData {
+export type StageJobEndpointSegment = 'mix-swap' | 'rmbg' | 'upscale';
+
+export interface EnqueueStageJobEnqueuedData {
   job_id: string;
   status: 'queued';
-  type: 'remix_mix_swap';
+  type: 'remix_mix_swap' | 'remix_rmbg' | 'remix_upscale';
   remix_id: string;
   batch_id: string;
-  target_count: number;
-  unchanged_count: number;
   total_steps: number;
   sheets_to_process: number;
   estimated_duration_sec: number;
   skipped?: false;
   deduped?: false;
+  [k: string]: unknown;
 }
 
-export interface EnqueueMixSwapSkippedData {
+export interface EnqueueStageJobSkippedData {
   skipped: true;
-  reason: 'all_sheets_already_swapped' | 'no_crop_sheets' | string;
+  /** Opaque per-job reason — job 05: 'all_sheets_already_swapped' |
+   *  'no_crop_sheets'; jobs 09/10: 'all_sheets_already_done' | … . FE only
+   *  displays it. */
+  reason: string;
   sheets_to_process: 0;
 }
 
-export interface EnqueueMixSwapDedupedData {
+export interface EnqueueStageJobDedupedData {
   job_id: string;
   status: 'queued' | 'running';
-  /** Strictly 1 active swap/remix — dedup target is always the mix-swap job. */
-  type: 'remix_mix_swap';
+  type: 'remix_mix_swap' | 'remix_rmbg' | 'remix_upscale';
   remix_id: string;
   active_swap_key: string;
   deduped: true;
 }
 
-export type EnqueueMixSwapData =
-  | EnqueueMixSwapEnqueuedData
-  | EnqueueMixSwapSkippedData
-  | EnqueueMixSwapDedupedData;
+export type EnqueueStageJobData =
+  | EnqueueStageJobEnqueuedData
+  | EnqueueStageJobSkippedData
+  | EnqueueStageJobDedupedData;
 
 // ── Sprite swap (api/jobs/02 — sprite-level swap, Variants tab) ──────────────
 
@@ -176,27 +183,30 @@ export async function enqueueAudioSwap(
   );
 }
 
-/** POST /api/jobs/remix/{remixId}/mix-swap (api/jobs/05 — batch-level swap).
- *  Returns parsed `data` on 2xx (enqueued/skipped/deduped); throws
- *  `EnqueueJobError` (with backend `code`) on non-2xx so the modal can
- *  distinguish 422 MISSING_VARIANT_REFERENCE / TOO_MANY_SWAP_TARGETS /
- *  NO_SWAP_TARGETS from a generic failure. */
-export async function enqueueRemixMixSwap(
+/** POST /api/jobs/remix/{remixId}/{mix-swap|rmbg|upscale} (jobs 05/09/10 —
+ *  batch-level stage jobs, ⚡2026-06-12 generic). Returns parsed `data` on 2xx
+ *  (enqueued/skipped/deduped); throws `EnqueueJobError` (with backend `code`)
+ *  on non-2xx so the modal can toast per-code (e.g. 422
+ *  MISSING_VARIANT_REFERENCE on mix-swap). */
+export async function enqueueRemixStageJob(
   remixId: string,
-  body: EnqueueMixSwapBody,
-): Promise<EnqueueMixSwapData> {
-  log.info('enqueueRemixMixSwap', 'request', {
+  endpointSegment: StageJobEndpointSegment,
+  body: EnqueueStageJobBody,
+): Promise<EnqueueStageJobData> {
+  log.info('enqueueRemixStageJob', 'request', {
     remixId,
+    endpointSegment,
     forceResweep: body.force_resweep ?? true,
   });
-  const result = await callImageApi<EnqueueJobResponse<EnqueueMixSwapData>>(
-    `/api/jobs/remix/${encodeURIComponent(remixId)}/mix-swap`,
+  const result = await callImageApi<EnqueueJobResponse<EnqueueStageJobData>>(
+    `/api/jobs/remix/${encodeURIComponent(remixId)}/${endpointSegment}`,
     { batch_id: body.batch_id, force_resweep: body.force_resweep ?? true },
   );
   if (!result.success) {
     const failure = result as ImageApiFailure;
-    log.error('enqueueRemixMixSwap', 'failed', {
+    log.error('enqueueRemixStageJob', 'failed', {
       remixId,
+      endpointSegment,
       httpStatus: failure.httpStatus,
       errorCode: failure.errorCode,
     });

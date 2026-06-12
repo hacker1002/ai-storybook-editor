@@ -1,20 +1,28 @@
 // swap-crop-sheet-modal.tsx — Full-screen workspace for the remix swap modal
-// (design 05-swap-crop-sheet-modal.md, batch-model).
+// (design 05-swap-crop-sheet-modal.md — ⚡2026-06-12 4-tab PIPELINE:
+// Sprites › Crops › Remove BG › Upscale; Lotties removed).
 //
 // Thin CONTAINER that owns only SHARED state + selectors + action wiring, then
 // renders the active tab:
-//   • Header   — RemixModalHeader (3-tab pill group: Variants / Batches / Lotties)
-//   • Body     — one of VariantsTab | BatchesTab | LottiesTab (tab owns its own
-//                sidebar + CropSheetStage) + SwapParametersSidebar (right)
+//   • Header   — RemixModalHeader (4-tab pipeline pill group)
+//   • Body     — VariantsTab (sprite plane) | one of the 3 isomorphic
+//                StageBatchTab instances (BatchesTab/RmbgTab/UpscaleTab —
+//                hook useStageBatchTab) + SwapParametersSidebar (right)
+//   • Overlay  — ImportBatchModal (rmbg/upscale Import — dialog OVER modal)
 //
-// Both the Variants (sprite plane) and Batches (mix plane) tabs drive a BATCH
-// background swap job:
-//   • Variants → `sprites[]` + sprite-swap (api/jobs/02). Per-variant synchronous
-//     Generate is GONE (sprite-swap redesign).
-//   • Batches  → `mixes[]` + mix-swap (api/jobs/05).
+// Stage state is PER-STAGE (`stageStates` record: activeBatchRef +
+// submittingBatchId); rev6 selection lives in a keyed-remount
+// `SelectionProvider` per stage (key = `${stage}/${batchId}::${resultCount}` —
+// chốt 2026-06-12, no useEffect+setState reset).
 //
-// On mount the root fires the idempotent legacy→batch migration AND lazily seeds
-// the initial sprite; an effect closes the modal when the remix disappears.
+// Raw active refs hold USER INTENT only; every consumer reads the DERIVED
+// effective refs (raw-if-resolvable, else first entity sheet 0) so rows that
+// arrive after mount (async sprite seed / mixes migration / realtime)
+// auto-select without setState-in-effect.
+//
+// On mount the root fires the idempotent legacy→batch migration AND lazily
+// seeds the initial sprite; an effect closes the modal when the remix
+// disappears.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -27,8 +35,8 @@ import { toast } from 'sonner';
 import {
   useRemixById,
   useRemixSprites,
-  useRemixBatches,
-  useAnyMixSwapRunning,
+  useRemixStageBatches,
+  useAnyStageJobRunning,
   useAnySpriteSwapRunning,
   useRemixActions,
   useRemixStore,
@@ -37,16 +45,21 @@ import { useInteractionLayer } from '@/features/editor/contexts';
 import { EnqueueJobError } from '@/apis/jobs-api';
 import { createLogger } from '@/utils/logger';
 import type {
-  SwapCropSheetTarget,
-  RemixBatch,
+  RemixModalTab,
   RemixSprite,
+  RemixStageBatch,
+  StageKind,
+  SwapCropSheetTarget,
   SwapModelParams,
 } from '@/types/remix';
-import { RemixModalHeader, type RemixModalTab } from './remix-modal-header';
+import { RemixModalHeader } from './remix-modal-header';
 import { SwapParametersSidebar } from './swap-parameters-sidebar';
+import { STAGE_TAB_CONFIG, STAGE_OF_TAB } from './stage-tab-config';
 import { VariantsTab } from './tabs/variants-tab';
 import { BatchesTab } from './tabs/batches-tab';
-import { LottiesTab } from './tabs/lotties-tab';
+import { RmbgTab } from './tabs/rmbg-tab';
+import { UpscaleTab } from './tabs/upscale-tab';
+import { ImportBatchModal } from './import-batch-modal';
 import { SelectionProvider } from './hooks/use-selected-swap-crops';
 import { DEFAULT_SWAP_PARAMS, SWAP_MODAL_TOKENS, Z_INDEX, ZOOM } from './swap-modal-constants';
 
@@ -63,14 +76,23 @@ interface ActiveSpriteRef {
   sheetIndex: number;
 }
 
-/** Active batch+sheet pointer for the Batches tab. */
+/** Active batch+sheet pointer within ONE stage tab. */
 interface ActiveBatchRef {
   batchId: string;
   sheetIndex: number;
 }
 
+/** Per-stage tab state (⚡2026-06-12). Selection is NOT here — it lives in the
+ *  keyed-remount SelectionProvider per stage. */
+interface StageTabState {
+  activeBatchRef: ActiveBatchRef | null;
+  submittingBatchId: string | null;
+}
+
+type StageStates = Record<StageKind, StageTabState>;
+
 /** Default tab from the opener target — a `mix` (= batch) opener lands on the
- *  Batches tab, a character/prop opener on Variants. */
+ *  Crops tab, a character/prop opener on Sprites. */
 function defaultTab(target: SwapCropSheetTarget): RemixModalTab {
   return target.type === 'mix' ? 'batches' : 'variants';
 }
@@ -81,16 +103,14 @@ function initialSpriteRef(sprites: RemixSprite[]): ActiveSpriteRef | null {
   return { spriteId: sprites[0].id, sheetIndex: 0 };
 }
 
-/** First active-batch pointer — first batch, sheet 0. Null pre-migration. */
-function initialBatchRef(batches: RemixBatch[]): ActiveBatchRef | null {
+/** First active-batch pointer — first batch, sheet 0. Null when the stage has
+ *  no batches yet (rmbgs/upscales pre-import → empty-state CTA). */
+function initialBatchRef(batches: RemixStageBatch[]): ActiveBatchRef | null {
   if (batches.length === 0) return null;
   return { batchId: batches[0].id, sheetIndex: 0 };
 }
 
-/** Sprite to re-select after deleting `removedId`. Returns null when no move is
- *  needed (the removed sprite wasn't active, or it doesn't exist). Prefers the
- *  previous sibling; falls back to the next when removing the first sprite.
- *  Caller must pass the pre-removal `sprites` array. */
+/** Sprite to re-select after deleting `removedId` (previous sibling, else next). */
 function spriteRefAfterRemoval(
   sprites: RemixSprite[],
   activeRef: ActiveSpriteRef | null,
@@ -104,9 +124,9 @@ function spriteRefAfterRemoval(
 }
 
 /** Batch to re-select after deleting `removedId`. Mirror of
- *  {@link spriteRefAfterRemoval} on the batch plane. */
+ *  {@link spriteRefAfterRemoval} on the stage-batch plane. */
 function batchRefAfterRemoval(
-  batches: RemixBatch[],
+  batches: RemixStageBatch[],
   activeRef: ActiveBatchRef | null,
   removedId: string,
 ): ActiveBatchRef | null {
@@ -117,8 +137,9 @@ function batchRefAfterRemoval(
   return sibling ? { batchId: sibling.id, sheetIndex: 0 } : null;
 }
 
-/** Maps a mix-swap enqueue error code to a user-facing toast message. */
-function mapMixSwapError(code: string | undefined): string {
+/** Maps a stage-job enqueue error code to a user-facing toast message. The
+ *  swap-specific codes only ever come back from the mix-swap endpoint. */
+function mapStageJobError(stage: StageKind, code: string | undefined): string {
   switch (code) {
     case 'MISSING_VARIANT_REFERENCE':
       return 'Generate a swapped visual for every character first — open the Variants tab';
@@ -127,7 +148,7 @@ function mapMixSwapError(code: string | undefined): string {
     case 'NO_SWAP_TARGETS':
       return 'This batch has no characters to swap';
     default:
-      return "Couldn't start swap — try again";
+      return `Couldn't start ${STAGE_TAB_CONFIG[stage].actionLabel.toLowerCase()} — try again`;
   }
 }
 
@@ -148,14 +169,33 @@ function mapSpriteSwapError(code: string | undefined): string {
 export function SwapCropSheetModal({ target, onClose }: Props) {
   const remix = useRemixById(target.remixId);
   const sprites = useRemixSprites(target.remixId);
-  const batches = useRemixBatches(target.remixId);
-  const anyMixSwapRunning = useAnyMixSwapRunning(target.remixId);
   const anySpriteSwapRunning = useAnySpriteSwapRunning(target.remixId);
+  // ⚡2026-06-12 — per-stage selectors (fixed-order hook calls; STAGES const).
+  const mixBatches = useRemixStageBatches(target.remixId, 'mixes');
+  const rmbgBatches = useRemixStageBatches(target.remixId, 'rmbgs');
+  const upscaleBatches = useRemixStageBatches(target.remixId, 'upscales');
+  const anyMixJobRunning = useAnyStageJobRunning(target.remixId, 'mixes');
+  const anyRmbgJobRunning = useAnyStageJobRunning(target.remixId, 'rmbgs');
+  const anyUpscaleJobRunning = useAnyStageJobRunning(target.remixId, 'upscales');
+  const stageBatches: Record<StageKind, RemixStageBatch[]> = useMemo(
+    () => ({ mixes: mixBatches, rmbgs: rmbgBatches, upscales: upscaleBatches }),
+    [mixBatches, rmbgBatches, upscaleBatches],
+  );
+  const anyStageJobRunning: Record<StageKind, boolean> = useMemo(
+    () => ({
+      mixes: anyMixJobRunning,
+      rmbgs: anyRmbgJobRunning,
+      upscales: anyUpscaleJobRunning,
+    }),
+    [anyMixJobRunning, anyRmbgJobRunning, anyUpscaleJobRunning],
+  );
+
   const {
-    removeBatch,
-    appendBatchSheet,
-    removeBatchSheet,
-    startMixSwap,
+    removeStageBatch,
+    appendStageBatchSheet,
+    removeStageBatchSheet,
+    startStageJob,
+    importStageBatch,
     startSpriteSwap,
     removeSprite,
     appendSpriteSheet,
@@ -177,15 +217,86 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const [submittingSpriteId, setSubmittingSpriteId] = useState<string | null>(
     null,
   );
-  const [activeBatchRef, setActiveBatchRef] = useState<ActiveBatchRef | null>(
-    () => initialBatchRef(batches),
-  );
+  // ⚡2026-06-12 — per-stage record (mixes auto-inits from the seeded batch;
+  // rmbgs/upscales start null when 0 batches → empty-state CTA Import).
+  const [stageStates, setStageStates] = useState<StageStates>(() => ({
+    mixes: { activeBatchRef: initialBatchRef(mixBatches), submittingBatchId: null },
+    rmbgs: { activeBatchRef: initialBatchRef(rmbgBatches), submittingBatchId: null },
+    upscales: {
+      activeBatchRef: initialBatchRef(upscaleBatches),
+      submittingBatchId: null,
+    },
+  }));
+  const [importModal, setImportModal] = useState<{
+    stage: 'rmbgs' | 'upscales';
+  } | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(ZOOM.default);
   const [dividerPosition, setDividerPosition] = useState(50);
   const [params, setParams] = useState<SwapModelParams>(DEFAULT_SWAP_PARAMS);
-  const [submittingBatchId, setSubmittingBatchId] = useState<string | null>(
-    null,
+
+  // ── EFFECTIVE pointers (derived — no setState-in-effect, React 19 lint) ──────
+  // The raw refs above capture USER INTENT and are seeded once at mount; rows
+  // that arrive AFTER mount (async sprite seed / legacy mixes migration /
+  // realtime) would leave them null → sidebar shows no selection while the
+  // center stage falls back to [0]. The EFFECTIVE ref mirrors that fallback:
+  // raw ref while it still resolves (sheetIndex clamped), else first entity
+  // sheet 0, else null. ALL consumers (tabs, sidebars, reset keys, removal
+  // re-selection) read the effective ref; only user actions write the raw one.
+  const effectiveSpriteRef = useMemo<ActiveSpriteRef | null>(() => {
+    const sprite = activeSpriteRef
+      ? sprites.find((s) => s.id === activeSpriteRef.spriteId)
+      : undefined;
+    if (activeSpriteRef && sprite) {
+      const maxIndex = Math.max(0, sprite.crop_sheets.length - 1);
+      return {
+        spriteId: activeSpriteRef.spriteId,
+        sheetIndex: Math.min(Math.max(activeSpriteRef.sheetIndex, 0), maxIndex),
+      };
+    }
+    return initialSpriteRef(sprites);
+  }, [activeSpriteRef, sprites]);
+
+  const effectiveBatchRefs = useMemo<Record<StageKind, ActiveBatchRef | null>>(() => {
+    const resolve = (stage: StageKind): ActiveBatchRef | null => {
+      const ref = stageStates[stage].activeBatchRef;
+      const batch = ref
+        ? stageBatches[stage].find((b) => b.id === ref.batchId)
+        : undefined;
+      if (ref && batch) {
+        const maxIndex = Math.max(0, batch.crop_sheets.length - 1);
+        return {
+          batchId: ref.batchId,
+          sheetIndex: Math.min(Math.max(ref.sheetIndex, 0), maxIndex),
+        };
+      }
+      return initialBatchRef(stageBatches[stage]);
+    };
+    return {
+      mixes: resolve('mixes'),
+      rmbgs: resolve('rmbgs'),
+      upscales: resolve('upscales'),
+    };
+  }, [stageStates, stageBatches]);
+
+  // Per-stage state setters (record-merge helpers).
+  const setStageActiveBatchRef = useCallback(
+    (stage: StageKind, ref: ActiveBatchRef | null) => {
+      setStageStates((prev) => ({
+        ...prev,
+        [stage]: { ...prev[stage], activeBatchRef: ref },
+      }));
+    },
+    [],
+  );
+  const setStageSubmitting = useCallback(
+    (stage: StageKind, batchId: string | null) => {
+      setStageStates((prev) => ({
+        ...prev,
+        [stage]: { ...prev[stage], submittingBatchId: batchId },
+      }));
+    },
+    [],
   );
 
   // ── Focus restore + ILS slot ────────────────────────────────────────────────
@@ -245,11 +356,9 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     setActiveTab(tab);
     setCompareMode(false);
     setDividerPosition(50);
-    if (tab === 'variants' && !activeSpriteRef) {
-      setActiveSpriteRef(initialSpriteRef(sprites));
-    } else if (tab === 'batches' && !activeBatchRef) {
-      setActiveBatchRef(initialBatchRef(batches));
-    }
+    // No ref backfill needed — the EFFECTIVE refs above already resolve a null/
+    // stale raw ref to the first entity (rmbgs/upscales with 0 batches stay
+    // null → empty-state CTA Import).
   };
 
   const handleSelectSpriteSheet = useCallback(
@@ -262,14 +371,18 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [],
   );
 
-  const handleSelectBatchSheet = useCallback(
-    (batchId: string, sheetIndex: number) => {
-      log.debug('handleSelectBatchSheet', 'select sheet', { batchId, sheetIndex });
-      setActiveBatchRef({ batchId, sheetIndex });
+  const handleSelectStageSheet = useCallback(
+    (stage: StageKind, batchId: string, sheetIndex: number) => {
+      log.debug('handleSelectStageSheet', 'select sheet', {
+        stage,
+        batchId,
+        sheetIndex,
+      });
+      setStageActiveBatchRef(stage, { batchId, sheetIndex });
       setCompareMode(false);
       setDividerPosition(50);
     },
-    [],
+    [setStageActiveBatchRef],
   );
 
   const handleToggleCompare = useCallback(
@@ -314,45 +427,79 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [startSpriteSwap, target.remixId, params],
   );
 
-  // ── onSwapBatch (Batches tab) ────────────────────────────────────────────────
-  const handleSwapBatch = useCallback(
-    async (batchId: string) => {
-      setSubmittingBatchId(batchId);
+  // ── Generic stage-job enqueue (3 stages — jobs 05/09/10) ─────────────────────
+  const handleStartStageJob = useCallback(
+    async (stage: StageKind, batchId: string) => {
+      setStageSubmitting(stage, batchId);
       try {
-        const outcome = await startMixSwap({
+        const outcome = await startStageJob({
           remixId: target.remixId,
+          stage,
           batchId,
           params,
           forceResweep: true,
         });
-        log.info('handleSwapBatch', 'enqueue outcome', {
+        log.info('handleStartStageJob', 'enqueue outcome', {
+          stage,
           batchId,
           kind: outcome.kind,
         });
+        const action = STAGE_TAB_CONFIG[stage].actionLabel;
         if (outcome.kind === 'deduped') {
-          toast.info('A swap is already running for this remix');
+          toast.info(`A ${action.toLowerCase()} job is already running for this remix`);
         } else if (outcome.kind === 'enqueued') {
-          toast.success('Swap started');
+          toast.success(`${action} started`);
         }
       } catch (err) {
         const code = err instanceof EnqueueJobError ? err.code : undefined;
-        log.error('handleSwapBatch', 'enqueue failed', { batchId, code });
-        toast.error(mapMixSwapError(code));
+        log.error('handleStartStageJob', 'enqueue failed', { stage, batchId, code });
+        toast.error(mapStageJobError(stage, code));
       } finally {
-        setSubmittingBatchId(null);
+        setStageSubmitting(stage, null);
       }
     },
-    [startMixSwap, target.remixId, params],
+    [startStageJob, target.remixId, params, setStageSubmitting],
+  );
+
+  // ── Import flow (rmbgs/upscales — 05-14) ─────────────────────────────────────
+  const handleOpenImport = useCallback((stage: 'rmbgs' | 'upscales') => {
+    log.debug('handleOpenImport', 'open import dialog', { stage });
+    setImportModal({ stage });
+  }, []);
+
+  const handleImportStageBatch = useCallback(
+    async (stage: 'rmbgs' | 'upscales', selectedKeys: ReadonlySet<string>) => {
+      log.info('handleImportStageBatch', 'confirm import', {
+        stage,
+        selectionSize: selectedKeys.size,
+      });
+      try {
+        const newBatchId = await importStageBatch(
+          target.remixId,
+          stage,
+          selectedKeys,
+        );
+        if (newBatchId === null) {
+          toast.error("Couldn't import batch — try again");
+          return;
+        }
+        setStageActiveBatchRef(stage, { batchId: newBatchId, sheetIndex: 0 });
+        setImportModal(null);
+        toast.success('Batch imported');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to import batch';
+        log.error('handleImportStageBatch', 'failed', { stage, error: msg });
+        // Dialog stays open — the user can retry or Cancel (05-14 §4).
+        toast.error(msg);
+      }
+    },
+    [importStageBatch, target.remixId, setStageActiveBatchRef],
   );
 
   // ── Sprite sidebar action callbacks (thin store delegates) ───────────────────
-  // `handleAddSprite` lives in `VariantsTab` (reads selection from
-  // `useSelectedSwapCrops()`); the modal owns only `onActivateSprite`.
   const handleRemoveSprite = useCallback(
     (spriteId: string) => {
-      // Capture the reselection target against the pre-removal list, then move
-      // selection to the previous sibling once the delete actually lands.
-      const nextRef = spriteRefAfterRemoval(sprites, activeSpriteRef, spriteId);
+      const nextRef = spriteRefAfterRemoval(sprites, effectiveSpriteRef, spriteId);
       void removeSprite(target.remixId, spriteId)
         .then((ok) => {
           if (ok && nextRef) {
@@ -366,7 +513,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
           });
         });
     },
-    [removeSprite, target.remixId, sprites, activeSpriteRef, handleSelectSpriteSheet],
+    [removeSprite, target.remixId, sprites, effectiveSpriteRef, handleSelectSpriteSheet],
   );
   const handleAddSpriteSheet = useCallback(
     (spriteId: string) => void appendSpriteSheet(target.remixId, spriteId),
@@ -378,47 +525,64 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [removeSpriteSheet, target.remixId],
   );
 
-  // ── Batch sidebar action callbacks (thin store delegates) ────────────────────
-  const handleRemoveBatch = useCallback(
-    (batchId: string) => {
-      const nextRef = batchRefAfterRemoval(batches, activeBatchRef, batchId);
-      void removeBatch(target.remixId, batchId)
+  // ── Stage sidebar action callbacks (generic — thin store delegates) ──────────
+  const handleRemoveStageBatch = useCallback(
+    (stage: StageKind, batchId: string) => {
+      const nextRef = batchRefAfterRemoval(
+        stageBatches[stage],
+        effectiveBatchRefs[stage],
+        batchId,
+      );
+      void removeStageBatch(target.remixId, stage, batchId)
         .then((ok) => {
-          if (ok && nextRef) {
-            handleSelectBatchSheet(nextRef.batchId, nextRef.sheetIndex);
+          if (!ok) return;
+          if (nextRef) {
+            handleSelectStageSheet(stage, nextRef.batchId, nextRef.sheetIndex);
+          } else if (effectiveBatchRefs[stage]?.batchId === batchId) {
+            // Removed the LAST batch of an allowZeroBatch stage → empty state.
+            setStageActiveBatchRef(stage, null);
           }
         })
         .catch((err) => {
-          log.warn('handleRemoveBatch', 'removeBatch rejected', {
+          log.warn('handleRemoveStageBatch', 'removeStageBatch rejected', {
+            stage,
             batchId,
             error: err instanceof Error ? err.message : String(err),
           });
         });
     },
-    [removeBatch, target.remixId, batches, activeBatchRef, handleSelectBatchSheet],
+    [
+      removeStageBatch,
+      target.remixId,
+      stageBatches,
+      effectiveBatchRefs,
+      handleSelectStageSheet,
+      setStageActiveBatchRef,
+    ],
   );
-  const handleAddSheet = useCallback(
-    (batchId: string) => void appendBatchSheet(target.remixId, batchId),
-    [appendBatchSheet, target.remixId],
+  const handleAddStageSheet = useCallback(
+    (stage: StageKind, batchId: string) =>
+      void appendStageBatchSheet(target.remixId, stage, batchId),
+    [appendStageBatchSheet, target.remixId],
   );
-  const handleRemoveSheet = useCallback(
-    (batchId: string, sheetIndex: number) =>
-      void removeBatchSheet(target.remixId, batchId, sheetIndex),
-    [removeBatchSheet, target.remixId],
+  const handleRemoveStageSheet = useCallback(
+    (stage: StageKind, batchId: string, sheetIndex: number) =>
+      void removeStageBatchSheet(target.remixId, stage, batchId, sheetIndex),
+    [removeStageBatchSheet, target.remixId],
   );
 
   // ── Selection reset keys ─────────────────────────────────────────────────────
   // `SelectionProvider` is remounted (→ fresh `new Set()`) by changing its `key`
-  // — NOT useEffect+setState (React 19 lint). The reset key is the active sprite/
-  // batch id + the SUM of swap_results across its sheets (a completed swap pushes
-  // results → sum increases → key changes → selection resets; switching SHEETS
-  // within the same sprite/batch keeps the sum stable → selection persists).
+  // — NOT useEffect+setState (React 19 lint). The reset key is the stage + the
+  // active sprite/batch id + the SUM of swap_results across its sheets (a
+  // completed job pushes results → sum increases → key changes → selection
+  // resets; switching SHEETS within the same batch keeps the sum stable).
   const activeSprite = useMemo(
     () =>
-      activeSpriteRef
-        ? sprites.find((s) => s.id === activeSpriteRef.spriteId) ?? null
+      effectiveSpriteRef
+        ? sprites.find((s) => s.id === effectiveSpriteRef.spriteId) ?? null
         : null,
-    [sprites, activeSpriteRef],
+    [sprites, effectiveSpriteRef],
   );
   const activeSpriteSwapResultsCount = useMemo(
     () =>
@@ -430,26 +594,24 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         : 0,
     [activeSprite],
   );
-  const spriteSelectionResetKey = `${activeSpriteRef?.spriteId ?? '__none__'}::${activeSpriteSwapResultsCount}`;
+  const spriteSelectionResetKey = `${effectiveSpriteRef?.spriteId ?? '__none__'}::${activeSpriteSwapResultsCount}`;
 
-  const activeBatch = useMemo(
-    () =>
-      activeBatchRef
-        ? batches.find((b) => b.id === activeBatchRef.batchId) ?? null
-        : null,
-    [batches, activeBatchRef],
+  /** `${stage}/${batchId}::${totalSwapResultsCount}` — per-stage keyed remount.
+   *  Keyed on the EFFECTIVE batch so a stale/null ref can't freeze the reset
+   *  key at `__none__`. */
+  const stageSelectionResetKey = useCallback(
+    (stage: StageKind): string => {
+      const ref = effectiveBatchRefs[stage];
+      const batch = ref
+        ? stageBatches[stage].find((b) => b.id === ref.batchId) ?? null
+        : null;
+      const count = batch
+        ? batch.crop_sheets.reduce((acc, s) => acc + s.swap_results.length, 0)
+        : 0;
+      return `${stage}/${batch?.id ?? '__none__'}::${count}`;
+    },
+    [effectiveBatchRefs, stageBatches],
   );
-  const activeBatchTotalSwapResultsCount = useMemo(
-    () =>
-      activeBatch
-        ? activeBatch.crop_sheets.reduce(
-            (acc, s) => acc + s.swap_results.length,
-            0,
-          )
-        : 0,
-    [activeBatch],
-  );
-  const batchSelectionResetKey = `${activeBatchRef?.batchId ?? '__none__'}::${activeBatchTotalSwapResultsCount}`;
 
   // entity selectors return [] when the remix is gone; the null-remix close is
   // handled by the effect above. Render null for that single frame.
@@ -463,6 +625,27 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     onZoomChange: handleZoomChange,
     onDividerChange: handleDividerChange,
   };
+
+  /** Stage-generic props bundle for the 3 StageBatchTab instances. */
+  const stageTabProps = (stage: StageKind) => ({
+    remixId: target.remixId,
+    batches: stageBatches[stage],
+    activeBatchRef: effectiveBatchRefs[stage],
+    anyJobRunning: anyStageJobRunning[stage],
+    submittingBatchId: stageStates[stage].submittingBatchId,
+    onSelectBatchSheet: (batchId: string, sheetIndex: number) =>
+      handleSelectStageSheet(stage, batchId, sheetIndex),
+    onActivateBatch: (ref: ActiveBatchRef) => setStageActiveBatchRef(stage, ref),
+    onRemoveBatch: (batchId: string) => handleRemoveStageBatch(stage, batchId),
+    onAddSheet: (batchId: string) => handleAddStageSheet(stage, batchId),
+    onRemoveSheet: (batchId: string, sheetIndex: number) =>
+      handleRemoveStageSheet(stage, batchId, sheetIndex),
+    onStartJob: (batchId: string) => void handleStartStageJob(stage, batchId),
+    ...sharedStageProps,
+  });
+
+  const activeStage: StageKind | null =
+    activeTab === 'variants' ? null : STAGE_OF_TAB[activeTab];
 
   return (
     <Dialog
@@ -487,7 +670,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
       >
         <DialogTitle className="sr-only">Remix — quản lý crop sheet</DialogTitle>
         <DialogDescription className="sr-only">
-          Xem và quản lý variants, batches và lotties của remix.
+          Pipeline 4 tab: sprites, crops, remove background và upscale của remix.
         </DialogDescription>
 
         <RemixModalHeader
@@ -505,7 +688,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
               <VariantsTab
                 remixId={target.remixId}
                 sprites={sprites}
-                activeSpriteRef={activeSpriteRef}
+                activeSpriteRef={effectiveSpriteRef}
                 submittingSpriteId={submittingSpriteId}
                 anySpriteSwapRunning={anySpriteSwapRunning}
                 onSelectSpriteSheet={handleSelectSpriteSheet}
@@ -519,26 +702,29 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
             </SelectionProvider>
           )}
 
-          {activeTab === 'batches' && (
-            <SelectionProvider key={batchSelectionResetKey}>
-              <BatchesTab
-                remixId={target.remixId}
-                batches={batches}
-                activeBatchRef={activeBatchRef}
-                submittingBatchId={submittingBatchId}
-                anyMixSwapRunning={anyMixSwapRunning}
-                onSelectBatchSheet={handleSelectBatchSheet}
-                onActivateBatch={setActiveBatchRef}
-                onRemoveBatch={handleRemoveBatch}
-                onAddSheet={handleAddSheet}
-                onRemoveSheet={handleRemoveSheet}
-                onSwapBatch={handleSwapBatch}
-                {...sharedStageProps}
+          {activeStage === 'mixes' && (
+            <SelectionProvider key={stageSelectionResetKey('mixes')}>
+              <BatchesTab {...stageTabProps('mixes')} />
+            </SelectionProvider>
+          )}
+
+          {activeStage === 'rmbgs' && (
+            <SelectionProvider key={stageSelectionResetKey('rmbgs')}>
+              <RmbgTab
+                {...stageTabProps('rmbgs')}
+                onOpenImport={() => handleOpenImport('rmbgs')}
               />
             </SelectionProvider>
           )}
 
-          {activeTab === 'lotties' && <LottiesTab remixId={target.remixId} />}
+          {activeStage === 'upscales' && (
+            <SelectionProvider key={stageSelectionResetKey('upscales')}>
+              <UpscaleTab
+                {...stageTabProps('upscales')}
+                onOpenImport={() => handleOpenImport('upscales')}
+              />
+            </SelectionProvider>
+          )}
 
           <SwapParametersSidebar
             params={params}
@@ -546,6 +732,16 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
             activeTab={activeTab}
           />
         </div>
+
+        {importModal && (
+          // Dialog OVER the modal (05-14) — Esc/backdrop close THIS only.
+          <ImportBatchModal
+            remixId={target.remixId}
+            stage={importModal.stage}
+            onClose={() => setImportModal(null)}
+            onConfirm={(keys) => void handleImportStageBatch(importModal.stage, keys)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

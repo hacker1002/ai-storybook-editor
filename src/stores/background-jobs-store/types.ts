@@ -80,11 +80,16 @@ export const ACTIVE_STATUSES: ReadonlySet<JobStatus> = new Set(['queued', 'runni
 // ── Shared job-type allowlists (consumers import these) ──────────────────────
 
 /** Remix swap job types — RemixStore consumer subscribes to exactly these so
- *  render/transcode/pdf never leak into the remix `jobs[]` (phantom-job fix). */
+ *  render/transcode/pdf never leak into the remix `jobs[]` (phantom-job fix).
+ *  ⚡2026-06-12 += `remix_rmbg`/`remix_upscale` (stage 2/3 pipeline, jobs
+ *  09/10). Single allowlist (ADR-037) — the remix-store consumer, the
+ *  notification hook and the job mirror all read THIS constant. */
 export const REMIX_SWAP_TYPES = [
   'remix_audio_swap',
   'remix_mix_swap',
   'remix_sprite_swap',
+  'remix_rmbg',
+  'remix_upscale',
 ] as const;
 
 /** Distribution export job types — export watcher subscribes to these. Includes

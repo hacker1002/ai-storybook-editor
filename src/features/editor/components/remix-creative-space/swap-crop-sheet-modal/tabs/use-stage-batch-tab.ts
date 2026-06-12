@@ -1,0 +1,440 @@
+// use-stage-batch-tab.ts — Shared logic of the 3 stage tabs (Crops / Remove BG
+// / Upscale — design 05-11). The tabs are isomorphic; everything common lives
+// HERE: active batch/sheet/selectedSwap derivation, gating, rev6 tick-flow
+// subset Add Batch, rev7 per-stage ownership + take-back, the destructive
+// relayout confirm, Import gating, and the per-stage overlay copy.
+//
+// Instances stay thin: they call this hook with their stage + an optional
+// per-stage `precondition` resolver (mixes: visual_swap_url gating; rmbgs/
+// upscales: default crops-non-empty), then render Sidebar + CropSheetStage +
+// RelayoutConfirmDialog from the returned bag.
+//
+// Selection lives in the modal-mounted `SelectionProvider` (keyed remount per
+// stage — chốt 2026-06-12); this hook only CONSUMES it.
+//
+// SECURITY: never log media_url / swap URLs.
+
+import { useCallback, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { createLogger } from '@/utils/logger';
+import {
+  useRemixById,
+  useRemixActions,
+  useStageFinals,
+} from '@/stores/remix-store';
+import type {
+  BatchSwapTaskStatus,
+  RemixStageBatch,
+  StageKind,
+} from '@/types/remix';
+import { PREV_STAGE } from '@/types/remix';
+import { STAGE_TAB_CONFIG, type StageTabConfig } from '../stage-tab-config';
+import type { RelayoutConfirmKind } from '../relayout-confirm-dialog';
+import { useCollapseState, type CollapseSetApi } from '../sidebar/use-collapse-state';
+import { useSelectedSwapCrops } from '../hooks/use-selected-swap-crops';
+import {
+  useCropOwnership,
+  type CropOwnershipState,
+} from '../hooks/use-crop-ownership';
+
+const log = createLogger('Editor', 'useStageBatchTab');
+
+/** Shared props contract of the 3 stage-tab instances (root 05 §3.3).
+ *  Selection is NOT here — it flows through the SelectionProvider context. */
+export interface StageBatchTabProps {
+  remixId: string;
+  batches: RemixStageBatch[];
+  activeBatchRef: { batchId: string; sheetIndex: number } | null;
+  /** useAnyStageJobRunning(remixId, stage) — guards within THIS stage only. */
+  anyJobRunning: boolean;
+  submittingBatchId: string | null;
+  onSelectBatchSheet: (batchId: string, sheetIndex: number) => void;
+  /** Auto-select a freshly created batch (subset-add / import). */
+  onActivateBatch: (ref: { batchId: string; sheetIndex: number }) => void;
+  onRemoveBatch: (batchId: string) => void;
+  onAddSheet: (batchId: string) => void;
+  onRemoveSheet: (batchId: string, sheetIndex: number) => void;
+  /** Action button → modal's handleStartStageJob(stage, batchId). */
+  onStartJob: (batchId: string) => void;
+  /** ONLY passed to rmbg/upscale instances (cfg.hasImport). */
+  onOpenImport?: () => void;
+  // shared stage state (root-owned)
+  compareMode: boolean;
+  zoomLevel: number;
+  dividerPosition: number;
+  onToggleCompare: () => void;
+  onZoomChange: (z: number) => void;
+  onDividerChange: (p: number) => void;
+}
+
+/** Per-stage action precondition. Default (rmbgs/upscales): the batch has ≥1
+ *  sheet with non-empty `original_crops[]`. */
+export interface StageGateResult {
+  ok: boolean;
+  reason?: string;
+}
+
+interface PendingAction {
+  kind: RelayoutConfirmKind;
+  batchName: string;
+  run: () => void;
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+/** True when any sheet of the batch carries ≥1 swap result. */
+export function batchHasSwapResults(batch: RemixStageBatch): boolean {
+  return batch.crop_sheets.some((s) => s.swap_results.length > 0);
+}
+
+export interface StageBatchTabState {
+  cfg: StageTabConfig;
+  batch: RemixStageBatch | null;
+  sheetIndex: number;
+  sheet: RemixStageBatch['crop_sheets'][number] | null;
+  selectedSwap: RemixStageBatch['crop_sheets'][number]['swap_results'][number] | null;
+  swapTask: BatchSwapTaskStatus;
+  isSubmitting: boolean;
+  isRunning: boolean;
+  // gating
+  actionDisabled: boolean;
+  gateReason: string | undefined;
+  // rev6 selection / subset-add
+  selectionSize: number;
+  selectedSwapCrops: ReadonlySet<string>;
+  toggleSwapCropSelection: (cropKey: string) => void;
+  stageSelectable: boolean;
+  canAddBatch: boolean;
+  addBatchTooltip: string;
+  handleAddBatch: () => Promise<void>;
+  // rev7 ownership (per stage)
+  getOwnership: (cropKey: string) => CropOwnershipState;
+  handleTakeBack: (cropKey: string) => void;
+  // destructive guard (confirm dialog)
+  pending: PendingAction | null;
+  confirmPending: () => void;
+  cancelPending: () => void;
+  handleAddSheetGuarded: (batchId: string) => void;
+  handleRemoveSheetGuarded: (batchId: string, sheetIndex: number) => void;
+  handleRemoveBatchGuarded: (batchId: string) => void;
+  // Import (hasImport stages)
+  importDisabled: boolean;
+  importTooltip: string;
+  // overlay copy
+  runningLabel: (current: number, total: number) => string;
+  submittingLabel: string;
+  // sidebar collapse
+  collapse: CollapseSetApi;
+  handleStartJob: () => void;
+}
+
+export function useStageBatchTab(
+  stage: StageKind,
+  props: StageBatchTabProps,
+  /** Per-stage extra precondition (mixes: sprite finals). Runs AFTER the
+   *  generic crops-non-empty check. */
+  precondition?: (batch: RemixStageBatch) => StageGateResult,
+): StageBatchTabState {
+  const cfg = STAGE_TAB_CONFIG[stage];
+  const {
+    remixId,
+    batches,
+    activeBatchRef,
+    anyJobRunning,
+    submittingBatchId,
+    onActivateBatch,
+    onStartJob,
+    onRemoveBatch,
+    onAddSheet,
+    onRemoveSheet,
+    compareMode,
+  } = props;
+
+  const collapse = useCollapseState();
+  const [pending, setPending] = useState<PendingAction | null>(null);
+
+  const {
+    keys: selectedSwapCrops,
+    toggle: toggleSwapCropSelection,
+    clear: clearSwapCropSelection,
+  } = useSelectedSwapCrops();
+  const { addStageBatch, takeFinalBack } = useRemixActions();
+
+  const remix = useRemixById(remixId);
+
+  // Import gating — finals of the PREVIOUS stage (no-op array on mixes).
+  const prevStage = cfg.hasImport ? PREV_STAGE[stage as 'rmbgs' | 'upscales'] : stage;
+  const prevFinals = useStageFinals(cfg.hasImport ? remixId : null, prevStage);
+  const importDisabled = cfg.hasImport && prevFinals.length === 0;
+  const importTooltip = importDisabled
+    ? 'Run the previous stage and pick finals first'
+    : '';
+
+  // ── Derive active batch / sheet / swap ──────────────────────────────────────
+  const batch = useMemo(
+    () =>
+      batches.find((b) => b.id === activeBatchRef?.batchId) ??
+      batches[0] ??
+      null,
+    [batches, activeBatchRef],
+  );
+
+  // ⚡rev7 — per-stage ownership for the AFTER pane. Keyed on the EFFECTIVE
+  // batch (ref may be stale/null while the displayed batch falls back to
+  // batches[0] — e.g. rows arriving via realtime after mount); using the raw
+  // ref would mis-render the batch's own finals as owned-foreign.
+  const currentBatchId = batch?.id ?? null;
+  const { getOwnership } = useCropOwnership(remix, stage, currentBatchId);
+  const sheetCount = batch?.crop_sheets.length ?? 0;
+  const sheetIndex =
+    batch && sheetCount > 0
+      ? clamp(activeBatchRef?.sheetIndex ?? 0, 0, sheetCount - 1)
+      : 0;
+  const sheet = batch?.crop_sheets[sheetIndex] ?? null;
+  const selectedSwap = sheet?.swap_results.find((s) => s.is_selected) ?? null;
+  const swapTask = batch?.swapTask ?? { state: 'idle' as const };
+  const isSubmitting =
+    submittingBatchId != null && submittingBatchId === batch?.id;
+  const isRunning = swapTask.state === 'running';
+
+  // ── Gating (generic crops check + per-stage precondition) ───────────────────
+  const hasCrops =
+    batch?.crop_sheets.some((s) => s.original_crops.length > 0) ?? false;
+  const gate = useMemo<StageGateResult>(() => {
+    if (!batch) return { ok: false, reason: `Select a batch to ${cfg.actionLabel.toLowerCase()}` };
+    if (!hasCrops) return { ok: false, reason: 'This batch has no crops to process' };
+    return precondition?.(batch) ?? { ok: true };
+  }, [batch, hasCrops, precondition, cfg.actionLabel]);
+
+  const actionDisabled = !gate.ok || anyJobRunning || isSubmitting || isRunning;
+  const gateReason = useMemo<string | undefined>(() => {
+    if (anyJobRunning && !isSubmitting && !isRunning) {
+      return `A ${cfg.actionLabel.toLowerCase()} job is already running for this remix`;
+    }
+    return gate.ok ? undefined : gate.reason;
+  }, [anyJobRunning, isSubmitting, isRunning, gate, cfg.actionLabel]);
+
+  // ── rev6 subset Add Batch ───────────────────────────────────────────────────
+  const selectionSize = selectedSwapCrops.size;
+  const stageSelectable =
+    selectedSwap !== null && !compareMode && !isSubmitting && !isRunning;
+  const canAddBatch =
+    selectionSize > 0 && !isSubmitting && !isRunning && !anyJobRunning;
+  const addBatchTooltip =
+    selectionSize === 0
+      ? 'Tick the crops you want to redo first — checkboxes on each crop in the result'
+      : anyJobRunning
+        ? 'Wait until the current job finishes'
+        : '';
+
+  const handleAddBatch = useCallback(async () => {
+    if (selectionSize === 0) {
+      log.warn('handleAddBatch', 'empty selection — abort', { stage });
+      return;
+    }
+    if (anyJobRunning || isSubmitting || isRunning) {
+      log.warn('handleAddBatch', 'busy — abort', { stage, anyJobRunning });
+      return;
+    }
+    const activeBatchId = activeBatchRef?.batchId ?? batches[0]?.id;
+    if (!activeBatchId) {
+      log.warn('handleAddBatch', 'no active batch — abort', { stage });
+      return;
+    }
+    log.info('handleAddBatch', 'start subset add batch', {
+      stage,
+      activeBatchId,
+      selectionSize,
+    });
+    try {
+      const newBatchId = await addStageBatch(
+        remixId,
+        stage,
+        activeBatchId,
+        selectedSwapCrops,
+      );
+      if (newBatchId === null) {
+        log.error('handleAddBatch', 'addStageBatch returned null', { stage });
+        toast.error("Couldn't add batch — try again");
+        clearSwapCropSelection();
+        return;
+      }
+      clearSwapCropSelection();
+      onActivateBatch({ batchId: newBatchId, sheetIndex: 0 });
+      log.info('handleAddBatch', 'success', { stage, newBatchId });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add batch';
+      log.error('handleAddBatch', 'failed', { stage, error: msg });
+      toast.error(msg);
+      clearSwapCropSelection();
+    }
+  }, [
+    stage,
+    selectionSize,
+    anyJobRunning,
+    isSubmitting,
+    isRunning,
+    activeBatchRef,
+    batches,
+    addStageBatch,
+    remixId,
+    selectedSwapCrops,
+    clearSwapCropSelection,
+    onActivateBatch,
+  ]);
+
+  // ── rev7 take-back (per-stage mutex) ────────────────────────────────────────
+  const handleTakeBack = useCallback(
+    (cropKey: string) => {
+      if (!currentBatchId) {
+        log.warn('handleTakeBack', 'no currentBatchId — ignore', { stage });
+        return;
+      }
+      const sepIdx = cropKey.indexOf('/');
+      if (sepIdx < 0) return;
+      const spreadId = cropKey.slice(0, sepIdx);
+      const layerId = cropKey.slice(sepIdx + 1);
+      const ownership = getOwnership(cropKey);
+      if (ownership.state !== 'owned-foreign') {
+        log.debug('handleTakeBack', 'not foreign-owned — ignore', {
+          stage,
+          cropKey,
+          state: ownership.state,
+        });
+        return;
+      }
+      log.info('handleTakeBack', 'invoking takeFinalBack', {
+        stage,
+        cropKey,
+        targetBatchId: currentBatchId,
+      });
+      takeFinalBack(remixId, stage, spreadId, layerId, currentBatchId)
+        .then((ok) => {
+          if (!ok) toast.error('Could not take the final crop back.');
+        })
+        .catch((err) => {
+          log.warn('handleTakeBack', 'rejected', {
+            stage,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : 'Could not take the final crop back.',
+          );
+        });
+    },
+    [remixId, stage, currentBatchId, getOwnership, takeFinalBack],
+  );
+
+  // ── Destructive-action guard (deferred-action pattern) ──────────────────────
+  const findBatch = useCallback(
+    (batchId: string) => batches.find((b) => b.id === batchId) ?? null,
+    [batches],
+  );
+  const guardDestructive = useCallback(
+    (target: RemixStageBatch, kind: RelayoutConfirmKind, run: () => void) => {
+      if (batchHasSwapResults(target)) {
+        log.info('guardDestructive', 'defer destructive action — confirm', {
+          stage,
+          batchId: target.id,
+          kind,
+        });
+        setPending({ kind, batchName: target.name, run });
+      } else {
+        run();
+      }
+    },
+    [stage],
+  );
+
+  const handleAddSheetGuarded = useCallback(
+    (batchId: string) => {
+      const target = findBatch(batchId);
+      if (!target) return;
+      guardDestructive(target, 'add-sheet', () => onAddSheet(batchId));
+    },
+    [findBatch, guardDestructive, onAddSheet],
+  );
+  const handleRemoveSheetGuarded = useCallback(
+    (batchId: string, idx: number) => {
+      const target = findBatch(batchId);
+      if (!target) return;
+      guardDestructive(target, 'remove-sheet', () => onRemoveSheet(batchId, idx));
+    },
+    [findBatch, guardDestructive, onRemoveSheet],
+  );
+  const handleRemoveBatchGuarded = useCallback(
+    (batchId: string) => {
+      const target = findBatch(batchId);
+      if (!target) return;
+      guardDestructive(target, 'remove-batch', () => onRemoveBatch(batchId));
+    },
+    [findBatch, guardDestructive, onRemoveBatch],
+  );
+
+  const confirmPending = useCallback(() => {
+    setPending((p) => {
+      if (p) {
+        log.info('confirmPending', 'run deferred destructive action', {
+          stage,
+          kind: p.kind,
+        });
+        p.run();
+      }
+      return null;
+    });
+  }, [stage]);
+  const cancelPending = useCallback(() => setPending(null), []);
+
+  const handleStartJob = useCallback(() => {
+    if (!batch) return;
+    log.info('handleStartJob', 'request stage job', { stage, batchId: batch.id });
+    onStartJob(batch.id);
+  }, [batch, stage, onStartJob]);
+
+  // ── Per-stage overlay copy ──────────────────────────────────────────────────
+  const verb =
+    stage === 'mixes' ? 'Swapping' : stage === 'rmbgs' ? 'Removing background' : 'Upscaling';
+  const runningLabel = useCallback(
+    (current: number, total: number) => `${verb} sheet ${current}/${total}…`,
+    [verb],
+  );
+  const submittingLabel = `Starting ${cfg.actionLabel.toLowerCase()}…`;
+
+  return {
+    cfg,
+    batch,
+    sheetIndex,
+    sheet,
+    selectedSwap,
+    swapTask,
+    isSubmitting,
+    isRunning,
+    actionDisabled,
+    gateReason,
+    selectionSize,
+    selectedSwapCrops,
+    toggleSwapCropSelection,
+    stageSelectable,
+    canAddBatch,
+    addBatchTooltip,
+    handleAddBatch,
+    getOwnership,
+    handleTakeBack,
+    pending,
+    confirmPending,
+    cancelPending,
+    handleAddSheetGuarded,
+    handleRemoveSheetGuarded,
+    handleRemoveBatchGuarded,
+    importDisabled,
+    importTooltip,
+    runningLabel,
+    submittingLabel,
+    collapse,
+    handleStartJob,
+  };
+}

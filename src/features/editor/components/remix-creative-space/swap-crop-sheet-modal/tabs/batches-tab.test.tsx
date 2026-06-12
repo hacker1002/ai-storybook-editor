@@ -18,17 +18,27 @@ vi.mock('../hooks/use-selected-swap-crops', () => ({
   }),
 }));
 
-// Mock store actions.
-const mockAddBatch = vi.fn();
-const mockRemoveBatch = vi.fn();
+// Mock store actions (⚡2026-06-12 stage-generic surface consumed by
+// useStageBatchTab + the tab itself).
+const mockAddStageBatch = vi.fn();
 vi.mock('@/stores/remix-store', () => ({
   useRemixVariants: vi.fn(() => []),
   useRemixById: vi.fn(() => null),
+  useStageFinals: vi.fn(() => []),
   useRemixActions: () => ({
-    addBatch: mockAddBatch,
-    removeBatch: mockRemoveBatch,
+    addStageBatch: mockAddStageBatch,
     takeFinalBack: vi.fn(async () => true),
   }),
+}));
+
+// Humans cache (Settings review join) — empty is fine for gating tests.
+vi.mock('@/stores/humans-store', () => ({
+  useHumans: vi.fn(() => []),
+}));
+
+// Review dialog renders nothing in these tests (remix mock is null anyway).
+vi.mock('../swap-config-review-modal', () => ({
+  SwapConfigReviewModal: () => null,
 }));
 
 // Mock dependencies. Narrow shapes — only the props each mock reads.
@@ -102,15 +112,12 @@ function makeBatch(id: string, name: string, hasCrops = true): RemixBatch {
         sheet_geometry: { width: 100, height: 100 },
         image_url: '',
         swap_results: [],
-        crops: hasCrops
+        // LEAN CropEntry (⚡2026-06-12).
+        original_crops: hasCrops
           ? [
               {
                 spread_id: 's1',
                 id: 'i1',
-                layer_kind: 'image',
-                spread_number: 1,
-                aspect_ratio: '1:1',
-                name: 'Crop',
                 tags: [],
                 media_url: 'https://cdn/i1.png',
                 geometry: { x: 0, y: 0, w: 100, h: 100 },
@@ -127,8 +134,7 @@ function makeBatch(id: string, name: string, hasCrops = true): RemixBatch {
 
 describe('BatchesTab — gating logic', () => {
   beforeEach(() => {
-    mockAddBatch.mockClear();
-    mockRemoveBatch.mockClear();
+    mockAddStageBatch.mockClear();
   });
 
   // ── stageSelectable gates correctly ──────────────────────────────────────
@@ -150,13 +156,13 @@ describe('BatchesTab — gating logic', () => {
         batches={[batch]}
         activeBatchRef={{ batchId: 'b1', sheetIndex: 0 }}
         submittingBatchId={null}
-        anyMixSwapRunning={false}
+        anyJobRunning={false}
         onSelectBatchSheet={vi.fn()}
         onActivateBatch={vi.fn()}
         onRemoveBatch={vi.fn()}
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
-        onSwapBatch={vi.fn()}
+        onStartJob={vi.fn()}
         compareMode={true}
         zoomLevel={100}
         dividerPosition={50}
@@ -180,13 +186,13 @@ describe('BatchesTab — gating logic', () => {
         batches={[batch]}
         activeBatchRef={{ batchId: 'b1', sheetIndex: 0 }}
         submittingBatchId={null}
-        anyMixSwapRunning={false}
+        anyJobRunning={false}
         onSelectBatchSheet={vi.fn()}
         onActivateBatch={vi.fn()}
         onRemoveBatch={vi.fn()}
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
-        onSwapBatch={vi.fn()}
+        onStartJob={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -217,13 +223,13 @@ describe('BatchesTab — gating logic', () => {
         batches={[batch]}
         activeBatchRef={{ batchId: 'b1', sheetIndex: 0 }}
         submittingBatchId="b1"
-        anyMixSwapRunning={false}
+        anyJobRunning={false}
         onSelectBatchSheet={vi.fn()}
         onActivateBatch={vi.fn()}
         onRemoveBatch={vi.fn()}
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
-        onSwapBatch={vi.fn()}
+        onStartJob={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -255,13 +261,13 @@ describe('BatchesTab — gating logic', () => {
         batches={[batch]}
         activeBatchRef={{ batchId: 'b1', sheetIndex: 0 }}
         submittingBatchId={null}
-        anyMixSwapRunning={false}
+        anyJobRunning={false}
         onSelectBatchSheet={vi.fn()}
         onActivateBatch={vi.fn()}
         onRemoveBatch={vi.fn()}
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
-        onSwapBatch={vi.fn()}
+        onStartJob={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -292,13 +298,13 @@ describe('BatchesTab — gating logic', () => {
         batches={[batch]}
         activeBatchRef={{ batchId: 'b1', sheetIndex: 0 }}
         submittingBatchId={null}
-        anyMixSwapRunning={false}
+        anyJobRunning={false}
         onSelectBatchSheet={vi.fn()}
         onActivateBatch={vi.fn()}
         onRemoveBatch={vi.fn()}
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
-        onSwapBatch={vi.fn()}
+        onStartJob={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -323,13 +329,13 @@ describe('BatchesTab — gating logic', () => {
         batches={[batch]}
         activeBatchRef={{ batchId: 'b1', sheetIndex: 0 }}
         submittingBatchId={null}
-        anyMixSwapRunning={false}
+        anyJobRunning={false}
         onSelectBatchSheet={vi.fn()}
         onActivateBatch={vi.fn()}
         onRemoveBatch={vi.fn()}
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
-        onSwapBatch={vi.fn()}
+        onStartJob={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -347,7 +353,7 @@ describe('BatchesTab — gating logic', () => {
     );
   });
 
-  it('[+] disabled when anyMixSwapRunning=true', () => {
+  it('[+] disabled when anyJobRunning=true', () => {
     const batch = makeBatch('b1', 'Batch 1');
 
     render(
@@ -356,13 +362,13 @@ describe('BatchesTab — gating logic', () => {
         batches={[batch]}
         activeBatchRef={{ batchId: 'b1', sheetIndex: 0 }}
         submittingBatchId={null}
-        anyMixSwapRunning={true}
+        anyJobRunning={true}
         onSelectBatchSheet={vi.fn()}
         onActivateBatch={vi.fn()}
         onRemoveBatch={vi.fn()}
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
-        onSwapBatch={vi.fn()}
+        onStartJob={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -375,7 +381,7 @@ describe('BatchesTab — gating logic', () => {
     const addBtn = screen.getByTestId('add-batch-btn');
     expect(addBtn).toBeDisabled();
     // When selection is empty, the tooltip is about ticking crops first
-    // When anyMixSwapRunning, disabled takes precedence, but the tooltip
+    // When anyJobRunning, disabled takes precedence, but the tooltip
     // logic shows "Tick crops" when selection.size === 0
   });
 

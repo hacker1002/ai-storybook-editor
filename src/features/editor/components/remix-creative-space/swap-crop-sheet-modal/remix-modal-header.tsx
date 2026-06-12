@@ -1,16 +1,24 @@
-// remix-modal-header.tsx — Header band for SwapCropSheetModal (design §3.1, rev2).
-// Title (remix name) + a 3-tab pill group (Variants / Batches / Lotties) + close.
-// The tab group is a roving-tabindex `tablist` — ←/→ moves the active tab.
+// remix-modal-header.tsx — Header band for SwapCropSheetModal (design §3.1).
+// Title (remix name) + the ⚡2026-06-12 4-tab PIPELINE pill group
+// (Sprites › Crops › Remove BG › Upscale — chevron separators express the
+// stage 1→2→3 flow) + close. Tab ids are stable (`'variants'`/`'batches'`/
+// `'rmbg'`/`'upscale'`) and ≠ display labels. Roving-tabindex tablist — ←/→
+// moves the active tab.
 
-import { SplitSquareHorizontal, LayoutGrid, Sparkles, X } from 'lucide-react';
+import {
+  ChevronRight,
+  Eraser,
+  Expand,
+  LayoutGrid,
+  SplitSquareHorizontal,
+  X,
+} from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
+import type { RemixModalTab } from '@/types/remix';
 import { HEADER_HEIGHT_PX } from './swap-modal-constants';
 
 const log = createLogger('Editor', 'RemixModalHeader');
-
-/** The three top-level tabs of the rev2 swap modal. */
-export type RemixModalTab = 'variants' | 'batches' | 'lotties';
 
 interface RemixModalHeaderProps {
   title: string;
@@ -25,11 +33,12 @@ interface TabDef {
   Icon: typeof SplitSquareHorizontal;
 }
 
-// Order is the keyboard navigation order for ←/→.
+// Order is BOTH the pipeline order and the keyboard navigation order for ←/→.
 const TABS: TabDef[] = [
   { id: 'variants', label: 'Sprites', Icon: SplitSquareHorizontal },
-  { id: 'batches', label: 'Batches', Icon: LayoutGrid },
-  { id: 'lotties', label: 'Lotties', Icon: Sparkles },
+  { id: 'batches', label: 'Crops', Icon: LayoutGrid },
+  { id: 'rmbg', label: 'Remove BG', Icon: Eraser },
+  { id: 'upscale', label: 'Upscale', Icon: Expand },
 ];
 
 export function RemixModalHeader({
@@ -52,7 +61,12 @@ export function RemixModalHeader({
       to: TABS[next].id,
     });
     onTabChange(TABS[next].id);
-    const sibling = e.currentTarget.parentElement?.children[next];
+    // Tab buttons sit in per-pill wrappers with decorative chevrons between
+    // them — resolve siblings from the tablist by role, not by child index.
+    const tabEls = e.currentTarget
+      .closest('[role="tablist"]')
+      ?.querySelectorAll('[role="tab"]');
+    const sibling = tabEls?.[next];
     if (sibling instanceof HTMLElement) sibling.focus();
   };
 
@@ -72,33 +86,41 @@ export function RemixModalHeader({
       <div
         role="tablist"
         aria-label="Chế độ remix"
-        className="flex items-center gap-1 rounded-lg bg-[var(--swap-modal-surface-hover)] p-1"
+        className="flex items-center gap-0.5 rounded-lg bg-[var(--swap-modal-surface-hover)] p-1"
       >
-        {TABS.map(({ id, label, Icon }) => {
+        {TABS.map(({ id, label, Icon }, index) => {
           const isActive = id === activeTab;
           return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              tabIndex={isActive ? 0 : -1}
-              onClick={() => {
-                if (id === activeTab) return;
-                log.debug('onClick', 'tab change', { to: id });
-                onTabChange(id);
-              }}
-              onKeyDown={handleKeyDown}
-              className={cn(
-                'flex items-center gap-1.5 rounded-md px-3 py-1 text-sm transition-colors',
-                isActive
-                  ? 'bg-white font-semibold text-[#0a0d18] shadow-sm'
-                  : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
+            // Fragment per pill: chevron separator BETWEEN tabs (pipeline flow).
+            <span key={id} className="flex items-center gap-0.5">
+              {index > 0 && (
+                <ChevronRight
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 shrink-0 text-[var(--swap-modal-text-muted)]"
+                />
               )}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
-            </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => {
+                  if (id === activeTab) return;
+                  log.debug('onClick', 'tab change', { to: id });
+                  onTabChange(id);
+                }}
+                onKeyDown={handleKeyDown}
+                className={cn(
+                  'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm transition-colors',
+                  isActive
+                    ? 'bg-white font-semibold text-[#0a0d18] shadow-sm'
+                    : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {label}
+              </button>
+            </span>
           );
         })}
       </div>

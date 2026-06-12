@@ -249,7 +249,7 @@ function buildSpriteSheetsFromLayout(
         sheet_geometry: sheet.sheetGeometry,
         image_url: '',
         swap_results: [],
-        crops: [],
+        original_crops: [],
       };
     }
 
@@ -302,7 +302,7 @@ function buildSpriteSheetsFromLayout(
       sheet_geometry: { width, height },
       image_url: '',
       swap_results: [],
-      crops: geoms.map((g) =>
+      original_crops: geoms.map((g) =>
         toSpriteCrop(cellByKey[g.id], { x: g.x, y: g.y, w: g.w, h: g.h }),
       ),
     };
@@ -413,12 +413,12 @@ export async function partitionByObjectAffinity(
 }
 
 /** Distinct (deduped) cells currently living on a sprite — reads ONLY pre-swap
- *  `sheet.crops[]` (never `swap_results[].crops[]`). Dedup key = cellKey. */
+ *  `sheet.original_crops[]` (never `swap_results[].crops[]`). Dedup key = cellKey. */
 export function currentCellsOfSprite(sprite: RemixSpriteEntry): SpriteCrop[] {
   const seen = new Set<string>();
   const out: SpriteCrop[] = [];
   for (const sheet of sprite.crop_sheets) {
-    for (const crop of sheet.crops) {
+    for (const crop of sheet.original_crops) {
       const key = spriteCellKey(crop);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -513,7 +513,7 @@ async function persistSprites(
 /**
  * Re-layouts ALL sheets of ONE sprite at `currentSheetCount + delta`, clamped to
  * `[SHEET_MIN, SHEET_MAX]`. Re-packs the sprite's OWN cells (pre-swap
- * `sheet.crops[]`, scoped to the sprite — subset sprites carry a subset).
+ * `sheet.original_crops[]`, scoped to the sprite — subset sprites carry a subset).
  *
  * SWAP-RESULTS CONTRACT (callers MUST gate): a successful re-layout REBUILDS the
  * sprite's sheets (swap_results cleared — stale geometry). Caller gates on

@@ -1,6 +1,8 @@
-// select-final-crops.test.ts — pure-logic unit tests for cross-batch
+// select-final-crops.test.ts — pure-logic unit tests for the per-stage
 // `is_final` mutex selectors (resolveFinalCrops / findUncoveredLayers /
 // reconcileOrphanFinals). No store, no React.
+// ⚡2026-06-12 — Inject reads `upscales[]` STRICT: remix fixtures place the
+// batch rows on `upscales` (the row-level helpers stay column-agnostic).
 
 import { describe, it, expect } from 'vitest';
 import type { Remix, RemixCropSheet, RemixMix, SwapResult, SwapResultCrop } from '@/types/remix';
@@ -19,12 +21,11 @@ function makeCrop(
   layerId: string,
   isFinal?: boolean,
 ): SwapResultCrop {
+  // LEAN swap crop (⚡2026-06-12) — no geometry/tags.
   const base: SwapResultCrop = {
     spread_id: spreadId,
     id: layerId,
-    geometry: { x: 0, y: 0, w: 10, h: 10 },
     media_url: `u://${spreadId}/${layerId}`,
-    tags: [],
   };
   if (isFinal !== undefined) base.is_final = isFinal;
   return base;
@@ -45,7 +46,7 @@ function makeSheet(swapResults: SwapResult[] = []): RemixCropSheet {
     sheet_geometry: { width: 100, height: 100 },
     image_url: '',
     swap_results: swapResults,
-    crops: [],
+    original_crops: [],
   };
 }
 
@@ -53,7 +54,8 @@ function makeBatch(id: string, order: number, sheets: RemixCropSheet[]): RemixMi
   return { id, order, name: `Batch ${order}`, crop_sheets: sheets };
 }
 
-function makeRemix(mixes: RemixMix[]): Remix {
+function makeRemix(rows: RemixMix[]): Remix {
+  // Inject source = `upscales[]` (strict — validation S1).
   return {
     id: 'r1',
     snapshot_id: 's1',
@@ -62,7 +64,9 @@ function makeRemix(mixes: RemixMix[]): Remix {
     illustration: { spreads: [], sections: [] },
     characters: [],
     props: [],
-    mixes,
+    mixes: [],
+    rmbgs: [],
+    upscales: rows,
     sprites: [],
     created_at: '2026-05-29T00:00:00Z',
     updated_at: '2026-05-29T00:00:00Z',

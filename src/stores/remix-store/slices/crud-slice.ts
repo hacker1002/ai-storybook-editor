@@ -230,9 +230,9 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
         if (r.id !== id) return r;
         const next = { ...r };
         for (const u of updates) {
-          // rev2: crop sheets live only on the batch (mix). Identity is `id`
-          // (uuid). entityKey === batchId.
-          next.mixes = next.mixes.map((m) =>
+          // ⚡2026-06-12 stage-generic: `u.stage` selects the JSONB column
+          // (mixes | rmbgs | upscales); entityKey === batchId within it.
+          next[u.stage] = (next[u.stage] ?? []).map((m) =>
             m.id === u.entityKey ? applySheetPatch(m, u) : m,
           );
         }

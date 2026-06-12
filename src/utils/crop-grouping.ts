@@ -103,7 +103,15 @@ export function groupCropsForBatch(remix: Remix): GroupCropsResult {
     [...charKeys, ...propKeys].map((k, i) => [k, i]),
   );
 
-  type Collected = { input: CropInput; meta: CropEntry; entityIdx: number };
+  // `spreadNumber` stays INTERNAL (sort tie-break only) — the LEAN CropEntry
+  // (⚡2026-06-12) no longer persists it (nor layer_kind/aspect_ratio/name/
+  // annotation; annotation resolves at runtime from the illustration layer).
+  type Collected = {
+    input: CropInput;
+    meta: CropEntry;
+    entityIdx: number;
+    spreadNumber: number;
+  };
   const collected: Collected[] = [];
   const seen = new Set<string>();
 
@@ -140,34 +148,25 @@ export function groupCropsForBatch(remix: Remix): GroupCropsResult {
       }
 
       const primary = subjectTags[0];
-      // Dynamic-state annotation (pose/action/expression) authored in Objects
-      // space (enhance-annotation flow). Only forward when non-empty so the swap
-      // manifest doesn't ship a cleared/blank description key to Gemini.
-      const layerAnnotation = (layer as { annotation?: { description?: string } }).annotation;
-      const annotation =
-        layerAnnotation?.description?.trim()
-          ? { description: layerAnnotation.description }
-          : undefined;
       collected.push({
         entityIdx: entityOrder.get(primary.object_key) ?? Number.MAX_SAFE_INTEGER,
+        spreadNumber,
         input: {
           id: layer.id,
           widthPct: g.w,
           heightPct: g.h,
           objectKey: primary.object_key,
         },
+        // LEAN CropEntry (⚡2026-06-12): 5 fields only. Per-crop annotation is
+        // no longer persisted — the swap manifest resolves it at job time from
+        // illustration.spreads[].images[].annotation by (spread_id, id).
         meta: {
           spread_id: spread.id,
           id: layer.id,
-          layer_kind: 'image',
-          spread_number: spreadNumber,
-          aspect_ratio: (layer as { aspect_ratio?: string }).aspect_ratio ?? '1:1',
-          name: primary.variant_key ?? '',
           tags: subjectTags,
           media_url: url,
           // Placeholder — overwritten with engine placement geometry in Phase 03.
           geometry: { x: 0, y: 0, w: 0, h: 0 },
-          ...(annotation ? { annotation } : {}),
         },
       });
     }
@@ -177,7 +176,7 @@ export function groupCropsForBatch(remix: Remix): GroupCropsResult {
   // engine's per-entity affinity clusters appear in cast order.
   collected.sort((a, b) => {
     if (a.entityIdx !== b.entityIdx) return a.entityIdx - b.entityIdx;
-    return a.meta.spread_number - b.meta.spread_number;
+    return a.spreadNumber - b.spreadNumber;
   });
 
   const cropInputs: CropInput[] = [];
