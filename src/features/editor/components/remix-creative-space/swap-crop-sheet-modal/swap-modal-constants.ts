@@ -161,6 +161,11 @@ export const Z_INDEX = {
   /** Read-only remix-settings review dialog (Sprites tab header) — same layer
    *  constraint as confirmDialog: must paint ABOVE the full-screen swap modal. */
   reviewModal: 4100,
+  /** Parameter-sidebar Select dropdowns. Radix popper copies the content's
+   *  computed z-index onto its portal wrapper; shadcn ships SelectContent at
+   *  z-50, which the full-screen swapModal (4000) occludes — the dropdown opens
+   *  but paints behind the modal (invisible/unselectable). Must clear swapModal. */
+  selectDropdown: 4100,
   variantsModal: 5000,
 } as const;
 

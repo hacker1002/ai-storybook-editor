@@ -38,6 +38,7 @@ import {
   modelSupportsNoise,
   RIGHT_SIDEBAR_WIDTH_PX,
   HEADER_HEIGHT_PX,
+  Z_INDEX,
 } from './swap-modal-constants';
 
 const log = createLogger('Editor', 'SwapParametersSidebar');
@@ -94,6 +95,9 @@ export function SwapParametersSidebar({
     'w-full bg-[var(--swap-modal-surface-hover)] border-[var(--swap-modal-border-strong)] text-[var(--swap-modal-text-primary)] hover:bg-[var(--swap-modal-surface-hover-strong)] focus-visible:ring-[var(--swap-modal-accent)]';
   const DARK_STEPPER_CLASS =
     '[&_button]:border-[var(--swap-modal-border-strong)] [&_button]:bg-[var(--swap-modal-surface-hover)] [&_button]:text-[var(--swap-modal-text-muted)] [&_button:hover]:bg-[var(--swap-modal-surface-hover-strong)] [&_button:hover]:text-[var(--swap-modal-text-primary)] [&_input]:border-[var(--swap-modal-border-strong)] [&_input]:bg-[var(--swap-modal-surface-hover)] [&_input]:text-[var(--swap-modal-text-primary)]';
+  // Radix popper copies this computed z-index onto its portal wrapper; without
+  // it the dropdown (shadcn default z-50) paints behind the swapModal (z-4000).
+  const SELECT_CONTENT_STYLE = { zIndex: Z_INDEX.selectDropdown };
 
   return (
     <aside
@@ -118,7 +122,7 @@ export function SwapParametersSidebar({
                 <SelectTrigger id="swap-model-select" className={DARK_TRIGGER_CLASS}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={SELECT_CONTENT_STYLE}>
                   {SWAP_MODEL_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>
                       {opt}
@@ -147,7 +151,7 @@ export function SwapParametersSidebar({
               <SelectTrigger id="rmbg-model-select" className={DARK_TRIGGER_CLASS}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent style={SELECT_CONTENT_STYLE}>
                 {RMBG_MODEL_OPTIONS.map((opt) => (
                   <SelectItem key={opt} value={opt}>
                     {opt}
@@ -171,7 +175,7 @@ export function SwapParametersSidebar({
                 >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={SELECT_CONTENT_STYLE}>
                   {UPSCALE_MODEL_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>
                       {opt}

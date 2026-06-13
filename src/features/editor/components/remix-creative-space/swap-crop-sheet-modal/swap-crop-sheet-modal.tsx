@@ -327,6 +327,17 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
       '[data-radix-select-content]',
       '[role="listbox"]',
     ],
+    // Parameter-sidebar Select dropdowns portal OUTSIDE dialogContentRef. Picking
+    // an option (or re-picking the same value) unmounts the popper synchronously
+    // on pointerdown, so by mousedown the target is a detached node and
+    // portalSelectors can no longer match it → the resolver mis-classifies the
+    // click as outside and captureClickOutside pops the modal. dropdownSelectors
+    // lets the Provider snapshot "a dropdown was open at pointerdown" and keep
+    // the modal open (see interaction-layer-provider §handlePointerDownCapture).
+    dropdownSelectors: [
+      '[data-radix-select-content]',
+      '[data-radix-popper-content-wrapper]',
+    ],
   });
 
   // ── On-mount one-shots (idempotent) ──────────────────────────────────────────
