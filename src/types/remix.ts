@@ -237,12 +237,13 @@ export interface RemixSprite {
   swapTask: SpriteSwapTaskStatus;
 }
 
-/** Args for the sprite-level swap enqueue (api/jobs/02). `params` (swap model)
- *  carries only `swapModel` at the Variants tab (no upscale/scale — Validation
- *  S1). v1 is collect-only on the FE; job 02 hardcodes the model server-side. */
+/** Args for the sprite-level swap enqueue (api/jobs/02). `params` (swap group)
+ *  WIRED → `buildModelParams('sprites', params)` → body `model_params`
+ *  (swapModel + swapTemperature); backend allowlists/clamps per model. */
 export interface StartSpriteSwapParams {
   remixId: string;
   spriteId: string;
+  /** WIRED → buildModelParams('sprites', params) → body model_params. */
   params: SwapModelParams;
   /** When true (default), clear + re-swap every sheet of the sprite (api/jobs/02). */
   forceResweep?: boolean;
@@ -668,23 +669,27 @@ export interface ReferenceImage {
 
 /** Right-sidebar AI model params — per-tab groups (⚡2026-06-12: swap / rmbg /
  *  upscale + Noise; `scale` dropped — job 10 derives PRINT 300 DPI itself).
- *  v1: collect-only placeholder — NOT forwarded to any API (jobs 09/10 take no
- *  `model_params`). */
+ *  ⚡2026-06-13 WIRED → `buildModelParams(stage, params)` → job body
+ *  `model_params` (§4.6); the API allowlists/clamps/maps per model. The `swap`
+ *  group (Sprites + Crops) shares one `swapTemperature` stepper. */
 export interface SwapModelParams {
   swapModel: string;
+  /** Gemini `generationConfig.temperature` — shared by Sprites + Crops (group
+   *  'swap'); forwarded as `model_params.params.temperature`. Backend clamps. */
+  swapTemperature: number;
   rmbgModel: string;
   upscaleModel: string;
-  noise: number; // 0..10 step 0.1 — ephemeral placeholder (semantics OQ)
+  noise: number; // 0..10 step 0.1 — upscale denoise (group 'upscale')
 }
 
 /** Args for the stage-job enqueue (⚡2026-06-12 generic — jobs 05/09/10,
- *  replaces StartMixSwapParams; validation S1 no alias). `params` is v1
- *  collect-only — NOT forwarded to the API. */
+ *  replaces StartMixSwapParams; validation S1 no alias). `params` WIRED →
+ *  `buildModelParams(stage, params)` → body `model_params` (§4.6). */
 export interface StartStageJobParams {
   remixId: string;
   stage: StageKind;
   batchId: string;
-  /** v1 collect-only — not forwarded to the job API yet. */
+  /** WIRED → buildModelParams(stage, params) → body model_params. */
   params: SwapModelParams;
   /** When true (default), clear + re-run every sheet of the batch; false is
    *  idempotent — backend skips sheets already carrying a result. */

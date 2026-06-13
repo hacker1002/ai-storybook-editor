@@ -69,9 +69,21 @@ export interface EnqueueAudioSwapParams {
 // responses share the fields the FE consumes; job-specific extras (e.g. job
 // 05's target_count) ride in the index signature.
 
+/** Per-model parameters forwarded to a stage/sprite job (⚡2026-06-13 — wired
+ *  from the right-sidebar params via `buildModelParams`). `model` = the picked
+ *  model id (allowlist UI); `params` = optional knobs the backend
+ *  allowlists/clamps/maps per model (temperature for swap, noise for upscale).
+ *  Backend drops keys a model doesn't support (defense). */
+export interface ModelParamsBody {
+  model: string;
+  params?: { temperature?: number; noise?: number };
+}
+
 export interface EnqueueStageJobBody {
   batch_id: string;
   force_resweep?: boolean;
+  /** ⚡2026-06-13 WIRED — per-model params (model + temperature/noise). */
+  model_params?: ModelParamsBody;
 }
 
 export type StageJobEndpointSegment = 'mix-swap' | 'rmbg' | 'upscale';
@@ -118,6 +130,8 @@ export type EnqueueStageJobData =
 export interface EnqueueSpriteSwapBody {
   sprite_id: string;
   force_resweep?: boolean;
+  /** ⚡2026-06-13 WIRED — per-model params (swap model + temperature). */
+  model_params?: ModelParamsBody;
 }
 
 export interface EnqueueSpriteSwapEnqueuedData {
@@ -197,10 +211,15 @@ export async function enqueueRemixStageJob(
     remixId,
     endpointSegment,
     forceResweep: body.force_resweep ?? true,
+    model: body.model_params?.model,
   });
   const result = await callImageApi<EnqueueJobResponse<EnqueueStageJobData>>(
     `/api/jobs/remix/${encodeURIComponent(remixId)}/${endpointSegment}`,
-    { batch_id: body.batch_id, force_resweep: body.force_resweep ?? true },
+    {
+      batch_id: body.batch_id,
+      force_resweep: body.force_resweep ?? true,
+      ...(body.model_params ? { model_params: body.model_params } : {}),
+    },
   );
   if (!result.success) {
     const failure = result as ImageApiFailure;
@@ -219,8 +238,8 @@ export async function enqueueRemixStageJob(
  *  Returns parsed `data` on 2xx (enqueued/skipped/deduped); throws
  *  `EnqueueJobError` (with backend `code`) on non-2xx so the modal can
  *  distinguish 422 NO_SWAP_OBJECTS / MISSING_OBJECT_CONFIG / 404 SPRITE_NOT_FOUND
- *  from a generic failure. Body carries only `sprite_id` + `force_resweep`
- *  (job 02 hardcodes the swap model — no `model_params` v1). */
+ *  from a generic failure. Body carries `sprite_id` + `force_resweep` +
+ *  ⚡2026-06-13 `model_params` (swap model + temperature). */
 export async function enqueueRemixSpriteSwap(
   remixId: string,
   body: EnqueueSpriteSwapBody,
@@ -228,10 +247,15 @@ export async function enqueueRemixSpriteSwap(
   log.info('enqueueRemixSpriteSwap', 'request', {
     remixId,
     forceResweep: body.force_resweep ?? true,
+    model: body.model_params?.model,
   });
   const result = await callImageApi<EnqueueJobResponse<EnqueueSpriteSwapData>>(
     `/api/jobs/remix/${encodeURIComponent(remixId)}/sprite-swap`,
-    { sprite_id: body.sprite_id, force_resweep: body.force_resweep ?? true },
+    {
+      sprite_id: body.sprite_id,
+      force_resweep: body.force_resweep ?? true,
+      ...(body.model_params ? { model_params: body.model_params } : {}),
+    },
   );
   if (!result.success) {
     const failure = result as ImageApiFailure;

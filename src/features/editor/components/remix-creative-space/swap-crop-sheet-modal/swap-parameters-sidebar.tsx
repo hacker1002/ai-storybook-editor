@@ -1,14 +1,16 @@
 // swap-parameters-sidebar.tsx — Right sidebar of SwapCropSheetModal (design
 // §3.8). ⚡2026-06-12 — PER-TAB parameter group:
-//   - Sprites/Crops (group 'swap')  : Swap Model
+//   - Sprites/Crops (group 'swap')  : Swap Model + Temperature (shared stepper)
 //   - Remove BG     (group 'rmbg')  : Remove Background Model
 //   - Upscale       (group 'upscale'): Upscale Model + Noise stepper
 //
-// PLACEHOLDER v1 (design §4.6): values are collected in the modal's ephemeral
-// local state and NOT forwarded to any API — jobs 05/09/10 take no
-// `model_params`; `Noise` semantics are an open question (real-esrgan has no
-// noise input). Scale stepper REMOVED — job 10 derives PRINT 300 DPI itself.
-// Resets to DEFAULT_SWAP_PARAMS on every modal open.
+// ⚡2026-06-13 WIRED (design §4.6): values forward via buildModelParams(stage,
+// params) → job body `model_params`; the API allowlists/clamps/maps per model.
+// Noise is disabled + tooltipped when the picked upscale model has no denoise
+// input (modelSupportsNoise — real-esrgan / recraft ignore it; the value stays
+// in `params` and the backend drops the key as defense). Scale stepper REMOVED
+// — job 10 derives PRINT 300 DPI itself. Params are ephemeral — reset to
+// DEFAULT_SWAP_PARAMS on every modal open.
 
 import {
   Select,
@@ -18,6 +20,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { NumberStepper } from '@/components/ui/number-stepper';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { createLogger } from '@/utils/logger';
 import type { RemixModalTab, SwapModelParams } from '@/types/remix';
 import { STAGE_OF_TAB, STAGE_TAB_CONFIG } from './stage-tab-config';
@@ -26,6 +34,8 @@ import {
   RMBG_MODEL_OPTIONS,
   UPSCALE_MODEL_OPTIONS,
   NOISE,
+  TEMPERATURE,
+  modelSupportsNoise,
   RIGHT_SIDEBAR_WIDTH_PX,
   HEADER_HEIGHT_PX,
 } from './swap-modal-constants';
@@ -53,10 +63,17 @@ export function SwapParametersSidebar({
   activeTab,
 }: SwapParametersSidebarProps) {
   const group = paramsGroupOf(activeTab);
+  // Noise input is meaningless for models without a denoise knob (real-esrgan /
+  // recraft); disable + tooltip. Value stays in params — backend drops the key.
+  const noiseDisabled = !modelSupportsNoise(params.upscaleModel);
 
   const handleSwapModelChange = (value: string) => {
     log.debug('handleSwapModelChange', 'swap model selected', { value });
     onChange({ ...params, swapModel: value });
+  };
+  const handleTemperatureChange = (value: number) => {
+    log.debug('handleTemperatureChange', 'temperature changed', { value });
+    onChange({ ...params, swapTemperature: value });
   };
   const handleRmbgModelChange = (value: string) => {
     log.debug('handleRmbgModelChange', 'rmbg model selected', { value });
@@ -95,20 +112,33 @@ export function SwapParametersSidebar({
 
       <div className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
         {group === 'swap' && (
-          <ParamField label="Swap Model" htmlFor="swap-model-select">
-            <Select value={params.swapModel} onValueChange={handleSwapModelChange}>
-              <SelectTrigger id="swap-model-select" className={DARK_TRIGGER_CLASS}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SWAP_MODEL_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
-                    {opt}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </ParamField>
+          <>
+            <ParamField label="Swap Model" htmlFor="swap-model-select">
+              <Select value={params.swapModel} onValueChange={handleSwapModelChange}>
+                <SelectTrigger id="swap-model-select" className={DARK_TRIGGER_CLASS}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SWAP_MODEL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </ParamField>
+
+            <ParamField label="Temperature">
+              <NumberStepper
+                value={params.swapTemperature}
+                min={TEMPERATURE.min}
+                max={TEMPERATURE.max}
+                step={TEMPERATURE.step}
+                onChange={handleTemperatureChange}
+                className={DARK_STEPPER_CLASS}
+              />
+            </ParamField>
+          </>
         )}
 
         {group === 'rmbg' && (
@@ -152,23 +182,45 @@ export function SwapParametersSidebar({
             </ParamField>
 
             <ParamField label="Noise">
-              {/* Placeholder ephemeral v1 (chốt 2026-06-12): rendered per the
-                  mock but NOT sent in the job-10 body — model_params is not
-                  part of the contract; Noise semantics are an open question. */}
-              <NumberStepper
-                value={params.noise}
-                min={NOISE.min}
-                max={NOISE.max}
-                step={NOISE.step}
-                onChange={handleNoiseChange}
-                className={DARK_STEPPER_CLASS}
-              />
+              {/* ⚡2026-06-13 WIRED → model_params.params.noise. Disabled +
+                  tooltip when the model has no denoise input; the span wrapper
+                  gives the Tooltip a hover target (a disabled control emits no
+                  pointer events). */}
+              {noiseDisabled ? (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex w-fit">
+                        <NumberStepper
+                          value={params.noise}
+                          min={NOISE.min}
+                          max={NOISE.max}
+                          step={NOISE.step}
+                          onChange={handleNoiseChange}
+                          disabled
+                          className={DARK_STEPPER_CLASS}
+                        />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Not used by this model</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <NumberStepper
+                  value={params.noise}
+                  min={NOISE.min}
+                  max={NOISE.max}
+                  step={NOISE.step}
+                  onChange={handleNoiseChange}
+                  className={DARK_STEPPER_CLASS}
+                />
+              )}
             </ParamField>
           </>
         )}
 
         <p className="mt-auto text-[11px] leading-relaxed text-[var(--swap-modal-text-muted)]">
-          Tham số v1 chỉ thu thập ở UI — chưa nối API.
+          Tham số gửi kèm mỗi job; reset mặc định mỗi lần mở modal.
         </p>
       </div>
     </aside>

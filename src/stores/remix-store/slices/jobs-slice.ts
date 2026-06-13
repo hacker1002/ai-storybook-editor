@@ -20,6 +20,7 @@ import { useAuthStore } from '../../auth-store';
 import { useBackgroundJobsStore } from '../../background-jobs-store';
 import { resolveFinalCrops } from '../selectors/select-final-crops';
 import { applyFinalCrops } from '../apply-final-crops';
+import { buildModelParams } from './build-model-params';
 import type { RemixJobsSlice, RemixSliceCreator } from '../types';
 
 const log = createLogger('Store', 'RemixStore');
@@ -184,10 +185,10 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
   // ── Stage-batch job enqueue (⚡2026-06-12 generic — jobs 05/09/10) ──
   // Mirrors startAudioJob: POST enqueue + optimistic seed of the stage's job
   // type. Backend dedups PER-TYPE (1 job per remix+stage; the 3 stages run
-  // concurrently — disjoint JSONB columns). `params` (model group) is v1
-  // collect-only — NOT sent in the body.
+  // concurrently — disjoint JSONB columns). ⚡2026-06-13 `params` WIRED →
+  // buildModelParams(stage, params) → body `model_params` (API per-model handle).
   startStageJob: async (p) => {
-    const { remixId, stage, batchId, forceResweep = true } = p;
+    const { remixId, stage, batchId, params, forceResweep = true } = p;
     const { phase, endpointSegment } = STAGE_JOB_CONFIG[stage];
 
     // Guard within THE stage only — other stages stay unblocked.
@@ -206,17 +207,20 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       return { kind: 'skipped', reason: 'busy' };
     }
 
+    const modelParams = buildModelParams(stage, params);
     log.info('startStageJob', 'enqueue', {
       remixId,
       stage,
       batchId,
       forceResweep,
+      model: modelParams.model,
     });
     // Throws EnqueueJobError on non-2xx (e.g. 422 MISSING_VARIANT_REFERENCE on
     // mix-swap) — caller (modal) toasts on `code`.
     const data = await enqueueRemixStageJob(remixId, endpointSegment, {
       batch_id: batchId,
       force_resweep: forceResweep,
+      model_params: modelParams,
     });
 
     if ('skipped' in data && data.skipped) {
@@ -263,6 +267,8 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       currentStep: 0,
       totalSteps: data.total_steps,
       stepDetails: null,
+      // `model_params` intentionally omitted — backend owns `background_jobs.params`;
+      // realtime UPDATE reconciles the persisted row (FE seed is optimistic only).
       params: { remix_id: remixId, batch_id: batchId },
       result: null,
       cancelRequested: false,
@@ -280,10 +286,10 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
   // ── Sprite (Variants) crop-sheet swap enqueue (api/jobs/02) ────────
   // Mirrors startMixSwap: POST enqueue + optimistic seed `remix_sprite_swap`
   // row. INDEPENDENT of mix-swap (disjoint dedup key = sprite_id); an
-  // already-running swap for the SAME sprite no-ops. Body carries only
-  // `sprite_id` + `force_resweep` (job 02 hardcodes the model — no model_params).
-  startSpriteSwap: async (params) => {
-    const { remixId, spriteId, forceResweep = true } = params;
+  // already-running swap for the SAME sprite no-ops. ⚡2026-06-13 body carries
+  // `sprite_id` + `force_resweep` + `model_params` (swap model + temperature).
+  startSpriteSwap: async (args) => {
+    const { remixId, spriteId, params, forceResweep = true } = args;
 
     const alreadyRunning = get().jobs.some(
       (j) =>
@@ -300,12 +306,19 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       return { kind: 'skipped', reason: 'busy' };
     }
 
-    log.info('startSpriteSwap', 'enqueue', { remixId, spriteId, forceResweep });
+    const modelParams = buildModelParams('sprites', params);
+    log.info('startSpriteSwap', 'enqueue', {
+      remixId,
+      spriteId,
+      forceResweep,
+      model: modelParams.model,
+    });
     // Throws EnqueueJobError on non-2xx (incl. 422 NO_SWAP_OBJECTS /
     // MISSING_OBJECT_CONFIG, 404 SPRITE_NOT_FOUND) — caller (modal) toasts on `code`.
     const data = await enqueueRemixSpriteSwap(remixId, {
       sprite_id: spriteId,
       force_resweep: forceResweep,
+      model_params: modelParams,
     });
 
     if ('skipped' in data && data.skipped) {
@@ -344,6 +357,8 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       currentStep: 0,
       totalSteps: data.total_steps,
       stepDetails: null,
+      // `model_params` intentionally omitted — backend owns `background_jobs.params`;
+      // realtime UPDATE reconciles the persisted row (FE seed is optimistic only).
       params: { remix_id: remixId, sprite_id: spriteId },
       result: null,
       cancelRequested: false,

@@ -9,12 +9,12 @@ import type { SwapModelParams } from '@/types/remix';
  *  sub-components share one named alias. */
 export type RemixEntityType = 'character' | 'prop' | 'mix';
 
-/** AI swap model options (right sidebar — v1 collect-only, not wired to API). */
-export const SWAP_MODEL_OPTIONS = [
-  'google/nano-banana-pro',
-  'openai/gpt-image-2',
-  'bytedance/seedream-4.5',
-] as const;
+/** AI swap model options (right sidebar, group 'swap'). ⚡2026-06-13 Gemini-only:
+ *  v1 dispatch supports only nano-banana-pro; non-Gemini models are registered
+ *  NOT_SUPPORTED backend (→422 UNSUPPORTED_MODEL), so we do not list dead
+ *  options in the UI. Re-add (gpt-image-2 / seedream) when a provider adapter
+ *  ships. */
+export const SWAP_MODEL_OPTIONS = ['google/nano-banana-pro'] as const;
 
 /** AI remove-background model options (right sidebar, tab Remove BG —
  *  ⚡2026-06-12 placeholder, job 09 takes no `model_params` v1). */
@@ -35,6 +35,7 @@ export const UPSCALE_MODEL_OPTIONS = [
  *  removed — job 10 derives PRINT 300 DPI from the layer geometry itself. */
 export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
   swapModel: 'google/nano-banana-pro',
+  swapTemperature: 0.25,
   rmbgModel: 'bria/remove-background',
   upscaleModel: 'nightmareai/real-esrgan',
   noise: 1.5,
@@ -46,9 +47,31 @@ export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
  *  can fit-to-canvas inside a narrow viewport (design 05-03 §4.2/§4.6). */
 export const ZOOM = { min: 10, max: 400, step: 5, default: 100 } as const;
 
-/** Noise stepper range (right sidebar, tab Upscale — ⚡2026-06-12 placeholder,
- *  ephemeral; NOT sent to job 10 v1). */
+/** Temperature stepper range (right sidebar, group 'swap' — Gemini
+ *  `generationConfig.temperature`). ⚡2026-06-13 WIRED: one shared stepper for
+ *  Sprites + Crops; forwarded as `model_params.params.temperature`. Backend
+ *  clamps to [0,2]. Default 0.25 (modal always sends the stepper value; a job's
+ *  historical 0.4 default only applies on direct API calls that omit
+ *  `model_params`). */
+export const TEMPERATURE = { min: 0, max: 2, step: 0.05, default: 0.25 } as const;
+
+/** Noise stepper range (right sidebar, group 'upscale' — denoise strength).
+ *  ⚡2026-06-13 WIRED → `model_params.params.noise`. Only models exposing a
+ *  denoise input consume it (see `modelSupportsNoise`); real-esrgan /
+ *  recraft-crisp-upscale ignore it — backend drops the key as defense. */
 export const NOISE = { min: 0, max: 10, step: 0.1, default: 1.5 } as const;
+
+/** Upscale models exposing a denoise input (job 10 registry §96-102). The Noise
+ *  stepper is disabled + tooltipped when the picked model isn't here:
+ *  `nightmareai/real-esrgan` (no noise input) and
+ *  `recraft-ai/recraft-crisp-upscale` (fixed crispness) both ignore noise; only
+ *  `alexgenovese/upscaler` exposes denoise. Backend drops the key as defense
+ *  even if sent. KISS: a Set, not a per-model object. */
+const UPSCALE_MODELS_WITH_NOISE = new Set<string>(['alexgenovese/upscaler']);
+
+export function modelSupportsNoise(upscaleModel: string): boolean {
+  return UPSCALE_MODELS_WITH_NOISE.has(upscaleModel);
+}
 
 /** Each batch must keep at least this many crop sheets. */
 export const SHEET_MIN = 1;
