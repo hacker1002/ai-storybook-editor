@@ -22,9 +22,12 @@ import { useFormats, useFormatActions } from "@/stores/format-store";
 import { useEras, useEraActions } from "@/stores/era-store";
 import { useLocations, useLocationActions } from "@/stores/location-store";
 import { useArtStyleStore } from "@/stores/art-style-store";
+import { useArtStyles, useArtStylesActions } from "@/stores/art-styles-store";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown";
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown";
+import { ArtStyleSelect } from "@/features/books";
+import type { ArtStyleOption } from "@/features/books/types";
 import { DIMENSION_MAP, TARGET_AUDIENCE_MAP } from "@/constants/book-enums";
 import { SUPPORTED_LANGUAGES } from "@/constants/config-constants";
 import { resolveMultiLangName } from "@/utils/multi-lang-helpers";
@@ -66,6 +69,8 @@ export function ConfigGeneralSettings() {
   const { fetchLocations } = useLocationActions();
 
   const artStyleName = useArtStyleStore((s) => s.name);
+  const artStyles = useArtStyles();
+  const { fetchStyles } = useArtStylesActions();
   const lang = useLanguageCode();
 
   // Fetch all lookup data on mount
@@ -76,7 +81,8 @@ export function ConfigGeneralSettings() {
     void fetchFormats();
     void fetchEras();
     void fetchLocations();
-  }, [fetchThemes, fetchGenres, fetchFormats, fetchEras, fetchLocations]);
+    void fetchStyles();
+  }, [fetchThemes, fetchGenres, fetchFormats, fetchEras, fetchLocations, fetchStyles]);
 
   // Fetch junction data when book changes
   React.useEffect(() => {
@@ -132,6 +138,11 @@ export function ConfigGeneralSettings() {
     value: g.id,
     label: resolveMultiLangName(g.name, lang),
   }));
+  const artStyleOptions: ArtStyleOption[] = artStyles.map((s) => ({
+    id: s.id,
+    name: s.name,
+    thumbnailUrl: s.imageReferences?.[0]?.mediaUrl,
+  }));
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -173,6 +184,17 @@ export function ConfigGeneralSettings() {
   const handleLocationChange = (value: string) => {
     log.info("handleLocationChange", "updating", { locationId: value });
     void updateBook(book.id, { location_id: value });
+  };
+
+  const handleArtStyleChange = (artStyleId: string | null) => {
+    log.info("handleArtStyleChange", "updating", { artStyleId });
+    void updateBook(book.id, { artstyle_id: artStyleId });
+    // Refresh the singular art-style store (drives illustration prompt
+    // description). Its fetch short-circuits on existing description, so reset
+    // first; on clear, leave it reset.
+    const store = useArtStyleStore.getState();
+    store.reset();
+    if (artStyleId) void store.fetchArtStyle(artStyleId);
   };
 
   return (
@@ -246,15 +268,15 @@ export function ConfigGeneralSettings() {
           />
         </div>
 
-        {/* ART STYLE — readonly */}
+        {/* ART STYLE — editable, thumbnail picker (parity with NewBookModal) */}
         <div>
           <FieldLabel>Art Style</FieldLabel>
-          <SearchableDropdown
-            options={[]}
-            value={null}
-            onChange={() => {}}
-            placeholder={artStyleName ?? "—"}
-            disabled
+          <ArtStyleSelect
+            value={book.artstyle_id ?? null}
+            options={artStyleOptions}
+            onChange={handleArtStyleChange}
+            placeholder="Select art style..."
+            clearable
           />
         </div>
 
