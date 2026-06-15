@@ -9,10 +9,12 @@ import { VoicesPage } from '@/features/voices';
 import { SoundsPage } from '@/features/sounds';
 import { MusicsPage } from '@/features/musics';
 import { HumansPage } from '@/features/humans';
+import { StylesPage } from '@/features/styles';
 import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer, DemoRemotionSpike } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVoicesActions } from '@/stores/voices-store';
 import { useHumansActions } from '@/stores/humans-store';
+import { useArtStylesActions } from '@/stores/art-styles-store';
 import { useBackgroundJobsStore } from '@/stores/background-jobs-store';
 import { useJobNotifications } from '@/features/editor/hooks/use-job-notifications';
 
@@ -33,7 +35,6 @@ const SIDEBAR_PLACEHOLDER_ROUTES: Array<{ path: string; title: string }> = [
   { path: '/products',   title: 'Products' },
   { path: '/assets',     title: 'Assets' },
   { path: '/concepts',   title: 'Concepts' },
-  { path: '/styles',     title: 'Styles' },
   { path: '/categories', title: 'Categories' },
   { path: '/eras',       title: 'Eras' },
   { path: '/locations',  title: 'Locations' },
@@ -69,6 +70,7 @@ export default function App() {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const { fetchVoices } = useVoicesActions();
   const { fetchHumans } = useHumansActions();
+  const { fetchStyles } = useArtStylesActions();
 
   useEffect(() => {
     initialize();
@@ -78,8 +80,9 @@ export default function App() {
     if (isInitialized && isAuthenticated) {
       void fetchVoices();
       void fetchHumans();
+      void fetchStyles();
     }
-  }, [isInitialized, isAuthenticated, fetchVoices, fetchHumans]);
+  }, [isInitialized, isAuthenticated, fetchVoices, fetchHumans, fetchStyles]);
 
   // Unified background-jobs channel (ADR-037) — app-root singleton. Open when
   // auth resolves with a user; teardown lives in auth-store.logout(). `init` is
@@ -117,6 +120,7 @@ export default function App() {
           <Route path="/sounds" element={<SoundsPage />} />
           <Route path="/musics" element={<MusicsPage />} />
           <Route path="/humans" element={<HumansPage />} />
+          <Route path="/styles" element={<StylesPage />} />
           <Route
             path="/humans/:id"
             element={<Suspense fallback={<LoadingScreen />}><HumanDetailPage /></Suspense>}
