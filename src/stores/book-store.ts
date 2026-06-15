@@ -30,7 +30,7 @@ export interface CreateBookParams {
   format_id: string;
   dimension: number;
   target_audience: number;
-  artstyle_id: string;
+  artstyle_id: string | null;
   original_language: string;
 }
 
@@ -146,7 +146,7 @@ export const useBookStore = create<BookStore>()(
               book_type: 1,
               dimension: params.dimension,
               target_audience: params.target_audience,
-              artstyle_id: params.artstyle_id,
+              artstyle_id: params.artstyle_id ?? null,
               step: 1,
               type: 1,
               original_language: params.original_language,

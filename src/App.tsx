@@ -10,6 +10,7 @@ import { SoundsPage } from '@/features/sounds';
 import { MusicsPage } from '@/features/musics';
 import { HumansPage } from '@/features/humans';
 import { StylesPage } from '@/features/styles';
+import { BooksPage } from '@/features/books';
 import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer, DemoRemotionSpike } from '@/features/demo-spread-views';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVoicesActions } from '@/stores/voices-store';
@@ -31,7 +32,6 @@ const HumanDetailPage = lazy(() =>
 );
 
 const SIDEBAR_PLACEHOLDER_ROUTES: Array<{ path: string; title: string }> = [
-  { path: '/books',      title: 'Books' },
   { path: '/products',   title: 'Products' },
   { path: '/assets',     title: 'Assets' },
   { path: '/concepts',   title: 'Concepts' },
@@ -115,12 +115,18 @@ export default function App() {
         <Route path="/demo/rive-player" element={<DemoRivePlayer />} />
         <Route path="/demo/remotion-spike" element={<DemoRemotionSpike />} />
         <Route element={<AppLayout />}>
-          <Route path="/" element={<HomePage />} />
+          {/* Default landing = Books library. Single source of the "default"
+              route — login redirect, editor-exit, and the `*` catch-all all
+              navigate('/') and follow this. Home stays reachable at /home
+              (sidebar title link). */}
+          <Route index element={<Navigate to="/books" replace />} />
+          <Route path="/home" element={<HomePage />} />
           <Route path="/voices" element={<VoicesPage />} />
           <Route path="/sounds" element={<SoundsPage />} />
           <Route path="/musics" element={<MusicsPage />} />
           <Route path="/humans" element={<HumansPage />} />
           <Route path="/styles" element={<StylesPage />} />
+          <Route path="/books" element={<BooksPage />} />
           <Route
             path="/humans/:id"
             element={<Suspense fallback={<LoadingScreen />}><HumanDetailPage /></Suspense>}

@@ -157,7 +157,7 @@ export function AppSidebar() {
   return (
     <aside className="flex h-screen w-60 flex-col border-r border-sidebar-border bg-sidebar-background">
       <div className="p-4">
-        <NavLink to="/" className="text-xl font-bold text-foreground">
+        <NavLink to="/home" className="text-xl font-bold text-foreground">
           StoryWeaver
         </NavLink>
       </div>
