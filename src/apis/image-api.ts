@@ -1,4 +1,3 @@
-import { callEdgeFunction } from './edge-function-client';
 import { callImageApi, type ImageApiFailure } from './image-api-client';
 import { createLogger } from '@/utils/logger';
 import type { AspectRatio } from '@/constants/aspect-ratio-constants';
@@ -49,22 +48,6 @@ export interface NormalizeImageFailure {
 }
 
 export type NormalizeImageResult = NormalizeImageSuccess | NormalizeImageFailure;
-
-// --- Other types ---
-
-export interface GenerateFromDescriptionParams {
-  description: string;
-  referenceImages?: Array<{ base64Data: string; mimeType: string }>;
-  aspectRatio?: string;
-  imageSize?: string;
-}
-
-export interface GenerateFromDescriptionResult {
-  success: boolean;
-  data?: { imageUrl: string; storagePath: string };
-  error?: string;
-  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
-}
 
 // --- Internal helpers ---
 
@@ -158,19 +141,6 @@ export async function normalizeImage(
   }
 
   return result;
-}
-
-export async function callGenerateFromDescription(
-  params: GenerateFromDescriptionParams
-): Promise<GenerateFromDescriptionResult> {
-  log.info('callGenerateFromDescription', 'start', {
-    descriptionLength: params.description.length,
-    refCount: params.referenceImages?.length ?? 0,
-  });
-  return callEdgeFunction<GenerateFromDescriptionResult>(
-    'image-generate-from-description',
-    params
-  );
 }
 
 // --- Human visual-profile pipeline (normalize-human → extract-human-traits) ---

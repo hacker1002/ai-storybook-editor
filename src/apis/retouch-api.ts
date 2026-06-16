@@ -1,4 +1,3 @@
-import { callEdgeFunction } from './edge-function-client';
 import { callImageApi, type ImageApiFailure } from './image-api-client';
 import { createLogger } from '@/utils/logger';
 import type { WordTiming } from '@/types/spread-types';
@@ -179,14 +178,20 @@ export async function callImageRemoveBg(
   return res;
 }
 
+// TODO: Re-implement narration generation via the ElevenLabs voice API.
+// The `retouch-generate-narration` edge function is deprecated. The branching
+// modal should drive narration through the ElevenLabs-backed voice endpoints
+// (see narrate-script-api.ts `/api/text/narrate-script` or voice-api.ts).
+// Stubbed until that wiring lands — returns a not-available failure so callers
+// degrade gracefully instead of hitting the dead edge function.
 export async function callGenerateNarration(
   params: GenerateNarrationParams
 ): Promise<GenerateNarrationResult> {
-  log.info('callGenerateNarration', 'start', { scriptLength: params.script.length, voiceId: params.voiceId });
-  return callEdgeFunction<GenerateNarrationResult>(
-    'retouch-generate-narration',
-    params
-  );
+  log.warn('callGenerateNarration', 'not implemented — retouch-generate-narration deprecated, pending ElevenLabs migration', {
+    scriptLength: params.script.length,
+    voiceId: params.voiceId,
+  });
+  return { success: false, error: 'Tính năng sinh narration đang được chuyển sang ElevenLabs, tạm thời chưa khả dụng.' };
 }
 
 export async function callLayeringImage(

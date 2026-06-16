@@ -141,6 +141,9 @@ export function StoryBranchingModal({ spreadId, onClose }: StoryBranchingModalPr
     setIsGeneratingNarration(true);
 
     try {
+      // TODO: Switch to the ElevenLabs voice API (retouch-generate-narration deprecated).
+      // callGenerateNarration is currently a stub returning not-available — wire this
+      // to narrate-script-api `/api/text/narrate-script` (ElevenLabs) when ready.
       const response = await callGenerateNarration({
         script: promptTitle,
         voiceId,
