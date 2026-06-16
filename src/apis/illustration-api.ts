@@ -1,4 +1,4 @@
-import { callEdgeFunction } from './edge-function-client';
+import { callImageApi, type ImageApiFailure } from './image-api-client';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('API', 'IllustrationApi');
@@ -76,13 +76,13 @@ export interface GenerateCharacterVariantResult {
 
 export async function callGenerateCharacterBase(
   params: GenerateCharacterBaseParams
-): Promise<GenerateCharacterBaseResult> {
+): Promise<GenerateCharacterBaseResult | ImageApiFailure> {
   log.info('callGenerateCharacterBase', 'start', {
     characterKey: params.characterKey,
     refCount: params.referenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GenerateCharacterBaseResult>(
-    'illustration-generate-character-base',
+  return callImageApi<GenerateCharacterBaseResult>(
+    '/api/illustration/generate-character-base',
     params
   );
 }
@@ -113,13 +113,13 @@ export interface GeneratePropBaseResult {
 
 export async function callGeneratePropBase(
   params: GeneratePropBaseParams
-): Promise<GeneratePropBaseResult> {
+): Promise<GeneratePropBaseResult | ImageApiFailure> {
   log.info('callGeneratePropBase', 'start', {
     propKey: params.propKey,
     refCount: params.referenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GeneratePropBaseResult>(
-    'illustration-generate-prop-base',
+  return callImageApi<GeneratePropBaseResult>(
+    '/api/illustration/generate-prop-base',
     params
   );
 }
@@ -148,14 +148,14 @@ export interface GeneratePropVariantResult {
 
 export async function callGeneratePropVariant(
   params: GeneratePropVariantParams
-): Promise<GeneratePropVariantResult> {
+): Promise<GeneratePropVariantResult | ImageApiFailure> {
   log.info('callGeneratePropVariant', 'start', {
     propKey: params.propKey,
     variantKey: params.variantKey,
     refCount: params.additionalReferenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GeneratePropVariantResult>(
-    'illustration-generate-prop-variant',
+  return callImageApi<GeneratePropVariantResult>(
+    '/api/illustration/generate-prop-variant',
     params
   );
 }
@@ -189,13 +189,13 @@ export interface GenerateStageBaseResult {
 
 export async function callGenerateStageBase(
   params: GenerateStageBaseParams
-): Promise<GenerateStageBaseResult> {
+): Promise<GenerateStageBaseResult | ImageApiFailure> {
   log.info('callGenerateStageBase', 'start', {
     stageKey: params.stageKey,
     refCount: params.referenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GenerateStageBaseResult>(
-    'illustration-generate-stage-base',
+  return callImageApi<GenerateStageBaseResult>(
+    '/api/illustration/generate-stage-base',
     params
   );
 }
@@ -227,14 +227,14 @@ export interface GenerateStageVariantResult {
 
 export async function callGenerateStageVariant(
   params: GenerateStageVariantParams
-): Promise<GenerateStageVariantResult> {
+): Promise<GenerateStageVariantResult | ImageApiFailure> {
   log.info('callGenerateStageVariant', 'start', {
     stageKey: params.stageKey,
     variantKey: params.variantKey,
     refCount: params.additionalReferenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GenerateStageVariantResult>(
-    'illustration-generate-stage-variant',
+  return callImageApi<GenerateStageVariantResult>(
+    '/api/illustration/generate-stage-variant',
     params
   );
 }
@@ -261,27 +261,27 @@ export interface GenerateSceneResult {
 
 export async function callGenerateScene(
   params: GenerateSceneParams
-): Promise<GenerateSceneResult> {
+): Promise<GenerateSceneResult | ImageApiFailure> {
   log.info('callGenerateScene', 'start', {
     hasStageVariantImage: !!params.stageVariantImageUrl,
     refCount: params.referenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GenerateSceneResult>(
-    'illustration-generate-scene',
+  return callImageApi<GenerateSceneResult>(
+    '/api/illustration/generate-scene',
     params
   );
 }
 
 export async function callGenerateCharacterVariant(
   params: GenerateCharacterVariantParams
-): Promise<GenerateCharacterVariantResult> {
+): Promise<GenerateCharacterVariantResult | ImageApiFailure> {
   log.info('callGenerateCharacterVariant', 'start', {
     characterKey: params.characterKey,
     variantKey: params.variantKey,
     refCount: params.additionalReferenceImages?.length ?? 0,
   });
-  return callEdgeFunction<GenerateCharacterVariantResult>(
-    'illustration-generate-character-variant',
+  return callImageApi<GenerateCharacterVariantResult>(
+    '/api/illustration/generate-character-variant',
     params
   );
 }
