@@ -1,5 +1,6 @@
-// art-style-store.ts - Zustand store for art style description fetched from DB.
-// Used by all illustration API calls to pass artStyleDescription.
+// art-style-store.ts - Zustand store for art style name + description fetched from DB.
+// `name` drives the settings label; `description` feeds the annotation flow (objects → EnhanceImageAnnotationModal).
+// NOTE: the 7 generate-* illustration endpoints now send `artStyleId` (book.artstyle_id UUID), NOT this description.
 
 import { create } from 'zustand';
 import { supabase } from '@/apis/supabase';

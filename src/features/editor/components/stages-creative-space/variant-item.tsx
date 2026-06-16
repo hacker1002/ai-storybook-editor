@@ -37,7 +37,7 @@ import { Label } from '@/components/ui/label';
 import { useSnapshotActions, useStageByKey, useImageTasksForChild } from '@/stores/snapshot-store/selectors';
 import { useLocations } from '@/stores/location-store';
 import { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
-import { useArtStyleDescription } from '@/stores/art-style-store';
+import { useCurrentBook } from '@/stores/book-store';
 import type { StageVariant } from '@/types/stage-types';
 import { uploadImageToStorage } from '@/apis/storage-api';
 import { createLogger } from '@/utils/logger';
@@ -62,7 +62,8 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
   const locations = useLocations();
   const eras = useEras();
   const eraByName = useMemo(() => new Map(eras.map((e) => [e.name, e])), [eras]);
-  const artStyleDescription = useArtStyleDescription();
+  const book = useCurrentBook();
+  const artStyleId = book?.artstyle_id ?? null;
   const { isProcessing } = useImageTasksForChild(stageKey, variantData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -104,8 +105,8 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
     ? stage?.variants.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
     : undefined;
 
-  // Non-base variants cannot generate without base illustration
-  const isGenerateDisabled = isProcessing || !promptText.trim() || (!isBase && !baseStageImageUrl);
+  // Non-base variants cannot generate without base illustration; all variants need a book art style.
+  const isGenerateDisabled = isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseStageImageUrl);
 
   // Resolve era description from era store
   const resolvedEraDescription = variantData.temporal.era
@@ -115,6 +116,13 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
   const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
+
+    // Null-guard: require book.artstyle_id (UUID) — contract rejects empty art style with 400.
+    if (!artStyleId) {
+      log.warn('handleGenerate', 'blocked — missing artStyleId', { stageKey, variantKey: variantData.key });
+      toast.error('Select an art style first');
+      return;
+    }
 
     log.info('handleGenerate', 'start', { stageKey, variantKey: variantData.key, isBase });
     updateStageVariant(stageKey, variantData.key, { visual_description: trimmedPrompt });
@@ -144,7 +152,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
           sensory: variantData.sensory,
           emotional: variantData.emotional,
         },
-        artStyleDescription: artStyleDescription ?? '',
+        artStyleId,
         referenceImages,
       });
     } else {
@@ -163,7 +171,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
         variantEmotional: variantData.emotional,
         eraDescription: resolvedEraDescription,
         baseStageImageUrl,
-        artStyleDescription: artStyleDescription ?? '',
+        artStyleId,
         additionalReferenceImages: referenceImages,
       });
     }
@@ -479,6 +487,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
             <Button
               onClick={handleGenerate}
               disabled={isGenerateDisabled}
+              title={!artStyleId ? 'Select an art style first' : undefined}
               className="w-40"
             >
               {isProcessing ? (
@@ -493,6 +502,9 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
                 </>
               )}
             </Button>
+            {!artStyleId && (
+              <span className="text-xs text-muted-foreground">Select an art style first</span>
+            )}
             {!isBase && !baseStageImageUrl && (
               <span className="text-xs text-muted-foreground">Generate base variant first</span>
             )}

@@ -37,7 +37,8 @@ import {
 import { ImageZoomPreview } from "@/components/ui/image-zoom-preview";
 import { downloadImage } from "@/utils/download-image";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
-import { useArtStyleDescription } from "@/stores/art-style-store";
+import { useCurrentBook } from "@/stores/book-store";
+import { toast } from "sonner";
 import {
   useSnapshotActions,
   useStages,
@@ -125,7 +126,8 @@ export function GenerateImageModal({
   // Store hooks
   const { startGenerateTask, startEditTask } = useSnapshotActions();
   const stages = useStages();
-  const artStyleDescription = useArtStyleDescription();
+  const book = useCurrentBook();
+  const artStyleId = book?.artstyle_id ?? null;
   const { isProcessing } = useImageTasksForChild(spreadId, image.id);
 
   // Reference image pickers for generate and edit flows
@@ -228,6 +230,13 @@ export function GenerateImageModal({
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt || isProcessing) return;
 
+    // Null-guard: book must have an art style (artstyle_id UUID) before generating (contract requires it).
+    if (!artStyleId) {
+      log.warn("handleGenerate", "blocked — missing artStyleId", { spreadId, imageId: image.id });
+      toast.error("Select an art style first");
+      return;
+    }
+
     onUpdateImage({ visual_description: trimmedPrompt });
 
     log.info("handleGenerate", "start", {
@@ -258,7 +267,7 @@ export function GenerateImageModal({
       childKey: image.id,
       childName: image.title || "Image",
       visualDescription: trimmedPrompt,
-      artStyleDescription: artStyleDescription ?? "",
+      artStyleId,
       stageVariantImageUrl: resolveStageVariantImageUrl(),
       referenceImages,
       aspectRatio: image.aspect_ratio,
@@ -274,7 +283,7 @@ export function GenerateImageModal({
     image.aspect_ratio,
     generateRefs,
     selectedStageVariant,
-    artStyleDescription,
+    artStyleId,
     resolveStageVariantImageUrl,
     startGenerateTask,
     onUpdateImage,
@@ -673,23 +682,29 @@ export function GenerateImageModal({
         </div>
 
         <DialogFooter className="sm:justify-center">
-          <Button
-            onClick={handleGenerate}
-            disabled={isProcessing || !prompt.trim()}
-            className="w-40"
-          >
-            {isProcessing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Processing
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Generate
-              </>
+          <div className="flex flex-col items-center gap-1">
+            <Button
+              onClick={handleGenerate}
+              disabled={isProcessing || !prompt.trim() || !artStyleId}
+              title={!artStyleId ? "Select an art style first" : undefined}
+              className="w-40"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  Processing
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate
+                </>
+              )}
+            </Button>
+            {!artStyleId && (
+              <span className="text-xs text-muted-foreground">Select an art style first</span>
             )}
-          </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

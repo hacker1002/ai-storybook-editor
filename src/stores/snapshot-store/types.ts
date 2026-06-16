@@ -417,7 +417,8 @@ interface CharacterBaseGenerateParams extends ImageTaskTarget {
     };
     visual_description: string;
   };
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend resolves the row. */
+  artStyleId: string;
   referenceImages?: ReferenceImages;
 }
 
@@ -434,7 +435,8 @@ interface CharacterVariantGenerateParams extends ImageTaskTarget {
   };
   variantVisualDescription: string;
   baseVariantImageUrl: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend resolves the row. */
+  artStyleId: string;
   additionalReferenceImages?: ReferenceImages;
 }
 
@@ -447,7 +449,8 @@ interface PropBaseGenerateParams extends ImageTaskTarget {
   categoryName?: string;
   categoryType?: number;
   baseStateVisualDescription: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend resolves the row. */
+  artStyleId: string;
   referenceImages?: ReferenceImages;
 }
 
@@ -457,7 +460,8 @@ interface PropVariantGenerateParams extends ImageTaskTarget {
   variantKey: string;
   variantVisualDescription: string;
   basePropImageUrl: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend resolves the row. */
+  artStyleId: string;
   additionalReferenceImages?: ReferenceImages;
 }
 
@@ -474,7 +478,8 @@ interface StageBaseGenerateParams extends ImageTaskTarget {
     sensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
     emotional?: { mood?: string };
   };
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend resolves the row. */
+  artStyleId: string;
   referenceImages?: ReferenceImages;
 }
 
@@ -488,14 +493,16 @@ interface StageVariantGenerateParams extends ImageTaskTarget {
   variantEmotional?: { mood?: string };
   eraDescription?: string;
   baseStageImageUrl: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend resolves the row. */
+  artStyleId: string;
   additionalReferenceImages?: ReferenceImages;
 }
 
 interface SceneGenerateParams extends ImageTaskTarget {
   entityType: 'illustration_image';
   visualDescription: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend resolves the row. */
+  artStyleId: string;
   stageVariantImageUrl?: string;
   referenceImages?: ReferenceImages;
   aspectRatio?: string;

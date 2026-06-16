@@ -15,9 +15,29 @@ import {
   callGenerateScene,
 } from '@/apis/illustration-api';
 import { callEditObjectImage } from '@/apis/retouch-api';
+import type { ImageApiFailure } from '@/apis/image-api-client';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'ImageTaskSlice');
+
+// Maps backend art-style error codes → user-facing guidance for the illustration generate flow.
+// Validation S1 Q4: hardcoded English (intentionally diverges from the VI convention in image-api-client.ts).
+const ART_STYLE_ERROR_MESSAGES: Record<string, string> = {
+  ART_STYLE_NOT_FOUND: 'Selected art style not found — please pick one again in settings.',
+  ART_STYLE_NO_REFERENCES: 'This art style has no reference images — add some in Style settings.',
+  VALIDATION_ERROR: 'Invalid art style — please select an art style.',
+};
+
+// Shown when artStyleId is missing at the slice boundary (defensive net; components block first).
+const MISSING_ART_STYLE_MESSAGE = 'Select an art style first';
+
+/** Common success shape across all 7 generate-* endpoints (kept in union with ImageApiFailure so errorCode survives). */
+type IllustrationGenerateResult = {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+};
 
 /**
  * Finds the illustrations array for the given entity type + keys.
@@ -73,7 +93,7 @@ function prependIllustration(illustrations: Illustration[], imageUrl: string): v
 }
 
 /** Routes a generate call to the correct illustration API based on discriminated union params */
-function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: boolean; data?: { imageUrl: string; storagePath: string }; error?: string }> {
+function routeGenerateCall(params: StartGenerateTaskParams): Promise<IllustrationGenerateResult | ImageApiFailure> {
   switch (params.entityType) {
     case 'character':
       if (params.isBase) {
@@ -82,7 +102,7 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
           basicInfo: params.basicInfo,
           personality: params.personality,
           baseVariant: params.baseVariant,
-          artStyleDescription: params.artStyleDescription,
+          artStyleId: params.artStyleId,
           referenceImages: params.referenceImages,
         });
       }
@@ -92,7 +112,7 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
         variantAppearance: params.variantAppearance,
         variantVisualDescription: params.variantVisualDescription,
         baseVariantImageUrl: params.baseVariantImageUrl,
-        artStyleDescription: params.artStyleDescription,
+        artStyleId: params.artStyleId,
         additionalReferenceImages: params.additionalReferenceImages,
       });
 
@@ -105,7 +125,7 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
           categoryName: params.categoryName,
           categoryType: params.categoryType,
           baseStateVisualDescription: params.baseStateVisualDescription,
-          artStyleDescription: params.artStyleDescription,
+          artStyleId: params.artStyleId,
           referenceImages: params.referenceImages,
         });
       }
@@ -114,7 +134,7 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
         variantKey: params.variantKey,
         variantVisualDescription: params.variantVisualDescription,
         basePropImageUrl: params.basePropImageUrl,
-        artStyleDescription: params.artStyleDescription,
+        artStyleId: params.artStyleId,
         additionalReferenceImages: params.additionalReferenceImages,
       });
 
@@ -125,7 +145,7 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
           stageName: params.stageName,
           locationDescription: params.locationDescription,
           baseSetting: params.baseSetting,
-          artStyleDescription: params.artStyleDescription,
+          artStyleId: params.artStyleId,
           referenceImages: params.referenceImages,
         });
       }
@@ -137,14 +157,14 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<{ success: 
         variantSensory: params.variantSensory,
         variantEmotional: params.variantEmotional,
         baseStageImageUrl: params.baseStageImageUrl,
-        artStyleDescription: params.artStyleDescription,
+        artStyleId: params.artStyleId,
         additionalReferenceImages: params.additionalReferenceImages,
       });
 
     case 'illustration_image':
       return callGenerateScene({
         visualDescription: params.visualDescription,
-        artStyleDescription: params.artStyleDescription,
+        artStyleId: params.artStyleId,
         stageVariantImageUrl: params.stageVariantImageUrl,
         referenceImages: params.referenceImages,
         aspectRatio: params.aspectRatio,
@@ -165,6 +185,28 @@ export const createImageTaskSlice: StateCreator<
 
   startGenerateTask: (params) => {
     const { entityType, entityKey, entityName, childKey, childName } = params;
+
+    // Defensive guard: never send an empty artStyleId (contract requires a UUID → backend 400).
+    // Components block + toast first; this is the safety net for any future call-site (ADR-020 error-as-state).
+    if (!params.artStyleId) {
+      log.warn('startGenerateTask', 'blocked — missing artStyleId', { entityType, entityKey, childKey });
+      set((state) => {
+        state.imageTasks.push({
+          id: crypto.randomUUID(),
+          entityType,
+          entityKey,
+          entityName,
+          childKey,
+          childName,
+          taskType: 'generate',
+          status: 'error',
+          error: MISSING_ART_STYLE_MESSAGE,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        });
+      });
+      return;
+    }
 
     // Block concurrent: 1 task per entity+child at a time
     const existing = get().imageTasks.find(
@@ -205,7 +247,11 @@ export const createImageTaskSlice: StateCreator<
         }
 
         if (!result.success || !result.data) {
-          throw new Error(result.error ?? 'Generation failed');
+          // Preserve backend errorCode (404 ART_STYLE_NOT_FOUND / 422 ART_STYLE_NO_REFERENCES / 400 VALIDATION_ERROR)
+          // → map to friendly English message; fall back to raw error. Toast reads task.error downstream.
+          const errorCode = (result as ImageApiFailure).errorCode;
+          const friendly = (errorCode && ART_STYLE_ERROR_MESSAGES[errorCode]) || result.error || 'Generation failed';
+          throw new Error(friendly);
         }
 
         const imageUrl = result.data.imageUrl;

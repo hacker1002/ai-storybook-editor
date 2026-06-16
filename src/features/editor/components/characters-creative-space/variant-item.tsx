@@ -40,7 +40,7 @@ import {
 } from '@/stores/snapshot-store/selectors';
 import { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
 import type { CharacterAppearance, CharacterVariant } from '@/types/character-types';
-import { useArtStyleDescription } from '@/stores/art-style-store';
+import { useCurrentBook } from '@/stores/book-store';
 import { uploadImageToStorage } from '@/apis/storage-api';
 import { createLogger } from '@/utils/logger';
 import { downloadImage } from '@/utils/download-image';
@@ -140,7 +140,8 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
   const { deleteCharacterVariant, updateCharacterVariant, startGenerateTask, startEditTask } =
     useSnapshotActions();
   const character = useCharacterByKey(characterKey);
-  const artStyleDescription = useArtStyleDescription();
+  const book = useCurrentBook();
+  const artStyleId = book?.artstyle_id ?? null;
   const { isProcessing } = useImageTasksForChild(characterKey, variantData.key);
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -179,12 +180,18 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
     ? character?.variants.find((v) => v.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
     : undefined;
 
-  // Non-base variants cannot generate without base illustration
-  const isGenerateDisabled = isProcessing || !promptText.trim() || (!isBase && !baseVariantImageUrl);
+  // Non-base variants cannot generate without base illustration; all variants need a book art style.
+  const isGenerateDisabled = isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseVariantImageUrl);
 
   const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
+    // Null-guard: require book.artstyle_id (UUID) — contract rejects empty art style with 400.
+    if (!artStyleId) {
+      log.warn('handleGenerate', 'blocked — missing artStyleId', { characterKey, variantKey: variantData.key });
+      toast.error('Select an art style first');
+      return;
+    }
     log.info('handleGenerate', 'start', { characterKey, variantKey: variantData.key, isBase });
     updateCharacterVariant(characterKey, variantData.key, { visual_description: trimmedPrompt });
 
@@ -206,7 +213,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
           appearance: variantData.appearance,
           visual_description: trimmedPrompt,
         },
-        artStyleDescription: artStyleDescription ?? '',
+        artStyleId,
         referenceImages,
       });
     } else {
@@ -222,7 +229,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
         variantAppearance: variantData.appearance,
         variantVisualDescription: trimmedPrompt,
         baseVariantImageUrl,
-        artStyleDescription: artStyleDescription ?? '',
+        artStyleId,
         additionalReferenceImages: referenceImages,
       });
     }
@@ -453,13 +460,16 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
 
           {/* Generate button */}
           <div className="flex flex-col items-center gap-1">
-            <Button onClick={handleGenerate} disabled={isGenerateDisabled} className="w-40" aria-disabled={isGenerateDisabled}>
+            <Button onClick={handleGenerate} disabled={isGenerateDisabled} title={!artStyleId ? 'Select an art style first' : undefined} className="w-40" aria-disabled={isGenerateDisabled}>
               {isProcessing ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating</>
               ) : (
                 <><Sparkles className="h-4 w-4 mr-2" />Generate</>
               )}
             </Button>
+            {!artStyleId && (
+              <span className="text-xs text-muted-foreground">Select an art style first</span>
+            )}
             {!isBase && !baseVariantImageUrl && (
               <span className="text-xs text-muted-foreground">Generate base variant first</span>
             )}

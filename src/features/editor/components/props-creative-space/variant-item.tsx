@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label";
 import { useSnapshotActions, usePropByKey, useImageTasksForChild } from "@/stores/snapshot-store";
 import { useAssetCategories } from "@/stores/asset-category-store";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
-import { useArtStyleDescription } from '@/stores/art-style-store';
+import { useCurrentBook } from '@/stores/book-store';
 import type { PropVariant } from "@/types/prop-types";
 import { uploadImageToStorage } from "@/apis/storage-api";
 import { createLogger } from "@/utils/logger";
@@ -66,7 +66,8 @@ export function VariantItem({
   const { deletePropVariant, updatePropVariant, startGenerateTask, startEditTask } = useSnapshotActions();
   const prop = usePropByKey(propKey);
   const categories = useAssetCategories();
-  const artStyleDescription = useArtStyleDescription();
+  const book = useCurrentBook();
+  const artStyleId = book?.artstyle_id ?? null;
   const { isProcessing } = useImageTasksForChild(propKey, variantData.key);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -162,12 +163,19 @@ export function VariantItem({
     ? prop?.variants.find((s) => s.type === 0)?.illustrations.find((ill) => ill.is_selected)?.media_url
     : undefined;
 
-  // Non-base states cannot generate without base illustration
-  const isGenerateDisabled = isProcessing || !promptText.trim() || (!isBase && !basePropImageUrl);
+  // Non-base states cannot generate without base illustration; all states need a book art style.
+  const isGenerateDisabled = isProcessing || !promptText.trim() || !artStyleId || (!isBase && !basePropImageUrl);
 
   const handleGenerate = () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
+
+    // Null-guard: require book.artstyle_id (UUID) — contract rejects empty art style with 400.
+    if (!artStyleId) {
+      log.warn("handleGenerate", "blocked — missing artStyleId", { propKey, variantKey: variantData.key });
+      toast.error("Select an art style first");
+      return;
+    }
 
     log.info("handleGenerate", "start", { propKey, variantKey: variantData.key, isBase });
 
@@ -200,7 +208,7 @@ export function VariantItem({
         categoryName: category?.name,
         categoryType: category?.type,
         baseStateVisualDescription: trimmedPrompt,
-        artStyleDescription: artStyleDescription ?? '',
+        artStyleId,
         referenceImages,
       });
     } else {
@@ -215,7 +223,7 @@ export function VariantItem({
         variantKey: variantData.key,
         variantVisualDescription: trimmedPrompt,
         basePropImageUrl,
-        artStyleDescription: artStyleDescription ?? '',
+        artStyleId,
         additionalReferenceImages: referenceImages,
       });
     }
@@ -624,6 +632,7 @@ export function VariantItem({
             <Button
               onClick={handleGenerate}
               disabled={isGenerateDisabled}
+              title={!artStyleId ? "Select an art style first" : undefined}
               className="w-40"
             >
               {isProcessing ? (
@@ -638,6 +647,9 @@ export function VariantItem({
                 </>
               )}
             </Button>
+            {!artStyleId && (
+              <span className="text-xs text-muted-foreground">Select an art style first</span>
+            )}
             {!isBase && !basePropImageUrl && (
               <span className="text-xs text-muted-foreground">Generate base variant first</span>
             )}

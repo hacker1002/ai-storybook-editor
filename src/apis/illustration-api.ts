@@ -34,7 +34,8 @@ export interface GenerateCharacterBaseParams {
     };
     visual_description: string;
   };
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches description + image_references. */
+  artStyleId: string;
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
@@ -59,7 +60,8 @@ export interface GenerateCharacterVariantParams {
   };
   variantVisualDescription: string;
   baseVariantImageUrl: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches description + image_references. */
+  artStyleId: string;
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
@@ -96,7 +98,8 @@ export interface GeneratePropBaseParams {
   categoryName?: string;
   categoryType?: number;
   baseStateVisualDescription: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches description + image_references. */
+  artStyleId: string;
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
@@ -131,7 +134,8 @@ export interface GeneratePropVariantParams {
   variantKey: string;
   variantVisualDescription: string;
   basePropImageUrl: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches description + image_references. */
+  artStyleId: string;
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
@@ -172,7 +176,8 @@ export interface GenerateStageBaseParams {
     sensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
     emotional?: { mood?: string };
   };
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches description + image_references. */
+  artStyleId: string;
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
@@ -210,7 +215,8 @@ export interface GenerateStageVariantParams {
   variantSensory?: { atmosphere?: string; soundscape?: string; lighting?: string; color_palette?: string };
   variantEmotional?: { mood?: string };
   baseStageImageUrl: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches description + image_references. */
+  artStyleId: string;
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
@@ -243,7 +249,8 @@ export async function callGenerateStageVariant(
 
 export interface GenerateSceneParams {
   visualDescription: string;
-  artStyleDescription: string;
+  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches description + image_references. */
+  artStyleId: string;
   stageVariantImageUrl?: string;
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
