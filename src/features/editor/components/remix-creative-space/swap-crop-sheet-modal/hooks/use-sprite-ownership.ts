@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import type { Remix } from '@/types/remix';
 import { resolveSpriteOwners } from '@/stores/remix-store/sprite-ownership';
+import { spriteBatchLabel } from '../swap-modal-constants';
 import type { CropOwnership, CropOwnershipState } from './use-crop-ownership';
 
 const UNCOVERED: CropOwnershipState = { state: 'uncovered' };
@@ -27,7 +28,7 @@ export function useSpriteOwnership(
   const spriteNameById = useMemo(() => {
     const map = new Map<string, string>();
     if (!sprites) return map;
-    for (const s of sprites) map.set(s.id, s.name ?? `Sprite ${s.order + 1}`);
+    for (const s of sprites) map.set(s.id, spriteBatchLabel(s.order));
     return map;
   }, [sprites]);
 

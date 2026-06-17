@@ -150,9 +150,9 @@ export interface RemixSpriteSlice {
    *  removed. Optimistic + rollback. Resolves `true` on success. */
   removeSprite: (remixId: string, spriteId: string) => Promise<boolean>;
 
-  /** Appends one crop sheet to a sprite (clamped to `SHEET_MAX`). Re-packs the
-   *  sprite's cells at K+1. DESTRUCTIVE: clears `swap_results` — caller MUST
-   *  gate. Optimistic with rollback. */
+  /** Appends one crop sheet to a sprite (clamped to the sprite's crop count).
+   *  Re-packs the sprite's cells at K+1. DESTRUCTIVE: clears `swap_results` —
+   *  caller MUST gate. Optimistic with rollback. */
   appendSpriteSheet: (remixId: string, spriteId: string) => Promise<boolean>;
 
   /** Removes one crop sheet from a sprite (clamped to `SHEET_MIN`). `sheetIndex`
@@ -227,8 +227,8 @@ export interface RemixSwapSlice {
     batchId: string,
   ) => Promise<boolean>;
 
-  /** Appends one crop sheet to a stage batch (clamped to `SHEET_MAX`) —
-   *  re-packs the batch's crops at K+1. DESTRUCTIVE: clears the batch's
+  /** Appends one crop sheet to a stage batch (clamped to the batch's crop
+   *  count) — re-packs the batch's crops at K+1. DESTRUCTIVE: clears the batch's
    *  `swap_results` — caller MUST gate (confirm dialog). */
   appendStageBatchSheet: (
     remixId: string,

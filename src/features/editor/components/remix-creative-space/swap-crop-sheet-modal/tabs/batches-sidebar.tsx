@@ -26,7 +26,6 @@ import {
 import {
   BATCH_MIN,
   LEFT_SIDEBAR_WIDTH_PX,
-  SHEET_MAX,
   SHEET_MIN,
 } from '../swap-modal-constants';
 
@@ -58,7 +57,7 @@ interface BatchesSidebarProps {
   onAddBatch: () => void;
   /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces BATCH_MIN. */
   onRemoveBatch: (batchId: string) => void;
-  /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces SHEET_MAX. */
+  /** Tab-guarded (confirm-if-swap_results). Sidebar only caps at crop count. */
   onAddSheet: (batchId: string) => void;
   /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces SHEET_MIN. */
   onRemoveSheet: (batchId: string, sheetIndex: number) => void;
@@ -203,14 +202,16 @@ function BatchNode({
 }: BatchNodeProps) {
   const sheetCount = batch.crop_sheets.length;
   const isActiveBatch = activeBatchRef?.batchId === batch.id;
-  const removeSheetDisabled = anyJobRunning || sheetCount <= SHEET_MIN;
-  const addSheetDisabled = anyJobRunning || sheetCount >= SHEET_MAX;
   // ⚡rev6 — Tiny muted "· N crops" badge after the name. Derived inline
-  // (O(sheets) reduce, cheap — no memo). Skip when 0 to avoid noise.
+  // (O(sheets) reduce, cheap — no memo). Skip when 0 to avoid noise. Also the
+  // per-batch sheet ceiling: a sheet holds ≥1 crop, so K can never exceed the
+  // crop count (replaces the old flat SHEET_MAX=10).
   const cropCount = batch.crop_sheets.reduce(
     (acc, s) => acc + s.original_crops.length,
     0,
   );
+  const removeSheetDisabled = anyJobRunning || sheetCount <= SHEET_MIN;
+  const addSheetDisabled = anyJobRunning || sheetCount >= cropCount;
 
   return (
     <div

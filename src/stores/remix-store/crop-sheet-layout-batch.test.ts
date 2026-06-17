@@ -412,23 +412,44 @@ describe('relayoutStageBatchSheets', () => {
   });
 
   it('rev6: uses PER-BATCH scope (subset) instead of full illustration', async () => {
-    // batch carries ONLY the s1/i1 crop (subset of the illustration which has
-    // s1/i1 + s2/i2). After relayout the rebuilt sheets must still carry that
-    // subset only — not pull in the missing s2/i2 from the full grouping.
+    // illustration has s1/i1 + s2/i2 + s3/i3; the batch carries only the
+    // {s1/i1, s2/i2} subset. After relayout (K:1→2, within the 2-crop cap) the
+    // rebuilt sheets must still carry that subset only — never pull s3/i3 from
+    // the full grouping. (≥2 subset crops required: the per-batch cap forbids
+    // more sheets than crops, so a 1-crop batch can't grow to K=2.)
     const subsetBatch = makeBatch('b1', 0, 'Batch 1', false, [
       { spreadId: 's1', layerId: 'i1', objectKey: 'c1' },
+      { spreadId: 's2', layerId: 'i2', objectKey: 'c1' },
     ]);
     const remix = makeRemix([subsetBatch]);
+    // Extend the full illustration with a 3rd crop the batch does NOT carry.
+    (remix.illustration.spreads as unknown as Array<ReturnType<typeof spreadWithCrop>>).push(
+      spreadWithCrop('s3', 3, 'i3', 'c1'),
+    );
     const deps = makeDeps(remix);
 
     const ok = await relayoutStageBatchSheets(deps, 'remix-1', 'mixes', 'b1', +1); // K: 1 → 2
     expect(ok).toBe(true);
 
     const sheets = deps.state.remixes[0].mixes[0].crop_sheets;
-    // Union of crop ids across the rebuilt sheets — must be the subset {i1}.
+    // Union of crop ids across the rebuilt sheets — the subset, NOT s3/i3.
     const ids = new Set<string>();
     for (const s of sheets) for (const c of s.original_crops) ids.add(`${c.spread_id}/${c.id}`);
-    expect([...ids].sort()).toEqual(['s1/i1']);
+    expect([...ids].sort()).toEqual(['s1/i1', 's2/i2']);
+  });
+
+  it('caps K at the batch crop count — a 1-crop batch cannot grow to K=2', async () => {
+    // New rule: max sheets per batch = crop count (replaces flat SHEET_MAX=10).
+    const oneCrop = makeBatch('b1', 0, 'Batch 1', false, [
+      { spreadId: 's1', layerId: 'i1', objectKey: 'c1' },
+    ]);
+    const remix = makeRemix([oneCrop]);
+    const deps = makeDeps(remix);
+
+    // K:1→2 requested, but cap=1 → clamps to current → no-op (false, no persist).
+    const ok = await relayoutStageBatchSheets(deps, 'remix-1', 'mixes', 'b1', +1);
+    expect(ok).toBe(false);
+    expect(deps.state.remixes[0].mixes[0].crop_sheets).toHaveLength(1);
   });
 
   it("stage 'rmbgs': re-packs the batch's own crops at native px and persists the rmbgs column", async () => {

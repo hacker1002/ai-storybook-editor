@@ -76,15 +76,19 @@ export function modelSupportsNoise(upscaleModel: string): boolean {
 /** Each batch must keep at least this many crop sheets. */
 export const SHEET_MIN = 1;
 
-/** Upper bound on crop sheets per batch (relayout K clamp). */
-export const SHEET_MAX = 10;
-
 /** A remix must keep at least this many batches — ⚡2026-06-12 CHỈ stage
  *  `'mixes'` (auto-seeded); rmbgs/upscales allow 0 batches (empty-state CTA). */
 export const BATCH_MIN = 1;
 
 /** A remix must keep at least this many sprites (Variants tab). */
 export const SPRITE_MIN = 1;
+
+/** Display label for a sprite row + its confirm-dialog / take-back-overlay
+ *  name. The Variants tab renders sprites as "Batch N" for UI parity with the
+ *  stage `BATCHES` sidebars — the underlying data model stays `sprite`. Derived
+ *  from `order` (not the persisted `name`, which seeds as "Sprite N"), so old
+ *  and new rows render identically with no data migration. */
+export const spriteBatchLabel = (order: number): string => `Batch ${order + 1}`;
 
 /** Composer parity — colours mirror `DEFAULT_FRAME_*` in
  *  `ai-storybook-image-api/src/models/requests/build_crop_sheet.py`. The

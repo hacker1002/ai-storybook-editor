@@ -34,6 +34,7 @@ import {
   buildSwapConfigViews,
   missingSwapConfigObjects,
 } from './sprite-swap-gating';
+import { spriteBatchLabel } from '../swap-modal-constants';
 import { CropSheetStage } from '../crop-sheet-stage';
 import type { RenderableCrop } from '../crop-sheet-stage/composed-crop-sheet';
 import {
@@ -252,7 +253,7 @@ export function VariantsTab({
         spriteId: target.id,
         kind,
       });
-      setPending({ kind, spriteName: target.name, run });
+      setPending({ kind, spriteName: spriteBatchLabel(target.order), run });
     } else {
       run();
     }
@@ -304,7 +305,7 @@ export function VariantsTab({
     selectionSize > 0 && !isSubmitting && !isRunning && !anySpriteSwapRunning;
   const addSpriteTooltip =
     selectionSize === 0
-      ? 'Tick the variants you want in a new sprite first — checkboxes on each cell in the swap result'
+      ? 'Tick the variants you want in a new batch first — checkboxes on each cell in the swap result'
       : anySpriteSwapRunning
         ? 'Wait until the current swap finishes'
         : '';
@@ -337,7 +338,7 @@ export function VariantsTab({
       const newSpriteId = await addSprite(remixId, activeSpriteId, selectedSwapCells);
       if (newSpriteId === null) {
         log.error('handleAddSprite', 'addSprite returned null', {});
-        toast.error("Couldn't add sprite — try again");
+        toast.error("Couldn't add batch — try again");
         clearSwapCellSelection();
         return;
       }
@@ -345,7 +346,7 @@ export function VariantsTab({
       onActivateSprite({ spriteId: newSpriteId, sheetIndex: 0 });
       log.info('handleAddSprite', 'success', { newSpriteId });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to add sprite';
+      const msg = err instanceof Error ? err.message : 'Failed to add batch';
       log.error('handleAddSprite', 'failed', { error: msg });
       toast.error(msg);
       clearSwapCellSelection();

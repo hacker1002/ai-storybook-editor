@@ -23,8 +23,8 @@ import {
 import {
   SPRITE_MIN,
   LEFT_SIDEBAR_WIDTH_PX,
-  SHEET_MAX,
   SHEET_MIN,
+  spriteBatchLabel,
 } from '../swap-modal-constants';
 import { spriteLineupObjects } from '@/stores/remix-store';
 
@@ -54,7 +54,7 @@ interface SpritesSidebarProps {
   onAddSprite: () => void;
   /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces SPRITE_MIN. */
   onRemoveSprite: (spriteId: string) => void;
-  /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces SHEET_MAX. */
+  /** Tab-guarded (confirm-if-swap_results). Sidebar only caps at crop count. */
   onAddSheet: (spriteId: string) => void;
   /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces SHEET_MIN. */
   onRemoveSheet: (spriteId: string, sheetIndex: number) => void;
@@ -79,7 +79,7 @@ export function SpritesSidebar({
   const addSpriteButton = (
     <button
       type="button"
-      aria-label={`Add sprite (${selectionSize} cells selected)`}
+      aria-label={`Add batch (${selectionSize} cells selected)`}
       disabled={!canAddSprite}
       onClick={() => {
         log.debug('onAddSprite', 'add sprite', {
@@ -98,16 +98,16 @@ export function SpritesSidebar({
     <aside
       className="flex h-full shrink-0 flex-col border-r border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)]"
       style={{ width: LEFT_SIDEBAR_WIDTH_PX }}
-      aria-label="Sprites"
+      aria-label="Batches"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] px-4 py-3">
         <div className="flex min-w-0 items-center gap-1.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]">
-            Sprites
+            Batches
           </p>
           {layoutPending && sprites.length > 0 && (
             <Loader2
-              aria-label="Đang tính lại layout sprite"
+              aria-label="Đang tính lại layout batch"
               className="h-3 w-3 animate-spin text-[var(--swap-modal-text-muted)]"
             />
           )}
@@ -147,25 +147,28 @@ export function SpritesSidebar({
             <>
               <Loader2 className="h-5 w-5 animate-spin text-[var(--swap-modal-text-muted)]" />
               <p className="text-sm text-[var(--swap-modal-text-muted)]">
-                Đang dựng sprite — đo kích thước ảnh variant…
+                Đang dựng batch — đo kích thước ảnh variant…
               </p>
             </>
           ) : (
             <p className="text-sm text-[var(--swap-modal-text-muted)]">
-              Chưa có sprite nào.
+              Chưa có batch nào.
             </p>
           )}
         </div>
       ) : (
         <div
           role="tree"
-          aria-label="Sprites tree"
+          aria-label="Batches tree"
           className="min-h-0 flex-1 overflow-y-auto py-1"
         >
           {sprites.map((sprite, index) => (
             <SpriteNode
               key={sprite.id}
               sprite={sprite}
+              // Rendered label — "Batch N" for parity with the stage BATCHES
+              // sidebars; data model stays `sprite`.
+              displayName={spriteBatchLabel(sprite.order)}
               activeSpriteRef={activeSpriteRef}
               collapsed={isCollapsed(sprite.id)}
               anySpriteSwapRunning={anySpriteSwapRunning}
@@ -187,6 +190,8 @@ export function SpritesSidebar({
 
 interface SpriteNodeProps {
   sprite: RemixSprite;
+  /** Pre-derived "Batch N" label (presentational; see `spriteBatchLabel`). */
+  displayName: string;
   activeSpriteRef: { spriteId: string; sheetIndex: number } | null;
   collapsed: boolean;
   anySpriteSwapRunning: boolean;
@@ -200,6 +205,7 @@ interface SpriteNodeProps {
 
 function SpriteNode({
   sprite,
+  displayName,
   activeSpriteRef,
   collapsed,
   anySpriteSwapRunning,
@@ -212,15 +218,16 @@ function SpriteNode({
 }: SpriteNodeProps) {
   const sheetCount = sprite.crop_sheets.length;
   const isActiveSprite = activeSpriteRef?.spriteId === sprite.id;
-  const removeSheetDisabled = anySpriteSwapRunning || sheetCount <= SHEET_MIN;
-  const addSheetDisabled = anySpriteSwapRunning || sheetCount >= SHEET_MAX;
-  // `· N variants` badge — distinct character object_keys on this sprite (cheap
-  // O(crops) reduce; skip when 0 to avoid noise).
+  // `· N variants` badge — crops on this batch (cheap O(crops) reduce; skip when
+  // 0 to avoid noise). Also the per-batch sheet ceiling: a sheet holds ≥1 crop,
+  // so K can never exceed the crop count (replaces the old flat SHEET_MAX=10).
   const variantCount = sprite.crop_sheets.reduce(
     (acc, s) => acc + s.original_crops.length,
     0,
   );
   const objectCount = spriteLineupObjects(sprite).length;
+  const removeSheetDisabled = anySpriteSwapRunning || sheetCount <= SHEET_MIN;
+  const addSheetDisabled = anySpriteSwapRunning || sheetCount >= variantCount;
 
   return (
     <div
@@ -233,7 +240,7 @@ function SpriteNode({
       <div className="flex items-center gap-1.5 px-2 pb-1.5 pt-2">
         <button
           type="button"
-          aria-label={`${collapsed ? 'Mở' : 'Thu gọn'} ${sprite.name}`}
+          aria-label={`${collapsed ? 'Mở' : 'Thu gọn'} ${displayName}`}
           aria-expanded={!collapsed}
           onClick={() => onToggleCollapse(sprite.id)}
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-[var(--swap-modal-surface-hover)] focus:outline-none focus:ring-1 focus:ring-inset focus:ring-[var(--swap-modal-accent)]"
@@ -249,7 +256,7 @@ function SpriteNode({
             )}
           </span>
           <span className="truncate text-sm font-semibold text-[var(--swap-modal-text-primary)]">
-            {sprite.name}
+            {displayName}
           </span>
           {variantCount > 0 && (
             <span
@@ -265,7 +272,7 @@ function SpriteNode({
         <div className="flex shrink-0 items-center gap-0.5">
           <button
             type="button"
-            aria-label={`Bớt sheet của ${sprite.name}`}
+            aria-label={`Bớt sheet của ${displayName}`}
             disabled={removeSheetDisabled}
             onClick={() => {
               log.debug('onRemoveSheet', 'remove last sheet', {
@@ -286,7 +293,7 @@ function SpriteNode({
           </span>
           <button
             type="button"
-            aria-label={`Thêm sheet của ${sprite.name}`}
+            aria-label={`Thêm sheet của ${displayName}`}
             disabled={addSheetDisabled}
             onClick={() => {
               log.debug('onAddSheet', 'append sheet', {
@@ -304,7 +311,7 @@ function SpriteNode({
         {SHOW_REMOVE_SPRITE && canRemoveSprite && (
           <button
             type="button"
-            aria-label={`Xoá ${sprite.name}`}
+            aria-label={`Xoá ${displayName}`}
             disabled={anySpriteSwapRunning}
             onClick={() => {
               log.debug('onRemoveSprite', 'remove sprite', { spriteId: sprite.id });

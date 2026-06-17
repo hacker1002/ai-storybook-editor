@@ -72,9 +72,10 @@ export const BATCH_MIN = 1;
 
 const log = createLogger('Store', 'CropSheetLayout');
 
-/** Minimum / maximum crop sheets a batch can hold (relayout clamp). */
+/** Minimum crop sheets a batch can hold (relayout clamp). The maximum is the
+ *  batch's own crop count — a sheet holds ≥1 crop, so K can never exceed it
+ *  (resolved per-batch in `relayoutStageBatchSheets`; no flat ceiling). */
 export const SHEET_MIN = 1;
-export const SHEET_MAX = 10;
 
 /** Resolves the spread (px) for the layout engine from a book dimension code.
  *  Falls back to the legacy 800×600 spread when the dimension is unset/unknown. */
@@ -258,7 +259,8 @@ async function persistStageColumn(
 
 /**
  * Re-layouts ALL crop sheets of ONE batch of ONE stage at
- * `currentSheetCount + delta`, clamped to `[SHEET_MIN, SHEET_MAX]`.
+ * `currentSheetCount + delta`, clamped to `[SHEET_MIN, cropCount]` (a sheet
+ * holds ≥1 crop, so K can never exceed the batch's crop count).
  *
  * Stage 'mixes' re-groups from the frozen illustration (source-% geometry);
  * rmbgs/upscales re-pack the batch's OWN crops at native px (`absolutePx`).
@@ -294,7 +296,10 @@ export async function relayoutStageBatchSheets(
   }
 
   const currentCount = batch.crop_sheets.length;
-  const nextCount = Math.min(SHEET_MAX, Math.max(SHEET_MIN, currentCount + delta));
+  // Cap K at the batch's crop count — a sheet holds ≥1 crop, so requesting more
+  // sheets than crops only yields empties (replaces the old SHEET_MAX=10).
+  const cropCount = currentCropsOfBatch(batch).length;
+  const nextCount = Math.min(cropCount, Math.max(SHEET_MIN, currentCount + delta));
   if (nextCount === currentCount) {
     log.debug('relayoutStageBatchSheets', 'no count change — skip', {
       remixId,

@@ -33,7 +33,7 @@ import type {
   CropInput,
   CropSheetLayoutResult,
 } from '@/utils/crop-sheet-layout-engine';
-import { SHEET_MIN, SHEET_MAX } from './crop-sheet-layout';
+import { SHEET_MIN } from './crop-sheet-layout';
 import type { RelayoutDeps } from './crop-sheet-layout';
 
 const log = createLogger('Store', 'SpriteLayout');
@@ -512,7 +512,7 @@ async function persistSprites(
 
 /**
  * Re-layouts ALL sheets of ONE sprite at `currentSheetCount + delta`, clamped to
- * `[SHEET_MIN, SHEET_MAX]`. Re-packs the sprite's OWN cells (pre-swap
+ * `[SHEET_MIN, cropCount]` (a sheet holds ≥1 cell). Re-packs the sprite's OWN cells (pre-swap
  * `sheet.original_crops[]`, scoped to the sprite — subset sprites carry a subset).
  *
  * SWAP-RESULTS CONTRACT (callers MUST gate): a successful re-layout REBUILDS the
@@ -542,17 +542,6 @@ export async function relayoutSpriteSheets(
     return false;
   }
 
-  const currentCount = sprite.crop_sheets.length;
-  const nextCount = Math.min(SHEET_MAX, Math.max(SHEET_MIN, currentCount + delta));
-  if (nextCount === currentCount) {
-    log.debug('relayoutSpriteSheets', 'no count change — skip', {
-      remixId,
-      spriteId,
-      currentCount,
-    });
-    return false;
-  }
-
   // Re-pack the sprite's own cells (ORIGINAL artwork carried on the crops).
   const cells: SpriteCell[] = currentCellsOfSprite(sprite).map((c) => ({
     type: c.type,
@@ -562,6 +551,19 @@ export async function relayoutSpriteSheets(
   }));
   if (cells.length === 0) {
     log.warn('relayoutSpriteSheets', 'no cells to layout — abort', { remixId, spriteId });
+    return false;
+  }
+
+  const currentCount = sprite.crop_sheets.length;
+  // Cap K at the sprite's crop count — a sheet must hold ≥1 cell, so requesting
+  // more sheets than cells only yields empties (replaces the old SHEET_MAX=10).
+  const nextCount = Math.min(cells.length, Math.max(SHEET_MIN, currentCount + delta));
+  if (nextCount === currentCount) {
+    log.debug('relayoutSpriteSheets', 'no count change — skip', {
+      remixId,
+      spriteId,
+      currentCount,
+    });
     return false;
   }
   const newSheets = await partitionByObjectAffinity(cells, nextCount);
