@@ -1,9 +1,10 @@
-// use-object-modals.ts - Modal state management for generate/split/crop/editAudio modals
+// use-object-modals.ts - Modal state management for generate/extract/crop/editAudio modals
 // spreadId is captured at open time to prevent stale-spread updates if selection changes while modal is open
 
 import { useState, useCallback } from "react";
 import { createLogger } from "@/utils/logger";
 import { useSnapshotActions } from "@/stores/snapshot-store/selectors";
+import type { ExtractTabKey } from "@/features/editor/components/shared-components";
 import type {
   SpreadImage,
   SpreadAudio,
@@ -20,9 +21,14 @@ export type EditAudioKind = "audio" | "auto_audio";
 
 export interface UseObjectModalsReturn {
   generate: { open: boolean; imageId: string | null; spreadId: string };
-  split: { open: boolean; image: SpreadImage | null; spreadId: string };
+  /** Consolidated Extract modal (Segments + Layers) — replaces split + segment slices. */
+  extract: {
+    open: boolean;
+    image: SpreadImage | null;
+    spreadId: string;
+    initialTab: ExtractTabKey;
+  };
   crop: { open: boolean; image: SpreadImage | null; spreadId: string };
-  segment: { open: boolean; image: SpreadImage | null; spreadId: string };
   editAudio: {
     open: boolean;
     item: SpreadAudio | SpreadAutoAudio | null;
@@ -32,12 +38,10 @@ export interface UseObjectModalsReturn {
 
   openGenerate: (img: SpreadImage) => void;
   closeGenerate: (open: boolean) => void;
-  openSplit: (img: SpreadImage) => void;
-  closeSplit: (open: boolean) => void;
+  openExtract: (img: SpreadImage, initialTab?: ExtractTabKey) => void;
+  closeExtract: (open: boolean) => void;
   openCrop: (img: SpreadImage) => void;
   closeCrop: (open: boolean) => void;
-  openSegment: (img: SpreadImage) => void;
-  closeSegment: (open: boolean) => void;
   openEditAudio: (
     item: SpreadAudio | SpreadAutoAudio,
     kind: EditAudioKind
@@ -58,20 +62,17 @@ export function useObjectModals(
   const [generateImageId, setGenerateImageId] = useState<string | null>(null);
   const [generateSpreadId, setGenerateSpreadId] = useState<string>("");
 
-  // Split image modal
-  const [splitOpen, setSplitOpen] = useState(false);
-  const [splitImage, setSplitImage] = useState<SpreadImage | null>(null);
-  const [splitSpreadId, setSplitSpreadId] = useState<string>("");
+  // Extract image modal (consolidated Segments + Layers)
+  const [extractOpen, setExtractOpen] = useState(false);
+  const [extractImage, setExtractImage] = useState<SpreadImage | null>(null);
+  const [extractSpreadId, setExtractSpreadId] = useState<string>("");
+  const [extractInitialTab, setExtractInitialTab] =
+    useState<ExtractTabKey>("segment");
 
   // Crop image modal
   const [cropOpen, setCropOpen] = useState(false);
   const [cropImage, setCropImage] = useState<SpreadImage | null>(null);
   const [cropSpreadId, setCropSpreadId] = useState<string>("");
-
-  // Segment image modal
-  const [segmentOpen, setSegmentOpen] = useState(false);
-  const [segmentImage, setSegmentImage] = useState<SpreadImage | null>(null);
-  const [segmentSpreadId, setSegmentSpreadId] = useState<string>("");
 
   // Edit audio modal — covers audio + auto_audio (discriminated via kind)
   const [editAudioOpen, setEditAudioOpen] = useState(false);
@@ -98,18 +99,19 @@ export function useObjectModals(
     if (!open) setGenerateImageId(null);
   }, []);
 
-  const openSplit = useCallback(
-    (img: SpreadImage) => {
-      setSplitImage(img);
-      setSplitSpreadId(selectedSpreadId);
-      setSplitOpen(true);
+  const openExtract = useCallback(
+    (img: SpreadImage, initialTab: ExtractTabKey = "segment") => {
+      setExtractImage(img);
+      setExtractSpreadId(selectedSpreadId);
+      setExtractInitialTab(initialTab);
+      setExtractOpen(true);
     },
     [selectedSpreadId]
   );
 
-  const closeSplit = useCallback((open: boolean) => {
-    setSplitOpen(open);
-    if (!open) setSplitImage(null);
+  const closeExtract = useCallback((open: boolean) => {
+    setExtractOpen(open);
+    if (!open) setExtractImage(null);
   }, []);
 
   const openCrop = useCallback(
@@ -124,20 +126,6 @@ export function useObjectModals(
   const closeCrop = useCallback((open: boolean) => {
     setCropOpen(open);
     if (!open) setCropImage(null);
-  }, []);
-
-  const openSegment = useCallback(
-    (img: SpreadImage) => {
-      setSegmentImage(img);
-      setSegmentSpreadId(selectedSpreadId);
-      setSegmentOpen(true);
-    },
-    [selectedSpreadId]
-  );
-
-  const closeSegment = useCallback((open: boolean) => {
-    setSegmentOpen(open);
-    if (!open) setSegmentImage(null);
   }, []);
 
   const openEditAudio = useCallback(
@@ -207,9 +195,13 @@ export function useObjectModals(
 
   return {
     generate: { open: generateOpen, imageId: generateImageId, spreadId: generateSpreadId },
-    split: { open: splitOpen, image: splitImage, spreadId: splitSpreadId },
+    extract: {
+      open: extractOpen,
+      image: extractImage,
+      spreadId: extractSpreadId,
+      initialTab: extractInitialTab,
+    },
     crop: { open: cropOpen, image: cropImage, spreadId: cropSpreadId },
-    segment: { open: segmentOpen, image: segmentImage, spreadId: segmentSpreadId },
     editAudio: {
       open: editAudioOpen,
       item: editAudioItem,
@@ -218,12 +210,10 @@ export function useObjectModals(
     },
     openGenerate,
     closeGenerate,
-    openSplit,
-    closeSplit,
+    openExtract,
+    closeExtract,
     openCrop,
     closeCrop,
-    openSegment,
-    closeSegment,
     openEditAudio,
     closeEditAudio,
     handleEditAudioComplete,

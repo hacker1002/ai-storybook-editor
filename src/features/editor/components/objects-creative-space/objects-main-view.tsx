@@ -34,16 +34,14 @@ import {
   EditableAutoAudio,
   EditableAutoPic,
   EditImageModal,
-  SplitImageModal,
+  ExtractImageModal,
   CropImageModal,
   EditAudioModal,
-  SegmentLayerModal,
   SoundLibraryModal,
 } from "@/features/editor/components/shared-components";
 import type {
-  SplitLayerResult,
+  ExtractResult,
   CropCreateResult,
-  SegmentResult,
   LibrarySound,
 } from "@/features/editor/components/shared-components";
 import { useSounds } from "@/stores/sounds-store";
@@ -74,8 +72,7 @@ import {
   useSpreadHandlers,
   useSpreadItemDispatch,
   buildCropImages,
-  buildSplitImages,
-  buildSegmentImage,
+  buildExtractImages,
   useSplitTextbox,
   useObjectModals,
   useCloneRaw,
@@ -430,7 +427,7 @@ export function ObjectsMainView({
   const { splitTextbox } = useSplitTextbox(actions, onItemSelect, langCode, canvasWidth, canvasHeight);
 
   const modals = useObjectModals(selectedSpreadId, actions);
-  const { openGenerate, openSplit, openCrop, openSegment, openEditAudio } = modals;
+  const { openGenerate, openExtract, openCrop, openEditAudio } = modals;
 
   const handleCropCreateImages = useCallback(
     (result: CropCreateResult) => {
@@ -440,27 +437,12 @@ export function ObjectsMainView({
     [modals.crop.image, modals.crop.spreadId, retouchSpreads, actions]
   );
 
-  const handleSplitCreateImages = useCallback(
-    (layers: SplitLayerResult[]) => {
-      if (!modals.split.image) return;
-      buildSplitImages(layers, modals.split.image, modals.split.spreadId, retouchSpreads, actions);
+  const handleExtractCreateImages = useCallback(
+    (results: ExtractResult[]) => {
+      if (!modals.extract.image) return;
+      buildExtractImages(results, modals.extract.image, modals.extract.spreadId, retouchSpreads, actions);
     },
-    [modals.split.image, modals.split.spreadId, retouchSpreads, actions]
-  );
-
-  const handleSegmentCreateImage = useCallback(
-    (segment: SegmentResult) => {
-      if (!modals.segment.image) return;
-      buildSegmentImage(
-        segment,
-        modals.segment.image,
-        modals.segment.spreadId,
-        retouchSpreads,
-        actions,
-        (item) => onItemSelect(item)
-      );
-    },
-    [modals.segment.image, modals.segment.spreadId, retouchSpreads, actions, onItemSelect]
+    [modals.extract.image, modals.extract.spreadId, retouchSpreads, actions]
   );
 
   const { handleDeleteSpread, handleSpreadReorder } = useSpreadHandlers(actions);
@@ -810,13 +792,12 @@ export function ObjectsMainView({
         context={{
           ...context,
           onGenerateImage: () => openGenerate(context.item),
-          onSegmentImage: () => openSegment(context.item),
-          onSplitImage: () => openSplit(context.item),
+          onExtractImage: () => openExtract(context.item),
           onCropImage: () => openCrop(context.item),
         }}
       />
     ),
-    [openGenerate, openSegment, openSplit, openCrop]
+    [openGenerate, openExtract, openCrop]
   );
 
   const { cloneRawImage, cloneRawTextbox } = useCloneRaw(retouchSpreads, selectedSpreadId, actions);
@@ -826,13 +807,13 @@ export function ObjectsMainView({
       <ObjectsRawImageToolbar
         context={{
           ...context,
-          onSplitImage: () => openSplit(context.item),
+          onSplitImage: () => openExtract(context.item, "layering"),
           onCropImage: () => openCrop(context.item),
           onClone: () => cloneRawImage(context.item as SpreadImage),
         }}
       />
     ),
-    [openSplit, openCrop, cloneRawImage]
+    [openExtract, openCrop, cloneRawImage]
   );
 
   const renderRetouchTextToolbar = useCallback(
@@ -1027,21 +1008,13 @@ export function ObjectsMainView({
         />
       )}
 
-      {modals.split.image && (
-        <SplitImageModal
-          open={modals.split.open}
-          onOpenChange={modals.closeSplit}
-          image={modals.split.image}
-          onCreateImages={handleSplitCreateImages}
-        />
-      )}
-
-      {modals.segment.image && (
-        <SegmentLayerModal
-          open={modals.segment.open}
-          onOpenChange={modals.closeSegment}
-          image={modals.segment.image}
-          onCreateSegment={handleSegmentCreateImage}
+      {modals.extract.image && (
+        <ExtractImageModal
+          open={modals.extract.open}
+          onOpenChange={modals.closeExtract}
+          image={modals.extract.image}
+          initialTab={modals.extract.initialTab}
+          onCreateImages={handleExtractCreateImages}
         />
       )}
 

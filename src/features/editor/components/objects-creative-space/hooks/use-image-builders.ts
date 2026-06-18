@@ -1,4 +1,4 @@
-// use-image-builders.ts - Plain builder functions for crop/split image creation
+// use-image-builders.ts - Plain builder functions for crop/extract image creation
 // Exported as functions (not a hook) — callsite wraps with useCallback + modal state
 
 import { createLogger } from "@/utils/logger";
@@ -8,8 +8,7 @@ import { useSnapshotActions } from "@/stores/snapshot-store/selectors";
 import type { BaseSpread, SpreadImage } from "@/types/canvas-types";
 import type {
   CropCreateResult,
-  SplitLayerResult,
-  SegmentResult,
+  ExtractResult,
 } from "@/features/editor/components/shared-components";
 
 const log = createLogger("Editor", "useImageBuilders");
@@ -65,25 +64,32 @@ export function buildCropImages(
   });
 }
 
-export function buildSplitImages(
-  layers: SplitLayerResult[],
-  splitModalImage: SpreadImage,
-  splitModalSpreadId: string,
+/**
+ * Spawn N new SpreadImages from committed extract results (Segments append N=1 / Layers
+ * replace N). Both tabs ride one N-image path (the former single-segment spawn is folded in
+ * as N=1): full-screen sources copy geometry, otherwise stagger +5px per result; z = next
+ * top of the pictorial tier, clamped to MEDIA.max.
+ * No auto-select (mirrors the old split behaviour — consistent for N>1).
+ */
+export function buildExtractImages(
+  results: ExtractResult[],
+  sourceImage: SpreadImage,
+  sourceSpreadId: string,
   retouchSpreads: BaseSpread[],
   actions: SnapshotActions
 ): void {
-  const orig = splitModalImage.geometry;
+  const orig = sourceImage.geometry;
   const isFullScreen = orig.w >= 100 && orig.h >= 100;
-  const spread = retouchSpreads.find((s) => s.id === splitModalSpreadId);
+  const spread = retouchSpreads.find((s) => s.id === sourceSpreadId);
 
   const firstZ = spread
-    ? nextTopZInTier(spread, "pictorial", { count: layers.length })
+    ? nextTopZInTier(spread, "pictorial", { count: results.length })
     : LAYER_CONFIG.MEDIA.min;
 
-  layers.forEach((layer, index) => {
+  results.forEach((result, index) => {
     const newImage: SpreadImage = {
       id: crypto.randomUUID(),
-      title: layer.title,
+      title: result.title,
       geometry: isFullScreen
         ? { ...orig }
         : {
@@ -92,69 +98,27 @@ export function buildSplitImages(
             w: orig.w,
             h: orig.h,
           },
-      media_url: layer.media_url,
+      media_url: result.media_url,
       illustrations: [
         {
-          media_url: layer.media_url,
+          media_url: result.media_url,
           created_time: new Date().toISOString(),
           is_selected: true,
         },
       ],
       tags: [],
-      aspect_ratio: splitModalImage.aspect_ratio,
-      player_visible: splitModalImage.player_visible,
-      editor_visible: splitModalImage.editor_visible,
+      aspect_ratio: sourceImage.aspect_ratio,
+      player_visible: sourceImage.player_visible,
+      editor_visible: sourceImage.editor_visible,
       "z-index": Math.min(firstZ + index, LAYER_CONFIG.MEDIA.max),
     };
-    actions.addRetouchImage(splitModalSpreadId, newImage);
+    actions.addRetouchImage(sourceSpreadId, newImage);
   });
 
-  log.info("buildSplitImages", "created images from split", {
-    count: layers.length,
-    spreadId: splitModalSpreadId,
+  log.info("buildExtractImages", "created images from extract", {
+    count: results.length,
+    spreadId: sourceSpreadId,
     firstZ,
     isFullScreen,
-  });
-}
-
-export function buildSegmentImage(
-  segment: SegmentResult,
-  sourceImage: SpreadImage,
-  segmentSpreadId: string,
-  retouchSpreads: BaseSpread[],
-  actions: SnapshotActions,
-  onItemSelect: (item: { type: 'image'; id: string }) => void
-): void {
-  const spread = retouchSpreads.find((s) => s.id === segmentSpreadId);
-  const zIndex = spread
-    ? nextTopZInTier(spread, "pictorial")
-    : LAYER_CONFIG.MEDIA.min;
-
-  const newImage: SpreadImage = {
-    id: crypto.randomUUID(),
-    title: `${sourceImage.title ?? "Image"} - Segment`,
-    geometry: { ...sourceImage.geometry },
-    aspect_ratio: sourceImage.aspect_ratio,
-    tags: [],
-    media_url: segment.media_url,
-    illustrations: [
-      {
-        media_url: segment.media_url,
-        created_time: new Date().toISOString(),
-        is_selected: true,
-      },
-    ],
-    player_visible: true,
-    editor_visible: true,
-    "z-index": zIndex,
-  };
-
-  actions.addRetouchImage(segmentSpreadId, newImage);
-  onItemSelect({ type: "image", id: newImage.id });
-
-  log.info("buildSegmentImage", "created segment image", {
-    newImageId: newImage.id,
-    spreadId: segmentSpreadId,
-    zIndex,
   });
 }

@@ -14,7 +14,7 @@ import {
 import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Scissors, Crop, Pencil, Upload, Trash2, MousePointerSquareDashed } from "lucide-react";
+import { Layers, Crop, Pencil, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { uploadImageToStorageWithNormalize, ImageTooTallError } from "@/apis/storage-api";
 import {
@@ -63,8 +63,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     onUpdate,
     onDelete,
     onGenerateImage,
-    onSegmentImage,
-    onSplitImage,
+    onExtractImage,
     onCropImage,
     selectedGeometry,
     canvasRef,
@@ -140,21 +139,13 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     onUpdate({ geometry: { ...geometry, rotation: 0 } });
   }, [geometry, onUpdate]);
 
-  const handleSegment = useCallback(() => {
-    if (onSegmentImage) {
-      onSegmentImage();
+  const handleExtract = useCallback(() => {
+    if (onExtractImage) {
+      onExtractImage();
     } else {
-      toast.info("Segment feature not available");
+      toast.info("Extract feature not available");
     }
-  }, [onSegmentImage]);
-
-  const handleSplit = useCallback(() => {
-    if (onSplitImage) {
-      onSplitImage();
-    } else {
-      toast.info("Split feature not available");
-    }
-  }, [onSplitImage]);
+  }, [onExtractImage]);
 
   const handleCrop = useCallback(() => {
     if (onCropImage) {
@@ -313,14 +304,9 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <div className="flex items-center gap-1">
             <ToolbarIconButton
-              icon={MousePointerSquareDashed}
-              label="Segment Layer (AI)"
-              onClick={handleSegment}
-            />
-            <ToolbarIconButton
-              icon={Scissors}
-              label="Split"
-              onClick={handleSplit}
+              icon={Layers}
+              label="Extract (Segments / Layers)"
+              onClick={handleExtract}
             />
             <ToolbarIconButton icon={Crop} label="Crop" onClick={handleCrop} />
             <ToolbarIconButton

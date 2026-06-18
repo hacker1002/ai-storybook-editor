@@ -416,7 +416,9 @@ export interface ImageToolbarContext<TSpread extends BaseSpread>
   extends ImageItemContext<TSpread>,
     BaseToolbarContext {
   onGenerateImage: () => void;
-  onSegmentImage?: () => void;
+  /** Retouch image: open the consolidated ExtractImageModal (Segments + Layers). */
+  onExtractImage?: () => void;
+  /** Raw image: open ExtractImageModal on the Layers tab (split). */
   onSplitImage?: () => void;
   onCropImage?: () => void;
   onReplaceImage: () => void;
