@@ -100,6 +100,16 @@ export function BooksPage() {
     [navigate],
   );
 
+  // Import-success: close the modal + navigate to the editor on the new book.
+  const handleImported = useCallback(
+    (bookId: string) => {
+      log.info('handleImported', 'import ok, navigate editor', { id: bookId });
+      setImportSource(null);
+      navigate(`/editor/${bookId}`);
+    },
+    [navigate],
+  );
+
   const handleDelete = useCallback((book: BookListItem) => {
     log.debug('handleDelete', 'open delete dialog (phase 04)', { id: book.id });
     setDeletingBook(book);
@@ -145,7 +155,11 @@ export function BooksPage() {
       )}
 
       {importSource && (
-        <ImportBookModal source={importSource} onClose={() => setImportSource(null)} />
+        <ImportBookModal
+          source={importSource}
+          onClose={() => setImportSource(null)}
+          onImported={handleImported}
+        />
       )}
       {deletingBook && (
         <DeleteBookDialog book={deletingBook} onClose={() => setDeletingBook(null)} />
