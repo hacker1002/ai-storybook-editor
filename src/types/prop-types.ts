@@ -7,10 +7,23 @@ export type PropType = 'narrative' | 'anchor';
 /** 0 = base variant, 1 = user-created variant */
 export type PropVariantType = 0 | 1;
 
+/** Provenance discriminator for an illustration entry (DB-CHANGELOG 2026-06-18, additive).
+ *  'created' = AI generate; 'uploaded' = user upload (no AI); 'edited' = Edit-modal output. */
+export type IllustrationType = 'created' | 'uploaded' | 'edited';
+
 export interface Illustration {
   media_url: string;
   created_time: string;
   is_selected: boolean;
+  /** Provenance (additive, optional → non-breaking). Absent entries coerce to 'created' on read. */
+  type?: IllustrationType;
+  /** Pre-edit source URL — set ⇔ type='edited'. Provenance-only; never enters the effective-URL resolve chain. */
+  original_url?: string;
+}
+
+/** Coerce-on-read provenance: legacy/absent `type` reads as 'created' (YAGNI — no writer-side validator). */
+export function coerceIllustrationType(entry: Pick<Illustration, 'type'>): IllustrationType {
+  return entry.type ?? 'created';
 }
 
 export interface ImageReference {

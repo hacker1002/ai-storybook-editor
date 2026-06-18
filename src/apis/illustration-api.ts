@@ -255,6 +255,12 @@ export interface GenerateSceneParams {
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
+  /** Model override (07-generate-scene) — allowlist group `scene`; out-of-allowlist → 422 UNSUPPORTED_MODEL. */
+  modelParams?: { model: string; params?: Record<string, unknown> };
+  /** Edge treatment param (07-generate-scene Flow §6b) — v1 backend echoes meta, output unchanged (no-op). */
+  edgeTreatment?: string;
+  /** Snapshot id (= meta.id) so the backend can resolve `@<key>/<variant>` mentions → entity reference images. */
+  snapshotId?: string;
 }
 
 export interface GenerateSceneResult {

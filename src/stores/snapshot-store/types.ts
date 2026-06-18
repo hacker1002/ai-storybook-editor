@@ -506,6 +506,11 @@ interface SceneGenerateParams extends ImageTaskTarget {
   stageVariantImageUrl?: string;
   referenceImages?: ReferenceImages;
   aspectRatio?: string;
+  /** Model override (07-generate-scene) — allowlist group `scene`; out-of-allowlist → 422 UNSUPPORTED_MODEL. */
+  modelParams?: { model: string; params?: Record<string, unknown> };
+  /** Edge treatment param — forwarded to generate; v1 backend no-op/echo (07-generate-scene Flow §6b). */
+  edgeTreatment?: string;
+  // NOTE: snapshotId is injected at the slice (= get().meta.id), NOT threaded through callers.
 }
 
 export type StartGenerateTaskParams =
@@ -524,10 +529,19 @@ export interface StartEditTaskParams extends ImageTaskTarget {
   aspectRatio?: string;
 }
 
+/** Push an externally-uploaded image (no AI) into the target illustrations[] (type='uploaded'). */
+export interface AddUploadedIllustrationParams {
+  entityKey: string;   // spread id (illustration_image entity)
+  childKey: string;    // raw image id
+  mediaUrl: string;    // public storage URL (already uploaded + normalized)
+}
+
 export interface ImageTaskSlice {
   imageTasks: ImageTask[];
   startGenerateTask: (params: StartGenerateTaskParams) => void;
   startEditTask: (params: StartEditTaskParams) => void;
+  /** Prepend a user-uploaded illustration (type='uploaded', is_selected) + mark dirty. No task/AI. */
+  addUploadedIllustration: (params: AddUploadedIllustrationParams) => void;
   dismissTask: (taskId: string) => void;
   clearAllTasks: () => void;
 }

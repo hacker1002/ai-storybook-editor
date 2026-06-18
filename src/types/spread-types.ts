@@ -2,6 +2,7 @@
 // Centralized from components/shared/types.ts
 
 import type { BranchSetting } from './illustration-types';
+import type { Illustration } from './prop-types';
 
 // === Unified Item Type (canvas + playable merged) ===
 export type ItemType =
@@ -362,12 +363,9 @@ export interface SpreadImage {
   // Sketch images (step 2) - direct URL, no illustration variants
   media_url?: string;
 
-  // Illustration images (step 3) - multiple variants, one selected
-  illustrations?: Array<{
-    media_url: string;
-    created_time: string;
-    is_selected: boolean;
-  }>;
+  // Illustration images (step 3) - multiple variants, one selected.
+  // Provenance fields (type/original_url) added 2026-06-18 — see Illustration.
+  illustrations?: Illustration[];
   final_hires_media_url?: string;
 
   // Retouch-specific optional fields

@@ -4,7 +4,7 @@
 
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, ImageTaskSlice, ImageTaskEntityType, StartGenerateTaskParams } from '../types';
-import type { Illustration } from '@/types/prop-types';
+import type { Illustration, IllustrationType } from '@/types/prop-types';
 import {
   callGenerateCharacterBase,
   callGenerateCharacterVariant,
@@ -80,8 +80,14 @@ function findIllustrations(
 
 /**
  * Prepends a new illustration (selected) to the target, deselecting all existing ones.
+ * `type` records provenance (DB-CHANGELOG 2026-06-18): 'created' for AI generate (default),
+ * 'uploaded' for user upload. original_url is never set here (edited-only, deferred Edit modal).
  */
-function prependIllustration(illustrations: Illustration[], imageUrl: string): void {
+function prependIllustration(
+  illustrations: Illustration[],
+  imageUrl: string,
+  type: IllustrationType = 'created',
+): void {
   for (const ill of illustrations) {
     ill.is_selected = false;
   }
@@ -89,11 +95,17 @@ function prependIllustration(illustrations: Illustration[], imageUrl: string): v
     media_url: imageUrl,
     created_time: new Date().toISOString(),
     is_selected: true,
+    type,
   });
 }
 
-/** Routes a generate call to the correct illustration API based on discriminated union params */
-function routeGenerateCall(params: StartGenerateTaskParams): Promise<IllustrationGenerateResult | ImageApiFailure> {
+/** Routes a generate call to the correct illustration API based on discriminated union params.
+ *  `snapshotId` (= store meta.id) is injected by the slice for the scene path only — the backend
+ *  resolves `@<key>/<variant>` mentions → entity reference images (07-generate-scene). */
+function routeGenerateCall(
+  params: StartGenerateTaskParams,
+  snapshotId?: string,
+): Promise<IllustrationGenerateResult | ImageApiFailure> {
   switch (params.entityType) {
     case 'character':
       if (params.isBase) {
@@ -168,6 +180,9 @@ function routeGenerateCall(params: StartGenerateTaskParams): Promise<Illustratio
         stageVariantImageUrl: params.stageVariantImageUrl,
         referenceImages: params.referenceImages,
         aspectRatio: params.aspectRatio,
+        modelParams: params.modelParams,
+        edgeTreatment: params.edgeTreatment,
+        snapshotId,
       });
 
     default:
@@ -235,8 +250,11 @@ export const createImageTaskSlice: StateCreator<
       });
     });
 
-    // Route to the correct illustration API based on entityType + isBase
-    const apiCall = routeGenerateCall(params);
+    // Route to the correct illustration API based on entityType + isBase.
+    // Inject snapshotId (= meta.id) at the slice so the scene path can resolve @mentions;
+    // empty/absent id → omit the field (optional — mentions degrade to plain text).
+    const snapshotId = get().meta.id || undefined;
+    const apiCall = routeGenerateCall(params, snapshotId);
 
     apiCall
       .then((result) => {
@@ -363,6 +381,20 @@ export const createImageTaskSlice: StateCreator<
           }
         });
       });
+  },
+
+  addUploadedIllustration: ({ entityKey, childKey, mediaUrl }) => {
+    // No AI / no task — user upload pushed straight into the illustration_image's illustrations[].
+    log.info('addUploadedIllustration', 'prepend uploaded', { entityKey, childKey });
+    set((state) => {
+      const illustrations = findIllustrations(state, 'illustration_image', entityKey, childKey);
+      if (!illustrations) {
+        log.warn('addUploadedIllustration', 'illustrations not found', { entityKey, childKey });
+        return;
+      }
+      prependIllustration(illustrations, mediaUrl, 'uploaded');
+      state.sync.isDirty = true;
+    });
   },
 
   dismissTask: (taskId) =>

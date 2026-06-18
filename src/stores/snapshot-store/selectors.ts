@@ -469,6 +469,7 @@ export const useSnapshotActions = () =>
       // Image Tasks
       startGenerateTask: s.startGenerateTask,
       startEditTask: s.startEditTask,
+      addUploadedIllustration: s.addUploadedIllustration,
       dismissTask: s.dismissTask,
       clearAllTasks: s.clearAllTasks,
       // Top-level
