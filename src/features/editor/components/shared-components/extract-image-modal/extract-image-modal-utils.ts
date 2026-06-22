@@ -16,6 +16,9 @@ const log = createLogger('Editor', 'ExtractImageModalUtils');
 /** Storage category folder for committed extract results (design §4.2). */
 const EXTRACT_RESULTS_FOLDER = 'extract-results';
 
+/** Storage category folder for crop-on-extract objects (Objects tab, design §6). */
+const EXTRACT_OBJECTS_FOLDER = 'extract-objects';
+
 /** Source URL priority: final_hires > selected illustration > first illustration > media_url.
  *  Mirrors `resolveImageUrl` from the deleted segment/split modals so extraction runs on the
  *  same pixels the canvas shows. */
@@ -43,8 +46,29 @@ export async function uploadEphemeralToStorage(result: ExtractResult): Promise<E
   return { ...result, media_url: publicUrl };
 }
 
+/** Upload one crop-on-extract base64 data URL to Storage; returns the public URL.
+ *  Objects-tab Extract path (design §6): `data:<mime>;base64,<payload>` → File → Storage. */
+export async function uploadCroppedToStorage(
+  base64DataUrl: string,
+  folder: string = EXTRACT_OBJECTS_FOLDER,
+): Promise<string> {
+  const match = /^data:([^;]+);base64,(.*)$/.exec(base64DataUrl);
+  const mimeType = match?.[1] ?? 'image/png';
+  const payload = match?.[2] ?? base64DataUrl;
+  const ext = mimeType.split('/')[1] || 'png';
+  const binary = atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const file = new File([bytes], `${crypto.randomUUID()}.${ext}`, { type: mimeType });
+  log.debug('uploadCroppedToStorage', 'start', { folder, bytes: bytes.length, mimeType });
+  const { publicUrl } = await uploadImageToStorage(file, folder);
+  log.debug('uploadCroppedToStorage', 'done', { folder });
+  return publicUrl;
+}
+
 /** Map an ImageApiFailure to a user-facing English message keyed on errorCode
- *  (segment 422 EMPTY_SEGMENTATION / layers 429 REPLICATE_RATE_LIMIT / 504 TIMEOUT). */
+ *  (segment 422 EMPTY_SEGMENTATION / layers 429 REPLICATE_RATE_LIMIT / 504 TIMEOUT;
+ *  Objects detect 404/422/502 + crop EMPTY_CROP_RESULT — see 07/05 specs). */
 export function mapExtractError(failure: ImageApiFailure): string {
   switch (failure.errorCode) {
     case 'EMPTY_SEGMENTATION':
@@ -53,6 +77,20 @@ export function mapExtractError(failure: ImageApiFailure): string {
       return 'Server busy, try again shortly.';
     case 'TIMEOUT':
       return 'The request timed out. Please try again.';
+    case 'SNAPSHOT_NOT_FOUND':
+      return 'Scene data not found. Try reopening the editor.';
+    case 'LLM_ERROR':
+      return 'Object detection is busy. Please try again shortly.';
+    case 'LLM_PARSE_ERROR':
+      return 'Could not read the detection result. Please try again.';
+    case 'IMAGE_FETCH_ERROR':
+      return 'Could not load the source image. Please try again.';
+    case 'DECODE_ERROR':
+      return 'The source image could not be processed.';
+    case 'EMPTY_CROP_RESULT':
+      return 'No crop produced. Make the crop area larger and try again.';
+    case 'UNSUPPORTED_MODEL':
+      return 'The selected detection model is not available.';
     default:
       return failure.error || 'Extraction failed. Please try again.';
   }

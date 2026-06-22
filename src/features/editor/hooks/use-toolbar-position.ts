@@ -97,20 +97,16 @@ export function useToolbarPosition({
       }
     }
 
-    // Boundary adjustments
-    if (placement === 'above' || placement === 'below') {
-      if (left < gap) left = gap;
-      if (left + toolbarRect.width > viewportWidth - gap) {
-        left = viewportWidth - toolbarRect.width - gap;
-      }
-    }
-
-    if (placement === 'left' || placement === 'right') {
-      if (top < gap) top = gap;
-      if (top + toolbarRect.height > viewportHeight - gap) {
-        top = viewportHeight - toolbarRect.height - gap;
-      }
-    }
+    // Universal viewport clamp (both axes). The placement logic above only
+    // guards the cross-axis; the 'below'/'right' fallbacks can still resolve to
+    // a main-axis position that overflows the viewport when the item fills (or
+    // exceeds) the canvas — e.g. a full-bleed image whose bottom edge sits below
+    // the fold. Clamping both axes keeps the toolbar fully on-screen and
+    // reachable, overlapping the item when no off-item slot fits.
+    const maxLeft = Math.max(gap, viewportWidth - toolbarRect.width - gap);
+    const maxTop = Math.max(gap, viewportHeight - toolbarRect.height - gap);
+    left = Math.min(Math.max(left, gap), maxLeft);
+    top = Math.min(Math.max(top, gap), maxTop);
 
     log.debug('useToolbarPosition', 'placement resolved', { placement, top, left });
     setPosition({ top, left, placement });

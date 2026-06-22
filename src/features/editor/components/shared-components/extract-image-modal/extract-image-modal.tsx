@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { useInteractionLayer } from "@/features/editor/contexts";
 import { createLogger } from "@/utils/logger";
 import type { SpreadImage } from "@/types/spread-types";
-import { SWAP_MODAL_TOKENS, Z_INDEX, RIGHT_SIDEBAR_WIDTH_PX } from "./extract-image-modal-constants";
+import { SWAP_MODAL_TOKENS, Z_INDEX, HEADER_HEIGHT_PX, RIGHT_SIDEBAR_WIDTH_PX } from "./extract-image-modal-constants";
 import {
   EXTRACT_TABS,
   DEFAULT_EXTRACT_TAB,
@@ -32,8 +32,10 @@ import {
 } from "./extract-image-modal-utils";
 import { useSegmentTabState, type SegmentTabHandle } from "./segment-tab";
 import { useLayersTabState, type LayersTabHandle } from "./layers-tab";
+import { useObjectsTabState } from "./objects-tab";
 import { ExtractImageModalHeader } from "./extract-image-modal-header";
 import { ExtractResultsSidebar } from "./extract-results-sidebar";
+import { ExtractObjectsSidebar } from "./extract-objects-sidebar";
 import { ExtractCanvas } from "./extract-canvas";
 
 const log = createLogger("Editor", "ExtractImageModal");
@@ -48,6 +50,8 @@ export interface ExtractImageModalProps {
   onCreateImages: (results: ExtractResult[]) => void;
   initialTab?: ExtractTabKey;
   yieldedFrom?: { parentId: string; onParentForcePop: () => void };
+  /** Objects tab Detect context (visualDescription + snapshotId). Absent → Detect disabled. */
+  detectContext?: { visualDescription: string; snapshotId: string };
 }
 
 export function ExtractImageModal({
@@ -57,6 +61,7 @@ export function ExtractImageModal({
   onCreateImages,
   initialTab,
   yieldedFrom,
+  detectContext,
 }: ExtractImageModalProps) {
   // ── State ──────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ExtractTabKey>(initialTab ?? DEFAULT_EXTRACT_TAB);
@@ -78,9 +83,10 @@ export function ExtractImageModal({
   const isBusy = isProcessing || isCommitting;
   const onRequestRun = useCallback(() => runExtractRef.current(), []);
 
-  // ── Per-tab sub-state (both hooks run unconditionally; root renders the active one) ──
+  // ── Per-tab sub-state (all hooks run unconditionally; root renders the active one) ──
   const segmentHandle = useSegmentTabState(image, { isBusy, onRequestRun });
   const layersHandle = useLayersTabState(image, { isBusy });
+  const objectsHandle = useObjectsTabState(image, { isBusy, detectContext });
 
   // ── Derived (computed in render — no set-state-in-effect, React 19 lint) ─────────
   const activeContract = useMemo(
@@ -89,6 +95,9 @@ export function ExtractImageModal({
   );
   const activeHandle: SegmentTabHandle | LayersTabHandle | null =
     activeTab === "segment" ? segmentHandle : activeTab === "layering" ? layersHandle : null;
+  // Objects overrides the shared shell: source + box overlay canvas, box-list sidebar,
+  // [+] = instant add (no API), ⭐ Extract = crop-on-extract (README §2.3 gating branch).
+  const isBoxOverlay = activeContract?.interactionMode === "box-overlay";
 
   const results = resultsByTab[activeTab] ?? EMPTY_RESULTS;
   const selectedResult = useMemo(
@@ -97,22 +106,34 @@ export function ExtractImageModal({
   );
 
   const sourceUrl = resolveSourceImageUrl(image);
-  // isBusy (not just isProcessing) so [+] is also gated during commit; handleRunExtract
-  // guards on runDisabled, so this hardens the handler too (review M2).
-  const runDisabled = isBusy || !sourceUrl || !(activeHandle?.canRun ?? false);
-  const commitDisabled = results.length === 0 || isBusy;
-  const processingLabel = activeTab === "layering" ? "Splitting…" : "Segmenting…";
+  // [+] gate — box-overlay: addBox (busy / no source only, NOT canRun — else first box is stuck);
+  // result-grid: run extract (also needs the tab's canRun). isBusy gates during commit too.
+  const runDisabled = isBoxOverlay
+    ? isBusy || !sourceUrl
+    : isBusy || !sourceUrl || !(activeHandle?.canRun ?? false);
+  // ⭐ Extract gate — box-overlay: boxes > 0; result-grid: has results.
+  const commitDisabled = isBoxOverlay
+    ? isBusy || !sourceUrl || !objectsHandle.canRun
+    : results.length === 0 || isBusy;
+  const processingLabel = isBoxOverlay
+    ? "Detecting…"
+    : activeTab === "layering"
+      ? "Splitting…"
+      : "Segmenting…";
+  const committingLabel = isBoxOverlay ? "Extracting…" : "Saving…";
 
   const paramsPanel =
     activeTab === "segment"
       ? segmentHandle.ParamsPanel
       : activeTab === "layering"
         ? layersHandle.ParamsPanel
-        : (
-            <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
-              Coming soon
-            </div>
-          );
+        : activeTab === "get_object"
+          ? objectsHandle.ParamsPanel
+          : (
+              <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
+                Coming soon
+              </div>
+            );
 
   // ── State reset / close ──────────────────────────────────────────────────────
   const resetState = useCallback(() => {
@@ -124,7 +145,8 @@ export function ExtractImageModal({
     setIsCommitting(false);
     segmentHandle.reset();
     layersHandle.reset();
-  }, [initialTab, segmentHandle, layersHandle]);
+    objectsHandle.reset();
+  }, [initialTab, segmentHandle, layersHandle, objectsHandle]);
 
   const handleClose = useCallback(() => {
     if (isBusy) {
@@ -216,8 +238,44 @@ export function ExtractImageModal({
     [activeTab, resultsByTab],
   );
 
+  // 🔍 Detect (box-overlay) — root owns isProcessing; the tab handles its own toasts.
+  const handleDetect = useCallback(async () => {
+    if (!isBoxOverlay || !sourceUrl || isBusy || !objectsHandle.canDetect) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsProcessing(true);
+    log.info("handleDetect", "start", { imageId: image.id });
+    try {
+      await objectsHandle.detect(sourceUrl);
+    } finally {
+      if (!controller.signal.aborted) setIsProcessing(false);
+    }
+  }, [isBoxOverlay, sourceUrl, isBusy, objectsHandle, image.id]);
+
   const handleCommitExtract = useCallback(async () => {
     if (commitDisabled) return;
+
+    // Objects: crop-on-extract — crop every box → upload → geometry-positioned spawn.
+    if (activeContract?.commitMode === "crop-on-extract") {
+      if (!sourceUrl) return;
+      setIsCommitting(true);
+      log.info("handleCommitExtract", "crop-on-extract start", { activeTab });
+      try {
+        const uploaded = await objectsHandle.commitExtract(sourceUrl);
+        log.info("handleCommitExtract", "crop-on-extract done", { count: uploaded.length });
+        onCreateImages(uploaded);
+        onOpenChange(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Extract failed. Please try again.";
+        log.error("handleCommitExtract", "crop-on-extract failed", { error: msg });
+        toast.error(msg);
+      } finally {
+        setIsCommitting(false);
+      }
+      return;
+    }
+
+    // Default: upload-ephemeral (Segment/Layers).
     setIsCommitting(true);
     log.info("handleCommitExtract", "start", { activeTab, count: results.length });
     try {
@@ -231,7 +289,16 @@ export function ExtractImageModal({
     } finally {
       setIsCommitting(false);
     }
-  }, [commitDisabled, results, activeTab, onCreateImages, onOpenChange]);
+  }, [
+    commitDisabled,
+    activeContract,
+    sourceUrl,
+    objectsHandle,
+    results,
+    activeTab,
+    onCreateImages,
+    onOpenChange,
+  ]);
 
   // ── Interaction Layer Stack (top modal slot) ────────────────────────────────────
   useInteractionLayer(
@@ -240,7 +307,10 @@ export function ExtractImageModal({
       ? {
           id: "extract-image-modal",
           ref: dialogContentRef,
-          hotkeys: ["Escape"],
+          // Delete/Backspace handled HERE (top modal slot) so they don't fall through to the
+          // item/spread slot below (memory: sidebars don't own destructive hotkeys). The
+          // provider already ignores them while an input/textarea is focused.
+          hotkeys: ["Escape", "Delete", "Backspace"],
           captureClickOutside: true,
           portalSelectors: [
             "[data-radix-popper-content-wrapper]",
@@ -254,7 +324,18 @@ export function ExtractImageModal({
             "[data-radix-popper-content-wrapper]",
           ],
           onHotkey: (key) => {
-            if (key === "Escape") handleClose();
+            if (key === "Escape") {
+              handleClose();
+              return;
+            }
+            if (
+              (key === "Delete" || key === "Backspace") &&
+              isBoxOverlay &&
+              objectsHandle.selectedBoxId
+            ) {
+              log.debug("onHotkey", "delete box", { boxId: objectsHandle.selectedBoxId });
+              objectsHandle.deleteBox(objectsHandle.selectedBoxId);
+            }
           },
           onClickOutside: () => handleClose(),
           // Spread switch / target-image delete → force close + reset (bypasses busy guard).
@@ -293,16 +374,28 @@ export function ExtractImageModal({
         />
 
         <div className="flex min-h-0 flex-1">
-          <ExtractResultsSidebar
-            title={activeContract?.label ?? ""}
-            results={results}
-            selectedResultId={selectedResultId}
-            onSelectResult={handleSelectResult}
-            onDeleteResult={handleDeleteResult}
-            onRunExtract={handleRunExtract}
-            runDisabled={runDisabled}
-            isProcessing={isProcessing}
-          />
+          {isBoxOverlay ? (
+            <ExtractObjectsSidebar
+              title={activeContract?.label ?? ""}
+              boxes={objectsHandle.boxes}
+              selectedBoxId={objectsHandle.selectedBoxId}
+              onSelectBox={objectsHandle.selectBox}
+              onDeleteBox={objectsHandle.deleteBox}
+              onAddBox={objectsHandle.addBox}
+              addDisabled={runDisabled}
+            />
+          ) : (
+            <ExtractResultsSidebar
+              title={activeContract?.label ?? ""}
+              results={results}
+              selectedResultId={selectedResultId}
+              onSelectResult={handleSelectResult}
+              onDeleteResult={handleDeleteResult}
+              onRunExtract={handleRunExtract}
+              runDisabled={runDisabled}
+              isProcessing={isProcessing}
+            />
+          )}
 
           <ExtractCanvas
             sourceUrl={sourceUrl}
@@ -310,16 +403,31 @@ export function ExtractImageModal({
             isProcessing={isProcessing}
             isCommitting={isCommitting}
             processingLabel={processingLabel}
+            committingLabel={committingLabel}
             onCommitExtract={handleCommitExtract}
             commitDisabled={commitDisabled}
+            interactionMode={activeContract?.interactionMode}
+            overlay={isBoxOverlay ? objectsHandle.CanvasOverlay : undefined}
+            onImageLoad={isBoxOverlay ? objectsHandle.onImageLoad : undefined}
+            onDetect={handleDetect}
+            canDetect={objectsHandle.canDetect}
+            detectVisible={isBoxOverlay}
           />
 
           <aside
-            className="flex h-full shrink-0 flex-col overflow-y-auto border-l border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)]"
+            className="flex h-full shrink-0 flex-col overflow-hidden border-l border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)]"
             style={{ width: RIGHT_SIDEBAR_WIDTH_PX }}
             aria-label="Extract parameters"
           >
-            {paramsPanel}
+            <div
+              className="flex shrink-0 items-center border-b border-[var(--swap-modal-border)] px-4"
+              style={{ height: HEADER_HEIGHT_PX }}
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]">
+                Parameters
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">{paramsPanel}</div>
           </aside>
         </div>
       </DialogContent>

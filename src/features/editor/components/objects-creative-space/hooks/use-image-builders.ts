@@ -65,11 +65,12 @@ export function buildCropImages(
 }
 
 /**
- * Spawn N new SpreadImages from committed extract results (Segments append N=1 / Layers
- * replace N). Both tabs ride one N-image path (the former single-segment spawn is folded in
- * as N=1): full-screen sources copy geometry, otherwise stagger +5px per result; z = next
- * top of the pictorial tier, clamped to MEDIA.max.
- * No auto-select (mirrors the old split behaviour — consistent for N>1).
+ * Spawn N new SpreadImages from committed extract results.
+ * - Segments (append N=1) / Layers (replace N): full-screen sources copy geometry, otherwise
+ *   stagger +5px per result.
+ * - Objects (crop-on-extract): `meta.geometry` (box % of source) → position the crop at its
+ *   exact spot within the source footprint (NO stagger), and `meta.tag` → `layer.tags[]`.
+ * z = next top of the pictorial tier, clamped to MEDIA.max. No auto-select (N>1 consistent).
  */
 export function buildExtractImages(
   results: ExtractResult[],
@@ -87,17 +88,29 @@ export function buildExtractImages(
     : LAYER_CONFIG.MEDIA.min;
 
   results.forEach((result, index) => {
-    const newImage: SpreadImage = {
-      id: crypto.randomUUID(),
-      title: result.title,
-      geometry: isFullScreen
+    const box = result.meta?.geometry;
+    // Objects: geometry-positioned (box % within source footprint — mirrors buildCropImages).
+    // Others: full-screen copy or +5px stagger.
+    const geometry = box
+      ? {
+          x: Math.min(orig.x + (box.x / 100) * orig.w, 99),
+          y: Math.min(orig.y + (box.y / 100) * orig.h, 99),
+          w: Math.min((box.w / 100) * orig.w, 100),
+          h: Math.min((box.h / 100) * orig.h, 100),
+        }
+      : isFullScreen
         ? { ...orig }
         : {
             x: Math.min(orig.x + 5 * (index + 1), 100 - orig.w),
             y: Math.min(orig.y + 5 * (index + 1), 100 - orig.h),
             w: orig.w,
             h: orig.h,
-          },
+          };
+
+    const newImage: SpreadImage = {
+      id: crypto.randomUUID(),
+      title: result.title,
+      geometry,
       media_url: result.media_url,
       illustrations: [
         {
@@ -106,8 +119,9 @@ export function buildExtractImages(
           is_selected: true,
         },
       ],
-      tags: [],
-      aspect_ratio: sourceImage.aspect_ratio,
+      // Detect tag → subject identity on the spawned layer (DetectTag ⊂ SpreadTag).
+      tags: result.meta?.tag ? [result.meta.tag] : [],
+      aspect_ratio: result.meta?.ratio ?? sourceImage.aspect_ratio,
       player_visible: sourceImage.player_visible,
       editor_visible: sourceImage.editor_visible,
       "z-index": Math.min(firstZ + index, LAYER_CONFIG.MEDIA.max),
@@ -120,5 +134,6 @@ export function buildExtractImages(
     spreadId: sourceSpreadId,
     firstZ,
     isFullScreen,
+    geometryPositioned: results.filter((r) => r.meta?.geometry).length,
   });
 }

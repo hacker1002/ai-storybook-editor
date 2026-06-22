@@ -305,7 +305,7 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
           <div className="flex items-center gap-1">
             <ToolbarIconButton
               icon={Layers}
-              label="Extract (Segments / Layers)"
+              label="Extract"
               onClick={handleExtract}
             />
             <ToolbarIconButton icon={Crop} label="Crop" onClick={handleCrop} />

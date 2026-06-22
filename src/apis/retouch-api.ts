@@ -1,6 +1,7 @@
 import { callImageApi, type ImageApiFailure } from './image-api-client';
 import { createLogger } from '@/utils/logger';
 import type { WordTiming } from '@/types/spread-types';
+import type { AspectRatio } from '@/constants/aspect-ratio-constants';
 
 const log = createLogger('API', 'RetouchApi');
 
@@ -75,6 +76,49 @@ export interface CropObjectImageResult {
   };
 }
 
+// --- Detect Objects (07-detect-objects) ---
+
+/** Structured tag mirroring snapshot illustration tags spec — carried into spawned
+ *  layer.tags[]. `variant_key` is null when the @mention has no "/variant" segment. */
+export interface DetectTag {
+  type: 'character' | 'prop';
+  object_key: string;
+  variant_key: string | null;
+}
+
+export interface DetectObjectsParams {
+  imageUrl: string;
+  visualDescription: string;
+  snapshotId: string;
+  /** Override bounding model — allowlist group `detect-objects`. Omit → server default. */
+  modelParams?: { model?: string; params?: Record<string, unknown> };
+}
+
+export interface DetectedObject {
+  object: string; // "@key/variant" mention (audit)
+  tag: DetectTag;
+  /** Bounding box in basis points: 100% == 10000 (consumer divides by 100 → %). */
+  geometry: { x: number; y: number; w: number; h: number };
+  /** Canonical visual aspect after server clamp — NOT derivable from basis w/h. */
+  ratio: AspectRatio;
+  confidence?: number;
+}
+
+export interface DetectObjectsResult {
+  success: boolean;
+  data?: { objects: DetectedObject[] };
+  error?: string;
+  meta?: {
+    processingTime?: number;
+    model?: string;
+    tokenUsage?: number;
+    sourceWidth?: number;
+    sourceHeight?: number;
+    detectedCount?: number;
+    droppedCount?: number;
+  };
+}
+
 export interface ImageRemoveBgParams {
   imageUrl: string;
   preserveAlpha?: boolean;
@@ -128,6 +172,30 @@ export async function callCropObjectImage(
   } else {
     const { error, httpStatus, errorCode } = res as ImageApiFailure;
     log.error('callCropObjectImage', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
+}
+
+export async function callDetectObjects(
+  params: DetectObjectsParams
+): Promise<DetectObjectsResult | ImageApiFailure> {
+  log.info('callDetectObjects', 'start', {
+    imageUrl: params.imageUrl.slice(0, 80),
+    descLen: params.visualDescription.length,
+    model: params.modelParams?.model,
+  });
+  const res = await callImageApi<DetectObjectsResult>('/api/retouch/detect-objects', params);
+  if (res.success) {
+    const r = res as DetectObjectsResult;
+    log.info('callDetectObjects', 'success', {
+      count: r.data?.objects.length ?? 0,
+      detectedCount: r.meta?.detectedCount,
+      droppedCount: r.meta?.droppedCount,
+      processingMs: r.meta?.processingTime,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callDetectObjects', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
   }
   return res;
 }

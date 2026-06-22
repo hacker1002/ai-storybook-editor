@@ -6,6 +6,11 @@
 
 import { Tag, Type, Crop, Box, Layers, Image as ImageIcon, Disc } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { ASPECT_RATIOS, type AspectRatio } from '@/constants/aspect-ratio-constants';
+import type { DetectTag } from '@/apis/retouch-api';
+
+// Re-export so Objects-tab consumers have one constants surface.
+export type { DetectTag };
 
 // Re-export the shell layout tokens / z-index / sidebar dims from the swap modal (single
 // source — design §2.6 "reuse swap shell"). Children import these from HERE so the modal
@@ -34,6 +39,31 @@ export type ExtractTabKey =
 /** How a fresh run merges into the tab's grid — segment accumulates, layering replaces. */
 export type ExtractRunMode = 'append' | 'replace';
 
+// ── Objects-tab box types (03-objects-tab.md §2) ─────────────────────────────
+
+/** Provenance of a crop box: manual `[+]` vs AI `Detect`. */
+export type ObjectBoxSource = 'manual' | 'detected';
+
+/** Per-box ratio selector value. `'Free'` = resize with no aspect lock; otherwise one
+ *  of the 10 shared aspect ratios (single source: aspect-ratio-constants). */
+export type ObjectRatio = 'Free' | AspectRatio;
+
+/** One interactive crop box on the source canvas (geometry in % 0-100 — matches
+ *  crop-object-image + SpreadImage). `detected`-only fields carry to spawn. */
+export interface ObjectBox {
+  id: string;
+  x: number; y: number; w: number; h: number; // % (0-100), top-left + size
+  ratio: ObjectRatio;
+  source: ObjectBoxSource;
+  color: string;  // OBJECT_BOX_COLORS[idx % n] — border + badge + swatch
+  label: string;  // badge — manual: "Object {n}"; detected: humanized tag
+  // ⚡ detected-only metadata (carry to spawn; does NOT affect crop pixels):
+  tag?: DetectTag;
+  object?: string;        // "@key/variant" mention (audit)
+  apiRatio?: AspectRatio; // server clamp ratio (07) — default `ratio` for detected box
+  confidence?: number;
+}
+
 /** One ephemeral, pre-commit result. Unifies the old `SegmentResult` (1/run) and
  *  `SplitLayerResult` (N/run). `media_url` is the API ephemeral URL until commit swaps
  *  in the uploaded Storage publicUrl. */
@@ -42,7 +72,16 @@ export interface ExtractResult {
   media_url: string;
   sourceTab: ExtractTabKey;
   title: string;
-  meta?: { prompt?: string; coverageRatio?: number; layerIndex?: number };
+  meta?: {
+    prompt?: string;
+    coverageRatio?: number;
+    layerIndex?: number;
+    // ⚡ Objects tab — geometry-positioned spawn (% 0-100) + carried detect metadata.
+    geometry?: { x: number; y: number; w: number; h: number };
+    ratio?: string;
+    tag?: DetectTag;
+    boxIndex?: number;
+  };
 }
 
 /** Per-tab metadata. `runExtract` + `ParamsPanel` live in the tab files (segment-tab /
@@ -53,11 +92,15 @@ export interface ExtractTabContract {
   icon: LucideIcon;
   runMode: ExtractRunMode;
   enabled: boolean;
+  /** Canvas interaction model — default `result-grid` (Segment/Layers); Objects = `box-overlay`. */
+  interactionMode?: 'result-grid' | 'box-overlay';
+  /** ⭐ Extract commit path — default `upload-ephemeral`; Objects = `crop-on-extract`. */
+  commitMode?: 'upload-ephemeral' | 'crop-on-extract';
 }
 
 // ── Tab registry (README §2.2 — order + labels match mock #ex-fs-tabs) ────────
 export const EXTRACT_TABS: ExtractTabContract[] = [
-  { key: 'get_object', label: 'Objects', icon: Tag, runMode: 'replace', enabled: false },
+  { key: 'get_object', label: 'Objects', icon: Tag, runMode: 'replace', enabled: true, interactionMode: 'box-overlay', commitMode: 'crop-on-extract' },
   { key: 'get_text', label: 'Texts', icon: Type, runMode: 'replace', enabled: false },
   { key: 'crop', label: 'Crops', icon: Crop, runMode: 'replace', enabled: false },
   { key: 'segment', label: 'Segments', icon: Box, runMode: 'append', enabled: true },
@@ -81,3 +124,19 @@ export const DEFAULT_LAYERS_MODEL = 'qwen/qwen-image-layered';
 export const LAYER_COUNT_MIN = 2;
 export const LAYER_COUNT_MAX = 8; // API cap (01-layering-image) — NOT 10, see 02-layers-tab §7.
 export const LAYER_COUNT_DEFAULT = 3;
+
+// ── Objects tab (03-objects-tab.md §2) ───────────────────────────────────────
+// Detect model — allowlist group `detect-objects` (07 §Notes, v1 Gemini-only).
+// ⚠️ Mock UI ghi 'google/gemini-3-flash' = SAI. API default = 'google/gemini-3.5-flash'.
+export const BOUNDING_MODEL_OPTIONS = ['google/gemini-3.5-flash'] as const;
+export const DEFAULT_BOUNDING_MODEL = 'google/gemini-3.5-flash';
+
+/** Per-box ratio options — `'Free'` + the 10 shared ratios (DRY: single source). */
+export const OBJECT_RATIOS: readonly ObjectRatio[] = ['Free', ...ASPECT_RATIOS.map((r) => r.value)];
+
+/** Stable distinct colors for box border + badge + sidebar swatch (cycled by index). */
+export const OBJECT_BOX_COLORS = ['#3b6cf6', '#f59e0b', '#22c55e', '#ef4444', '#a855f7', '#14b8a6'] as const;
+
+export const OBJECT_DEFAULT_BOX_SIZE_PERCENT = 30; // manual [+] box edge, % of canvas
+export const OBJECT_MIN_BOX_SIZE_PERCENT = 1;      // guard: < 1% → degenerate (anti EMPTY_CROP_RESULT)
+export const CROP_BATCH_SIZE = 3;                  // crop-object-image cap = 1..3 box/call → chunk

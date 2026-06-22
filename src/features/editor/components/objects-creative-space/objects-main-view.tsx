@@ -60,6 +60,7 @@ import {
   useSnapshotActions,
   useCharacters,
   useProps,
+  useSnapshotId,
 } from "@/stores/snapshot-store/selectors";
 import { useArtStyleDescription } from "@/stores/art-style-store";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
@@ -168,6 +169,9 @@ export function ObjectsMainView({
 
   const characters = useCharacters();
   const props = useProps();
+  // Detect-objects context (07 §Parameters): scene visualDescription + snapshotId. Resolved
+  // per-image at the modal mount; absent (non-scene image / no snapshot) → Detect disabled.
+  const snapshotId = useSnapshotId();
   const annotationArtStyle = useArtStyleDescription() ?? undefined;
 
   const selectedSpread = useMemo(
@@ -1015,6 +1019,14 @@ export function ObjectsMainView({
           image={modals.extract.image}
           initialTab={modals.extract.initialTab}
           onCreateImages={handleExtractCreateImages}
+          detectContext={
+            modals.extract.image.visual_description?.trim() && snapshotId
+              ? {
+                  visualDescription: modals.extract.image.visual_description.trim(),
+                  snapshotId,
+                }
+              : undefined
+          }
         />
       )}
 

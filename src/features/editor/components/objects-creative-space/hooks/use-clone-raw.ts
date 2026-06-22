@@ -37,6 +37,8 @@ export function useCloneRaw(
         geometry: { ...rawImage.geometry },
         media_url: rawImage.media_url,
         illustrations: rawImage.illustrations ? [...rawImage.illustrations] : [],
+        // Carry visual_description so the cloned image keeps Detect/extract context
+        visual_description: rawImage.visual_description,
         aspect_ratio: rawImage.aspect_ratio,
         tags: [],
         player_visible: true,

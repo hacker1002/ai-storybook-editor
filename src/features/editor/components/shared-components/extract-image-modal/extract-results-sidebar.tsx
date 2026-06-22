@@ -6,7 +6,7 @@
 import { Plus, Loader2, Trash2, Check } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
-import { LEFT_SIDEBAR_WIDTH_PX, type ExtractResult } from './extract-image-modal-constants';
+import { HEADER_HEIGHT_PX, LEFT_SIDEBAR_WIDTH_PX, type ExtractResult } from './extract-image-modal-constants';
 
 const log = createLogger('Editor', 'ExtractResultsSidebar');
 
@@ -39,7 +39,10 @@ export function ExtractResultsSidebar({
       style={{ width: LEFT_SIDEBAR_WIDTH_PX }}
       aria-label="Extract results"
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] px-4 py-3">
+      <div
+        className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] px-4"
+        style={{ height: HEADER_HEIGHT_PX }}
+      >
         <span className="text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]">
           {title}
         </span>
