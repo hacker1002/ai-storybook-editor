@@ -6,7 +6,10 @@ import { Plus, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { Illustration } from '@/types/prop-types';
-import { LEFT_SIDEBAR_WIDTH_PX } from '../../remix-creative-space/swap-crop-sheet-modal/swap-modal-constants';
+import {
+  LEFT_SIDEBAR_WIDTH_PX,
+  HEADER_HEIGHT_PX,
+} from '../../remix-creative-space/swap-crop-sheet-modal/swap-modal-constants';
 import type { GenerateModalMode } from './generate-image-modal-constants';
 
 const log = createLogger('Editor', 'GeneratedSidebar');
@@ -44,7 +47,10 @@ export function GeneratedSidebar({
       style={{ width: LEFT_SIDEBAR_WIDTH_PX }}
       aria-label="Lịch sử ảnh"
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] px-4 py-3">
+      <div
+        className="flex shrink-0 items-center justify-between border-b border-[var(--swap-modal-border)] px-4"
+        style={{ height: HEADER_HEIGHT_PX }}
+      >
         <span className="text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]">
           {title}
         </span>

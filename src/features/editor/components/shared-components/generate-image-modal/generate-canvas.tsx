@@ -9,6 +9,7 @@ import { createLogger } from '@/utils/logger';
 import type { Illustration } from '@/types/prop-types';
 import type { GenerateModalMode } from './generate-image-modal-constants';
 import { ZOOM } from './generate-image-modal-constants';
+import { HEADER_HEIGHT_PX } from '../../remix-creative-space/swap-crop-sheet-modal/swap-modal-constants';
 
 const log = createLogger('Editor', 'GenerateCanvas');
 
@@ -63,7 +64,8 @@ export function GenerateCanvas({
     <div className="flex min-w-0 flex-1 flex-col bg-[var(--swap-modal-canvas-bg)]">
       {/* stage-header: spacer + zoom control */}
       <div
-        className="flex shrink-0 items-center justify-end gap-2 border-b border-[var(--swap-modal-border)] px-4 py-2"
+        className="flex shrink-0 items-center justify-end gap-2 border-b border-[var(--swap-modal-border)] px-4"
+        style={{ height: HEADER_HEIGHT_PX }}
       >
         <ZoomIn className="h-4 w-4 text-[var(--swap-modal-text-muted)]" aria-hidden="true" />
         <input

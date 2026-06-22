@@ -18,6 +18,7 @@ import { createLogger } from '@/utils/logger';
 import type { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
 import {
   RIGHT_SIDEBAR_WIDTH_PX,
+  HEADER_HEIGHT_PX,
   Z_INDEX,
 } from '../../remix-creative-space/swap-crop-sheet-modal/swap-modal-constants';
 import {
@@ -156,10 +157,21 @@ export function ParametersSidebar(props: ParametersSidebarProps) {
 
   return (
     <aside
-      className="flex h-full shrink-0 flex-col overflow-y-auto border-l border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)]"
+      className="flex h-full shrink-0 flex-col border-l border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)]"
       style={{ width: RIGHT_SIDEBAR_WIDTH_PX }}
       aria-label="Tham số tạo ảnh"
     >
+      {/* Column header — height-aligned with the left sidebar + canvas headers. */}
+      <div
+        className="flex shrink-0 items-center border-b border-[var(--swap-modal-border)] px-4"
+        style={{ height: HEADER_HEIGHT_PX }}
+      >
+        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]">
+          PARAMETERS
+        </span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
       {mode === 'generate' ? (
         <div className="flex flex-col gap-5 px-4 py-4">
           {/* MODEL */}
@@ -354,6 +366,7 @@ export function ParametersSidebar(props: ParametersSidebarProps) {
           </button>
         </div>
       )}
+      </div>
     </aside>
   );
 }
