@@ -300,7 +300,7 @@ export function EditImageModal({
           </DialogDescription>
 
           <EditImageModalHeader
-            title={imageTitle ? `${imageTitle} — Editing Image` : "Editing Image"}
+            title="Editing Image"
             activeTool={activeTool}
             tools={EDIT_TOOLS}
             onToolChange={handleToolChange}
