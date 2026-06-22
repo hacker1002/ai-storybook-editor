@@ -14,7 +14,7 @@ export { GenerateImageModal } from './generate-image-modal';
 export { ExtractImageModal } from './extract-image-modal';
 export type { ExtractResult, ExtractTabKey } from './extract-image-modal';
 export { EditImageModal } from './edit-image-modal';
-export { EraseImageModal } from './erase-image-modal';
+export type { EditImageModalProps, EditToolKey } from './edit-image-modal';
 export { CropImageModal } from './crop-image-modal';
 export type { CropCreateResult } from './crop-image-modal-parts';
 export { EditAudioModal } from './edit-audio-modal';

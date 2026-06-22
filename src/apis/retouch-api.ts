@@ -123,6 +123,10 @@ export interface ImageRemoveBgParams {
   imageUrl: string;
   preserveAlpha?: boolean;
   backgroundColor?: string | null;
+  /** Replicate rmbg model owner/name — allowlist group `rmbg` (⚡2026-06-13). Omit → Bria
+   *  default (server-side). Validated against the allowlist at the endpoint before binding
+   *  to the core (never forwarded raw). FE sends explicit value to match the UI default. */
+  model?: string;
 }
 
 export interface ImageRemoveBgResult {

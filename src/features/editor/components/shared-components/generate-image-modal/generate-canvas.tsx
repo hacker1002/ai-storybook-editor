@@ -3,13 +3,14 @@
 // Presentational/dumb — zoom value + drop handler come from the root.
 
 import { useCallback, useState } from 'react';
-import { ZoomIn, Loader2, UploadCloud } from 'lucide-react';
+import { Loader2, UploadCloud } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { Illustration } from '@/types/prop-types';
 import type { GenerateModalMode } from './generate-image-modal-constants';
 import { ZOOM } from './generate-image-modal-constants';
 import { HEADER_HEIGHT_PX } from '../../remix-creative-space/swap-crop-sheet-modal/swap-modal-constants';
+import { ZoomControl } from '../zoom-control';
 
 const log = createLogger('Editor', 'GenerateCanvas');
 
@@ -67,20 +68,13 @@ export function GenerateCanvas({
         className="flex shrink-0 items-center justify-end gap-2 border-b border-[var(--swap-modal-border)] px-4"
         style={{ height: HEADER_HEIGHT_PX }}
       >
-        <ZoomIn className="h-4 w-4 text-[var(--swap-modal-text-muted)]" aria-hidden="true" />
-        <input
-          type="range"
-          aria-label="Zoom"
+        <ZoomControl
+          value={zoomLevel}
+          onChange={onZoomChange}
           min={ZOOM.min}
           max={ZOOM.max}
           step={ZOOM.step}
-          value={zoomLevel}
-          onChange={(e) => onZoomChange(Number(e.target.value))}
-          className="h-1 w-40 cursor-pointer accent-[var(--swap-modal-accent)]"
         />
-        <span className="w-12 text-right text-xs tabular-nums text-[var(--swap-modal-text-secondary)]">
-          {zoomLevel}%
-        </span>
       </div>
 
       {/* canvas */}

@@ -33,7 +33,6 @@ import {
   EditableAudio,
   EditableAutoAudio,
   EditableAutoPic,
-  EditImageModal,
   ExtractImageModal,
   CropImageModal,
   EditAudioModal,
@@ -45,6 +44,7 @@ import type {
   LibrarySound,
 } from "@/features/editor/components/shared-components";
 import { useSounds } from "@/stores/sounds-store";
+import { RetouchEditImageModal } from "./retouch-edit-image-modal";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import { ObjectsVideoToolbar } from "./objects-video-toolbar";
 import { ObjectsAudioToolbar } from "./objects-audio-toolbar";
@@ -1004,7 +1004,7 @@ export function ObjectsMainView({
       />
 
       {modals.generate.imageId && (
-        <EditImageModal
+        <RetouchEditImageModal
           open={modals.generate.open}
           onOpenChange={modals.closeGenerate}
           spreadId={modals.generate.spreadId}

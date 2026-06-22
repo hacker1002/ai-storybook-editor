@@ -23,13 +23,10 @@ import {
   Loader2,
   AlertTriangle,
   RotateCcw,
-  Minus,
-  Plus,
   type LucideIcon,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
 import { cn } from '@/utils/utils';
+import { ZoomControl } from '../../shared-components/zoom-control';
 import { createLogger } from '@/utils/logger';
 import {
   Tooltip,
@@ -387,54 +384,16 @@ function StageHeader({
         {headerActions}
       </div>
 
-      <div className="flex items-center gap-2 text-[var(--swap-modal-text-primary)]">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Decrease zoom"
-          disabled={zoomLevel <= ZOOM.min}
-          onClick={() => {
-            const next = Math.max(zoomLevel - ZOOM.step, ZOOM.min);
-            log.debug('onClick', 'zoom decrease', { from: zoomLevel, to: next });
-            onZoomChange(next);
-          }}
-          className="h-8 w-8 text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]"
-        >
-          <Minus className="h-4 w-4" />
-        </Button>
-        <Slider
-          value={[zoomLevel]}
-          min={ZOOM.min}
-          max={ZOOM.max}
-          step={ZOOM.step}
-          onValueChange={([v]) => {
-            log.debug('onValueChange', 'zoom change', { zoom: v });
-            onZoomChange(v);
-          }}
-          aria-label="Zoom level"
-          className="w-[120px]"
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Increase zoom"
-          disabled={zoomLevel >= ZOOM.max}
-          onClick={() => {
-            const next = Math.min(zoomLevel + ZOOM.step, ZOOM.max);
-            log.debug('onClick', 'zoom increase', { from: zoomLevel, to: next });
-            onZoomChange(next);
-          }}
-          className="h-8 w-8 text-[var(--swap-modal-text-muted)] hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-text-primary)]"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-        <span
-          className="w-12 text-right text-sm font-medium tabular-nums text-[var(--swap-modal-text-secondary)]"
-          aria-live="polite"
-        >
-          {zoomLevel}%
-        </span>
-      </div>
+      <ZoomControl
+        value={zoomLevel}
+        onChange={(next) => {
+          log.debug('onZoomChange', 'zoom change', { from: zoomLevel, to: next });
+          onZoomChange(next);
+        }}
+        min={ZOOM.min}
+        max={ZOOM.max}
+        step={ZOOM.step}
+      />
     </div>
   );
 }

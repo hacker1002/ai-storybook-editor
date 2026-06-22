@@ -1,14 +1,18 @@
-/** Pure canvas utilities for EraseImageModal — exported separately for unit testing (react-refresh/only-export-components). */
+// erase-stroke-engine.ts — Pure canvas stroke engine for the Erasor tab. Relocated from
+// the old `erase-image-modal-utils.ts` (design 02-eraser-tab §5 "reuse, KHÔNG viết lại").
+// Only change vs the original: `Stroke.size` is now a number (canvas-px radius) instead of
+// a 'T'|'S'|'M'|'L' key, so `BRUSH_PX` is dropped. Exported separately for unit testing.
 
-export const BRUSH_PX = { T: 4, S: 8, M: 16, L: 32 } as const;
-
-export type StrokeMode = "paint" | "erase";
+export type StrokeMode = 'paint' | 'erase';
 
 export interface Stroke {
+  /** Normalized 0..1 points (resolution-independent — survives canvas resize / export scale). */
   points: { x: number; y: number }[];
-  size: "T" | "S" | "M" | "L";
+  /** Brush radius in canvas-px @ zoom 100% (snapshot of brushSize at draw time). Export
+   *  multiplies by `brushScale = naturalW / canvas.w` to reach natural-resolution px. */
+  size: number;
   mode: StrokeMode;
-  /** Only consulted when mode === "paint". Erase strokes ignore color. */
+  /** Only consulted when mode === 'paint'. Erase strokes ignore color. */
   color: string;
 }
 
@@ -16,16 +20,12 @@ export function norm(x: number, y: number, w: number, h: number) {
   return { x: x / w, y: y / h };
 }
 
-export function rgbToHex(r: number, g: number, b: number): string {
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-}
-
-/** Renders all strokes onto a canvas context. brushScale > 1 for natural-resolution export.
- *  clearFirst=true (default) wipes the canvas before painting — correct for overlays
- *  that re-render from scratch each frame. Pass false when compositing strokes ON TOP
- *  of existing content (e.g. after drawImage in the main workspace or export pipeline).
+/** Renders all strokes onto a canvas context. `brushScale > 1` for natural-resolution
+ *  export. `clearFirst=true` (default) wipes the canvas before painting — correct for
+ *  overlays that re-render from scratch each frame. Pass false to composite strokes ON TOP
+ *  of existing content (e.g. after drawImage in the workspace or export pipeline).
  *
- *  Erase strokes use globalCompositeOperation="destination-out" to subtract alpha from
+ *  Erase strokes use globalCompositeOperation='destination-out' to subtract alpha from
  *  existing pixels, producing true transparency that reveals the layer below the canvas. */
 export function paintStrokesOnCtx(
   ctx: CanvasRenderingContext2D,
@@ -34,26 +34,26 @@ export function paintStrokesOnCtx(
   canvasW: number,
   canvasH: number,
   brushScale = 1,
-  clearFirst = true
+  clearFirst = true,
 ) {
   if (clearFirst) ctx.clearRect(0, 0, canvasW, canvasH);
   const prevOp = ctx.globalCompositeOperation;
   for (const stroke of [...strokes, activeStroke].filter(Boolean) as Stroke[]) {
     if (stroke.points.length === 0) continue;
-    const radius = BRUSH_PX[stroke.size] * brushScale;
-    if (stroke.mode === "erase") {
-      ctx.globalCompositeOperation = "destination-out";
+    const radius = stroke.size * brushScale;
+    if (stroke.mode === 'erase') {
+      ctx.globalCompositeOperation = 'destination-out';
       // destination-out only cares about the stroke's alpha; color value is irrelevant.
-      ctx.strokeStyle = "#000";
-      ctx.fillStyle = "#000";
+      ctx.strokeStyle = '#000';
+      ctx.fillStyle = '#000';
     } else {
-      ctx.globalCompositeOperation = "source-over";
+      ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = stroke.color;
       ctx.fillStyle = stroke.color;
     }
     ctx.lineWidth = radius * 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     const pts = stroke.points.map((p) => ({ x: p.x * canvasW, y: p.y * canvasH }));
 
     if (pts.length === 1) {
