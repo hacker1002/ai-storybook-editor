@@ -72,14 +72,13 @@ export const COMMIT_HINTS: Partial<Record<EditToolKey, string>> = {
 // ── Remove BG tab (01-remove-bg-tab.md §2) ───────────────────────────────────
 
 /** Replicate rmbg model allowlist (mock dropdown + API §model + swap RMBG_MODEL_OPTIONS).
- *  `851-labs` is the mock-default; the API default is `bria` → FE always sends explicit
- *  `model` to match the UI. */
+ *  FE default matches API default (`bria`); FE still sends explicit `model` on every call. */
 export type RmbgModel = '851-labs/background-remover' | 'bria/remove-background';
 export const RMBG_MODEL_OPTIONS: readonly RmbgModel[] = [
-  '851-labs/background-remover',
   'bria/remove-background',
+  '851-labs/background-remover',
 ];
-export const DEFAULT_RMBG_MODEL: RmbgModel = '851-labs/background-remover';
+export const DEFAULT_RMBG_MODEL: RmbgModel = 'bria/remove-background';
 
 /** Output background mode. Only `transparent`/`color` reach the API; `blur`/`overlay`
  *  are deferred (rendered disabled — API 04-image-remove-bg has no support yet). */
