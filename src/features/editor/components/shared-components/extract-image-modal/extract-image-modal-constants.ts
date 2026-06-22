@@ -109,8 +109,8 @@ export const EXTRACT_TABS: ExtractTabContract[] = [
   { key: 'lottie', label: 'Lottie', icon: Disc, runMode: 'replace', enabled: false },
 ];
 
-/** Default tab when `initialTab` is not supplied (README §2.2). */
-export const DEFAULT_EXTRACT_TAB: ExtractTabKey = 'segment';
+/** Default tab when `initialTab` is not supplied (README §2.2). Objects is the landing tab. */
+export const DEFAULT_EXTRACT_TAB: ExtractTabKey = 'get_object';
 
 // ── Segments tab (01-segment-tab.md §2) ──────────────────────────────────────
 // ⚡v1 single SAM3 dispatch; `threshold` not exposed (API default 0.5 — YAGNI).

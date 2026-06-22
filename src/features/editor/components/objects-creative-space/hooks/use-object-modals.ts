@@ -100,7 +100,9 @@ export function useObjectModals(
   }, []);
 
   const openExtract = useCallback(
-    (img: SpreadImage, initialTab: ExtractTabKey = "segment") => {
+    // Default entry (toolbar "Extract") opens the Objects tab; the split entry passes
+    // "layering" explicitly. Segments is no longer the default landing tab.
+    (img: SpreadImage, initialTab: ExtractTabKey = "get_object") => {
       setExtractImage(img);
       setExtractSpreadId(selectedSpreadId);
       setExtractInitialTab(initialTab);
