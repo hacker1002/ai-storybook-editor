@@ -347,11 +347,10 @@ export function useObjectsTabState(
         disabled={isBusy}
         onSelectBox={selectBox}
         onUpdateBox={updateBox}
-        onDeleteBox={deleteBox}
         onRatioChange={handleRatioChange}
       />
     ),
-    [boxes, selectedBoxId, imageNatural, isBusy, selectBox, updateBox, deleteBox, handleRatioChange],
+    [boxes, selectedBoxId, imageNatural, isBusy, selectBox, updateBox, handleRatioChange],
   );
 
   return {

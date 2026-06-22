@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { X } from 'lucide-react';
 import {
   OBJECT_RATIOS,
   OBJECT_MIN_BOX_SIZE_PERCENT,
@@ -53,7 +52,6 @@ export interface ObjectBoxOverlayProps {
   showDimmed?: boolean;
   onSelectBox: (id: string | null) => void;
   onUpdateBox: (id: string, patch: Partial<Pick<ObjectBox, 'x' | 'y' | 'w' | 'h'>>) => void;
-  onDeleteBox: (id: string) => void;
   onRatioChange: (id: string, ratio: ObjectRatio) => void;
 }
 
@@ -75,7 +73,6 @@ export function ObjectBoxOverlay({
   showDimmed = true,
   onSelectBox,
   onUpdateBox,
-  onDeleteBox,
   onRatioChange,
 }: ObjectBoxOverlayProps) {
   const areaRef = useRef<HTMLDivElement>(null);
@@ -142,7 +139,10 @@ export function ObjectBoxOverlay({
   return (
     <div
       ref={areaRef}
-      className="absolute inset-0 select-none"
+      // `leading-none` resets the line-height:0 inherited from the canvas image wrapper's
+      // `leading-[0]` — otherwise the ratio <SelectValue> (line-clamp-1 → overflow:hidden)
+      // collapses to 0 height and the selected value renders invisible.
+      className="absolute inset-0 select-none leading-none"
       onClick={handleAreaClick}
     >
       {/* Dimmed overlay outside boxes (optional) */}
@@ -193,60 +193,52 @@ export function ObjectBoxOverlay({
               }}
             />
 
-            {/* Ratio selector — top-left (only place ratio changes, per design §4.2) */}
+            {/* Control bar — spans the box width: ratio dropdown pinned to the LEFT edge,
+                title badge pinned to the RIGHT edge (design ref). Both ALWAYS shown (ratio is
+                editable without selecting first). Delete lives in the sidebar row + the
+                Delete/Backspace hotkey — no destructive control on the canvas box itself.
+                Strip is pointer-events-none so the gap between the two controls doesn't swallow
+                canvas clicks; the interactive children re-enable pointer events. */}
             <div
-              className="absolute"
-              style={{ top: -30, left: 0, zIndex: 30 }}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
+              className="pointer-events-none absolute flex items-center justify-between gap-2"
+              style={{ top: -30, left: 0, right: 0, zIndex: 30 }}
             >
-              <Select
-                value={box.ratio}
-                onValueChange={(v) => onRatioChange(box.id, v as ObjectRatio)}
-                disabled={disabled}
+              <div
+                className="pointer-events-auto"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
               >
-                <SelectTrigger
-                  className="h-6 min-w-0 w-auto bg-background px-2 text-xs"
-                  style={{ borderColor: box.color, fontSize: 11 }}
-                  aria-label={`Aspect ratio for ${box.label}`}
+                <Select
+                  value={box.ratio}
+                  onValueChange={(v) => onRatioChange(box.id, v as ObjectRatio)}
+                  disabled={disabled}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent style={SELECT_CONTENT_STYLE}>
-                  {OBJECT_RATIOS.map((r) => (
-                    <SelectItem key={r} value={r} className="text-xs">
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  {/* SOLID opaque bg (NOT the translucent `surface-hover` token): the trigger
+                      floats over the source image, so a see-through bg left the white value text
+                      invisible on light image areas. Opaque bg + white text guarantees contrast. */}
+                  <SelectTrigger
+                    className="h-6 min-w-0 w-auto gap-1 rounded-md bg-[var(--swap-modal-bg)] px-2 text-[11px] text-[var(--swap-modal-text-primary)]"
+                    style={{ borderColor: box.color }}
+                    aria-label={`Aspect ratio for ${box.label}`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent style={SELECT_CONTENT_STYLE}>
+                    {OBJECT_RATIOS.map((r) => (
+                      <SelectItem key={r} value={r} className="text-xs">
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Label badge — top-right, box color */}
-            <div
-              className="absolute flex items-center gap-1"
-              style={{ top: -28, right: 0, zIndex: 30 }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
               <span
-                className="rounded px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm"
+                className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm"
                 style={{ background: box.color }}
               >
                 {box.label}
               </span>
-              {isSelected && !disabled && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteBox(box.id);
-                  }}
-                  className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
-                  aria-label={`Remove ${box.label}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
             </div>
 
             {/* Corner resize handles — selected only */}
