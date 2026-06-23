@@ -68,7 +68,11 @@ export function NumberStepper({
         disabled={disabled}
         onChange={handleInput}
         className={cn(
-          'h-7 w-12 border border-x-0 bg-background text-center text-sm',
+          // `<input>` is a form control — it does NOT inherit an ancestor's `color`
+          // (falls back to UA `fieldtext` ≈ black). Without an explicit `text-foreground`
+          // the value renders black-on-dark inside themed dark surfaces (edit-image modal)
+          // → invisible. Pair `bg-background` with `text-foreground` (canonical shadcn).
+          'h-7 w-12 border border-x-0 bg-background text-center text-sm text-foreground',
           'focus:outline-none focus:ring-1 focus:ring-ring',
           'disabled:opacity-40',
           '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
