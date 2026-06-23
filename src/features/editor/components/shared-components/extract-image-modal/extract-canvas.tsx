@@ -1,12 +1,20 @@
 // extract-canvas.tsx — Center canvas (design README §3.3): stage-header with the `⭐ Extract`
 // commit button + a dark checkerboard preview of the selected result (RGBA) or the source
-// image. Busy overlay covers processing (Segmenting…/Splitting…) and committing (Saving…).
+// image. Render branches by tab: `box-overlay` (Objects), `compare` before/after slider
+// (Background), or single result <img> (Segments/Layers). Busy overlay covers processing
+// (Segmenting…/Splitting…/Detecting…/Generating background…) and committing (Saving…/Extracting…).
 // Presentational/dumb — commit handler + state come from the root.
 
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Star, Loader2, ScanSearch } from 'lucide-react';
 import { createLogger } from '@/utils/logger';
 import { HEADER_HEIGHT_PX, type ExtractResult } from './extract-image-modal-constants';
+import { CompareSlider } from '../compare-slider';
+import {
+  fitNaturalToFrame,
+  useImageNaturalSize,
+  type Size,
+} from '../edit-image-modal/edit-image-modal-fit';
 
 const log = createLogger('Editor', 'ExtractCanvas');
 
@@ -33,6 +41,9 @@ interface ExtractCanvasProps {
   commitDisabled: boolean;
   /** `box-overlay` (Objects) → always show source + interactive overlay; else result preview. */
   interactionMode?: 'result-grid' | 'box-overlay';
+  /** `compare` (Background) → render a before(source)/after(result) slider once a result is
+   *  selected; default `image` keeps the single result <img>. */
+  resultPreview?: 'image' | 'compare';
   /** Box overlay node (Objects CanvasOverlay) — rendered over the source in box-overlay mode. */
   overlay?: ReactNode;
   /** Source <img> onLoad — captures natural dims for the overlay ratio math. */
@@ -53,6 +64,7 @@ export function ExtractCanvas({
   onCommitExtract,
   commitDisabled,
   interactionMode = 'result-grid',
+  resultPreview = 'image',
   overlay,
   onImageLoad,
   onDetect,
@@ -64,6 +76,32 @@ export function ExtractCanvas({
   const previewUrl = isBoxOverlay ? sourceUrl ?? null : selectedResult?.media_url ?? sourceUrl ?? null;
   const overlayActive = isProcessing || isCommitting;
   const detectDisabled = !canDetect || overlayActive;
+
+  // ── Compare (Background tab) — needs explicit px dims (the slider can't contain-fit itself).
+  // Frame = canvas content box via ResizeObserver (event-driven setState → React 19 safe).
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [frame, setFrame] = useState<Size | null>(null);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect; // contentRect excludes padding
+      if (cr && cr.width > 0 && cr.height > 0) {
+        setFrame({ w: Math.round(cr.width), h: Math.round(cr.height) });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Probe source natural dims out-of-band (cached) so the slider can size on first result.
+  const compareSourceUrl = resultPreview === 'compare' && !isBoxOverlay ? sourceUrl ?? null : null;
+  const sourceNatural = useImageNaturalSize(compareSourceUrl);
+  const isCompare =
+    resultPreview === 'compare' && !isBoxOverlay && !!selectedResult && !!sourceUrl;
+  const compareSize =
+    isCompare && sourceNatural && frame
+      ? fitNaturalToFrame(sourceNatural.w, sourceNatural.h, frame)
+      : null;
 
   // Source natural aspect-ratio (box-overlay only). Drives the wrapper's aspect-ratio so the
   // image fits-contain on its longest edge (parity with the result-grid <img>), while the
@@ -135,11 +173,31 @@ export function ExtractCanvas({
 
       {/* canvas */}
       <div
+        ref={canvasRef}
         className="relative flex flex-1 items-center justify-center overflow-auto p-6"
         style={CHECKERBOARD_STYLE}
       >
         {previewUrl ? (
-          isBoxOverlay ? (
+          isCompare ? (
+            // Background tab: before(source) / after(result) slider at the fitted display size.
+            // Falls back to the source <img> until natural dims + frame are measured.
+            compareSize ? (
+              <CompareSlider
+                before={sourceUrl as string}
+                after={selectedResult!.media_url}
+                size={compareSize}
+                beforeLabel="ORIGINAL"
+                afterLabel="RESULT"
+              />
+            ) : (
+              <img
+                key={`compare-fallback-${sourceUrl}`}
+                src={sourceUrl}
+                alt="Source image"
+                className="max-h-full max-w-full object-contain"
+              />
+            )
+          ) : isBoxOverlay ? (
             // Wrapper carries the source aspect-ratio → fits-contain on the longest edge (parity
             // with the result-grid <img>) AND coincides 1:1 with the rendered image so the
             // absolute overlay maps to its box. Falls back to width-fit until the ratio loads.

@@ -81,6 +81,10 @@ export interface ExtractResult {
     ratio?: string;
     tag?: DetectTag;
     boxIndex?: number;
+    // ⚡ Background tab — media_url is already a permanent Storage URL (API passthrough),
+    // so commit skips the ephemeral re-upload; removedCount mirrors API meta.removedCount.
+    permanent?: boolean;
+    removedCount?: number;
   };
 }
 
@@ -94,8 +98,20 @@ export interface ExtractTabContract {
   enabled: boolean;
   /** Canvas interaction model — default `result-grid` (Segment/Layers); Objects = `box-overlay`. */
   interactionMode?: 'result-grid' | 'box-overlay';
-  /** ⭐ Extract commit path — default `upload-ephemeral`; Objects = `crop-on-extract`. */
-  commitMode?: 'upload-ephemeral' | 'crop-on-extract';
+  /** Result canvas render — default `image` (single <img>); Background = `compare` (before/after slider). */
+  resultPreview?: 'image' | 'compare';
+  /** ⭐ Extract commit path — default `upload-ephemeral`; Objects = `crop-on-extract`;
+   *  Background = `passthrough` (API returns a permanent URL → no re-upload). */
+  commitMode?: 'upload-ephemeral' | 'crop-on-extract' | 'passthrough';
+}
+
+/** One spread image offered as a "remove from scene" target in the Background tab.
+ *  `media_url` is the effective (resolved) URL; `id` keys the chip + de-dups + excludes source. */
+export interface BackgroundRemoveCandidate {
+  id: string;                       // SpreadImage id (key + de-dup, excludes the source image)
+  media_url: string;                // effective URL (resolveEffectiveImageUrl)
+  title?: string;
+  type?: 'character' | 'prop';
 }
 
 // ── Tab registry (README §2.2 — order + labels match mock #ex-fs-tabs) ────────
@@ -105,7 +121,7 @@ export const EXTRACT_TABS: ExtractTabContract[] = [
   { key: 'crop', label: 'Crops', icon: Crop, runMode: 'replace', enabled: false },
   { key: 'segment', label: 'Segments', icon: Box, runMode: 'append', enabled: true },
   { key: 'layering', label: 'Layers', icon: Layers, runMode: 'replace', enabled: true },
-  { key: 'background', label: 'Background', icon: ImageIcon, runMode: 'replace', enabled: false },
+  { key: 'background', label: 'Background', icon: ImageIcon, runMode: 'append', enabled: true, resultPreview: 'compare', commitMode: 'passthrough' },
   { key: 'lottie', label: 'Lottie', icon: Disc, runMode: 'replace', enabled: false },
 ];
 
@@ -140,3 +156,11 @@ export const OBJECT_BOX_COLORS = ['#3b6cf6', '#f59e0b', '#22c55e', '#ef4444', '#
 export const OBJECT_DEFAULT_BOX_SIZE_PERCENT = 30; // manual [+] box edge, % of canvas
 export const OBJECT_MIN_BOX_SIZE_PERCENT = 1;      // guard: < 1% → degenerate (anti EMPTY_CROP_RESULT)
 export const CROP_BATCH_SIZE = 3;                  // crop-object-image cap = 1..3 box/call → chunk
+
+// ── Background tab (04-background-tab.md §2 / api/retouch/08-generate-background) ──
+// ⚡v1 single Gemini dispatch (nano-banana-pro); aspectRatio/imageSize auto-derived (omit).
+export const BACKGROUND_MODEL_OPTIONS = ['google/nano-banana-pro'] as const;
+export const DEFAULT_BACKGROUND_MODEL = 'google/nano-banana-pro';
+export const REMOVE_OBJECTS_MIN = 1;   // API requires ≥1 object to remove
+export const REMOVE_OBJECTS_MAX = 16;  // API cap (08 §Parameters) — seed/add clamp here
+export const BACKGROUND_PROMPT_MAX = 2000;

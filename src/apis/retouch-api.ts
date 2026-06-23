@@ -333,3 +333,61 @@ export async function callSegmentLayer(
   }
   return res;
 }
+
+// --- Generate Background (08-generate-background) ---
+
+/** One object to remove from the scene before the background is repainted. v1 sends
+ *  `imageUrl`-only (API accepts one-of imageUrl⊕base64; FE never uploads base64). */
+export interface GenerateBackgroundRemoveObject {
+  imageUrl: string;
+  name?: string;
+  type?: 'character' | 'prop';
+  visualDescription?: string;
+}
+
+export interface GenerateBackgroundParams {
+  imageUrl: string;
+  removeObjects: GenerateBackgroundRemoveObject[]; // [1..16]
+  prompt?: string;
+  aspectRatio?: string; // omit → API auto-derives nearest source ratio
+  imageSize?: string;   // omit → API default "2K"
+  /** Model override — allowlist group `generate-background`. Omit → server default. */
+  modelParams?: { model: string; params?: { temperature?: number } };
+}
+
+export interface GenerateBackgroundResult {
+  success: true;
+  data: { imageUrl: string; storagePath: string };
+  meta?: {
+    processingTime?: number;
+    mimeType?: string;
+    tokenUsage?: number;
+    model?: string;
+    aspectRatio?: string;
+    removedCount?: number;
+  };
+}
+
+export async function callGenerateBackground(
+  params: GenerateBackgroundParams
+): Promise<GenerateBackgroundResult | ImageApiFailure> {
+  // Redact: log object count + prompt length only (no full URLs / prompt text — privacy).
+  log.info('callGenerateBackground', 'start', {
+    removeCount: params.removeObjects.length,
+    promptLen: params.prompt?.length ?? 0,
+    hasModelParams: !!params.modelParams,
+  });
+  const res = await callImageApi<GenerateBackgroundResult>('/api/retouch/generate-background', params);
+  if (res.success) {
+    const r = res as GenerateBackgroundResult;
+    log.info('callGenerateBackground', 'success', {
+      storagePath: r.data.storagePath,
+      removedCount: r.meta?.removedCount,
+      processingMs: r.meta?.processingTime,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callGenerateBackground', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
+}

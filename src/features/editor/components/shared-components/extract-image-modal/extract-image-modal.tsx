@@ -25,6 +25,7 @@ import {
   DEFAULT_EXTRACT_TAB,
   type ExtractResult,
   type ExtractTabKey,
+  type BackgroundRemoveCandidate,
 } from "./extract-image-modal-constants";
 import {
   resolveSourceImageUrl,
@@ -33,6 +34,7 @@ import {
 import { useSegmentTabState, type SegmentTabHandle } from "./segment-tab";
 import { useLayersTabState, type LayersTabHandle } from "./layers-tab";
 import { useObjectsTabState } from "./objects-tab";
+import { useBackgroundTabState, type BackgroundTabHandle } from "./background-tab";
 import { ExtractImageModalHeader } from "./extract-image-modal-header";
 import { ExtractResultsSidebar } from "./extract-results-sidebar";
 import { ExtractObjectsSidebar } from "./extract-objects-sidebar";
@@ -52,6 +54,9 @@ export interface ExtractImageModalProps {
   yieldedFrom?: { parentId: string; onParentForcePop: () => void };
   /** Objects tab Detect context (visualDescription + snapshotId). Absent → Detect disabled. */
   detectContext?: { visualDescription: string; snapshotId: string };
+  /** Background tab — other spread images (effective URLs, source excluded) offered as
+   *  remove targets. Absent/[] → Background grid empty → run disabled. */
+  backgroundRemoveCandidates?: BackgroundRemoveCandidate[];
 }
 
 export function ExtractImageModal({
@@ -62,6 +67,7 @@ export function ExtractImageModal({
   initialTab,
   yieldedFrom,
   detectContext,
+  backgroundRemoveCandidates = [],
 }: ExtractImageModalProps) {
   // ── State ──────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ExtractTabKey>(initialTab ?? DEFAULT_EXTRACT_TAB);
@@ -87,14 +93,25 @@ export function ExtractImageModal({
   const segmentHandle = useSegmentTabState(image, { isBusy, onRequestRun });
   const layersHandle = useLayersTabState(image, { isBusy });
   const objectsHandle = useObjectsTabState(image, { isBusy, detectContext });
+  const backgroundHandle = useBackgroundTabState(image, {
+    isBusy,
+    onRequestRun,
+    removeCandidates: backgroundRemoveCandidates,
+  });
 
   // ── Derived (computed in render — no set-state-in-effect, React 19 lint) ─────────
   const activeContract = useMemo(
     () => EXTRACT_TABS.find((t) => t.key === activeTab) ?? null,
     [activeTab],
   );
-  const activeHandle: SegmentTabHandle | LayersTabHandle | null =
-    activeTab === "segment" ? segmentHandle : activeTab === "layering" ? layersHandle : null;
+  const activeHandle: SegmentTabHandle | LayersTabHandle | BackgroundTabHandle | null =
+    activeTab === "segment"
+      ? segmentHandle
+      : activeTab === "layering"
+        ? layersHandle
+        : activeTab === "background"
+          ? backgroundHandle
+          : null;
   // Objects overrides the shared shell: source + box overlay canvas, box-list sidebar,
   // [+] = instant add (no API), ⭐ Extract = crop-on-extract (README §2.3 gating branch).
   const isBoxOverlay = activeContract?.interactionMode === "box-overlay";
@@ -119,8 +136,11 @@ export function ExtractImageModal({
     ? "Detecting…"
     : activeTab === "layering"
       ? "Splitting…"
-      : "Segmenting…";
-  const committingLabel = isBoxOverlay ? "Extracting…" : "Saving…";
+      : activeTab === "background"
+        ? "Generating background…"
+        : "Segmenting…";
+  const committingLabel =
+    isBoxOverlay || activeTab === "background" ? "Extracting…" : "Saving…";
 
   const paramsPanel =
     activeTab === "segment"
@@ -129,11 +149,13 @@ export function ExtractImageModal({
         ? layersHandle.ParamsPanel
         : activeTab === "get_object"
           ? objectsHandle.ParamsPanel
-          : (
-              <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
-                Coming soon
-              </div>
-            );
+          : activeTab === "background"
+            ? backgroundHandle.ParamsPanel
+            : (
+                <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
+                  Coming soon
+                </div>
+              );
 
   // ── State reset / close ──────────────────────────────────────────────────────
   const resetState = useCallback(() => {
@@ -146,7 +168,8 @@ export function ExtractImageModal({
     segmentHandle.reset();
     layersHandle.reset();
     objectsHandle.reset();
-  }, [initialTab, segmentHandle, layersHandle, objectsHandle]);
+    backgroundHandle.reset();
+  }, [initialTab, segmentHandle, layersHandle, objectsHandle, backgroundHandle]);
 
   const handleClose = useCallback(() => {
     if (isBusy) {
@@ -275,6 +298,20 @@ export function ExtractImageModal({
       return;
     }
 
+    // Background: passthrough — API already returned permanent Storage URLs, so spawn the
+    // results directly (no ephemeral re-upload → no duplicate Storage objects).
+    if (activeContract?.commitMode === "passthrough") {
+      setIsCommitting(true);
+      log.info("handleCommitExtract", "passthrough", { activeTab, count: results.length });
+      try {
+        onCreateImages(results);
+        onOpenChange(false);
+      } finally {
+        setIsCommitting(false);
+      }
+      return;
+    }
+
     // Default: upload-ephemeral (Segment/Layers).
     setIsCommitting(true);
     log.info("handleCommitExtract", "start", { activeTab, count: results.length });
@@ -362,7 +399,7 @@ export function ExtractImageModal({
       >
         <DialogTitle className="sr-only">Extracting Image</DialogTitle>
         <DialogDescription className="sr-only">
-          Trích xuất object/layer từ ảnh nguồn (Segments / Layers).
+          Trích xuất object/layer hoặc tái tạo nền từ ảnh nguồn (Objects / Segments / Layers / Background).
         </DialogDescription>
 
         <ExtractImageModalHeader
@@ -407,6 +444,7 @@ export function ExtractImageModal({
             onCommitExtract={handleCommitExtract}
             commitDisabled={commitDisabled}
             interactionMode={activeContract?.interactionMode}
+            resultPreview={activeContract?.resultPreview}
             overlay={isBoxOverlay ? objectsHandle.CanvasOverlay : undefined}
             onImageLoad={isBoxOverlay ? objectsHandle.onImageLoad : undefined}
             onDetect={handleDetect}

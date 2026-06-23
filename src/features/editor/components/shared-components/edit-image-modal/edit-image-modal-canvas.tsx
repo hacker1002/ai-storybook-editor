@@ -9,7 +9,7 @@ import { Columns2, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { Illustration } from '@/types/prop-types';
-import { CompareSlider } from './compare-slider';
+import { CompareSlider } from '../compare-slider';
 import { HEADER_HEIGHT_PX, ZOOM, type EditCanvasMode } from './edit-image-modal-constants';
 import { useImageNaturalSize, useStageFitSize } from './edit-image-modal-fit';
 import { ZoomControl } from '../zoom-control';

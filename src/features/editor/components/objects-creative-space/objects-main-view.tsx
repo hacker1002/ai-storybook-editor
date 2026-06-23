@@ -37,11 +37,13 @@ import {
   CropImageModal,
   EditAudioModal,
   SoundLibraryModal,
+  resolveEffectiveImageUrl,
 } from "@/features/editor/components/shared-components";
 import type {
   ExtractResult,
   CropCreateResult,
   LibrarySound,
+  BackgroundRemoveCandidate,
 } from "@/features/editor/components/shared-components";
 import { useSounds } from "@/stores/sounds-store";
 import { RetouchEditImageModal } from "./retouch-edit-image-modal";
@@ -448,6 +450,28 @@ export function ObjectsMainView({
     },
     [modals.extract.image, modals.extract.spreadId, retouchSpreads, actions]
   );
+
+  // Background tab remove-targets: every OTHER image in the source's spread (effective URL,
+  // source excluded). API ignores objects it can't match, so seeding all is safe (no tag filter).
+  const backgroundRemoveCandidates = useMemo<BackgroundRemoveCandidate[]>(() => {
+    const sourceId = modals.extract.image?.id;
+    const spread = retouchSpreads.find((s) => s.id === modals.extract.spreadId);
+    if (!spread || !sourceId) return [];
+    const out: BackgroundRemoveCandidate[] = [];
+    for (const img of spread.images) {
+      if (img.id === sourceId) continue;
+      const media_url = resolveEffectiveImageUrl(img); // skip images with no resolvable URL
+      if (!media_url) continue;
+      const tagType = img.tags?.[0]?.type;
+      out.push({
+        id: img.id,
+        media_url,
+        title: img.title,
+        type: tagType === "character" || tagType === "prop" ? tagType : undefined,
+      });
+    }
+    return out;
+  }, [retouchSpreads, modals.extract.spreadId, modals.extract.image?.id]);
 
   const { handleDeleteSpread, handleSpreadReorder } = useSpreadHandlers(actions);
   const { handleSpreadItemAction } = useSpreadItemDispatch(actions, retouchSpreads);
@@ -1027,6 +1051,7 @@ export function ObjectsMainView({
                 }
               : undefined
           }
+          backgroundRemoveCandidates={backgroundRemoveCandidates}
         />
       )}
 

@@ -12,7 +12,7 @@ export { EditableAutoPic } from './editable-auto-pic';
 export { EditableQuiz } from './editable-quiz';
 export { GenerateImageModal } from './generate-image-modal';
 export { ExtractImageModal } from './extract-image-modal';
-export type { ExtractResult, ExtractTabKey } from './extract-image-modal';
+export type { ExtractResult, ExtractTabKey, BackgroundRemoveCandidate } from './extract-image-modal';
 export { EditImageModal } from './edit-image-modal';
 export type { EditImageModalProps, EditToolKey } from './edit-image-modal';
 export { CropImageModal } from './crop-image-modal';

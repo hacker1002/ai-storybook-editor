@@ -1,13 +1,15 @@
 // compare-slider.tsx — Thin dark-themed wrapper around react-compare-slider (already a
-// dep — swap-crop-sheet-modal) for the EditImageModal stage Compare mode (design §2.3/§3.3).
-// before = selectedVersion.original_url, after = selectedVersion.media_url. Both images fit
-// -contain on the checkerboard so RGBA results (transparent rmbg / erase) read correctly.
+// dep — swap-crop-sheet-modal). Shared by EditImageModal (Compare mode, design §2.3/§3.3,
+// before = original_url / after = media_url) AND ExtractImageModal Background tab (before =
+// effective source URL / after = generated plate). Both images fit-contain on the
+// checkerboard so RGBA results (transparent rmbg / erase) read correctly.
 //
-// Sizing: the wrapper box dimensions come from the canvas shell (see edit-image-modal-fit.ts)
-// so all three modes (preview/compare/eraser) render the same image at the same display size.
+// Sizing: the wrapper box dimensions come from the caller's canvas shell (see
+// edit-image-modal/edit-image-modal-fit.ts) so the slider renders at the same display size
+// as the other canvas modes.
 
 import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
-import type { Size } from './edit-image-modal-fit';
+import type { Size } from './edit-image-modal/edit-image-modal-fit';
 
 interface CompareSliderProps {
   before: string;
