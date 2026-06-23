@@ -36,6 +36,7 @@ import {
 } from "./edit-image-modal-constants";
 import { prependVersion, versionFromMediaUrl, mapEditError } from "./edit-image-modal-utils";
 import { useRemoveBgTabState } from "./remove-bg-tab";
+import { useUpscaleTabState } from "./upscale-tab";
 import { useEraserTabState } from "./eraser-tab";
 import { EditImageModalHeader } from "./edit-image-modal-header";
 import { EditImageModalVersionsSidebar } from "./edit-image-modal-versions-sidebar";
@@ -45,7 +46,16 @@ const log = createLogger("Editor", "EditImageModal");
 
 const PROCESSING_LABELS: Partial<Record<EditToolKey, string>> = {
   remove_background: "Removing background…",
+  upscale: "Upscaling…",
   erasor: "Saving erased version…",
+};
+
+// Per-tool label threaded into mapEditError (Validation S1) so generic REPLICATE_ERROR/TIMEOUT
+// wording names the active tool ("Upscale thất bại…" vs "Remove background thất bại…").
+const ERROR_ACTION_LABELS: Partial<Record<EditToolKey, string>> = {
+  remove_background: "Remove background",
+  upscale: "Upscale",
+  erasor: "Lưu",
 };
 
 export interface EditImageModalProps {
@@ -102,8 +112,9 @@ export function EditImageModal({
   );
   const canCompare = selectedVersion?.type === "edited" && !!selectedVersion.original_url;
 
-  // ── Per-tab sub-state (both hooks run unconditionally; shell renders the active one) ──
+  // ── Per-tab sub-state (all hooks run unconditionally; shell renders the active one) ──
   const removeBgState = useRemoveBgTabState({ selectedVersion });
+  const upscaleState = useUpscaleTabState({ selectedVersion });
   const erasorState = useEraserTabState({ selectedVersion, pathPrefix, zoom });
 
   const isErasor = activeTool === "erasor";
@@ -112,7 +123,14 @@ export function EditImageModal({
     ? "compare"
     : activeContract?.canvasMode ?? "preview";
 
-  const activeCanCommit = isErasor ? erasorState.canCommit : removeBgState.canCommit;
+  // Dispatch the shared `{ canCommit, commit, ParamsPanel }` contract by activeTool (erasor-only
+  // surface — CanvasLayer/hasUncommitted/resetStrokes — stays on its own `isErasor` branches).
+  const activeCanCommit =
+    activeTool === "upscale"
+      ? upscaleState.canCommit
+      : isErasor
+        ? erasorState.canCommit
+        : removeBgState.canCommit;
   const commitDisabled = isProcessing || !selectedVersion || !activeCanCommit;
   const commitHint = COMMIT_HINTS[activeTool] ?? "Commit";
   const processingLabel = PROCESSING_LABELS[activeTool] ?? "Processing…";
@@ -120,13 +138,15 @@ export function EditImageModal({
   const paramsPanel =
     activeTool === "remove_background"
       ? removeBgState.ParamsPanel
-      : isErasor
-        ? erasorState.ParamsPanel
-        : (
-            <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
-              Coming soon
-            </div>
-          );
+      : activeTool === "upscale"
+        ? upscaleState.ParamsPanel
+        : isErasor
+          ? erasorState.ParamsPanel
+          : (
+              <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
+                Coming soon
+              </div>
+            );
 
   // ── Reset / close ────────────────────────────────────────────────────────────
   const resetState = useCallback(() => {
@@ -202,7 +222,12 @@ export function EditImageModal({
     setIsProcessing(true);
     log.info("handleCommit", "start", { activeTool, runId });
     try {
-      const commitFn = isErasor ? erasorState.commit : removeBgState.commit;
+      const commitFn =
+        activeTool === "upscale"
+          ? upscaleState.commit
+          : isErasor
+            ? erasorState.commit
+            : removeBgState.commit;
       const newUrl = await commitFn(committed);
       if (runId !== commitRunIdRef.current) {
         log.debug("handleCommit", "stale — dropped", { runId });
@@ -217,11 +242,11 @@ export function EditImageModal({
     } catch (err) {
       if (runId !== commitRunIdRef.current) return;
       log.error("handleCommit", "failed", { activeTool, error: String(err) });
-      toast.error(mapEditError(err));
+      toast.error(mapEditError(err, { actionLabel: ERROR_ACTION_LABELS[activeTool] }));
     } finally {
       if (runId === commitRunIdRef.current) setIsProcessing(false);
     }
-  }, [commitDisabled, selectedVersion, activeTool, isErasor, erasorState, removeBgState, illustrations, onUpdateIllustrations]);
+  }, [commitDisabled, selectedVersion, activeTool, isErasor, erasorState, removeBgState, upscaleState, illustrations, onUpdateIllustrations]);
 
   const handleToggleCompare = useCallback(() => {
     if (!canCompare) return;

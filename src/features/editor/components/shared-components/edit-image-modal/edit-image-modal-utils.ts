@@ -4,6 +4,8 @@
 // NO new data type); these helpers operate on `Illustration[]` directly.
 
 import type { Illustration } from '@/types/prop-types';
+import type { UpscaleModel, UpscaleImagePayload } from '@/apis/image-api';
+import { UPSCALE_MODEL_CAPS } from './edit-image-modal-constants';
 
 /** Carries the API failure's errorCode/httpStatus through a thrown Error so the shell's
  *  catch can map it via `mapEditError` (single mapping surface). Tabs throw this for API
@@ -56,10 +58,13 @@ export function prependVersion(
   return [newEntry, ...versions.map((v) => ({ ...v, is_selected: false }))];
 }
 
-/** Maps a thrown commit error → user-facing toast message (design 01 §3 error table).
+/** Maps a thrown commit error → user-facing toast message (design 01/03 §3 error tables).
  *  Prefers the typed `EditApiError.errorCode`; falls back to CORS detection on plain
- *  Errors, then the raw message, then a generic message. Never surfaces internals. */
-export function mapEditError(err: unknown): string {
+ *  Errors, then the raw message, then a generic message. Never surfaces internals.
+ *  ⚡ Tab-aware (Validation S1): `opts.actionLabel` (e.g. 'Remove background' / 'Upscale') is
+ *  threaded by the shell so the generic REPLICATE_ERROR/TIMEOUT wording names the active tool;
+ *  no-arg default = 'Xử lý ảnh'. Shared across all 3 tabs (single mapping surface). */
+export function mapEditError(err: unknown, opts?: { actionLabel?: string }): string {
   const code = err instanceof EditApiError ? err.errorCode : undefined;
   if (code) {
     switch (code) {
@@ -67,11 +72,15 @@ export function mapEditError(err: unknown): string {
         return 'Model không hỗ trợ.';
       case 'IMAGE_FETCH_ERROR':
         return 'Không tải được ảnh nguồn.';
+      case 'INPUT_TOO_LARGE_FOR_MODEL':
+        return 'Ảnh quá lớn để upscale — giảm scale hoặc chọn ảnh nhỏ hơn.';
+      case 'OUTPUT_FETCH_ERROR':
+        return 'Ảnh kết quả quá lớn — giảm scale.';
       case 'REPLICATE_RATE_LIMIT':
         return 'Đang quá tải, thử lại sau ít giây.';
       case 'REPLICATE_ERROR':
       case 'TIMEOUT':
-        return 'Remove background thất bại, vui lòng thử lại.';
+        return `${opts?.actionLabel ?? 'Xử lý ảnh'} thất bại, vui lòng thử lại.`;
       case 'SSRF_BLOCKED':
         return 'URL ảnh không hợp lệ.';
       case 'CONNECTION_ERROR':
@@ -87,6 +96,21 @@ export function mapEditError(err: unknown): string {
     if (err.message) return err.message;
   }
   return 'Đã có lỗi xảy ra, vui lòng thử lại.';
+}
+
+/** Pure payload shaper for the upscale commit (Validation S1 — unit-tested in isolation).
+ *  ⚡ faceEnhance is sent EXPLICITLY (even false) for models that support it, so the API's
+ *  default-TRUE never silently overrides a user OFF. recraft (no face-enhance field) →
+ *  `params: {}` to avoid the per-model allowlist clamp (03 §3). */
+export function buildUpscalePayload(
+  model: UpscaleModel,
+  scale: number,
+  faceEnhance: boolean,
+  imageUrl: string,
+): UpscaleImagePayload {
+  const caps = UPSCALE_MODEL_CAPS[model];
+  const params = caps.supportsFaceEnhance ? { faceEnhance } : {};
+  return { imageUrl, scale, modelParams: { model, params } };
 }
 
 // NOTE: the design §2.5 ⚡I editable-focus guard for the `c`/`C` Compare hotkey is NOT

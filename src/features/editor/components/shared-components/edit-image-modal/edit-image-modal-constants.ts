@@ -7,6 +7,11 @@
 
 import { Brush, Maximize, Expand, CircleSlash, Type, ImageOff, Eraser } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { UpscaleModel } from '@/apis/image-api';
+
+// Re-export so the upscale tab can pull the model union from this constants surface
+// (mirror RmbgModel locality), while image-api stays the single allowlist source.
+export type { UpscaleModel };
 
 // Re-export the shell layout tokens / z-index / sidebar dims from the swap modal (single
 // source — design §2.6). Children import these from HERE so the modal has one constants
@@ -52,7 +57,7 @@ export interface EditToolContract {
 export const EDIT_TOOLS: EditToolContract[] = [
   { key: 'inpaint', label: 'Inpaint', icon: Brush, enabled: false, canvasMode: 'paint' },
   { key: 'outpaint', label: 'Outpaint', icon: Maximize, enabled: false, canvasMode: 'preview' },
-  { key: 'upscale', label: 'Upscale', icon: Expand, enabled: false, canvasMode: 'preview' },
+  { key: 'upscale', label: 'Upscale', icon: Expand, enabled: true, canvasMode: 'preview' },
   { key: 'remove_object', label: 'Remove Object', icon: CircleSlash, enabled: false, canvasMode: 'paint' },
   { key: 'remove_text', label: 'Remove Text', icon: Type, enabled: false, canvasMode: 'preview' },
   { key: 'remove_background', label: 'Remove BG', icon: ImageOff, enabled: true, canvasMode: 'preview' },
@@ -66,6 +71,7 @@ export const DEFAULT_EDIT_TOOL: EditToolKey = 'remove_background';
 /** Per-tool `[+]` button hint (aria-label + tooltip) — README §3.2. */
 export const COMMIT_HINTS: Partial<Record<EditToolKey, string>> = {
   remove_background: 'Run remove background',
+  upscale: 'Run upscale',
   erasor: 'Save erased version',
 };
 
@@ -85,6 +91,37 @@ export const DEFAULT_RMBG_MODEL: RmbgModel = 'bria/remove-background';
 export type OutputBgMode = 'transparent' | 'color' | 'blur' | 'overlay';
 export const DEFAULT_OUTPUT_BG: OutputBgMode = 'transparent';
 export const DEFAULT_OUTPUT_COLOR = '#FFFFFF';
+
+// ── Upscale tab (03-upscale-tab.md §2) ───────────────────────────────────────
+
+/** Replicate upscale model allowlist (mock dropdown + API §Multi-model group `upscale`).
+ *  Default `real-esrgan` matches BOTH the mock selection AND the API default. */
+export const UPSCALE_MODEL_OPTIONS: readonly UpscaleModel[] = [
+  'nightmareai/real-esrgan',
+  'recraft-ai/recraft-crisp-upscale',
+  'alexgenovese/upscaler',
+];
+export const DEFAULT_UPSCALE_MODEL: UpscaleModel = 'nightmareai/real-esrgan';
+
+/** Scale stepper: int 1..8, default 2 (mock). API accepts float (0,10] — UI restricts to integer. */
+export const SCALE = { min: 1, max: 8, step: 1, default: 2 } as const;
+
+/** ⚡ UI default OFF (false) — diverges from API default TRUE. FE sends faceEnhance EXPLICITLY
+ *  (even false) for scalable models so the API default never silently flips it on (03 §5). */
+export const DEFAULT_FACE_ENHANCE = false;
+
+/** Per-model capability gate. `recraft` is fixed-ratio native passthrough → scale has no effect
+ *  AND it has no face-enhance field → both controls disabled (03 §4). Switching model keeps the
+ *  scale/faceEnhance state, only the disabled flag changes. */
+export interface UpscaleModelCaps {
+  supportsScale: boolean;
+  supportsFaceEnhance: boolean;
+}
+export const UPSCALE_MODEL_CAPS: Record<UpscaleModel, UpscaleModelCaps> = {
+  'nightmareai/real-esrgan': { supportsScale: true, supportsFaceEnhance: true },
+  'alexgenovese/upscaler': { supportsScale: true, supportsFaceEnhance: true },
+  'recraft-ai/recraft-crisp-upscale': { supportsScale: false, supportsFaceEnhance: false },
+};
 
 // ── Eraser tab (02-eraser-tab.md §2) ─────────────────────────────────────────
 export const BRUSH = { min: 1, max: 100, step: 1, default: 30 } as const;

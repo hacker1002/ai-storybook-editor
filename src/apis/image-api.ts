@@ -208,6 +208,65 @@ export async function extractHumanTraits(
   return result;
 }
 
+// --- Upscale (multi-model super-resolution — image/05-upscale-image.md) ---
+
+/** Replicate upscale model allowlist (group `upscale`). Single source for the
+ *  EditImageModal upscale tab (constants re-export this type). */
+export type UpscaleModel =
+  | 'nightmareai/real-esrgan'
+  | 'recraft-ai/recraft-crisp-upscale'
+  | 'alexgenovese/upscaler';
+
+export interface UpscaleImagePayload {
+  imageUrl: string;
+  /** int 1..8 in the UI (default 2); API accepts float (0,10]. recraft ignores it (native passthrough). */
+  scale: number;
+  /** Model select via `modelParams.model` (NOT flat `model`); faceEnhance via params (recraft → `{}`). */
+  modelParams: { model: UpscaleModel; params: { faceEnhance?: boolean } };
+}
+
+export interface UpscaleImageResponse {
+  success: true;
+  data: { imageUrl: string; storagePath: string; width: number; height: number };
+  meta?: {
+    processingTime?: number;
+    mimeType?: string;
+    model?: string;
+    scale?: number;
+    fixedRatio?: boolean;
+    sourceType?: 'url' | 'base64';
+    tileCount?: number;
+    replicatePredictionIds?: string[];
+  };
+}
+
+/**
+ * Upscale (super-resolution) an image via Replicate (sync) → permanent Storage URL.
+ * POST /api/image/upscale-image. JSON client (parity normalizeHuman) — NOT multipart.
+ */
+export async function callImageUpscale(
+  payload: UpscaleImagePayload,
+): Promise<UpscaleImageResponse | ImageApiFailure> {
+  log.info('callImageUpscale', 'start', {
+    host: urlHost(payload.imageUrl),
+    model: payload.modelParams.model,
+    scale: payload.scale,
+    faceEnhance: payload.modelParams.params.faceEnhance,
+  });
+  const result = await callImageApi<UpscaleImageResponse>('/api/image/upscale-image', payload);
+  if (result.success) {
+    log.debug('callImageUpscale', 'ok', {
+      host: urlHost(result.data.imageUrl),
+      fixedRatio: result.meta?.fixedRatio,
+      width: result.data.width,
+      height: result.data.height,
+    });
+  } else {
+    log.error('callImageUpscale', 'failed', { errorCode: result.errorCode, httpStatus: result.httpStatus });
+  }
+  return result;
+}
+
 /** Map API trait shape → persisted DB shape: drop `present`, null-out description when absent, reserve image_url. */
 export function toStoredTraits(apiTraits: ExtractedTrait[]): VisualProfileTrait[] {
   return apiTraits.map((t) => ({
