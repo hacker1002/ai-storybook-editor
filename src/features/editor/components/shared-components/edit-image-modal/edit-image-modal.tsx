@@ -38,6 +38,7 @@ import { prependVersion, versionFromMediaUrl, mapEditError } from "./edit-image-
 import { useRemoveBgTabState } from "./remove-bg-tab";
 import { useUpscaleTabState } from "./upscale-tab";
 import { useEraserTabState } from "./eraser-tab";
+import { useInpaintTabState } from "./inpaint-tab";
 import { EditImageModalHeader } from "./edit-image-modal-header";
 import { EditImageModalVersionsSidebar } from "./edit-image-modal-versions-sidebar";
 import { EditImageModalCanvas } from "./edit-image-modal-canvas";
@@ -45,6 +46,7 @@ import { EditImageModalCanvas } from "./edit-image-modal-canvas";
 const log = createLogger("Editor", "EditImageModal");
 
 const PROCESSING_LABELS: Partial<Record<EditToolKey, string>> = {
+  inpaint: "Inpainting…",
   remove_background: "Removing background…",
   upscale: "Upscaling…",
   erasor: "Saving erased version…",
@@ -53,6 +55,7 @@ const PROCESSING_LABELS: Partial<Record<EditToolKey, string>> = {
 // Per-tool label threaded into mapEditError (Validation S1) so generic REPLICATE_ERROR/TIMEOUT
 // wording names the active tool ("Upscale thất bại…" vs "Remove background thất bại…").
 const ERROR_ACTION_LABELS: Partial<Record<EditToolKey, string>> = {
+  inpaint: "Inpaint",
   remove_background: "Remove background",
   upscale: "Upscale",
   erasor: "Lưu",
@@ -116,37 +119,41 @@ export function EditImageModal({
   const removeBgState = useRemoveBgTabState({ selectedVersion });
   const upscaleState = useUpscaleTabState({ selectedVersion });
   const erasorState = useEraserTabState({ selectedVersion, pathPrefix, zoom });
+  const inpaintState = useInpaintTabState({ selectedVersion, zoom });
 
+  // Active "paint" tab — inpaint + erasor share the canvas/commit/undo-redo/confirm path
+  // (both expose the same paint surface; resetAll is inpaint-only and used in resetState).
   const isErasor = activeTool === "erasor";
+  const isInpaint = activeTool === "inpaint";
+  const isPaint = isErasor || isInpaint;
+  const activePaint = isErasor ? erasorState : isInpaint ? inpaintState : null;
   const activeContract = EDIT_TOOLS.find((t) => t.key === activeTool) ?? null;
   const canvasMode: EditCanvasMode | "compare" = compareMode
     ? "compare"
     : activeContract?.canvasMode ?? "preview";
 
-  // Dispatch the shared `{ canCommit, commit, ParamsPanel }` contract by activeTool (erasor-only
-  // surface — CanvasLayer/hasUncommitted/resetStrokes — stays on its own `isErasor` branches).
-  const activeCanCommit =
-    activeTool === "upscale"
+  // Dispatch the shared `{ canCommit, commit, ParamsPanel, CanvasLayer, hasUncommitted, ... }`
+  // contract: paint tabs (inpaint/erasor) go through `activePaint`; preview tabs by activeTool.
+  const activeCanCommit = activePaint
+    ? activePaint.canCommit
+    : activeTool === "upscale"
       ? upscaleState.canCommit
-      : isErasor
-        ? erasorState.canCommit
-        : removeBgState.canCommit;
+      : removeBgState.canCommit;
   const commitDisabled = isProcessing || !selectedVersion || !activeCanCommit;
   const commitHint = COMMIT_HINTS[activeTool] ?? "Commit";
   const processingLabel = PROCESSING_LABELS[activeTool] ?? "Processing…";
 
-  const paramsPanel =
-    activeTool === "remove_background"
+  const paramsPanel = activePaint
+    ? activePaint.ParamsPanel
+    : activeTool === "remove_background"
       ? removeBgState.ParamsPanel
       : activeTool === "upscale"
         ? upscaleState.ParamsPanel
-        : isErasor
-          ? erasorState.ParamsPanel
-          : (
-              <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
-                Coming soon
-              </div>
-            );
+        : (
+            <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
+              Coming soon
+            </div>
+          );
 
   // ── Reset / close ────────────────────────────────────────────────────────────
   const resetState = useCallback(() => {
@@ -157,7 +164,8 @@ export function EditImageModal({
     setIsProcessing(false);
     setZoomOpen(false);
     erasorState.resetStrokes();
-  }, [initialTool, erasorState]);
+    inpaintState.resetAll(); // inpaint also resets prompt + model on close (not just strokes)
+  }, [initialTool, erasorState, inpaintState]);
 
   const handleClose = useCallback(() => {
     if (isProcessing) {
@@ -184,16 +192,16 @@ export function EditImageModal({
         log.debug("handleToolChange", "ignored — disabled tool", { tool });
         return;
       }
-      // Leaving the eraser with uncommitted strokes → blocking confirm-discard (⚡E).
-      if (isErasor && tool !== "erasor" && erasorState.hasUncommitted) {
+      // Leaving a paint tab (inpaint/erasor) with uncommitted strokes → blocking confirm (⚡E).
+      if (isPaint && tool !== activeTool && activePaint?.hasUncommitted) {
         if (!window.confirm("Huỷ các nét chưa lưu?")) return;
-        erasorState.resetStrokes();
+        activePaint.resetStrokes();
       }
       log.debug("handleToolChange", "switch", { from: activeTool, to: tool });
       setActiveTool(tool);
       setCompareMode(false);
     },
-    [isProcessing, isErasor, erasorState, activeTool],
+    [isProcessing, isPaint, activePaint, activeTool],
   );
 
   const handleSelectVersion = useCallback(
@@ -201,18 +209,18 @@ export function EditImageModal({
       if (isProcessing) return; // ⚡F: no version switch mid run/commit
       const target = versions[index];
       if (!target || target.is_selected) return; // no-op (covers display-only fallback)
-      // Changing source while eraser has uncommitted strokes → blocking confirm (⚡E).
-      if (isErasor && erasorState.hasUncommitted) {
+      // Changing source while a paint tab has uncommitted strokes → blocking confirm (⚡E).
+      if (isPaint && activePaint?.hasUncommitted) {
         if (!window.confirm("Huỷ các nét chưa lưu?")) return;
       }
       const next = versions.map((v, i) => ({ ...v, is_selected: i === index }));
       onUpdateIllustrations(next);
       // ⚡C: switching to a non-edited version while comparing → drop compare (no original_url).
       if (!(target.type === "edited" && target.original_url)) setCompareMode(false);
-      if (isErasor) erasorState.resetStrokes(); // new source image → discard strokes
+      if (isPaint) activePaint?.resetStrokes(); // new source image → discard strokes
       log.debug("handleSelectVersion", "selected", { index });
     },
-    [isProcessing, versions, isErasor, erasorState, onUpdateIllustrations],
+    [isProcessing, versions, isPaint, activePaint, onUpdateIllustrations],
   );
 
   const handleCommit = useCallback(async () => {
@@ -222,12 +230,11 @@ export function EditImageModal({
     setIsProcessing(true);
     log.info("handleCommit", "start", { activeTool, runId });
     try {
-      const commitFn =
-        activeTool === "upscale"
+      const commitFn = activePaint
+        ? activePaint.commit
+        : activeTool === "upscale"
           ? upscaleState.commit
-          : isErasor
-            ? erasorState.commit
-            : removeBgState.commit;
+          : removeBgState.commit;
       const newUrl = await commitFn(committed);
       if (runId !== commitRunIdRef.current) {
         log.debug("handleCommit", "stale — dropped", { runId });
@@ -237,7 +244,7 @@ export function EditImageModal({
       // preserved as original_url so Compare works after the very first commit.
       const next = prependVersion(illustrations, newUrl, committed.media_url);
       onUpdateIllustrations(next);
-      if (isErasor) erasorState.afterCommit();
+      if (isPaint) activePaint?.afterCommit(); // clear strokes (inpaint keeps prompt + model)
       log.info("handleCommit", "done", { activeTool });
     } catch (err) {
       if (runId !== commitRunIdRef.current) return;
@@ -246,7 +253,7 @@ export function EditImageModal({
     } finally {
       if (runId === commitRunIdRef.current) setIsProcessing(false);
     }
-  }, [commitDisabled, selectedVersion, activeTool, isErasor, erasorState, removeBgState, upscaleState, illustrations, onUpdateIllustrations]);
+  }, [commitDisabled, selectedVersion, activeTool, isPaint, activePaint, removeBgState, upscaleState, illustrations, onUpdateIllustrations]);
 
   const handleToggleCompare = useCallback(() => {
     if (!canCompare) return;
@@ -258,14 +265,14 @@ export function EditImageModal({
     setZoomOpen(true);
   }, []);
 
-  // ── Eraser undo/redo — global hotkey (Ctrl/Cmd+Z, +Shift = redo) only while erasor active ──
+  // ── Paint undo/redo — global hotkey (Ctrl/Cmd+Z, +Shift = redo) only while a paint tab active ──
   useGlobalHotkey(
-    (e) => open && isErasor && !isProcessing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z",
+    (e) => open && isPaint && !isProcessing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z",
     (e) => {
-      if (e.shiftKey) erasorState.redo();
-      else erasorState.undo();
+      if (e.shiftKey) activePaint?.redo();
+      else activePaint?.undo();
     },
-    [open, isErasor, isProcessing, erasorState.redo, erasorState.undo],
+    [open, isPaint, isProcessing, activePaint],
   );
 
   // ── Interaction Layer Stack (top modal slot) — gated off while zoom child owns the slot ──
@@ -321,7 +328,7 @@ export function EditImageModal({
         >
           <DialogTitle className="sr-only">Editing Image</DialogTitle>
           <DialogDescription className="sr-only">
-            Chỉnh sửa ảnh (Remove BG / Erasor) trong workspace toàn màn hình.
+            Chỉnh sửa ảnh (Inpaint / Upscale / Remove BG / Erasor) trong workspace toàn màn hình.
           </DialogDescription>
 
           <EditImageModalHeader
@@ -347,7 +354,7 @@ export function EditImageModal({
             <EditImageModalCanvas
               canvasMode={canvasMode}
               selectedVersion={selectedVersion}
-              canvasLayer={erasorState.CanvasLayer}
+              canvasLayer={activePaint?.CanvasLayer}
               compareMode={compareMode}
               canCompare={canCompare}
               onToggleCompare={handleToggleCompare}

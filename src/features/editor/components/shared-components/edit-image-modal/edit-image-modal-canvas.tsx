@@ -30,7 +30,7 @@ const CHECKERBOARD_STYLE: React.CSSProperties = {
 interface EditImageModalCanvasProps {
   canvasMode: StageCanvasMode;
   selectedVersion: Illustration | null;
-  /** Eraser interactive canvas (rendered in paint mode). */
+  /** Active paint-tab interactive canvas (inpaint / erasor — rendered in paint mode). */
   canvasLayer: ReactNode;
   compareMode: boolean;
   canCompare: boolean;
@@ -142,7 +142,7 @@ export function EditImageModalCanvas({
             );
           }
           if (canvasMode === 'paint') {
-            // Eraser owns the canvas + cursor; pass scaled dims via the layer wrapper.
+            // Active paint tab owns the canvas + cursor; pass scaled dims via the layer wrapper.
             return <div className="m-auto">{canvasLayer}</div>;
           }
           return (

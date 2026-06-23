@@ -5,7 +5,13 @@
 
 import type { Illustration } from '@/types/prop-types';
 import type { UpscaleModel, UpscaleImagePayload } from '@/apis/image-api';
-import { UPSCALE_MODEL_CAPS } from './edit-image-modal-constants';
+import {
+  ASPECT_RATIOS,
+  DEFAULT_ASPECT_RATIO,
+  type AspectRatio,
+} from '@/constants/aspect-ratio-constants';
+import { UPSCALE_MODEL_CAPS, REGION_MAX_DECODED_BYTES } from './edit-image-modal-constants';
+import { type Stroke, paintStrokesOnCtx } from './erase-stroke-engine';
 
 /** Carries the API failure's errorCode/httpStatus through a thrown Error so the shell's
  *  catch can map it via `mapEditError` (single mapping surface). Tabs throw this for API
@@ -77,14 +83,31 @@ export function mapEditError(err: unknown, opts?: { actionLabel?: string }): str
       case 'OUTPUT_FETCH_ERROR':
         return 'Ảnh kết quả quá lớn — giảm scale.';
       case 'REPLICATE_RATE_LIMIT':
+      case 'GEMINI_RATE_LIMIT':
         return 'Đang quá tải, thử lại sau ít giây.';
       case 'REPLICATE_ERROR':
       case 'TIMEOUT':
+      case 'NO_IMAGE_RESPONSE':
+      case 'GEMINI_ERROR':
         return `${opts?.actionLabel ?? 'Xử lý ảnh'} thất bại, vui lòng thử lại.`;
       case 'SSRF_BLOCKED':
         return 'URL ảnh không hợp lệ.';
       case 'CONNECTION_ERROR':
         return 'Mất kết nối tới máy chủ — vui lòng thử lại.';
+      // ── Inpaint / edit-object-image (Gemini) codes (04-inpaint-tab.md §3) ──
+      case 'SAFETY_FILTER_BLOCKED':
+        return 'Nội dung prompt/ảnh vi phạm policy.';
+      case 'REGION_ASPECT_MISMATCH':
+        return 'Tỷ lệ vùng khoanh không khớp ảnh nguồn.';
+      case 'REGION_TOO_LARGE':
+        return 'Ảnh quá lớn để inpaint — chọn version nhỏ hơn.';
+      case 'VALIDATION_ERROR':
+        return 'Ảnh vùng khoanh không hợp lệ.';
+      case 'STORAGE_UPLOAD_ERROR':
+        return 'Lưu ảnh thất bại, vui lòng thử lại.';
+      // Map INTERNAL_ERROR to the generic line explicitly so a raw server message never leaks.
+      case 'INTERNAL_ERROR':
+        return 'Đã có lỗi xảy ra, vui lòng thử lại.';
       default:
         break;
     }
@@ -111,6 +134,78 @@ export function buildUpscalePayload(
   const caps = UPSCALE_MODEL_CAPS[model];
   const params = caps.supportsFaceEnhance ? { faceEnhance } : {};
   return { imageUrl, scale, modelParams: { model, params } };
+}
+
+// ── Inpaint helpers (04-inpaint-tab.md §6) ────────────────────────────────────
+
+/** Picks the aspect-ratio enum closest to the source ratio — FE mirror of the backend
+ *  `nearest_aspect_ratio` so a sent `regionAnnotation` never trips the server's
+ *  REGION_ASPECT_MISMATCH guard. argmin of relative error `|opt.numeric − src| / src` over
+ *  ASPECT_RATIOS (the single ratio table — DRY). Degenerate height → DEFAULT_ASPECT_RATIO. */
+export function nearestAspectRatio(naturalW: number, naturalH: number): AspectRatio {
+  if (naturalH <= 0 || naturalW <= 0) return DEFAULT_ASPECT_RATIO;
+  const src = naturalW / naturalH;
+  let best = ASPECT_RATIOS[0];
+  let bestErr = Infinity;
+  for (const opt of ASPECT_RATIOS) {
+    const err = Math.abs(opt.numeric - src) / src;
+    if (err < bestErr) {
+      bestErr = err;
+      best = opt;
+    }
+  }
+  return best.value;
+}
+
+/** Pre-flight size guard (Inpaint commit): true when the composite PNG would exceed the API
+ *  decoded-byte cap, so the shell aborts BEFORE the call (no 400 round-trip). A base64 string
+ *  decodes to ~`length * 0.75` bytes. */
+export function exceedsRegionSizeCap(base64: string): boolean {
+  return base64.length * 0.75 > REGION_MAX_DECODED_BYTES;
+}
+
+/** Composite source + translucent set-of-mark at natural resolution → PNG base64 WITHOUT the
+ *  `data:` prefix (the `regionAnnotation.base64Data` the API wants). The mark is rendered to an
+ *  OFFSCREEN canvas at FULL alpha then drawn once with `globalAlpha = markAlpha`, so overlapping
+ *  strokes don't darken-stack (≠ eraser's direct destination-out). `brushScale` rescales the
+ *  display-px brush radius up to natural-res. Throws if the source taints the canvas (CORS) —
+ *  the message carries "tainted/CORS" so mapEditError surfaces the right toast.
+ *  Manual-smoke only (jsdom has no real 2d context). */
+export function compositeMark(
+  sourceImg: HTMLImageElement,
+  strokes: Stroke[],
+  markColor: string,
+  markAlpha: number,
+  naturalW: number,
+  naturalH: number,
+  displayW: number,
+  displayH: number,
+): string {
+  const base = document.createElement('canvas');
+  base.width = naturalW;
+  base.height = naturalH;
+  const baseCtx = base.getContext('2d');
+  if (!baseCtx) throw new Error('Could not get 2D context');
+  baseCtx.drawImage(sourceImg, 0, 0, naturalW, naturalH);
+
+  const mark = document.createElement('canvas');
+  mark.width = naturalW;
+  mark.height = naturalH;
+  const markCtx = mark.getContext('2d');
+  if (!markCtx) throw new Error('Could not get 2D context');
+
+  // Force mark color + paint mode regardless of stroke provenance (compositeMark owns the look).
+  const markStrokes: Stroke[] = strokes.map((s) => ({ ...s, color: markColor, mode: 'paint' }));
+  const brushScale = (naturalW / displayW + naturalH / displayH) / 2;
+  paintStrokesOnCtx(markCtx, markStrokes, null, naturalW, naturalH, brushScale, true);
+
+  baseCtx.globalAlpha = markAlpha;
+  baseCtx.drawImage(mark, 0, 0);
+  baseCtx.globalAlpha = 1;
+
+  // toDataURL throws on a CORS-tainted canvas — surfaced by mapEditError's CORS branch.
+  const dataUrl = base.toDataURL('image/png');
+  return dataUrl.split(',')[1] ?? '';
 }
 
 // NOTE: the design §2.5 ⚡I editable-focus guard for the `c`/`C` Compare hotkey is NOT

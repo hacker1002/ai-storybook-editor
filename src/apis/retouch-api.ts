@@ -27,16 +27,24 @@ export interface LayeringImageResult {
 export interface EditObjectImageParams {
   prompt: string;
   imageUrl: string;
+  /** Set-of-mark region (Inpaint tab): composite source + translucent mark at natural-res,
+   *  PNG base64 WITHOUT the `data:` URI prefix. Omit for prompt-only full-image edit. */
+  regionAnnotation?: { base64Data: string; mimeType: string };
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  // GIỮ `string` (Validation S1): caller image-task-slice.ts passes StartEditTaskParams.aspectRatio?: string.
+  // nearestAspectRatio() returns AspectRatio (assignable to string) → no type-safety loss on the inpaint path.
   aspectRatio?: string;
   imageSize?: string;
+  /** Model override — allowlist group `edit-object` (v1 Gemini-only). Omit `params` → server
+   *  temperature default 0.3. Out-of-allowlist model → 422 UNSUPPORTED_MODEL. */
+  modelParams?: { model: string; params?: { temperature?: number } };
 }
 
 export interface EditObjectImageResult {
   success: boolean;
   data?: { imageUrl: string; storagePath: string };
   error?: string;
-  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
+  meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number; model?: string };
 }
 
 export interface CropBoundingBox {
@@ -210,8 +218,10 @@ export async function callEditObjectImage(
   log.info('callEditObjectImage', 'start', {
     promptLength: params.prompt.length,
     refCount: params.referenceImages?.length ?? 0,
+    hasRegion: !!params.regionAnnotation,
     aspectRatio: params.aspectRatio,
     imageSize: params.imageSize,
+    model: params.modelParams?.model,
   });
   const res = await callImageApi<EditObjectImageResult>('/api/retouch/edit-object-image', params);
   if (res.success) {

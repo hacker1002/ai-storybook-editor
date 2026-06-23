@@ -55,7 +55,7 @@ export interface EditToolContract {
 
 // ── Tool registry (README §2.2 — order + labels match mock #edit-fs-tabs) ──────
 export const EDIT_TOOLS: EditToolContract[] = [
-  { key: 'inpaint', label: 'Inpaint', icon: Brush, enabled: false, canvasMode: 'paint' },
+  { key: 'inpaint', label: 'Inpaint', icon: Brush, enabled: true, canvasMode: 'paint' },
   { key: 'outpaint', label: 'Outpaint', icon: Maximize, enabled: false, canvasMode: 'preview' },
   { key: 'upscale', label: 'Upscale', icon: Expand, enabled: true, canvasMode: 'preview' },
   { key: 'remove_object', label: 'Remove Object', icon: CircleSlash, enabled: false, canvasMode: 'paint' },
@@ -64,16 +64,36 @@ export const EDIT_TOOLS: EditToolContract[] = [
   { key: 'erasor', label: 'Erasor', icon: Eraser, enabled: true, canvasMode: 'paint' },
 ];
 
-/** Default landing tool when `initialTool` is not supplied (README §2.2). Inpaint is the
- *  mock-default but is deferred → landing MUST be the first enabled tool. */
-export const DEFAULT_EDIT_TOOL: EditToolKey = 'remove_background';
+/** Default landing tool when `initialTool` is not supplied (README §2.2). Inpaint is now in
+ *  scope + leftmost (mock default) → landing = `'inpaint'` (Validation S1 — accepted blast
+ *  radius: every consumer opens into Inpaint). */
+export const DEFAULT_EDIT_TOOL: EditToolKey = 'inpaint';
 
 /** Per-tool `[+]` button hint (aria-label + tooltip) — README §3.2. */
 export const COMMIT_HINTS: Partial<Record<EditToolKey, string>> = {
+  inpaint: 'Run inpaint',
   remove_background: 'Run remove background',
   upscale: 'Run upscale',
   erasor: 'Save erased version',
 };
+
+// ── Inpaint tab (04-inpaint-tab.md §2) ───────────────────────────────────────
+/** Model allowlist (group `edit-object` — v1 Gemini-only; out-of-allowlist → 422
+ *  UNSUPPORTED_MODEL). Select renders even at 1 option (ready for allowlist growth). */
+export const INPAINT_MODEL_OPTIONS = ['google/nano-banana-pro'] as const;
+export type InpaintModel = (typeof INPAINT_MODEL_OPTIONS)[number];
+export const INPAINT_DEFAULT_MODEL: InpaintModel = 'google/nano-banana-pro';
+/** Mark = set-of-mark soft hint (NOT a binary mask). Translucent so the model still "sees"
+ *  the content under the mark — bright accent so the marked region stands out. */
+export const INPAINT_MARK_COLOR = '#3b6cf6';
+export const INPAINT_MARK_ALPHA = 0.5;
+/** Fixed API image size — NOT exposed (mock has no control). */
+export const INPAINT_IMAGE_SIZE = '2K';
+/** Prompt textarea maxLength — API rejects > 2000 chars. */
+export const INPAINT_PROMPT_MAX = 2000;
+/** Client pre-flight cap: composite PNG decoded bytes must stay ≤ this (mirrors API 10MB cap)
+ *  → abort BEFORE the call (no 400 round-trip). `base64.length * 0.75` ≈ decoded bytes. */
+export const REGION_MAX_DECODED_BYTES = 10 * 1024 * 1024;
 
 // ── Remove BG tab (01-remove-bg-tab.md §2) ───────────────────────────────────
 
@@ -125,6 +145,9 @@ export const UPSCALE_MODEL_CAPS: Record<UpscaleModel, UpscaleModelCaps> = {
 
 // ── Eraser tab (02-eraser-tab.md §2) ─────────────────────────────────────────
 export const BRUSH = { min: 1, max: 100, step: 1, default: 30 } as const;
+/** Inpaint reuses BRUSH min/max/step but defaults smaller (10px) — finer marks for
+ *  targeted region painting vs the eraser's broader strokes. */
+export const INPAINT_BRUSH_DEFAULT = 10;
 export const DEFAULT_ERASER_COLOR = '#FFFFFF';
 /** Strokes count at which Reset asks for confirmation (mirror erase-modal cũ). */
 export const RESET_CONFIRM_THRESHOLD = 3;
