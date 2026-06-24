@@ -37,6 +37,7 @@ import {
 import { prependVersion, versionFromMediaUrl, mapEditError } from "./edit-image-modal-utils";
 import { useRemoveBgTabState } from "./remove-bg-tab";
 import { useUpscaleTabState } from "./upscale-tab";
+import { useOutpaintTabState } from "./outpaint-tab";
 import { useEraserTabState } from "./eraser-tab";
 import { useInpaintTabState } from "./inpaint-tab";
 import { EditImageModalHeader } from "./edit-image-modal-header";
@@ -47,6 +48,7 @@ const log = createLogger("Editor", "EditImageModal");
 
 const PROCESSING_LABELS: Partial<Record<EditToolKey, string>> = {
   inpaint: "Inpainting…",
+  outpaint: "Outpainting…",
   remove_background: "Removing background…",
   upscale: "Upscaling…",
   erasor: "Saving erased version…",
@@ -56,6 +58,7 @@ const PROCESSING_LABELS: Partial<Record<EditToolKey, string>> = {
 // wording names the active tool ("Upscale thất bại…" vs "Remove background thất bại…").
 const ERROR_ACTION_LABELS: Partial<Record<EditToolKey, string>> = {
   inpaint: "Inpaint",
+  outpaint: "Outpaint",
   remove_background: "Remove background",
   upscale: "Upscale",
   erasor: "Lưu",
@@ -118,6 +121,7 @@ export function EditImageModal({
   // ── Per-tab sub-state (all hooks run unconditionally; shell renders the active one) ──
   const removeBgState = useRemoveBgTabState({ selectedVersion });
   const upscaleState = useUpscaleTabState({ selectedVersion });
+  const outpaintState = useOutpaintTabState({ selectedVersion });
   const erasorState = useEraserTabState({ selectedVersion, pathPrefix, zoom });
   const inpaintState = useInpaintTabState({ selectedVersion, zoom });
 
@@ -138,7 +142,9 @@ export function EditImageModal({
     ? activePaint.canCommit
     : activeTool === "upscale"
       ? upscaleState.canCommit
-      : removeBgState.canCommit;
+      : activeTool === "outpaint"
+        ? outpaintState.canCommit
+        : removeBgState.canCommit;
   const commitDisabled = isProcessing || !selectedVersion || !activeCanCommit;
   const commitHint = COMMIT_HINTS[activeTool] ?? "Commit";
   const processingLabel = PROCESSING_LABELS[activeTool] ?? "Processing…";
@@ -149,11 +155,13 @@ export function EditImageModal({
       ? removeBgState.ParamsPanel
       : activeTool === "upscale"
         ? upscaleState.ParamsPanel
-        : (
-            <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
-              Coming soon
-            </div>
-          );
+        : activeTool === "outpaint"
+          ? outpaintState.ParamsPanel
+          : (
+              <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
+                Coming soon
+              </div>
+            );
 
   // ── Reset / close ────────────────────────────────────────────────────────────
   const resetState = useCallback(() => {
@@ -234,7 +242,9 @@ export function EditImageModal({
         ? activePaint.commit
         : activeTool === "upscale"
           ? upscaleState.commit
-          : removeBgState.commit;
+          : activeTool === "outpaint"
+            ? outpaintState.commit
+            : removeBgState.commit;
       const newUrl = await commitFn(committed);
       if (runId !== commitRunIdRef.current) {
         log.debug("handleCommit", "stale — dropped", { runId });
@@ -253,7 +263,7 @@ export function EditImageModal({
     } finally {
       if (runId === commitRunIdRef.current) setIsProcessing(false);
     }
-  }, [commitDisabled, selectedVersion, activeTool, isPaint, activePaint, removeBgState, upscaleState, illustrations, onUpdateIllustrations]);
+  }, [commitDisabled, selectedVersion, activeTool, isPaint, activePaint, removeBgState, upscaleState, outpaintState, illustrations, onUpdateIllustrations]);
 
   const handleToggleCompare = useCallback(() => {
     if (!canCompare) return;
@@ -362,6 +372,7 @@ export function EditImageModal({
               onZoomChange={setZoom}
               isProcessing={isProcessing}
               processingLabel={processingLabel}
+              previewOverlay={activeTool === "outpaint" ? outpaintState.previewOverlay : undefined}
             />
 
             <aside

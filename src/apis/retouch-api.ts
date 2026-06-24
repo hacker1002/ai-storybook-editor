@@ -47,6 +47,43 @@ export interface EditObjectImageResult {
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number; model?: string };
 }
 
+// ── Outpaint (09-outpaint-image) ──────────────────────────────────────────────
+
+/** Edge-expansion direction — mirrors the API enum + DIRECTION_EDGES map 1:1. Server derives
+ *  the output aspect ratio from source + direction + expandRatio (NO `aspectRatio` param). */
+export type ExpandDirection =
+  | 'all' | 'top' | 'bottom' | 'left' | 'right' | 'horizontal' | 'vertical';
+
+export interface OutpaintImageParams {
+  imageUrl: string;
+  /** Per-edge expand percent (0, 100] — gated ratio>0 at the UI; >50 → server log.warn (quality). */
+  expandRatio: number;
+  direction: ExpandDirection;
+  /** Optional guidance, ≤ 2000 chars; omit when empty (server fills its own continuation prompt). */
+  prompt?: string;
+  /** Gemini output resolution. Default '2K' server-side; FE sends explicit (parity inpaint). */
+  imageSize?: '1K' | '2K' | '4K';
+  /** Model override — allowlist group `outpaint` (v1 Gemini-only; out-of-allowlist → 422
+   *  UNSUPPORTED_MODEL). Omit `params` → server temperature default 0.4. */
+  modelParams?: { model: string; params?: { temperature?: number } };
+}
+
+export interface OutpaintImageResult {
+  success: boolean;
+  data?: { imageUrl: string; storagePath: string };
+  error?: string;
+  meta?: {
+    processingTime?: number;
+    mimeType?: string;
+    tokenUsage?: number;
+    model?: string;
+    canvasAspectRatio?: string;
+    outputWidth?: number;
+    outputHeight?: number;
+    expandedEdges?: string[];
+  };
+}
+
 export interface CropBoundingBox {
   x: number;
   y: number;
@@ -233,6 +270,32 @@ export async function callEditObjectImage(
   } else {
     const { error, httpStatus, errorCode } = res as ImageApiFailure;
     log.error('callEditObjectImage', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
+}
+
+export async function callOutpaintImage(
+  params: OutpaintImageParams
+): Promise<OutpaintImageResult | ImageApiFailure> {
+  log.info('callOutpaintImage', 'start', {
+    imageUrl: params.imageUrl.slice(0, 80),
+    direction: params.direction,
+    expandRatio: params.expandRatio,
+    hasPrompt: !!params.prompt,
+    model: params.modelParams?.model,
+  });
+  const res = await callImageApi<OutpaintImageResult>('/api/retouch/outpaint-image', params);
+  if (res.success) {
+    const r = res as OutpaintImageResult;
+    log.info('callOutpaintImage', 'success', {
+      processingMs: r.meta?.processingTime,
+      canvasAspectRatio: r.meta?.canvasAspectRatio,
+      outputWidth: r.meta?.outputWidth,
+      outputHeight: r.meta?.outputHeight,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callOutpaintImage', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
   }
   return res;
 }

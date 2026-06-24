@@ -12,6 +12,9 @@ import {
   buildUpscalePayload,
   nearestAspectRatio,
   exceedsRegionSizeCap,
+  DIRECTION_EDGES,
+  outpaintFrameInset,
+  buildOutpaintPayload,
 } from './edit-image-modal-utils';
 import { REGION_MAX_DECODED_BYTES } from './edit-image-modal-constants';
 
@@ -85,6 +88,8 @@ describe('mapEditError', () => {
     ['GEMINI_ERROR', 'Xử lý ảnh thất bại, vui lòng thử lại.'],
     ['STORAGE_UPLOAD_ERROR', 'Lưu ảnh thất bại, vui lòng thử lại.'],
     ['INTERNAL_ERROR', 'Đã có lỗi xảy ra, vui lòng thử lại.'],
+    // Outpaint source-decode failure (05-outpaint-tab.md §3).
+    ['DECODE_ERROR', 'Ảnh nguồn lỗi, không đọc được kích thước.'],
   ];
   it.each(cases)('maps EditApiError code %s', (code, message) => {
     expect(mapEditError(new EditApiError('raw', { errorCode: code }))).toBe(message);
@@ -182,5 +187,72 @@ describe('exceedsRegionSizeCap', () => {
   it('returns false right at the cap boundary', () => {
     const atLength = Math.floor(REGION_MAX_DECODED_BYTES / 0.75);
     expect(exceedsRegionSizeCap('a'.repeat(atLength))).toBe(false);
+  });
+});
+
+describe('DIRECTION_EDGES', () => {
+  it('expands all four edges for "all"', () => {
+    expect(DIRECTION_EDGES.all).toEqual({ t: 1, r: 1, b: 1, l: 1 });
+  });
+
+  it('expands only left+right for "horizontal"', () => {
+    expect(DIRECTION_EDGES.horizontal).toEqual({ t: 0, r: 1, b: 0, l: 1 });
+  });
+
+  it('expands only top+bottom for "vertical"', () => {
+    expect(DIRECTION_EDGES.vertical).toEqual({ t: 1, r: 0, b: 1, l: 0 });
+  });
+
+  it('expands a single edge for "bottom"', () => {
+    expect(DIRECTION_EDGES.bottom).toEqual({ t: 0, r: 0, b: 1, l: 0 });
+  });
+});
+
+describe('outpaintFrameInset', () => {
+  it('grows top+bottom by ratio·h for vertical (left/right unchanged)', () => {
+    // 13% of 800×600: ey = 0.13·600 = 78 each vertical edge; horizontal edges unchanged.
+    const inset = outpaintFrameInset({ w: 800, h: 600 }, 'vertical', 13);
+    expect(inset).toEqual({ left: 0, top: -78, width: 800, height: 600 + 2 * 78 });
+  });
+
+  it('grows left+right by ratio·w for horizontal (top/bottom unchanged)', () => {
+    // 25% of 800×600: ex = 0.25·800 = 200 each horizontal edge.
+    const inset = outpaintFrameInset({ w: 800, h: 600 }, 'horizontal', 25);
+    expect(inset).toEqual({ left: -200, top: 0, width: 800 + 2 * 200, height: 600 });
+  });
+
+  it('coincides with the image box at ratio=0', () => {
+    expect(outpaintFrameInset({ w: 800, h: 600 }, 'all', 0)).toEqual({
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600,
+    });
+  });
+
+  it('offsets only the expanded edge for a single direction (right)', () => {
+    const inset = outpaintFrameInset({ w: 800, h: 600 }, 'right', 50);
+    expect(inset).toEqual({ left: 0, top: 0, width: 800 + 400, height: 600 });
+  });
+});
+
+describe('buildOutpaintPayload', () => {
+  it('omits prompt when empty/whitespace; always sends imageSize + model-only modelParams', () => {
+    const p = buildOutpaintPayload('google/nano-banana-pro', 'all', 13, '   ', 'https://cdn/a.png');
+    expect(p).toEqual({
+      imageUrl: 'https://cdn/a.png',
+      expandRatio: 13,
+      direction: 'all',
+      imageSize: '2K',
+      modelParams: { model: 'google/nano-banana-pro' },
+    });
+    expect(p.prompt).toBeUndefined();
+  });
+
+  it('trims and forwards a non-empty prompt', () => {
+    const p = buildOutpaintPayload('google/nano-banana-pro', 'top', 30, '  extend the sky  ', 'https://cdn/a.png');
+    expect(p.prompt).toBe('extend the sky');
+    expect(p.direction).toBe('top');
+    expect(p.expandRatio).toBe(30);
   });
 });

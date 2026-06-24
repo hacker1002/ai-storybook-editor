@@ -5,12 +5,17 @@
 
 import type { Illustration } from '@/types/prop-types';
 import type { UpscaleModel, UpscaleImagePayload } from '@/apis/image-api';
+import type { ExpandDirection, OutpaintImageParams } from '@/apis/retouch-api';
 import {
   ASPECT_RATIOS,
   DEFAULT_ASPECT_RATIO,
   type AspectRatio,
 } from '@/constants/aspect-ratio-constants';
-import { UPSCALE_MODEL_CAPS, REGION_MAX_DECODED_BYTES } from './edit-image-modal-constants';
+import {
+  UPSCALE_MODEL_CAPS,
+  REGION_MAX_DECODED_BYTES,
+  OUTPAINT_IMAGE_SIZE,
+} from './edit-image-modal-constants';
 import { type Stroke, paintStrokesOnCtx } from './erase-stroke-engine';
 
 /** Carries the API failure's errorCode/httpStatus through a thrown Error so the shell's
@@ -69,7 +74,7 @@ export function prependVersion(
  *  Errors, then the raw message, then a generic message. Never surfaces internals.
  *  ⚡ Tab-aware (Validation S1): `opts.actionLabel` (e.g. 'Remove background' / 'Upscale') is
  *  threaded by the shell so the generic REPLICATE_ERROR/TIMEOUT wording names the active tool;
- *  no-arg default = 'Xử lý ảnh'. Shared across all 3 tabs (single mapping surface). */
+ *  no-arg default = 'Xử lý ảnh'. Shared across all tabs (single mapping surface). */
 export function mapEditError(err: unknown, opts?: { actionLabel?: string }): string {
   const code = err instanceof EditApiError ? err.errorCode : undefined;
   if (code) {
@@ -105,6 +110,9 @@ export function mapEditError(err: unknown, opts?: { actionLabel?: string }): str
         return 'Ảnh vùng khoanh không hợp lệ.';
       case 'STORAGE_UPLOAD_ERROR':
         return 'Lưu ảnh thất bại, vui lòng thử lại.';
+      // ── Outpaint / outpaint-image source-decode failure (05-outpaint-tab.md §3) ──
+      case 'DECODE_ERROR':
+        return 'Ảnh nguồn lỗi, không đọc được kích thước.';
       // Map INTERNAL_ERROR to the generic line explicitly so a raw server message never leaks.
       case 'INTERNAL_ERROR':
         return 'Đã có lỗi xảy ra, vui lòng thử lại.';
@@ -134,6 +142,68 @@ export function buildUpscalePayload(
   const caps = UPSCALE_MODEL_CAPS[model];
   const params = caps.supportsFaceEnhance ? { faceEnhance } : {};
   return { imageUrl, scale, modelParams: { model, params } };
+}
+
+// ── Outpaint helpers (05-outpaint-tab.md §2/§5) ───────────────────────────────
+
+/** Per-direction edge flags — FE mirror of the backend edge map (design §2). 1 = that edge
+ *  expands by `expandRatio`. Used by BOTH the dashed preview frame AND the Compare overlay so
+ *  the two never disagree (single geometry source). */
+export const DIRECTION_EDGES: Record<ExpandDirection, { t: 0 | 1; r: 0 | 1; b: 0 | 1; l: 0 | 1 }> = {
+  all: { t: 1, r: 1, b: 1, l: 1 },
+  top: { t: 1, r: 0, b: 0, l: 0 },
+  bottom: { t: 0, r: 0, b: 1, l: 0 },
+  left: { t: 0, r: 0, b: 0, l: 1 },
+  right: { t: 0, r: 1, b: 0, l: 0 },
+  horizontal: { t: 0, r: 1, b: 0, l: 1 },
+  vertical: { t: 1, r: 0, b: 1, l: 0 },
+};
+
+/** Dashed preview-frame inset (design §5.2). `box` = the scaled image box (display px @ zoom —
+ *  the canvas owns it). The frame grows OUTWARD from the image on the selected edges, so the
+ *  left/top offsets are negative. `expandX = r·box.w` per horizontal edge, `expandY = r·box.h`
+ *  per vertical edge (per-edge percent of the ORIGINAL box — matches the backend geometry).
+ *  ratio=0 → `{ left:0, top:0, width:box.w, height:box.h }` (frame coincides with the image). */
+export function outpaintFrameInset(
+  box: { w: number; h: number },
+  direction: ExpandDirection,
+  ratioPct: number,
+): { left: number; top: number; width: number; height: number } {
+  const r = ratioPct / 100;
+  const s = DIRECTION_EDGES[direction];
+  const ex = r * box.w;
+  const ey = r * box.h;
+  // Guard on the flag AND a non-zero expand so an unexpanded (or ratio-0) edge is a clean +0,
+  // never IEEE -0 (`-ex * s.l` / `-0` would leak into style objects + break toEqual).
+  return {
+    left: s.l && ex ? -ex : 0,
+    top: s.t && ey ? -ey : 0,
+    width: box.w + ex * (s.l + s.r),
+    height: box.h + ey * (s.t + s.b),
+  };
+}
+
+/** Pure payload shaper for the outpaint commit (parity buildUpscalePayload — unit-tested in
+ *  isolation). `imageSize` is sent explicit; `prompt` is trimmed and OMITTED when empty (server
+ *  fills its own continuation prompt); `modelParams` carries model-only (omit `params` → server
+ *  temperature default). */
+export function buildOutpaintPayload(
+  model: string,
+  direction: ExpandDirection,
+  ratioPct: number,
+  prompt: string,
+  imageUrl: string,
+): OutpaintImageParams {
+  const payload: OutpaintImageParams = {
+    imageUrl,
+    expandRatio: ratioPct,
+    direction,
+    imageSize: OUTPAINT_IMAGE_SIZE,
+    modelParams: { model },
+  };
+  const trimmed = prompt.trim();
+  if (trimmed) payload.prompt = trimmed;
+  return payload;
 }
 
 // ── Inpaint helpers (04-inpaint-tab.md §6) ────────────────────────────────────

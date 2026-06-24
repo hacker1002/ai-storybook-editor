@@ -1,8 +1,9 @@
 // edit-image-modal-canvas.tsx — Center stage (design §3.3): stage-header (Compare toggle +
 // zoom range) + checkerboard canvas. canvasMode switches the body: `compare` → before/after
-// slider; `paint` → the eraser CanvasLayer; `preview` → static <img>. Zoom = CSS transform
-// scale on the canvas wrapper (⚡H — canvas internals unchanged, pointer mapping invariant).
-// Presentational/dumb — state + handlers come from the shell.
+// CompareSlider; `paint` → the eraser CanvasLayer; `preview` → static <img> (+ optional outpaint
+// `previewOverlay`). Zoom = actual CSS width/height on the content (NOT transform:scale — see the
+// body comment), so the scroll container reaches the full zoomed range. Presentational/dumb —
+// state + handlers come from the shell.
 
 import { type ReactNode } from 'react';
 import { Columns2, Loader2 } from 'lucide-react';
@@ -39,6 +40,9 @@ interface EditImageModalCanvasProps {
   onZoomChange: (zoom: number) => void;
   isProcessing: boolean;
   processingLabel: string;
+  /** Preview-mode overlay (outpaint dashed target frame). Receives the measured scaled box.
+   *  Omitted by every other tab → static <img> only. */
+  previewOverlay?: (box: { w: number; h: number }) => ReactNode;
 }
 
 export function EditImageModalCanvas({
@@ -52,6 +56,7 @@ export function EditImageModalCanvas({
   onZoomChange,
   isProcessing,
   processingLabel,
+  previewOverlay,
 }: EditImageModalCanvasProps) {
   const mediaUrl = selectedVersion?.media_url;
   const originalUrl = selectedVersion?.original_url;
@@ -135,6 +140,9 @@ export function EditImageModalCanvas({
           const scaledH = Math.round((fitSize.h * zoom) / 100);
           const scaledSize = { w: scaledW, h: scaledH };
           if (canvasMode === 'compare' && originalUrl) {
+            // All tabs share the before/after CompareSlider. For outpaint the result is a larger
+            // aspect than the original, so the contain-fit original reads slightly larger than its
+            // place in the result (accepted — product 2026-06-24).
             return (
               <div className="m-auto">
                 <CompareSlider before={originalUrl} after={mediaUrl} size={scaledSize} />
@@ -145,14 +153,20 @@ export function EditImageModalCanvas({
             // Active paint tab owns the canvas + cursor; pass scaled dims via the layer wrapper.
             return <div className="m-auto">{canvasLayer}</div>;
           }
+          // Preview: relative wrapper (size = scaled box) so an outpaint previewOverlay can pin
+          // its dashed frame to the image edges. overflow stays visible → the frame may grow
+          // outward past the image. Other tabs pass no overlay → just the <img>.
           return (
-            <img
-              key={mediaUrl}
-              src={mediaUrl}
-              alt="Selected version"
-              className="m-auto block object-contain"
-              style={{ width: scaledW, height: scaledH, maxWidth: 'none' }}
-            />
+            <div className="relative m-auto" style={{ width: scaledW, height: scaledH }}>
+              <img
+                key={mediaUrl}
+                src={mediaUrl}
+                alt="Selected version"
+                className="block object-contain"
+                style={{ width: scaledW, height: scaledH, maxWidth: 'none' }}
+              />
+              {previewOverlay?.(scaledSize)}
+            </div>
           );
         })()}
 
