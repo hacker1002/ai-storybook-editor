@@ -6,6 +6,7 @@
 
 import { useCallback } from "react";
 import { EditImageModal } from "@/features/editor/components/shared-components/edit-image-modal";
+import type { EditToolKey } from "@/features/editor/components/shared-components/edit-image-modal";
 import { useRetouchImageById, useSnapshotActions } from "@/stores/snapshot-store/selectors";
 import type { Illustration } from "@/types/prop-types";
 import { createLogger } from "@/utils/logger";
@@ -17,6 +18,8 @@ interface RetouchEditImageModalProps {
   onOpenChange: (open: boolean) => void;
   spreadId: string;
   imageId: string;
+  /** Per-space edit-tool availability (matrix gate). Forwarded to EditImageModal. */
+  enabledTools?: EditToolKey[];
 }
 
 export function RetouchEditImageModal({
@@ -24,6 +27,7 @@ export function RetouchEditImageModal({
   onOpenChange,
   spreadId,
   imageId,
+  enabledTools,
 }: RetouchEditImageModalProps) {
   const image = useRetouchImageById(spreadId, imageId);
   const { updateRetouchImage } = useSnapshotActions();
@@ -48,6 +52,7 @@ export function RetouchEditImageModal({
       mediaUrl={image.media_url ?? ""}
       onUpdateIllustrations={handleUpdate}
       pathPrefix={`retouch/${imageId}/erased`}
+      enabledTools={enabledTools}
     />
   );
 }

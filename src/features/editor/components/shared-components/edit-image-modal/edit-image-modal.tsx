@@ -35,6 +35,7 @@ import {
   type EditCanvasMode,
 } from "./edit-image-modal-constants";
 import { prependVersion, versionFromMediaUrl, mapEditError } from "./edit-image-modal-utils";
+import { resolveInitialKey } from "../image-tools-space-matrix";
 import { useRemoveBgTabState } from "./remove-bg-tab";
 import { useUpscaleTabState } from "./upscale-tab";
 import { useOutpaintTabState } from "./outpaint-tab";
@@ -77,6 +78,10 @@ export interface EditImageModalProps {
   pathPrefix: string;
   // ── UI ──
   initialTool?: EditToolKey;
+  /** Per-space tool availability (matrix gate #1). `undefined` → all EDIT_TOOLS (legacy).
+   *  Tools absent from the list are hidden from the tab bar entirely; present-but-unbuilt
+   *  tools still render as "Coming soon". */
+  enabledTools?: EditToolKey[];
   yieldedFrom?: YieldedFromLinkage;
 }
 
@@ -89,10 +94,16 @@ export function EditImageModal({
   onUpdateIllustrations,
   pathPrefix,
   initialTool,
+  enabledTools,
   yieldedFrom,
 }: EditImageModalProps) {
+  // Landing tool ∈ (available-in-space ∩ built); never lands on a coming-soon slot. Plain const
+  // (cheap) so it seeds useState + feeds resetState consistently. The header renders the FULL
+  // EDIT_TOOLS registry — tools gated off by `enabledTools` show disabled, never hidden.
+  const resolvedInitialTool = resolveInitialKey(EDIT_TOOLS, enabledTools, initialTool, DEFAULT_EDIT_TOOL);
+
   // ── State ──────────────────────────────────────────────────────────────────
-  const [activeTool, setActiveTool] = useState<EditToolKey>(initialTool ?? DEFAULT_EDIT_TOOL);
+  const [activeTool, setActiveTool] = useState<EditToolKey>(resolvedInitialTool);
   const [compareMode, setCompareMode] = useState(false);
   const [zoom, setZoom] = useState<number>(ZOOM.default);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -166,14 +177,14 @@ export function EditImageModal({
   // ── Reset / close ────────────────────────────────────────────────────────────
   const resetState = useCallback(() => {
     commitRunIdRef.current += 1; // invalidate any in-flight commit
-    setActiveTool(initialTool ?? DEFAULT_EDIT_TOOL);
+    setActiveTool(resolvedInitialTool);
     setCompareMode(false);
     setZoom(ZOOM.default);
     setIsProcessing(false);
     setZoomOpen(false);
     erasorState.resetStrokes();
     inpaintState.resetAll(); // inpaint also resets prompt + model on close (not just strokes)
-  }, [initialTool, erasorState, inpaintState]);
+  }, [resolvedInitialTool, erasorState, inpaintState]);
 
   const handleClose = useCallback(() => {
     if (isProcessing) {
@@ -196,8 +207,9 @@ export function EditImageModal({
     (tool: EditToolKey) => {
       if (isProcessing) return;
       const contract = EDIT_TOOLS.find((t) => t.key === tool);
-      if (!contract?.enabled) {
-        log.debug("handleToolChange", "ignored — disabled tool", { tool });
+      const availableInSpace = !enabledTools || enabledTools.includes(tool);
+      if (!availableInSpace || !contract?.enabled) {
+        log.debug("handleToolChange", "ignored — coming-soon tool", { tool });
         return;
       }
       // Leaving a paint tab (inpaint/erasor) with uncommitted strokes → blocking confirm (⚡E).
@@ -209,7 +221,7 @@ export function EditImageModal({
       setActiveTool(tool);
       setCompareMode(false);
     },
-    [isProcessing, isPaint, activePaint, activeTool],
+    [isProcessing, enabledTools, isPaint, activePaint, activeTool],
   );
 
   const handleSelectVersion = useCallback(
@@ -345,6 +357,7 @@ export function EditImageModal({
             title="Editing Image"
             activeTool={activeTool}
             tools={EDIT_TOOLS}
+            enabledKeys={enabledTools}
             onToolChange={handleToolChange}
             onClose={handleClose}
             disabled={isProcessing}

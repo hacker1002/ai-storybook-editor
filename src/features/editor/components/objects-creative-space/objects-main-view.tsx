@@ -34,19 +34,19 @@ import {
   EditableAutoAudio,
   EditableAutoPic,
   ExtractImageModal,
-  CropImageModal,
   EditAudioModal,
   SoundLibraryModal,
   resolveEffectiveImageUrl,
+  SPACE_TOOL_MATRIX,
 } from "@/features/editor/components/shared-components";
 import type {
   ExtractResult,
-  CropCreateResult,
   LibrarySound,
   BackgroundRemoveCandidate,
 } from "@/features/editor/components/shared-components";
 import { useSounds } from "@/stores/sounds-store";
 import { RetouchEditImageModal } from "./retouch-edit-image-modal";
+import { RetouchGenerateImageModal } from "./retouch-generate-image-modal";
 import { ObjectsImageToolbar } from "./objects-image-toolbar";
 import { ObjectsVideoToolbar } from "./objects-video-toolbar";
 import { ObjectsAudioToolbar } from "./objects-audio-toolbar";
@@ -74,7 +74,6 @@ import { COLUMNS, DEFAULT_AUDIO_TITLES } from "@/constants/spread-constants";
 import {
   useSpreadHandlers,
   useSpreadItemDispatch,
-  buildCropImages,
   buildExtractImages,
   useSplitTextbox,
   useObjectModals,
@@ -433,15 +432,7 @@ export function ObjectsMainView({
   const { splitTextbox } = useSplitTextbox(actions, onItemSelect, langCode, canvasWidth, canvasHeight);
 
   const modals = useObjectModals(selectedSpreadId, actions);
-  const { openGenerate, openExtract, openCrop, openEditAudio } = modals;
-
-  const handleCropCreateImages = useCallback(
-    (result: CropCreateResult) => {
-      if (!modals.crop.image) return;
-      buildCropImages(result, modals.crop.image, modals.crop.spreadId, retouchSpreads, actions);
-    },
-    [modals.crop.image, modals.crop.spreadId, retouchSpreads, actions]
-  );
+  const { openGenerate, openEdit, openExtract, openEditAudio } = modals;
 
   const handleExtractCreateImages = useCallback(
     (results: ExtractResult[]) => {
@@ -820,12 +811,13 @@ export function ObjectsMainView({
         context={{
           ...context,
           onGenerateImage: () => openGenerate(context.item),
+          onEditImage: () => openEdit(context.item),
           onExtractImage: () => openExtract(context.item),
-          onCropImage: () => openCrop(context.item),
+          onClone: () => handleDuplicateItem("image", context.item.id),
         }}
       />
     ),
-    [openGenerate, openExtract, openCrop]
+    [openGenerate, openEdit, openExtract, handleDuplicateItem]
   );
 
   const { cloneRawImage, cloneRawTextbox } = useCloneRaw(retouchSpreads, selectedSpreadId, actions);
@@ -835,13 +827,11 @@ export function ObjectsMainView({
       <ObjectsRawImageToolbar
         context={{
           ...context,
-          onSplitImage: () => openExtract(context.item, "layering"),
-          onCropImage: () => openCrop(context.item),
           onClone: () => cloneRawImage(context.item as SpreadImage),
         }}
       />
     ),
-    [openExtract, openCrop, cloneRawImage]
+    [cloneRawImage]
   );
 
   const renderRetouchTextToolbar = useCallback(
@@ -1028,11 +1018,21 @@ export function ObjectsMainView({
       />
 
       {modals.generate.imageId && (
-        <RetouchEditImageModal
+        <RetouchGenerateImageModal
           open={modals.generate.open}
           onOpenChange={modals.closeGenerate}
           spreadId={modals.generate.spreadId}
           imageId={modals.generate.imageId}
+        />
+      )}
+
+      {modals.edit.imageId && (
+        <RetouchEditImageModal
+          open={modals.edit.open}
+          onOpenChange={modals.closeEdit}
+          spreadId={modals.edit.spreadId}
+          imageId={modals.edit.imageId}
+          enabledTools={SPACE_TOOL_MATRIX.object.edit}
         />
       )}
 
@@ -1042,6 +1042,7 @@ export function ObjectsMainView({
           onOpenChange={modals.closeExtract}
           image={modals.extract.image}
           initialTab={modals.extract.initialTab}
+          enabledTabs={SPACE_TOOL_MATRIX.object.extract}
           onCreateImages={handleExtractCreateImages}
           detectContext={
             modals.extract.image.visual_description?.trim() && snapshotId
@@ -1052,15 +1053,6 @@ export function ObjectsMainView({
               : undefined
           }
           backgroundRemoveCandidates={backgroundRemoveCandidates}
-        />
-      )}
-
-      {modals.crop.image && (
-        <CropImageModal
-          open={modals.crop.open}
-          onOpenChange={modals.closeCrop}
-          image={modals.crop.image}
-          onCreateImages={handleCropCreateImages}
         />
       )}
 

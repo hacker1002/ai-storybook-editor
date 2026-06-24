@@ -31,6 +31,7 @@ import {
   resolveSourceImageUrl,
   uploadEphemeralToStorage,
 } from "./extract-image-modal-utils";
+import { resolveInitialKey } from "../image-tools-space-matrix";
 import { useSegmentTabState, type SegmentTabHandle } from "./segment-tab";
 import { useLayersTabState, type LayersTabHandle } from "./layers-tab";
 import { useObjectsTabState } from "./objects-tab";
@@ -51,6 +52,9 @@ export interface ExtractImageModalProps {
   image: SpreadImage;
   onCreateImages: (results: ExtractResult[]) => void;
   initialTab?: ExtractTabKey;
+  /** Per-space tab availability (matrix gate #1). `undefined` → all EXTRACT_TABS (legacy).
+   *  Tabs absent from the list are hidden; present-but-unbuilt tabs render as "Coming soon". */
+  enabledTabs?: ExtractTabKey[];
   yieldedFrom?: { parentId: string; onParentForcePop: () => void };
   /** Objects tab Detect context (visualDescription + snapshotId). Absent → Detect disabled. */
   detectContext?: { visualDescription: string; snapshotId: string };
@@ -65,12 +69,19 @@ export function ExtractImageModal({
   image,
   onCreateImages,
   initialTab,
+  enabledTabs,
   yieldedFrom,
   detectContext,
   backgroundRemoveCandidates = [],
 }: ExtractImageModalProps) {
+  // Landing tab ∈ (available-in-space ∩ built); falls back to leftmost available (coming-soon)
+  // when a space has no built tab (e.g. raw Extract). Plain const → seeds useState + feeds
+  // resetState. The header renders the FULL EXTRACT_TABS registry — tabs gated off by
+  // `enabledTabs` show disabled, never hidden.
+  const resolvedInitialTab = resolveInitialKey(EXTRACT_TABS, enabledTabs, initialTab, DEFAULT_EXTRACT_TAB);
+
   // ── State ──────────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<ExtractTabKey>(initialTab ?? DEFAULT_EXTRACT_TAB);
+  const [activeTab, setActiveTab] = useState<ExtractTabKey>(resolvedInitialTab);
   const [resultsByTab, setResultsByTab] = useState<
     Partial<Record<ExtractTabKey, ExtractResult[]>>
   >({});
@@ -160,7 +171,7 @@ export function ExtractImageModal({
   // ── State reset / close ──────────────────────────────────────────────────────
   const resetState = useCallback(() => {
     abortRef.current?.abort();
-    setActiveTab(initialTab ?? DEFAULT_EXTRACT_TAB);
+    setActiveTab(resolvedInitialTab);
     setResultsByTab({});
     setSelectedResultId(null);
     setIsProcessing(false);
@@ -169,7 +180,7 @@ export function ExtractImageModal({
     layersHandle.reset();
     objectsHandle.reset();
     backgroundHandle.reset();
-  }, [initialTab, segmentHandle, layersHandle, objectsHandle, backgroundHandle]);
+  }, [resolvedInitialTab, segmentHandle, layersHandle, objectsHandle, backgroundHandle]);
 
   const handleClose = useCallback(() => {
     if (isBusy) {
@@ -192,15 +203,16 @@ export function ExtractImageModal({
     (tab: ExtractTabKey) => {
       if (isBusy) return;
       const contract = EXTRACT_TABS.find((t) => t.key === tab);
-      if (!contract?.enabled) {
-        log.debug("handleTabChange", "ignored — disabled tab", { tab });
+      const availableInSpace = !enabledTabs || enabledTabs.includes(tab);
+      if (!availableInSpace || !contract?.enabled) {
+        log.debug("handleTabChange", "ignored — coming-soon tab", { tab });
         return;
       }
       log.debug("handleTabChange", "switch tab", { from: activeTab, to: tab });
       setActiveTab(tab);
       setSelectedResultId(null);
     },
-    [isBusy, activeTab],
+    [isBusy, enabledTabs, activeTab],
   );
 
   const handleRunExtract = useCallback(async () => {
@@ -405,6 +417,7 @@ export function ExtractImageModal({
         <ExtractImageModalHeader
           activeTab={activeTab}
           tabs={EXTRACT_TABS}
+          enabledKeys={enabledTabs}
           onTabChange={handleTabChange}
           onClose={handleClose}
           disabled={isBusy}

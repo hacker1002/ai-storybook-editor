@@ -531,9 +531,13 @@ export interface StartEditTaskParams extends ImageTaskTarget {
 
 /** Push an externally-uploaded image (no AI) into the target illustrations[] (type='uploaded'). */
 export interface AddUploadedIllustrationParams {
-  entityKey: string;   // spread id (illustration_image entity)
-  childKey: string;    // raw image id
+  entityKey: string;   // spread id
+  childKey: string;    // image id (raw image for illustration_image; spread image for retouch_image)
   mediaUrl: string;    // public storage URL (already uploaded + normalized)
+  /** Target collection (toolbar-unify: GenerateImageModal upload now runs in both spaces).
+   *  Defaults to 'illustration_image' (raw_images) for backward compat; Objects passes
+   *  'retouch_image' so the upload lands in illustration.spreads[].images[]. */
+  entityType?: ImageTaskEntityType;
 }
 
 export interface ImageTaskSlice {

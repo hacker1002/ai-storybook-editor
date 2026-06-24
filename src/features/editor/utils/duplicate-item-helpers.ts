@@ -1,6 +1,5 @@
 // duplicate-item-helpers.ts — Shared pure helpers for the duplicate-item feature.
-// Used by SpreadsMainView and ObjectsMainView handleDuplicateItem, handleCropCreateImages,
-// handleSplitCreateImages handlers.
+// Used by SpreadsMainView and ObjectsMainView handleDuplicateItem + the extract-image builders.
 
 import { LAYER_CONFIG } from "@/constants/spread-constants";
 import { createLogger } from "@/utils/logger";

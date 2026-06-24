@@ -25,6 +25,7 @@ import {
   useStages,
   useImageTasksForChild,
 } from "@/stores/snapshot-store";
+import type { ImageTaskEntityType } from "@/stores/snapshot-store/types";
 import { useCurrentBook } from "@/stores/book-store";
 import { useReferenceImagePicker } from "@/features/editor/hooks/use-reference-image-picker";
 import {
@@ -69,6 +70,14 @@ interface GenerateImageModalProps {
   spreadId: string;
   image: SpreadImage;
   onUpdateImage: (updates: Partial<SpreadImage>) => void;
+  /** Per-space mode availability (matrix gate). `undefined` → both modes (legacy). Modes not in
+   *  the list render disabled ("Coming soon") in the header; the modal lands on the leftmost
+   *  ENABLED mode (e.g. Object = `['upload']` → starts on Upload, Generate shown but inert), so
+   *  the generate machinery is never reachable from the UI. */
+  enabledModes?: GenerateModalMode[];
+  /** Target section for the Upload-mode prepend. Defaults to 'illustration_image' (raw_images,
+   *  spreads space); Objects passes 'retouch_image' so uploads land in the retouch image. */
+  uploadEntityType?: ImageTaskEntityType;
 }
 
 const ACCEPTED_UPLOAD_TYPES = UPLOAD.accept.split(",");
@@ -79,9 +88,20 @@ export function GenerateImageModal({
   spreadId,
   image,
   onUpdateImage,
+  enabledModes,
+  uploadEntityType = "illustration_image",
 }: GenerateImageModalProps) {
+  // Landing mode = leftmost available mode (TABS order: generate, upload). Plain const (cheap)
+  // so it can seed useState below + feed resetState. `undefined`/empty → 'generate' (legacy).
+  const defaultMode: GenerateModalMode =
+    !enabledModes || enabledModes.length === 0
+      ? "generate"
+      : enabledModes.includes("generate")
+        ? "generate"
+        : enabledModes[0];
+
   // ── Local state ──────────────────────────────────────────────────────────────
-  const [mode, setMode] = useState<GenerateModalMode>("generate");
+  const [mode, setMode] = useState<GenerateModalMode>(defaultMode);
   const [prompt, setPrompt] = useState(image.visual_description ?? "");
   const [selectedStageVariant, setSelectedStageVariant] = useState<string | null>(
     image.stage_variant ?? null,
@@ -140,7 +160,7 @@ export function GenerateImageModal({
 
   // ── State reset / close ──────────────────────────────────────────────────────
   const resetState = useCallback(() => {
-    setMode("generate");
+    setMode(defaultMode);
     setPrompt(image.visual_description ?? "");
     setSelectedStageVariant(image.stage_variant ?? null);
     setEdgeTreatment(DEFAULT_EDGE_TREATMENT);
@@ -148,7 +168,7 @@ export function GenerateImageModal({
     setZoomLevel(ZOOM.default);
     setIsUploading(false);
     generateRefs.clearImages();
-  }, [image.visual_description, image.stage_variant, generateRefs]);
+  }, [defaultMode, image.visual_description, image.stage_variant, generateRefs]);
 
   const handleClose = useCallback(() => {
     if (isProcessing || isUploading) {
@@ -306,7 +326,12 @@ export function GenerateImageModal({
           "illustrations",
         );
 
-        addUploadedIllustration({ entityKey: spreadId, childKey: image.id, mediaUrl: publicUrl });
+        addUploadedIllustration({
+          entityKey: spreadId,
+          childKey: image.id,
+          mediaUrl: publicUrl,
+          entityType: uploadEntityType,
+        });
 
         // Fixed ratio from the normalize step → canvas-aware refit (canonical helper, same path
         // as the spreads/objects image toolbars). aspect_ratio + geometry are written together.
@@ -333,7 +358,7 @@ export function GenerateImageModal({
         setIsUploading(false);
       }
     },
-    [spreadId, image.id, image.geometry, canvasAspectRatio, addUploadedIllustration, onUpdateImage],
+    [spreadId, image.id, image.geometry, canvasAspectRatio, addUploadedIllustration, onUpdateImage, uploadEntityType],
   );
 
   const handleUploadInputChange = useCallback(
@@ -402,6 +427,7 @@ export function GenerateImageModal({
           mode={mode}
           onModeChange={setMode}
           onClose={handleClose}
+          enabledModes={enabledModes}
         />
 
         <div className="flex min-h-0 flex-1">

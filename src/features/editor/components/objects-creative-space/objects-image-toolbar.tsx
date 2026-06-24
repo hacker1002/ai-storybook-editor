@@ -1,7 +1,7 @@
 // objects-image-toolbar.tsx - Floating toolbar for image items on canvas in Objects Creative Space
 "use client";
 
-import { useMemo, useRef, useCallback, useState } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,9 +14,8 @@ import {
 import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Layers, Crop, Pencil, Upload, Trash2 } from "lucide-react";
+import { Sparkles, Pencil, Layers, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { uploadImageToStorageWithNormalize, ImageTooTallError } from "@/apis/storage-api";
 import {
   useToolbarPosition,
   type BaseSpread,
@@ -33,14 +32,11 @@ import {
 import { ItemTagsSection } from "@/features/editor/components/objects-creative-space/item-tags-section";
 import {
   ASPECT_RATIOS,
-  DEFAULT_ASPECT_RATIO,
   type AspectRatio,
 } from "@/constants/aspect-ratio-constants";
 import {
   calculateGeometryForRatio,
   detectRatioFromGeometry,
-  findClosestRatio,
-  getImageNaturalDimensions,
 } from "@/utils/aspect-ratio-utils";
 
 const log = createLogger("Editor", "ObjectsImageToolbar");
@@ -55,16 +51,15 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
   context,
 }: ObjectsImageToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const canvasAspectRatio = useCanvasAspectRatio();
   const {
     item,
     onUpdate,
     onDelete,
     onGenerateImage,
+    onEditImage,
     onExtractImage,
-    onCropImage,
+    onClone,
     selectedGeometry,
     canvasRef,
   } = context;
@@ -139,6 +134,20 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     onUpdate({ geometry: { ...geometry, rotation: 0 } });
   }, [geometry, onUpdate]);
 
+  const handleGenerate = useCallback(() => {
+    log.info("handleGenerate", "open generate modal", { itemId: item.id });
+    onGenerateImage();
+  }, [onGenerateImage, item.id]);
+
+  const handleEdit = useCallback(() => {
+    if (onEditImage) {
+      log.info("handleEdit", "open edit modal", { itemId: item.id });
+      onEditImage();
+    } else {
+      toast.info("Edit feature not available");
+    }
+  }, [onEditImage, item.id]);
+
   const handleExtract = useCallback(() => {
     if (onExtractImage) {
       onExtractImage();
@@ -147,91 +156,14 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
     }
   }, [onExtractImage]);
 
-  const handleCrop = useCallback(() => {
-    if (onCropImage) {
-      onCropImage();
+  const handleDuplicate = useCallback(() => {
+    if (onClone) {
+      log.info("handleDuplicate", "duplicate retouch image", { itemId: item.id });
+      onClone();
     } else {
-      toast.info("Crop feature not available");
+      toast.info("Duplicate feature not available");
     }
-  }, [onCropImage]);
-
-  const handleUploadClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      // Reset input so same file can be re-selected
-      e.target.value = "";
-
-      setIsUploading(true);
-      log.info("ObjectsImageToolbar", "upload started", {
-        name: file.name,
-        size: file.size,
-      });
-
-      try {
-        const uploadResult = await uploadImageToStorageWithNormalize(file, "objects");
-        const { publicUrl } = uploadResult;
-
-        // Server-authoritative ratio for exact-match + slow-path; fallback client dim-read for gif/svg passthrough
-        const ratio: AspectRatio = uploadResult.ratio !== undefined
-          ? uploadResult.ratio
-          : await getImageNaturalDimensions(file)
-              .then(({ width, height }) => findClosestRatio(width, height))
-              .catch(() => DEFAULT_ASPECT_RATIO);
-
-        log.debug("ObjectsImageToolbar", "upload ratio resolved", {
-          ratio,
-          serverProvided: uploadResult.ratio !== undefined,
-        });
-
-        // Update media_url + add to illustrations as selected so canvas renders it immediately
-        // (EditableImage priority: final_hires > illustrations[selected] > illustrations[0] > media_url)
-        const existingIllustrations = (item.illustrations ?? []).map((i) => ({
-          ...i,
-          is_selected: false,
-        }));
-
-        const updates: Parameters<typeof onUpdate>[0] = {
-          media_url: publicUrl,
-          aspect_ratio: ratio,
-          illustrations: [
-            ...existingIllustrations,
-            {
-              media_url: publicUrl,
-              created_time: new Date().toISOString(),
-              is_selected: true,
-            },
-          ],
-        };
-
-        // Adjust geometry to match the new ratio
-        updates.geometry = calculateGeometryForRatio(geometry, ratio, canvasAspectRatio, clampGeometry);
-
-        onUpdate(updates);
-        toast.success("Image uploaded");
-        // Close toolbar by deselecting via canvas background click
-        canvasRef.current?.click();
-        log.info("ObjectsImageToolbar", "upload success", { url: publicUrl, ratio });
-      } catch (err) {
-        if (err instanceof ImageTooTallError) {
-          toast.error("Image too tall. Minimum supported ratio is 9:16. Please crop and try again.");
-          log.warn("ObjectsImageToolbar", "upload blocked: too tall", { srcRatio: err.srcRatio });
-        } else {
-          const message = err instanceof Error ? err.message : "Upload failed";
-          toast.error(message);
-          log.error("ObjectsImageToolbar", "upload failed", { error: message });
-        }
-      } finally {
-        setIsUploading(false);
-      }
-    },
-    [geometry, onUpdate]
-  );
+  }, [onClone, item.id]);
 
   // === Positioning ===
 
@@ -300,25 +232,28 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
           onRotationReset={handleRotationReset}
         />
 
-        {/* === FOOTER === */}
+        {/* === FOOTER === Generate · Edit · Extract · Duplicate | Delete (matrix unify) */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <div className="flex items-center gap-1">
+            <ToolbarIconButton
+              icon={Sparkles}
+              label="Generate"
+              onClick={handleGenerate}
+            />
+            <ToolbarIconButton
+              icon={Pencil}
+              label="Edit image"
+              onClick={handleEdit}
+            />
             <ToolbarIconButton
               icon={Layers}
               label="Extract"
               onClick={handleExtract}
             />
-            <ToolbarIconButton icon={Crop} label="Crop" onClick={handleCrop} />
             <ToolbarIconButton
-              icon={Pencil}
-              label="Edit image"
-              onClick={onGenerateImage}
-            />
-            <ToolbarIconButton
-              icon={Upload}
-              label={isUploading ? "Uploading..." : "Upload image"}
-              onClick={handleUploadClick}
-              disabled={isUploading}
+              icon={Copy}
+              label="Duplicate"
+              onClick={handleDuplicate}
             />
           </div>
           <ToolbarIconButton
@@ -326,13 +261,6 @@ export function ObjectsImageToolbar<TSpread extends BaseSpread>({
             label="Delete image"
             onClick={onDelete}
             variant="destructive"
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-            className="hidden"
-            onChange={handleFileChange}
           />
         </div>
       </div>

@@ -17,6 +17,9 @@ const log = createLogger('Editor', 'ExtractImageModalHeader');
 interface ExtractImageModalHeaderProps {
   activeTab: ExtractTabKey;
   tabs: ExtractTabContract[];
+  /** Per-space availability (matrix gate #1). `undefined` → all available (legacy). Tabs NOT in
+   *  this list render disabled + "Coming soon" — never hidden (unified with unbuilt tabs). */
+  enabledKeys?: ExtractTabKey[];
   onTabChange: (tab: ExtractTabKey) => void;
   onClose: () => void;
   /** processing || committing — blocks tab switching + the close button. */
@@ -26,23 +29,29 @@ interface ExtractImageModalHeaderProps {
 export function ExtractImageModalHeader({
   activeTab,
   tabs,
+  enabledKeys,
   onTabChange,
   onClose,
   disabled,
 }: ExtractImageModalHeaderProps) {
-  // ←/→ navigates only among ENABLED tabs (disabled registry slots are skipped).
+  // A tab is SELECTABLE only when available-in-space AND built; otherwise it shows as a disabled
+  // "Coming soon" tab (never hidden — unified 2-state model across all image modals).
+  const isAvailable = (key: ExtractTabKey) => enabledKeys === undefined || enabledKeys.includes(key);
+  const isSelectable = (t: ExtractTabContract) => isAvailable(t.key) && t.enabled;
+
+  // ←/→ navigates only among SELECTABLE tabs (coming-soon slots are skipped).
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const enabled = tabs.filter((t) => t.enabled);
-    const curIdx = enabled.findIndex((t) => t.key === activeTab);
+    const selectable = tabs.filter(isSelectable);
+    const curIdx = selectable.findIndex((t) => t.key === activeTab);
     if (curIdx === -1) return;
     const nextIdx =
       e.key === 'ArrowLeft'
         ? Math.max(0, curIdx - 1)
-        : Math.min(enabled.length - 1, curIdx + 1);
+        : Math.min(selectable.length - 1, curIdx + 1);
     if (nextIdx === curIdx) return;
-    const nextKey = enabled[nextIdx].key;
+    const nextKey = selectable[nextIdx].key;
     log.debug('handleKeyDown', 'arrow navigate tab', { from: activeTab, to: nextKey });
     onTabChange(nextKey);
     const tabEls = e.currentTarget
@@ -71,7 +80,8 @@ export function ExtractImageModalHeader({
       >
         {tabs.map(({ key, label, icon: Icon, enabled }) => {
           const isActive = key === activeTab;
-          const isDisabled = !enabled || disabled;
+          const comingSoon = !isAvailable(key) || !enabled; // gated-off (matrix) OR unbuilt
+          const isDisabled = comingSoon || disabled;
           return (
             <button
               key={key}
@@ -79,7 +89,7 @@ export function ExtractImageModalHeader({
               role="tab"
               aria-selected={isActive}
               aria-disabled={isDisabled}
-              title={!enabled ? 'Coming soon' : undefined}
+              title={comingSoon ? 'Coming soon' : undefined}
               tabIndex={isActive ? 0 : -1}
               onClick={() => {
                 if (isDisabled || key === activeTab) return;
@@ -92,8 +102,8 @@ export function ExtractImageModalHeader({
                 isActive
                   ? 'bg-white font-semibold text-[#0a0d18] shadow-sm'
                   : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
-                !enabled && 'cursor-not-allowed opacity-40 hover:text-[var(--swap-modal-text-muted)]',
-                enabled && disabled && 'cursor-not-allowed',
+                comingSoon && 'cursor-not-allowed opacity-40 hover:text-[var(--swap-modal-text-muted)]',
+                !comingSoon && disabled && 'cursor-not-allowed',
               )}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />

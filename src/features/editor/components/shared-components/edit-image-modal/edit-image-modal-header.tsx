@@ -18,6 +18,9 @@ interface EditImageModalHeaderProps {
   title: string;
   activeTool: EditToolKey;
   tools: EditToolContract[];
+  /** Per-space availability (matrix gate #1). `undefined` → all available (legacy). Tools NOT
+   *  in this list render disabled + "Coming soon" — never hidden (unified with unbuilt tools). */
+  enabledKeys?: EditToolKey[];
   onToolChange: (tool: EditToolKey) => void;
   onClose: () => void;
   /** isProcessing — blocks tool switching + the close button. */
@@ -28,21 +31,27 @@ export function EditImageModalHeader({
   title,
   activeTool,
   tools,
+  enabledKeys,
   onToolChange,
   onClose,
   disabled,
 }: EditImageModalHeaderProps) {
-  // ←/→ navigates only among ENABLED tools (disabled registry slots are skipped).
+  // A tool is SELECTABLE only when available-in-space AND built; otherwise it shows as a
+  // disabled "Coming soon" tab (never hidden — unified 2-state model across all image modals).
+  const isAvailable = (key: EditToolKey) => enabledKeys === undefined || enabledKeys.includes(key);
+  const isSelectable = (t: EditToolContract) => isAvailable(t.key) && t.enabled;
+
+  // ←/→ navigates only among SELECTABLE tools (coming-soon slots are skipped).
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const enabled = tools.filter((t) => t.enabled);
-    const curIdx = enabled.findIndex((t) => t.key === activeTool);
+    const selectable = tools.filter(isSelectable);
+    const curIdx = selectable.findIndex((t) => t.key === activeTool);
     if (curIdx === -1) return;
     const nextIdx =
-      e.key === 'ArrowLeft' ? Math.max(0, curIdx - 1) : Math.min(enabled.length - 1, curIdx + 1);
+      e.key === 'ArrowLeft' ? Math.max(0, curIdx - 1) : Math.min(selectable.length - 1, curIdx + 1);
     if (nextIdx === curIdx) return;
-    const nextKey = enabled[nextIdx].key;
+    const nextKey = selectable[nextIdx].key;
     log.debug('handleKeyDown', 'arrow navigate tool', { from: activeTool, to: nextKey });
     onToolChange(nextKey);
     const tabEls = e.currentTarget
@@ -71,7 +80,8 @@ export function EditImageModalHeader({
       >
         {tools.map(({ key, label, icon: Icon, enabled }) => {
           const isActive = key === activeTool;
-          const isDisabled = !enabled || disabled;
+          const comingSoon = !isAvailable(key) || !enabled; // gated-off (matrix) OR unbuilt
+          const isDisabled = comingSoon || disabled;
           return (
             <button
               key={key}
@@ -79,7 +89,7 @@ export function EditImageModalHeader({
               role="tab"
               aria-selected={isActive}
               aria-disabled={isDisabled}
-              title={!enabled ? 'Coming soon' : undefined}
+              title={comingSoon ? 'Coming soon' : undefined}
               tabIndex={isActive ? 0 : -1}
               onClick={() => {
                 if (isDisabled || key === activeTool) return;
@@ -92,8 +102,8 @@ export function EditImageModalHeader({
                 isActive
                   ? 'bg-white font-semibold text-[#0a0d18] shadow-sm'
                   : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
-                !enabled && 'cursor-not-allowed opacity-40 hover:text-[var(--swap-modal-text-muted)]',
-                enabled && disabled && 'cursor-not-allowed',
+                comingSoon && 'cursor-not-allowed opacity-40 hover:text-[var(--swap-modal-text-muted)]',
+                !comingSoon && disabled && 'cursor-not-allowed',
               )}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />

@@ -8,7 +8,10 @@ import {
   EditableTextbox,
   EditableShape,
   GenerateImageModal,
+  ExtractImageModal,
+  SPACE_TOOL_MATRIX,
 } from '@/features/editor/components/shared-components';
+import type { ExtractResult } from '@/features/editor/components/shared-components';
 import {
   cloneItemWithNewId,
   nextTopZInTier,
@@ -31,6 +34,7 @@ import { createLogger } from '@/utils/logger';
 import { useInteractionLayerContext } from '@/features/editor/contexts/interaction-layer-provider';
 import { useGlobalHotkey } from '@/features/editor/contexts/use-global-hotkey';
 import { SpreadsImageToolbar } from './spreads-image-toolbar';
+import { IllustrationEditImageModal } from './illustration-edit-image-modal';
 import { SpreadsTextToolbar } from './spreads-text-toolbar';
 import { SpreadsShapeToolbar } from './spreads-shape-toolbar';
 import { SpreadsPageToolbar } from './spreads-page-toolbar';
@@ -324,6 +328,39 @@ export function SpreadsMainView({
     [selectedSpreadId, handleSpreadItemAction]
   );
 
+  // === Edit image modal state (matrix unify — net-new for illustration) ===
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editModalImageId, setEditModalImageId] = useState<string | null>(null);
+
+  const openEditModal = useCallback((image: SpreadImage) => {
+    setEditModalImageId(image.id);
+    setEditModalOpen(true);
+  }, []);
+
+  // === Extract image modal state (matrix unify — net-new for illustration) ===
+  const [extractModalOpen, setExtractModalOpen] = useState(false);
+  const [extractModalImageId, setExtractModalImageId] = useState<string | null>(null);
+
+  // Derive live source image from store (consistent with generateModalImage).
+  const extractModalImage = useMemo(() => {
+    if (!extractModalImageId) return null;
+    const spread = illustrationSpreads.find((s) => s.id === selectedSpreadId);
+    return spread?.raw_images?.find((img) => img.id === extractModalImageId) ?? null;
+  }, [extractModalImageId, illustrationSpreads, selectedSpreadId]);
+
+  const openExtractModal = useCallback((image: SpreadImage) => {
+    setExtractModalImageId(image.id);
+    setExtractModalOpen(true);
+  }, []);
+
+  // Raw Extract tabs are all coming-soon (matrix raw.extract = crop + get_text, both deferred),
+  // so nothing is ever committed. Placeholder no-op + warn until a raw extract builder ships (Q3).
+  const handleExtractCreateImages = useCallback((results: ExtractResult[]) => {
+    log.warn('handleExtractCreateImages', 'illustration extract not wired yet — ignored', {
+      count: results.length,
+    });
+  }, []);
+
   // === Page & deselect handlers ===
 
   const handlePageSelect = useCallback(
@@ -413,11 +450,13 @@ export function SpreadsMainView({
         context={{
           ...context,
           onGenerateImage: () => openGenerateModal(context.item),
+          onEditImage: () => openEditModal(context.item),
+          onExtractImage: () => openExtractModal(context.item),
           onClone: () => handleDuplicateItem('raw_image', context.item.id),
         }}
       />
     ),
-    [openGenerateModal, handleDuplicateItem]
+    [openGenerateModal, openEditModal, openExtractModal, handleDuplicateItem]
   );
 
   const renderIllustrationTextToolbar = useCallback(
@@ -568,9 +607,30 @@ export function SpreadsMainView({
           onOpenChange={setGenerateModalOpen}
           spreadId={selectedSpreadId}
           image={generateModalImage}
+          enabledModes={SPACE_TOOL_MATRIX.raw.generate}
           onUpdateImage={(updates) => {
             handleGenerateImageUpdate(generateModalImage.id, updates);
           }}
+        />
+      )}
+
+      {editModalImageId && (
+        <IllustrationEditImageModal
+          open={editModalOpen}
+          onOpenChange={setEditModalOpen}
+          spreadId={selectedSpreadId}
+          imageId={editModalImageId}
+          enabledTools={SPACE_TOOL_MATRIX.raw.edit}
+        />
+      )}
+
+      {extractModalImage && (
+        <ExtractImageModal
+          open={extractModalOpen}
+          onOpenChange={setExtractModalOpen}
+          image={extractModalImage}
+          enabledTabs={SPACE_TOOL_MATRIX.raw.extract}
+          onCreateImages={handleExtractCreateImages}
         />
       )}
     </>

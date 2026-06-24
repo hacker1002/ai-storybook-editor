@@ -416,11 +416,11 @@ export interface ImageToolbarContext<TSpread extends BaseSpread>
   extends ImageItemContext<TSpread>,
     BaseToolbarContext {
   onGenerateImage: () => void;
-  /** Retouch image: open the consolidated ExtractImageModal (Segments + Layers). */
+  /** Open the consolidated EditImageModal (Inpaint / Outpaint / Upscale / Remove BG / Erasor).
+   *  Added in the per-space toolbar unify (matrix); space passes `enabledTools`. */
+  onEditImage?: () => void;
+  /** Open the consolidated ExtractImageModal (Objects / Segments / Layers / Background). */
   onExtractImage?: () => void;
-  /** Raw image: open ExtractImageModal on the Layers tab (split). */
-  onSplitImage?: () => void;
-  onCropImage?: () => void;
   onReplaceImage: () => void;
   onClone?: () => void;
   /** Trigger inline edit mode for the selected image — set by parent via editingItemId state.

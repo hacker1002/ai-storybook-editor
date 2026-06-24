@@ -1,9 +1,9 @@
 // spreads-image-toolbar.tsx - Floating toolbar for illustration image items in Spreads Creative Space
-// Simpler than ObjectsImageToolbar: no MediaIdentitySection, no Split/Crop.
-// Provides: aspect ratio display, geometry editing, and footer actions (Generate, Upload, Delete).
+// Footer unified with Objects (matrix): Generate · Edit · Extract · Duplicate | Delete.
+// Upload is no longer a toolbar button — it lives in the Generate modal's Upload mode.
 "use client";
 
-import { useMemo, useRef, useCallback, useState } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,9 +14,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Sparkles, Upload, Trash2, Copy } from "lucide-react";
+import { Sparkles, Pencil, Layers, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { uploadImageToStorageWithNormalize, ImageTooTallError } from "@/apis/storage-api";
 import {
   useToolbarPosition,
   type BaseSpread,
@@ -31,14 +30,11 @@ import {
 } from "@/features/editor/components/shared-components";
 import {
   ASPECT_RATIOS,
-  DEFAULT_ASPECT_RATIO,
   type AspectRatio,
 } from "@/constants/aspect-ratio-constants";
 import {
   calculateGeometryForRatio,
   detectRatioFromGeometry,
-  findClosestRatio,
-  getImageNaturalDimensions,
 } from "@/utils/aspect-ratio-utils";
 
 const log = createLogger("Editor", "SpreadsImageToolbar");
@@ -53,8 +49,6 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
   context,
 }: SpreadsImageToolbarProps<TSpread>) {
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const canvasAspectRatio = useCanvasAspectRatio();
 
   const {
@@ -62,6 +56,8 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
     onUpdate,
     onDelete,
     onGenerateImage,
+    onEditImage,
+    onExtractImage,
     onClone,
     selectedGeometry,
     canvasRef,
@@ -105,80 +101,32 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
     [geometry, onUpdate]
   );
 
-  const handleUploadClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
+  const handleEdit = useCallback(() => {
+    if (onEditImage) {
+      log.info("handleEdit", "open edit modal", { itemId: item.id });
+      onEditImage();
+    } else {
+      toast.info("Edit feature not available");
+    }
+  }, [onEditImage, item.id]);
 
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const handleExtract = useCallback(() => {
+    if (onExtractImage) {
+      log.info("handleExtract", "open extract modal", { itemId: item.id });
+      onExtractImage();
+    } else {
+      toast.info("Extract feature not available");
+    }
+  }, [onExtractImage, item.id]);
 
-      // Reset input so same file can be re-selected
-      e.target.value = "";
-
-      setIsUploading(true);
-      log.info("SpreadsImageToolbar", "upload started", {
-        name: file.name,
-        size: file.size,
-      });
-
-      try {
-        const uploadResult = await uploadImageToStorageWithNormalize(file, "illustrations");
-        const { publicUrl } = uploadResult;
-
-        // Server-authoritative ratio for exact-match + slow-path; fallback client dim-read for gif/svg passthrough
-        const ratio: AspectRatio = uploadResult.ratio !== undefined
-          ? uploadResult.ratio
-          : await getImageNaturalDimensions(file)
-              .then(({ width, height }) => findClosestRatio(width, height))
-              .catch(() => DEFAULT_ASPECT_RATIO);
-
-        log.debug("SpreadsImageToolbar", "upload ratio resolved", {
-          ratio,
-          serverProvided: uploadResult.ratio !== undefined,
-        });
-
-        // Deselect all existing illustrations, add new one as selected
-        const existingIllustrations = (item.illustrations ?? []).map((i) => ({
-          ...i,
-          is_selected: false,
-        }));
-
-        const newGeometry = calculateGeometryForRatio(geometry, ratio, canvasAspectRatio, clampGeometry);
-        onUpdate({
-          media_url: publicUrl,
-          aspect_ratio: ratio,
-          geometry: newGeometry,
-          illustrations: [
-            ...existingIllustrations,
-            {
-              media_url: publicUrl,
-              created_time: new Date().toISOString(),
-              is_selected: true,
-            },
-          ],
-        });
-
-        toast.success("Image uploaded");
-        // Close toolbar by deselecting via canvas background click
-        canvasRef.current?.click();
-        log.info("SpreadsImageToolbar", "upload success", { url: publicUrl, ratio });
-      } catch (err) {
-        if (err instanceof ImageTooTallError) {
-          toast.error("Image too tall. Minimum supported ratio is 9:16. Please crop and try again.");
-          log.warn("SpreadsImageToolbar", "upload blocked: too tall", { srcRatio: err.srcRatio });
-        } else {
-          const message = err instanceof Error ? err.message : "Upload failed";
-          toast.error(message);
-          log.error("SpreadsImageToolbar", "upload failed", { error: message });
-        }
-      } finally {
-        setIsUploading(false);
-      }
-    },
-    [geometry, item.illustrations, onUpdate, canvasRef]
-  );
+  const handleDuplicate = useCallback(() => {
+    if (onClone) {
+      log.info("handleDuplicate", "duplicate illustration image", { itemId: item.id });
+      onClone();
+    } else {
+      toast.info("Duplicate feature not available");
+    }
+  }, [onClone, item.id]);
 
   // === Positioning ===
 
@@ -241,7 +189,7 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
           onGeometryChange={handleGeometryChange}
         />
 
-        {/* Footer: Generate + Upload on the left, Delete on the right */}
+        {/* === FOOTER === Generate · Edit · Extract · Duplicate | Delete (matrix unify) */}
         <div className="flex items-center justify-between gap-1 border-t border-border pt-2">
           <div className="flex items-center gap-1">
             <ToolbarIconButton
@@ -250,18 +198,20 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
               onClick={onGenerateImage}
             />
             <ToolbarIconButton
-              icon={Upload}
-              label={isUploading ? "Uploading..." : "Upload image"}
-              onClick={handleUploadClick}
-              disabled={isUploading}
+              icon={Pencil}
+              label="Edit image"
+              onClick={handleEdit}
             />
-            {onClone && (
-              <ToolbarIconButton
-                icon={Copy}
-                label="Clone image"
-                onClick={onClone}
-              />
-            )}
+            <ToolbarIconButton
+              icon={Layers}
+              label="Extract"
+              onClick={handleExtract}
+            />
+            <ToolbarIconButton
+              icon={Copy}
+              label="Duplicate"
+              onClick={handleDuplicate}
+            />
           </div>
           <ToolbarIconButton
             icon={Trash2}
@@ -270,15 +220,6 @@ export function SpreadsImageToolbar<TSpread extends BaseSpread>({
             variant="destructive"
           />
         </div>
-
-        {/* Hidden file input for upload */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-          className="hidden"
-          onChange={handleFileChange}
-        />
       </div>
     </TooltipProvider>
   );

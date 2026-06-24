@@ -383,13 +383,15 @@ export const createImageTaskSlice: StateCreator<
       });
   },
 
-  addUploadedIllustration: ({ entityKey, childKey, mediaUrl }) => {
-    // No AI / no task — user upload pushed straight into the illustration_image's illustrations[].
-    log.info('addUploadedIllustration', 'prepend uploaded', { entityKey, childKey });
+  addUploadedIllustration: ({ entityKey, childKey, mediaUrl, entityType = 'illustration_image' }) => {
+    // No AI / no task — user upload pushed straight into the target image's illustrations[].
+    // entityType routes the lookup: 'illustration_image' → raw_images (spreads space),
+    // 'retouch_image' → illustration.spreads[].images (objects space).
+    log.info('addUploadedIllustration', 'prepend uploaded', { entityKey, childKey, entityType });
     set((state) => {
-      const illustrations = findIllustrations(state, 'illustration_image', entityKey, childKey);
+      const illustrations = findIllustrations(state, entityType, entityKey, childKey);
       if (!illustrations) {
-        log.warn('addUploadedIllustration', 'illustrations not found', { entityKey, childKey });
+        log.warn('addUploadedIllustration', 'illustrations not found', { entityKey, childKey, entityType });
         return;
       }
       prependIllustration(illustrations, mediaUrl, 'uploaded');

@@ -14,6 +14,10 @@ interface GenerateImageModalHeaderProps {
   mode: GenerateModalMode;
   onModeChange: (mode: GenerateModalMode) => void;
   onClose: () => void;
+  /** Per-space availability (matrix gate). `undefined` → both modes active (legacy). Modes NOT
+   *  in this list still render — disabled + "Coming soon" — mirroring the Edit/Extract tab
+   *  headers (a gated-off tool stays visible, just inert). */
+  enabledModes?: GenerateModalMode[];
 }
 
 interface TabDef {
@@ -32,19 +36,30 @@ export function GenerateImageModalHeader({
   mode,
   onModeChange,
   onClose,
+  enabledModes,
 }: GenerateImageModalHeaderProps) {
+  // Matrix gate (#1): a mode is enabled if available in this space (undefined → all enabled).
+  // Disabled modes still render (greyed + "Coming soon"), like the Edit/Extract tab headers.
+  const isModeEnabled = (id: GenerateModalMode) =>
+    enabledModes === undefined || enabledModes.includes(id);
+
+  // ←/→ navigates only among ENABLED modes (disabled modes are skipped).
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    const currentIndex = TABS.findIndex((t) => t.id === mode);
-    let next = currentIndex;
-    if (e.key === 'ArrowLeft') next = Math.max(0, currentIndex - 1);
-    else if (e.key === 'ArrowRight') next = Math.min(TABS.length - 1, currentIndex + 1);
-    else return;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    if (next === currentIndex) return;
-    log.debug('handleKeyDown', 'arrow navigate mode', { from: TABS[currentIndex].id, to: TABS[next].id });
-    onModeChange(TABS[next].id);
-    const tabEls = e.currentTarget.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]');
-    const sibling = tabEls?.[next];
+    const enabled = TABS.filter((t) => isModeEnabled(t.id));
+    const curIdx = enabled.findIndex((t) => t.id === mode);
+    if (curIdx === -1) return;
+    const nextIdx =
+      e.key === 'ArrowLeft' ? Math.max(0, curIdx - 1) : Math.min(enabled.length - 1, curIdx + 1);
+    if (nextIdx === curIdx) return;
+    const nextId = enabled[nextIdx].id;
+    log.debug('handleKeyDown', 'arrow navigate mode', { from: mode, to: nextId });
+    onModeChange(nextId);
+    const tabEls = e.currentTarget
+      .closest('[role="tablist"]')
+      ?.querySelectorAll('[role="tab"]:not([aria-disabled="true"])');
+    const sibling = tabEls?.[nextIdx];
     if (sibling instanceof HTMLElement) sibling.focus();
   };
 
@@ -66,25 +81,29 @@ export function GenerateImageModalHeader({
         className="flex items-center gap-0.5 rounded-lg bg-[var(--swap-modal-surface-hover)] p-1"
       >
         {TABS.map(({ id, label, Icon }) => {
-          const isActive = id === mode;
+          const isSelected = id === mode;
+          const isDisabled = !isModeEnabled(id);
           return (
             <button
               key={id}
               type="button"
               role="tab"
-              aria-selected={isActive}
-              tabIndex={isActive ? 0 : -1}
+              aria-selected={isSelected}
+              aria-disabled={isDisabled}
+              title={isDisabled ? 'Coming soon' : undefined}
+              tabIndex={isSelected ? 0 : -1}
               onClick={() => {
-                if (id === mode) return;
+                if (isDisabled || id === mode) return;
                 log.debug('onClick', 'mode change', { to: id });
                 onModeChange(id);
               }}
               onKeyDown={handleKeyDown}
               className={cn(
                 'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm transition-colors',
-                isActive
+                isSelected
                   ? 'bg-white font-semibold text-[#0a0d18] shadow-sm'
                   : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
+                isDisabled && 'cursor-not-allowed opacity-40 hover:text-[var(--swap-modal-text-muted)]',
               )}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
