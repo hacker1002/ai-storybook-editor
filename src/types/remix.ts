@@ -258,6 +258,11 @@ export type RemixSpread = Omit<
   'raw_images' | 'raw_textboxes' | 'manuscript' | 'tiny_sketch_media_url'
 >;
 
+/** One image layer inside a remix spread (`remix.illustration.spreads[].images[]`).
+ *  Structurally identical to the editor `SpreadImage` (the `images` field is kept by the
+ *  `RemixSpread` Pick) — aliased so granular-patch call sites read in the remix domain. */
+export type RemixSpreadImage = RemixSpread['images'][number];
+
 export interface RemixIllustration {
   spreads: RemixSpread[];
   sections: Section[];

@@ -79,8 +79,8 @@ export interface EditImageModalProps {
   // ── UI ──
   initialTool?: EditToolKey;
   /** Per-space tool availability (matrix gate #1). `undefined` → all EDIT_TOOLS (legacy).
-   *  Tools absent from the list are hidden from the tab bar entirely; present-but-unbuilt
-   *  tools still render as "Coming soon". */
+   *  3-state header (never hidden): tools absent from the list render disabled + "Not available
+   *  in this space"; present-but-unbuilt tools render disabled + "Coming soon". */
   enabledTools?: EditToolKey[];
   yieldedFrom?: YieldedFromLinkage;
 }

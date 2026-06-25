@@ -12,6 +12,7 @@ import type {
   RemixCropSheet,
   RemixJob,
   RemixSpread,
+  RemixSpreadImage,
   StageKind,
   StartStageJobParams,
   StartSpriteSwapParams,
@@ -76,6 +77,20 @@ export interface RemixCrudSlice {
 
   patchRemixIllustration: (id: string, spreads: RemixSpread[]) => void;
   patchRemixCropSheets: (id: string, updates: CropSheetUpdate[]) => void;
+
+  /** Granular single-image-layer patch into `remix.illustration.spreads[].images[]` — binding
+   *  for the remix image toolbar's Edit modal (`onUpdateIllustrations`). Mirrors
+   *  `injectFinalCrops`: optimistic local merge of `patch` into the matched image, then ONE
+   *  Supabase UPDATE of the full `illustration` column; rollback via `refetchRemix` on persist
+   *  failure. Same column as Inject (last-write-wins, no merge guard). Throws
+   *  `REMIX_NOT_FOUND` / `SPREAD_NOT_FOUND` / `IMAGE_NOT_FOUND` on a missing target, or the
+   *  Supabase error message on persist failure. */
+  updateRemixSpreadImage: (
+    remixId: string,
+    spreadId: string,
+    imageId: string,
+    patch: Partial<RemixSpreadImage>,
+  ) => Promise<void>;
 }
 
 /** Remote background_jobs (audio/mix swap): enqueue, cancel, dismiss. Plus the

@@ -510,6 +510,7 @@ export const useRemixActions = () =>
       syncFromServer: s.syncFromServer,
       patchRemixIllustration: s.patchRemixIllustration,
       patchRemixCropSheets: s.patchRemixCropSheets,
+      updateRemixSpreadImage: s.updateRemixSpreadImage,
       startStageJob: s.startStageJob,
       addStageBatch: s.addStageBatch,
       importStageBatch: s.importStageBatch,

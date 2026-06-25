@@ -1,11 +1,14 @@
 // edit-image-modal-header.tsx — Header band for the Editing-Image workspace (design §3.1).
-// Title (left) + EDIT_TOOLS tablist (center, ←/→ roving tabindex, disabled tools skipped +
-// "Coming soon" tooltip) + close (right). Clone of the Extract header with the extract-tool
-// registry swapped for the edit-tool registry. Presentational/dumb.
+// Title (left) + EDIT_TOOLS tablist (center, ←/→ roving tabindex, disabled tools skipped) +
+// close (right). 3-state tabs (design §5, via resolveToolGate): active / coming-soon (built
+// gate) / unavailable (matrix gate) — the two disabled states differ only by tooltip.
+// Clone of the Extract header with the extract-tool registry swapped for the edit-tool
+// registry. Presentational/dumb.
 
 import { X } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
+import { resolveToolGate, gateTooltip } from '../image-tools-space-matrix';
 import {
   HEADER_HEIGHT_PX,
   type EditToolKey,
@@ -18,8 +21,9 @@ interface EditImageModalHeaderProps {
   title: string;
   activeTool: EditToolKey;
   tools: EditToolContract[];
-  /** Per-space availability (matrix gate #1). `undefined` → all available (legacy). Tools NOT
-   *  in this list render disabled + "Coming soon" — never hidden (unified with unbuilt tools). */
+  /** Per-space availability (matrix gate #1). `undefined` → all available (legacy). Tools NOT in
+   *  this list render disabled + "Not available in this space"; available-but-unbuilt tools render
+   *  disabled + "Coming soon" (3-state — never hidden). */
   enabledKeys?: EditToolKey[];
   onToolChange: (tool: EditToolKey) => void;
   onClose: () => void;
@@ -36,12 +40,13 @@ export function EditImageModalHeader({
   onClose,
   disabled,
 }: EditImageModalHeaderProps) {
-  // A tool is SELECTABLE only when available-in-space AND built; otherwise it shows as a
-  // disabled "Coming soon" tab (never hidden — unified 2-state model across all image modals).
-  const isAvailable = (key: EditToolKey) => enabledKeys === undefined || enabledKeys.includes(key);
-  const isSelectable = (t: EditToolContract) => isAvailable(t.key) && t.enabled;
+  // A tool is SELECTABLE only when its gate status is 'active' (available-in-space AND built);
+  // both disabled states (unavailable / coming-soon) are greyed + skipped by roving nav and
+  // differ only by tooltip (3-state model across all image modals).
+  const isSelectable = (t: EditToolContract) =>
+    resolveToolGate(t.key, enabledKeys, t.enabled) === 'active';
 
-  // ←/→ navigates only among SELECTABLE tools (coming-soon slots are skipped).
+  // ←/→ navigates only among SELECTABLE tools (disabled slots are skipped).
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
@@ -80,8 +85,9 @@ export function EditImageModalHeader({
       >
         {tools.map(({ key, label, icon: Icon, enabled }) => {
           const isActive = key === activeTool;
-          const comingSoon = !isAvailable(key) || !enabled; // gated-off (matrix) OR unbuilt
-          const isDisabled = comingSoon || disabled;
+          const status = resolveToolGate(key, enabledKeys, enabled); // unavailable | coming-soon | active
+          const isDisabledTab = status !== 'active'; // gated-off (matrix) OR unbuilt
+          const isDisabled = isDisabledTab || disabled;
           return (
             <button
               key={key}
@@ -89,7 +95,7 @@ export function EditImageModalHeader({
               role="tab"
               aria-selected={isActive}
               aria-disabled={isDisabled}
-              title={comingSoon ? 'Coming soon' : undefined}
+              title={gateTooltip(status)}
               tabIndex={isActive ? 0 : -1}
               onClick={() => {
                 if (isDisabled || key === activeTool) return;
@@ -102,8 +108,8 @@ export function EditImageModalHeader({
                 isActive
                   ? 'bg-white font-semibold text-[#0a0d18] shadow-sm'
                   : 'text-[var(--swap-modal-text-muted)] hover:text-[var(--swap-modal-text-primary)]',
-                comingSoon && 'cursor-not-allowed opacity-40 hover:text-[var(--swap-modal-text-muted)]',
-                !comingSoon && disabled && 'cursor-not-allowed',
+                isDisabledTab && 'cursor-not-allowed opacity-40 hover:text-[var(--swap-modal-text-muted)]',
+                !isDisabledTab && disabled && 'cursor-not-allowed',
               )}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />

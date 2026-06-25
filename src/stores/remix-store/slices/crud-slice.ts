@@ -239,4 +239,66 @@ export const createCrudSlice: RemixSliceCreator<RemixCrudSlice> = (
         return next;
       }),
     })),
+
+  // ── Granular image-layer patch (image toolbar Edit modal) ──────────
+  // Mirrors injectFinalCrops (jobs-slice): immutable merge `patch` into the
+  // matched spread image, optimistic set, then ONE Supabase UPDATE of the full
+  // `illustration` column. Rollback via refetchRemix on persist failure. Same
+  // column as Inject → last-write-wins, no merge guard. NO background job
+  // (sync ~ms). Throws *_NOT_FOUND on a missing remix/spread/image.
+  updateRemixSpreadImage: async (remixId, spreadId, imageId, patch) => {
+    log.info('updateRemixSpreadImage', 'patch image layer', { remixId, spreadId, imageId });
+
+    const remix = get().remixes.find((r) => r.id === remixId);
+    if (!remix) {
+      log.warn('updateRemixSpreadImage', 'remix not found', { remixId });
+      throw new Error('REMIX_NOT_FOUND');
+    }
+    const spread = remix.illustration.spreads.find((s) => s.id === spreadId);
+    if (!spread) {
+      log.warn('updateRemixSpreadImage', 'spread not found', { remixId, spreadId });
+      throw new Error('SPREAD_NOT_FOUND');
+    }
+    if (!spread.images.some((img) => img.id === imageId)) {
+      log.warn('updateRemixSpreadImage', 'image not found', { remixId, spreadId, imageId });
+      throw new Error('IMAGE_NOT_FOUND');
+    }
+
+    const nextSpreads = remix.illustration.spreads.map((s) =>
+      s.id === spreadId
+        ? {
+            ...s,
+            images: s.images.map((img) =>
+              img.id === imageId ? { ...img, ...patch } : img,
+            ),
+          }
+        : s,
+    );
+    const nextIllustration = { ...remix.illustration, spreads: nextSpreads };
+
+    // Optimistic local update (same body as the persisted UPDATE).
+    set((state) => ({
+      remixes: state.remixes.map((r) =>
+        r.id === remixId ? { ...r, illustration: nextIllustration } : r,
+      ),
+    }));
+
+    const { error } = await supabase
+      .from('remixes')
+      .update({ illustration: nextIllustration })
+      .eq('id', remixId);
+
+    if (error) {
+      log.error('updateRemixSpreadImage', 'persist failed; rolling back', {
+        remixId,
+        spreadId,
+        imageId,
+        error: error.message,
+      });
+      await get().refetchRemix(remixId);
+      throw new Error(error.message);
+    }
+
+    log.info('updateRemixSpreadImage', 'patch persisted', { remixId, spreadId, imageId });
+  },
 });

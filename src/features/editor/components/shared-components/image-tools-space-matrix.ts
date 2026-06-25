@@ -3,13 +3,17 @@
 // `image-tools-space-matrix.md` §4-§6). This is gate #1 (availability-in-space). Each modal
 // ALSO has its own registry `enabled` flag = gate #2 (build-status).
 //
-// ⚡ RENDERING (UI decision 2026-06-24 — never hide): the modal headers render EVERY registry
-// tab/tool/mode. A slot is fully interactive only when available-in-space AND built; otherwise
-// it shows DISABLED + "Coming soon" — it is NOT removed from the header. So the two gates
-// collapse to a 2-state VISUAL (active vs disabled). The classifier below still distinguishes
-// `hidden` (matrix `x`) from `coming-soon` (matrix `o` + unbuilt) because they differ for
-// LANDING selection — resolveInitialKey only lands on available (`o`) tabs — but both paint the
-// same greyed/coming-soon button.
+// ⚡ RENDERING (UI decision 2026-06-24 — never hide, 3-STATE): the modal headers render EVERY
+// registry tab/tool/mode; nothing is removed from the header. Each slot resolves to ONE of three
+// visual states via `resolveToolGate` (design §5):
+//   • 'active'       — available-in-space AND built → fully interactive.
+//   • 'coming-soon'  — available-in-space BUT unbuilt (matrix `o` + `enabled:false`) → disabled,
+//                      tooltip "Coming soon".
+//   • 'unavailable'  — NOT available in this space (matrix `x`) → disabled, tooltip
+//                      "Not available in this space".
+// Both disabled states are greyed + click-no-op + skipped by ←/→ roving nav, but their TOOLTIPS
+// differ (why-disabled). Landing selection (`resolveInitialKey`) only ever lands on an available
+// (`o`) slot, so a modal body never renders an 'unavailable' panel.
 //
 // Keys reuse the existing modal enums verbatim (no new types). Extract uses the modal's own
 // keys (`background`/`lottie`, not `get_background`/`get_lottie`) so it stays type-checked
@@ -44,21 +48,25 @@ export const SPACE_TOOL_MATRIX: Record<ToolSpace, SpaceToolConfig> = {
     edit: ['inpaint', 'outpaint', 'upscale', 'remove_object', 'remove_background', 'erasor'], // NO remove_text
     extract: ['segment', 'layering', 'crop', 'get_object', 'background', 'lottie'],            // NO get_text
   },
-  remix: { // data ready, NOT yet wired (no editable image toolbar in RemixMainView)
+  remix: { // Phase 1: Edit-only image toolbar wired in RemixDisplayCanvasArea (Generate = Phase 2).
     generate: ['upload'],
-    edit: ['inpaint', 'upscale', 'erasor'],
+    edit: ['inpaint', 'upscale', 'erasor', 'remove_background'],
     extract: [],
   },
 };
 
-// ── 2-gate resolution ──────────────────────────────────────────────────────────
+// ── 2-gate resolution → 3-state ─────────────────────────────────────────────────
 
-export type ToolGateStatus = 'hidden' | 'coming-soon' | 'active';
+export type ToolGateStatus = 'unavailable' | 'coming-soon' | 'active';
 
 /**
- * Resolve the display status of one tool key against the 2 gates.
+ * Resolve the 3-state display status of one tool key against the 2 gates (design §5):
+ *   • 'unavailable' — key NOT in `enabledKeys` (matrix `x`) → "Not available in this space".
+ *   • 'coming-soon' — available-in-space but `implemented:false` → "Coming soon".
+ *   • 'active'      — available-in-space AND implemented.
  * @param enabledKeys availability list for the space; `undefined` = no space gate (every key
- *   available → matches legacy behavior when a modal is mounted without a per-space prop).
+ *   available → matches legacy behavior when a modal is mounted without a per-space prop; in
+ *   that case the result is only ever 'coming-soon' or 'active', never 'unavailable').
  * @param implemented the modal registry's build-status flag for this key.
  */
 export function resolveToolGate(
@@ -67,9 +75,17 @@ export function resolveToolGate(
   implemented: boolean,
 ): ToolGateStatus {
   const availableInSpace = enabledKeys === undefined || enabledKeys.includes(key);
-  if (!availableInSpace) return 'hidden';
+  if (!availableInSpace) return 'unavailable';
   if (!implemented) return 'coming-soon';
   return 'active';
+}
+
+/** Why-disabled tooltip for a gate status (SSOT for the 2 distinct disabled reasons —
+ *  shared by every modal header). `active` → no tooltip. */
+export function gateTooltip(status: ToolGateStatus): string | undefined {
+  if (status === 'unavailable') return 'Not available in this space';
+  if (status === 'coming-soon') return 'Coming soon';
+  return undefined;
 }
 
 /** Minimal registry-entry shape the initial-key resolver needs. */

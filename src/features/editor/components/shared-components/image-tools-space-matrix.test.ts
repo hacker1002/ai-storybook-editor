@@ -1,19 +1,21 @@
-// image-tools-space-matrix.test.ts — Unit tests for the 2-gate resolution helpers. Focus is
-// resolveInitialKey's fallback chain (the raw-Extract "all coming-soon" case is the one that
-// would crash a modal if it returned a hidden/null tab) + backward-compat when no space gate.
+// image-tools-space-matrix.test.ts — Unit tests for the 3-state gate resolution helpers. Focus is
+// resolveToolGate's 2-reason classification (unavailable vs coming-soon) + resolveInitialKey's
+// fallback chain (the raw-Extract "all coming-soon" case is the one that would crash a modal if
+// it returned an unavailable/null tab) + backward-compat when no space gate.
 
 import { describe, it, expect } from 'vitest';
 import {
   SPACE_TOOL_MATRIX,
   resolveToolGate,
   resolveInitialKey,
+  gateTooltip,
 } from './image-tools-space-matrix';
 import { EDIT_TOOLS, DEFAULT_EDIT_TOOL } from './edit-image-modal/edit-image-modal-constants';
 import { EXTRACT_TABS, DEFAULT_EXTRACT_TAB } from './extract-image-modal/extract-image-modal-constants';
 
 describe('resolveToolGate', () => {
-  it('hides a key absent from the space list', () => {
-    expect(resolveToolGate('remove_text', ['inpaint', 'upscale'], true)).toBe('hidden');
+  it('marks a key absent from the space list unavailable (matrix gate)', () => {
+    expect(resolveToolGate('remove_text', ['inpaint', 'upscale'], true)).toBe('unavailable');
   });
 
   it('marks an available-but-unbuilt key coming-soon', () => {
@@ -24,9 +26,47 @@ describe('resolveToolGate', () => {
     expect(resolveToolGate('inpaint', ['inpaint'], true)).toBe('active');
   });
 
-  it('treats undefined space list as "all available" (legacy)', () => {
+  it('treats undefined space list as "all available" (legacy) — never unavailable', () => {
     expect(resolveToolGate('anything', undefined, true)).toBe('active');
     expect(resolveToolGate('anything', undefined, false)).toBe('coming-soon');
+  });
+});
+
+describe('gateTooltip — 2 distinct disabled reasons', () => {
+  it('unavailable → "Not available in this space"', () => {
+    expect(gateTooltip('unavailable')).toBe('Not available in this space');
+  });
+  it('coming-soon → "Coming soon"', () => {
+    expect(gateTooltip('coming-soon')).toBe('Coming soon');
+  });
+  it('active → no tooltip', () => {
+    expect(gateTooltip('active')).toBeUndefined();
+  });
+});
+
+describe('SPACE_TOOL_MATRIX.remix.edit — 3-state (Phase 1 wiring)', () => {
+  const remixEdit = SPACE_TOOL_MATRIX.remix.edit;
+
+  it('includes remove_background (added Phase 1)', () => {
+    expect(remixEdit).toContain('remove_background');
+  });
+
+  it('built remix tools resolve active', () => {
+    for (const key of ['inpaint', 'upscale', 'erasor', 'remove_background']) {
+      const enabled = EDIT_TOOLS.find((t) => t.key === key)?.enabled ?? false;
+      expect(resolveToolGate(key, remixEdit, enabled)).toBe('active');
+    }
+  });
+
+  it('tools outside remix.edit resolve unavailable (Not available in this space)', () => {
+    for (const key of ['outpaint', 'remove_object', 'remove_text']) {
+      const enabled = EDIT_TOOLS.find((t) => t.key === key)?.enabled ?? false;
+      expect(resolveToolGate(key, remixEdit, enabled)).toBe('unavailable');
+    }
+  });
+
+  it('remix.edit lands on inpaint (never an unavailable tool)', () => {
+    expect(resolveInitialKey(EDIT_TOOLS, remixEdit, undefined, DEFAULT_EDIT_TOOL)).toBe('inpaint');
   });
 });
 
@@ -48,8 +88,8 @@ describe('resolveInitialKey — Edit tools', () => {
     ).toBe('inpaint');
   });
 
-  it('skips a requested tool hidden by the space gate', () => {
-    // remove_text is NOT in object.edit (hidden) → fall back to leftmost built+available.
+  it('skips a requested tool unavailable in the space gate', () => {
+    // remove_text is NOT in object.edit (unavailable) → fall back to leftmost built+available.
     expect(
       resolveInitialKey(EDIT_TOOLS, SPACE_TOOL_MATRIX.object.edit, 'remove_text', DEFAULT_EDIT_TOOL),
     ).toBe('inpaint');
@@ -67,7 +107,7 @@ describe('resolveInitialKey — Extract tabs', () => {
     ).toBe('get_object');
   });
 
-  it('raw space (all tabs coming-soon) → leftmost available, never hidden/null', () => {
+  it('raw space (all tabs coming-soon) → leftmost available, never unavailable/null', () => {
     // raw.extract = ['crop','get_text'], both enabled:false. Registry order puts get_text (idx 1)
     // before crop (idx 2), so the leftmost-available fallback is get_text.
     const tab = resolveInitialKey(EXTRACT_TABS, SPACE_TOOL_MATRIX.raw.extract, undefined, DEFAULT_EXTRACT_TAB);

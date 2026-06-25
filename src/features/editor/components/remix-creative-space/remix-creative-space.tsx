@@ -142,6 +142,7 @@ export function RemixCreativeSpace() {
         {activeRemix ? (
           <RemixDisplayCanvasArea
             spreads={activeRemix.illustration.spreads}
+            remixId={activeRemix.id}
             pageNumbering={templateLayout?.page_numbering}
           />
         ) : (

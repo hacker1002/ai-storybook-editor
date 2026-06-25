@@ -5,6 +5,7 @@
 import { Image as ImageIcon, Upload, X } from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
+import { resolveToolGate, gateTooltip } from '../image-tools-space-matrix';
 import { HEADER_HEIGHT_PX } from '../../remix-creative-space/swap-crop-sheet-modal/swap-modal-constants';
 import type { GenerateModalMode } from './generate-image-modal-constants';
 
@@ -14,9 +15,10 @@ interface GenerateImageModalHeaderProps {
   mode: GenerateModalMode;
   onModeChange: (mode: GenerateModalMode) => void;
   onClose: () => void;
-  /** Per-space availability (matrix gate). `undefined` → both modes active (legacy). Modes NOT
-   *  in this list still render — disabled + "Coming soon" — mirroring the Edit/Extract tab
-   *  headers (a gated-off tool stays visible, just inert). */
+  /** Per-space availability (matrix gate). `undefined` → both modes active (legacy). Modes NOT in
+   *  this list still render — disabled + "Not available in this space" — mirroring the Edit/Extract
+   *  tab headers (a gated-off mode stays visible, just inert). Modes have no per-mode build flag,
+   *  so the gate is availability-only (never "Coming soon"). */
   enabledModes?: GenerateModalMode[];
 }
 
@@ -38,10 +40,11 @@ export function GenerateImageModalHeader({
   onClose,
   enabledModes,
 }: GenerateImageModalHeaderProps) {
-  // Matrix gate (#1): a mode is enabled if available in this space (undefined → all enabled).
-  // Disabled modes still render (greyed + "Coming soon"), like the Edit/Extract tab headers.
+  // Matrix gate (#1) only — modes have no per-mode build flag, so `implemented` is always true:
+  // status is 'active' (available) or 'unavailable' (gated-off), never 'coming-soon'. Disabled
+  // modes still render greyed (3-state, like the Edit/Extract tab headers).
   const isModeEnabled = (id: GenerateModalMode) =>
-    enabledModes === undefined || enabledModes.includes(id);
+    resolveToolGate(id, enabledModes, true) === 'active';
 
   // ←/→ navigates only among ENABLED modes (disabled modes are skipped).
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -82,7 +85,8 @@ export function GenerateImageModalHeader({
       >
         {TABS.map(({ id, label, Icon }) => {
           const isSelected = id === mode;
-          const isDisabled = !isModeEnabled(id);
+          const status = resolveToolGate(id, enabledModes, true); // unavailable | active (no build gate)
+          const isDisabled = status !== 'active';
           return (
             <button
               key={id}
@@ -90,7 +94,7 @@ export function GenerateImageModalHeader({
               role="tab"
               aria-selected={isSelected}
               aria-disabled={isDisabled}
-              title={isDisabled ? 'Coming soon' : undefined}
+              title={gateTooltip(status)}
               tabIndex={isSelected ? 0 : -1}
               onClick={() => {
                 if (isDisabled || id === mode) return;
