@@ -191,6 +191,27 @@ export function useCropsTabState(
     [cropPresets],
   );
 
+  // Upsert the box's CURRENT geometry + given title into book.crop_presets, linking the box
+  // when it has no preset yet (Custom → first save). onUpsertCropPreset fires ONCE in the body —
+  // never inside a setBoxes updater (StrictMode double-invokes updaters → duplicate book writes,
+  // mirror confirmDeletePreset). Shared by 💾 Save and ✎ Edit (rename auto re-saves — see renameBox).
+  const upsertPresetFromBox = useCallback(
+    (box: CropBox, title: string) => {
+      if (!onUpsertCropPreset) return; // unwired (read-only) → caller keeps session label only
+      const geometry = { x: box.x, y: box.y, w: box.w, h: box.h };
+      if (box.presetId) {
+        onUpsertCropPreset({ id: box.presetId, title, geometry });
+        log.info('upsertPresetFromBox', 'updated preset', { boxId: box.id, presetId: box.presetId });
+      } else {
+        const id = crypto.randomUUID();
+        onUpsertCropPreset({ id, title, geometry });
+        setBoxes((prev) => prev.map((b) => (b.id === box.id ? { ...b, presetId: id } : b)));
+        log.info('upsertPresetFromBox', 'created preset', { boxId: box.id, presetId: id });
+      }
+    },
+    [onUpsertCropPreset],
+  );
+
   const renameBox = useCallback(
     (boxId: string, title: string) => {
       const trimmed = title.trim();
@@ -201,16 +222,12 @@ export function useCropsTabState(
         return; // reject empty — keep current title
       }
       setBoxes((prev) => prev.map((b) => (b.id === boxId ? { ...b, title: trimmed } : b)));
-      // Persist rename for a linked preset (geometry unchanged — rename ≠ re-save).
-      if (box.presetId && onUpsertCropPreset) {
-        const preset = cropPresets.find((p) => p.id === box.presetId);
-        if (preset) {
-          onUpsertCropPreset({ ...preset, title: trimmed });
-          log.debug('renameBox', 'persisted preset title', { boxId, presetId: box.presetId });
-        }
-      }
+      // Auto re-save the CURRENT version (geometry + new title) into book.crop_presets: a
+      // successful rename upserts the preset — creating + linking it when the box is Custom,
+      // and clearing any `*` dirty marker on a linked box (geometry now matches preset).
+      upsertPresetFromBox(box, trimmed);
     },
-    [boxes, cropPresets, onUpsertCropPreset],
+    [boxes, upsertPresetFromBox],
   );
 
   const saveBox = useCallback(
@@ -220,18 +237,9 @@ export function useCropsTabState(
         log.debug('saveBox', 'no-op — missing box or unwired', { boxId });
         return; // no-op guard (read-only / unwired)
       }
-      const geometry = { x: box.x, y: box.y, w: box.w, h: box.h };
-      if (box.presetId) {
-        onUpsertCropPreset({ id: box.presetId, title: box.title, geometry });
-        log.info('saveBox', 'updated preset', { boxId, presetId: box.presetId });
-      } else {
-        const id = crypto.randomUUID();
-        onUpsertCropPreset({ id, title: box.title, geometry });
-        setBoxes((prev) => prev.map((b) => (b.id === boxId ? { ...b, presetId: id } : b)));
-        log.info('saveBox', 'created preset', { boxId, presetId: id });
-      }
+      upsertPresetFromBox(box, box.title);
     },
-    [boxes, onUpsertCropPreset],
+    [boxes, onUpsertCropPreset, upsertPresetFromBox],
   );
 
   const deleteBox = useCallback((id: string) => {
@@ -294,15 +302,20 @@ export function useCropsTabState(
       );
 
       const flat: ExtractResult[] = [];
+      const failureCodes: string[] = []; // per-batch failure reasons → classify the thrown message
+      let uploadFailures = 0; // crops returned OK from the API but the storage upload threw
       for (let i = 0; i < settled.length; i++) {
         const s = settled[i];
         if (s.status !== 'fulfilled') {
+          failureCodes.push('REJECTED');
           log.warn('commitExtract', 'batch rejected', { batch: i, reason: String(s.reason) });
           continue;
         }
         const res = s.value;
         if (!res.success) {
-          log.warn('commitExtract', 'batch api-failed', { batch: i, errorCode: (res as ImageApiFailure).errorCode });
+          const code = (res as ImageApiFailure).errorCode ?? 'UNKNOWN';
+          failureCodes.push(code);
+          log.warn('commitExtract', 'batch api-failed', { batch: i, errorCode: code });
           continue;
         }
         const data = (res as CropObjectImageResult).data;
@@ -328,6 +341,7 @@ export function useCropsTabState(
               },
             });
           } catch (uploadErr) {
+            uploadFailures++;
             log.warn('commitExtract', 'crop upload failed — skipped', {
               batch: i,
               boxIndex: cropped.boxIndex,
@@ -337,7 +351,20 @@ export function useCropsTabState(
         }
       }
 
-      if (flat.length === 0) throw new Error('Crop failed');
+      if (flat.length === 0) {
+        // No crop survived — classify so the toast names the real cause (connection vs API vs
+        // upload) instead of the opaque "Crop failed". CONNECTION_ERROR = host unreachable
+        // (offline / CORS / gateway, e.g. Cloudflare 523) — all batches hit one origin at once,
+        // so any connection failure means the service is down, not the crop.
+        log.error('commitExtract', 'all crops failed', { batches: settled.length, failureCodes, uploadFailures });
+        if (failureCodes.includes('CONNECTION_ERROR')) {
+          throw new Error('Image service unavailable — could not reach the server. Please try again later.');
+        }
+        if (failureCodes.length > 0) {
+          throw new Error('Crop failed — the image service returned an error. Please try again.');
+        }
+        throw new Error('Crop failed — could not save the cropped images. Please try again.');
+      }
       log.info('commitExtract', 'done', { spawned: flat.length });
       return flat;
     },

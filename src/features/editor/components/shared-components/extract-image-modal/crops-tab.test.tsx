@@ -1,6 +1,7 @@
 // crops-tab.test.tsx — useCropsTabState (design 05-crops-tab.md §4.3). Covers addBox,
 // applyPreset (apply/custom/stale), saveBox (create+link / update), renameBox (reject empty /
-// persist on link), deleteBox vs deleteCropPreset (✕ keeps preset / 🗑 confirm flow), the
+// auto re-save current version: create+link Custom, re-save diverged geometry), deleteBox vs
+// deleteCropPreset (✕ keeps preset / 🗑 confirm flow), the
 // derived dirty marker, and commitExtract (filter min-size, no tag, empty → throw). The crop
 // API + storage upload are the only network seams (mocked).
 
@@ -167,7 +168,7 @@ describe('useCropsTabState — saveBox', () => {
   });
 });
 
-describe('useCropsTabState — renameBox', () => {
+describe('useCropsTabState — renameBox (auto re-saves current version)', () => {
   it('rejects empty / whitespace title', () => {
     const { result, onUpsert } = renderCropsTab();
     act(() => result.current.addBox());
@@ -177,7 +178,7 @@ describe('useCropsTabState — renameBox', () => {
     expect(onUpsert).not.toHaveBeenCalled();
   });
 
-  it('persists the new title to a linked preset (geometry unchanged)', () => {
+  it('persists the new title to a linked preset (current geometry)', () => {
     const preset: CropPreset = { id: 'p1', title: 'Sunny', geometry: { x: 10, y: 10, w: 20, h: 20 } };
     const { result, onUpsert } = renderCropsTab({ cropPresets: [preset] });
     act(() => result.current.addBox());
@@ -190,6 +191,46 @@ describe('useCropsTabState — renameBox', () => {
       title: 'Sunset',
       geometry: { x: 10, y: 10, w: 20, h: 20 },
     });
+  });
+
+  it('creates + links a preset when renaming an unlinked Custom box', () => {
+    const { result, onUpsert } = renderCropsTab();
+    act(() => result.current.addBox());
+    const id = result.current.boxes[0].id;
+    expect(result.current.boxes[0].presetId).toBeNull();
+    act(() => result.current.renameBox(id, 'Hero'));
+    expect(onUpsert).toHaveBeenCalledTimes(1);
+    const arg = onUpsert!.mock.calls[0][0] as CropPreset;
+    expect(arg.title).toBe('Hero');
+    expect(arg.geometry).toEqual({ x: 35, y: 35, w: 30, h: 30 });
+    expect(result.current.boxes[0].presetId).toBe(arg.id); // box now linked
+  });
+
+  it('re-saves the box geometry (not the diverged preset) on rename', () => {
+    // Box applied p1, then preset edited book-wide → box geometry diverges (dirty). Rename must
+    // persist the BOX's current geometry, overwriting the diverged preset with the new title.
+    const preset: CropPreset = { id: 'p1', title: 'Sunny', geometry: { x: 10, y: 10, w: 20, h: 20 } };
+    const { result, rerender, onUpsert } = renderCropsTab({ cropPresets: [preset] });
+    act(() => result.current.addBox());
+    const id = result.current.boxes[0].id;
+    act(() => result.current.applyPreset(id, 'p1'));
+    rerender({ presets: [{ ...preset, geometry: { x: 50, y: 50, w: 20, h: 20 } }] });
+    expect(result.current.displayLabel(id)).toBe('Sunny *'); // dirty
+    act(() => result.current.renameBox(id, 'Sunset'));
+    expect(onUpsert).toHaveBeenLastCalledWith({
+      id: 'p1',
+      title: 'Sunset',
+      geometry: { x: 10, y: 10, w: 20, h: 20 }, // box geometry wins, not the {50,50} preset
+    });
+  });
+
+  it('no persist when onUpsert is unwired — session label only', () => {
+    const { result } = renderCropsTab({ wireUpsert: false });
+    act(() => result.current.addBox());
+    const id = result.current.boxes[0].id;
+    act(() => result.current.renameBox(id, 'Hero'));
+    expect(result.current.boxes[0].title).toBe('Hero'); // local rename still applies
+    expect(result.current.boxes[0].presetId).toBeNull(); // but nothing persisted/linked
   });
 });
 
@@ -265,5 +306,45 @@ describe('useCropsTabState — commitExtract', () => {
     // No boxes at all → "all too small" guard.
     await expect(result.current.commitExtract(SOURCE_URL)).rejects.toThrow(/too small/i);
     expect(mockCrop).not.toHaveBeenCalled();
+  });
+
+  it('classifies a CONNECTION_ERROR batch failure as service unavailable', async () => {
+    mockCrop.mockResolvedValue({
+      success: false,
+      error: 'connection refused',
+      httpStatus: 0,
+      errorCode: 'CONNECTION_ERROR',
+    } as never);
+    const { result } = renderCropsTab();
+    act(() => result.current.addBox());
+    await expect(result.current.commitExtract(SOURCE_URL)).rejects.toThrow(/service unavailable/i);
+  });
+
+  it('classifies a non-connection API failure as an image-service error', async () => {
+    mockCrop.mockResolvedValue({
+      success: false,
+      error: 'bad request',
+      httpStatus: 422,
+      errorCode: 'VALIDATION_ERROR',
+    } as never);
+    const { result } = renderCropsTab();
+    act(() => result.current.addBox());
+    await expect(result.current.commitExtract(SOURCE_URL)).rejects.toThrow(/image service returned an error/i);
+  });
+
+  it('classifies all-upload-failures as a save error (API succeeded)', async () => {
+    mockCrop.mockResolvedValue({
+      success: true,
+      data: {
+        croppedObjects: [
+          { boxIndex: 0, base64: 'AAAA', mimeType: 'image/png', aspectRatio: '1:1', width: 10, height: 10 },
+        ],
+      },
+      meta: {},
+    } as never);
+    mockUpload.mockRejectedValue(new Error('storage 500')); // every upload throws
+    const { result } = renderCropsTab();
+    act(() => result.current.addBox());
+    await expect(result.current.commitExtract(SOURCE_URL)).rejects.toThrow(/could not save the cropped images/i);
   });
 });
