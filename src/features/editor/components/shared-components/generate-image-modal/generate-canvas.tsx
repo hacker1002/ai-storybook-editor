@@ -77,13 +77,16 @@ export function GenerateCanvas({
         />
       </div>
 
-      {/* canvas */}
+      {/* canvas — `safe center` (not plain center): centers the image while it fits, but falls
+          back to flex-start once it overflows on zoom-in, so the top/left corner stays
+          scroll-reachable. Plain items/justify-center split the overflow both ways → the start of
+          each axis is clipped and unreachable by the scrollbar (memory: zoom-via-css-width). */}
       <div
         className={cn(
-          'relative flex flex-1 items-center justify-center overflow-auto p-6',
+          'relative flex flex-1 overflow-auto p-6',
           isUploadMode && isDragOver && 'ring-2 ring-inset ring-[var(--swap-modal-accent)]',
         )}
-        style={CHECKERBOARD_STYLE}
+        style={{ ...CHECKERBOARD_STYLE, justifyContent: 'safe center', alignItems: 'safe center' }}
         onDragOver={
           isUploadMode
             ? (e) => {

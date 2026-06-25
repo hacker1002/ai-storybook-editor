@@ -17,6 +17,7 @@ import {
   useImageNaturalSize,
   type Size,
 } from '../edit-image-modal/edit-image-modal-fit';
+import { useCropFitZoom } from './extract-crop-fit';
 
 const log = createLogger('Editor', 'ExtractCanvas');
 
@@ -132,6 +133,17 @@ export function ExtractCanvas({
   );
   const sourceAspectRatio = natural && natural.url === previewUrl ? natural.ratio : null;
 
+  // Crops tab: on first load (and on a source swap) auto-fit the image so the whole picture is
+  // visible — contain-fit reported up to the modal once per source. Width-% zoom model, so this
+  // replaces the 100% default with the largest zoom that clears both frame edges (design 05 §4.2).
+  useCropFitZoom({
+    enabled: showZoom && isBoxOverlay,
+    frame,
+    imgAspect: sourceAspectRatio,
+    imageKey: previewUrl,
+    onZoomChange,
+  });
+
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-[var(--swap-modal-canvas-bg)]">
       {/* stage-header: ⭐ Extract (+ 🔍 Detect in box-overlay mode) */}
@@ -195,11 +207,15 @@ export function ExtractCanvas({
         )}
       </div>
 
-      {/* canvas */}
+      {/* canvas — `safe center` (not plain center): centers content while it fits, but falls
+          back to flex-start once the (zoomed) Crops image overflows, so its top/left corner stays
+          scroll-reachable. Plain items/justify-center split the overflow both ways → the start of
+          each axis is clipped and unreachable by the scrollbar (memory: zoom-via-css-width). `safe`
+          is a no-op for the non-overflowing tabs (compare slider / result <img>). */}
       <div
         ref={canvasRef}
-        className="relative flex flex-1 items-center justify-center overflow-auto p-6"
-        style={CHECKERBOARD_STYLE}
+        className="relative flex flex-1 overflow-auto p-6"
+        style={{ ...CHECKERBOARD_STYLE, justifyContent: 'safe center', alignItems: 'safe center' }}
       >
         {previewUrl ? (
           isCompare ? (
@@ -226,7 +242,8 @@ export function ExtractCanvas({
               // Crops zoom: wrapper width = zoom% of the canvas (CSS width, NOT transform —
               // keeps overflow-auto scroll metrics accurate, editor zoom pattern/memory). The
               // block wrapper's height = the img height, so the absolute overlay still maps 1:1.
-              // flex-shrink-0 lets it overflow (scroll) past 100% instead of being squished.
+              // flex-shrink-0 lets it overflow (scroll) past 100% instead of being squished; the
+              // container's `safe center` keeps the overflowed top/left corner scroll-reachable.
               <div
                 className="relative leading-[0]"
                 style={{ width: `${zoom}%`, maxWidth: 'none', flexShrink: 0 }}
