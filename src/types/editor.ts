@@ -309,6 +309,17 @@ export interface Distribution {
 
 export type ChannelKey = 'player' | 'digital' | 'printer' | 'video';
 
+// ── Crop presets (books.crop_presets JSONB[], DB-CHANGELOG 2026-06-25) ────────
+// Book-level reusable crop frames for the ExtractImageModal Crops tab. SSOT here
+// (next to Book); extract-image-modal-constants re-imports this type so the import
+// direction stays feature→types (a deep feature module never owns a shared type).
+// `geometry` is % (0-100) relative to the source image bbox → reusable cross-image.
+export interface CropPreset {
+  id: string;
+  title: string;
+  geometry: { x: number; y: number; w: number; h: number };
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -337,6 +348,7 @@ export interface Book {
   remix: BookRemix | null;
   template_layout: BookTemplateLayout | null;
   distribution?: Distribution | null; // export-artifact state (additive, optional)
+  crop_presets?: CropPreset[] | null; // Crops-tab reusable frames (additive, optional)
   created_at: string;
   updated_at: string;
 }

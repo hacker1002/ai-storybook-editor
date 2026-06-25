@@ -12,28 +12,41 @@ const log = createLogger("Editor", "useImageBuilders");
 
 type SnapshotActions = ReturnType<typeof useSnapshotActions>;
 
+/** Options to retarget the spawn (raw/illustration space vs retouch/objects). */
+export interface BuildExtractImagesOptions {
+  /** Add action to call per image. Default `actions.addRetouchImage` (Objects/retouch space). */
+  addImage?: (spreadId: string, image: SpreadImage) => void;
+  /** z-index tier for cascade. `null` → omit z-index (raw_images don't cascade). Default 'pictorial'. */
+  zTier?: "pictorial" | null;
+}
+
 /**
  * Spawn N new SpreadImages from committed extract results.
  * - Segments (append N=1) / Layers (replace N): full-screen sources copy geometry, otherwise
  *   stagger +5px per result.
- * - Objects (crop-on-extract): `meta.geometry` (box % of source) → position the crop at its
- *   exact spot within the source footprint (NO stagger), and `meta.tag` → `layer.tags[]`.
+ * - Objects / Crops (crop-on-extract): `meta.geometry` (box % of source) → position the crop at
+ *   its exact spot within the source footprint (NO stagger); `meta.tag` → `layer.tags[]` (Crops
+ *   carries no tag).
  * z = next top of the pictorial tier, clamped to MEDIA.max. No auto-select (N>1 consistent).
+ * Pass `options` to retarget the raw/illustration space (addRawImage + no z-tier).
  */
 export function buildExtractImages(
   results: ExtractResult[],
   sourceImage: SpreadImage,
   sourceSpreadId: string,
-  retouchSpreads: BaseSpread[],
-  actions: SnapshotActions
+  spreads: BaseSpread[],
+  actions: SnapshotActions,
+  options: BuildExtractImagesOptions = {}
 ): void {
+  const { addImage = actions.addRetouchImage, zTier = "pictorial" } = options;
   const orig = sourceImage.geometry;
   const isFullScreen = orig.w >= 100 && orig.h >= 100;
-  const spread = retouchSpreads.find((s) => s.id === sourceSpreadId);
+  const spread = spreads.find((s) => s.id === sourceSpreadId);
 
-  const firstZ = spread
-    ? nextTopZInTier(spread, "pictorial", { count: results.length })
-    : LAYER_CONFIG.MEDIA.min;
+  const firstZ =
+    zTier && spread
+      ? nextTopZInTier(spread, zTier, { count: results.length })
+      : LAYER_CONFIG.MEDIA.min;
 
   results.forEach((result, index) => {
     const box = result.meta?.geometry;
@@ -72,9 +85,10 @@ export function buildExtractImages(
       aspect_ratio: result.meta?.ratio ?? sourceImage.aspect_ratio,
       player_visible: sourceImage.player_visible,
       editor_visible: sourceImage.editor_visible,
-      "z-index": Math.min(firstZ + index, LAYER_CONFIG.MEDIA.max),
+      // raw_images don't cascade (zTier null) → omit z-index; retouch images carry it.
+      ...(zTier ? { "z-index": Math.min(firstZ + index, LAYER_CONFIG.MEDIA.max) } : {}),
     };
-    actions.addRetouchImage(sourceSpreadId, newImage);
+    addImage(sourceSpreadId, newImage);
   });
 
   log.info("buildExtractImages", "created images from extract", {

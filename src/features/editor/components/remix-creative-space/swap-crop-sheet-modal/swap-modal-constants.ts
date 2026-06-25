@@ -161,7 +161,10 @@ export const SWAP_MODAL_TOKENS = {
  *  relayout-confirm popup mounts but is painted behind the modal (invisible). */
 export const Z_INDEX = {
   swapModal: 4000,
-  confirmDialog: 4100,
+  /** Destructive confirm AlertDialog (relayout + crop-preset delete). Bumped 4100→4200
+   *  so it paints ABOVE the per-box preset Select dropdown (selectDropdown 4100) when a
+   *  confirm is raised over a box-overlay tab — single source for every consumer. */
+  confirmDialog: 4200,
   /** Read-only remix-settings review dialog (Sprites tab header) — same layer
    *  constraint as confirmDialog: must paint ABOVE the full-screen swap modal. */
   reviewModal: 4100,

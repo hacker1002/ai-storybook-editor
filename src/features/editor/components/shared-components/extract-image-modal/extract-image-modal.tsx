@@ -26,6 +26,7 @@ import {
   type ExtractResult,
   type ExtractTabKey,
   type BackgroundRemoveCandidate,
+  type CropPreset,
 } from "./extract-image-modal-constants";
 import {
   resolveSourceImageUrl,
@@ -35,16 +36,32 @@ import { resolveInitialKey } from "../image-tools-space-matrix";
 import { useSegmentTabState, type SegmentTabHandle } from "./segment-tab";
 import { useLayersTabState, type LayersTabHandle } from "./layers-tab";
 import { useObjectsTabState } from "./objects-tab";
+import { useCropsTabState } from "./crops-tab";
 import { useBackgroundTabState, type BackgroundTabHandle } from "./background-tab";
 import { ExtractImageModalHeader } from "./extract-image-modal-header";
 import { ExtractResultsSidebar } from "./extract-results-sidebar";
 import { ExtractObjectsSidebar } from "./extract-objects-sidebar";
+import { ExtractCropsSidebar } from "./extract-crops-sidebar";
+import { CropPresetConfirmDialog } from "./crop-preset-confirm-dialog";
 import { ExtractCanvas } from "./extract-canvas";
 
 const log = createLogger("Editor", "ExtractImageModal");
 
 /** Stable empty array so the per-tab fallback keeps a constant identity (no re-render churn). */
 const EMPTY_RESULTS: ExtractResult[] = [];
+/** Stable empty presets fallback (Crops tab) — same constant-identity rationale. */
+const EMPTY_CROP_PRESETS: CropPreset[] = [];
+
+/** Shared subset of the Objects + Crops box-overlay handles the root drives (canvas overlay,
+ *  ⭐ commit, Delete hotkey). Both handles satisfy it structurally. */
+type BoxOverlayHandle = {
+  selectedBoxId: string | null;
+  canRun: boolean;
+  CanvasOverlay: React.ReactNode;
+  onImageLoad: (e: React.SyntheticEvent<HTMLImageElement>) => void;
+  deleteBox: (id: string) => void;
+  commitExtract: (sourceUrl: string) => Promise<ExtractResult[]>;
+};
 
 export interface ExtractImageModalProps {
   open: boolean;
@@ -61,6 +78,12 @@ export interface ExtractImageModalProps {
   /** Background tab — other spread images (effective URLs, source excluded) offered as
    *  remove targets. Absent/[] → Background grid empty → run disabled. */
   backgroundRemoveCandidates?: BackgroundRemoveCandidate[];
+  /** Crops tab — book.crop_presets[] (dropdown source + Save target). undefined → [] (Custom only). */
+  cropPresets?: CropPreset[];
+  /** Crops tab — Save/Edit-on-saved → parent persists books.crop_presets[] (append/replace by id). */
+  onUpsertCropPreset?: (preset: CropPreset) => void;
+  /** Crops tab — sidebar 🗑 → parent removes the entry from books.crop_presets[] (filter by id). */
+  onDeleteCropPreset?: (presetId: string) => void;
 }
 
 export function ExtractImageModal({
@@ -73,6 +96,9 @@ export function ExtractImageModal({
   yieldedFrom,
   detectContext,
   backgroundRemoveCandidates = [],
+  cropPresets,
+  onUpsertCropPreset,
+  onDeleteCropPreset,
 }: ExtractImageModalProps) {
   // Landing tab ∈ (available-in-space ∩ built); falls back to leftmost available (coming-soon)
   // when a space has no built tab (e.g. raw Extract). Plain const → seeds useState + feeds
@@ -88,6 +114,9 @@ export function ExtractImageModal({
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
+  // Crops-tab canvas zoom (CSS width scale). Gated to activeTab==='crop' so Objects keeps
+  // its current header (validation S1). Reset on tab change / close.
+  const [zoom, setZoom] = useState(100);
 
   const dialogContentRef = useRef<HTMLDivElement>(null);
   // API clients don't take an AbortSignal — the controller is a "should I still apply
@@ -104,6 +133,12 @@ export function ExtractImageModal({
   const segmentHandle = useSegmentTabState(image, { isBusy, onRequestRun });
   const layersHandle = useLayersTabState(image, { isBusy });
   const objectsHandle = useObjectsTabState(image, { isBusy, detectContext });
+  const cropsState = useCropsTabState(image, {
+    isBusy,
+    cropPresets: cropPresets ?? EMPTY_CROP_PRESETS,
+    onUpsertCropPreset,
+    onDeleteCropPreset,
+  });
   const backgroundHandle = useBackgroundTabState(image, {
     isBusy,
     onRequestRun,
@@ -126,6 +161,13 @@ export function ExtractImageModal({
   // Objects overrides the shared shell: source + box overlay canvas, box-list sidebar,
   // [+] = instant add (no API), ⭐ Extract = crop-on-extract (README §2.3 gating branch).
   const isBoxOverlay = activeContract?.interactionMode === "box-overlay";
+  const isCropTab = activeTab === "crop";
+  // Box-overlay tabs (Objects + Crops) share the canvas/commit/Delete-hotkey path; pick the
+  // active handle via the shared structural contract.
+  const boxTab: BoxOverlayHandle = isCropTab ? cropsState : objectsHandle;
+  // Title of the box pending crop-preset delete (drives the confirm dialog copy).
+  const confirmPresetTitle =
+    cropsState.boxes.find((b) => b.id === cropsState.confirmDeleteBoxId)?.title ?? "";
 
   const results = resultsByTab[activeTab] ?? EMPTY_RESULTS;
   const selectedResult = useMemo(
@@ -139,9 +181,9 @@ export function ExtractImageModal({
   const runDisabled = isBoxOverlay
     ? isBusy || !sourceUrl
     : isBusy || !sourceUrl || !(activeHandle?.canRun ?? false);
-  // ⭐ Extract gate — box-overlay: boxes > 0; result-grid: has results.
+  // ⭐ Extract gate — box-overlay: boxes > 0 (active handle); result-grid: has results.
   const commitDisabled = isBoxOverlay
-    ? isBusy || !sourceUrl || !objectsHandle.canRun
+    ? isBusy || !sourceUrl || !boxTab.canRun
     : results.length === 0 || isBusy;
   const processingLabel = isBoxOverlay
     ? "Detecting…"
@@ -176,11 +218,13 @@ export function ExtractImageModal({
     setSelectedResultId(null);
     setIsProcessing(false);
     setIsCommitting(false);
+    setZoom(100);
     segmentHandle.reset();
     layersHandle.reset();
     objectsHandle.reset();
+    cropsState.reset();
     backgroundHandle.reset();
-  }, [resolvedInitialTab, segmentHandle, layersHandle, objectsHandle, backgroundHandle]);
+  }, [resolvedInitialTab, segmentHandle, layersHandle, objectsHandle, cropsState, backgroundHandle]);
 
   const handleClose = useCallback(() => {
     if (isBusy) {
@@ -211,6 +255,7 @@ export function ExtractImageModal({
       log.debug("handleTabChange", "switch tab", { from: activeTab, to: tab });
       setActiveTab(tab);
       setSelectedResultId(null);
+      setZoom(100);
     },
     [isBusy, enabledTabs, activeTab],
   );
@@ -290,13 +335,13 @@ export function ExtractImageModal({
   const handleCommitExtract = useCallback(async () => {
     if (commitDisabled) return;
 
-    // Objects: crop-on-extract — crop every box → upload → geometry-positioned spawn.
+    // Objects + Crops: crop-on-extract — crop every box → upload → geometry-positioned spawn.
     if (activeContract?.commitMode === "crop-on-extract") {
       if (!sourceUrl) return;
       setIsCommitting(true);
       log.info("handleCommitExtract", "crop-on-extract start", { activeTab });
       try {
-        const uploaded = await objectsHandle.commitExtract(sourceUrl);
+        const uploaded = await boxTab.commitExtract(sourceUrl);
         log.info("handleCommitExtract", "crop-on-extract done", { count: uploaded.length });
         onCreateImages(uploaded);
         onOpenChange(false);
@@ -342,7 +387,7 @@ export function ExtractImageModal({
     commitDisabled,
     activeContract,
     sourceUrl,
-    objectsHandle,
+    boxTab,
     results,
     activeTab,
     onCreateImages,
@@ -374,16 +419,24 @@ export function ExtractImageModal({
           ],
           onHotkey: (key) => {
             if (key === "Escape") {
+              // Defensive: if the crop confirm dialog is open, cancel it instead of closing
+              // the modal. Radix usually consumes Esc + stops propagation before this runs,
+              // so this guards against any AlertDialog↔Dialog propagation difference.
+              if (isCropTab && cropsState.confirmDeleteBoxId !== null) {
+                cropsState.cancelDeletePreset();
+                return;
+              }
               handleClose();
               return;
             }
-            if (
-              (key === "Delete" || key === "Backspace") &&
-              isBoxOverlay &&
-              objectsHandle.selectedBoxId
-            ) {
-              log.debug("onHotkey", "delete box", { boxId: objectsHandle.selectedBoxId });
-              objectsHandle.deleteBox(objectsHandle.selectedBoxId);
+            if (key === "Delete" || key === "Backspace") {
+              // Ignore the destructive hotkey while the crop confirm dialog is open (the box
+              // is already pending confirm; Radix AlertDialog doesn't capture Delete).
+              if (isCropTab && cropsState.confirmDeleteBoxId !== null) return;
+              if (isBoxOverlay && boxTab.selectedBoxId) {
+                log.debug("onHotkey", "delete box", { boxId: boxTab.selectedBoxId });
+                boxTab.deleteBox(boxTab.selectedBoxId);
+              }
             }
           },
           onClickOutside: () => handleClose(),
@@ -424,7 +477,24 @@ export function ExtractImageModal({
         />
 
         <div className="flex min-h-0 flex-1">
-          {isBoxOverlay ? (
+          {isCropTab ? (
+            <ExtractCropsSidebar
+              title={activeContract?.label ?? ""}
+              boxes={cropsState.boxes}
+              selectedBoxId={cropsState.selectedBoxId}
+              editingBoxId={cropsState.editingBoxId}
+              displayLabel={cropsState.displayLabel}
+              canSave={cropsState.canSave}
+              onAddBox={cropsState.addBox}
+              onSelectBox={cropsState.selectBox}
+              onStartEdit={cropsState.setEditingBox}
+              onRename={cropsState.renameBox}
+              onCancelEdit={() => cropsState.setEditingBox(null)}
+              onSaveBox={cropsState.saveBox}
+              onDeleteCropPreset={cropsState.deleteCropPreset}
+              addDisabled={runDisabled}
+            />
+          ) : isBoxOverlay ? (
             <ExtractObjectsSidebar
               title={activeContract?.label ?? ""}
               boxes={objectsHandle.boxes}
@@ -458,13 +528,17 @@ export function ExtractImageModal({
             commitDisabled={commitDisabled}
             interactionMode={activeContract?.interactionMode}
             resultPreview={activeContract?.resultPreview}
-            overlay={isBoxOverlay ? objectsHandle.CanvasOverlay : undefined}
-            onImageLoad={isBoxOverlay ? objectsHandle.onImageLoad : undefined}
+            overlay={isBoxOverlay ? boxTab.CanvasOverlay : undefined}
+            onImageLoad={isBoxOverlay ? boxTab.onImageLoad : undefined}
             onDetect={handleDetect}
             canDetect={objectsHandle.canDetect}
-            detectVisible={isBoxOverlay}
+            detectVisible={isBoxOverlay && !isCropTab}
+            zoom={zoom}
+            onZoomChange={setZoom}
+            showZoom={isCropTab}
           />
 
+          {activeContract?.hasParams !== false && (
           <aside
             className="flex h-full shrink-0 flex-col overflow-hidden border-l border-[var(--swap-modal-border)] bg-[var(--swap-modal-surface)]"
             style={{ width: RIGHT_SIDEBAR_WIDTH_PX }}
@@ -480,7 +554,16 @@ export function ExtractImageModal({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">{paramsPanel}</div>
           </aside>
+          )}
         </div>
+
+        {/* Destructive confirm — delete a crop preset book-wide (portaled INTO this modal). */}
+        <CropPresetConfirmDialog
+          open={cropsState.confirmDeleteBoxId !== null}
+          presetTitle={confirmPresetTitle}
+          onConfirm={cropsState.confirmDeletePreset}
+          onCancel={cropsState.cancelDeletePreset}
+        />
       </DialogContent>
     </Dialog>
   );

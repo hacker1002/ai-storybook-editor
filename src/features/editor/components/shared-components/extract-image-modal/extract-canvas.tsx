@@ -10,6 +10,8 @@ import { Star, Loader2, ScanSearch } from 'lucide-react';
 import { createLogger } from '@/utils/logger';
 import { HEADER_HEIGHT_PX, type ExtractResult } from './extract-image-modal-constants';
 import { CompareSlider } from '../compare-slider';
+import { ZoomControl } from '../zoom-control';
+import { ZOOM } from '../generate-image-modal/generate-image-modal-constants';
 import {
   fitNaturalToFrame,
   useImageNaturalSize,
@@ -52,6 +54,11 @@ interface ExtractCanvasProps {
   onDetect?: () => void;
   canDetect?: boolean;
   detectVisible?: boolean;
+  /** Zoom % (Crops tab — CSS width scale, NOT transform). Default 100. */
+  zoom?: number;
+  onZoomChange?: (next: number) => void;
+  /** Render the stage-header zoom slider + scale the box-overlay content (Crops only). */
+  showZoom?: boolean;
 }
 
 export function ExtractCanvas({
@@ -70,6 +77,9 @@ export function ExtractCanvas({
   onDetect,
   canDetect = false,
   detectVisible = false,
+  zoom = 100,
+  onZoomChange,
+  showZoom = false,
 }: ExtractCanvasProps) {
   const isBoxOverlay = interactionMode === 'box-overlay';
   // box-overlay always shows the source (boxes draw over it); result-grid previews the result.
@@ -169,6 +179,20 @@ export function ExtractCanvas({
             Detect
           </button>
         )}
+
+        {/* Crops tab — zoom slider pinned right (design 05 §4.2). Gated to box-overlay
+            crop space only (validation S1) so Objects/others keep their current header. */}
+        {showZoom && onZoomChange && (
+          <div className="ml-auto">
+            <ZoomControl
+              value={zoom}
+              onChange={onZoomChange}
+              min={ZOOM.min}
+              max={ZOOM.max}
+              step={ZOOM.step}
+            />
+          </div>
+        )}
       </div>
 
       {/* canvas */}
@@ -198,27 +222,49 @@ export function ExtractCanvas({
               />
             )
           ) : isBoxOverlay ? (
-            // Wrapper carries the source aspect-ratio → fits-contain on the longest edge (parity
-            // with the result-grid <img>) AND coincides 1:1 with the rendered image so the
-            // absolute overlay maps to its box. Falls back to width-fit until the ratio loads.
-            <div
-              className="relative max-h-full max-w-full leading-[0]"
-              style={sourceAspectRatio ? { aspectRatio: String(sourceAspectRatio) } : undefined}
-            >
-              <img
-                key={previewUrl}
-                src={previewUrl}
-                alt="Source image"
-                onLoad={handleSourceLoad}
-                draggable={false}
-                className={
-                  sourceAspectRatio
-                    ? 'block h-full w-full object-contain'
-                    : 'block max-h-full max-w-full object-contain'
-                }
-              />
-              {overlay}
-            </div>
+            showZoom ? (
+              // Crops zoom: wrapper width = zoom% of the canvas (CSS width, NOT transform —
+              // keeps overflow-auto scroll metrics accurate, editor zoom pattern/memory). The
+              // block wrapper's height = the img height, so the absolute overlay still maps 1:1.
+              // flex-shrink-0 lets it overflow (scroll) past 100% instead of being squished.
+              <div
+                className="relative leading-[0]"
+                style={{ width: `${zoom}%`, maxWidth: 'none', flexShrink: 0 }}
+              >
+                <img
+                  key={previewUrl}
+                  src={previewUrl}
+                  alt="Source image"
+                  onLoad={handleSourceLoad}
+                  draggable={false}
+                  className="block w-full object-contain"
+                  style={{ height: 'auto' }}
+                />
+                {overlay}
+              </div>
+            ) : (
+              // Wrapper carries the source aspect-ratio → fits-contain on the longest edge (parity
+              // with the result-grid <img>) AND coincides 1:1 with the rendered image so the
+              // absolute overlay maps to its box. Falls back to width-fit until the ratio loads.
+              <div
+                className="relative max-h-full max-w-full leading-[0]"
+                style={sourceAspectRatio ? { aspectRatio: String(sourceAspectRatio) } : undefined}
+              >
+                <img
+                  key={previewUrl}
+                  src={previewUrl}
+                  alt="Source image"
+                  onLoad={handleSourceLoad}
+                  draggable={false}
+                  className={
+                    sourceAspectRatio
+                      ? 'block h-full w-full object-contain'
+                      : 'block max-h-full max-w-full object-contain'
+                  }
+                />
+                {overlay}
+              </div>
+            )
           ) : (
             <img
               key={previewUrl}

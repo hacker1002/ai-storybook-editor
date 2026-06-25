@@ -8,9 +8,13 @@ import { Tag, Type, Crop, Box, Layers, Image as ImageIcon, Disc } from 'lucide-r
 import type { LucideIcon } from 'lucide-react';
 import { ASPECT_RATIOS, type AspectRatio } from '@/constants/aspect-ratio-constants';
 import type { DetectTag } from '@/apis/retouch-api';
+import type { CropPreset } from '@/types/editor';
 
 // Re-export so Objects-tab consumers have one constants surface.
 export type { DetectTag };
+// CropPreset SSOT lives in types/editor (next to Book). Re-export so Crops-tab
+// consumers keep one constants surface (import direction stays feature→types).
+export type { CropPreset };
 
 // Re-export the shell layout tokens / z-index / sidebar dims from the swap modal (single
 // source — design §2.6 "reuse swap shell"). Children import these from HERE so the modal
@@ -103,6 +107,9 @@ export interface ExtractTabContract {
   /** ⭐ Extract commit path — default `upload-ephemeral`; Objects = `crop-on-extract`;
    *  Background = `passthrough` (API returns a permanent URL → no re-upload). */
   commitMode?: 'upload-ephemeral' | 'crop-on-extract' | 'passthrough';
+  /** Right Params sidebar — default true (model/threshold controls). Crops = false
+   *  (no model → root hides the sidebar so the canvas spans full width). */
+  hasParams?: boolean;
 }
 
 /** One spread image offered as a "remove from scene" target in the Background tab.
@@ -118,7 +125,7 @@ export interface BackgroundRemoveCandidate {
 export const EXTRACT_TABS: ExtractTabContract[] = [
   { key: 'get_object', label: 'Objects', icon: Tag, runMode: 'replace', enabled: true, interactionMode: 'box-overlay', commitMode: 'crop-on-extract' },
   { key: 'get_text', label: 'Texts', icon: Type, runMode: 'replace', enabled: false },
-  { key: 'crop', label: 'Crops', icon: Crop, runMode: 'replace', enabled: false },
+  { key: 'crop', label: 'Crops', icon: Crop, runMode: 'replace', enabled: true, interactionMode: 'box-overlay', commitMode: 'crop-on-extract', hasParams: false },
   { key: 'segment', label: 'Segments', icon: Box, runMode: 'append', enabled: true },
   { key: 'layering', label: 'Layers', icon: Layers, runMode: 'replace', enabled: true },
   { key: 'background', label: 'Background', icon: ImageIcon, runMode: 'append', enabled: true, resultPreview: 'compare', commitMode: 'passthrough' },
@@ -156,6 +163,26 @@ export const OBJECT_BOX_COLORS = ['#3b6cf6', '#f59e0b', '#22c55e', '#ef4444', '#
 export const OBJECT_DEFAULT_BOX_SIZE_PERCENT = 30; // manual [+] box edge, % of canvas
 export const OBJECT_MIN_BOX_SIZE_PERCENT = 1;      // guard: < 1% → degenerate (anti EMPTY_CROP_RESULT)
 export const CROP_BATCH_SIZE = 3;                  // crop-object-image cap = 1..3 box/call → chunk
+
+// ── Crops tab (05-crops-tab.md §2) ───────────────────────────────────────────
+// Frame-based crop boxes (NO AI/Detect, NO tag) with book-level reusable presets
+// (books.crop_presets[]). Reuses the Objects box-overlay shell + crop-object-image
+// commit; the dropdown selects a CropPreset instead of an aspect ratio.
+
+/** One interactive crop box on the source canvas (geometry % 0-100). `presetId`
+ *  links to a `crop_presets[]` entry (null = Custom/free) — drives Save-upsert,
+ *  the dropdown current value, and the dirty `*` marker. */
+export interface CropBox {
+  id: string;
+  x: number; y: number; w: number; h: number; // % (0-100), top-left + size
+  title: string;             // sidebar label + spawned title; manual = "Custom {n}"
+  presetId: string | null;   // crop_presets[].id this box was applied from (null = Custom)
+}
+
+/** First dropdown option = free-form (no geometry constraint). */
+export const CUSTOM_PRESET_LABEL = 'Custom';
+export const CROP_DEFAULT_BOX_SIZE_PERCENT = 30; // [+] box edge, % of canvas (mirror Objects)
+export const CROP_MIN_BOX_SIZE_PERCENT = 1;      // guard degenerate (anti EMPTY_CROP_RESULT)
 
 // ── Background tab (04-background-tab.md §2 / api/retouch/08-generate-background) ──
 // ⚡v1 single Gemini dispatch (nano-banana-pro); aspectRatio/imageSize auto-derived (omit).

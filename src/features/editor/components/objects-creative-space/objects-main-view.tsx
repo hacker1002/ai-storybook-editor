@@ -44,6 +44,11 @@ import type {
   LibrarySound,
   BackgroundRemoveCandidate,
 } from "@/features/editor/components/shared-components";
+import {
+  upsertCropPreset,
+  deleteCropPreset,
+} from "@/features/editor/components/shared-components/extract-image-modal/crop-preset-utils";
+import type { CropPreset } from "@/types/editor";
 import { useSounds } from "@/stores/sounds-store";
 import { RetouchEditImageModal } from "./retouch-edit-image-modal";
 import { RetouchGenerateImageModal } from "./retouch-generate-image-modal";
@@ -67,7 +72,7 @@ import {
 import { useArtStyleDescription } from "@/stores/art-style-store";
 import { getTextboxContentForLanguage } from "@/features/editor/utils/textbox-helpers";
 import { useLanguageCode } from "@/stores/editor-settings-store";
-import { useBookTemplateLayout, useCurrentBook } from "@/stores/book-store";
+import { useBookTemplateLayout, useCurrentBook, useBookActions } from "@/stores/book-store";
 import { useCanvasWidth, useCanvasHeight } from "@/stores/editor-settings-store";
 import { useInteractionLayerContext } from "@/features/editor/contexts/interaction-layer-provider";
 import { COLUMNS, DEFAULT_AUDIO_TITLES } from "@/constants/spread-constants";
@@ -157,6 +162,7 @@ export function ObjectsMainView({
   const canvasHeight = useCanvasHeight();
   const templateLayout = useBookTemplateLayout();
   const book = useCurrentBook();
+  const { updateBook } = useBookActions();
 
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [narrationSpreadModalOpen, setNarrationSpreadModalOpen] = useState(false);
@@ -440,6 +446,22 @@ export function ObjectsMainView({
       buildExtractImages(results, modals.extract.image, modals.extract.spreadId, retouchSpreads, actions);
     },
     [modals.extract.image, modals.extract.spreadId, retouchSpreads, actions]
+  );
+
+  // ── Crop presets (books.crop_presets[]) — controlled persistence via updateBook ──
+  const handleUpsertCropPreset = useCallback(
+    (preset: CropPreset) => {
+      if (!book) return;
+      void updateBook(book.id, { crop_presets: upsertCropPreset(book.crop_presets ?? [], preset) });
+    },
+    [book, updateBook]
+  );
+  const handleDeleteCropPreset = useCallback(
+    (presetId: string) => {
+      if (!book) return;
+      void updateBook(book.id, { crop_presets: deleteCropPreset(book.crop_presets ?? [], presetId) });
+    },
+    [book, updateBook]
   );
 
   // Background tab remove-targets: every OTHER image in the source's spread (effective URL,
@@ -1053,6 +1075,9 @@ export function ObjectsMainView({
               : undefined
           }
           backgroundRemoveCandidates={backgroundRemoveCandidates}
+          cropPresets={book?.crop_presets ?? undefined}
+          onUpsertCropPreset={handleUpsertCropPreset}
+          onDeleteCropPreset={handleDeleteCropPreset}
         />
       )}
 

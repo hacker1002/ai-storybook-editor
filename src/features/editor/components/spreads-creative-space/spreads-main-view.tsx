@@ -12,6 +12,12 @@ import {
   SPACE_TOOL_MATRIX,
 } from '@/features/editor/components/shared-components';
 import type { ExtractResult } from '@/features/editor/components/shared-components';
+import { buildExtractImages } from '@/features/editor/components/objects-creative-space/hooks/use-image-builders';
+import {
+  upsertCropPreset,
+  deleteCropPreset,
+} from '@/features/editor/components/shared-components/extract-image-modal/crop-preset-utils';
+import type { CropPreset } from '@/types/editor';
 import {
   cloneItemWithNewId,
   nextTopZInTier,
@@ -23,7 +29,7 @@ import {
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
 import { useLanguageCode } from '@/stores/editor-settings-store';
-import { useCurrentBook, useBookTemplateLayout, useBookTypography } from '@/stores/book-store';
+import { useCurrentBook, useBookTemplateLayout, useBookTypography, useBookActions } from '@/stores/book-store';
 import { useTemplateLayouts } from '@/hooks/use-template-layouts';
 import {
   buildIllustrationItemsFromTemplate,
@@ -118,6 +124,7 @@ export function SpreadsMainView({
   const actions = useSnapshotActions();
   const langCode = useLanguageCode();
   const book = useCurrentBook();
+  const { updateBook } = useBookActions();
   const templateLayout = useBookTemplateLayout();
   const bookTypography = useBookTypography();
   const { spreadLayouts, singlePageLayouts, allLayouts } = useTemplateLayouts(book?.book_type ?? null);
@@ -353,13 +360,42 @@ export function SpreadsMainView({
     setExtractModalOpen(true);
   }, []);
 
-  // Raw Extract tabs are all coming-soon (matrix raw.extract = crop + get_text, both deferred),
-  // so nothing is ever committed. Placeholder no-op + warn until a raw extract builder ships (Q3).
-  const handleExtractCreateImages = useCallback((results: ExtractResult[]) => {
-    log.warn('handleExtractCreateImages', 'illustration extract not wired yet — ignored', {
-      count: results.length,
-    });
-  }, []);
+  // Crops extract (raw space) → spawn the cropped images into the current illustration spread's
+  // raw_images[]. Reuses buildExtractImages with the raw add-action + no z-tier (raw_images
+  // don't cascade — see handleDuplicateItem). Geometry positions each crop at its box spot.
+  const handleExtractCreateImages = useCallback(
+    (results: ExtractResult[]) => {
+      if (!extractModalImage) {
+        log.warn('handleExtractCreateImages', 'no source image — ignored', { count: results.length });
+        return;
+      }
+      buildExtractImages(results, extractModalImage, selectedSpreadId, illustrationSpreads, actions, {
+        addImage: actions.addRawImage,
+        zTier: null,
+      });
+      log.info('handleExtractCreateImages', 'spawned raw images', {
+        count: results.length,
+        spreadId: selectedSpreadId,
+      });
+    },
+    [extractModalImage, selectedSpreadId, illustrationSpreads, actions]
+  );
+
+  // ── Crop presets (books.crop_presets[]) — controlled persistence via updateBook ──
+  const handleUpsertCropPreset = useCallback(
+    (preset: CropPreset) => {
+      if (!book) return;
+      void updateBook(book.id, { crop_presets: upsertCropPreset(book.crop_presets ?? [], preset) });
+    },
+    [book, updateBook]
+  );
+  const handleDeleteCropPreset = useCallback(
+    (presetId: string) => {
+      if (!book) return;
+      void updateBook(book.id, { crop_presets: deleteCropPreset(book.crop_presets ?? [], presetId) });
+    },
+    [book, updateBook]
+  );
 
   // === Page & deselect handlers ===
 
@@ -631,6 +667,9 @@ export function SpreadsMainView({
           image={extractModalImage}
           enabledTabs={SPACE_TOOL_MATRIX.raw.extract}
           onCreateImages={handleExtractCreateImages}
+          cropPresets={book?.crop_presets ?? undefined}
+          onUpsertCropPreset={handleUpsertCropPreset}
+          onDeleteCropPreset={handleDeleteCropPreset}
         />
       )}
     </>
