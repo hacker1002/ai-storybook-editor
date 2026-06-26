@@ -3,14 +3,26 @@
 //
 // Two-level ARIA tree (role=tree → sprite treeitem → sheet treeitem). Header
 // `SPRITES` + [+] addSprite (subset of the active sprite's selected cells). Each
-// sprite row: caret (collapse) + name + `· N variants` badge + sheet stepper
-// [−] K [+] + [✕] removeSprite. Sheet rows: dot + title, active highlight.
+// sprite row (⚡2026-06-26 — parity with batches-sidebar):
+//   row 1: caret + name + right cluster [ stepper [−] K [+] | Swap action ]
+//   row 2: muted "N variants · M char" count (moved below the title).
+// Clicking the per-row Swap action auto-selects that sprite then enqueues its
+// swap (tab-supplied `spriteAction.onRun`). Sheet rows: dot + title + "N
+// variants" pill, active highlight.
 //
 // PRESENTATIONAL only — the tab passes already-guarded callbacks (confirm dialog
 // for destructive relayout lives in the tab). Disabled states are computed here
 // from props for a11y; the tab also guards before mutating.
 
-import { ChevronDown, ChevronRight, Loader2, Minus, Plus, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Minus,
+  Plus,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { RemixSprite } from '@/types/remix';
@@ -25,10 +37,28 @@ import {
   LEFT_SIDEBAR_WIDTH_PX,
   SHEET_MIN,
   spriteBatchLabel,
+  Z_INDEX,
 } from '../swap-modal-constants';
 import { spriteLineupObjects } from '@/stores/remix-store';
+import type { BatchActionState } from './use-stage-batch-tab';
+
+// Lift in-modal tooltips above the z-4000 swapModal (shared TooltipContent ships
+// at z-50). ⚡2026-06-26 (see Z_INDEX.tooltip).
+const TOOLTIP_CONTENT_STYLE = { zIndex: Z_INDEX.tooltip };
 
 const log = createLogger('Editor', 'SpritesSidebar');
+
+/** ⚡2026-06-26 — per-sprite Swap action moved from the stage header into each
+ *  sidebar sprite row. Tab supplies icon + copy + the hook-backed
+ *  evaluator/runner; sidebar stays presentational. Reuses `BatchActionState`
+ *  (the shared gate/busy/error shape) for parity with the stage tabs. */
+export interface SpriteActionDescriptor {
+  icon: LucideIcon;
+  label: string;
+  retryLabel: string;
+  getState: (sprite: RemixSprite) => BatchActionState;
+  onRun: (spriteId: string) => void;
+}
 
 // Delete-sprite affordance hidden by product decision; flip to re-enable.
 const SHOW_REMOVE_SPRITE: boolean = false;
@@ -46,6 +76,8 @@ interface SpritesSidebarProps {
   addSpriteTooltip: string;
   /** Number of cells currently ticked — drives the `(N sel)` badge + aria. */
   selectionSize: number;
+  /** ⚡2026-06-26 — per-sprite Swap action rendered in each row. */
+  spriteAction: SpriteActionDescriptor;
   /** True while a sprite layout computes (seed / relayout — artwork dimension
    *  measurement, seconds on a cold cache). Empty state becomes a loading
    *  state; header shows a small spinner while sprites are visible. */
@@ -70,6 +102,7 @@ export function SpritesSidebar({
   addSpriteTooltip,
   selectionSize,
   layoutPending,
+  spriteAction,
   onSelectSpriteSheet,
   onAddSprite,
   onRemoveSprite,
@@ -128,7 +161,11 @@ export function SpritesSidebar({
                   {addSpriteButton}
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs text-xs">
+              <TooltipContent
+                side="bottom"
+                className="max-w-xs text-xs"
+                style={TOOLTIP_CONTENT_STYLE}
+              >
                 {addSpriteTooltip}
               </TooltipContent>
             </Tooltip>
@@ -175,6 +212,7 @@ export function SpritesSidebar({
               // First SPRITE_MIN sprites are permanent (the seed sprite at
               // index 0); only later sprites expose the delete affordance.
               canRemoveSprite={index >= SPRITE_MIN}
+              spriteAction={spriteAction}
               onToggleCollapse={onToggleCollapse}
               onSelectSpriteSheet={onSelectSpriteSheet}
               onRemoveSprite={onRemoveSprite}
@@ -196,6 +234,7 @@ interface SpriteNodeProps {
   collapsed: boolean;
   anySpriteSwapRunning: boolean;
   canRemoveSprite: boolean;
+  spriteAction: SpriteActionDescriptor;
   onToggleCollapse: (spriteId: string) => void;
   onSelectSpriteSheet: (spriteId: string, sheetIndex: number) => void;
   onRemoveSprite: (spriteId: string) => void;
@@ -210,6 +249,7 @@ function SpriteNode({
   collapsed,
   anySpriteSwapRunning,
   canRemoveSprite,
+  spriteAction,
   onToggleCollapse,
   onSelectSpriteSheet,
   onRemoveSprite,
@@ -229,6 +269,11 @@ function SpriteNode({
   const removeSheetDisabled = anySpriteSwapRunning || sheetCount <= SHEET_MIN;
   const addSheetDisabled = anySpriteSwapRunning || sheetCount >= variantCount;
 
+  // ⚡2026-06-26 — per-row Swap action (tab-supplied icon + hook gating).
+  const action = spriteAction.getState(sprite);
+  const ActionIcon = spriteAction.icon;
+  const actionLabel = action.isError ? spriteAction.retryLabel : spriteAction.label;
+
   return (
     <div
       role="treeitem"
@@ -237,17 +282,17 @@ function SpriteNode({
       aria-selected={isActiveSprite}
       className="flex flex-col"
     >
-      <div className="flex items-center gap-1.5 px-2 pb-1.5 pt-2">
+      <div className="flex items-start gap-1.5 px-2 pb-1.5 pt-2">
         <button
           type="button"
           aria-label={`${collapsed ? 'Mở' : 'Thu gọn'} ${displayName}`}
           aria-expanded={!collapsed}
           onClick={() => onToggleCollapse(sprite.id)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-[var(--swap-modal-surface-hover)] focus:outline-none focus:ring-1 focus:ring-inset focus:ring-[var(--swap-modal-accent)]"
+          className="flex min-w-0 flex-1 items-start gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-[var(--swap-modal-surface-hover)] focus:outline-none focus:ring-1 focus:ring-inset focus:ring-[var(--swap-modal-accent)]"
         >
           <span
             aria-hidden="true"
-            className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--swap-modal-text-muted)]"
+            className="flex h-5 w-4 shrink-0 items-center justify-center text-[var(--swap-modal-text-muted)]"
           >
             {collapsed ? (
               <ChevronRight className="h-3.5 w-3.5" />
@@ -255,18 +300,18 @@ function SpriteNode({
               <ChevronDown className="h-3.5 w-3.5" />
             )}
           </span>
-          <span className="truncate text-sm font-semibold text-[var(--swap-modal-text-primary)]">
-            {displayName}
-          </span>
-          {variantCount > 0 && (
-            <span
-              aria-hidden="true"
-              className="ml-1 shrink-0 text-xs tabular-nums text-[var(--swap-modal-text-muted)]"
-            >
-              · {variantCount} variants
-              {objectCount > 0 ? ` · ${objectCount} char` : ''}
+          {/* ⚡2026-06-26 — name on row 1, count relocated to row 2. */}
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-semibold text-[var(--swap-modal-text-primary)]">
+              {displayName}
             </span>
-          )}
+            {variantCount > 0 && (
+              <span className="text-xs tabular-nums text-[var(--swap-modal-text-muted)]">
+                {variantCount} variants
+                {objectCount > 0 ? ` · ${objectCount} char` : ''}
+              </span>
+            )}
+          </span>
         </button>
 
         <div className="flex shrink-0 items-center gap-0.5">
@@ -308,6 +353,44 @@ function SpriteNode({
           </button>
         </div>
 
+        {/* ⚡2026-06-26 — per-row Swap action. Click auto-selects the sprite then
+            enqueues its swap. Icon-only; tooltip = gate reason when disabled, else
+            label. aria-label carries the action + batch name (a11y for icon-only). */}
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={-1} className="inline-flex shrink-0">
+                <button
+                  type="button"
+                  aria-label={`${actionLabel} ${displayName}`}
+                  disabled={action.disabled || action.busy}
+                  aria-busy={action.busy || undefined}
+                  onClick={() => {
+                    log.info('onRunSpriteAction', 'run sprite swap', {
+                      spriteId: sprite.id,
+                    });
+                    spriteAction.onRun(sprite.id);
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded-md border border-[var(--swap-modal-border)] text-[var(--swap-modal-accent)] transition-colors hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {action.busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ActionIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              className="max-w-xs text-xs"
+              style={TOOLTIP_CONTENT_STYLE}
+            >
+              {action.tooltip ?? actionLabel}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
         {SHOW_REMOVE_SPRITE && canRemoveSprite && (
           <button
             type="button"
@@ -326,9 +409,11 @@ function SpriteNode({
 
       {!collapsed && sheetCount > 0 && (
         <div role="group" className="flex flex-col">
-          {sprite.crop_sheets.map((_, sheetIndex) => {
+          {sprite.crop_sheets.map((sheet, sheetIndex) => {
             const isActive =
               isActiveSprite && activeSpriteRef?.sheetIndex === sheetIndex;
+            // ⚡2026-06-26 — per-sheet variant count pill (parity with batches).
+            const sheetVariantCount = sheet.original_crops.length;
             return (
               <button
                 key={sheetIndex}
@@ -356,7 +441,22 @@ function SpriteNode({
                   aria-hidden="true"
                   className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--swap-modal-text-muted)]"
                 />
-                <span className="truncate font-medium">Sheet {sheetIndex + 1}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  Sheet {sheetIndex + 1}
+                </span>
+                {sheetVariantCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'shrink-0 rounded-full px-2 py-0.5 text-xs tabular-nums',
+                      isActive
+                        ? 'bg-[var(--swap-modal-accent)]/15 text-[var(--swap-modal-text-primary)]'
+                        : 'bg-[var(--swap-modal-surface-hover)] text-[var(--swap-modal-text-muted)]',
+                    )}
+                  >
+                    {sheetVariantCount} variants
+                  </span>
+                )}
               </button>
             );
           })}

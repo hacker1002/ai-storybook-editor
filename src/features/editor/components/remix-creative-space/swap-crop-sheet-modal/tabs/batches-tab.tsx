@@ -67,7 +67,6 @@ export function BatchesTab(props: StageBatchTabProps) {
     remixId,
     batchCount: props.batches.length,
     activeBatchId: t.batch?.id ?? null,
-    actionDisabled: t.actionDisabled,
     isSubmitting: t.isSubmitting,
     isRunning: t.isRunning,
   });
@@ -83,6 +82,13 @@ export function BatchesTab(props: StageBatchTabProps) {
         canAddBatch={t.canAddBatch}
         addBatchTooltip={t.addBatchTooltip}
         selectionSize={t.selectionSize}
+        batchAction={{
+          icon: Repeat,
+          label: t.cfg.actionLabel,
+          retryLabel: 'Retry swap',
+          getState: t.evaluateBatchAction,
+          onRun: t.handleStartBatchJob,
+        }}
         onSelectBatchSheet={props.onSelectBatchSheet}
         onAddBatch={t.handleAddBatch}
         onRemoveBatch={t.handleRemoveBatchGuarded}
@@ -93,14 +99,6 @@ export function BatchesTab(props: StageBatchTabProps) {
       {t.batch ? (
         <CropSheetStage
           source={{ mode: 'batches', sheet: t.sheet, selectedSwap: t.selectedSwap }}
-          headerPrimary={{
-            label: t.swapTask.state === 'error' ? 'Retry swap' : t.cfg.actionLabel,
-            icon: Repeat,
-            disabled: t.actionDisabled,
-            tooltip: t.gateReason,
-            busy: t.isSubmitting || t.isRunning,
-            onClick: t.handleStartJob,
-          }}
           headerActions={
             <button
               type="button"

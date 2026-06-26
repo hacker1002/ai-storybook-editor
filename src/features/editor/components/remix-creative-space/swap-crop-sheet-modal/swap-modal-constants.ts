@@ -173,6 +173,11 @@ export const Z_INDEX = {
    *  z-50, which the full-screen swapModal (4000) occludes — the dropdown opens
    *  but paints behind the modal (invisible/unselectable). Must clear swapModal. */
   selectDropdown: 4100,
+  /** Radix Tooltip content. Shared shadcn `TooltipContent` ships at z-50, which
+   *  the full-screen swapModal (4000) occludes — the tooltip mounts on hover but
+   *  paints behind the modal (invisible). Every in-modal tooltip (per-row action,
+   *  add-batch/sprite, Compare) must clear swapModal. ⚡2026-06-26. */
+  tooltip: 4100,
   variantsModal: 5000,
 } as const;
 

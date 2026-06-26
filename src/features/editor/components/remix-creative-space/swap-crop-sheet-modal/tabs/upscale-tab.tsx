@@ -85,7 +85,6 @@ export function UpscaleTab(props: UpscaleTabProps) {
     remixId: props.remixId,
     batchCount: props.batches.length,
     activeBatchId: t.batch?.id ?? null,
-    actionDisabled: t.actionDisabled,
     importDisabled: t.importDisabled,
     skippedCount,
   });
@@ -102,6 +101,13 @@ export function UpscaleTab(props: UpscaleTabProps) {
         canAddBatch={t.canAddBatch}
         addBatchTooltip={t.addBatchTooltip}
         selectionSize={t.selectionSize}
+        batchAction={{
+          icon: Expand,
+          label: t.cfg.actionLabel,
+          retryLabel: 'Retry Upscale',
+          getState: t.evaluateBatchAction,
+          onRun: t.handleStartBatchJob,
+        }}
         onSelectBatchSheet={props.onSelectBatchSheet}
         onAddBatch={t.handleAddBatch}
         onRemoveBatch={t.handleRemoveBatchGuarded}
@@ -119,15 +125,6 @@ export function UpscaleTab(props: UpscaleTabProps) {
       ) : t.batch ? (
         <CropSheetStage
           source={{ mode: 'batches', sheet: t.sheet, selectedSwap: t.selectedSwap }}
-          headerPrimary={{
-            label:
-              t.swapTask.state === 'error' ? 'Retry Upscale' : t.cfg.actionLabel,
-            icon: Expand,
-            disabled: t.actionDisabled,
-            tooltip: t.gateReason,
-            busy: t.isSubmitting || t.isRunning,
-            onClick: t.handleStartJob,
-          }}
           headerActions={
             <>
               <StageImportButton

@@ -3,9 +3,14 @@
 // is uniform across tabs per validation S1).
 //
 // Two-level ARIA tree (role=tree → batch treeitem → sheet treeitem). Header
-// `BATCHES` + [+] addBatch. Each batch row: caret (collapse, owned by the tab
-// via the generic use-collapse-state hook) + name + sheet stepper [−] K [+] +
-// [✕] removeBatch. Sheet rows: dot + title, active highlight, click → select.
+// `BATCHES` + [+] addBatch. Each batch row (⚡2026-06-26):
+//   row 1: caret (collapse) + name + right cluster [ stepper [−] K [+] |
+//          primary action (Swap/Remove BG/Upscale) | (check — DEFERRED) ]
+//   row 2: muted "N crops" count (moved below the title from the old inline
+//          "· N crops" badge).
+// Clicking the per-row action auto-selects that batch then calls the stage API
+// (tab-supplied `batchAction.onRun`). Sheet rows: dot + title + "N crops" pill,
+// active highlight, click → select.
 //
 // PRESENTATIONAL only: the tab passes already-guarded callbacks. The confirm
 // dialog (destructive relayout when swap_results present) is mounted + driven by
@@ -13,7 +18,15 @@
 // states (SHEET_MIN/MAX, BATCH_MIN, anyJobRunning) are computed here from
 // props for correct a11y, but the tab also guards before mutating.
 
-import { ChevronDown, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Minus,
+  Plus,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { RemixStageBatch } from '@/types/remix';
@@ -27,7 +40,30 @@ import {
   BATCH_MIN,
   LEFT_SIDEBAR_WIDTH_PX,
   SHEET_MIN,
+  Z_INDEX,
 } from '../swap-modal-constants';
+import type { BatchActionState } from './use-stage-batch-tab';
+
+// Tooltips portal at z-50 (shared shadcn) which the z-4000 swapModal occludes —
+// lift in-modal tooltips above it. ⚡2026-06-26 (see Z_INDEX.tooltip).
+const TOOLTIP_CONTENT_STYLE = { zIndex: Z_INDEX.tooltip };
+
+/** ⚡2026-06-26 — per-batch primary action (Swap / Remove BG / Upscale) moved
+ *  from the stage header into each sidebar batch row. The tab supplies the
+ *  stage icon + copy + the hook-backed evaluator/runner; the sidebar stays
+ *  presentational (renders state, fires `onRun`). */
+export interface BatchActionDescriptor {
+  /** Stage glyph: Repeat (mixes) | Eraser (rmbgs) | Expand (upscales). */
+  icon: LucideIcon;
+  /** Base label, e.g. "Swap" — used for the icon-only button's tooltip/a11y. */
+  label: string;
+  /** Shown instead of `label` when the batch's last job errored. */
+  retryLabel: string;
+  /** Per-batch gate/busy/error state — drives disabled + spinner + tooltip. */
+  getState: (batch: RemixStageBatch) => BatchActionState;
+  /** Auto-select the batch then enqueue its stage job. */
+  onRun: (batchId: string) => void;
+}
 
 const log = createLogger('Editor', 'BatchesSidebar');
 
@@ -53,6 +89,9 @@ interface BatchesSidebarProps {
   /** ⚡rev6 — number of swap-crops currently ticked; drives the `(N sel)`
    *  badge in the header + the `[+]` button's aria-label. */
   selectionSize: number;
+  /** ⚡2026-06-26 — per-batch primary action rendered in each row (tab-supplied
+   *  stage icon + hook-backed gating/runner). */
+  batchAction: BatchActionDescriptor;
   onSelectBatchSheet: (batchId: string, sheetIndex: number) => void;
   onAddBatch: () => void;
   /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces BATCH_MIN. */
@@ -73,6 +112,7 @@ export function BatchesSidebar({
   canAddBatch,
   addBatchTooltip,
   selectionSize,
+  batchAction,
   onSelectBatchSheet,
   onAddBatch,
   onRemoveBatch,
@@ -130,7 +170,11 @@ export function BatchesSidebar({
                   {addBatchButton}
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs text-xs">
+              <TooltipContent
+                side="bottom"
+                className="max-w-xs text-xs"
+                style={TOOLTIP_CONTENT_STYLE}
+              >
                 {addBatchTooltip}
               </TooltipContent>
             </Tooltip>
@@ -162,6 +206,7 @@ export function BatchesSidebar({
               // mixes: first BATCH_MIN batches are permanent (the seed batch);
               // rmbgs/upscales (allowZeroBatch): every batch is removable.
               canRemoveBatch={allowZeroBatch || index >= BATCH_MIN}
+              batchAction={batchAction}
               onToggleCollapse={onToggleCollapse}
               onSelectBatchSheet={onSelectBatchSheet}
               onRemoveBatch={onRemoveBatch}
@@ -181,6 +226,7 @@ interface BatchNodeProps {
   collapsed: boolean;
   anyJobRunning: boolean;
   canRemoveBatch: boolean;
+  batchAction: BatchActionDescriptor;
   onToggleCollapse: (batchId: string) => void;
   onSelectBatchSheet: (batchId: string, sheetIndex: number) => void;
   onRemoveBatch: (batchId: string) => void;
@@ -194,6 +240,7 @@ function BatchNode({
   collapsed,
   anyJobRunning,
   canRemoveBatch,
+  batchAction,
   onToggleCollapse,
   onSelectBatchSheet,
   onRemoveBatch,
@@ -213,6 +260,11 @@ function BatchNode({
   const removeSheetDisabled = anyJobRunning || sheetCount <= SHEET_MIN;
   const addSheetDisabled = anyJobRunning || sheetCount >= cropCount;
 
+  // ⚡2026-06-26 — per-row primary action (stage-supplied icon + hook gating).
+  const action = batchAction.getState(batch);
+  const ActionIcon = batchAction.icon;
+  const actionLabel = action.isError ? batchAction.retryLabel : batchAction.label;
+
   return (
     <div
       role="treeitem"
@@ -221,18 +273,18 @@ function BatchNode({
       aria-selected={isActiveBatch}
       className="flex flex-col"
     >
-      <div className="flex items-center gap-1.5 px-2 pb-1.5 pt-2">
-        {/* Caret + name → toggle collapse only (never selects a sheet). */}
+      <div className="flex items-start gap-1.5 px-2 pb-1.5 pt-2">
+        {/* Caret + name (+ crop count below) → toggle collapse only. */}
         <button
           type="button"
           aria-label={`${collapsed ? 'Mở' : 'Thu gọn'} ${batch.name}`}
           aria-expanded={!collapsed}
           onClick={() => onToggleCollapse(batch.id)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-[var(--swap-modal-surface-hover)] focus:outline-none focus:ring-1 focus:ring-inset focus:ring-[var(--swap-modal-accent)]"
+          className="flex min-w-0 flex-1 items-start gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-[var(--swap-modal-surface-hover)] focus:outline-none focus:ring-1 focus:ring-inset focus:ring-[var(--swap-modal-accent)]"
         >
           <span
             aria-hidden="true"
-            className="flex h-4 w-4 shrink-0 items-center justify-center text-[var(--swap-modal-text-muted)]"
+            className="flex h-5 w-4 shrink-0 items-center justify-center text-[var(--swap-modal-text-muted)]"
           >
             {collapsed ? (
               <ChevronRight className="h-3.5 w-3.5" />
@@ -240,17 +292,17 @@ function BatchNode({
               <ChevronDown className="h-3.5 w-3.5" />
             )}
           </span>
-          <span className="truncate text-sm font-semibold text-[var(--swap-modal-text-primary)]">
-            {batch.name}
-          </span>
-          {cropCount > 0 && (
-            <span
-              aria-hidden="true"
-              className="ml-1 shrink-0 text-xs tabular-nums text-[var(--swap-modal-text-muted)]"
-            >
-              · {cropCount} crops
+          {/* ⚡2026-06-26 — name on row 1, "N crops" relocated to row 2. */}
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-semibold text-[var(--swap-modal-text-primary)]">
+              {batch.name}
             </span>
-          )}
+            {cropCount > 0 && (
+              <span className="text-xs tabular-nums text-[var(--swap-modal-text-muted)]">
+                {cropCount} crops
+              </span>
+            )}
+          </span>
         </button>
 
         {/* Sheet stepper [−] K [+] */}
@@ -293,6 +345,46 @@ function BatchNode({
           </button>
         </div>
 
+        {/* ⚡2026-06-26 — per-row primary action (Swap/Remove BG/Upscale).
+            Click auto-selects the batch then enqueues the stage job. Tooltip
+            carries the gate reason when disabled, else the action label (the
+            button is icon-only). The [✓] check button sits to its right —
+            DEFERRED (rendered later). */}
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={-1} className="inline-flex shrink-0">
+                <button
+                  type="button"
+                  aria-label={`${actionLabel} ${batch.name}`}
+                  disabled={action.disabled || action.busy}
+                  aria-busy={action.busy || undefined}
+                  onClick={() => {
+                    log.info('onRunBatchAction', 'run stage action', {
+                      batchId: batch.id,
+                    });
+                    batchAction.onRun(batch.id);
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded-md border border-[var(--swap-modal-border)] text-[var(--swap-modal-accent)] transition-colors hover:bg-[var(--swap-modal-surface-hover)] hover:text-[var(--swap-modal-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {action.busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ActionIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              className="max-w-xs text-xs"
+              style={TOOLTIP_CONTENT_STYLE}
+            >
+              {action.tooltip ?? actionLabel}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
         {/* [✕] remove batch — only when above BATCH_MIN */}
         {SHOW_REMOVE_BATCH && canRemoveBatch && (
           <button
@@ -312,9 +404,11 @@ function BatchNode({
 
       {!collapsed && sheetCount > 0 && (
         <div role="group" className="flex flex-col">
-          {batch.crop_sheets.map((_, sheetIndex) => {
+          {batch.crop_sheets.map((sheet, sheetIndex) => {
             const isActive =
               isActiveBatch && activeBatchRef?.sheetIndex === sheetIndex;
+            // ⚡2026-06-26 — per-sheet crop count pill (mockup).
+            const sheetCropCount = sheet.original_crops.length;
             return (
               <button
                 key={sheetIndex}
@@ -342,9 +436,22 @@ function BatchNode({
                   aria-hidden="true"
                   className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--swap-modal-text-muted)]"
                 />
-                <span className="truncate font-medium">
+                <span className="min-w-0 flex-1 truncate font-medium">
                   Sheet {sheetIndex + 1}
                 </span>
+                {sheetCropCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'shrink-0 rounded-full px-2 py-0.5 text-xs tabular-nums',
+                      isActive
+                        ? 'bg-[var(--swap-modal-accent)]/15 text-[var(--swap-modal-text-primary)]'
+                        : 'bg-[var(--swap-modal-surface-hover)] text-[var(--swap-modal-text-muted)]',
+                    )}
+                  >
+                    {sheetCropCount} crops
+                  </span>
+                )}
               </button>
             );
           })}

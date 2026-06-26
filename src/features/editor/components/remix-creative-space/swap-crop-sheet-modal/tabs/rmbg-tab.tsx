@@ -32,7 +32,6 @@ export function RmbgTab(props: RmbgTabProps) {
     remixId: props.remixId,
     batchCount: props.batches.length,
     activeBatchId: t.batch?.id ?? null,
-    actionDisabled: t.actionDisabled,
     importDisabled: t.importDisabled,
   });
 
@@ -48,6 +47,13 @@ export function RmbgTab(props: RmbgTabProps) {
         canAddBatch={t.canAddBatch}
         addBatchTooltip={t.addBatchTooltip}
         selectionSize={t.selectionSize}
+        batchAction={{
+          icon: Eraser,
+          label: t.cfg.actionLabel,
+          retryLabel: 'Retry Remove BG',
+          getState: t.evaluateBatchAction,
+          onRun: t.handleStartBatchJob,
+        }}
         onSelectBatchSheet={props.onSelectBatchSheet}
         onAddBatch={t.handleAddBatch}
         onRemoveBatch={t.handleRemoveBatchGuarded}
@@ -66,15 +72,6 @@ export function RmbgTab(props: RmbgTabProps) {
       ) : t.batch ? (
         <CropSheetStage
           source={{ mode: 'batches', sheet: t.sheet, selectedSwap: t.selectedSwap }}
-          headerPrimary={{
-            label:
-              t.swapTask.state === 'error' ? 'Retry Remove BG' : t.cfg.actionLabel,
-            icon: Eraser,
-            disabled: t.actionDisabled,
-            tooltip: t.gateReason,
-            busy: t.isSubmitting || t.isRunning,
-            onClick: t.handleStartJob,
-          }}
           headerActions={
             <StageImportButton
               disabled={t.importDisabled}

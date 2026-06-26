@@ -74,6 +74,21 @@ export interface StageGateResult {
   reason?: string;
 }
 
+/** Per-batch evaluation of the stage's primary action (⚡2026-06-26 — moved
+ *  from the stage header into each sidebar batch row). Computed per batch so
+ *  every row reflects its OWN crops/precondition/running state. */
+export interface BatchActionState {
+  /** Gate failed OR a stage job is running OR this batch is busy. */
+  disabled: boolean;
+  /** Why it's disabled (gate reason / per-stage mutex) — surfaced as a row
+   *  tooltip. Undefined when actionable. */
+  tooltip?: string;
+  /** This batch's job is submitting/running → spinner + aria-busy. */
+  busy: boolean;
+  /** This batch's last job errored → label flips to the retry copy. */
+  isError: boolean;
+}
+
 interface PendingAction {
   kind: RelayoutConfirmKind;
   batchName: string;
@@ -98,9 +113,9 @@ export interface StageBatchTabState {
   swapTask: BatchSwapTaskStatus;
   isSubmitting: boolean;
   isRunning: boolean;
-  // gating
-  actionDisabled: boolean;
-  gateReason: string | undefined;
+  // ⚡2026-06-26 per-batch primary action (sidebar rows)
+  evaluateBatchAction: (batch: RemixStageBatch) => BatchActionState;
+  handleStartBatchJob: (batchId: string) => void;
   // rev6 selection / subset-add
   selectionSize: number;
   selectedSwapCrops: ReadonlySet<string>;
@@ -127,7 +142,6 @@ export interface StageBatchTabState {
   submittingLabel: string;
   // sidebar collapse
   collapse: CollapseSetApi;
-  handleStartJob: () => void;
 }
 
 export function useStageBatchTab(
@@ -145,6 +159,7 @@ export function useStageBatchTab(
     anyJobRunning,
     submittingBatchId,
     onActivateBatch,
+    onSelectBatchSheet,
     onStartJob,
     onRemoveBatch,
     onAddSheet,
@@ -199,22 +214,34 @@ export function useStageBatchTab(
     submittingBatchId != null && submittingBatchId === batch?.id;
   const isRunning = swapTask.state === 'running';
 
-  // ── Gating (generic crops check + per-stage precondition) ───────────────────
-  const hasCrops =
-    batch?.crop_sheets.some((s) => s.original_crops.length > 0) ?? false;
-  const gate = useMemo<StageGateResult>(() => {
-    if (!batch) return { ok: false, reason: `Select a batch to ${cfg.actionLabel.toLowerCase()}` };
-    if (!hasCrops) return { ok: false, reason: 'This batch has no crops to process' };
-    return precondition?.(batch) ?? { ok: true };
-  }, [batch, hasCrops, precondition, cfg.actionLabel]);
+  // ── Per-batch action gating (⚡2026-06-26 — the primary Swap/Remove BG/
+  // Upscale action moved from the stage header into each sidebar batch row).
+  // Evaluated per batch (the row owns its own gate), so a busy/empty batch
+  // disables ITS button while siblings stay actionable. `anyJobRunning` is the
+  // shared per-stage mutex (only one job at a time across the remix). ──────────
+  const evaluateBatchAction = useCallback(
+    (b: RemixStageBatch): BatchActionState => {
+      const running = b.swapTask?.state === 'running';
+      const submitting = submittingBatchId === b.id;
+      const busy = running || submitting;
+      const isError = b.swapTask?.state === 'error';
 
-  const actionDisabled = !gate.ok || anyJobRunning || isSubmitting || isRunning;
-  const gateReason = useMemo<string | undefined>(() => {
-    if (anyJobRunning && !isSubmitting && !isRunning) {
-      return `A ${cfg.actionLabel.toLowerCase()} job is already running for this remix`;
-    }
-    return gate.ok ? undefined : gate.reason;
-  }, [anyJobRunning, isSubmitting, isRunning, gate, cfg.actionLabel]);
+      const hasCrops = b.crop_sheets.some((s) => s.original_crops.length > 0);
+      const gate: StageGateResult = !hasCrops
+        ? { ok: false, reason: 'This batch has no crops to process' }
+        : (precondition?.(b) ?? { ok: true });
+
+      const disabled = !gate.ok || anyJobRunning || busy;
+      const tooltip =
+        anyJobRunning && !busy
+          ? `A ${cfg.actionLabel.toLowerCase()} job is already running for this remix`
+          : !gate.ok
+            ? gate.reason
+            : undefined;
+      return { disabled, tooltip, busy, isError };
+    },
+    [precondition, anyJobRunning, submittingBatchId, cfg.actionLabel],
+  );
 
   // ── rev6 subset Add Batch ───────────────────────────────────────────────────
   const selectionSize = selectedSwapCrops.size;
@@ -389,11 +416,26 @@ export function useStageBatchTab(
   }, [stage]);
   const cancelPending = useCallback(() => setPending(null), []);
 
-  const handleStartJob = useCallback(() => {
-    if (!batch) return;
-    log.info('handleStartJob', 'request stage job', { stage, batchId: batch.id });
-    onStartJob(batch.id);
-  }, [batch, stage, onStartJob]);
+  // ⚡2026-06-26 — per-row action: select the target batch (so the stage canvas
+  // tracks ITS progress overlay) then enqueue. `onStartJob` is already
+  // per-batch (modal → handleStartStageJob(stage, batchId)); selection only
+  // moves the active ref. Preserve the active sheet when re-running the already-
+  // selected batch; otherwise start at sheet 0.
+  const handleStartBatchJob = useCallback(
+    (batchId: string) => {
+      const sheetIndex =
+        activeBatchRef && activeBatchRef.batchId === batchId
+          ? activeBatchRef.sheetIndex
+          : 0;
+      log.info('handleStartBatchJob', 'select + start stage job', {
+        stage,
+        batchId,
+      });
+      onSelectBatchSheet(batchId, sheetIndex);
+      onStartJob(batchId);
+    },
+    [stage, activeBatchRef, onSelectBatchSheet, onStartJob],
+  );
 
   // ── Per-stage overlay copy ──────────────────────────────────────────────────
   const verb =
@@ -413,8 +455,8 @@ export function useStageBatchTab(
     swapTask,
     isSubmitting,
     isRunning,
-    actionDisabled,
-    gateReason,
+    evaluateBatchAction,
+    handleStartBatchJob,
     selectionSize,
     selectedSwapCrops,
     toggleSwapCropSelection,
@@ -435,6 +477,5 @@ export function useStageBatchTab(
     runningLabel,
     submittingLabel,
     collapse,
-    handleStartJob,
   };
 }

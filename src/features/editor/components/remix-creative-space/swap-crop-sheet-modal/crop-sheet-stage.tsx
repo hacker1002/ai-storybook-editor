@@ -38,7 +38,11 @@ import type {
   SwapPreviewState,
   BatchSwapTaskStatus,
 } from '@/types/remix';
-import { ZOOM, HEADER_HEIGHT_PX } from './swap-modal-constants';
+import { ZOOM, HEADER_HEIGHT_PX, Z_INDEX } from './swap-modal-constants';
+
+// Lift in-modal tooltips above the z-4000 swapModal (shared TooltipContent ships
+// at z-50, otherwise occluded). ⚡2026-06-26 (see Z_INDEX.tooltip).
+const TOOLTIP_CONTENT_STYLE = { zIndex: Z_INDEX.tooltip };
 import type {
   StageAfterComposeMode,
   StageComposeMode,
@@ -90,8 +94,12 @@ export type StageSource =
 
 export interface CropSheetStageProps {
   source: StageSource;
-  /** Primary action button (Generate | Swap) — tab-supplied. */
-  headerPrimary: StageHeaderPrimary;
+  /** Optional primary action button rendered at the left of the stage header.
+   *  ⚡2026-06-26: NO tab supplies this anymore — all 4 tabs (Sprites + the 3
+   *  stage tabs) moved their Swap/Remove BG/Upscale action into the per-row
+   *  sidebar buttons. Kept as a reserved header-action slot for a future tab;
+   *  `StageHeader` renders `PrimaryActionButton` only when present. */
+  headerPrimary?: StageHeaderPrimary;
   /** Optional extra header actions rendered AFTER the Compare toggle (e.g. the
    *  Sprites tab's read-only "Settings" review button). Tab-supplied node so the
    *  Stage stays presentational. */
@@ -320,7 +328,7 @@ export function CropSheetStage({
 // ── StageHeader ──────────────────────────────────────────────────────────────
 
 interface StageHeaderProps {
-  headerPrimary: StageHeaderPrimary;
+  headerPrimary?: StageHeaderPrimary;
   headerActions?: React.ReactNode;
   compareMode: boolean;
   compareDisabled: boolean;
@@ -345,7 +353,9 @@ function StageHeader({
       style={{ height: HEADER_HEIGHT_PX }}
     >
       <div className="flex items-center gap-2">
-        <PrimaryActionButton headerPrimary={headerPrimary} />
+        {/* ⚡2026-06-26 — only the Variants/Sprites tab still supplies a header
+            action; the 3 stage tabs render it per-batch in the sidebar. */}
+        {headerPrimary && <PrimaryActionButton headerPrimary={headerPrimary} />}
 
         <TooltipProvider>
           <Tooltip>
@@ -376,7 +386,9 @@ function StageHeader({
               </span>
             </TooltipTrigger>
             {compareDisabled && (
-              <TooltipContent>Chưa có swap result để so sánh</TooltipContent>
+              <TooltipContent style={TOOLTIP_CONTENT_STYLE}>
+                Chưa có swap result để so sánh
+              </TooltipContent>
             )}
           </Tooltip>
         </TooltipProvider>
@@ -440,7 +452,7 @@ function PrimaryActionButton({
         <TooltipTrigger asChild>
           <span>{button}</span>
         </TooltipTrigger>
-        <TooltipContent>{tooltip}</TooltipContent>
+        <TooltipContent style={TOOLTIP_CONTENT_STYLE}>{tooltip}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );

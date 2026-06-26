@@ -46,6 +46,7 @@ import { useSelectedSwapCrops } from '../hooks/use-selected-swap-crops';
 import { useSpriteOwnership } from '../hooks/use-sprite-ownership';
 import { SwapConfigReviewModal } from '../swap-config-review-modal';
 import { SpritesSidebar } from './sprites-sidebar';
+import type { BatchActionState } from './use-stage-batch-tab';
 
 const log = createLogger('Editor', 'VariantsTab');
 
@@ -205,30 +206,43 @@ export function VariantsTab({
     () => (sprite ? missingSwapConfigObjects(sprite, configViews) : []),
     [sprite, configViews],
   );
-  const lineupCount = useMemo(
-    () =>
-      sprite
-        ? sprite.crop_sheets.reduce((acc, s) => acc + s.original_crops.length, 0)
-        : 0,
-    [sprite],
+
+  // ⚡2026-06-26 — per-sprite Swap action (moved from the stage header into each
+  // sidebar sprite row). Evaluated per sprite (own cells + config + busy state);
+  // `anySpriteSwapRunning` is the shared mutex. Mirrors `evaluateBatchAction`
+  // (05-11) — completeness gate: every lineup character needs a COMPLETE config
+  // (NOT just ≥1) or enqueue fails server-side MISSING_OBJECT_CONFIG.
+  const evaluateSpriteAction = useCallback(
+    (s: RemixSprite): BatchActionState => {
+      const running = s.swapTask?.state === 'running';
+      const submitting = submittingSpriteId === s.id;
+      const busy = running || submitting;
+      const isError = s.swapTask?.state === 'error';
+
+      const cellCount = s.crop_sheets.reduce(
+        (acc, sh) => acc + sh.original_crops.length,
+        0,
+      );
+      const missing = missingSwapConfigObjects(s, configViews);
+      const gateOk = cellCount > 0 && missing.length === 0;
+      const gateReason =
+        cellCount === 0
+          ? 'This batch has no variants to swap'
+          : missing.length > 0
+            ? 'Finish the swap config (human + visual + extract + ≥1 trait) for every character first'
+            : undefined;
+
+      const disabled = !gateOk || anySpriteSwapRunning || busy;
+      const tooltip =
+        anySpriteSwapRunning && !busy
+          ? 'A sprite swap is already running for this remix'
+          : !gateOk
+            ? gateReason
+            : undefined;
+      return { disabled, tooltip, busy, isError };
+    },
+    [configViews, anySpriteSwapRunning, submittingSpriteId],
   );
-
-  const hasCells = lineupCount > 0;
-  // canSwap = every lineup character has a COMPLETE config (NOT just ≥1) — a
-  // partial config slips past enqueue and fails server-side MISSING_OBJECT_CONFIG.
-  const canSwap = sprite != null && hasCells && missingConfigObjects.length === 0;
-  const swapDisabled =
-    !canSwap || anySpriteSwapRunning || isSubmitting || isRunning;
-
-  const gateReason = useMemo<string | undefined>(() => {
-    if (!sprite) return 'Select a sprite to swap';
-    if (anySpriteSwapRunning && !isSubmitting && !isRunning)
-      return 'A sprite swap is already running for this remix';
-    if (!hasCells) return 'This sprite has no variants to swap';
-    if (missingConfigObjects.length > 0)
-      return 'Finish the swap config (human + visual + extract + ≥1 trait) for every character first';
-    return undefined;
-  }, [sprite, anySpriteSwapRunning, isSubmitting, isRunning, hasCells, missingConfigObjects]);
 
   log.debug('render', 'variants tab (sprite)', {
     remixId,
@@ -236,7 +250,6 @@ export function VariantsTab({
     activeSpriteId: sprite?.id ?? null,
     sheetIndex,
     sheetCount,
-    canSwap,
     missingConfigCount: missingConfigObjects.length,
     isSubmitting,
     isRunning,
@@ -291,11 +304,21 @@ export function VariantsTab({
     setPending(null);
   };
 
-  const handleSwap = () => {
-    if (!sprite) return;
-    log.info('handleSwap', 'request sprite swap', { spriteId: sprite.id });
-    onSwapSprite(sprite.id);
-  };
+  // ⚡2026-06-26 — per-row Swap: select that sprite (so the stage canvas tracks
+  // ITS progress overlay) then enqueue. Preserve the active sheet when re-running
+  // the already-selected sprite; else start at sheet 0.
+  const handleSwapSprite = useCallback(
+    (spriteId: string) => {
+      const idx =
+        activeSpriteRef && activeSpriteRef.spriteId === spriteId
+          ? activeSpriteRef.sheetIndex
+          : 0;
+      log.info('handleSwapSprite', 'select + swap sprite', { spriteId });
+      onSelectSpriteSheet(spriteId, idx);
+      onSwapSprite(spriteId);
+    },
+    [activeSpriteRef, onSelectSpriteSheet, onSwapSprite],
+  );
 
   // ── Subset Add Sprite ──────────────────────────────────────────────────────
   const selectionSize = selectedSwapCells.size;
@@ -376,6 +399,13 @@ export function VariantsTab({
         addSpriteTooltip={addSpriteTooltip}
         selectionSize={selectionSize}
         layoutPending={layoutPending}
+        spriteAction={{
+          icon: Repeat,
+          label: 'Swap',
+          retryLabel: 'Retry swap',
+          getState: evaluateSpriteAction,
+          onRun: handleSwapSprite,
+        }}
         onSelectSpriteSheet={onSelectSpriteSheet}
         onAddSprite={handleAddSprite}
         onRemoveSprite={handleRemoveSprite}
@@ -386,14 +416,6 @@ export function VariantsTab({
       {sprite ? (
         <CropSheetStage
           source={{ mode: 'batches', sheet, selectedSwap }}
-          headerPrimary={{
-            label: swapTask.state === 'error' ? 'Retry swap' : 'Swap',
-            icon: Repeat,
-            disabled: swapDisabled,
-            tooltip: gateReason,
-            busy: isSubmitting || isRunning,
-            onClick: handleSwap,
-          }}
           headerActions={
             <button
               type="button"
