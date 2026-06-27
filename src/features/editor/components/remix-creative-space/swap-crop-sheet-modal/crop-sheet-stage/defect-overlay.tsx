@@ -29,6 +29,12 @@ export const DEFECT_SEVERITY_STYLE = {
   low: { stroke: '#3b82f6', fill: 'rgba(59,130,246,0.12)' },
 } as const;
 
+/** Ellipse enlargement vs the raw `box` (box inscribed = 1.0 ↔ circumscribed =
+ *  √2 ≈ 1.414). 1.2 gives the oval a little breathing room around the region
+ *  without fully circumscribing it. Tune within [1.0, 1.414]. Only applies to the
+ *  `box`→ellipse path; the center+radius circle path is already circumscribed. */
+export const DEFECT_OVAL_SCALE = 1.2;
+
 export interface DefectOverlayProps {
   /** Defects of the SHEET currently shown (defectsBySheet[activeSheetIndex]). */
   defects: SwapDefect[];
@@ -118,8 +124,8 @@ export function DefectOverlay({
               key={i}
               cx={x + w / 2}
               cy={y + h / 2}
-              rx={w / 2}
-              ry={h / 2}
+              rx={(w / 2) * DEFECT_OVAL_SCALE}
+              ry={(h / 2) * DEFECT_OVAL_SCALE}
               {...common}
             >
               {title}
