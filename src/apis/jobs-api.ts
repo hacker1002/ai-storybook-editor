@@ -169,6 +169,55 @@ export type EnqueueSpriteSwapData =
   | EnqueueSpriteSwapSkippedData
   | EnqueueSpriteSwapDedupedData;
 
+// ── Detect swap defects (api/jobs/11 — sprite-level Check, Variants tab) ──────
+// Mirror sprite swap: enqueue background job that loops every swapped sheet and
+// returns `defectsBySheet` via `background_jobs.result`. Advisory/ephemeral.
+
+export interface EnqueueDetectDefectsBody {
+  sprite_id: string;
+  force_resweep?: boolean;
+  /** Swap intent context the core re-reads (NOT a model dispatch). */
+  swap_model?: string;
+  swap_temperature?: number;
+  focus_objects?: string[];
+  severity_threshold?: 'low' | 'medium' | 'high';
+  max_defects?: number;
+}
+
+export interface EnqueueDetectDefectsEnqueuedData {
+  job_id: string;
+  status: 'queued';
+  type: 'remix_detect_defects';
+  remix_id: string;
+  sprite_id: string;
+  total_steps: number;
+  sheets_to_process: number;
+  estimated_duration_sec?: number;
+  skipped?: false;
+  deduped?: false;
+}
+
+export interface EnqueueDetectDefectsSkippedData {
+  skipped: true;
+  reason: 'no_swap_result' | 'no_crop_sheets' | string;
+  sheets_to_process: 0;
+}
+
+export interface EnqueueDetectDefectsDedupedData {
+  job_id: string;
+  status: 'queued' | 'running';
+  type: 'remix_detect_defects';
+  remix_id: string;
+  /** Detect dedup key = sprite_id (INDEPENDENT of swap — disjoint). */
+  active_swap_key: string;
+  deduped: true;
+}
+
+export type EnqueueDetectDefectsData =
+  | EnqueueDetectDefectsEnqueuedData
+  | EnqueueDetectDefectsSkippedData
+  | EnqueueDetectDefectsDedupedData;
+
 /** Error thrown by enqueue wrappers on non-2xx so callers can branch on the
  *  backend `code` (e.g. MISSING_VARIANT_REFERENCE) — a plain `Error` would lose
  *  it. `code`/`httpStatus` mirror the `ImageApiFailure` fields. */
@@ -260,6 +309,49 @@ export async function enqueueRemixSpriteSwap(
   if (!result.success) {
     const failure = result as ImageApiFailure;
     log.error('enqueueRemixSpriteSwap', 'failed', {
+      remixId,
+      httpStatus: failure.httpStatus,
+      errorCode: failure.errorCode,
+    });
+    throw new EnqueueJobError(failure.error, failure.httpStatus, failure.errorCode);
+  }
+  return result.data;
+}
+
+/** POST /api/jobs/remix/{remixId}/detect-sprite-defects (api/jobs/11 — Check).
+ *  Returns parsed `data` on 2xx (enqueued/skipped/deduped); throws
+ *  `EnqueueJobError` (with backend `code`) on non-2xx so the caller can
+ *  distinguish 422 NO_SWAP_RESULT / 404 SPRITE_NOT_FOUND from a generic failure.
+ *  Body carries `sprite_id` + `force_resweep` + swap-intent context
+ *  (`swap_model`/`swap_temperature`). SECURITY: never log defect messages/media. */
+export async function enqueueRemixDetectDefects(
+  remixId: string,
+  body: EnqueueDetectDefectsBody,
+): Promise<EnqueueDetectDefectsData> {
+  log.info('enqueueRemixDetectDefects', 'request', {
+    remixId,
+    forceResweep: body.force_resweep ?? true,
+    model: body.swap_model,
+  });
+  const result = await callImageApi<EnqueueJobResponse<EnqueueDetectDefectsData>>(
+    `/api/jobs/remix/${encodeURIComponent(remixId)}/detect-sprite-defects`,
+    {
+      sprite_id: body.sprite_id,
+      force_resweep: body.force_resweep ?? true,
+      ...(body.swap_model ? { swap_model: body.swap_model } : {}),
+      ...(body.swap_temperature != null
+        ? { swap_temperature: body.swap_temperature }
+        : {}),
+      ...(body.focus_objects ? { focus_objects: body.focus_objects } : {}),
+      ...(body.severity_threshold
+        ? { severity_threshold: body.severity_threshold }
+        : {}),
+      ...(body.max_defects != null ? { max_defects: body.max_defects } : {}),
+    },
+  );
+  if (!result.success) {
+    const failure = result as ImageApiFailure;
+    log.error('enqueueRemixDetectDefects', 'failed', {
       remixId,
       httpStatus: failure.httpStatus,
       errorCode: failure.errorCode,

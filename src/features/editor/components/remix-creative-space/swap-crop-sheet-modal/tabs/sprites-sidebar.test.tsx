@@ -66,6 +66,16 @@ function renderSidebar(
       getState,
       onRun,
     },
+    spriteDetectAction: {
+      getState: () => ({
+        disabled: false,
+        busy: false,
+        tooltip: 'Kiểm tra lỗi swap (mọi sheet)',
+        label: 'Check',
+        badge: null,
+      }),
+      onRun: vi.fn(),
+    },
     onSelectSpriteSheet: vi.fn(),
     onAddSprite: vi.fn(),
     onRemoveSprite: vi.fn(),

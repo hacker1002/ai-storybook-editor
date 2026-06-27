@@ -8,6 +8,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { STAGE_JOB_CONFIG } from '@/types/remix';
 import type {
   BatchSwapTaskStatus,
+  DefectSheetResult,
+  DetectTaskStatus,
   Remix,
   RemixJob,
   RemixJobPhase,
@@ -452,6 +454,118 @@ export const useAnySpriteSwapRunning = (
     ),
   );
 
+// ── Sprite detect selectors (Variants tab — Check, api/jobs/11) ──────────────
+
+/** Stable empty defects array — keeps the projected ref steady across renders
+ *  when a sprite has no completed detect (avoids selector re-render loops,
+ *  memory feedback_zustand_useshallow_nested_arrays). */
+const EMPTY_DEFECTS: DefectSheetResult[] = [];
+
+/** Result of {@link deriveSpriteDetectTask} — task state + the latest completed
+ *  job's per-sheet defects + its createdAt (for the stale guard). */
+export interface SpriteDetectView {
+  task: DetectTaskStatus;
+  defectsBySheet: DefectSheetResult[];
+  /** createdAt of the latest detect job (drives `jobCreatedAt > swap.created_time`
+   *  stale guard). Undefined when no detect has ever run for the sprite. */
+  jobCreatedAt?: string;
+}
+
+/** Derive a sprite's detect task + defects from `jobs[]` (mirror
+ *  deriveSpriteSwapTask). Latest `remix_detect_defects` job for (remixId,
+ *  spriteId); maps status → UI task. `defectsBySheet` is read from the RAW job
+ *  result (no fresh `.map()`) so callers can memoize on the job ref. Pure. */
+export function deriveSpriteDetectTask(
+  jobs: RemixJob[],
+  remixId: string,
+  spriteId: string,
+): SpriteDetectView {
+  const matches = jobs.filter(
+    (j) =>
+      j.phase === 'remix_detect_defects' &&
+      j.remixId === remixId &&
+      j.spriteId === spriteId,
+  );
+  if (matches.length === 0) {
+    return { task: { state: 'idle' }, defectsBySheet: EMPTY_DEFECTS };
+  }
+  const job = matches.reduce((latest, cur) =>
+    cur.createdAt > latest.createdAt ? cur : latest,
+  );
+
+  // Defects only meaningful on a completed run; while running/queued the
+  // overlay stays empty (prior-run defects would be stale vs the new check).
+  const defectsBySheet =
+    job.status === 'completed'
+      ? (job.result?.defectsBySheet ?? EMPTY_DEFECTS)
+      : EMPTY_DEFECTS;
+
+  if (job.status === 'queued' || job.status === 'running') {
+    return {
+      task: { state: 'running', current: job.currentStep, total: job.totalSteps },
+      defectsBySheet,
+      jobCreatedAt: job.createdAt,
+    };
+  }
+
+  if (job.status === 'failed' || job.status === 'cancelled') {
+    return {
+      task: {
+        state: 'error',
+        message: job.result?.errors?.[0]?.message ?? 'Detect failed',
+      },
+      defectsBySheet,
+      jobCreatedAt: job.createdAt,
+    };
+  }
+
+  // completed — clean or partial (per-sheet errors are non-fatal).
+  return {
+    task: {
+      state: 'done',
+      skippedSheets:
+        typeof job.result?.skipped_sheets === 'number'
+          ? job.result.skipped_sheets
+          : 0,
+      errorCount: job.result?.errors?.length ?? 0,
+    },
+    defectsBySheet,
+    jobCreatedAt: job.createdAt,
+  };
+}
+
+/** Reusable sprite-detect hook (mirror the swapTask derivation). Memoized on
+ *  the per-remix `jobs` slice + spriteId so the projected `defectsBySheet` ref
+ *  is stable until a job updates (memory feedback_zustand_useshallow_nested_arrays). */
+export const useSpriteDetect = (
+  remixId: string | null | undefined,
+  spriteId: string | null | undefined,
+): SpriteDetectView => {
+  const jobs = useJobsForRemix(remixId ?? '');
+  return useMemo<SpriteDetectView>(() => {
+    if (!remixId || !spriteId) {
+      return { task: { state: 'idle' }, defectsBySheet: EMPTY_DEFECTS };
+    }
+    return deriveSpriteDetectTask(jobs, remixId, spriteId);
+  }, [jobs, remixId, spriteId]);
+};
+
+/** True when ANY `remix_detect_defects` job of the remix is queued/running.
+ *  Gates every Check button (detect dedups to 1 per remix). Independent of swap.
+ *  Boolean primitive — ref-stable by value. */
+export const useAnyDetectRunning = (
+  remixId: string | null | undefined,
+): boolean =>
+  useRemixStore((s) =>
+    !!remixId &&
+    s.jobs.some(
+      (j) =>
+        j.phase === 'remix_detect_defects' &&
+        j.remixId === remixId &&
+        (j.status === 'queued' || j.status === 'running'),
+    ),
+  );
+
 /** True while a sprite LAYOUT computation (seed / relayout / add-subset) is
  *  in flight for the remix. Layout measures every cell artwork's natural
  *  dimensions via image loads — seconds on a cold cache — so the modal shows a
@@ -520,6 +634,7 @@ export const useRemixActions = () =>
       removeStageBatchSheet: s.removeStageBatchSheet,
       takeFinalBack: s.takeFinalBack,
       startSpriteSwap: s.startSpriteSwap,
+      startDetectDefects: s.startDetectDefects,
       addSprite: s.addSprite,
       removeSprite: s.removeSprite,
       appendSpriteSheet: s.appendSpriteSheet,

@@ -27,6 +27,9 @@ import {
   useRemixById,
   useRemixActions,
   useSpriteLayoutPending,
+  useJobsForRemix,
+  useSpriteDetect,
+  deriveSpriteDetectTask,
 } from '@/stores/remix-store';
 import { useHumans } from '@/stores/humans-store';
 import type { RemixSprite } from '@/types/remix';
@@ -34,6 +37,7 @@ import {
   buildSwapConfigViews,
   missingSwapConfigObjects,
 } from './sprite-swap-gating';
+import { evaluateSpriteDetect } from './sprite-detect-gating';
 import { spriteBatchLabel } from '../swap-modal-constants';
 import { CropSheetStage } from '../crop-sheet-stage';
 import type { RenderableCrop } from '../crop-sheet-stage/composed-crop-sheet';
@@ -46,6 +50,7 @@ import { useSelectedSwapCrops } from '../hooks/use-selected-swap-crops';
 import { useSpriteOwnership } from '../hooks/use-sprite-ownership';
 import { SwapConfigReviewModal } from '../swap-config-review-modal';
 import { SpritesSidebar } from './sprites-sidebar';
+import type { DetectActionState } from './sprites-sidebar';
 import type { BatchActionState } from './use-stage-batch-tab';
 
 const log = createLogger('Editor', 'VariantsTab');
@@ -56,6 +61,10 @@ export interface VariantsTabProps {
   activeSpriteRef: { spriteId: string; sheetIndex: number } | null;
   submittingSpriteId: string | null;
   anySpriteSwapRunning: boolean;
+  /** Detect (Check) — POST in-flight sprite id (mirror submittingSpriteId). */
+  submittingDetectSpriteId: string | null;
+  /** True while ANY detect job runs for the remix (dedup = 1/remix). */
+  anyDetectRunning: boolean;
   onSelectSpriteSheet: (spriteId: string, sheetIndex: number) => void;
   /** Set the modal-owned activeSpriteRef after a successful subset Add Sprite so
    *  the new sprite (sheet 0) is auto-selected. */
@@ -64,6 +73,8 @@ export interface VariantsTabProps {
   onAddSheet: (spriteId: string) => void;
   onRemoveSheet: (spriteId: string, sheetIndex: number) => void;
   onSwapSprite: (spriteId: string) => void;
+  /** Enqueue a swap-defect detect job for the sprite (Check). */
+  onDetectSprite: (spriteId: string) => void;
   compareMode: boolean;
   zoomLevel: number;
   dividerPosition: number;
@@ -96,12 +107,15 @@ export function VariantsTab({
   activeSpriteRef,
   submittingSpriteId,
   anySpriteSwapRunning,
+  submittingDetectSpriteId,
+  anyDetectRunning,
   onSelectSpriteSheet,
   onActivateSprite,
   onRemoveSprite,
   onAddSheet,
   onRemoveSheet,
   onSwapSprite,
+  onDetectSprite,
   compareMode,
   zoomLevel,
   dividerPosition,
@@ -125,6 +139,10 @@ export function VariantsTab({
   // dimension measurement takes seconds on a cold cache; drive loading states
   // instead of a confusing empty tab.
   const layoutPending = useSpriteLayoutPending(remixId);
+
+  // Per-remix jobs slice (ref-stable via useShallow) — feeds the per-sprite
+  // detect derivation (`deriveSpriteDetectTask`) for both row gating + overlay.
+  const jobs = useJobsForRemix(remixId);
 
   // Swap-config gating: resolve every character's config view once (frozen
   // remix_config + live humans cache for converted_image).
@@ -200,6 +218,44 @@ export function VariantsTab({
   const isSubmitting =
     submittingSpriteId != null && submittingSpriteId === sprite?.id;
   const isRunning = swapTask.state === 'running';
+
+  // ── Detect (Check) — active-sprite overlay source + per-row gating ──────────
+  // Active-sprite detect via the reusable `useSpriteDetect` hook (the overlay
+  // reads the SHEET being viewed); the per-row evaluator derives each sprite
+  // inline with the pure `deriveSpriteDetectTask` (no hook in a loop).
+  const activeSpriteId = sprite?.id ?? null;
+  const activeDetect = useSpriteDetect(remixId, activeSpriteId);
+  const detectSheetResult =
+    activeDetect.defectsBySheet.find((d) => d.sheet_index === sheetIndex) ?? null;
+  const detectDefects = detectSheetResult?.defects ?? [];
+  const detectSwappedDim = detectSheetResult?.swappedDimensions ?? null;
+  // Stale guard (defects ephemeral): overlay only valid when the detect ran
+  // AFTER the swap result currently shown (jobCreatedAt > selectedSwap.created_time).
+  const detectOverlayStale =
+    !activeDetect.jobCreatedAt ||
+    selectedSwap === null ||
+    !(activeDetect.jobCreatedAt > selectedSwap.created_time);
+  const detectOverlayVisible =
+    selectedSwap !== null &&
+    detectDefects.length > 0 &&
+    !compareMode &&
+    !detectOverlayStale;
+  const detectProgress =
+    activeDetect.task.state === 'running'
+      ? { current: activeDetect.task.current, total: activeDetect.task.total }
+      : null;
+
+  // Per-row Check evaluator (pure — derives each sprite's detect inline; no hook
+  // in a loop). `anyDetectRunning` disables every Check (detect dedups 1/remix).
+  const evaluateSpriteDetectRow = useCallback(
+    (s: RemixSprite): DetectActionState =>
+      evaluateSpriteDetect(s, deriveSpriteDetectTask(jobs, remixId, s.id), {
+        submittingDetectSpriteId,
+        anySpriteSwapRunning,
+        anyDetectRunning,
+      }),
+    [jobs, remixId, submittingDetectSpriteId, anySpriteSwapRunning, anyDetectRunning],
+  );
 
   // ── Precondition + gating ──────────────────────────────────────────────────
   const missingConfigObjects = useMemo(
@@ -320,6 +376,22 @@ export function VariantsTab({
     [activeSpriteRef, onSelectSpriteSheet, onSwapSprite],
   );
 
+  // ⚡2026-06-27 — per-row Check: select that sprite (so the stage overlay tracks
+  // ITS sheet) then enqueue the detect job. Preserve the active sheet when
+  // re-checking the already-selected sprite; else start at sheet 0.
+  const handleDetectSprite = useCallback(
+    (spriteId: string) => {
+      const idx =
+        activeSpriteRef && activeSpriteRef.spriteId === spriteId
+          ? activeSpriteRef.sheetIndex
+          : 0;
+      log.info('handleDetectSprite', 'select + detect sprite', { spriteId });
+      onSelectSpriteSheet(spriteId, idx);
+      onDetectSprite(spriteId);
+    },
+    [activeSpriteRef, onSelectSpriteSheet, onDetectSprite],
+  );
+
   // ── Subset Add Sprite ──────────────────────────────────────────────────────
   const selectionSize = selectedSwapCells.size;
   const stageSelectable =
@@ -406,6 +478,10 @@ export function VariantsTab({
           getState: evaluateSpriteAction,
           onRun: handleSwapSprite,
         }}
+        spriteDetectAction={{
+          getState: evaluateSpriteDetectRow,
+          onRun: handleDetectSprite,
+        }}
         onSelectSpriteSheet={onSelectSpriteSheet}
         onAddSprite={handleAddSprite}
         onRemoveSprite={handleRemoveSprite}
@@ -449,6 +525,12 @@ export function VariantsTab({
           getOwnership={getOwnership}
           onTakeBack={handleTakeBack}
           takeBackDisabled={anySpriteSwapRunning}
+          defectOverlay={{
+            defects: detectDefects,
+            swappedDimensions: detectSwappedDim,
+            visible: detectOverlayVisible,
+          }}
+          detectProgress={detectProgress}
         />
       ) : (
         <section

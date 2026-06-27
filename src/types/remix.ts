@@ -249,6 +249,73 @@ export interface StartSpriteSwapParams {
   forceResweep?: boolean;
 }
 
+// ── Swap defect detection (Check — api/jobs/11) ──────────────────────────────
+// Advisory/ephemeral overlay: bấm Check trên 1 sprite → background job
+// `remix_detect_defects` soi MỌI sheet đã swap → trả `defectsBySheet` qua
+// `background_jobs.result` (KHÔNG persist vào `remixes`). FE vẽ vòng tròn/oval
+// (`DefectOverlay`) đè vùng swap nghi lỗi trên canvas AFTER. Mirror sprite swap.
+// Spec: api/remix/06-detect-swap-defects.md (core) + api/jobs/11 (job) + 05-15.
+
+/** Defect taxonomy (core 06 §Result). `low` severity color default khi
+ *  `severity`/`category` undefined. */
+export type SwapDefectCategory =
+  | 'identity_mismatch'
+  | 'trait_leak'
+  | 'cross_contamination'
+  | 'pose_or_composition'
+  | 'art_style_break'
+  | 'ordinal_altered'
+  | 'cell_structure'
+  | 'artifact'
+  | 'not_swapped'
+  | 'other';
+
+/** One suspected swap-defect region on a swapped sheet (coords px on
+ *  `swappedDimensions`). `box` present → render ellipse (hugs elongated areas);
+ *  else `center` + `radius` → circle. `message` is vi user copy — NEVER pushed
+ *  to logger/analytics (PII §10). */
+export interface SwapDefect {
+  center: { x: number; y: number };
+  radius: number;
+  box?: { x: number; y: number; w: number; h: number };
+  category?: SwapDefectCategory;
+  severity?: 'low' | 'medium' | 'high';
+  message?: string;
+  confidence?: number;
+  cell?: number;
+  object_key?: string;
+}
+
+/** Per-sheet detect result = `background_jobs.result.defectsBySheet[]`
+ *  (api/jobs/11). `swappedDimensions` is the COORDINATE ORIGIN for the sheet's
+ *  defects (the swapped sheet pixel size). `truncated` → core capped at
+ *  `max_defects` (30) most-severe per sheet. */
+export interface DefectSheetResult {
+  sheet_index: number;
+  defects: SwapDefect[];
+  swappedDimensions: { width: number; height: number };
+  defectCount: number;
+  truncated?: boolean;
+}
+
+/** Sprite-level detect task — DERIVED from `jobs[]` (mirror SpriteSwapTaskStatus).
+ *  `done` carries the skip/error counters so the sidebar badge can summarize a
+ *  clean vs partial run. */
+export type DetectTaskStatus =
+  | { state: 'idle' }
+  | { state: 'running'; current: number; total: number }
+  | { state: 'done'; skippedSheets: number; errorCount: number }
+  | { state: 'error'; message: string };
+
+/** Args for the sprite-level detect enqueue (api/jobs/11). `params` supplies the
+ *  swap-model context (`swap_model`/`swap_temperature`) the core re-uses to read
+ *  the swap intent; mirror `StartSpriteSwapParams`. */
+export interface StartDetectDefectsParams {
+  remixId: string;
+  spriteId: string;
+  params: SwapModelParams;
+}
+
 // ── Spread (display-only subset of BaseSpread) ───────────────────────────────
 // Drop editor-only fields. We intentionally keep this as a Pick so the existing
 // CanvasSpreadView<RemixSpread> generic continues to type-check.
@@ -445,12 +512,17 @@ export interface RemixRow {
 // `remix_rmbg` / `remix_upscale` = stage 2/3 pipeline jobs (api/jobs/09 + 10,
 // ⚡2026-06-12). Dedup is PER-TYPE + the 3 stage JSONB columns are disjoint →
 // the 3 stage jobs can run concurrently without blocking each other.
+// `remix_detect_defects` = sprite-level swap-defect detection (api/jobs/11 —
+// Variants tab Check). Independent of swap jobs (disjoint dedup key); advisory
+// result lives in `background_jobs.result.defectsBySheet` (NOT persisted to
+// `remixes`). Keep in lockstep with REMIX_SWAP_TYPES + JOB_TYPE_TO_PHASE.
 export type RemixJobPhase =
   | 'audio'
   | 'remix_mix_swap'
   | 'remix_sprite_swap'
   | 'remix_rmbg'
-  | 'remix_upscale';
+  | 'remix_upscale'
+  | 'remix_detect_defects';
 
 export type RemixJobStatus =
   | 'queued'
@@ -489,6 +561,9 @@ export interface RemixJobResult {
   skipped_sheets?: number;
   failed_sheets?: number;
   variants_processed?: number;
+  // Swap-defect detection (api/jobs/11 §Result) — advisory per-sheet defects.
+  // `skipped_sheets` (above) reused; `errors[]` reused for partial-sheet errors.
+  defectsBySheet?: DefectSheetResult[];
   [k: string]: unknown;
 }
 
@@ -547,6 +622,7 @@ export interface BackgroundJobRow {
     | 'remix_sprite_swap'
     | 'remix_rmbg'
     | 'remix_upscale'
+    | 'remix_detect_defects'
     | string;
   user_id: string;
   book_id: string | null;

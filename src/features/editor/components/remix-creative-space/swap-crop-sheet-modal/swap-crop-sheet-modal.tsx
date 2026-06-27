@@ -38,6 +38,7 @@ import {
   useRemixStageBatches,
   useAnyStageJobRunning,
   useAnySpriteSwapRunning,
+  useAnyDetectRunning,
   useRemixActions,
   useRemixStore,
 } from '@/stores/remix-store';
@@ -170,6 +171,8 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const remix = useRemixById(target.remixId);
   const sprites = useRemixSprites(target.remixId);
   const anySpriteSwapRunning = useAnySpriteSwapRunning(target.remixId);
+  // Detect (Check) — 1 job/remix (dedup); gates every Check button.
+  const anyDetectRunning = useAnyDetectRunning(target.remixId);
   // ⚡2026-06-12 — per-stage selectors (fixed-order hook calls; STAGES const).
   const mixBatches = useRemixStageBatches(target.remixId, 'mixes');
   const rmbgBatches = useRemixStageBatches(target.remixId, 'rmbgs');
@@ -197,6 +200,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     startStageJob,
     importStageBatch,
     startSpriteSwap,
+    startDetectDefects,
     removeSprite,
     appendSpriteSheet,
     removeSpriteSheet,
@@ -217,6 +221,10 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const [submittingSpriteId, setSubmittingSpriteId] = useState<string | null>(
     null,
   );
+  // Detect (Check) POST in-flight — mirror submittingSpriteId, modal-local.
+  const [submittingDetectSpriteId, setSubmittingDetectSpriteId] = useState<
+    string | null
+  >(null);
   // ⚡2026-06-12 — per-stage record (mixes auto-inits from the seeded batch;
   // rmbgs/upscales start null when 0 batches → empty-state CTA Import).
   const [stageStates, setStageStates] = useState<StageStates>(() => ({
@@ -436,6 +444,42 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
       }
     },
     [startSpriteSwap, target.remixId, params],
+  );
+
+  // ── onDetectSprite (Variants tab — Check) ────────────────────────────────────
+  // Mirror handleSwapSprite. Enqueue is NON-FATAL advisory: any failure just
+  // warns (the swap result stays usable). SECURITY: never log defect data.
+  const handleDetectSprite = useCallback(
+    async (spriteId: string) => {
+      setSubmittingDetectSpriteId(spriteId);
+      try {
+        const outcome = await startDetectDefects({
+          remixId: target.remixId,
+          spriteId,
+          params,
+        });
+        log.info('handleDetectSprite', 'enqueue outcome', {
+          spriteId,
+          kind: outcome.kind,
+        });
+        if (outcome.kind === 'deduped') {
+          toast.info('Đang kiểm tra một sprite khác — đợi xong rồi thử lại');
+        } else if (outcome.kind === 'enqueued') {
+          toast.success('Bắt đầu kiểm tra lỗi swap');
+        }
+        // 'skipped' (busy) is silent — gating already disables the button.
+      } catch (err) {
+        const code = err instanceof EnqueueJobError ? err.code : undefined;
+        log.warn('handleDetectSprite', 'enqueue failed (non-fatal)', {
+          spriteId,
+          code,
+        });
+        toast.warning('Không kiểm tra được lỗi swap — kết quả vẫn dùng được');
+      } finally {
+        setSubmittingDetectSpriteId(null);
+      }
+    },
+    [startDetectDefects, target.remixId, params],
   );
 
   // ── Generic stage-job enqueue (3 stages — jobs 05/09/10) ─────────────────────
@@ -702,12 +746,15 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
                 activeSpriteRef={effectiveSpriteRef}
                 submittingSpriteId={submittingSpriteId}
                 anySpriteSwapRunning={anySpriteSwapRunning}
+                submittingDetectSpriteId={submittingDetectSpriteId}
+                anyDetectRunning={anyDetectRunning}
                 onSelectSpriteSheet={handleSelectSpriteSheet}
                 onActivateSprite={setActiveSpriteRef}
                 onRemoveSprite={handleRemoveSprite}
                 onAddSheet={handleAddSpriteSheet}
                 onRemoveSheet={handleRemoveSpriteSheet}
                 onSwapSprite={handleSwapSprite}
+                onDetectSprite={handleDetectSprite}
                 {...sharedStageProps}
               />
             </SelectionProvider>

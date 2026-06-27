@@ -37,8 +37,10 @@ import {
 import type {
   SwapPreviewState,
   BatchSwapTaskStatus,
+  SwapDefect,
 } from '@/types/remix';
 import { ZOOM, HEADER_HEIGHT_PX, Z_INDEX } from './swap-modal-constants';
+import { DefectOverlay } from './crop-sheet-stage/defect-overlay';
 
 // Lift in-modal tooltips above the z-4000 swapModal (shared TooltipContent ships
 // at z-50, otherwise occluded). ⚡2026-06-26 (see Z_INDEX.tooltip).
@@ -160,6 +162,21 @@ export interface CropSheetStageProps {
   onTakeBack?: (cropKey: string) => void;
   /** Disables the take-back chip (e.g. `anyMixSwapRunning` / `anySpriteSwapRunning`). */
   takeBackDisabled?: boolean;
+
+  // ── Swap-defect detection (Variants Check, 05-15 §3.2) ────────────────────
+  /** Per-sheet defect overlay data + host-computed visibility gate (AFTER
+   *  non-compare + has defects + not stale). batches mode only; the DefectOverlay
+   *  mounts over the sheet frame (above the composed art, below selection/★ —
+   *  pointer-events:none so it never blocks the checkboxes). */
+  defectOverlay?: {
+    defects: SwapDefect[];
+    swappedDimensions: { width: number; height: number } | null;
+    visible: boolean;
+  };
+  /** Detect job progress — when running, a NON-blocking status chip announces
+   *  "Đang kiểm tra sheet {c}/{t}…" (aria-live polite) without hiding the swap
+   *  result the user is reviewing. Null when no detect is running. */
+  detectProgress?: { current: number; total: number } | null;
 }
 
 // ── Source helpers — collapse the discriminated union to canvas primitives ───
@@ -261,6 +278,8 @@ export function CropSheetStage({
   getOwnership,
   onTakeBack,
   takeBackDisabled,
+  defectOverlay,
+  detectProgress,
 }: CropSheetStageProps) {
   // Compare needs an "after" to diff the "before" against (⚡2026-06-12 —
   // upscales have media_url=null but compose from crops[]).
@@ -320,6 +339,8 @@ export function CropSheetStage({
         getOwnership={getOwnership}
         onTakeBack={onTakeBack}
         takeBackDisabled={takeBackDisabled}
+        defectOverlay={defectOverlay}
+        detectProgress={detectProgress}
       />
     </section>
   );
@@ -487,6 +508,13 @@ interface StageCanvasProps {
   ) => import('./hooks/use-crop-ownership').CropOwnershipState;
   onTakeBack?: (cropKey: string) => void;
   takeBackDisabled?: boolean;
+  // ── Swap-defect detection forwarding (batches mode only) ──────────────────
+  defectOverlay?: {
+    defects: SwapDefect[];
+    swappedDimensions: { width: number; height: number } | null;
+    visible: boolean;
+  };
+  detectProgress?: { current: number; total: number } | null;
 }
 
 function StageCanvas({
@@ -509,6 +537,8 @@ function StageCanvas({
   getOwnership,
   onTakeBack,
   takeBackDisabled,
+  defectOverlay,
+  detectProgress,
 }: StageCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -599,6 +629,17 @@ function StageCanvas({
               onTakeBack={onTakeBack}
               takeBackDisabled={takeBackDisabled}
             />
+            {/* Defect overlay — fills the sheet frame OVER the composed art.
+                pointer-events:none (shapes opt back in for hover), no z-index →
+                the z-30 selection checkbox / ★ still paint above it (05-15 §3.2).
+                Host gates `visible` (AFTER non-compare + has defects + not stale). */}
+            {defectOverlay?.swappedDimensions && (
+              <DefectOverlay
+                defects={defectOverlay.defects}
+                swappedDimensions={defectOverlay.swappedDimensions}
+                visible={defectOverlay.visible}
+              />
+            )}
           </div>
         ) : (
           <div
@@ -645,6 +686,21 @@ function StageCanvas({
           <span className="mt-1 flex items-center gap-1 text-xs text-[var(--swap-modal-text-muted)]">
             <RotateCcw className="h-3.5 w-3.5" />
             Thử lại từ nút hành động
+          </span>
+        </div>
+      )}
+
+      {/* Detect-progress chip — NON-blocking (the swap result stays visible
+          while Check runs). aria-live polite announces sheet progress (05-15 §9). */}
+      {detectProgress && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+        >
+          <span className="flex items-center gap-2 rounded-full bg-[var(--swap-modal-card-bg)]/90 px-3 py-1.5 text-xs text-[var(--swap-modal-text-secondary)] shadow-lg">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--swap-modal-accent)]" />
+            Đang kiểm tra sheet {detectProgress.current}/{detectProgress.total}…
           </span>
         </div>
       )}

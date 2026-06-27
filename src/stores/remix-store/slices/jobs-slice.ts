@@ -13,6 +13,7 @@ import {
   enqueueAudioSwap,
   enqueueRemixStageJob,
   enqueueRemixSpriteSwap,
+  enqueueRemixDetectDefects,
   type EnqueueAudioSwapEnqueuedData,
   type EnqueueAudioSwapDedupedData,
 } from '@/apis/jobs-api';
@@ -359,6 +360,94 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       stepDetails: null,
       // `model_params` intentionally omitted — backend owns `background_jobs.params`;
       // realtime UPDATE reconciles the persisted row (FE seed is optimistic only).
+      params: { remix_id: remixId, sprite_id: spriteId },
+      result: null,
+      cancelRequested: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+
+    return {
+      kind: 'enqueued',
+      jobId: data.job_id,
+      totalSteps: data.total_steps,
+    };
+  },
+
+  // ── Sprite swap-defect detection enqueue (api/jobs/11 — Check) ─────
+  // Mirrors startSpriteSwap: POST enqueue + optimistic seed `remix_detect_defects`
+  // row. INDEPENDENT of swap (disjoint dedup key = sprite_id); an
+  // already-running detect for the SAME sprite no-ops. Advisory/ephemeral —
+  // defects land in `background_jobs.result.defectsBySheet` (NOT `remixes`).
+  // SECURITY: never log defect message/media/human — counts + ids only.
+  startDetectDefects: async (args) => {
+    const { remixId, spriteId, params } = args;
+
+    const alreadyRunning = get().jobs.some(
+      (j) =>
+        j.phase === 'remix_detect_defects' &&
+        j.remixId === remixId &&
+        j.spriteId === spriteId &&
+        (j.status === 'queued' || j.status === 'running'),
+    );
+    if (alreadyRunning) {
+      log.debug('startDetectDefects', 'detect already running — no-op', {
+        remixId,
+        spriteId,
+      });
+      return { kind: 'skipped', reason: 'busy' };
+    }
+
+    log.info('startDetectDefects', 'enqueue', {
+      remixId,
+      spriteId,
+      model: params.swapModel,
+    });
+    // Throws EnqueueJobError on non-2xx (incl. 422 NO_SWAP_RESULT, 404
+    // SPRITE_NOT_FOUND) — caller (modal) toasts non-fatal on `code`.
+    const data = await enqueueRemixDetectDefects(remixId, {
+      sprite_id: spriteId,
+      force_resweep: true,
+      swap_model: params.swapModel,
+      swap_temperature: params.swapTemperature,
+    });
+
+    if ('skipped' in data && data.skipped) {
+      log.info('startDetectDefects', 'skipped', { remixId, reason: data.reason });
+      return { kind: 'skipped', reason: data.reason };
+    }
+
+    if ('deduped' in data && data.deduped) {
+      log.info('startDetectDefects', 'deduped', {
+        remixId,
+        jobId: data.job_id,
+        status: data.status,
+      });
+      if (!get().jobs.find((j) => j.id === data.job_id)) {
+        const shared = useBackgroundJobsStore.getState().jobsById[data.job_id];
+        if (shared) get().onRemixJobEvent({ job: shared, prev: null, transition: 'appeared' });
+      }
+      return { kind: 'deduped', jobId: data.job_id, status: data.status };
+    }
+
+    log.info('startDetectDefects', 'enqueued', {
+      remixId,
+      spriteId,
+      jobId: data.job_id,
+      totalSteps: data.total_steps,
+    });
+
+    // Optimistic seed into the unified store — consumer callback upserts jobs[].
+    const nowIso = new Date().toISOString();
+    useBackgroundJobsStore.getState().seed({
+      id: data.job_id,
+      type: 'remix_detect_defects',
+      bookId: null,
+      userId: useAuthStore.getState().user?.id ?? '',
+      status: 'queued',
+      currentStep: 0,
+      totalSteps: data.total_steps,
+      stepDetails: null,
       params: { remix_id: remixId, sprite_id: spriteId },
       result: null,
       cancelRequested: false,

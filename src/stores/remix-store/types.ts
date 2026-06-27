@@ -14,6 +14,7 @@ import type {
   RemixSpread,
   RemixSpreadImage,
   StageKind,
+  StartDetectDefectsParams,
   StartStageJobParams,
   StartSpriteSwapParams,
 } from '@/types/remix';
@@ -131,6 +132,17 @@ export interface RemixJobsSlice {
    *  NO_SWAP_OBJECTS / MISSING_OBJECT_CONFIG distinctly. */
   startSpriteSwap: (
     params: StartSpriteSwapParams,
+  ) => Promise<EnqueueRemixJobOutcome>;
+
+  /** Modal-driven sprite swap-defect detection (api/jobs/11 — Variants Check).
+   *  POST `/api/jobs/remix/{id}/detect-sprite-defects` + optimistic seed
+   *  `remix_detect_defects` job. Guard: an already-running detect for the same
+   *  sprite no-ops to `skipped`. Independent of swap (disjoint dedup key).
+   *  Advisory/ephemeral: defects land in `background_jobs.result.defectsBySheet`
+   *  (NOT persisted to `remixes`). Throws `EnqueueJobError` (with `code`) on
+   *  422/non-2xx (NO_SWAP_RESULT / SPRITE_NOT_FOUND) — caller toasts non-fatal. */
+  startDetectDefects: (
+    params: StartDetectDefectsParams,
   ) => Promise<EnqueueRemixJobOutcome>;
 
   cancelJob: (jobId: string) => Promise<void>;
