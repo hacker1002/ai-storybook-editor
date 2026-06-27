@@ -42,6 +42,8 @@ import {
   SHEET_MIN,
   Z_INDEX,
 } from '../swap-modal-constants';
+import { DefectCheckButton } from '../defect-check-button';
+import type { DetectActionState } from './detect-gating';
 import type { BatchActionState } from './use-stage-batch-tab';
 
 // Tooltips portal at z-50 (shared shadcn) which the z-4000 swapModal occludes —
@@ -62,6 +64,16 @@ export interface BatchActionDescriptor {
   /** Per-batch gate/busy/error state — drives disabled + spinner + tooltip. */
   getState: (batch: RemixStageBatch) => BatchActionState;
   /** Auto-select the batch then enqueue its stage job. */
+  onRun: (batchId: string) => void;
+}
+
+/** ⚡2026-06-27 — per-batch Check (swap-defect detect) action, the `[✓]` slot
+ *  sibling RIGHT of the primary Swap action (05-11 §4). Passed ONLY by the mixes
+ *  tab (`STAGE_TAB_CONFIG.mixes.hasDetect`); rmbgs/upscales omit it → the slot is
+ *  hidden (no identity swap → no defect). The shared `DefectCheckButton` renders
+ *  it; the tab supplies the hook-backed evaluator/runner + result badge. */
+export interface BatchDetectDescriptor {
+  getState: (batch: RemixStageBatch) => DetectActionState;
   onRun: (batchId: string) => void;
 }
 
@@ -92,6 +104,9 @@ interface BatchesSidebarProps {
   /** ⚡2026-06-26 — per-batch primary action rendered in each row (tab-supplied
    *  stage icon + hook-backed gating/runner). */
   batchAction: BatchActionDescriptor;
+  /** ⚡2026-06-27 — per-batch Check action (`[✓]` slot). Present ONLY on the
+   *  mixes tab (`hasDetect`); omitted on rmbgs/upscales → slot hidden. */
+  batchDetectAction?: BatchDetectDescriptor;
   onSelectBatchSheet: (batchId: string, sheetIndex: number) => void;
   onAddBatch: () => void;
   /** Tab-guarded (confirm-if-swap_results). Sidebar only enforces BATCH_MIN. */
@@ -113,6 +128,7 @@ export function BatchesSidebar({
   addBatchTooltip,
   selectionSize,
   batchAction,
+  batchDetectAction,
   onSelectBatchSheet,
   onAddBatch,
   onRemoveBatch,
@@ -207,6 +223,7 @@ export function BatchesSidebar({
               // rmbgs/upscales (allowZeroBatch): every batch is removable.
               canRemoveBatch={allowZeroBatch || index >= BATCH_MIN}
               batchAction={batchAction}
+              batchDetectAction={batchDetectAction}
               onToggleCollapse={onToggleCollapse}
               onSelectBatchSheet={onSelectBatchSheet}
               onRemoveBatch={onRemoveBatch}
@@ -227,6 +244,7 @@ interface BatchNodeProps {
   anyJobRunning: boolean;
   canRemoveBatch: boolean;
   batchAction: BatchActionDescriptor;
+  batchDetectAction?: BatchDetectDescriptor;
   onToggleCollapse: (batchId: string) => void;
   onSelectBatchSheet: (batchId: string, sheetIndex: number) => void;
   onRemoveBatch: (batchId: string) => void;
@@ -241,6 +259,7 @@ function BatchNode({
   anyJobRunning,
   canRemoveBatch,
   batchAction,
+  batchDetectAction,
   onToggleCollapse,
   onSelectBatchSheet,
   onRemoveBatch,
@@ -348,8 +367,8 @@ function BatchNode({
         {/* ⚡2026-06-26 — per-row primary action (Swap/Remove BG/Upscale).
             Click auto-selects the batch then enqueues the stage job. Tooltip
             carries the gate reason when disabled, else the action label (the
-            button is icon-only). The [✓] check button sits to its right —
-            DEFERRED (rendered later). */}
+            button is icon-only). The [✓] check button sits to its right
+            (⚡2026-06-27 — mixes only, via `batchDetectAction`). */}
         <TooltipProvider delayDuration={150}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -384,6 +403,18 @@ function BatchNode({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+
+        {/* ⚡2026-06-27 — per-row Check (`[✓]` slot). Mixes ONLY — the shared
+            DefectCheckButton renders it (click → tab auto-selects the batch then
+            enqueues the mix-detect job, 05-15 §4.1 / 05-11 §4). */}
+        {batchDetectAction && (
+          <DefectCheckButton
+            scopeId={batch.id}
+            scopeLabel={batch.name}
+            detect={batchDetectAction.getState(batch)}
+            onRun={batchDetectAction.onRun}
+          />
+        )}
 
         {/* [✕] remove batch — only when above BATCH_MIN */}
         {SHOW_REMOVE_BATCH && canRemoveBatch && (

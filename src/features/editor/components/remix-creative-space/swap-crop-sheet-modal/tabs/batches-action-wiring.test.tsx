@@ -18,10 +18,19 @@ vi.mock('@/stores/remix-store', () => ({
   useRemixVariants: vi.fn(() => []),
   useRemixById: vi.fn(() => null),
   useStageFinals: vi.fn(() => []),
+  useJobsForRemix: vi.fn(() => []),
+  deriveDetectView: vi.fn(() => ({ task: { state: 'idle' }, defectsBySheet: [] })),
   useRemixActions: () => ({
     addStageBatch: vi.fn(),
     takeFinalBack: vi.fn(async () => true),
   }),
+}));
+
+// ⚡2026-06-27 — mix detect hook stubbed (overlay source); the [✓] Check slot
+// gating uses the real `evaluateDetect` on the (un-swapped) fixtures → disabled.
+vi.mock('@/features/editor/hooks/use-defect-detection', () => ({
+  useDefectDetection: () => ({ task: { state: 'idle' }, defectsBySheet: [] }),
+  useAnyDetectRunning: () => false,
 }));
 
 vi.mock('@/stores/humans-store', () => ({ useHumans: vi.fn(() => []) }));
@@ -77,6 +86,9 @@ function renderTab(
       onAddSheet={vi.fn()}
       onRemoveSheet={vi.fn()}
       onStartJob={onStartJob}
+      submittingDetectBatchId={null}
+      anyDetectRunning={false}
+      onDetectBatch={vi.fn()}
       compareMode={false}
       zoomLevel={100}
       dividerPosition={50}

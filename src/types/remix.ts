@@ -249,15 +249,23 @@ export interface StartSpriteSwapParams {
   forceResweep?: boolean;
 }
 
-// ── Swap defect detection (Check — api/jobs/11) ──────────────────────────────
-// Advisory/ephemeral overlay: bấm Check trên 1 sprite → background job
-// `remix_detect_defects` soi MỌI sheet đã swap → trả `defectsBySheet` qua
-// `background_jobs.result` (KHÔNG persist vào `remixes`). FE vẽ vòng tròn/oval
-// (`DefectOverlay`) đè vùng swap nghi lỗi trên canvas AFTER. Mirror sprite swap.
-// Spec: api/remix/06-detect-swap-defects.md (core) + api/jobs/11 (job) + 05-15.
+// ── Swap defect detection (Check — api/jobs/11 sprite + 12 mix) ──────────────
+// Advisory/ephemeral overlay: bấm Check trên 1 scope (sprite HOẶC batch mix) →
+// background job (`remix_detect_defects` sprite / `remix_detect_mix_defects` mix)
+// soi MỌI sheet đã swap → trả `defectsBySheet` qua `background_jobs.result`
+// (KHÔNG persist vào `remixes`). FE vẽ vòng tròn/oval (`DefectOverlay`) đè vùng
+// swap nghi lỗi trên canvas AFTER. Generic 2 plane (chốt user 2026-06-27).
+// Spec: api/remix/06+07 (core) + api/jobs/11+12 (job) + design 05-15.
 
-/** Defect taxonomy (core 06 §Result). `low` severity color default khi
- *  `severity`/`category` undefined. */
+/** Detect plane — the ONLY parametrize axis between the 2 Check flows (sprite
+ *  tab Variants vs mix tab Crops). Resolves the scope-key/endpoint/job-type via
+ *  {@link DETECT_JOB_CONFIG}. */
+export type DetectPlane = 'sprite' | 'mix';
+
+/** Defect taxonomy — SPRITE core (06 §Result). Dev type-hint ONLY; the shared
+ *  `SwapDefect.category` is kept LOOSE (`string`) so the overlay stays
+ *  plane-agnostic (it renders `category·message` as text, never branches on the
+ *  enum). `low` severity/color is the default when severity/category undefined. */
 export type SwapDefectCategory =
   | 'identity_mismatch'
   | 'trait_leak'
@@ -270,15 +278,23 @@ export type SwapDefectCategory =
   | 'not_swapped'
   | 'other';
 
+/** Defect taxonomy — MIX core (07 §Result). Dev type-hint ONLY (see
+ *  {@link SwapDefectCategory}); adds the multi-subject crop categories. */
+export type MixDefectCategory =
+  | SwapDefectCategory
+  | 'unrelated_object_changed';
+
 /** One suspected swap-defect region on a swapped sheet (coords px on
  *  `swappedDimensions`). `box` present → render ellipse (hugs elongated areas);
- *  else `center` + `radius` → circle. `message` is vi user copy — NEVER pushed
+ *  else `center` + `radius` → circle. `category` is LOOSE (`string`) — sprite
+ *  ({@link SwapDefectCategory}) | mix ({@link MixDefectCategory}); a tooltip
+ *  label only, never a render branch. `message` is vi user copy — NEVER pushed
  *  to logger/analytics (PII §10). */
 export interface SwapDefect {
   center: { x: number; y: number };
   radius: number;
   box?: { x: number; y: number; w: number; h: number };
-  category?: SwapDefectCategory;
+  category?: string;
   severity?: 'low' | 'medium' | 'high';
   message?: string;
   confidence?: number;
@@ -287,15 +303,18 @@ export interface SwapDefect {
 }
 
 /** Per-sheet detect result = `background_jobs.result.defectsBySheet[]`
- *  (api/jobs/11). `swappedDimensions` is the COORDINATE ORIGIN for the sheet's
- *  defects (the swapped sheet pixel size). `truncated` → core capped at
- *  `max_defects` (30) most-severe per sheet. */
+ *  (api/jobs/11 sprite = 12 mix — same shape). `swappedDimensions` is the
+ *  COORDINATE ORIGIN for the sheet's defects (= `sheet_geometry`, the recompose
+ *  result pixel size). `truncated` → core capped at `max_defects` (30)
+ *  most-severe per sheet. `hasOldVariantSheet` is mix-only observability meta —
+ *  it does NOT affect render. */
 export interface DefectSheetResult {
   sheet_index: number;
   defects: SwapDefect[];
   swappedDimensions: { width: number; height: number };
   defectCount: number;
   truncated?: boolean;
+  hasOldVariantSheet?: boolean;
 }
 
 /** Sprite-level detect task — DERIVED from `jobs[]` (mirror SpriteSwapTaskStatus).
@@ -307,12 +326,36 @@ export type DetectTaskStatus =
   | { state: 'done'; skippedSheets: number; errorCount: number }
   | { state: 'error'; message: string };
 
-/** Args for the sprite-level detect enqueue (api/jobs/11). `params` supplies the
- *  swap-model context (`swap_model`/`swap_temperature`) the core re-uses to read
- *  the swap intent; mirror `StartSpriteSwapParams`. */
-export interface StartDetectDefectsParams {
+/** Plane → background-job phase + enqueue endpoint segment + scope-key (the ONLY
+ *  per-plane differences). `POST /api/jobs/remix/{id}/{endpointSegment}` with
+ *  body `{[scopeKey]: scopeId, …}`. Store-facing (mirrors `STAGE_JOB_CONFIG`);
+ *  UI extras (coreDoc) live in the modal's `detect-plane-config.ts`. The 2
+ *  job-types are SEPARATE dedup families → sprite-check + mix-check run in
+ *  parallel. */
+export const DETECT_JOB_CONFIG = {
+  sprite: {
+    phase: 'remix_detect_defects',
+    endpointSegment: 'detect-sprite-defects',
+    scopeKey: 'sprite_id',
+  },
+  mix: {
+    phase: 'remix_detect_mix_defects',
+    endpointSegment: 'detect-mix-defects',
+    scopeKey: 'batch_id',
+  },
+} as const satisfies Record<
+  DetectPlane,
+  { phase: RemixJobPhase; endpointSegment: string; scopeKey: 'sprite_id' | 'batch_id' }
+>;
+
+/** Args for the generic detect enqueue (api/jobs/11 sprite | 12 mix). `scopeId`
+ *  = sprite_id (sprite) | batch_id (mix). `params` supplies the swap-model
+ *  context (`swap_model`/`swap_temperature`) the core re-uses to read the swap
+ *  intent; mirror `StartSpriteSwapParams`. */
+export interface StartDetectJobParams {
+  plane: DetectPlane;
   remixId: string;
-  spriteId: string;
+  scopeId: string;
   params: SwapModelParams;
 }
 
@@ -513,16 +556,20 @@ export interface RemixRow {
 // ⚡2026-06-12). Dedup is PER-TYPE + the 3 stage JSONB columns are disjoint →
 // the 3 stage jobs can run concurrently without blocking each other.
 // `remix_detect_defects` = sprite-level swap-defect detection (api/jobs/11 —
-// Variants tab Check). Independent of swap jobs (disjoint dedup key); advisory
+// Variants tab Check). `remix_detect_mix_defects` = mix/batch-level detection
+// (api/jobs/12 — Crops tab Check). Independent of swap jobs AND of each other
+// (disjoint dedup keys — sprite-check + mix-check run in parallel); advisory
 // result lives in `background_jobs.result.defectsBySheet` (NOT persisted to
-// `remixes`). Keep in lockstep with REMIX_SWAP_TYPES + JOB_TYPE_TO_PHASE.
+// `remixes`). Keep in lockstep with REMIX_SWAP_TYPES + JOB_TYPE_TO_PHASE +
+// DETECT_JOB_CONFIG.
 export type RemixJobPhase =
   | 'audio'
   | 'remix_mix_swap'
   | 'remix_sprite_swap'
   | 'remix_rmbg'
   | 'remix_upscale'
-  | 'remix_detect_defects';
+  | 'remix_detect_defects'
+  | 'remix_detect_mix_defects';
 
 export type RemixJobStatus =
   | 'queued'

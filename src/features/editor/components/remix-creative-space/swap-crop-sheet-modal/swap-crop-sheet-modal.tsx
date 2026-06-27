@@ -38,10 +38,10 @@ import {
   useRemixStageBatches,
   useAnyStageJobRunning,
   useAnySpriteSwapRunning,
-  useAnyDetectRunning,
   useRemixActions,
   useRemixStore,
 } from '@/stores/remix-store';
+import { useAnyDetectRunning } from '@/features/editor/hooks/use-defect-detection';
 import { useInteractionLayer } from '@/features/editor/contexts';
 import { EnqueueJobError } from '@/apis/jobs-api';
 import { createLogger } from '@/utils/logger';
@@ -56,6 +56,7 @@ import type {
 import { RemixModalHeader } from './remix-modal-header';
 import { SwapParametersSidebar } from './swap-parameters-sidebar';
 import { STAGE_TAB_CONFIG, STAGE_OF_TAB } from './stage-tab-config';
+import { DETECT_PLANE_CONFIG } from './detect-plane-config';
 import { VariantsTab } from './tabs/variants-tab';
 import { BatchesTab } from './tabs/batches-tab';
 import { RmbgTab } from './tabs/rmbg-tab';
@@ -171,8 +172,16 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const remix = useRemixById(target.remixId);
   const sprites = useRemixSprites(target.remixId);
   const anySpriteSwapRunning = useAnySpriteSwapRunning(target.remixId);
-  // Detect (Check) — 1 job/remix (dedup); gates every Check button.
-  const anyDetectRunning = useAnyDetectRunning(target.remixId);
+  // Detect (Check) — 1 job/remix/plane (dedup). The 2 planes are independent →
+  // sprite-check + mix-check run + dedup separately; each gates ITS own Check.
+  const anySpriteDetectRunning = useAnyDetectRunning(
+    target.remixId,
+    DETECT_PLANE_CONFIG.sprite.jobType,
+  );
+  const anyMixDetectRunning = useAnyDetectRunning(
+    target.remixId,
+    DETECT_PLANE_CONFIG.mix.jobType,
+  );
   // ⚡2026-06-12 — per-stage selectors (fixed-order hook calls; STAGES const).
   const mixBatches = useRemixStageBatches(target.remixId, 'mixes');
   const rmbgBatches = useRemixStageBatches(target.remixId, 'rmbgs');
@@ -200,7 +209,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     startStageJob,
     importStageBatch,
     startSpriteSwap,
-    startDetectDefects,
+    startDetectJob,
     removeSprite,
     appendSpriteSheet,
     removeSpriteSheet,
@@ -222,7 +231,11 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     null,
   );
   // Detect (Check) POST in-flight — mirror submittingSpriteId, modal-local.
+  // Per plane: sprite (Variants) + mix (Crops batch).
   const [submittingDetectSpriteId, setSubmittingDetectSpriteId] = useState<
+    string | null
+  >(null);
+  const [submittingDetectBatchId, setSubmittingDetectBatchId] = useState<
     string | null
   >(null);
   // ⚡2026-06-12 — per-stage record (mixes auto-inits from the seeded batch;
@@ -446,16 +459,19 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [startSpriteSwap, target.remixId, params],
   );
 
-  // ── onDetectSprite (Variants tab — Check) ────────────────────────────────────
+  // ── onDetectSprite (Variants tab — Check, sprite plane) ──────────────────────
   // Mirror handleSwapSprite. Enqueue is NON-FATAL advisory: any failure just
-  // warns (the swap result stays usable). SECURITY: never log defect data.
+  // warns (the swap result stays usable). `deduped` covers BOTH dedup contracts
+  // (sprite HTTP 200 envelope + the 409 path normalized in startDetectJob).
+  // SECURITY: never log defect data.
   const handleDetectSprite = useCallback(
     async (spriteId: string) => {
       setSubmittingDetectSpriteId(spriteId);
       try {
-        const outcome = await startDetectDefects({
+        const outcome = await startDetectJob({
+          plane: 'sprite',
           remixId: target.remixId,
-          spriteId,
+          scopeId: spriteId,
           params,
         });
         log.info('handleDetectSprite', 'enqueue outcome', {
@@ -463,7 +479,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
           kind: outcome.kind,
         });
         if (outcome.kind === 'deduped') {
-          toast.info('Đang kiểm tra một sprite khác — đợi xong rồi thử lại');
+          toast.info('Đang kiểm tra một mục khác — đợi xong rồi thử lại');
         } else if (outcome.kind === 'enqueued') {
           toast.success('Bắt đầu kiểm tra lỗi swap');
         }
@@ -479,7 +495,46 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         setSubmittingDetectSpriteId(null);
       }
     },
-    [startDetectDefects, target.remixId, params],
+    [startDetectJob, target.remixId, params],
+  );
+
+  // ── onDetectBatch (Crops tab — Check, mix plane) ─────────────────────────────
+  // Mirror handleDetectSprite on the mix plane. ⚡DEDUP DIVERGENCE: mix (job 12)
+  // returns HTTP 409 JOB_ALREADY_ACTIVE when a detect is already running —
+  // startDetectJob normalizes that to `deduped` (attach via realtime), so a
+  // 409 surfaces as an info toast here, NOT the warn error path. NON-FATAL.
+  const handleDetectBatch = useCallback(
+    async (batchId: string) => {
+      setSubmittingDetectBatchId(batchId);
+      try {
+        const outcome = await startDetectJob({
+          plane: 'mix',
+          remixId: target.remixId,
+          scopeId: batchId,
+          params,
+        });
+        log.info('handleDetectBatch', 'enqueue outcome', {
+          batchId,
+          kind: outcome.kind,
+        });
+        if (outcome.kind === 'deduped') {
+          toast.info('Đang kiểm tra một mục khác — đợi xong rồi thử lại');
+        } else if (outcome.kind === 'enqueued') {
+          toast.success('Bắt đầu kiểm tra lỗi swap');
+        }
+        // 'skipped' (busy) is silent — gating already disables the button.
+      } catch (err) {
+        const code = err instanceof EnqueueJobError ? err.code : undefined;
+        log.warn('handleDetectBatch', 'enqueue failed (non-fatal)', {
+          batchId,
+          code,
+        });
+        toast.warning('Không kiểm tra được lỗi swap — kết quả vẫn dùng được');
+      } finally {
+        setSubmittingDetectBatchId(null);
+      }
+    },
+    [startDetectJob, target.remixId, params],
   );
 
   // ── Generic stage-job enqueue (3 stages — jobs 05/09/10) ─────────────────────
@@ -747,7 +802,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
                 submittingSpriteId={submittingSpriteId}
                 anySpriteSwapRunning={anySpriteSwapRunning}
                 submittingDetectSpriteId={submittingDetectSpriteId}
-                anyDetectRunning={anyDetectRunning}
+                anyDetectRunning={anySpriteDetectRunning}
                 onSelectSpriteSheet={handleSelectSpriteSheet}
                 onActivateSprite={setActiveSpriteRef}
                 onRemoveSprite={handleRemoveSprite}
@@ -762,7 +817,12 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
 
           {activeStage === 'mixes' && (
             <SelectionProvider key={stageSelectionResetKey('mixes')}>
-              <BatchesTab {...stageTabProps('mixes')} />
+              <BatchesTab
+                {...stageTabProps('mixes')}
+                submittingDetectBatchId={submittingDetectBatchId}
+                anyDetectRunning={anyMixDetectRunning}
+                onDetectBatch={(batchId) => void handleDetectBatch(batchId)}
+              />
             </SelectionProvider>
           )}
 

@@ -90,10 +90,12 @@ export const REMIX_SWAP_TYPES = [
   'remix_sprite_swap',
   'remix_rmbg',
   'remix_upscale',
-  // ⚡2026-06-27 — sprite swap-defect detection (api/jobs/11, Variants Check).
-  // Must be here or the realtime job never reaches the remix `jobs[]` mirror →
-  // detect task silently never derives. Lockstep with JOB_TYPE_TO_PHASE.
+  // ⚡2026-06-27 — swap-defect detection: sprite (api/jobs/11, Variants Check) +
+  // mix/batch (api/jobs/12, Crops Check). Must be here or the realtime job never
+  // reaches the remix `jobs[]` mirror → detect task silently never derives.
+  // Lockstep with JOB_TYPE_TO_PHASE + DETECT_JOB_CONFIG.
   'remix_detect_defects',
+  'remix_detect_mix_defects',
 ] as const;
 
 /** Distribution export job types — export watcher subscribes to these. Includes

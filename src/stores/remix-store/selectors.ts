@@ -454,37 +454,40 @@ export const useAnySpriteSwapRunning = (
     ),
   );
 
-// ── Sprite detect selectors (Variants tab — Check, api/jobs/11) ──────────────
+// ── Detect selectors (Check — GENERIC over plane, api/jobs/11 sprite + 12 mix) ─
 
 /** Stable empty defects array — keeps the projected ref steady across renders
- *  when a sprite has no completed detect (avoids selector re-render loops,
+ *  when a scope has no completed detect (avoids selector re-render loops,
  *  memory feedback_zustand_useshallow_nested_arrays). */
 const EMPTY_DEFECTS: DefectSheetResult[] = [];
 
-/** Result of {@link deriveSpriteDetectTask} — task state + the latest completed
- *  job's per-sheet defects + its createdAt (for the stale guard). */
-export interface SpriteDetectView {
+/** Result of {@link deriveDetectView} — task state + the latest completed job's
+ *  per-sheet defects + its createdAt (for the stale guard). Plane-agnostic. */
+export interface DetectView {
   task: DetectTaskStatus;
   defectsBySheet: DefectSheetResult[];
   /** createdAt of the latest detect job (drives `jobCreatedAt > swap.created_time`
-   *  stale guard). Undefined when no detect has ever run for the sprite. */
+   *  stale guard). Undefined when no detect has ever run for the scope. */
   jobCreatedAt?: string;
 }
 
-/** Derive a sprite's detect task + defects from `jobs[]` (mirror
- *  deriveSpriteSwapTask). Latest `remix_detect_defects` job for (remixId,
- *  spriteId); maps status → UI task. `defectsBySheet` is read from the RAW job
- *  result (no fresh `.map()`) so callers can memoize on the job ref. Pure. */
-export function deriveSpriteDetectTask(
+/** Derive a scope's detect task + defects from `jobs[]` (mirror
+ *  deriveSpriteSwapTask) — GENERIC over plane. Latest job of `jobType`
+ *  (`remix_detect_defects` sprite | `remix_detect_mix_defects` mix) for
+ *  (remixId, scopeId); `scopeId` matches `spriteId` (sprite) OR `batchId` (mix).
+ *  `defectsBySheet` is read from the RAW job result (no fresh `.map()`) so
+ *  callers can memoize on the job ref. Pure. */
+export function deriveDetectView(
   jobs: RemixJob[],
   remixId: string,
-  spriteId: string,
-): SpriteDetectView {
+  scopeId: string,
+  jobType: RemixJobPhase,
+): DetectView {
   const matches = jobs.filter(
     (j) =>
-      j.phase === 'remix_detect_defects' &&
+      j.phase === jobType &&
       j.remixId === remixId &&
-      j.spriteId === spriteId,
+      (j.spriteId === scopeId || j.batchId === scopeId),
   );
   if (matches.length === 0) {
     return { task: { state: 'idle' }, defectsBySheet: EMPTY_DEFECTS };
@@ -533,38 +536,6 @@ export function deriveSpriteDetectTask(
     jobCreatedAt: job.createdAt,
   };
 }
-
-/** Reusable sprite-detect hook (mirror the swapTask derivation). Memoized on
- *  the per-remix `jobs` slice + spriteId so the projected `defectsBySheet` ref
- *  is stable until a job updates (memory feedback_zustand_useshallow_nested_arrays). */
-export const useSpriteDetect = (
-  remixId: string | null | undefined,
-  spriteId: string | null | undefined,
-): SpriteDetectView => {
-  const jobs = useJobsForRemix(remixId ?? '');
-  return useMemo<SpriteDetectView>(() => {
-    if (!remixId || !spriteId) {
-      return { task: { state: 'idle' }, defectsBySheet: EMPTY_DEFECTS };
-    }
-    return deriveSpriteDetectTask(jobs, remixId, spriteId);
-  }, [jobs, remixId, spriteId]);
-};
-
-/** True when ANY `remix_detect_defects` job of the remix is queued/running.
- *  Gates every Check button (detect dedups to 1 per remix). Independent of swap.
- *  Boolean primitive — ref-stable by value. */
-export const useAnyDetectRunning = (
-  remixId: string | null | undefined,
-): boolean =>
-  useRemixStore((s) =>
-    !!remixId &&
-    s.jobs.some(
-      (j) =>
-        j.phase === 'remix_detect_defects' &&
-        j.remixId === remixId &&
-        (j.status === 'queued' || j.status === 'running'),
-    ),
-  );
 
 /** True while a sprite LAYOUT computation (seed / relayout / add-subset) is
  *  in flight for the remix. Layout measures every cell artwork's natural
@@ -634,7 +605,7 @@ export const useRemixActions = () =>
       removeStageBatchSheet: s.removeStageBatchSheet,
       takeFinalBack: s.takeFinalBack,
       startSpriteSwap: s.startSpriteSwap,
-      startDetectDefects: s.startDetectDefects,
+      startDetectJob: s.startDetectJob,
       addSprite: s.addSprite,
       removeSprite: s.removeSprite,
       appendSpriteSheet: s.appendSpriteSheet,

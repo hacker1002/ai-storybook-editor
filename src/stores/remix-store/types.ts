@@ -14,7 +14,7 @@ import type {
   RemixSpread,
   RemixSpreadImage,
   StageKind,
-  StartDetectDefectsParams,
+  StartDetectJobParams,
   StartStageJobParams,
   StartSpriteSwapParams,
 } from '@/types/remix';
@@ -134,15 +134,18 @@ export interface RemixJobsSlice {
     params: StartSpriteSwapParams,
   ) => Promise<EnqueueRemixJobOutcome>;
 
-  /** Modal-driven sprite swap-defect detection (api/jobs/11 — Variants Check).
-   *  POST `/api/jobs/remix/{id}/detect-sprite-defects` + optimistic seed
-   *  `remix_detect_defects` job. Guard: an already-running detect for the same
-   *  sprite no-ops to `skipped`. Independent of swap (disjoint dedup key).
-   *  Advisory/ephemeral: defects land in `background_jobs.result.defectsBySheet`
-   *  (NOT persisted to `remixes`). Throws `EnqueueJobError` (with `code`) on
-   *  422/non-2xx (NO_SWAP_RESULT / SPRITE_NOT_FOUND) — caller toasts non-fatal. */
-  startDetectDefects: (
-    params: StartDetectDefectsParams,
+  /** Modal-driven swap-defect detection — GENERIC over plane (api/jobs/11 sprite
+   *  Variants Check | 12 mix Crops Check). POST
+   *  `/api/jobs/remix/{id}/{detect-sprite-defects|detect-mix-defects}` (resolved
+   *  from `DETECT_JOB_CONFIG[plane]`) + optimistic seed. Guard: an
+   *  already-running detect for the same scope no-ops to `skipped`. Independent
+   *  of swap AND of the other plane (disjoint dedup keys). Advisory/ephemeral:
+   *  defects land in `background_jobs.result.defectsBySheet` (NOT persisted to
+   *  `remixes`). Handles BOTH dedup contracts — sprite HTTP 200 `{deduped}` AND
+   *  mix HTTP 409 `JOB_ALREADY_ACTIVE` (→ `deduped`, attach via realtime).
+   *  Throws `EnqueueJobError` on other non-2xx — caller toasts non-fatal. */
+  startDetectJob: (
+    params: StartDetectJobParams,
   ) => Promise<EnqueueRemixJobOutcome>;
 
   cancelJob: (jobId: string) => Promise<void>;

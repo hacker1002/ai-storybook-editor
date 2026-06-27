@@ -28,16 +28,17 @@ import {
   useRemixActions,
   useSpriteLayoutPending,
   useJobsForRemix,
-  useSpriteDetect,
-  deriveSpriteDetectTask,
+  deriveDetectView,
 } from '@/stores/remix-store';
+import { useDefectDetection } from '@/features/editor/hooks/use-defect-detection';
 import { useHumans } from '@/stores/humans-store';
 import type { RemixSprite } from '@/types/remix';
 import {
   buildSwapConfigViews,
   missingSwapConfigObjects,
 } from './sprite-swap-gating';
-import { evaluateSpriteDetect } from './sprite-detect-gating';
+import { evaluateDetect, type DetectActionState } from './detect-gating';
+import { DETECT_PLANE_CONFIG } from '../detect-plane-config';
 import { spriteBatchLabel } from '../swap-modal-constants';
 import { CropSheetStage } from '../crop-sheet-stage';
 import type { RenderableCrop } from '../crop-sheet-stage/composed-crop-sheet';
@@ -50,7 +51,6 @@ import { useSelectedSwapCrops } from '../hooks/use-selected-swap-crops';
 import { useSpriteOwnership } from '../hooks/use-sprite-ownership';
 import { SwapConfigReviewModal } from '../swap-config-review-modal';
 import { SpritesSidebar } from './sprites-sidebar';
-import type { DetectActionState } from './sprites-sidebar';
 import type { BatchActionState } from './use-stage-batch-tab';
 
 const log = createLogger('Editor', 'VariantsTab');
@@ -220,11 +220,11 @@ export function VariantsTab({
   const isRunning = swapTask.state === 'running';
 
   // ── Detect (Check) — active-sprite overlay source + per-row gating ──────────
-  // Active-sprite detect via the reusable `useSpriteDetect` hook (the overlay
-  // reads the SHEET being viewed); the per-row evaluator derives each sprite
-  // inline with the pure `deriveSpriteDetectTask` (no hook in a loop).
+  // Active-sprite detect via the generic `useDefectDetection('sprite', …)` hook
+  // (the overlay reads the SHEET being viewed); the per-row evaluator derives
+  // each sprite inline with the pure `deriveDetectView` (no hook in a loop).
   const activeSpriteId = sprite?.id ?? null;
-  const activeDetect = useSpriteDetect(remixId, activeSpriteId);
+  const activeDetect = useDefectDetection('sprite', remixId, activeSpriteId);
   const detectSheetResult =
     activeDetect.defectsBySheet.find((d) => d.sheet_index === sheetIndex) ?? null;
   const detectDefects = detectSheetResult?.defects ?? [];
@@ -245,15 +245,21 @@ export function VariantsTab({
       ? { current: activeDetect.task.current, total: activeDetect.task.total }
       : null;
 
-  // Per-row Check evaluator (pure — derives each sprite's detect inline; no hook
-  // in a loop). `anyDetectRunning` disables every Check (detect dedups 1/remix).
+  // Per-row Check evaluator (pure — derives each sprite's detect inline via the
+  // generic `deriveDetectView`/`evaluateDetect`; no hook in a loop). On the
+  // sprite plane `anySwapRunning = anySpriteSwapRunning` (host-resolved);
+  // `anyDetectRunning` disables every Check (sprite detect dedups 1/remix).
   const evaluateSpriteDetectRow = useCallback(
     (s: RemixSprite): DetectActionState =>
-      evaluateSpriteDetect(s, deriveSpriteDetectTask(jobs, remixId, s.id), {
-        submittingDetectSpriteId,
-        anySpriteSwapRunning,
-        anyDetectRunning,
-      }),
+      evaluateDetect(
+        s,
+        deriveDetectView(jobs, remixId, s.id, DETECT_PLANE_CONFIG.sprite.jobType),
+        {
+          submittingScopeId: submittingDetectSpriteId,
+          anySwapRunning: anySpriteSwapRunning,
+          anyDetectRunning,
+        },
+      ),
     [jobs, remixId, submittingDetectSpriteId, anySpriteSwapRunning, anyDetectRunning],
   );
 

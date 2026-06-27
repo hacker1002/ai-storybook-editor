@@ -25,10 +25,19 @@ vi.mock('@/stores/remix-store', () => ({
   useRemixVariants: vi.fn(() => []),
   useRemixById: vi.fn(() => null),
   useStageFinals: vi.fn(() => []),
+  useJobsForRemix: vi.fn(() => []),
+  deriveDetectView: vi.fn(() => ({ task: { state: 'idle' }, defectsBySheet: [] })),
   useRemixActions: () => ({
     addStageBatch: mockAddStageBatch,
     takeFinalBack: vi.fn(async () => true),
   }),
+}));
+
+// ⚡2026-06-27 — mix detect hook stubbed (overlay source) so these gating tests
+// stay focused on the swap/selection flow.
+vi.mock('@/features/editor/hooks/use-defect-detection', () => ({
+  useDefectDetection: () => ({ task: { state: 'idle' }, defectsBySheet: [] }),
+  useAnyDetectRunning: () => false,
 }));
 
 // Humans cache (Settings review join) — empty is fine for gating tests.
@@ -163,6 +172,9 @@ describe('BatchesTab — gating logic', () => {
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
         onStartJob={vi.fn()}
+        submittingDetectBatchId={null}
+        anyDetectRunning={false}
+        onDetectBatch={vi.fn()}
         compareMode={true}
         zoomLevel={100}
         dividerPosition={50}
@@ -193,6 +205,9 @@ describe('BatchesTab — gating logic', () => {
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
         onStartJob={vi.fn()}
+        submittingDetectBatchId={null}
+        anyDetectRunning={false}
+        onDetectBatch={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -230,6 +245,9 @@ describe('BatchesTab — gating logic', () => {
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
         onStartJob={vi.fn()}
+        submittingDetectBatchId={null}
+        anyDetectRunning={false}
+        onDetectBatch={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -268,6 +286,9 @@ describe('BatchesTab — gating logic', () => {
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
         onStartJob={vi.fn()}
+        submittingDetectBatchId={null}
+        anyDetectRunning={false}
+        onDetectBatch={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -305,6 +326,9 @@ describe('BatchesTab — gating logic', () => {
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
         onStartJob={vi.fn()}
+        submittingDetectBatchId={null}
+        anyDetectRunning={false}
+        onDetectBatch={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -336,6 +360,9 @@ describe('BatchesTab — gating logic', () => {
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
         onStartJob={vi.fn()}
+        submittingDetectBatchId={null}
+        anyDetectRunning={false}
+        onDetectBatch={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}
@@ -369,6 +396,9 @@ describe('BatchesTab — gating logic', () => {
         onAddSheet={vi.fn()}
         onRemoveSheet={vi.fn()}
         onStartJob={vi.fn()}
+        submittingDetectBatchId={null}
+        anyDetectRunning={false}
+        onDetectBatch={vi.fn()}
         compareMode={false}
         zoomLevel={100}
         dividerPosition={50}

@@ -49,7 +49,14 @@ const REMIX_JOB_LABELS: Record<string, string> = {
   remix_rmbg: 'Remove BG',
   remix_upscale: 'Upscale',
   remix_detect_defects: 'Defect check',
+  remix_detect_mix_defects: 'Defect check',
 };
+
+/** Detect (Check) job types — advisory result, no "updated" copy. */
+const DETECT_JOB_TYPES = new Set<string>([
+  'remix_detect_defects',
+  'remix_detect_mix_defects',
+]);
 
 function remixCopy(job: BackgroundJob): ToastCopy {
   const params = job.params ?? {};
@@ -74,10 +81,10 @@ function remixCopy(job: BackgroundJob): ToastCopy {
 
   switch (job.status) {
     case 'completed':
-      // ⚡2026-06-27 — swap-defect Check (api/jobs/11): advisory result, no
-      // "updated" copy. Clean run → explicit success; defects found → warning
-      // pointing at the canvas overlay; partial-sheet errors fall through below.
-      if (job.type === 'remix_detect_defects' && errorCount === 0) {
+      // ⚡2026-06-27 — swap-defect Check (api/jobs/11 sprite + 12 mix): advisory
+      // result, no "updated" copy. Clean run → explicit success; defects found →
+      // warning pointing at the canvas overlay; partial-sheet errors fall through.
+      if (DETECT_JOB_TYPES.has(job.type) && errorCount === 0) {
         const defectCount = (result.defectsBySheet ?? []).reduce(
           (sum, sheet) => sum + (sheet.defectCount ?? sheet.defects?.length ?? 0),
           0,

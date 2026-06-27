@@ -6,9 +6,11 @@
 //   - precondition: every enabled CHARACTER lineup token must have a sprite
 //     final (`visual_swap_url`) — resolved via `useRemixVariants` (05-08 §7),
 //   - the Settings header button (read-only remix-config review — 05-10),
-//   - composeMode 'ordinal' / afterComposeMode 'crops-or-sheet' (from config).
+//   - composeMode 'ordinal' / afterComposeMode 'crops-or-sheet' (from config),
+//   - ⚡2026-06-27 the mix-plane swap-defect Check (`[✓]` slot + DefectOverlay,
+//     05-15 — mixes only, `cfg.hasDetect`).
 //
-// SECURITY: never log media_url / swap URLs.
+// SECURITY: never log media_url / swap URLs / defect message.
 
 import { useCallback, useState } from 'react';
 import { Repeat, Settings2 } from 'lucide-react';
@@ -17,13 +19,18 @@ import { createLogger } from '@/utils/logger';
 import {
   useRemixById,
   useRemixVariants,
+  useJobsForRemix,
+  deriveDetectView,
 } from '@/stores/remix-store';
+import { useDefectDetection } from '@/features/editor/hooks/use-defect-detection';
 import { useHumans } from '@/stores/humans-store';
 import type { RemixStageBatch } from '@/types/remix';
 import { missingCharRefs as resolveMissingCharRefs } from './batch-swap-gating';
 import { CropSheetStage } from '../crop-sheet-stage';
 import { RelayoutConfirmDialog } from '../relayout-confirm-dialog';
 import { SwapConfigReviewModal } from '../swap-config-review-modal';
+import { evaluateDetect, type DetectActionState } from './detect-gating';
+import { DETECT_PLANE_CONFIG } from '../detect-plane-config';
 import {
   useStageBatchTab,
   type StageBatchTabProps,
@@ -33,10 +40,20 @@ import { BatchesSidebar } from './batches-sidebar';
 
 const log = createLogger('Editor', 'BatchesTab');
 
-export type BatchesTabProps = StageBatchTabProps;
+/** Mixes tab = the shared stage props + the mix-plane detect (Check) wiring.
+ *  The detect props are mixes-ONLY (rmbg/upscale tabs never receive them →
+ *  no `[✓]` slot, no overlay). */
+export interface BatchesTabProps extends StageBatchTabProps {
+  /** batch_id currently POSTing a mix-detect (mirror submittingBatchId). */
+  submittingDetectBatchId: string | null;
+  /** True while ANY mix-detect job runs for the remix (dedup = 1/remix/plane). */
+  anyDetectRunning: boolean;
+  /** Enqueue a mix swap-defect detect job for the batch (Check). */
+  onDetectBatch: (batchId: string) => void;
+}
 
-export function BatchesTab(props: StageBatchTabProps) {
-  const { remixId } = props;
+export function BatchesTab(props: BatchesTabProps) {
+  const { remixId, submittingDetectBatchId, anyDetectRunning } = props;
   // Read-only variant projection for token → visual_swap_url resolution.
   const variantEntities = useRemixVariants(remixId);
   // Settings review dialog (frozen remix_config — chars + props).
@@ -63,12 +80,74 @@ export function BatchesTab(props: StageBatchTabProps) {
 
   const t = useStageBatchTab('mixes', props, precondition);
 
+  // ── Detect (Check) — active-batch overlay source + per-row gating (05-15) ────
+  // Generic `useDefectDetection('mix', …)` derives the active batch's detect view
+  // (the overlay reads the SHEET being viewed); the per-row evaluator derives
+  // each batch inline via the pure `deriveDetectView` (no hook in a loop).
+  const jobs = useJobsForRemix(remixId);
+  const activeBatchId = t.batch?.id ?? null;
+  const activeDetect = useDefectDetection('mix', remixId, activeBatchId);
+  const detectSheetResult =
+    activeDetect.defectsBySheet.find((d) => d.sheet_index === t.sheetIndex) ?? null;
+  const detectDefects = detectSheetResult?.defects ?? [];
+  const detectSwappedDim = detectSheetResult?.swappedDimensions ?? null;
+  // Stale guard (defects ephemeral): overlay valid only when the detect ran
+  // AFTER the swap result currently shown (jobCreatedAt > selectedSwap.created_time).
+  const detectOverlayStale =
+    !activeDetect.jobCreatedAt ||
+    t.selectedSwap === null ||
+    !(activeDetect.jobCreatedAt > t.selectedSwap.created_time);
+  const detectOverlayVisible =
+    t.selectedSwap !== null &&
+    detectDefects.length > 0 &&
+    !props.compareMode &&
+    !detectOverlayStale;
+  const detectProgress =
+    activeDetect.task.state === 'running'
+      ? { current: activeDetect.task.current, total: activeDetect.task.total }
+      : null;
+
+  // Per-row Check evaluator (pure; mix plane). `anySwapRunning = anyJobRunning`
+  // (the mixes stage mutex, host-resolved); `anyDetectRunning` disables every
+  // mix Check (mix detect dedups 1/remix, independent of sprite detect).
+  const evaluateBatchDetectRow = useCallback(
+    (b: RemixStageBatch): DetectActionState =>
+      evaluateDetect(
+        b,
+        deriveDetectView(jobs, remixId, b.id, DETECT_PLANE_CONFIG.mix.jobType),
+        {
+          submittingScopeId: submittingDetectBatchId,
+          anySwapRunning: props.anyJobRunning,
+          anyDetectRunning,
+        },
+      ),
+    [jobs, remixId, submittingDetectBatchId, props.anyJobRunning, anyDetectRunning],
+  );
+
+  // Per-row Check: select that batch (so the stage overlay tracks ITS sheet)
+  // then enqueue the detect job. Preserve the active sheet when re-checking the
+  // already-selected batch; else start at sheet 0. Mirror `handleStartBatchJob`.
+  const { onSelectBatchSheet, onDetectBatch, activeBatchRef } = props;
+  const handleDetectBatch = useCallback(
+    (batchId: string) => {
+      const sheetIndex =
+        activeBatchRef && activeBatchRef.batchId === batchId
+          ? activeBatchRef.sheetIndex
+          : 0;
+      log.info('handleDetectBatch', 'select + detect batch', { batchId });
+      onSelectBatchSheet(batchId, sheetIndex);
+      onDetectBatch(batchId);
+    },
+    [activeBatchRef, onSelectBatchSheet, onDetectBatch],
+  );
+
   log.debug('render', 'crops tab (mixes)', {
     remixId,
     batchCount: props.batches.length,
-    activeBatchId: t.batch?.id ?? null,
+    activeBatchId,
     isSubmitting: t.isSubmitting,
     isRunning: t.isRunning,
+    detectVisible: detectOverlayVisible,
   });
 
   return (
@@ -89,6 +168,11 @@ export function BatchesTab(props: StageBatchTabProps) {
           getState: t.evaluateBatchAction,
           onRun: t.handleStartBatchJob,
         }}
+        batchDetectAction={
+          t.cfg.hasDetect
+            ? { getState: evaluateBatchDetectRow, onRun: handleDetectBatch }
+            : undefined
+        }
         onSelectBatchSheet={props.onSelectBatchSheet}
         onAddBatch={t.handleAddBatch}
         onRemoveBatch={t.handleRemoveBatchGuarded}
@@ -135,6 +219,12 @@ export function BatchesTab(props: StageBatchTabProps) {
           getOwnership={t.getOwnership}
           onTakeBack={t.handleTakeBack}
           takeBackDisabled={props.anyJobRunning}
+          defectOverlay={{
+            defects: detectDefects,
+            swappedDimensions: detectSwappedDim,
+            visible: detectOverlayVisible,
+          }}
+          detectProgress={detectProgress}
         />
       ) : (
         <section

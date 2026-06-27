@@ -10,6 +10,7 @@
 //       ai-storybook-design/api/jobs/03-cancel-job.md
 
 import { callImageApi, type ImageApiFailure } from './image-api-client';
+import { DETECT_JOB_CONFIG, type DetectPlane } from '@/types/remix';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('API', 'JobsApi');
@@ -169,12 +170,16 @@ export type EnqueueSpriteSwapData =
   | EnqueueSpriteSwapSkippedData
   | EnqueueSpriteSwapDedupedData;
 
-// ── Detect swap defects (api/jobs/11 — sprite-level Check, Variants tab) ──────
-// Mirror sprite swap: enqueue background job that loops every swapped sheet and
+// ── Detect swap defects (api/jobs/11 sprite + 12 mix — generic Check) ─────────
+// Mirror swap: enqueue a background job that loops every swapped sheet and
 // returns `defectsBySheet` via `background_jobs.result`. Advisory/ephemeral.
+// ⚡2026-06-27 — ONE generic wrapper parameterized by `plane` (sprite/mix); the
+// scope key + endpoint + job-type are resolved from `DETECT_JOB_CONFIG`.
 
-export interface EnqueueDetectDefectsBody {
-  sprite_id: string;
+export interface EnqueueDetectBody {
+  /** Scope to inspect — sprite_id (sprite plane) | batch_id (mix plane). The
+   *  wrapper sets the correct body field from `DETECT_JOB_CONFIG[plane].scopeKey`. */
+  scopeId: string;
   force_resweep?: boolean;
   /** Swap intent context the core re-reads (NOT a model dispatch). */
   swap_model?: string;
@@ -184,12 +189,19 @@ export interface EnqueueDetectDefectsBody {
   max_defects?: number;
 }
 
-export interface EnqueueDetectDefectsEnqueuedData {
+/** Detect job-type — 2 separate dedup families (sprite vs mix). */
+export type DetectJobType = 'remix_detect_defects' | 'remix_detect_mix_defects';
+
+export interface EnqueueDetectEnqueuedData {
   job_id: string;
   status: 'queued';
-  type: 'remix_detect_defects';
+  type: DetectJobType;
   remix_id: string;
-  sprite_id: string;
+  /** Exactly one of these is set per plane (sprite_id | batch_id). */
+  sprite_id?: string;
+  batch_id?: string;
+  /** mix-only — # of target objects across the batch (api/jobs/12). */
+  target_count?: number;
   total_steps: number;
   sheets_to_process: number;
   estimated_duration_sec?: number;
@@ -197,26 +209,26 @@ export interface EnqueueDetectDefectsEnqueuedData {
   deduped?: false;
 }
 
-export interface EnqueueDetectDefectsSkippedData {
+export interface EnqueueDetectSkippedData {
   skipped: true;
   reason: 'no_swap_result' | 'no_crop_sheets' | string;
   sheets_to_process: 0;
 }
 
-export interface EnqueueDetectDefectsDedupedData {
+export interface EnqueueDetectDedupedData {
   job_id: string;
   status: 'queued' | 'running';
-  type: 'remix_detect_defects';
+  type: DetectJobType;
   remix_id: string;
-  /** Detect dedup key = sprite_id (INDEPENDENT of swap — disjoint). */
+  /** Detect dedup key = scope id (INDEPENDENT of swap + of the other plane). */
   active_swap_key: string;
   deduped: true;
 }
 
-export type EnqueueDetectDefectsData =
-  | EnqueueDetectDefectsEnqueuedData
-  | EnqueueDetectDefectsSkippedData
-  | EnqueueDetectDefectsDedupedData;
+export type EnqueueDetectData =
+  | EnqueueDetectEnqueuedData
+  | EnqueueDetectSkippedData
+  | EnqueueDetectDedupedData;
 
 /** Error thrown by enqueue wrappers on non-2xx so callers can branch on the
  *  backend `code` (e.g. MISSING_VARIANT_REFERENCE) — a plain `Error` would lose
@@ -318,25 +330,31 @@ export async function enqueueRemixSpriteSwap(
   return result.data;
 }
 
-/** POST /api/jobs/remix/{remixId}/detect-sprite-defects (api/jobs/11 — Check).
- *  Returns parsed `data` on 2xx (enqueued/skipped/deduped); throws
- *  `EnqueueJobError` (with backend `code`) on non-2xx so the caller can
- *  distinguish 422 NO_SWAP_RESULT / 404 SPRITE_NOT_FOUND from a generic failure.
- *  Body carries `sprite_id` + `force_resweep` + swap-intent context
- *  (`swap_model`/`swap_temperature`). SECURITY: never log defect messages/media. */
-export async function enqueueRemixDetectDefects(
+/** POST /api/jobs/remix/{remixId}/{detect-sprite-defects | detect-mix-defects}
+ *  (api/jobs/11 sprite | 12 mix — generic Check). The endpoint + scope-key are
+ *  resolved from `DETECT_JOB_CONFIG[plane]`. Returns parsed `data` on 2xx
+ *  (enqueued/skipped/deduped); throws `EnqueueJobError` (with backend `code` +
+ *  `httpStatus`) on non-2xx so the caller can branch — NOTE the dedup
+ *  divergence: sprite (11) returns HTTP 200 `{ deduped: true }` while mix (12)
+ *  returns HTTP 409 `JOB_ALREADY_ACTIVE`; the store action (`startDetectJob`)
+ *  tolerates BOTH. SECURITY: never log defect messages/media. */
+export async function enqueueDetectDefects(
+  plane: DetectPlane,
   remixId: string,
-  body: EnqueueDetectDefectsBody,
-): Promise<EnqueueDetectDefectsData> {
-  log.info('enqueueRemixDetectDefects', 'request', {
+  body: EnqueueDetectBody,
+): Promise<EnqueueDetectData> {
+  const cfg = DETECT_JOB_CONFIG[plane];
+  log.info('enqueueDetectDefects', 'request', {
+    plane,
     remixId,
+    endpoint: cfg.endpointSegment,
     forceResweep: body.force_resweep ?? true,
     model: body.swap_model,
   });
-  const result = await callImageApi<EnqueueJobResponse<EnqueueDetectDefectsData>>(
-    `/api/jobs/remix/${encodeURIComponent(remixId)}/detect-sprite-defects`,
+  const result = await callImageApi<EnqueueJobResponse<EnqueueDetectData>>(
+    `/api/jobs/remix/${encodeURIComponent(remixId)}/${cfg.endpointSegment}`,
     {
-      sprite_id: body.sprite_id,
+      [cfg.scopeKey]: body.scopeId,
       force_resweep: body.force_resweep ?? true,
       ...(body.swap_model ? { swap_model: body.swap_model } : {}),
       ...(body.swap_temperature != null
@@ -351,7 +369,8 @@ export async function enqueueRemixDetectDefects(
   );
   if (!result.success) {
     const failure = result as ImageApiFailure;
-    log.error('enqueueRemixDetectDefects', 'failed', {
+    log.error('enqueueDetectDefects', 'failed', {
+      plane,
       remixId,
       httpStatus: failure.httpStatus,
       errorCode: failure.errorCode,

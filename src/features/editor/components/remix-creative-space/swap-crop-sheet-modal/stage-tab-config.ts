@@ -49,6 +49,10 @@ export interface StageTabConfig {
   hasImport: boolean;
   /** Settings (config review, 05-10) — mixes only. */
   hasSettings: boolean;
+  /** ⚡2026-06-27 — per-batch Check (`[✓]` slot, swap-defect detect, 05-15) —
+   *  mixes ONLY (identity swap). rmbgs/upscales have no swap → no defect → slot
+   *  hidden. */
+  hasDetect: boolean;
   /** Right-sidebar parameter group (05 §3.8). */
   paramsGroup: "swap" | "rmbg" | "upscale";
   composeMode: StageComposeMode;
@@ -68,6 +72,7 @@ export const STAGE_TAB_CONFIG: Record<StageKind, StageTabConfig> = {
     endpointSegment: STAGE_JOB_CONFIG.mixes.endpointSegment,
     hasImport: false,
     hasSettings: true,
+    hasDetect: true,
     paramsGroup: "swap",
     composeMode: "ordinal",
     afterComposeMode: "crops-or-sheet",
@@ -82,6 +87,7 @@ export const STAGE_TAB_CONFIG: Record<StageKind, StageTabConfig> = {
     endpointSegment: STAGE_JOB_CONFIG.rmbgs.endpointSegment,
     hasImport: true,
     hasSettings: false,
+    hasDetect: false,
     paramsGroup: "rmbg",
     composeMode: "plain",
     afterComposeMode: "crops-or-sheet",
@@ -96,6 +102,7 @@ export const STAGE_TAB_CONFIG: Record<StageKind, StageTabConfig> = {
     endpointSegment: STAGE_JOB_CONFIG.upscales.endpointSegment,
     hasImport: true,
     hasSettings: false,
+    hasDetect: false,
     paramsGroup: "upscale",
     composeMode: "plain",
     afterComposeMode: "crops-only",

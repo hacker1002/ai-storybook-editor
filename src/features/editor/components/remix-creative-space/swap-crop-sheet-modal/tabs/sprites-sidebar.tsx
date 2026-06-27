@@ -15,7 +15,6 @@
 // from props for a11y; the tab also guards before mutating.
 
 import {
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -27,7 +26,6 @@ import {
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 import type { RemixSprite } from '@/types/remix';
-import { DEFECT_SEVERITY_STYLE } from '../crop-sheet-stage/defect-overlay';
 import {
   Tooltip,
   TooltipContent,
@@ -42,6 +40,8 @@ import {
   Z_INDEX,
 } from '../swap-modal-constants';
 import { spriteLineupObjects } from '@/stores/remix-store';
+import { DefectCheckButton } from '../defect-check-button';
+import type { DetectActionState } from './detect-gating';
 import type { BatchActionState } from './use-stage-batch-tab';
 
 // Lift in-modal tooltips above the z-4000 swapModal (shared TooltipContent ships
@@ -63,22 +63,11 @@ export interface SpriteActionDescriptor {
 }
 
 /** ⚡2026-06-27 — per-sprite Check (swap-defect detect) action, sibling RIGHT of
- *  the Swap button (05-15 §3.1). Icon fixed (`CheckCircle2`, busy → spinner);
- *  the tab supplies the hook-backed evaluator/runner + result badge. */
+ *  the Swap button (05-15 §4.1). The shared `DefectCheckButton` renders it; the
+ *  tab supplies the hook-backed evaluator/runner + result badge. */
 export interface SpriteDetectDescriptor {
   getState: (sprite: RemixSprite) => DetectActionState;
   onRun: (spriteId: string) => void;
-}
-
-/** Per-row Check gate/busy/label + result badge. `label` flips Check↔Re-check
- *  (stale / error). `badge`: an object → `●N` in the highest severity color
- *  (done & >0); `'clean'` → green tick (done & 0); `null` → idle/running. */
-export interface DetectActionState {
-  disabled: boolean;
-  busy: boolean;
-  tooltip: string;
-  label: string;
-  badge: { count: number; severity: 'low' | 'medium' | 'high' } | 'clean' | null;
 }
 
 // Delete-sprite affordance hidden by product decision; flip to re-enable.
@@ -422,61 +411,14 @@ function SpriteNode({
         </TooltipProvider>
 
         {/* ⚡2026-06-27 — per-row Check (swap-defect detect). Sibling RIGHT of
-            Swap; click auto-selects the sprite then enqueues the detect job
-            (05-15 §3.1). Badge: ●N (highest-severity color) when defects found,
-            green tick when clean. aria-label carries Check/Re-check + batch name
-            (icon-only a11y); aria-busy while running. */}
-        <TooltipProvider delayDuration={150}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={-1} className="inline-flex shrink-0">
-                <button
-                  type="button"
-                  aria-label={`${detect.label} ${displayName}`}
-                  disabled={detect.disabled || detect.busy}
-                  aria-busy={detect.busy || undefined}
-                  onClick={() => {
-                    log.info('onRunSpriteDetect', 'run sprite detect', {
-                      spriteId: sprite.id,
-                    });
-                    spriteDetectAction.onRun(sprite.id);
-                  }}
-                  className={cn(
-                    'relative flex h-6 w-6 items-center justify-center rounded-md border border-[var(--swap-modal-border)] transition-colors hover:bg-[var(--swap-modal-surface-hover)] disabled:cursor-not-allowed disabled:opacity-40',
-                    detect.badge === 'clean'
-                      ? 'text-emerald-400'
-                      : 'text-[var(--swap-modal-accent)] hover:text-[var(--swap-modal-accent-hover)]',
-                  )}
-                >
-                  {detect.busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                  {detect.badge && detect.badge !== 'clean' && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute -right-1 -top-1 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full px-0.5 text-[9px] font-bold leading-none text-white"
-                      style={{
-                        backgroundColor:
-                          DEFECT_SEVERITY_STYLE[detect.badge.severity].stroke,
-                      }}
-                    >
-                      {detect.badge.count > 99 ? '99+' : detect.badge.count}
-                    </span>
-                  )}
-                </button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              className="max-w-xs text-xs"
-              style={TOOLTIP_CONTENT_STYLE}
-            >
-              {detect.tooltip || detect.label}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+            Swap; the shared DefectCheckButton renders it (click → tab auto-selects
+            the sprite then enqueues the detect job, 05-15 §4.1). */}
+        <DefectCheckButton
+          scopeId={sprite.id}
+          scopeLabel={displayName}
+          detect={detect}
+          onRun={spriteDetectAction.onRun}
+        />
 
         {SHOW_REMOVE_SPRITE && canRemoveSprite && (
           <button

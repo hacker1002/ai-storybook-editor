@@ -7,15 +7,21 @@
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
-import { CLIENT_AUDIO_CHUNK_CAP, STAGE_JOB_CONFIG } from '@/types/remix';
+import {
+  CLIENT_AUDIO_CHUNK_CAP,
+  DETECT_JOB_CONFIG,
+  STAGE_JOB_CONFIG,
+} from '@/types/remix';
 import type { InjectResult, RemixIllustration } from '@/types/remix';
 import {
   enqueueAudioSwap,
   enqueueRemixStageJob,
   enqueueRemixSpriteSwap,
-  enqueueRemixDetectDefects,
+  enqueueDetectDefects,
+  EnqueueJobError,
   type EnqueueAudioSwapEnqueuedData,
   type EnqueueAudioSwapDedupedData,
+  type EnqueueDetectData,
 } from '@/apis/jobs-api';
 import { useAuthStore } from '../../auth-store';
 import { useBackgroundJobsStore } from '../../background-jobs-store';
@@ -374,51 +380,80 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
     };
   },
 
-  // ── Sprite swap-defect detection enqueue (api/jobs/11 — Check) ─────
-  // Mirrors startSpriteSwap: POST enqueue + optimistic seed `remix_detect_defects`
-  // row. INDEPENDENT of swap (disjoint dedup key = sprite_id); an
-  // already-running detect for the SAME sprite no-ops. Advisory/ephemeral —
-  // defects land in `background_jobs.result.defectsBySheet` (NOT `remixes`).
-  // SECURITY: never log defect message/media/human — counts + ids only.
-  startDetectDefects: async (args) => {
-    const { remixId, spriteId, params } = args;
+  // ── Generic swap-defect detection enqueue (api/jobs/11 sprite + 12 mix) ──────
+  // ⚡2026-06-27 — ONE generic action, parameterized by `plane` (sprite/mix);
+  // endpoint + scope-key + job-type resolved from `DETECT_JOB_CONFIG`. Mirrors
+  // startSpriteSwap: POST enqueue + optimistic seed. INDEPENDENT of swap AND of
+  // the other plane (disjoint dedup keys → sprite-check + mix-check run in
+  // parallel); an already-running detect for the SAME scope no-ops. Advisory/
+  // ephemeral — defects land in `background_jobs.result.defectsBySheet` (NOT
+  // `remixes`). SECURITY: never log defect message/media/human — counts + ids.
+  startDetectJob: async (args) => {
+    const { plane, remixId, scopeId, params } = args;
+    const cfg = DETECT_JOB_CONFIG[plane];
 
+    // Guard within THIS plane only (sprite-check + mix-check are independent).
     const alreadyRunning = get().jobs.some(
       (j) =>
-        j.phase === 'remix_detect_defects' &&
+        j.phase === cfg.phase &&
         j.remixId === remixId &&
-        j.spriteId === spriteId &&
+        (plane === 'sprite' ? j.spriteId === scopeId : j.batchId === scopeId) &&
         (j.status === 'queued' || j.status === 'running'),
     );
     if (alreadyRunning) {
-      log.debug('startDetectDefects', 'detect already running — no-op', {
+      log.debug('startDetectJob', 'detect already running — no-op', {
+        plane,
         remixId,
-        spriteId,
+        scopeId,
       });
       return { kind: 'skipped', reason: 'busy' };
     }
 
-    log.info('startDetectDefects', 'enqueue', {
+    log.info('startDetectJob', 'enqueue', {
+      plane,
       remixId,
-      spriteId,
+      scopeId,
       model: params.swapModel,
     });
-    // Throws EnqueueJobError on non-2xx (incl. 422 NO_SWAP_RESULT, 404
-    // SPRITE_NOT_FOUND) — caller (modal) toasts non-fatal on `code`.
-    const data = await enqueueRemixDetectDefects(remixId, {
-      sprite_id: spriteId,
-      force_resweep: true,
-      swap_model: params.swapModel,
-      swap_temperature: params.swapTemperature,
-    });
+
+    let data: EnqueueDetectData;
+    try {
+      data = await enqueueDetectDefects(plane, remixId, {
+        scopeId,
+        force_resweep: true,
+        swap_model: params.swapModel,
+        swap_temperature: params.swapTemperature,
+      });
+    } catch (err) {
+      // ⚡DEDUP DIVERGENCE (handle BOTH contracts): mix (job 12) returns HTTP
+      // 409 JOB_ALREADY_ACTIVE when a detect is already active, whereas sprite
+      // (job 11) returns HTTP 200 `{ deduped: true }`. Treat the 409 as "already
+      // running" (attach to the active job via realtime), NOT a hard error. The
+      // active job_id rides in error.details (not surfaced by the client); the
+      // realtime active-status top-up mirrors it into jobs[] → overlay/progress.
+      // Any OTHER failure propagates (the modal toasts it non-fatal).
+      if (
+        err instanceof EnqueueJobError &&
+        (err.httpStatus === 409 || err.code === 'JOB_ALREADY_ACTIVE')
+      ) {
+        log.info('startDetectJob', 'deduped (409 active job)', {
+          plane,
+          remixId,
+          scopeId,
+        });
+        return { kind: 'deduped', jobId: '', status: 'running' };
+      }
+      throw err;
+    }
 
     if ('skipped' in data && data.skipped) {
-      log.info('startDetectDefects', 'skipped', { remixId, reason: data.reason });
+      log.info('startDetectJob', 'skipped', { plane, remixId, reason: data.reason });
       return { kind: 'skipped', reason: data.reason };
     }
 
     if ('deduped' in data && data.deduped) {
-      log.info('startDetectDefects', 'deduped', {
+      log.info('startDetectJob', 'deduped (200 envelope)', {
+        plane,
         remixId,
         jobId: data.job_id,
         status: data.status,
@@ -430,25 +465,27 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       return { kind: 'deduped', jobId: data.job_id, status: data.status };
     }
 
-    log.info('startDetectDefects', 'enqueued', {
+    log.info('startDetectJob', 'enqueued', {
+      plane,
       remixId,
-      spriteId,
+      scopeId,
       jobId: data.job_id,
       totalSteps: data.total_steps,
     });
 
     // Optimistic seed into the unified store — consumer callback upserts jobs[].
+    // For detect, the job-type string == the phase (see DETECT_JOB_CONFIG).
     const nowIso = new Date().toISOString();
     useBackgroundJobsStore.getState().seed({
       id: data.job_id,
-      type: 'remix_detect_defects',
+      type: cfg.phase,
       bookId: null,
       userId: useAuthStore.getState().user?.id ?? '',
       status: 'queued',
       currentStep: 0,
       totalSteps: data.total_steps,
       stepDetails: null,
-      params: { remix_id: remixId, sprite_id: spriteId },
+      params: { remix_id: remixId, [cfg.scopeKey]: scopeId },
       result: null,
       cancelRequested: false,
       createdAt: nowIso,
