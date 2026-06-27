@@ -48,6 +48,7 @@ const REMIX_JOB_LABELS: Record<string, string> = {
   remix_sprite_swap: 'Variant swap',
   remix_rmbg: 'Remove BG',
   remix_upscale: 'Upscale',
+  remix_detect_defects: 'Defect check',
 };
 
 function remixCopy(job: BackgroundJob): ToastCopy {
@@ -60,6 +61,7 @@ function remixCopy(job: BackgroundJob): ToastCopy {
     errors?: { message?: string }[];
     failed_sheets?: number;
     upscale_skipped_count?: number;
+    defectsBySheet?: { defectCount?: number; defects?: unknown[] }[];
   };
   const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
   const failedSheets =
@@ -72,6 +74,28 @@ function remixCopy(job: BackgroundJob): ToastCopy {
 
   switch (job.status) {
     case 'completed':
+      // ⚡2026-06-27 — swap-defect Check (api/jobs/11): advisory result, no
+      // "updated" copy. Clean run → explicit success; defects found → warning
+      // pointing at the canvas overlay; partial-sheet errors fall through below.
+      if (job.type === 'remix_detect_defects' && errorCount === 0) {
+        const defectCount = (result.defectsBySheet ?? []).reduce(
+          (sum, sheet) => sum + (sheet.defectCount ?? sheet.defects?.length ?? 0),
+          0,
+        );
+        if (defectCount === 0) {
+          return {
+            tone: 'success',
+            message: `No swap defects found for "${name}" — crops look clean`,
+            autoDismiss: true,
+          };
+        }
+        return {
+          tone: 'warning',
+          message: `Found ${defectCount} potential swap ${
+            defectCount === 1 ? 'defect' : 'defects'
+          } for "${name}" — review the overlay`,
+        };
+      }
       if (errorCount > 0) {
         return {
           tone: 'warning',
