@@ -50,8 +50,8 @@ export interface StageTabConfig {
   /** Settings (config review, 05-10) — mixes only. */
   hasSettings: boolean;
   /** ⚡2026-06-27 — per-batch Check (`[✓]` slot, swap-defect detect, 05-15) —
-   *  mixes ONLY (identity swap). rmbgs/upscales have no swap → no defect → slot
-   *  hidden. */
+   *  mixes (identity swap) + ⚡2026-06-28 rmbgs (RGBA cut-out artefacts). upscales
+   *  have nothing new to inspect → slot hidden. */
   hasDetect: boolean;
   /** Right-sidebar parameter group (05 §3.8). */
   paramsGroup: "swap" | "rmbg" | "upscale";
@@ -87,7 +87,7 @@ export const STAGE_TAB_CONFIG: Record<StageKind, StageTabConfig> = {
     endpointSegment: STAGE_JOB_CONFIG.rmbgs.endpointSegment,
     hasImport: true,
     hasSettings: false,
-    hasDetect: false,
+    hasDetect: true,
     paramsGroup: "rmbg",
     composeMode: "plain",
     afterComposeMode: "crops-or-sheet",

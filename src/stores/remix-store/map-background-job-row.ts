@@ -27,10 +27,12 @@ const JOB_TYPE_TO_PHASE: Record<string, RemixJobPhase> = {
   remix_rmbg: 'remix_rmbg',
   remix_upscale: 'remix_upscale',
   // ⚡2026-06-27 — swap-defect detection: sprite (api/jobs/11) + mix/batch
-  // (api/jobs/12). `result.defectsBySheet` rides the raw passthrough cast below
-  // (RemixJobResult field). Lockstep with REMIX_SWAP_TYPES + DETECT_JOB_CONFIG.
+  // (api/jobs/12) + ⚡2026-06-28 rmbg/batch (api/jobs/13). `result.defectsBySheet`
+  // rides the raw passthrough cast below (RemixJobResult field). Lockstep with
+  // REMIX_SWAP_TYPES + DETECT_JOB_CONFIG.
   remix_detect_defects: 'remix_detect_defects',
   remix_detect_mix_defects: 'remix_detect_mix_defects',
+  remix_detect_rmbg_defects: 'remix_detect_rmbg_defects',
 };
 
 /** Map raw background_jobs row → RemixJob. Pure, no I/O. */

@@ -50,12 +50,14 @@ const REMIX_JOB_LABELS: Record<string, string> = {
   remix_upscale: 'Upscale',
   remix_detect_defects: 'Defect check',
   remix_detect_mix_defects: 'Defect check',
+  remix_detect_rmbg_defects: 'Defect check',
 };
 
 /** Detect (Check) job types — advisory result, no "updated" copy. */
 const DETECT_JOB_TYPES = new Set<string>([
   'remix_detect_defects',
   'remix_detect_mix_defects',
+  'remix_detect_rmbg_defects',
 ]);
 
 function remixCopy(job: BackgroundJob): ToastCopy {

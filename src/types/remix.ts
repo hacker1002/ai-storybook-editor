@@ -257,10 +257,10 @@ export interface StartSpriteSwapParams {
 // swap nghi lỗi trên canvas AFTER. Generic 2 plane (chốt user 2026-06-27).
 // Spec: api/remix/06+07 (core) + api/jobs/11+12 (job) + design 05-15.
 
-/** Detect plane — the ONLY parametrize axis between the 2 Check flows (sprite
- *  tab Variants vs mix tab Crops). Resolves the scope-key/endpoint/job-type via
- *  {@link DETECT_JOB_CONFIG}. */
-export type DetectPlane = 'sprite' | 'mix';
+/** Detect plane — the ONLY parametrize axis between the 3 Check flows (sprite
+ *  tab Variants, mix tab Crops, rmbg tab Remove BG). Resolves the
+ *  scope-key/endpoint/job-type via {@link DETECT_JOB_CONFIG}. */
+export type DetectPlane = 'sprite' | 'mix' | 'rmbg';
 
 /** Defect taxonomy — SPRITE core (06 §Result). Dev type-hint ONLY; the shared
  *  `SwapDefect.category` is kept LOOSE (`string`) so the overlay stays
@@ -329,9 +329,9 @@ export type DetectTaskStatus =
 /** Plane → background-job phase + enqueue endpoint segment + scope-key (the ONLY
  *  per-plane differences). `POST /api/jobs/remix/{id}/{endpointSegment}` with
  *  body `{[scopeKey]: scopeId, …}`. Store-facing (mirrors `STAGE_JOB_CONFIG`);
- *  UI extras (coreDoc) live in the modal's `detect-plane-config.ts`. The 2
- *  job-types are SEPARATE dedup families → sprite-check + mix-check run in
- *  parallel. */
+ *  UI extras (coreDoc) live in the modal's `detect-plane-config.ts`. The 3
+ *  job-types are SEPARATE dedup families → sprite-check + mix-check + rmbg-check
+ *  run in parallel. */
 export const DETECT_JOB_CONFIG = {
   sprite: {
     phase: 'remix_detect_defects',
@@ -341,6 +341,13 @@ export const DETECT_JOB_CONFIG = {
   mix: {
     phase: 'remix_detect_mix_defects',
     endpointSegment: 'detect-mix-defects',
+    scopeKey: 'batch_id',
+  },
+  // ⚡2026-06-28 — rmbg plane (Remove BG tab, api/jobs/13). Same batch scope as
+  // mix; defects drawn over the RGBA checkerboard AFTER view (core 08).
+  rmbg: {
+    phase: 'remix_detect_rmbg_defects',
+    endpointSegment: 'detect-rmbg-defects',
     scopeKey: 'batch_id',
   },
 } as const satisfies Record<
@@ -557,11 +564,12 @@ export interface RemixRow {
 // the 3 stage jobs can run concurrently without blocking each other.
 // `remix_detect_defects` = sprite-level swap-defect detection (api/jobs/11 —
 // Variants tab Check). `remix_detect_mix_defects` = mix/batch-level detection
-// (api/jobs/12 — Crops tab Check). Independent of swap jobs AND of each other
-// (disjoint dedup keys — sprite-check + mix-check run in parallel); advisory
-// result lives in `background_jobs.result.defectsBySheet` (NOT persisted to
-// `remixes`). Keep in lockstep with REMIX_SWAP_TYPES + JOB_TYPE_TO_PHASE +
-// DETECT_JOB_CONFIG.
+// (api/jobs/12 — Crops tab Check). `remix_detect_rmbg_defects` = rmbg/batch-level
+// detection (api/jobs/13 — Remove BG tab Check; ⚡2026-06-28). All 3 are
+// independent of swap jobs AND of each other (disjoint dedup keys —
+// sprite/mix/rmbg-check run in parallel); advisory result lives in
+// `background_jobs.result.defectsBySheet` (NOT persisted to `remixes`). Keep in
+// lockstep with REMIX_SWAP_TYPES + JOB_TYPE_TO_PHASE + DETECT_JOB_CONFIG.
 export type RemixJobPhase =
   | 'audio'
   | 'remix_mix_swap'
@@ -569,7 +577,8 @@ export type RemixJobPhase =
   | 'remix_rmbg'
   | 'remix_upscale'
   | 'remix_detect_defects'
-  | 'remix_detect_mix_defects';
+  | 'remix_detect_mix_defects'
+  | 'remix_detect_rmbg_defects';
 
 export type RemixJobStatus =
   | 'queued'

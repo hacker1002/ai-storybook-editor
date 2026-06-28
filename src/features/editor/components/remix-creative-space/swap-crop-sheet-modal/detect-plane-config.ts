@@ -1,4 +1,4 @@
-// detect-plane-config.ts — The SINGLE parametrize point for the 2 swap-defect
+// detect-plane-config.ts — The SINGLE parametrize point for the 3 swap-defect
 // detect planes (design 05-15 §2). All Check/overlay logic is generic; only
 // these per-plane values differ: scope key + enqueue endpoint + job-type/dedup
 // family + the backend core reference. Mirrors the `STAGE_TAB_CONFIG` precedent
@@ -22,8 +22,8 @@ export interface DetectPlaneConfig {
    *  run in parallel + dedup independently. Also the `jobs[]` filter key. */
   jobType: RemixJobPhase;
   /** Backend core reference (tham chiếu) — sprite = human-ref (06), mix =
-   *  variant-sheet (07). */
-  coreDoc: '06' | '07';
+   *  variant-sheet (07), rmbg = RGBA cut-out (08). */
+  coreDoc: '06' | '07' | '08';
 }
 
 export const DETECT_PLANE_CONFIG: Record<DetectPlane, DetectPlaneConfig> = {
@@ -38,5 +38,12 @@ export const DETECT_PLANE_CONFIG: Record<DetectPlane, DetectPlaneConfig> = {
     endpoint: DETECT_JOB_CONFIG.mix.endpointSegment,
     jobType: DETECT_JOB_CONFIG.mix.phase,
     coreDoc: '07',
+  },
+  // ⚡2026-06-28 — rmbg plane (Remove BG tab Check); batch scope (mirror mix).
+  rmbg: {
+    scopeKey: DETECT_JOB_CONFIG.rmbg.scopeKey,
+    endpoint: DETECT_JOB_CONFIG.rmbg.endpointSegment,
+    jobType: DETECT_JOB_CONFIG.rmbg.phase,
+    coreDoc: '08',
   },
 };

@@ -172,8 +172,9 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const remix = useRemixById(target.remixId);
   const sprites = useRemixSprites(target.remixId);
   const anySpriteSwapRunning = useAnySpriteSwapRunning(target.remixId);
-  // Detect (Check) — 1 job/remix/plane (dedup). The 2 planes are independent →
-  // sprite-check + mix-check run + dedup separately; each gates ITS own Check.
+  // Detect (Check) — 1 job/remix/plane (dedup). The 3 planes are independent →
+  // sprite-check + mix-check + rmbg-check run + dedup separately; each gates ITS
+  // own Check.
   const anySpriteDetectRunning = useAnyDetectRunning(
     target.remixId,
     DETECT_PLANE_CONFIG.sprite.jobType,
@@ -181,6 +182,10 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   const anyMixDetectRunning = useAnyDetectRunning(
     target.remixId,
     DETECT_PLANE_CONFIG.mix.jobType,
+  );
+  const anyRmbgDetectRunning = useAnyDetectRunning(
+    target.remixId,
+    DETECT_PLANE_CONFIG.rmbg.jobType,
   );
   // ⚡2026-06-12 — per-stage selectors (fixed-order hook calls; STAGES const).
   const mixBatches = useRemixStageBatches(target.remixId, 'mixes');
@@ -498,22 +503,25 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
     [startDetectJob, target.remixId, params],
   );
 
-  // ── onDetectBatch (Crops tab — Check, mix plane) ─────────────────────────────
-  // Mirror handleDetectSprite on the mix plane. ⚡DEDUP DIVERGENCE: mix (job 12)
-  // returns HTTP 409 JOB_ALREADY_ACTIVE when a detect is already running —
-  // startDetectJob normalizes that to `deduped` (attach via realtime), so a
-  // 409 surfaces as an info toast here, NOT the warn error path. NON-FATAL.
+  // ── onDetectBatch (Crops/Remove BG tabs — Check, batch-scoped planes) ────────
+  // Plane-aware (mix = Crops tab, rmbg = Remove BG tab — ⚡2026-06-28); both bind
+  // batch_id scope, so ONE handler serves both (the JSX passes the plane). Mirror
+  // handleDetectSprite. ⚡DEDUP DIVERGENCE: the batch planes (jobs 12/13) return
+  // HTTP 409 JOB_ALREADY_ACTIVE when a detect is already running — startDetectJob
+  // normalizes that to `deduped` (attach via realtime), so a 409 surfaces as an
+  // info toast here, NOT the warn error path. NON-FATAL.
   const handleDetectBatch = useCallback(
-    async (batchId: string) => {
+    async (plane: 'mix' | 'rmbg', batchId: string) => {
       setSubmittingDetectBatchId(batchId);
       try {
         const outcome = await startDetectJob({
-          plane: 'mix',
+          plane,
           remixId: target.remixId,
           scopeId: batchId,
           params,
         });
         log.info('handleDetectBatch', 'enqueue outcome', {
+          plane,
           batchId,
           kind: outcome.kind,
         });
@@ -526,6 +534,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
       } catch (err) {
         const code = err instanceof EnqueueJobError ? err.code : undefined;
         log.warn('handleDetectBatch', 'enqueue failed (non-fatal)', {
+          plane,
           batchId,
           code,
         });
@@ -821,7 +830,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
                 {...stageTabProps('mixes')}
                 submittingDetectBatchId={submittingDetectBatchId}
                 anyDetectRunning={anyMixDetectRunning}
-                onDetectBatch={(batchId) => void handleDetectBatch(batchId)}
+                onDetectBatch={(batchId) => void handleDetectBatch('mix', batchId)}
               />
             </SelectionProvider>
           )}
@@ -830,6 +839,9 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
             <SelectionProvider key={stageSelectionResetKey('rmbgs')}>
               <RmbgTab
                 {...stageTabProps('rmbgs')}
+                submittingDetectBatchId={submittingDetectBatchId}
+                anyDetectRunning={anyRmbgDetectRunning}
+                onDetectBatch={(batchId) => void handleDetectBatch('rmbg', batchId)}
                 onOpenImport={() => handleOpenImport('rmbgs')}
               />
             </SelectionProvider>

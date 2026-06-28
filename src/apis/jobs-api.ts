@@ -189,8 +189,11 @@ export interface EnqueueDetectBody {
   max_defects?: number;
 }
 
-/** Detect job-type — 2 separate dedup families (sprite vs mix). */
-export type DetectJobType = 'remix_detect_defects' | 'remix_detect_mix_defects';
+/** Detect job-type — 3 separate dedup families (sprite vs mix vs rmbg). */
+export type DetectJobType =
+  | 'remix_detect_defects'
+  | 'remix_detect_mix_defects'
+  | 'remix_detect_rmbg_defects';
 
 export interface EnqueueDetectEnqueuedData {
   job_id: string;
