@@ -24,6 +24,11 @@ export interface DetectPlaneConfig {
   /** Backend core reference (tham chiếu) — sprite = human-ref (06), mix =
    *  variant-sheet (07), rmbg = RGBA cut-out (08). */
   coreDoc: '06' | '07' | '08';
+  /** Vietnamese noun phrase for the kind of defect this plane checks — used in
+   *  the Check toasts ("Bắt đầu kiểm tra {label}" / "Không kiểm tra được {label}").
+   *  sprite/mix swap an identity → "lỗi swap"; rmbg only inspects the cut-out
+   *  mask → "lỗi xóa nền". */
+  defectLabel: string;
 }
 
 export const DETECT_PLANE_CONFIG: Record<DetectPlane, DetectPlaneConfig> = {
@@ -32,12 +37,14 @@ export const DETECT_PLANE_CONFIG: Record<DetectPlane, DetectPlaneConfig> = {
     endpoint: DETECT_JOB_CONFIG.sprite.endpointSegment,
     jobType: DETECT_JOB_CONFIG.sprite.phase,
     coreDoc: '06',
+    defectLabel: 'lỗi swap',
   },
   mix: {
     scopeKey: DETECT_JOB_CONFIG.mix.scopeKey,
     endpoint: DETECT_JOB_CONFIG.mix.endpointSegment,
     jobType: DETECT_JOB_CONFIG.mix.phase,
     coreDoc: '07',
+    defectLabel: 'lỗi swap',
   },
   // ⚡2026-06-28 — rmbg plane (Remove BG tab Check); batch scope (mirror mix).
   rmbg: {
@@ -45,5 +52,6 @@ export const DETECT_PLANE_CONFIG: Record<DetectPlane, DetectPlaneConfig> = {
     endpoint: DETECT_JOB_CONFIG.rmbg.endpointSegment,
     jobType: DETECT_JOB_CONFIG.rmbg.phase,
     coreDoc: '08',
+    defectLabel: 'lỗi xóa nền',
   },
 };

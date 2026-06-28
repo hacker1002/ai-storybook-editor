@@ -471,6 +471,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   // SECURITY: never log defect data.
   const handleDetectSprite = useCallback(
     async (spriteId: string) => {
+      const label = DETECT_PLANE_CONFIG.sprite.defectLabel;
       setSubmittingDetectSpriteId(spriteId);
       try {
         const outcome = await startDetectJob({
@@ -486,16 +487,20 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         if (outcome.kind === 'deduped') {
           toast.info('Đang kiểm tra một mục khác — đợi xong rồi thử lại');
         } else if (outcome.kind === 'enqueued') {
-          toast.success('Bắt đầu kiểm tra lỗi swap');
+          toast.success(`Bắt đầu kiểm tra ${label}`);
         }
         // 'skipped' (busy) is silent — gating already disables the button.
       } catch (err) {
         const code = err instanceof EnqueueJobError ? err.code : undefined;
+        const httpStatus =
+          err instanceof EnqueueJobError ? err.httpStatus : undefined;
         log.warn('handleDetectSprite', 'enqueue failed (non-fatal)', {
           spriteId,
           code,
+          httpStatus,
+          message: err instanceof Error ? err.message : String(err),
         });
-        toast.warning('Không kiểm tra được lỗi swap — kết quả vẫn dùng được');
+        toast.warning(`Không kiểm tra được ${label}`);
       } finally {
         setSubmittingDetectSpriteId(null);
       }
@@ -512,6 +517,7 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
   // info toast here, NOT the warn error path. NON-FATAL.
   const handleDetectBatch = useCallback(
     async (plane: 'mix' | 'rmbg', batchId: string) => {
+      const label = DETECT_PLANE_CONFIG[plane].defectLabel;
       setSubmittingDetectBatchId(batchId);
       try {
         const outcome = await startDetectJob({
@@ -528,17 +534,21 @@ export function SwapCropSheetModal({ target, onClose }: Props) {
         if (outcome.kind === 'deduped') {
           toast.info('Đang kiểm tra một mục khác — đợi xong rồi thử lại');
         } else if (outcome.kind === 'enqueued') {
-          toast.success('Bắt đầu kiểm tra lỗi swap');
+          toast.success(`Bắt đầu kiểm tra ${label}`);
         }
         // 'skipped' (busy) is silent — gating already disables the button.
       } catch (err) {
         const code = err instanceof EnqueueJobError ? err.code : undefined;
+        const httpStatus =
+          err instanceof EnqueueJobError ? err.httpStatus : undefined;
         log.warn('handleDetectBatch', 'enqueue failed (non-fatal)', {
           plane,
           batchId,
           code,
+          httpStatus,
+          message: err instanceof Error ? err.message : String(err),
         });
-        toast.warning('Không kiểm tra được lỗi swap — kết quả vẫn dùng được');
+        toast.warning(`Không kiểm tra được ${label}`);
       } finally {
         setSubmittingDetectBatchId(null);
       }

@@ -331,28 +331,42 @@ export type DetectTaskStatus =
  *  body `{[scopeKey]: scopeId, …}`. Store-facing (mirrors `STAGE_JOB_CONFIG`);
  *  UI extras (coreDoc) live in the modal's `detect-plane-config.ts`. The 3
  *  job-types are SEPARATE dedup families → sprite-check + mix-check + rmbg-check
- *  run in parallel. */
+ *  run in parallel.
+ *
+ *  `carriesSwapContext` — whether the BE enqueue model accepts the display-only
+ *  `swap_model`/`swap_temperature` fields. sprite (job 11) + mix (job 12) do;
+ *  rmbg (job 13) does NOT (no swap identity → `extra="forbid"` rejects them →
+ *  400 VALIDATION_ERROR). The client gates those fields per-plane on this flag. */
 export const DETECT_JOB_CONFIG = {
   sprite: {
     phase: 'remix_detect_defects',
     endpointSegment: 'detect-sprite-defects',
     scopeKey: 'sprite_id',
+    carriesSwapContext: true,
   },
   mix: {
     phase: 'remix_detect_mix_defects',
     endpointSegment: 'detect-mix-defects',
     scopeKey: 'batch_id',
+    carriesSwapContext: true,
   },
   // ⚡2026-06-28 — rmbg plane (Remove BG tab, api/jobs/13). Same batch scope as
-  // mix; defects drawn over the RGBA checkerboard AFTER view (core 08).
+  // mix; defects drawn over the RGBA checkerboard AFTER view (core 08). rmbg does
+  // NOT swap an identity → its enqueue model forbids swap_model/swap_temperature.
   rmbg: {
     phase: 'remix_detect_rmbg_defects',
     endpointSegment: 'detect-rmbg-defects',
     scopeKey: 'batch_id',
+    carriesSwapContext: false,
   },
 } as const satisfies Record<
   DetectPlane,
-  { phase: RemixJobPhase; endpointSegment: string; scopeKey: 'sprite_id' | 'batch_id' }
+  {
+    phase: RemixJobPhase;
+    endpointSegment: string;
+    scopeKey: 'sprite_id' | 'batch_id';
+    carriesSwapContext: boolean;
+  }
 >;
 
 /** Args for the generic detect enqueue (api/jobs/11 sprite | 12 mix). `scopeId`

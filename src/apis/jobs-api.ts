@@ -354,15 +354,23 @@ export async function enqueueDetectDefects(
     forceResweep: body.force_resweep ?? true,
     model: body.swap_model,
   });
+  // ⚡rmbg (job 13) forbids swap_model/swap_temperature (no swap identity → BE
+  // `extra="forbid"` → 400). Gate the display-only swap context per-plane so the
+  // generic body never trips the rmbg model. sprite/mix accept them.
+  const swapContext = cfg.carriesSwapContext
+    ? {
+        ...(body.swap_model ? { swap_model: body.swap_model } : {}),
+        ...(body.swap_temperature != null
+          ? { swap_temperature: body.swap_temperature }
+          : {}),
+      }
+    : {};
   const result = await callImageApi<EnqueueJobResponse<EnqueueDetectData>>(
     `/api/jobs/remix/${encodeURIComponent(remixId)}/${cfg.endpointSegment}`,
     {
       [cfg.scopeKey]: body.scopeId,
       force_resweep: body.force_resweep ?? true,
-      ...(body.swap_model ? { swap_model: body.swap_model } : {}),
-      ...(body.swap_temperature != null
-        ? { swap_temperature: body.swap_temperature }
-        : {}),
+      ...swapContext,
       ...(body.focus_objects ? { focus_objects: body.focus_objects } : {}),
       ...(body.severity_threshold
         ? { severity_threshold: body.severity_threshold }
