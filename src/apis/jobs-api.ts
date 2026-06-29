@@ -80,11 +80,27 @@ export interface ModelParamsBody {
   params?: { temperature?: number; noise?: number };
 }
 
+/** ⚡2026-06-29 Watercolor grain post-process — TOP-LEVEL job-10 body field
+ *  (sibling of `model_params`, NOT nested inside it). Upscale stage only.
+ *  Omit / `enabled:false` → grain off (server normalizes to none). `amp`/`blur`
+ *  are CLAMPED server-side (amp→0..50, blur→0..5), never rejected. `seed` is
+ *  omitted by the modal — the backend supplies a default and adds a per-crop
+ *  seed offset internally. MODEL-AGNOSTIC: applies to all 4 upscale models. */
+export interface GrainBody {
+  enabled: boolean;
+  amp?: number;
+  blur?: number;
+  seed?: number;
+}
+
 export interface EnqueueStageJobBody {
   batch_id: string;
   force_resweep?: boolean;
   /** ⚡2026-06-13 WIRED — per-model params (model + temperature/noise). */
   model_params?: ModelParamsBody;
+  /** ⚡2026-06-29 TOP-LEVEL grain knobs (sibling of model_params) — upscale only;
+   *  other stages omit it. */
+  grain?: GrainBody;
 }
 
 export type StageJobEndpointSegment = 'mix-swap' | 'rmbg' | 'upscale';
@@ -276,6 +292,8 @@ export async function enqueueRemixStageJob(
     endpointSegment,
     forceResweep: body.force_resweep ?? true,
     model: body.model_params?.model,
+    // ⚡2026-06-29 grain present (upscale only) — log the toggle, not the knobs.
+    grainEnabled: body.grain?.enabled,
   });
   const result = await callImageApi<EnqueueJobResponse<EnqueueStageJobData>>(
     `/api/jobs/remix/${encodeURIComponent(remixId)}/${endpointSegment}`,
@@ -283,6 +301,8 @@ export async function enqueueRemixStageJob(
       batch_id: body.batch_id,
       force_resweep: body.force_resweep ?? true,
       ...(body.model_params ? { model_params: body.model_params } : {}),
+      // ⚡2026-06-29 grain is TOP-LEVEL (sibling of model_params); upscale only.
+      ...(body.grain ? { grain: body.grain } : {}),
     },
   );
   if (!result.success) {

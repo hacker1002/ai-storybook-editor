@@ -9,6 +9,11 @@ const PARAMS: SwapModelParams = {
   rmbgModel: 'bria/remove-background',
   upscaleModel: 'alexgenovese/upscaler',
   noise: 2.5,
+  // ⚡2026-06-29 grain knobs — NOT part of model_params (top-level body field),
+  // so buildModelParams ignores them; present only to satisfy the type.
+  grainEnabled: true,
+  grainAmp: 9,
+  grainBlur: 0.8,
 };
 
 describe('buildModelParams', () => {

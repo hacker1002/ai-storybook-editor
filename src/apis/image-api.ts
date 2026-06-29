@@ -225,6 +225,11 @@ export interface UpscaleImagePayload {
   scale: number;
   /** Model select via `modelParams.model` (NOT flat `model`); faceEnhance via params (recraft → `{}`). */
   modelParams: { model: UpscaleModel; params: { faceEnhance?: boolean } };
+  /** TOP-LEVEL (NOT in `modelParams`) watercolor monochrome grain post-process applied AFTER
+   *  upscale — model-agnostic (same for all 4 models). Bounds (BE-enforced, 400 on out-of-range):
+   *  amp 0..50, blur 0..5. `seed` NOT exposed → API default. API omit=off, but the FE always sends
+   *  an explicit object: `enabled:false` turns it off. */
+  grain?: { enabled: boolean; amp: number; blur: number; seed?: number };
 }
 
 export interface UpscaleImageResponse {
@@ -242,6 +247,11 @@ export interface UpscaleImageResponse {
     /** Replicate variant label — set only for `xinntao/realesrgan` (e.g. "Anime - anime6B");
      *  null for the other models. Type-only forward-compat; the FE does NOT display it. */
     variant?: string;
+    /** Grain post-process outcome — ALWAYS present; false when grain off OR it failed
+     *  (non-fatal, server returns pre-grain bytes). */
+    grainApplied?: boolean;
+    /** Resolved grain params — present ONLY when `grainApplied` is true. */
+    grain?: { amp: number; blur: number; seed: number };
   };
 }
 
@@ -257,6 +267,7 @@ export async function callImageUpscale(
     model: payload.modelParams.model,
     scale: payload.scale,
     faceEnhance: payload.modelParams.params.faceEnhance,
+    grainEnabled: payload.grain?.enabled,
   });
   const result = await callImageApi<UpscaleImageResponse>('/api/image/upscale-image', payload);
   if (result.success) {
@@ -265,6 +276,7 @@ export async function callImageUpscale(
       fixedRatio: result.meta?.fixedRatio,
       width: result.data.width,
       height: result.data.height,
+      grainApplied: result.meta?.grainApplied,
     });
   } else {
     log.error('callImageUpscale', 'failed', { errorCode: result.errorCode, httpStatus: result.httpStatus });

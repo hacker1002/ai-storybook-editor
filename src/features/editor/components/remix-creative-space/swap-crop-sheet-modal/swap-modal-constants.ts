@@ -33,15 +33,33 @@ export const UPSCALE_MODEL_OPTIONS = [
   'alexgenovese/upscaler',
 ] as const;
 
+/** Watercolor grain post-process knobs (right sidebar, group 'upscale' →
+ *  TOP-LEVEL job-10 body `grain`, NOT `model_params`). ⚡2026-06-29.
+ *  MODEL-AGNOSTIC: grain runs AFTER upscale on ALL 4 models, so — unlike Noise
+ *  (`modelSupportsNoise`) — these controls are NEVER gated by the picked model;
+ *  amp/blur only grey out when the toggle is off. Server clamps amp→0..50,
+ *  blur→0..5 (phase 03 normalize) — FE bounds are UX only. `seed` is omitted by
+ *  the modal (backend default + per-crop offset). Declared BEFORE
+ *  DEFAULT_SWAP_PARAMS (which seeds from it) to avoid a const TDZ. */
+export const GRAIN = {
+  enabledDefault: true,
+  amp: { min: 0, max: 50, step: 1, default: 9 },
+  blur: { min: 0, max: 5, step: 0.1, default: 0.8 },
+} as const;
+
 /** Default right-sidebar params — re-applied on every modal open (ephemeral).
  *  ⚡2026-06-12: per-tab groups (swap / rmbg / upscale + noise); `scale`
- *  removed — job 10 derives PRINT 300 DPI from the layer geometry itself. */
+ *  removed — job 10 derives PRINT 300 DPI from the layer geometry itself.
+ *  ⚡2026-06-29: grain knobs (group 'upscale'); default toggle ON. */
 export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
   swapModel: 'google/nano-banana-pro',
   swapTemperature: 0.25,
   rmbgModel: 'bria/remove-background',
   upscaleModel: 'xinntao/realesrgan',
   noise: 1.5,
+  grainEnabled: GRAIN.enabledDefault,
+  grainAmp: GRAIN.amp.default,
+  grainBlur: GRAIN.blur.default,
 };
 
 /** Zoom slider range — applied as the stage canvas-inner `width/height`

@@ -166,6 +166,17 @@ export const SCALE = { min: 1, max: 8, step: 1, default: 2 } as const;
  *  (even false) for scalable models so the API default never silently flips it on (03 §5). */
 export const DEFAULT_FACE_ENHANCE = false;
 
+/** Watercolor monochrome grain post-process (applied AFTER upscale — Phase 04 spec). Default
+ *  toggle ON. KHÁC Scale/FaceEnhance: grain is MODEL-AGNOSTIC — NOT gated by UPSCALE_MODEL_CAPS,
+ *  always enabled for every model (incl. recraft). The AMP/BLUR steppers are greyed (disabled,
+ *  NOT hidden) only when the Grain toggle itself is OFF. */
+export const DEFAULT_GRAIN_ENABLED = true;
+/** AMP stepper: int 0..50, default 9 (mock). BE rejects out-of-range with 400 — stepper min/max
+ *  is UX, not the security boundary. `seed` NOT exposed → API default. */
+export const GRAIN_AMP = { min: 0, max: 50, step: 1, default: 9 } as const;
+/** BLUR stepper: float 0..5 step 0.1, default 0.8 (mock). */
+export const GRAIN_BLUR = { min: 0, max: 5, step: 0.1, default: 0.8 } as const;
+
 /** Per-model capability gate. `recraft` is fixed-ratio native passthrough → scale has no effect
  *  AND it has no face-enhance field → both controls disabled (03 §4). Switching model keeps the
  *  scale/faceEnhance state, only the disabled flag changes. */

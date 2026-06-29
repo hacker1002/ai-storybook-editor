@@ -129,19 +129,30 @@ export function mapEditError(err: unknown, opts?: { actionLabel?: string }): str
   return 'Đã có lỗi xảy ra, vui lòng thử lại.';
 }
 
+/** Watercolor grain options the upscale commit always sends (Phase 04). `seed` is NOT exposed
+ *  in the UI → omitted → API default. The toggle's `enabled:false` turns grain off, but the FE
+ *  NEVER omits the object (API omit=off; we send explicit so the contract is unambiguous). */
+export interface UpscaleGrainOptions {
+  enabled: boolean;
+  amp: number;
+  blur: number;
+}
+
 /** Pure payload shaper for the upscale commit (Validation S1 — unit-tested in isolation).
  *  ⚡ faceEnhance is sent EXPLICITLY (even false) for models that support it, so the API's
  *  default-TRUE never silently overrides a user OFF. recraft (no face-enhance field) →
- *  `params: {}` to avoid the per-model allowlist clamp (03 §3). */
+ *  `params: {}` to avoid the per-model allowlist clamp (03 §3). `grain` is sent as a TOP-LEVEL
+ *  explicit object on EVERY call — model-agnostic, never gated by caps (Phase 04). */
 export function buildUpscalePayload(
   model: UpscaleModel,
   scale: number,
   faceEnhance: boolean,
   imageUrl: string,
+  grain: UpscaleGrainOptions,
 ): UpscaleImagePayload {
   const caps = UPSCALE_MODEL_CAPS[model];
   const params = caps.supportsFaceEnhance ? { faceEnhance } : {};
-  return { imageUrl, scale, modelParams: { model, params } };
+  return { imageUrl, scale, modelParams: { model, params }, grain };
 }
 
 // ── Outpaint helpers (05-outpaint-tab.md §2/§5) ───────────────────────────────

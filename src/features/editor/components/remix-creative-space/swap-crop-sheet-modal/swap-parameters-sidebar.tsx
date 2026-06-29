@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { NumberStepper } from '@/components/ui/number-stepper';
+import { Switch } from '@/components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
@@ -34,6 +35,7 @@ import {
   RMBG_MODEL_OPTIONS,
   UPSCALE_MODEL_OPTIONS,
   NOISE,
+  GRAIN,
   TEMPERATURE,
   modelSupportsNoise,
   RIGHT_SIDEBAR_WIDTH_PX,
@@ -67,6 +69,10 @@ export function SwapParametersSidebar({
   // Noise input is meaningless for models without a denoise knob (real-esrgan /
   // recraft); disable + tooltip. Value stays in params — backend drops the key.
   const noiseDisabled = !modelSupportsNoise(params.upscaleModel);
+  // ⚡2026-06-29 Grain is MODEL-AGNOSTIC — the toggle is NEVER gated by the
+  // picked model (unlike Noise). amp/blur grey out only when the toggle is off;
+  // pure derive (NO useEffect+setState — React 19 lints that as an error).
+  const grainKnobsDisabled = !params.grainEnabled;
 
   const handleSwapModelChange = (value: string) => {
     log.debug('handleSwapModelChange', 'swap model selected', { value });
@@ -87,6 +93,18 @@ export function SwapParametersSidebar({
   const handleNoiseChange = (value: number) => {
     log.debug('handleNoiseChange', 'noise changed', { value });
     onChange({ ...params, noise: value });
+  };
+  const handleGrainToggle = (checked: boolean) => {
+    log.debug('handleGrainToggle', 'grain toggled', { enabled: checked });
+    onChange({ ...params, grainEnabled: checked });
+  };
+  const handleGrainAmpChange = (value: number) => {
+    log.debug('handleGrainAmpChange', 'grain amp changed', { value });
+    onChange({ ...params, grainAmp: value });
+  };
+  const handleGrainBlurChange = (value: number) => {
+    log.debug('handleGrainBlurChange', 'grain blur changed', { value });
+    onChange({ ...params, grainBlur: value });
   };
 
   // Dark field classes: translucent white surface + border-strong + white text
@@ -219,6 +237,50 @@ export function SwapParametersSidebar({
                   className={DARK_STEPPER_CLASS}
                 />
               )}
+            </ParamField>
+
+            {/* ⚡2026-06-29 Watercolor grain post-process → TOP-LEVEL job-10 body
+                `grain` (sibling of model_params). MODEL-AGNOSTIC: the toggle is
+                NEVER gated by the picked model (unlike Noise above) — it stays
+                enabled on all 4 upscale models incl. the xinntao default. Only
+                amp/blur grey out when the toggle is off (pure derive). */}
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="grain-toggle"
+                className="text-xs font-medium uppercase tracking-wide text-[var(--swap-modal-text-muted)]"
+              >
+                Grain
+              </label>
+              <Switch
+                id="grain-toggle"
+                checked={params.grainEnabled}
+                onCheckedChange={handleGrainToggle}
+                className="data-[state=checked]:bg-[var(--swap-modal-accent)]"
+              />
+            </div>
+
+            <ParamField label="Grain Amp">
+              <NumberStepper
+                value={params.grainAmp}
+                min={GRAIN.amp.min}
+                max={GRAIN.amp.max}
+                step={GRAIN.amp.step}
+                onChange={handleGrainAmpChange}
+                disabled={grainKnobsDisabled}
+                className={DARK_STEPPER_CLASS}
+              />
+            </ParamField>
+
+            <ParamField label="Grain Blur">
+              <NumberStepper
+                value={params.grainBlur}
+                min={GRAIN.blur.min}
+                max={GRAIN.blur.max}
+                step={GRAIN.blur.step}
+                onChange={handleGrainBlurChange}
+                disabled={grainKnobsDisabled}
+                className={DARK_STEPPER_CLASS}
+              />
             </ParamField>
           </>
         )}

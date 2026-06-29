@@ -128,39 +128,53 @@ describe('mapEditError', () => {
 });
 
 describe('buildUpscalePayload', () => {
-  it('sends faceEnhance EXPLICITLY (even false) for scalable models', () => {
-    const p = buildUpscalePayload('nightmareai/real-esrgan', 2, false, 'https://cdn/a.png');
+  const GRAIN_ON = { enabled: true, amp: 9, blur: 0.8 };
+  const GRAIN_OFF = { enabled: false, amp: 9, blur: 0.8 };
+
+  it('sends faceEnhance EXPLICITLY (even false) for scalable models + grain top-level', () => {
+    const p = buildUpscalePayload('nightmareai/real-esrgan', 2, false, 'https://cdn/a.png', GRAIN_ON);
     expect(p).toEqual({
       imageUrl: 'https://cdn/a.png',
       scale: 2,
       modelParams: { model: 'nightmareai/real-esrgan', params: { faceEnhance: false } },
+      grain: { enabled: true, amp: 9, blur: 0.8 },
     });
   });
 
   it('forwards faceEnhance=true for scalable models', () => {
-    const p = buildUpscalePayload('alexgenovese/upscaler', 4, true, 'https://cdn/a.png');
+    const p = buildUpscalePayload('alexgenovese/upscaler', 4, true, 'https://cdn/a.png', GRAIN_ON);
     expect(p.modelParams.params).toEqual({ faceEnhance: true });
     expect(p.modelParams.model).toBe('alexgenovese/upscaler');
   });
 
   it('omits params for recraft (native passthrough → empty params)', () => {
-    const p = buildUpscalePayload('recraft-ai/recraft-crisp-upscale', 8, true, 'https://cdn/a.png');
+    const p = buildUpscalePayload('recraft-ai/recraft-crisp-upscale', 8, true, 'https://cdn/a.png', GRAIN_ON);
     expect(p.modelParams.params).toEqual({});
     expect(p.modelParams.model).toBe('recraft-ai/recraft-crisp-upscale');
   });
 
   it('omits faceEnhance for xinntao (anime no-op) but forwards scale', () => {
     // xinntao supportsFaceEnhance=false → params {} (no faceEnhance sent); scale honoured.
-    const p = buildUpscalePayload('xinntao/realesrgan', 4, true, 'https://cdn/a.png');
+    const p = buildUpscalePayload('xinntao/realesrgan', 4, true, 'https://cdn/a.png', GRAIN_ON);
     expect(p.modelParams.params).toEqual({});
     expect(p.modelParams.model).toBe('xinntao/realesrgan');
     expect(p.scale).toBe(4);
   });
 
   it('forwards imageUrl + scale verbatim', () => {
-    const p = buildUpscalePayload('nightmareai/real-esrgan', 6, true, 'https://cdn/source.png');
+    const p = buildUpscalePayload('nightmareai/real-esrgan', 6, true, 'https://cdn/source.png', GRAIN_ON);
     expect(p.imageUrl).toBe('https://cdn/source.png');
     expect(p.scale).toBe(6);
+  });
+
+  it('is MODEL-AGNOSTIC for grain — recraft (no scale/faceEnhance) still carries grain', () => {
+    const p = buildUpscalePayload('recraft-ai/recraft-crisp-upscale', 8, true, 'https://cdn/a.png', GRAIN_ON);
+    expect(p.grain).toEqual({ enabled: true, amp: 9, blur: 0.8 });
+  });
+
+  it('sends an EXPLICIT grain object even when toggle OFF (never omitted)', () => {
+    const p = buildUpscalePayload('xinntao/realesrgan', 2, false, 'https://cdn/a.png', GRAIN_OFF);
+    expect(p.grain).toEqual({ enabled: false, amp: 9, blur: 0.8 });
   });
 });
 

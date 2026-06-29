@@ -215,12 +215,25 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
     }
 
     const modelParams = buildModelParams(stage, params);
+    // ⚡2026-06-29 Watercolor grain — TOP-LEVEL job body field (sibling of
+    // model_params), UPSCALE stage only. Default ON → always send an explicit
+    // {enabled,amp,blur}; the backend clamps amp/blur + adds a per-crop seed
+    // offset. Grain is MODEL-AGNOSTIC (unlike noise) — no model gate here.
+    const grain =
+      stage === 'upscales'
+        ? {
+            enabled: params.grainEnabled,
+            amp: params.grainAmp,
+            blur: params.grainBlur,
+          }
+        : undefined;
     log.info('startStageJob', 'enqueue', {
       remixId,
       stage,
       batchId,
       forceResweep,
       model: modelParams.model,
+      grainEnabled: grain?.enabled,
     });
     // Throws EnqueueJobError on non-2xx (e.g. 422 MISSING_VARIANT_REFERENCE on
     // mix-swap) — caller (modal) toasts on `code`.
@@ -228,6 +241,7 @@ export const createJobsSlice: RemixSliceCreator<RemixJobsSlice> = (
       batch_id: batchId,
       force_resweep: forceResweep,
       model_params: modelParams,
+      grain,
     });
 
     if ('skipped' in data && data.skipped) {

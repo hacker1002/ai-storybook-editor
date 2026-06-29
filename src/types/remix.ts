@@ -831,6 +831,13 @@ export interface SwapModelParams {
   rmbgModel: string;
   upscaleModel: string;
   noise: number; // 0..10 step 0.1 — upscale denoise (group 'upscale')
+  /** ⚡2026-06-29 Watercolor grain post-process (group 'upscale'). Forwarded as
+   *  the TOP-LEVEL job-10 body field `grain` (sibling of `model_params`, NOT
+   *  nested). MODEL-AGNOSTIC: applies after upscale on ALL 4 models — unlike
+   *  `noise`, the controls are NEVER gated by the picked model. Default ON. */
+  grainEnabled: boolean;
+  grainAmp: number; // 0..50 step 1 — grain amplitude (top-level grain.amp)
+  grainBlur: number; // 0..5 step 0.1 — grain blur radius (top-level grain.blur)
 }
 
 /** Args for the stage-job enqueue (⚡2026-06-12 generic — jobs 05/09/10,
