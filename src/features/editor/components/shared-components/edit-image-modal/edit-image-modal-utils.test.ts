@@ -149,6 +149,14 @@ describe('buildUpscalePayload', () => {
     expect(p.modelParams.model).toBe('recraft-ai/recraft-crisp-upscale');
   });
 
+  it('omits faceEnhance for xinntao (anime no-op) but forwards scale', () => {
+    // xinntao supportsFaceEnhance=false → params {} (no faceEnhance sent); scale honoured.
+    const p = buildUpscalePayload('xinntao/realesrgan', 4, true, 'https://cdn/a.png');
+    expect(p.modelParams.params).toEqual({});
+    expect(p.modelParams.model).toBe('xinntao/realesrgan');
+    expect(p.scale).toBe(4);
+  });
+
   it('forwards imageUrl + scale verbatim', () => {
     const p = buildUpscalePayload('nightmareai/real-esrgan', 6, true, 'https://cdn/source.png');
     expect(p.imageUrl).toBe('https://cdn/source.png');

@@ -44,6 +44,8 @@ const DARK_TRIGGER_CLASS = `w-full ${SWAP_MODAL_OUTLINE_BUTTON_CLASS}`;
 const SECTION_LABEL_CLASS =
   'mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--swap-modal-text-muted)]';
 const RECRAFT_HINT = 'Crisp sharpen — fixed ratio, no scale control';
+/** Face Enhance disabled-on-anime hint: GFPGAN is a no-op on the xinntao Anime variant. */
+const ANIME_FACE_ENHANCE_HINT = 'Face enhance không áp dụng cho variant Anime';
 
 export interface UpscaleTabApi {
   ParamsPanel: ReactNode;
@@ -64,6 +66,16 @@ export function useUpscaleTabState({ selectedVersion }: UseUpscaleTabOptions): U
 
   // Per-model gate — switching model keeps scale/faceEnhance state, only flips disabled flags.
   const caps = useMemo(() => UPSCALE_MODEL_CAPS[model], [model]);
+
+  // Face Enhance disabled tooltip is model-specific: recraft has no field (RECRAFT_HINT);
+  // xinntao's Anime variant makes GFPGAN a no-op (ANIME_FACE_ENHANCE_HINT).
+  const faceEnhanceHint = model === 'xinntao/realesrgan' ? ANIME_FACE_ENHANCE_HINT : RECRAFT_HINT;
+
+  const handleModelChange = useCallback((value: string) => {
+    const next = value as UpscaleModel;
+    log.debug('handleModelChange', 'upscale model selected', { model: next });
+    setModel(next);
+  }, []);
 
   const canCommit = !!selectedVersion;
 
@@ -105,7 +117,7 @@ export function useUpscaleTabState({ selectedVersion }: UseUpscaleTabOptions): U
       <div className="flex flex-col gap-5 px-4 py-4">
         <section>
           <p className={SECTION_LABEL_CLASS}>Model</p>
-          <Select value={model} onValueChange={(v) => setModel(v as UpscaleModel)}>
+          <Select value={model} onValueChange={handleModelChange}>
             <SelectTrigger className={DARK_TRIGGER_CLASS} aria-label="Upscale model">
               <SelectValue />
             </SelectTrigger>
@@ -137,10 +149,11 @@ export function useUpscaleTabState({ selectedVersion }: UseUpscaleTabOptions): U
               />
             </div>
 
-            {/* Face Enhance — disabled for recraft (no field). ⚡ default OFF (sent explicit). */}
+            {/* Face Enhance — disabled for recraft (no field) + xinntao (anime no-op).
+                ⚡ default OFF (sent explicit). */}
             <div
               className={caps.supportsFaceEnhance ? undefined : 'opacity-40'}
-              title={caps.supportsFaceEnhance ? undefined : RECRAFT_HINT}
+              title={caps.supportsFaceEnhance ? undefined : faceEnhanceHint}
             >
               <p className={SECTION_LABEL_CLASS}>Face Enhance</p>
               <div className="flex items-center gap-2">
@@ -163,7 +176,7 @@ export function useUpscaleTabState({ selectedVersion }: UseUpscaleTabOptions): U
         </section>
       </div>
     ),
-    [model, scale, faceEnhance, caps],
+    [model, scale, faceEnhance, caps, faceEnhanceHint, handleModelChange],
   );
 
   return { ParamsPanel, canCommit, commit };

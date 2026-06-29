@@ -211,8 +211,10 @@ export async function extractHumanTraits(
 // --- Upscale (multi-model super-resolution — image/05-upscale-image.md) ---
 
 /** Replicate upscale model allowlist (group `upscale`). Single source for the
- *  EditImageModal upscale tab (constants re-export this type). */
+ *  EditImageModal upscale tab (constants re-export this type). `xinntao/realesrgan`
+ *  (Anime variant) is the group default (2026-06-29 BE flip). */
 export type UpscaleModel =
+  | 'xinntao/realesrgan'
   | 'nightmareai/real-esrgan'
   | 'recraft-ai/recraft-crisp-upscale'
   | 'alexgenovese/upscaler';
@@ -237,6 +239,9 @@ export interface UpscaleImageResponse {
     sourceType?: 'url' | 'base64';
     tileCount?: number;
     replicatePredictionIds?: string[];
+    /** Replicate variant label — set only for `xinntao/realesrgan` (e.g. "Anime - anime6B");
+     *  null for the other models. Type-only forward-compat; the FE does NOT display it. */
+    variant?: string;
   };
 }
 

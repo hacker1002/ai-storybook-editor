@@ -23,8 +23,11 @@ export const RMBG_MODEL_OPTIONS = [
   '851-labs/background-remover',
 ] as const;
 
-/** AI upscale model options (right sidebar — v1 collect-only). */
+/** AI upscale model options (right sidebar — job 10 `model_params.model`).
+ *  `xinntao/realesrgan` (Anime variant) is listed FIRST and is the default —
+ *  matches the 2026-06-29 BE group-default flip. */
 export const UPSCALE_MODEL_OPTIONS = [
+  'xinntao/realesrgan',
   'nightmareai/real-esrgan',
   'recraft-ai/recraft-crisp-upscale',
   'alexgenovese/upscaler',
@@ -37,7 +40,7 @@ export const DEFAULT_SWAP_PARAMS: SwapModelParams = {
   swapModel: 'google/nano-banana-pro',
   swapTemperature: 0.25,
   rmbgModel: 'bria/remove-background',
-  upscaleModel: 'nightmareai/real-esrgan',
+  upscaleModel: 'xinntao/realesrgan',
   noise: 1.5,
 };
 
@@ -63,8 +66,9 @@ export const NOISE = { min: 0, max: 10, step: 0.1, default: 1.5 } as const;
 
 /** Upscale models exposing a denoise input (job 10 registry §96-102). The Noise
  *  stepper is disabled + tooltipped when the picked model isn't here:
+ *  `xinntao/realesrgan` (Anime variant — no noise input),
  *  `nightmareai/real-esrgan` (no noise input) and
- *  `recraft-ai/recraft-crisp-upscale` (fixed crispness) both ignore noise; only
+ *  `recraft-ai/recraft-crisp-upscale` (fixed crispness) all ignore noise; only
  *  `alexgenovese/upscaler` exposes denoise. Backend drops the key as defense
  *  even if sent. KISS: a Set, not a per-model object. */
 const UPSCALE_MODELS_WITH_NOISE = new Set<string>(['alexgenovese/upscaler']);

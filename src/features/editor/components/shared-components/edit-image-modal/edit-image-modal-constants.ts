@@ -149,13 +149,15 @@ export const DEFAULT_OUTPUT_COLOR = '#FFFFFF';
 // ── Upscale tab (03-upscale-tab.md §2) ───────────────────────────────────────
 
 /** Replicate upscale model allowlist (mock dropdown + API §Multi-model group `upscale`).
- *  Default `real-esrgan` matches BOTH the mock selection AND the API default. */
+ *  `xinntao/realesrgan` (Anime variant) is listed FIRST and is the default — matches the
+ *  2026-06-29 BE group-default flip (sync /api/image/upscale-image + remix job 10). */
 export const UPSCALE_MODEL_OPTIONS: readonly UpscaleModel[] = [
+  'xinntao/realesrgan',
   'nightmareai/real-esrgan',
   'recraft-ai/recraft-crisp-upscale',
   'alexgenovese/upscaler',
 ];
-export const DEFAULT_UPSCALE_MODEL: UpscaleModel = 'nightmareai/real-esrgan';
+export const DEFAULT_UPSCALE_MODEL: UpscaleModel = 'xinntao/realesrgan';
 
 /** Scale stepper: int 1..8, default 2 (mock). API accepts float (0,10] — UI restricts to integer. */
 export const SCALE = { min: 1, max: 8, step: 1, default: 2 } as const;
@@ -172,6 +174,9 @@ export interface UpscaleModelCaps {
   supportsFaceEnhance: boolean;
 }
 export const UPSCALE_MODEL_CAPS: Record<UpscaleModel, UpscaleModelCaps> = {
+  // xinntao = Anime variant: scale IS honoured, but Face Enhance (GFPGAN) is a no-op on the
+  // anime path → toggle disabled (still shown + tooltipped, never hidden). No noise input either.
+  'xinntao/realesrgan': { supportsScale: true, supportsFaceEnhance: false },
   'nightmareai/real-esrgan': { supportsScale: true, supportsFaceEnhance: true },
   'alexgenovese/upscaler': { supportsScale: true, supportsFaceEnhance: true },
   'recraft-ai/recraft-crisp-upscale': { supportsScale: false, supportsFaceEnhance: false },
