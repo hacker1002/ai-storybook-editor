@@ -11,15 +11,57 @@
 // viewBox=swappedDimensions + preserveAspectRatio="none". So defect px coords map
 // 1:1 to the frame at every zoom without tracking displayed pixels.
 //
-// PII (CRITICAL §10): the per-shape native tooltip (<title>) shows the
-// server-constrained `message` to sighted users, but the SR accessible name
-// (aria-label) is severity:category ONLY — `message` is never announced by a
-// screen reader and never pushed to logger/analytics.
+// PII (CRITICAL §10): the per-shape tooltip shows the server-constrained
+// `message` to sighted users via an `aria-hidden` visual-only popup, but the SR
+// accessible name (aria-label) is severity:category ONLY — `message` is never
+// announced by a screen reader and never pushed to logger/analytics. We do NOT
+// use Radix Tooltip here: it wires `aria-describedby` trigger→content, which
+// WOULD let a screen reader announce `message` — breaking the §10 contract.
+//
+// Speed: the old native <title> tooltip carried a fixed ~1.5s browser hover
+// delay (not configurable). The portal tooltip below appears instantly.
 
+import { useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { createLogger } from '@/utils/logger';
 import type { SwapDefect } from '@/types/remix';
+import { Z_INDEX } from '../swap-modal-constants';
 
 const log = createLogger('Editor', 'SwapDefectDetect');
+
+/** Hovered-shape state for the visual tooltip: which defect + its on-screen rect
+ *  (captured from the SVG shape, so the popup anchors correctly at any zoom /
+ *  non-uniform SVG scale) + the resolved modal-surface colors. `null` = nothing
+ *  hovered. The colors are read off the shape (which lives INSIDE the modal, so
+ *  the `--swap-modal-*` vars cascade) because the tooltip portals to <body>,
+ *  OUTSIDE the modal subtree, where those vars would not resolve. */
+interface HoveredDefect {
+  index: number;
+  rect: DOMRect;
+  bg: string;
+  border: string;
+  text: string;
+}
+
+/** Fallbacks mirror swap-modal-constants.ts (card-bg / border-strong /
+ *  text-primary) in case the var read comes back empty. */
+const TOOLTIP_FALLBACK = {
+  bg: '#14171f',
+  border: 'rgba(255, 255, 255, 0.18)',
+  text: '#ffffff',
+} as const;
+
+/** Resolve the modal-surface tokens from an in-modal element so the body-portaled
+ *  tooltip can match the dark modal chrome. */
+function resolveTooltipColors(el: Element): Pick<HoveredDefect, 'bg' | 'border' | 'text'> {
+  const cs = getComputedStyle(el);
+  const read = (v: string, fallback: string) => cs.getPropertyValue(v).trim() || fallback;
+  return {
+    bg: read('--swap-modal-card-bg', TOOLTIP_FALLBACK.bg),
+    border: read('--swap-modal-border-strong', TOOLTIP_FALLBACK.border),
+    text: read('--swap-modal-text-primary', TOOLTIP_FALLBACK.text),
+  };
+}
 
 /** Severity → stroke / fill colors (reusable across tabs). `low` is the default
  *  when a defect omits `severity`. high = đỏ, medium = hổ phách, low = xanh. */
@@ -71,6 +113,7 @@ export function DefectOverlay({
   onHoverDefect,
 }: DefectOverlayProps) {
   const { width, height } = swappedDimensions;
+  const [hovered, setHovered] = useState<HoveredDefect | null>(null);
 
   // Counts only — NEVER log defect.message / media / human data (PII §10).
   log.debug('render', 'defect overlay', {
@@ -81,7 +124,7 @@ export function DefectOverlay({
 
   if (!visible || defects.length === 0 || width <= 0 || height <= 0) return null;
 
-  return (
+  const svg = (
     <svg
       // Fill the sheet frame; viewBox in swapped px → stretch to frame so defect
       // coords map exactly the way the AFTER image fills (preserveAspectRatio none).
@@ -111,10 +154,22 @@ export function DefectOverlay({
           vectorEffect: 'non-scaling-stroke' as const,
           style: { pointerEvents: 'auto' as const, cursor: 'help' as const },
           'aria-label': shapeAriaLabel(defect),
-          onMouseEnter: () => onHoverDefect?.(i),
-          onMouseLeave: () => onHoverDefect?.(null),
+          // Visual tooltip is instant: capture the shape's on-screen rect so the
+          // portal popup anchors to it (correct under SVG non-uniform scale/zoom).
+          onMouseEnter: (e: ReactMouseEvent<SVGGeometryElement>) => {
+            const el = e.currentTarget;
+            setHovered({
+              index: i,
+              rect: el.getBoundingClientRect(),
+              ...resolveTooltipColors(el),
+            });
+            onHoverDefect?.(i);
+          },
+          onMouseLeave: () => {
+            setHovered((h) => (h?.index === i ? null : h));
+            onHoverDefect?.(null);
+          },
         };
-        const title = <title>{shapeTitle(defect)}</title>;
 
         // `box` present → ellipse (hugs elongated areas); else center+radius circle.
         if (defect.box) {
@@ -127,9 +182,7 @@ export function DefectOverlay({
               rx={(w / 2) * DEFECT_OVAL_SCALE}
               ry={(h / 2) * DEFECT_OVAL_SCALE}
               {...common}
-            >
-              {title}
-            </ellipse>
+            />
           );
         }
         return (
@@ -139,11 +192,47 @@ export function DefectOverlay({
             cy={defect.center.y}
             r={defect.radius}
             {...common}
-          >
-            {title}
-          </circle>
+          />
         );
       })}
     </svg>
+  );
+
+  // Visual-only tooltip (aria-hidden so SR never reads `message`, PII §10).
+  // Portaled to <body> to escape the sheet frame's overflow-hidden clip and to
+  // sit above the z-4000 swapModal (Z_INDEX.tooltip = 4100).
+  const tooltip =
+    hovered && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            aria-hidden
+            role="presentation"
+            // Portaled to <body> (outside the modal backdrop) → must be OPAQUE
+            // and can't read --swap-modal-* vars (they don't cascade here), so it
+            // uses the colors resolved off the in-modal shape at hover-time:
+            // solid card surface (#14171f), matching the dark modal chrome rather
+            // than the blue `bg-primary`.
+            className="pointer-events-none fixed max-w-[280px] whitespace-normal rounded-md px-3 py-1.5 text-xs leading-snug shadow-lg"
+            style={{
+              zIndex: Z_INDEX.tooltip,
+              backgroundColor: hovered.bg,
+              color: hovered.text,
+              border: `1px solid ${hovered.border}`,
+              left: hovered.rect.left + hovered.rect.width / 2,
+              top: hovered.rect.top - 8,
+              transform: 'translate(-50%, -100%)',
+            }}
+          >
+            {shapeTitle(defects[hovered.index])}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      {svg}
+      {tooltip}
+    </>
   );
 }
