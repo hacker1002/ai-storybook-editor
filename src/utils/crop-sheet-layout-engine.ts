@@ -120,20 +120,20 @@ export const ALLOWED_RATIOS: { key: string; value: number; orientation: Orientat
 ];
 
 export const DEFAULTS = {
-  // Asymmetric padding around each crop (px). gutterX > gutterY widens the
-  // horizontal gap (2·gutterX = 64px between adjacent crops) so the per-crop
-  // index badge fits in the left separating strip WITHOUT being clipped or
-  // overlapping the neighbour; the vertical gap stays tighter (2·gutterY =
-  // 16px). See spec 05-05 §5.3.
-  gutterX: 32, // horizontal padding each side → 64px horizontal gap
-  gutterY: 8, // vertical padding each side → 16px vertical gap
-  // Extra LEFT-only margin (px) added on top of gutterX for the first column,
-  // so the per-crop index badge (rendered in the left strip, translated fully
-  // out of the cell) fits 2-digit ordinals (≥10) without clipping. Applied as a
-  // uniform +x shift on every placement plus an equal widening of the sheet, so
-  // inter-crop gaps, vertical spacing and the right margin stay unchanged.
-  // left margin = gutterX + marginLeftExtra = 32 + 32 = 64px.
-  marginLeftExtra: 32,
+  // Asymmetric padding around each crop (px). gutterY > gutterX widens the
+  // vertical gap (2·gutterY = 64px between adjacent crops) so the per-crop
+  // index badge fits in the TOP separating strip WITHOUT being clipped or
+  // overlapping the neighbour; the horizontal gap stays tighter (2·gutterX =
+  // 8px). See spec 05-05 §5.3.
+  gutterX: 4, // horizontal padding each side → 8px horizontal gap
+  gutterY: 32, // vertical padding each side → 64px vertical gap
+  // Extra TOP-only margin (px) added on top of gutterY for the first row, so
+  // the per-crop index badge (rendered in the top strip, translated fully out
+  // of the cell) fits the ordinal height without clipping. Applied as a uniform
+  // +y shift on every placement plus an equal heightening of the sheet, so
+  // inter-crop gaps, horizontal spacing and the bottom margin stay unchanged.
+  // top margin = gutterY + marginTopExtra = 32 + 32 = 64px.
+  marginTopExtra: 32,
   landscapeTolerance: 0.08, // τ — accept landscape ratio if ≤ 8% worse than global best
   fillTarget: 0.95, // slack factor when seeding potpack bin width
 };
@@ -548,15 +548,15 @@ function toSheetLayout(
   gutterX: number,
   gutterY: number,
 ): SheetLayout {
-  // Shift every crop right by the extra left margin; widen the sheet by the
-  // same amount so only the LEFT margin grows (right margin / gaps unchanged).
-  const marginLeft = DEFAULTS.marginLeftExtra;
+  // Shift every crop down by the extra top margin; heighten the sheet by the
+  // same amount so only the TOP margin grows (bottom margin / gaps unchanged).
+  const marginTop = DEFAULTS.marginTopExtra;
 
   const placements: CropPlacement[] = best.packed.boxes.map((box) => ({
     id: box.id,
     geometry: {
-      x: Math.round(box.x + gutterX + marginLeft),
-      y: Math.round(box.y + gutterY),
+      x: Math.round(box.x + gutterX),
+      y: Math.round(box.y + gutterY + marginTop),
       // Clamp ≥ 1px — gutter larger than the crop would yield ≤ 0 (spec §8).
       w: Math.max(1, Math.round(box.w - 2 * gutterX)),
       h: Math.max(1, Math.round(box.h - 2 * gutterY)),
@@ -568,7 +568,7 @@ function toSheetLayout(
     ratioKey: best.key,
     ratio: best.R,
     fill: best.fill,
-    sheetGeometry: { width: Math.round(best.W + marginLeft), height: Math.round(best.H) },
+    sheetGeometry: { width: Math.round(best.W), height: Math.round(best.H + marginTop) },
     placements,
   };
 }

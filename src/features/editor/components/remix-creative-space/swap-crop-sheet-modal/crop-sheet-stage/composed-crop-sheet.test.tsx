@@ -79,6 +79,28 @@ describe('ComposedCropSheet', () => {
     expect(cropImages[1]).toHaveAttribute('src', expect.stringContaining('i2.png'));
   });
 
+  it('BEFORE ordinal badges sit in the TOP gutter (-translate-y-full)', () => {
+    const crops = [makeCropEntry('s1', 'i1'), makeCropEntry('s2', 'i2')];
+    const sheet = makeSheet(crops);
+
+    const { container } = render(
+      <ComposedCropSheet sheet={sheet} zoomLevel={100} cropsSource="before" />,
+    );
+
+    // OrdinalBadge translates fully OUT of the cell into the top separating
+    // strip (`-translate-y-full`), never the old left strip (`-translate-x-full`).
+    const badges = [...container.querySelectorAll('span')].filter((s) =>
+      s.className.includes('-translate-y-full'),
+    );
+    expect(badges).toHaveLength(2);
+    expect(badges.map((b) => b.textContent)).toEqual(['1', '2']);
+    expect(
+      [...container.querySelectorAll('span')].filter((s) =>
+        s.className.includes('-translate-x-full'),
+      ),
+    ).toHaveLength(0);
+  });
+
   // ── AFTER mode tests ──────────────────────────────────────────────────────
 
   it('renders AFTER crops from selectedSwap.crops[] ⋈ original_crops[] (lean join)', () => {

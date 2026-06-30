@@ -63,13 +63,13 @@ function spriteCapDim(cellsPerSheet: number): number {
 /** Padding (px) on EACH side of every sprite cell, EQUAL on both axes → the gap
  *  between adjacent cells is `2·SPRITE_GUTTER = 64px` horizontally AND
  *  vertically. Square cells look lopsided under the engine's asymmetric default
- *  (gutterX=32 / gutterY=8); 64px each way is uniform and still wide enough for
- *  the ordinal badge baked into the left gutter (cap ≤50px). */
+ *  (gutterX=4 / gutterY=32); 64px each way is uniform and still tall enough for
+ *  the ordinal badge baked into the top gutter (cap ≤50px). */
 const SPRITE_GUTTER = 32;
 
 /** Uniform OUTER margin (px) on all four sides after re-framing (see
  *  `buildSpriteSheetsFromLayout`). Equal on every side so a square cell grid
- *  frames to a 1:1 sheet; the left side still needs ≥ the ordinal badge width
+ *  frames to a 1:1 sheet; the top side still needs ≥ the ordinal badge height
  *  (~50px), hence 64. */
 const SPRITE_MARGIN = 64;
 
@@ -258,7 +258,7 @@ function buildSpriteSheetsFromLayout(
     //    stretches one axis (a square 2×2[2,1] grid → a 4:3 sheet with a wide
     //    empty right strip). Tightening to content + symmetric margins removes
     //    that waste → a square cell grid yields a 1:1 sheet, while keeping the
-    //    badge's left-gutter room (margin ≥ badge width).
+    //    badge's top-gutter room (margin ≥ badge height).
     const minX = Math.min(...placed.map((p) => p.geometry.x));
     const minY = Math.min(...placed.map((p) => p.geometry.y));
     const maxR = Math.max(...placed.map((p) => p.geometry.x + p.geometry.w));
@@ -392,8 +392,8 @@ export async function partitionByObjectAffinity(
     sheetCount,
     spread: { width: cap, height: cap },
     // Equal padding on both axes → uniform 64px gaps between cells (the engine
-    // default gutterY=8 made vertical gaps 4× tighter than horizontal). The
-    // ordinal badge still fits the 64px left gutter.
+    // default gutterX=4 made horizontal gaps 8× tighter than vertical). The
+    // ordinal badge still fits the 64px top gutter.
     gutterX: SPRITE_GUTTER,
     gutterY: SPRITE_GUTTER,
     // τ=0.1: accept a landscape grid when within 10% fill of the best ratio.

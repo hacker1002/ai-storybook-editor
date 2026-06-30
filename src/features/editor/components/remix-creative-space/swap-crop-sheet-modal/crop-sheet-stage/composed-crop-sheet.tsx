@@ -397,7 +397,7 @@ interface ComposedCropProps {
   cropKey: string;
   /** Resolved geometry (own — sprite plane — or joined from original_crops). */
   geometry: { x: number; y: number; w: number; h: number };
-  /** 1-based ordinal in the left gutter; null hides it (AFTER / plain). */
+  /** 1-based ordinal in the top gutter; null hides it (AFTER / plain). */
   ordinal: number | null;
   sheetWidth: number;
   sheetHeight: number;
@@ -603,15 +603,16 @@ function SelectionCheckbox({
   );
 }
 
-// ── OrdinalBadge — crop index, in the left gutter, top-aligned ────────────────
+// ── OrdinalBadge — crop index, in the top gutter, left-aligned ────────────────
 
 /** Frontend-only crop index (the composer bakes no ordinals). FIXED size,
- *  zoom-independent. Always rendered in the left separating strip
- *  (`-translate-x-full`) so it never overlaps artwork. */
+ *  zoom-independent. Always rendered in the top separating strip
+ *  (`-translate-y-full`) so it never overlaps artwork — the number belongs to
+ *  the cell right below it. */
 function OrdinalBadge({ ordinal }: { ordinal: number }) {
   return (
     <span
-      className="pointer-events-none absolute left-0 top-0 z-20 -translate-x-full rounded-l-md rounded-r-none bg-black/85 px-1.5 py-0.5 text-sm font-bold leading-none tabular-nums text-white shadow-sm"
+      className="pointer-events-none absolute left-0 top-0 z-20 -translate-y-full rounded-t-md rounded-b-none bg-black/85 px-1.5 py-0.5 text-sm font-bold leading-none tabular-nums text-white shadow-sm"
       aria-hidden="true"
     >
       {ordinal}

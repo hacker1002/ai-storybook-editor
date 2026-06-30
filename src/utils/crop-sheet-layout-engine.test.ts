@@ -205,24 +205,24 @@ describe('computeCropSheetLayout — crop-sheet layout engine §5', () => {
     expect(ids).toEqual(['good']);
   });
 
-  it('default gutters are asymmetric — single crop offset by gutterX+marginLeftExtra / gutterY=8', () => {
-    // One crop packs at origin (0,0); its x offset == gutterX + marginLeftExtra
-    // (the extra left margin that gives 2-digit index badges room), y offset ==
-    // gutterY. Pins the asymmetric default + 64px left margin (32+32).
+  it('default gutters are asymmetric — single crop offset by gutterX / gutterY+marginTopExtra', () => {
+    // One crop packs at origin (0,0); its x offset == gutterX, y offset ==
+    // gutterY + marginTopExtra (the extra top margin that gives the index badge
+    // room). Pins the asymmetric default + 64px top margin (32+32).
     const { sheets } = computeCropSheetLayout([crop('only', 50, 50)], config(1));
     const g = sheets[0].placements[0].geometry;
-    expect(g.x).toBe(DEFAULTS.gutterX + DEFAULTS.marginLeftExtra);
-    expect(g.y).toBe(8);
+    expect(g.x).toBe(DEFAULTS.gutterX);
+    expect(g.y).toBe(DEFAULTS.gutterY + DEFAULTS.marginTopExtra);
   });
 
-  it('honours explicit gutterX / gutterY overrides (x still adds marginLeftExtra)', () => {
+  it('honours explicit gutterX / gutterY overrides (y still adds marginTopExtra)', () => {
     const { sheets } = computeCropSheetLayout(
       [crop('only', 50, 50)],
       config(1, { gutterX: 40, gutterY: 12 }),
     );
     const g = sheets[0].placements[0].geometry;
-    expect(g.x).toBe(40 + DEFAULTS.marginLeftExtra);
-    expect(g.y).toBe(12);
+    expect(g.x).toBe(40);
+    expect(g.y).toBe(12 + DEFAULTS.marginTopExtra);
   });
 
   it('two side-by-side crops keep a 2·gutterX horizontal gap when packed in a row', () => {
