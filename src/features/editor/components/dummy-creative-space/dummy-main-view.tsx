@@ -36,6 +36,7 @@ import type {
 import { useSpaceViewState } from "@/features/editor/hooks/use-space-view-state";
 import { ZOOM, COLUMNS } from "@/constants/spread-constants";
 import type { ViewMode } from "@/types/canvas-types";
+import type { CreativeSpaceType } from "@/types/editor";
 
 interface DummyMainViewProps {
   selectedDummyId: string;
@@ -99,8 +100,12 @@ export function DummyMainView({ selectedDummyId }: DummyMainViewProps) {
 
   // View state persisted per-book for the dummy space (viewMode/zoom/columns).
   // activeSpreadId is NOT persisted — selectedSpreadIdLocal is entity-scoped local state.
+  // 'dummy' is a legacy (manuscript-era) creative-space key. This component is
+  // orphaned (no longer reachable after the manuscript→sketch nav rename) but kept;
+  // the view-state store still keys it as a plain string, so cast to satisfy the
+  // narrowed CreativeSpaceType. Remove with the component when it's deleted.
   const { viewMode, zoomLevel, columnsPerRow, patch } =
-    useSpaceViewState("dummy");
+    useSpaceViewState("dummy" as unknown as CreativeSpaceType);
   const [selectedSpreadIdLocal, setSelectedSpreadIdLocal] = useState<
     string | null
   >(null);

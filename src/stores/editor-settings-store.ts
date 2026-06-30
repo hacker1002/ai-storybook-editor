@@ -52,7 +52,7 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
     persist(
       (set, get) => ({
         currentLanguage: DEFAULT_LANGUAGE,
-        currentStep: 'manuscript',
+        currentStep: 'sketch',
         zoomLevel: 90,
         canvasSize: DEFAULT_CANVAS_SIZE,
         bleedCanvas: null,
@@ -125,12 +125,26 @@ export const useEditorSettingsStore = create<EditorSettingsStore>()(
       }),
       {
         name: 'editor-settings',
-        version: 1,
+        version: 2,
         storage: createJSONStorage(() => localStorage),
         partialize: (s) => ({
           languageByBook: s.languageByBook,
           stepByBook: s.stepByBook,
         }),
+        // v1→v2: pipeline step `'manuscript'` renamed to `'sketch'`. Surgically drop
+        // only stepByBook entries that remembered the now-invalid `'manuscript'`
+        // value (those books re-hydrate from backendStep); keep illustration/retouch.
+        migrate: (persisted, version) => {
+          log.info('migrate', 'persist version', { from: version, to: 2 });
+          const s = (persisted ?? {}) as { stepByBook?: Record<string, string> };
+          if (s.stepByBook) {
+            s.stepByBook = Object.fromEntries(
+              Object.entries(s.stepByBook).filter(([, step]) => step !== 'manuscript')
+            );
+          }
+          // Cast through unknown: persist merges this partial over current state at rehydrate.
+          return s as unknown as EditorSettingsStore;
+        },
       }
     ),
     { name: 'editor-settings-store' }

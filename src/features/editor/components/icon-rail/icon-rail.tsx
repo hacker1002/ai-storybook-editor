@@ -25,7 +25,7 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRai
     ];
 
     if (!validSpaces.includes(activeCreativeSpace)) {
-      onCreativeSpaceChange(stepIcons[0]?.id ?? 'doc');
+      onCreativeSpaceChange(stepIcons[0]?.id ?? 'sketch-character');
     }
   }, [currentStep, activeCreativeSpace, onCreativeSpaceChange, stepIcons]);
 

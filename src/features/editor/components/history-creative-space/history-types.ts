@@ -1,6 +1,7 @@
 // history-types.ts - Types and utilities for HistoryCreativeSpace feature
 // Colocated here because history data is read-only and not shared outside this feature.
 import type { ManuscriptDoc } from "@/types/editor";
+import type { Sketch } from "@/types/sketch";
 import type { ManuscriptDummy } from "@/types/dummy";
 import type { IllustrationData } from "@/types/illustration-types";
 import type { Prop } from "@/types/prop-types";
@@ -35,6 +36,7 @@ export interface FullSnapshotRow {
   updated_at: string;
   created_at: string;
   docs: ManuscriptDoc[] | null;
+  sketch: Sketch | null;
   dummies: ManuscriptDummy[] | null;
   illustration: IllustrationData | null;
   props: Prop[] | null;

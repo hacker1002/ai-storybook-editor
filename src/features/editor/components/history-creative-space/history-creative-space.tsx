@@ -186,6 +186,7 @@ export function HistoryCreativeSpace() {
       // Step 3: Load all slices into SnapshotStore
       initSnapshot({
         docs: fullData.docs ?? undefined,
+        sketch: fullData.sketch ?? undefined,
         dummies: fullData.dummies ?? undefined,
         illustration: fullData.illustration ?? undefined,
         props: fullData.props ?? undefined,

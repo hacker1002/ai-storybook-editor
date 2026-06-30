@@ -14,8 +14,6 @@ import { getDefaultCreativeSpace, AVAILABLE_LANGUAGES } from '@/constants/editor
 import { PIPELINE_STEP_MAP } from '@/constants/book-enums';
 import { EditorHeader } from '../components/editor-header';
 import { IconRail } from '../components/icon-rail';
-import { DocCreativeSpace } from '../components/doc-creative-space';
-import { DummyCreativeSpace } from '../components/dummy-creative-space';
 import { ObjectsCreativeSpace } from '../components/objects-creative-space';
 import { PreviewCreativeSpace } from '../components/preview-creative-space';
 import { PropsCreativeSpace } from '../components/props-creative-space';
@@ -71,7 +69,7 @@ export function EditorPage() {
   useImageTaskNotifications();
 
   // Local UI state
-  const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('doc');
+  const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('sketch-character');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notificationCount] = useState(3);
 
@@ -97,7 +95,7 @@ export function EditorPage() {
 
         const persistedStep = store.getPersistedStepForBook(bookId);
         const backendStep = (PIPELINE_STEP_MAP[fetchedBook.step as keyof typeof PIPELINE_STEP_MAP] ??
-          'manuscript') as PipelineStep;
+          'sketch') as PipelineStep;
         const initialStep = persistedStep ?? backendStep;
 
         log.info('loadData', 'hydrate', {
@@ -211,10 +209,6 @@ export function EditorPage() {
   // Render creative space based on activeCreativeSpace
   const renderCreativeSpace = () => {
     switch (activeCreativeSpace) {
-      case 'doc':
-        return <DocCreativeSpace />;
-      case 'dummy':
-        return <DummyCreativeSpace />;
       case 'object':
         return <ObjectsCreativeSpace />;
       case 'prop':
@@ -237,9 +231,14 @@ export function EditorPage() {
         return <SharesCreativeSpace />;
       case 'remix':
         return <RemixCreativeSpace />;
-      case 'sketch':
+      // Sketch creative spaces are placeholders ("coming soon") until built.
+      // Pass the raw id (e.g. 'sketch-character') per scope decision Q7 (KISS, no label lookup).
+      case 'sketch-character':
+      case 'sketch-prop':
+      case 'sketch-stage':
+      case 'sketch-spread':
       case 'quiz':
-      case 'flag':
+      case 'issue':
       case 'collaborator':
         return <MockCreativeSpace name={activeCreativeSpace} />;
       default:

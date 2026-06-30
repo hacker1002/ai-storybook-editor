@@ -7,15 +7,17 @@ export interface Language {
 }
 
 // Pipeline steps in book creation workflow
-export type PipelineStep = 'manuscript' | 'illustration' | 'retouch';
+export type PipelineStep = 'sketch' | 'illustration' | 'retouch';
 
 // Creative space types per pipeline step
-export type ManuscriptSpace = 'doc' | 'dummy' | 'sketch';
+// Sketch spaces are namespaced (`sketch-*`) to stay disjoint from IllustrationSpace
+// (`character`/`prop`/...) so activeCreativeSpace never collides on step auto-switch.
+export type SketchSpace = 'sketch-character' | 'sketch-prop' | 'sketch-stage' | 'sketch-spread';
 export type IllustrationSpace = 'character' | 'prop' | 'stage' | 'spread' | 'branch';
 // 'animation' removed — merged into 'object' space per ADR-028. Phase-06 cleans up consumer references.
 export type RetouchSpace = 'object' | 'quiz' | 'remix';
-export type DefaultSpace = 'preview' | 'history' | 'flag' | 'share' | 'collaborator' | 'setting';
-export type CreativeSpaceType = ManuscriptSpace | IllustrationSpace | RetouchSpace | DefaultSpace;
+export type DefaultSpace = 'preview' | 'history' | 'issue' | 'share' | 'collaborator' | 'setting';
+export type CreativeSpaceType = SketchSpace | IllustrationSpace | RetouchSpace | DefaultSpace;
 
 // Save status indicator
 export type SaveStatus = 'dirty' | 'auto-saving' | 'auto-saved' | 'manual-saving' | 'saved';

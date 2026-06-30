@@ -46,6 +46,7 @@ function normalizeSpread(s: BaseSpread): BaseSpread {
   };
 }
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';
+import { createSketchSlice, DEFAULT_SKETCH, normalizeSketch } from './slices/sketch-slice';
 import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
 import { createIllustrationSlice } from './slices/illustration-slice';
@@ -63,6 +64,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
     subscribeWithSelector(
       immer((...args) => ({
         ...createDocsSlice(...args),
+        ...createSketchSlice(...args),
         ...createMetaSlice(...args),
         ...createDummiesSlice(...args),
         ...createIllustrationSlice(...args),
@@ -141,6 +143,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.tag = data.tag;
               state.meta.autoSaveId = data.save_type === 2 ? data.id : null;
               state.docs = data.docs?.length ? data.docs : DEFAULT_DOCS;
+              state.sketch = normalizeSketch(data.sketch);
               state.dummies = data.dummies ?? [];
               const ill = data.illustration;
               state.illustration = {
@@ -165,6 +168,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.bookId = bookId;
               state.meta.autoSaveId = null;
               state.docs = DEFAULT_DOCS;
+              state.sketch = DEFAULT_SKETCH;
               state.dummies = [];
               state.illustration = { spreads: [], sections: [] };
               state.props = [];
@@ -178,11 +182,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, dummies, illustration, props, characters, stages, sync } = get();
+          const { meta, docs, sketch, dummies, illustration, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
 
-          log.info('saveSnapshot', 'start', { bookId: meta.bookId, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, sectionCount: illustration.sections.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length });
+          log.info('saveSnapshot', 'start', { bookId: meta.bookId, docCount: docs.length, dummyCount: dummies.length, illustrationSpreadCount: illustration.spreads.length, sectionCount: illustration.sections.length, propCount: props.length, characterCount: characters.length, stageCount: stages.length, sketchSpreadCount: sketch.spreads.length });
           set((state) => {
             state.sync.isSaving = true;
             state.sync.error = null;
@@ -197,6 +201,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             .insert({
               book_id: meta.bookId,
               docs,
+              sketch,
               dummies,
               illustration,
               props,
@@ -240,7 +245,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         autoSaveSnapshot: async () => {
           const [set, get] = args;
-          const { meta, docs, dummies, illustration, props, characters, stages, sync } = get();
+          const { meta, docs, sketch, dummies, illustration, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving || !sync.isDirty) return;
 
@@ -256,7 +261,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
           // Update-first: try UPDATE existing auto-save row, INSERT if none exists.
           // Partial unique index (book_id WHERE save_type=2) prevents duplicate INSERTs on race conditions.
-          const payload = { docs, dummies, illustration, props, characters, stages, version };
+          const payload = { docs, sketch, dummies, illustration, props, characters, stages, version };
           const { data: updated } = await supabase
             .from('snapshots')
             .update(payload)
@@ -309,6 +314,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           log.info('initSnapshot', 'init', { hasData: !!data, hasMeta: !!data.meta });
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
+            state.sketch = normalizeSketch(data.sketch);
             state.dummies = data.dummies ?? [];
             const ill = data.illustration;
             state.illustration = {
@@ -330,6 +336,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
           log.info('resetSnapshot', 'reset');
           set((state) => {
             state.docs = DEFAULT_DOCS;
+            state.sketch = DEFAULT_SKETCH;
             state.dummies = [];
             state.illustration = { spreads: [], sections: [] };
             state.props = [];

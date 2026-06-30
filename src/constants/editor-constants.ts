@@ -13,16 +13,18 @@ export const DEFAULT_LANGUAGE: Language = AVAILABLE_LANGUAGES[0];
 
 // Pipeline steps configuration
 export const PIPELINE_STEPS: { key: PipelineStep; label: string }[] = [
-  { key: 'manuscript', label: 'Manuscript' },
+  { key: 'sketch', label: 'Sketch' },
   { key: 'illustration', label: 'Illustration' },
   { key: 'retouch', label: 'Retouch' },
 ];
 
-// Manuscript step icons
-export const MANUSCRIPT_ICONS: IconRailItemConfig[] = [
-  { id: 'doc', icon: 'FileText', label: 'Document' },
-  { id: 'dummy', icon: 'LayoutGrid', label: 'Dummy Layout' },
-  { id: 'sketch', icon: 'Pencil', label: 'Sketch' },
+// Sketch step icons — 4 namespaced creative spaces (characters/props/stages/spreads).
+// All currently render the "coming soon" placeholder (MockCreativeSpace).
+export const SKETCH_ICONS: IconRailItemConfig[] = [
+  { id: 'sketch-character', icon: 'Smile', label: 'Characters' },
+  { id: 'sketch-prop', icon: 'Box', label: 'Props' },
+  { id: 'sketch-stage', icon: 'Mountain', label: 'Stages' },
+  { id: 'sketch-spread', icon: 'LayoutGrid', label: 'Spreads' },
 ];
 
 // Illustration step icons
@@ -44,7 +46,7 @@ export const RETOUCH_ICONS: IconRailItemConfig[] = [
 // Default icons (bottom section, always visible)
 export const DEFAULT_ICONS: IconRailItemConfig[] = [
   { id: 'history', icon: 'History', label: 'History' },
-  { id: 'flag', icon: 'Flag', label: 'Flags' },
+  { id: 'issue', icon: 'AlertCircle', label: 'Issues' },
   { id: 'share', icon: 'Share2', label: 'Share Links' },
   { id: 'collaborator', icon: 'Users', label: 'Collaborators' },
 ];
@@ -65,14 +67,14 @@ export const SETTING_ICON: IconRailItemConfig = {
 
 // Step to icons mapping
 export const STEP_ICONS: Record<PipelineStep, IconRailItemConfig[]> = {
-  manuscript: MANUSCRIPT_ICONS,
+  sketch: SKETCH_ICONS,
   illustration: ILLUSTRATION_ICONS,
   retouch: RETOUCH_ICONS,
 };
 
 // Helper: get icons for current step
 export function getIconsForStep(step: PipelineStep): IconRailItemConfig[] {
-  return STEP_ICONS[step] ?? MANUSCRIPT_ICONS;
+  return STEP_ICONS[step] ?? SKETCH_ICONS;
 }
 
 // Default creative space per step (overrides first-icon fallback)
@@ -84,7 +86,7 @@ const STEP_DEFAULT_CREATIVE_SPACE: Partial<Record<PipelineStep, string>> = {
 export function getDefaultCreativeSpace(step: PipelineStep): string {
   if (STEP_DEFAULT_CREATIVE_SPACE[step]) return STEP_DEFAULT_CREATIVE_SPACE[step]!;
   const icons = STEP_ICONS[step];
-  return icons?.[0]?.id ?? 'doc';
+  return icons?.[0]?.id ?? 'sketch-character';
 }
 
 // Brief attribute options - re-export from book-enums for backwards compatibility

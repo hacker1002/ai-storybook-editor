@@ -4,13 +4,13 @@
 import type { BookStep, BookStepTone, StepFilter, BooksFilterState } from './types';
 
 export const STEP_META: Record<BookStep, { label: string; tone: BookStepTone }> = {
-  1: { label: 'Manuscript', tone: 'manuscript' },
+  1: { label: 'Sketch', tone: 'sketch' },
   2: { label: 'Illustration', tone: 'illustration' },
   3: { label: 'Retouch', tone: 'retouch' },
 };
 
 export const TONE_CLASS: Record<BookStepTone, string> = {
-  manuscript: 'bg-muted text-muted-foreground',
+  sketch: 'bg-muted text-muted-foreground',
   illustration: 'bg-blue-100 text-blue-700',
   retouch: 'bg-green-100 text-green-700',
 };

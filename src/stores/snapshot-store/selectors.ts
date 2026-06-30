@@ -1,6 +1,7 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType, SaveStatus, SyncState } from '@/types/editor';
+import type { Sketch } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/illustration-types';
 import type { Prop } from '@/types/prop-types';
@@ -79,6 +80,9 @@ export const useDocs = () => useSnapshotStore((s) => s.docs);
 export const useDocByIndex = (index: number) => useSnapshotStore((s) => s.docs[index]);
 export const useDocByType = (type: DocType) =>
   useSnapshotStore((s) => s.docs.find((d) => d.type === type));
+
+// Sketch selector (whole-object ref; replaced only on load/setSketch/clearSketch)
+export const useSketch = (): Sketch => useSnapshotStore((s) => s.sketch);
 
 // Fetch state selectors
 export const useSnapshotFetchLoading = () => useSnapshotStore((s) => s.fetchLoading);

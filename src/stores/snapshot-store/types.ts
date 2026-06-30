@@ -1,4 +1,5 @@
 import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
+import type { Sketch } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
 import type { Prop, PropVariant, PropSound } from '@/types/prop-types';
@@ -174,6 +175,13 @@ export interface QuizSlice {
   // --- Validation utilities ---
   revalidateQuiz: (spreadId: string, quizId: string) => void;
   clearQuizValidation: (quizId: string) => void;
+}
+
+// SketchSlice — minimal (state + replace/clear). Guard-normalized on load; CRUD deferred.
+export interface SketchSlice {
+  sketch: Sketch;
+  setSketch: (sketch: Sketch) => void;
+  clearSketch: () => void;
 }
 
 export interface DocsSlice {
@@ -550,7 +558,7 @@ export interface ImageTaskSlice {
   clearAllTasks: () => void;
 }
 
-export type SnapshotStore = DocsSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
-  initSnapshot: (data: { docs?: ManuscriptDoc[]; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
+export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
+  initSnapshot: (data: { docs?: ManuscriptDoc[]; sketch?: Sketch; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

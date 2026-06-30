@@ -89,9 +89,10 @@ export const WRITING_STYLE_MAP = {
   3: 'Humorous Fiction',
 } as const;
 
-// Pipeline step mapping (book.step field)
+// Pipeline step mapping (book.step field). book.step stays SMALLINT (1|2|3);
+// only the FE label for step 1 changed manuscript→sketch.
 export const PIPELINE_STEP_MAP = {
-  1: 'manuscript',
+  1: 'sketch',
   2: 'illustration',
   3: 'retouch',
 } as const;
