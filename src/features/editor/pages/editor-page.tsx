@@ -19,6 +19,7 @@ import { PreviewCreativeSpace } from '../components/preview-creative-space';
 import { PropsCreativeSpace } from '../components/props-creative-space';
 import { StagesCreativeSpace } from '../components/stages-creative-space';
 import { CharactersCreativeSpace } from '../components/characters-creative-space';
+import { SketchVariantsCreativeSpace, SPACE_TO_KIND } from '../components/sketch-variants-creative-space';
 import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
 import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { HistoryCreativeSpace } from '../components/history-creative-space';
@@ -231,11 +232,13 @@ export function EditorPage() {
         return <SharesCreativeSpace />;
       case 'remix':
         return <RemixCreativeSpace />;
-      // Sketch creative spaces are placeholders ("coming soon") until built.
-      // Pass the raw id (e.g. 'sketch-character') per scope decision Q7 (KISS, no label lookup).
+      // Sketch entity spaces (characters/props/stages) — one shared component keyed by kind.
+      // Switch narrows activeCreativeSpace to SketchEntitySpaceId here, so the index is typesafe.
       case 'sketch-character':
       case 'sketch-prop':
       case 'sketch-stage':
+        return <SketchVariantsCreativeSpace kind={SPACE_TO_KIND[activeCreativeSpace]} />;
+      // sketch-spread (storyboard) is a different space — still a placeholder (out of scope).
       case 'sketch-spread':
       case 'quiz':
       case 'issue':

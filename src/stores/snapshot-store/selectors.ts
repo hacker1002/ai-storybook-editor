@@ -1,7 +1,7 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType, SaveStatus, SyncState } from '@/types/editor';
-import type { Sketch } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchEntityKind } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/illustration-types';
 import type { Prop } from '@/types/prop-types';
@@ -41,6 +41,7 @@ const EMPTY_ANIMATIONS: SpreadAnimation[] = [];
 const EMPTY_PROPS: Prop[] = [];
 const EMPTY_CHARACTERS: Character[] = [];
 const EMPTY_STAGES: Stage[] = [];
+const EMPTY_SKETCH_ENTITIES: SketchEntity[] = [];
 const EMPTY_IMAGE_TASKS: ImageTask[] = [];
 const EMPTY_SECTIONS: Section[] = [];
 const EMPTY_BRANCHES: Branch[] = [];
@@ -83,6 +84,19 @@ export const useDocByType = (type: DocType) =>
 
 // Sketch selector (whole-object ref; replaced only on load/setSketch/clearSketch)
 export const useSketch = (): Sketch => useSnapshotStore((s) => s.sketch);
+
+// Sketch entity selectors — keyed by kind (characters | props | stages).
+// useSketchEntityKeys mirrors useCharacterKeys: single .map() under useShallow is the
+// proven flat-string[] pattern (NOT the object-of-arrays anti-pattern that loops).
+export const useSketchEntities = (kind: SketchEntityKind): SketchEntity[] =>
+  useSnapshotStore((s) => s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES);
+export const useSketchEntityByKey = (
+  kind: SketchEntityKind,
+  key: string
+): SketchEntity | undefined =>
+  useSnapshotStore((s) => (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES).find((e) => e.key === key));
+export const useSketchEntityKeys = (kind: SketchEntityKind): string[] =>
+  useSnapshotStore(useShallow((s) => (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES).map((e) => e.key)));
 
 // Fetch state selectors
 export const useSnapshotFetchLoading = () => useSnapshotStore((s) => s.fetchLoading);
@@ -464,6 +478,12 @@ export const useSnapshotActions = () =>
       addStageSound: s.addStageSound,
       updateStageSound: s.updateStageSound,
       deleteStageSound: s.deleteStageSound,
+      // Sketch (entity-level CRUD, keyed by kind)
+      setSketchEntities: s.setSketchEntities,
+      upsertSketchEntity: s.upsertSketchEntity,
+      removeSketchEntity: s.removeSketchEntity,
+      setSketchEntityMediaUrl: s.setSketchEntityMediaUrl,
+      upsertSketchVariant: s.upsertSketchVariant,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,

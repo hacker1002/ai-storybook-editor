@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, SketchSlice } from '../types';
 import type { Sketch, SketchEntity, SketchSpread } from '@/types/sketch';
+import type { SketchVariant, SketchEntityKind } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'SketchSlice');
@@ -63,8 +64,9 @@ export function normalizeSketch(raw: unknown): Sketch {
   };
 }
 
-// Minimal slice: state + setSketch/clearSketch (enough for guard round-trip + future
-// consumers). CRUD entity/spread/textbox actions are deferred per scope decision Q5.
+// Slice: state + setSketch/clearSketch + entity-level CRUD (keyed by `kind`).
+// Spread/textbox/art-direction CRUD remain deferred (ship with sketch-spread space).
+// Every mutation sets `sync.isDirty` so auto-save flushes sketch edits/imports.
 export const createSketchSlice: StateCreator<
   SnapshotStore,
   [['zustand/immer', never]],
@@ -90,5 +92,57 @@ export const createSketchSlice: StateCreator<
       log.debug('clearSketch', 'reset to empty');
       state.sketch = DEFAULT_SKETCH;
       state.sync.isDirty = true;
+    }),
+
+  // --- Entity-level CRUD (keyed by kind) ---
+
+  setSketchEntities: (kind: SketchEntityKind, entities: SketchEntity[]) =>
+    set((state) => {
+      log.debug('setSketchEntities', 'replace all', { kind, count: entities.length });
+      state.sketch[kind] = entities;
+      state.sync.isDirty = true;
+    }),
+
+  upsertSketchEntity: (kind: SketchEntityKind, entity: SketchEntity) =>
+    set((state) => {
+      const list = state.sketch[kind];
+      const idx = list.findIndex((e) => e.key === entity.key);
+      log.debug('upsertSketchEntity', idx === -1 ? 'add' : 'update', { kind, key: entity.key });
+      if (idx === -1) list.push(entity);
+      else list[idx] = entity;
+      state.sync.isDirty = true;
+    }),
+
+  removeSketchEntity: (kind: SketchEntityKind, key: string) =>
+    set((state) => {
+      log.debug('removeSketchEntity', 'remove', { kind, key });
+      state.sketch[kind] = state.sketch[kind].filter((e) => e.key !== key);
+      state.sync.isDirty = true;
+    }),
+
+  setSketchEntityMediaUrl: (kind: SketchEntityKind, key: string, mediaUrl: string) =>
+    set((state) => {
+      const entity = state.sketch[kind].find((e) => e.key === key);
+      if (entity) {
+        log.debug('setSketchEntityMediaUrl', 'set', { kind, key });
+        entity.media_url = mediaUrl;
+        state.sync.isDirty = true;
+      }
+    }),
+
+  upsertSketchVariant: (kind: SketchEntityKind, entityKey: string, variant: SketchVariant) =>
+    set((state) => {
+      const entity = state.sketch[kind].find((e) => e.key === entityKey);
+      if (entity) {
+        const idx = entity.variants.findIndex((v) => v.key === variant.key);
+        log.debug('upsertSketchVariant', idx === -1 ? 'add' : 'update', {
+          kind,
+          entityKey,
+          variantKey: variant.key,
+        });
+        if (idx === -1) entity.variants.push(variant);
+        else entity.variants[idx] = variant;
+        state.sync.isDirty = true;
+      }
     }),
 });

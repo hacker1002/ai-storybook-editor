@@ -1,5 +1,5 @@
 import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
-import type { Sketch } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchVariant, SketchEntityKind } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
 import type { Prop, PropVariant, PropSound } from '@/types/prop-types';
@@ -177,11 +177,19 @@ export interface QuizSlice {
   clearQuizValidation: (quizId: string) => void;
 }
 
-// SketchSlice — minimal (state + replace/clear). Guard-normalized on load; CRUD deferred.
+// SketchSlice — state + replace/clear + entity-level CRUD (keyed by kind).
+// Guard-normalized on load. Spread/textbox/art-direction CRUD still deferred
+// (ships alongside the sketch-spread creative space).
 export interface SketchSlice {
   sketch: Sketch;
   setSketch: (sketch: Sketch) => void;
   clearSketch: () => void;
+  // Entity-level CRUD — `kind` selects the array (sketch.characters | props | stages)
+  setSketchEntities: (kind: SketchEntityKind, entities: SketchEntity[]) => void;
+  upsertSketchEntity: (kind: SketchEntityKind, entity: SketchEntity) => void;
+  removeSketchEntity: (kind: SketchEntityKind, key: string) => void;
+  setSketchEntityMediaUrl: (kind: SketchEntityKind, key: string, mediaUrl: string) => void;
+  upsertSketchVariant: (kind: SketchEntityKind, entityKey: string, variant: SketchVariant) => void;
 }
 
 export interface DocsSlice {
