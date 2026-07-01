@@ -594,7 +594,49 @@ export interface ImageTaskSlice {
   clearAllTasks: () => void;
 }
 
-export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & {
+// --- Sketch Generate Job Types (ephemeral, not persisted to DB) ---
+// One job = N entities of a single kind, generated SEQUENTIALLY (1 sheet API call/entity).
+// Distinct from ImageTaskSlice (parallel per-variant illustration tasks): sketch-sheet
+// generation writes entity.media_url + flushes DB per-entity so the UI fills in gradually.
+
+export type SketchTaskStatus = 'pending' | 'running' | 'completed' | 'error';
+
+export interface SketchGenerateTask {
+  entityKey: string;
+  entityName: string;        // titleCase(key) — for toast/aria copy
+  variantCount: number;      // len(variants) captured at enqueue
+  status: SketchTaskStatus;
+  imageUrl?: string;
+  error?: string;            // friendly message or backend code
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface SketchGenerateJob {
+  id: string;
+  kind: SketchEntityKind;
+  status: 'running' | 'completed' | 'cancelled';
+  tasks: SketchGenerateTask[];
+  currentIndex: number;      // -1 when not started / finished
+  cancelRequested: boolean;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface StartSketchGenerateJobParams {
+  kind: SketchEntityKind;
+  entityKeys: string[];      // target set (order preserved)
+  artStyleId: string;        // caller resolves book.artstyle_id, must be non-null
+}
+
+export interface SketchGenerateJobSlice {
+  sketchGenerateJob: SketchGenerateJob | null;
+  startSketchGenerateJob: (params: StartSketchGenerateJobParams) => void;
+  cancelSketchGenerateJob: () => void;
+  dismissSketchGenerateJob: () => void;
+}
+
+export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; sketch?: Sketch; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

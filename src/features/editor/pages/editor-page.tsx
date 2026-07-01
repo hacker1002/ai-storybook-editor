@@ -33,6 +33,7 @@ import { InteractionLayerProvider } from '../contexts';
 import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
+import { useSketchGenerateNotifications } from '../hooks/use-sketch-generate-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useFlushOnHidden } from '../hooks/use-flush-on-hidden';
 
@@ -69,6 +70,8 @@ export function EditorPage() {
   // distinct from background_jobs). Remix/export/render/transcode job toasts now
   // live in the app-root useJobNotifications() (ADR-037).
   useImageTaskNotifications();
+  // Summary toast for the sequential sketch-sheet generate job (running → terminal).
+  useSketchGenerateNotifications();
 
   // Local UI state
   const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('sketch-character');
@@ -235,10 +238,14 @@ export function EditorPage() {
         return <RemixCreativeSpace />;
       // Sketch entity spaces (characters/props/stages) — one shared component keyed by kind.
       // Switch narrows activeCreativeSpace to SketchEntitySpaceId here, so the index is typesafe.
+      // `key={kind}` forces a fresh instance per kind so per-kind UI state (checked set,
+      // focus, edit/import dialogs) never leaks across a space switch.
       case 'sketch-character':
       case 'sketch-prop':
-      case 'sketch-stage':
-        return <SketchVariantsCreativeSpace kind={SPACE_TO_KIND[activeCreativeSpace]} />;
+      case 'sketch-stage': {
+        const kind = SPACE_TO_KIND[activeCreativeSpace];
+        return <SketchVariantsCreativeSpace key={kind} kind={kind} />;
+      }
       // sketch-spread (storyboard) — standalone space (not a `kind` of the entity space).
       case 'sketch-spread':
         return <SketchSpreadsCreativeSpace />;

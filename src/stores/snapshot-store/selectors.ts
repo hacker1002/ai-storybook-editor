@@ -105,6 +105,37 @@ export const useSketchSpreadIds = (): string[] =>
 export const useSketchSpreadById = (spreadId: string): SketchSpread | undefined =>
   useSnapshotStore((s) => s.sketch.spreads.find((sp) => sp.id === spreadId));
 
+// Sketch generate-job selectors (ephemeral, not persisted).
+// Ref-stability matters (memory: useShallow footgun on object-of-fresh-arrays):
+//  - useSketchGenerateJob returns the stable store ref directly (Object.is) — no useShallow.
+//  - useIsSketchGenerating returns a boolean primitive — no useShallow.
+//  - useSketchGenerateProgress / useSketchEntityGenerating build fresh objects of PRIMITIVES
+//    only → useShallow is safe (shallow-eq on strings/bools, never on nested arrays).
+export const useSketchGenerateJob = () => useSnapshotStore((s) => s.sketchGenerateJob);
+
+export const useIsSketchGenerating = (): boolean =>
+  useSnapshotStore((s) => s.sketchGenerateJob?.status === 'running');
+
+export const useSketchGenerateProgress = () =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const job = s.sketchGenerateJob;
+      if (!job) return null;
+      const done = job.tasks.filter((t) => t.status === 'completed' || t.status === 'error').length;
+      return { done, total: job.tasks.length };
+    }),
+  );
+
+export const useSketchEntityGenerating = (kind: SketchEntityKind, entityKey: string) =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const job = s.sketchGenerateJob;
+      const task = job && job.kind === kind ? job.tasks.find((t) => t.entityKey === entityKey) : undefined;
+      const status = task?.status ?? 'idle';
+      return { status, isGenerating: status === 'running', error: task?.error };
+    }),
+  );
+
 // Fetch state selectors
 export const useSnapshotFetchLoading = () => useSnapshotStore((s) => s.fetchLoading);
 export const useSnapshotFetchError = () => useSnapshotStore((s) => s.fetchError);
@@ -491,6 +522,10 @@ export const useSnapshotActions = () =>
       removeSketchEntity: s.removeSketchEntity,
       setSketchEntityMediaUrl: s.setSketchEntityMediaUrl,
       upsertSketchVariant: s.upsertSketchVariant,
+      // Sketch generate job (sequential entity-sheet generation)
+      startSketchGenerateJob: s.startSketchGenerateJob,
+      cancelSketchGenerateJob: s.cancelSketchGenerateJob,
+      dismissSketchGenerateJob: s.dismissSketchGenerateJob,
       // Sketch (spread-level CRUD — sketch-spread creative space)
       setSketch: s.setSketch,
       setSketchSpreads: s.setSketchSpreads,

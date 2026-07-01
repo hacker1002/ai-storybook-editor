@@ -56,6 +56,7 @@ import { createPropsSlice } from './slices/props-slice';
 import { createCharactersSlice } from './slices/characters-slice';
 import { createStagesSlice } from './slices/stages-slice';
 import { createImageTaskSlice } from './slices/image-task-slice';
+import { createSketchGenerateJobSlice } from './slices/sketch-generate-job-slice';
 
 const log = createLogger('Store', 'SnapshotStore');
 
@@ -74,6 +75,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createCharactersSlice(...args),
         ...createStagesSlice(...args),
         ...createImageTaskSlice(...args),
+        ...createSketchGenerateJobSlice(...args),
 
         // Fetch state
         fetchLoading: false,
@@ -343,6 +345,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.characters = [];
             state.stages = [];
             state.imageTasks = [];
+            state.sketchGenerateJob = null;
             state.quizValidationErrors = {};
             state.meta = { id: null, bookId: null, version: null, tag: null, autoSaveId: null };
             state.sync = { isDirty: false, lastSavedAt: null, lastManualSavedAt: null, isSaving: false, isAutoSaving: false, error: null };
