@@ -37,8 +37,7 @@ export function SketchEntityContentArea({
   return (
     <div className="flex flex-col h-full" role="region" aria-label={`${cfg.noun} content`}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between h-11 px-4 border-b shrink-0">
-        <h2 className="text-sm font-semibold truncate">{name}</h2>
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
         <Button size="sm" onClick={handleGenerate} disabled aria-label={generateLabel}>
           <Sparkles className="h-4 w-4 mr-1.5" />
           {generateLabel}
