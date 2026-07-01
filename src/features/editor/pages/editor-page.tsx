@@ -20,6 +20,7 @@ import { PropsCreativeSpace } from '../components/props-creative-space';
 import { StagesCreativeSpace } from '../components/stages-creative-space';
 import { CharactersCreativeSpace } from '../components/characters-creative-space';
 import { SketchVariantsCreativeSpace, SPACE_TO_KIND } from '../components/sketch-variants-creative-space';
+import { SketchSpreadsCreativeSpace } from '../components/sketch-spreads-creative-space';
 import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
 import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { HistoryCreativeSpace } from '../components/history-creative-space';
@@ -238,8 +239,9 @@ export function EditorPage() {
       case 'sketch-prop':
       case 'sketch-stage':
         return <SketchVariantsCreativeSpace kind={SPACE_TO_KIND[activeCreativeSpace]} />;
-      // sketch-spread (storyboard) is a different space — still a placeholder (out of scope).
+      // sketch-spread (storyboard) — standalone space (not a `kind` of the entity space).
       case 'sketch-spread':
+        return <SketchSpreadsCreativeSpace />;
       case 'quiz':
       case 'issue':
       case 'collaborator':

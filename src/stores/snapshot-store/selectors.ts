@@ -1,7 +1,7 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType, SaveStatus, SyncState } from '@/types/editor';
-import type { Sketch, SketchEntity, SketchEntityKind } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchEntityKind, SketchSpread } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/illustration-types';
 import type { Prop } from '@/types/prop-types';
@@ -97,6 +97,13 @@ export const useSketchEntityByKey = (
   useSnapshotStore((s) => (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES).find((e) => e.key === key));
 export const useSketchEntityKeys = (kind: SketchEntityKind): string[] =>
   useSnapshotStore(useShallow((s) => (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES).map((e) => e.key)));
+
+// Sketch spread selectors — ID-based (mirror illustration spreads: useShallow+map for the id
+// list, whole-object find for a single spread). Drives the sketch-spread creative space.
+export const useSketchSpreadIds = (): string[] =>
+  useSnapshotStore(useShallow((s) => s.sketch.spreads.map((sp) => sp.id)));
+export const useSketchSpreadById = (spreadId: string): SketchSpread | undefined =>
+  useSnapshotStore((s) => s.sketch.spreads.find((sp) => sp.id === spreadId));
 
 // Fetch state selectors
 export const useSnapshotFetchLoading = () => useSnapshotStore((s) => s.fetchLoading);
@@ -484,6 +491,16 @@ export const useSnapshotActions = () =>
       removeSketchEntity: s.removeSketchEntity,
       setSketchEntityMediaUrl: s.setSketchEntityMediaUrl,
       upsertSketchVariant: s.upsertSketchVariant,
+      // Sketch (spread-level CRUD — sketch-spread creative space)
+      setSketch: s.setSketch,
+      setSketchSpreads: s.setSketchSpreads,
+      addSketchSpread: s.addSketchSpread,
+      deleteSketchSpread: s.deleteSketchSpread,
+      reorderSketchSpreads: s.reorderSketchSpreads,
+      setSketchSpreadMediaUrl: s.setSketchSpreadMediaUrl,
+      updateSketchPageArtDirection: s.updateSketchPageArtDirection,
+      updateSketchTextbox: s.updateSketchTextbox,
+      deleteSketchTextbox: s.deleteSketchTextbox,
       // Meta
       setMeta: s.setMeta,
       markDirty: s.markDirty,

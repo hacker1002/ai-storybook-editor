@@ -41,10 +41,35 @@ export interface SketchPage {
   art_direction: ArtDirection;
 }
 
-// Per-language textbox content keyed by language code; `id` is the only literal key.
+// Per-language textbox content (the value stored under each language-code key).
+export interface SketchTextboxContent {
+  text: string;
+  geometry: Geometry;
+  typography: Typography;
+}
+
+// Per-language textbox content keyed by language code; `id` is the only literal string key.
+// The union with `string` is what the `id` slot occupies — narrow with the guards below
+// before treating an indexed value as content (validation decision: cast-in-place, no refactor).
 export interface SketchTextbox {
   id: string;
-  [languageKey: string]: { text: string; geometry: Geometry; typography: Typography } | string;
+  [languageKey: string]: SketchTextboxContent | string;
+}
+
+// Guard: an indexed SketchTextbox value is language content (object) vs the literal `id` (string).
+export function isSketchTextboxContent(
+  value: SketchTextboxContent | string | undefined,
+): value is SketchTextboxContent {
+  return typeof value === 'object' && value !== null;
+}
+
+// Accessor: the content entry for a language, or undefined (absent / the `id` slot).
+export function getSketchTextboxContent(
+  textbox: SketchTextbox,
+  languageKey: string,
+): SketchTextboxContent | undefined {
+  const value = textbox[languageKey];
+  return isSketchTextboxContent(value) ? value : undefined;
 }
 
 export interface SketchSpread {

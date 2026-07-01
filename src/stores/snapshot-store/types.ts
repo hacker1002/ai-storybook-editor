@@ -1,5 +1,14 @@
 import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
-import type { Sketch, SketchEntity, SketchVariant, SketchEntityKind } from '@/types/sketch';
+import type {
+  Sketch,
+  SketchEntity,
+  SketchVariant,
+  SketchEntityKind,
+  SketchSpread,
+  SketchPageType,
+  ArtDirection,
+  SketchTextboxContent,
+} from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
 import type { Prop, PropVariant, PropSound } from '@/types/prop-types';
@@ -190,6 +199,25 @@ export interface SketchSlice {
   removeSketchEntity: (kind: SketchEntityKind, key: string) => void;
   setSketchEntityMediaUrl: (kind: SketchEntityKind, key: string, mediaUrl: string) => void;
   upsertSketchVariant: (kind: SketchEntityKind, entityKey: string, variant: SketchVariant) => void;
+  // Spread-level CRUD — ships with the sketch-spread creative space.
+  // Art-direction is keyed by page `type` (SketchPage has no id); textbox content is per-language.
+  setSketchSpreads: (spreads: SketchSpread[]) => void;
+  addSketchSpread: (spread: SketchSpread) => void;
+  deleteSketchSpread: (id: string) => void;
+  reorderSketchSpreads: (from: number, to: number) => void;
+  setSketchSpreadMediaUrl: (id: string, mediaUrl: string) => void;
+  updateSketchPageArtDirection: (
+    spreadId: string,
+    pageType: SketchPageType,
+    patch: Partial<ArtDirection>,
+  ) => void;
+  updateSketchTextbox: (
+    spreadId: string,
+    textboxId: string,
+    languageKey: string,
+    patch: Partial<SketchTextboxContent>,
+  ) => void;
+  deleteSketchTextbox: (spreadId: string, textboxId: string) => void;
 }
 
 export interface DocsSlice {

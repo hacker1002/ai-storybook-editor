@@ -1,7 +1,8 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, SketchSlice } from '../types';
 import type { Sketch, SketchEntity, SketchSpread } from '@/types/sketch';
-import type { SketchVariant, SketchEntityKind } from '@/types/sketch';
+import type { SketchVariant, SketchEntityKind, SketchPageType, ArtDirection, SketchTextboxContent } from '@/types/sketch';
+import { isSketchTextboxContent } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'SketchSlice');
@@ -144,5 +145,109 @@ export const createSketchSlice: StateCreator<
         else entity.variants[idx] = variant;
         state.sync.isDirty = true;
       }
+    }),
+
+  // --- Spread-level CRUD (ships with the sketch-spread creative space) ---
+
+  setSketchSpreads: (spreads: SketchSpread[]) =>
+    set((state) => {
+      log.debug('setSketchSpreads', 'replace all', { count: spreads.length });
+      state.sketch.spreads = spreads;
+      state.sync.isDirty = true;
+    }),
+
+  addSketchSpread: (spread: SketchSpread) =>
+    set((state) => {
+      log.debug('addSketchSpread', 'push', { id: spread.id });
+      state.sketch.spreads.push(spread);
+      state.sync.isDirty = true;
+    }),
+
+  deleteSketchSpread: (id: string) =>
+    set((state) => {
+      log.debug('deleteSketchSpread', 'remove', { id });
+      state.sketch.spreads = state.sketch.spreads.filter((s) => s.id !== id);
+      state.sync.isDirty = true;
+    }),
+
+  // Index-based move with clamp; from==to (or empty) is a no-op (leaves isDirty untouched).
+  reorderSketchSpreads: (from: number, to: number) =>
+    set((state) => {
+      const list = state.sketch.spreads;
+      const len = list.length;
+      if (len === 0) return;
+      const f = Math.max(0, Math.min(from, len - 1));
+      const t = Math.max(0, Math.min(to, len - 1));
+      if (f === t) return;
+      log.debug('reorderSketchSpreads', 'move', { from: f, to: t });
+      const [moved] = list.splice(f, 1);
+      list.splice(t, 0, moved);
+      state.sync.isDirty = true;
+    }),
+
+  setSketchSpreadMediaUrl: (id: string, mediaUrl: string) =>
+    set((state) => {
+      const spread = state.sketch.spreads.find((s) => s.id === id);
+      if (spread) {
+        log.debug('setSketchSpreadMediaUrl', 'set', { id });
+        spread.media_url = mediaUrl;
+        state.sync.isDirty = true;
+      }
+    }),
+
+  // Art-direction identity = page `type` ('left'|'right'|'full'); merges a partial patch.
+  updateSketchPageArtDirection: (
+    spreadId: string,
+    pageType: SketchPageType,
+    patch: Partial<ArtDirection>,
+  ) =>
+    set((state) => {
+      const spread = state.sketch.spreads.find((s) => s.id === spreadId);
+      const page = spread?.pages.find((p) => p.type === pageType);
+      if (page) {
+        log.debug('updateSketchPageArtDirection', 'merge', {
+          spreadId,
+          pageType,
+          keys: Object.keys(patch),
+        });
+        page.art_direction = { ...page.art_direction, ...patch };
+        state.sync.isDirty = true;
+      }
+    }),
+
+  // Per-language content upsert. The shared canvas synthesizes a full content object for a
+  // requested language and emits it expecting the store to PERSIST it (create-on-first-edit),
+  // so an absent language entry must be created — not skipped. Only the literal `id` slot
+  // (never a content object) is protected. `patch` from the canvas is always full content.
+  updateSketchTextbox: (
+    spreadId: string,
+    textboxId: string,
+    languageKey: string,
+    patch: Partial<SketchTextboxContent>,
+  ) =>
+    set((state) => {
+      if (languageKey === 'id') return; // never overwrite the id key
+      const spread = state.sketch.spreads.find((s) => s.id === spreadId);
+      const textbox = spread?.textboxes.find((t) => t.id === textboxId);
+      if (!textbox) return;
+      const entry = textbox[languageKey];
+      const base = isSketchTextboxContent(entry) ? entry : undefined;
+      log.debug('updateSketchTextbox', base ? 'merge' : 'create', {
+        spreadId,
+        textboxId,
+        languageKey,
+        keys: Object.keys(patch),
+      });
+      textbox[languageKey] = { ...(base ?? {}), ...patch } as SketchTextboxContent;
+      state.sync.isDirty = true;
+    }),
+
+  deleteSketchTextbox: (spreadId: string, textboxId: string) =>
+    set((state) => {
+      const spread = state.sketch.spreads.find((s) => s.id === spreadId);
+      if (!spread) return;
+      log.debug('deleteSketchTextbox', 'remove', { spreadId, textboxId });
+      spread.textboxes = spread.textboxes.filter((t) => t.id !== textboxId);
+      state.sync.isDirty = true;
     }),
 });
