@@ -41,6 +41,7 @@ import {
   useSketchSpreadGenerating,
 } from '@/stores/snapshot-store/selectors';
 import { useCurrentBook, useBookTemplateLayout, useBookTypography } from '@/stores/book-store';
+import { useLanguageCode } from '@/stores/editor-settings-store';
 import { createLogger } from '@/utils/logger';
 import type {
   ItemType,
@@ -89,8 +90,9 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
   const focusGen = useSketchSpreadGenerating(spreadId);
   const [pendingTarget, setPendingTarget] = useState<string[] | null>(null);
 
-  // Content language is locked to the book's original language (NOT the editor language).
-  const langCode = book?.original_language;
+  // Content language follows the header language selector (same as other creative spaces).
+  // Fall back to the book's original language until editor settings hydrate.
+  const langCode = useLanguageCode() || book?.original_language;
 
   // Fixed single-spread focus view — no zoom control (design intent).
   const [zoomLevel, setZoomLevel] = useState(100);
