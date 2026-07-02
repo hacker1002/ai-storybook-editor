@@ -10,6 +10,7 @@
 // raw_images / shapes / videos / quizzes are intentionally omitted (sketch step has none).
 
 import type { SketchSpread } from '@/types/sketch';
+import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
 import type { BaseSpread, SpreadImage, SpreadTextbox, PageData } from '@/types/spread-types';
 
 /** Stable id for the single backdrop image of a spread (derived, not stored). */
@@ -30,7 +31,7 @@ export function toBaseSpread(spread: SketchSpread): BaseSpread {
   const image: SpreadImage = {
     id: sketchBackdropImageId(spread.id),
     geometry: { x: 0, y: 0, w: 100, h: 100 },
-    media_url: spread.media_url ?? undefined,
+    media_url: getSketchSpreadEffectiveUrl(spread) ?? undefined,
     editor_visible: true,
     player_visible: true,
   };

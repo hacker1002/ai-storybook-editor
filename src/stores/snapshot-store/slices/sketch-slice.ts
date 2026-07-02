@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, SketchSlice } from '../types';
-import type { Sketch, SketchEntity, SketchSpread } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchSpread, SketchSpreadImage } from '@/types/sketch';
 import type { SketchVariant, SketchEntityKind, SketchPageType, ArtDirection, SketchTextboxContent } from '@/types/sketch';
 import { isSketchTextboxContent } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
@@ -26,17 +26,54 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  */
 function isLegacySketchShape(raw: Record<string, unknown>): boolean {
   if ('dummy_id' in raw || 'character_sheets' in raw || 'prop_sheets' in raw) return true;
-  // Legacy spreads carried an `images[]` array; the new shape uses `pages[]` + `textboxes[]`.
+  // Legacy spreads carried `images[]` and NO `pages[]`. The current shape ALSO carries
+  // `images[]` (versioned backdrop, this migration) but always has `pages[]` too — so the
+  // discriminator must require `images` WITHOUT `pages`, else every new spread false-positives
+  // as legacy and gets reset to empty (data loss). See phase-01 HAZARD note.
   const spreads = raw.spreads;
   if (Array.isArray(spreads) && spreads.length > 0) {
     const first = spreads[0];
-    if (isPlainObject(first) && 'images' in first) return true;
+    if (isPlainObject(first) && 'images' in first && !('pages' in first)) return true;
   }
   return false;
 }
 
 function asEntityArray(v: unknown): SketchEntity[] {
   return Array.isArray(v) ? (v as SketchEntity[]) : [];
+}
+
+/**
+ * Back-compat per-spread normalizer for the versioned `images[]` backdrop model:
+ *  - already-new shape (`images` is an array) → keep verbatim, clamp to ≤1 image.
+ *  - legacy scalar `media_url: string` → wrap in a single image/illustration (is_selected).
+ *  - no image at all → `images: []`.
+ * `pages` / `textboxes` always default to []. Non-object rows collapse to an empty spread.
+ */
+export function normalizeSketchSpread(raw: unknown): SketchSpread {
+  if (!isPlainObject(raw)) {
+    return { id: '', images: [], pages: [], textboxes: [] };
+  }
+  const id = typeof raw.id === 'string' ? raw.id : '';
+  const pages = Array.isArray(raw.pages) ? (raw.pages as SketchSpread['pages']) : [];
+  const textboxes = Array.isArray(raw.textboxes) ? (raw.textboxes as SketchSpread['textboxes']) : [];
+
+  let images: SketchSpreadImage[];
+  if (Array.isArray(raw.images)) {
+    images = (raw.images as SketchSpreadImage[]).slice(0, 1); // clamp ≤1 (already new shape)
+  } else if (typeof raw.media_url === 'string') {
+    images = [
+      {
+        id: crypto.randomUUID(),
+        illustrations: [
+          { media_url: raw.media_url, created_time: new Date().toISOString(), is_selected: true },
+        ],
+      },
+    ];
+  } else {
+    images = [];
+  }
+
+  return { id, images, pages, textboxes };
 }
 
 /**
@@ -61,7 +98,7 @@ export function normalizeSketch(raw: unknown): Sketch {
     characters: asEntityArray(raw.characters),
     props: asEntityArray(raw.props),
     stages: asEntityArray(raw.stages),
-    spreads: Array.isArray(raw.spreads) ? (raw.spreads as SketchSpread[]) : [],
+    spreads: Array.isArray(raw.spreads) ? raw.spreads.map(normalizeSketchSpread) : [],
   };
 }
 
@@ -185,14 +222,27 @@ export const createSketchSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  setSketchSpreadMediaUrl: (id: string, mediaUrl: string) =>
+  // Prepend a new generated version onto the spread's single backdrop image, auto-select it,
+  // and clear the previous selection. Creates the image container on first generate. Marks dirty
+  // so the awaited flushSnapshot() in the spread-generate job persists it before the next spread.
+  addSketchSpreadImageVersion: (spreadId: string, mediaUrl: string) =>
     set((state) => {
-      const spread = state.sketch.spreads.find((s) => s.id === id);
-      if (spread) {
-        log.debug('setSketchSpreadMediaUrl', 'set', { id });
-        spread.media_url = mediaUrl;
-        state.sync.isDirty = true;
+      const spread = state.sketch.spreads.find((s) => s.id === spreadId);
+      if (!spread) return;
+      if (spread.images.length === 0) {
+        spread.images = [{ id: crypto.randomUUID(), illustrations: [] }];
       }
+      const img = spread.images[0];
+      img.illustrations.forEach((ill) => {
+        ill.is_selected = false;
+      });
+      img.illustrations.unshift({
+        media_url: mediaUrl,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      });
+      log.debug('addSketchSpreadImageVersion', 'prepend', { spreadId });
+      state.sync.isDirty = true;
     }),
 
   // Art-direction identity = page `type` ('left'|'right'|'full'); merges a partial patch.

@@ -2,7 +2,7 @@ import { ArrowLeft, Settings } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { useHasPendingImageTasks, useIsSketchGenerating } from '@/stores/snapshot-store/selectors';
+import { useHasPendingImageTasks, useIsAnySketchGenerating } from '@/stores/snapshot-store/selectors';
 import { toast } from 'sonner';
 import type { UserPoints, EditorMode } from '@/types/editor';
 
@@ -25,7 +25,8 @@ export function MenuPopover({
 }: MenuPopoverProps) {
   const progressPercent = (userPoints.current / userPoints.total) * 100;
   const hasPendingTasks = useHasPendingImageTasks();
-  const isSketchGenerating = useIsSketchGenerating();
+  // Unified guard — blocks Home while EITHER sketch job (entity-sheet or spread-image) runs.
+  const isSketchGenerating = useIsAnySketchGenerating();
 
   const handleHomeClick = () => {
     if (hasPendingTasks) {
@@ -33,7 +34,7 @@ export function MenuPopover({
       return;
     }
     if (isSketchGenerating) {
-      toast.warning('Please wait — sketch sheets are still generating');
+      toast.warning('Please wait — sketch is still generating');
       return;
     }
     onNavigateHome();

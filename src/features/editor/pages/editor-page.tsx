@@ -34,6 +34,7 @@ import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
 import { useSketchGenerateNotifications } from '../hooks/use-sketch-generate-notifications';
+import { useSketchSpreadGenerateNotifications } from '../hooks/use-sketch-spread-generate-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useFlushOnHidden } from '../hooks/use-flush-on-hidden';
 
@@ -72,6 +73,8 @@ export function EditorPage() {
   useImageTaskNotifications();
   // Summary toast for the sequential sketch-sheet generate job (running → terminal).
   useSketchGenerateNotifications();
+  // Summary toast for the sequential sketch spread-image generate job (running → terminal).
+  useSketchSpreadGenerateNotifications();
 
   // Local UI state
   const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('sketch-character');

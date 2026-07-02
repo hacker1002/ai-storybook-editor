@@ -149,7 +149,7 @@ export function SketchSpreadsCreativeSpace() {
       />
 
       {selectedId ? (
-        <SketchSpreadContentArea spreadId={selectedId} />
+        <SketchSpreadContentArea spreadId={selectedId} checkedSpreadIds={checkedIds} />
       ) : (
         <section
           className="flex flex-1 flex-col items-center justify-center text-center text-muted-foreground"

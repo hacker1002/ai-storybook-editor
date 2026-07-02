@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { normalizeSketch, DEFAULT_SKETCH, createSketchSlice } from './sketch-slice';
+import { normalizeSketch, normalizeSketchSpread, DEFAULT_SKETCH, createSketchSlice } from './sketch-slice';
+import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
 import type { Sketch, SketchEntity, SketchSpread, ArtDirection, SketchTextbox } from '@/types/sketch';
 import type { Geometry, Typography } from '@/types/spread-types';
 
@@ -50,7 +51,7 @@ describe('normalizeSketch', () => {
       characters: [{ key: 'c1', media_url: null, variants: [] }],
       props: [],
       stages: [{ key: 'st1', media_url: 'u', variants: [{ key: 'v', visual_description: 'd' }] }],
-      spreads: [{ id: 'sp1', media_url: null, pages: [], textboxes: [] }],
+      spreads: [{ id: 'sp1', images: [], pages: [], textboxes: [] }],
     };
     expect(normalizeSketch(valid)).toEqual(valid);
   });
@@ -68,6 +69,73 @@ describe('normalizeSketch', () => {
   it('coerces a non-string id to null', () => {
     const result = normalizeSketch({ id: 123, characters: [], props: [], stages: [], spreads: [] });
     expect(result.id).toBeNull();
+  });
+
+  // Discriminator HAZARD (phase-01): the versioned model ADDS images[] to the new spread shape,
+  // which also carries pages[]. A new spread (images + pages) must NOT false-positive as legacy.
+  it('does NOT reset a new-shape spread that has BOTH images[] and pages[]', () => {
+    const raw = {
+      id: 'sk',
+      characters: [],
+      props: [],
+      stages: [],
+      spreads: [
+        { id: 'sp', images: [{ id: 'i', illustrations: [] }], pages: [{ type: 'full' }], textboxes: [] },
+      ],
+    };
+    const result = normalizeSketch(raw);
+    expect(result.spreads).toHaveLength(1);
+    expect(result.spreads[0].id).toBe('sp');
+  });
+});
+
+describe('normalizeSketchSpread (versioned images[] back-compat)', () => {
+  it('wraps a legacy scalar media_url into one selected illustration', () => {
+    const out = normalizeSketchSpread({ id: 's1', media_url: 'http://x/i.png', pages: [], textboxes: [] });
+    expect(out.images).toHaveLength(1);
+    expect(out.images[0].illustrations[0]).toMatchObject({ media_url: 'http://x/i.png', is_selected: true });
+  });
+
+  it('keeps an already-new images[] verbatim and clamps to ≤1', () => {
+    const images = [
+      { id: 'i1', illustrations: [{ media_url: 'u1', created_time: 't', is_selected: true }] },
+      { id: 'i2', illustrations: [{ media_url: 'u2', created_time: 't', is_selected: true }] },
+    ];
+    const out = normalizeSketchSpread({ id: 's1', images, pages: [], textboxes: [] });
+    expect(out.images).toHaveLength(1);
+    expect(out.images[0].id).toBe('i1');
+  });
+
+  it('defaults to images:[] when the spread has no image', () => {
+    const out = normalizeSketchSpread({ id: 's1', pages: [], textboxes: [] });
+    expect(out.images).toEqual([]);
+  });
+
+  it('collapses a non-object row to an empty spread', () => {
+    expect(normalizeSketchSpread(null)).toEqual({ id: '', images: [], pages: [], textboxes: [] });
+  });
+});
+
+describe('getSketchSpreadEffectiveUrl', () => {
+  const withIllustrations = (
+    ill: { media_url: string; created_time: string; is_selected: boolean }[],
+  ): SketchSpread => ({ id: 's', images: ill.length ? [{ id: 'i', illustrations: ill }] : [], pages: [], textboxes: [] });
+
+  it('returns the selected version url', () => {
+    const s = withIllustrations([
+      { media_url: 'new', created_time: 't', is_selected: false },
+      { media_url: 'sel', created_time: 't', is_selected: true },
+    ]);
+    expect(getSketchSpreadEffectiveUrl(s)).toBe('sel');
+  });
+
+  it('falls back to the newest (index 0) when none selected', () => {
+    const s = withIllustrations([{ media_url: 'first', created_time: 't', is_selected: false }]);
+    expect(getSketchSpreadEffectiveUrl(s)).toBe('first');
+  });
+
+  it('returns null when the spread has no image', () => {
+    expect(getSketchSpreadEffectiveUrl(withIllustrations([]))).toBeNull();
   });
 });
 
@@ -168,7 +236,7 @@ describe('SketchSlice spread actions', () => {
   });
   const spread = (id: string, pageTypes: SketchSpread['pages'][number]['type'][] = ['left', 'right']): SketchSpread => ({
     id,
-    media_url: null,
+    images: [],
     pages: pageTypes.map((type) => ({ type, art_direction: emptyAd() })),
     textboxes: [],
   });
@@ -217,11 +285,20 @@ describe('SketchSlice spread actions', () => {
     expect(store.getState().sync.isDirty).toBe(false);
   });
 
-  it('setSketchSpreadMediaUrl sets the matched spread only', () => {
+  it('addSketchSpreadImageVersion prepends + auto-selects on the matched spread only', () => {
     seed(spread('a'), spread('b'));
-    store.getState().setSketchSpreadMediaUrl('a', 'https://x/s.png');
-    expect(store.getState().sketch.spreads[0].media_url).toBe('https://x/s.png');
-    expect(store.getState().sketch.spreads[1].media_url).toBeNull();
+    store.getState().addSketchSpreadImageVersion('a', 'https://x/s1.png');
+    const imgs = store.getState().sketch.spreads[0].images;
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0].illustrations[0]).toMatchObject({ media_url: 'https://x/s1.png', is_selected: true });
+    // Second generate: new version prepended + selected, previous deselected.
+    store.getState().addSketchSpreadImageVersion('a', 'https://x/s2.png');
+    const ill = store.getState().sketch.spreads[0].images[0].illustrations;
+    expect(ill.map((i: { media_url: string }) => i.media_url)).toEqual(['https://x/s2.png', 'https://x/s1.png']);
+    expect(ill[0].is_selected).toBe(true);
+    expect(ill[1].is_selected).toBe(false);
+    // Sibling spread untouched.
+    expect(store.getState().sketch.spreads[1].images).toEqual([]);
   });
 
   it('updateSketchPageArtDirection merges patch into the page matched by type', () => {
@@ -243,7 +320,7 @@ describe('SketchSlice spread actions', () => {
 
   it('updateSketchTextbox merges into the language entry, skipping the id slot', () => {
     const tb: SketchTextbox = { id: 't1', en: { text: 'hi', geometry: geo, typography: typo } };
-    seed({ id: 'a', media_url: null, pages: [], textboxes: [tb] });
+    seed({ id: 'a', images: [], pages: [], textboxes: [tb] });
     store.getState().updateSketchTextbox('a', 't1', 'en', { text: 'hello' });
     const entry = store.getState().sketch.spreads[0].textboxes[0].en;
     expect(entry.text).toBe('hello');
@@ -253,7 +330,7 @@ describe('SketchSlice spread actions', () => {
 
   it('updateSketchTextbox creates the language entry when absent (canvas create-on-first-edit)', () => {
     const tb: SketchTextbox = { id: 't1', en: { text: 'hi', geometry: geo, typography: typo } };
-    seed({ id: 'a', media_url: null, pages: [], textboxes: [tb] });
+    seed({ id: 'a', images: [], pages: [], textboxes: [tb] });
     resetDirty();
     // Canvas emits a full content object for the newly-requested language.
     store.getState().updateSketchTextbox('a', 't1', 'vi', { text: 'xin chào', geometry: geo, typography: typo });
@@ -265,7 +342,7 @@ describe('SketchSlice spread actions', () => {
 
   it('updateSketchTextbox never overwrites the id slot', () => {
     const tb: SketchTextbox = { id: 't1', en: { text: 'hi', geometry: geo, typography: typo } };
-    seed({ id: 'a', media_url: null, pages: [], textboxes: [tb] });
+    seed({ id: 'a', images: [], pages: [], textboxes: [tb] });
     resetDirty();
     store.getState().updateSketchTextbox('a', 't1', 'id', { text: 'nope' });
     expect(store.getState().sketch.spreads[0].textboxes[0].id).toBe('t1');
@@ -274,7 +351,7 @@ describe('SketchSlice spread actions', () => {
 
   it('deleteSketchTextbox removes the textbox by id', () => {
     const tb = (id: string): SketchTextbox => ({ id, en: { text: id, geometry: geo, typography: typo } });
-    seed({ id: 'a', media_url: null, pages: [], textboxes: [tb('t1'), tb('t2')] });
+    seed({ id: 'a', images: [], pages: [], textboxes: [tb('t1'), tb('t2')] });
     store.getState().deleteSketchTextbox('a', 't1');
     expect(store.getState().sketch.spreads[0].textboxes.map((t: SketchTextbox) => t.id)).toEqual(['t2']);
   });
@@ -282,7 +359,7 @@ describe('SketchSlice spread actions', () => {
   it('mutations set isDirty; missing-target actions do not', () => {
     seed(spread('a'));
     resetDirty();
-    store.getState().setSketchSpreadMediaUrl('missing', 'u');
+    store.getState().addSketchSpreadImageVersion('missing', 'u');
     store.getState().deleteSketchTextbox('missing', 't');
     store.getState().updateSketchTextbox('missing', 't', 'en', { text: 'x' });
     expect(store.getState().sync.isDirty).toBe(false);

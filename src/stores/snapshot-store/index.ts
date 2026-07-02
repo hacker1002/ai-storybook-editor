@@ -57,6 +57,7 @@ import { createCharactersSlice } from './slices/characters-slice';
 import { createStagesSlice } from './slices/stages-slice';
 import { createImageTaskSlice } from './slices/image-task-slice';
 import { createSketchGenerateJobSlice } from './slices/sketch-generate-job-slice';
+import { createSketchSpreadGenerateJobSlice } from './slices/sketch-spread-generate-job-slice';
 
 const log = createLogger('Store', 'SnapshotStore');
 
@@ -76,6 +77,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createStagesSlice(...args),
         ...createImageTaskSlice(...args),
         ...createSketchGenerateJobSlice(...args),
+        ...createSketchSpreadGenerateJobSlice(...args),
 
         // Fetch state
         fetchLoading: false,
@@ -311,6 +313,86 @@ export const useSnapshotStore = create<SnapshotStore>()(
           });
         },
 
+        // Awaited flush: resolve only when the current (already set()) state has landed in the DB,
+        // or immediately when there is nothing to save. Wraps autoSaveSnapshot without changing it.
+        //
+        // Common path: no save in flight → run autoSaveSnapshot and await it. Rare path: a debounce/
+        // visibility autosave is mid-flight (isSaving===true) so our call self-guards to a no-op;
+        // we then wait for that save to finish (subscribeWithSelector on sync.isSaving), re-check
+        // isDirty, and retry ONCE. Bail if a save error leaves the state dirty — never block the
+        // caller (the spread-generate job's per-spread catch handles the consistency degrade).
+        flushSnapshot: async () => {
+          const [, get] = args;
+          const api = args[2];
+          const { sync, meta } = get();
+
+          if (!meta.bookId) {
+            log.debug('flushSnapshot', 'no bookId — cannot save, skip');
+            return;
+          }
+          if (!sync.isDirty && !sync.isSaving) {
+            log.debug('flushSnapshot', 'already clean — nothing to flush');
+            return;
+          }
+
+          log.info('flushSnapshot', 'start', { bookId: meta.bookId });
+
+          // Safety net so a hung concurrent save (sync.isSaving stuck true) can't park the caller —
+          // and, for the generate job, its nav-guard — forever. On timeout we stop waiting; the
+          // flush then re-checks isDirty and bails, letting the job finalize.
+          const FLUSH_WAIT_TIMEOUT_MS = 15000;
+          const waitForSavingFalse = (): Promise<void> =>
+            new Promise((resolve) => {
+              if (!get().sync.isSaving) {
+                resolve();
+                return;
+              }
+              let settled = false;
+              let unsub = () => {};
+              const timer = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                unsub();
+                log.warn('flushSnapshot', 'timed out waiting for in-flight save — giving up wait');
+                resolve();
+              }, FLUSH_WAIT_TIMEOUT_MS);
+              unsub = api.subscribe(
+                (s: SnapshotStore) => s.sync.isSaving,
+                (isSaving: boolean) => {
+                  if (!isSaving && !settled) {
+                    settled = true;
+                    clearTimeout(timer);
+                    unsub();
+                    resolve();
+                  }
+                },
+              );
+            });
+
+          await get().autoSaveSnapshot();
+          if (!get().sync.isDirty) {
+            log.info('flushSnapshot', 'landed');
+            return;
+          }
+          if (get().sync.error) {
+            log.warn('flushSnapshot', 'bail — save error left state dirty', { error: get().sync.error });
+            return;
+          }
+
+          // No-op'd because another save held isSaving — wait it out, re-check, retry once.
+          await waitForSavingFalse();
+          if (!get().sync.isDirty) {
+            log.info('flushSnapshot', 'landed after concurrent save');
+            return;
+          }
+          await get().autoSaveSnapshot();
+          if (!get().sync.isDirty) {
+            log.info('flushSnapshot', 'landed after retry');
+            return;
+          }
+          log.warn('flushSnapshot', 'still dirty after retry — giving up', { error: get().sync.error });
+        },
+
         initSnapshot: (data) => {
           const [set] = args;
           log.info('initSnapshot', 'init', { hasData: !!data, hasMeta: !!data.meta });
@@ -346,6 +428,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.stages = [];
             state.imageTasks = [];
             state.sketchGenerateJob = null;
+            state.sketchSpreadGenerateJob = null;
             state.quizValidationErrors = {};
             state.meta = { id: null, bookId: null, version: null, tag: null, autoSaveId: null };
             state.sync = { isDirty: false, lastSavedAt: null, lastManualSavedAt: null, isSaving: false, isAutoSaving: false, error: null };

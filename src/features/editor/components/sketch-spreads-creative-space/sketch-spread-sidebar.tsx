@@ -7,7 +7,7 @@
 // handler shape copied from canvas-spread-view/spread-thumbnail-list.tsx).
 
 import { useRef, useState } from 'react';
-import { FileSpreadsheet, Loader2, GripVertical, Pencil, Trash2, BookOpen, FileText } from 'lucide-react';
+import { FileSpreadsheet, Loader2, GripVertical, Pencil, Trash2, BookOpen, FileText, Clock, Check, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -21,7 +21,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useSketchSpreadById } from '@/stores/snapshot-store/selectors';
+import { useSketchSpreadById, useSketchSpreadGenerating } from '@/stores/snapshot-store/selectors';
+import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
@@ -244,6 +245,7 @@ function SketchSpreadListItem({
   onDragEnd,
 }: SketchSpreadListItemProps) {
   const spread = useSketchSpreadById(spreadId);
+  const gen = useSketchSpreadGenerating(spreadId); // per-row generate status (primitives; useShallow-safe)
 
   // Selector may return undefined mid-delete/mid-load — skip the row.
   if (!spread) {
@@ -252,6 +254,7 @@ function SketchSpreadListItem({
   }
 
   const label = `Spread ${ordinal}`;
+  const effectiveUrl = getSketchSpreadEffectiveUrl(spread);
   // Icon reflects page COUNT (visual metaphor): 2 pages (left+right) = open book;
   // 1 page = full-bleed DPS, one image across the spread = single sheet.
   const isTwoPage = spread.pages.length === 2;
@@ -284,9 +287,9 @@ function SketchSpreadListItem({
 
       {/* Thumbnail — scaled preview or neutral placeholder when no media */}
       <div className="h-9 w-12 shrink-0 overflow-hidden rounded-sm border bg-muted">
-        {spread.media_url ? (
+        {effectiveUrl ? (
           <img
-            src={spread.media_url}
+            src={effectiveUrl}
             alt={label}
             className="h-full w-full object-cover"
             draggable={false}
@@ -304,6 +307,22 @@ function SketchSpreadListItem({
           <FileText className="h-4 w-4" aria-hidden />
         )}
       </span>
+
+      {/* Per-row generate status — only rendered while a spread-image job touches this row
+          (idle = no icon, thumbnail alone). */}
+      {gen.status !== 'idle' && (
+        <span className="shrink-0" title={`Generation: ${gen.status}`} aria-label={`Generation ${gen.status}`}>
+          {gen.status === 'running' ? (
+            <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden />
+          ) : gen.status === 'completed' ? (
+            <Check className="h-4 w-4 text-green-600" aria-hidden />
+          ) : gen.status === 'error' ? (
+            <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />
+          ) : (
+            <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
+          )}
+        </span>
+      )}
 
       {/* Label */}
       <button

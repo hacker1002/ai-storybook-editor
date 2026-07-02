@@ -143,7 +143,7 @@ describe('buildSketchSpread', () => {
       { ...cellBase, is_dps: true, pages: [page({ stage_ref: '@forest', loi_van: 'Rừng xanh.' })] },
       book,
     );
-    expect(spread.media_url).toBeNull();
+    expect(spread.images).toEqual([]);
     expect(spread.pages.map((p) => p.type)).toEqual(['full']);
     expect(spread.pages[0].art_direction.stage).toBe('@forest');
     expect(spread.textboxes).toHaveLength(1);
@@ -164,7 +164,7 @@ describe('buildSketchSpread', () => {
       },
       book,
     );
-    expect(spread.media_url).toBeNull(); // one shared backdrop, not two
+    expect(spread.images).toEqual([]); // no image generated yet — one shared backdrop, not two
     expect(spread.pages.map((p) => p.type)).toEqual(['left', 'right']);
     expect(spread.textboxes).toHaveLength(2);
     const left = getSketchTextboxContent(spread.textboxes[0], 'vi_VN');

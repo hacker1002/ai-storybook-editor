@@ -72,11 +72,35 @@ export function getSketchTextboxContent(
   return isSketchTextboxContent(value) ? value : undefined;
 }
 
+// Versioned spread backdrop image (mirrors the illustration `illustrations[]` model).
+// A spread holds AT MOST ONE image (length ≤ 1, enforced in normalizer + producer); that
+// image accumulates generate versions, newest prepended, exactly one `is_selected`.
+export interface SketchSpreadIllustration {
+  media_url: string;
+  created_time: string; // ISO-8601
+  is_selected: boolean;
+}
+
+export interface SketchSpreadImage {
+  id: string; // UUID — stable key for ID-based reads
+  illustrations: SketchSpreadIllustration[]; // prepend-versioned; non-empty → exactly one is_selected
+}
+
 export interface SketchSpread {
   id: string;
-  media_url: string | null;
+  images: SketchSpreadImage[]; // length ≤ 1 (enforced in normalizeSketchSpread / addSketchSpreadImageVersion)
   pages: SketchPage[];
   textboxes: SketchTextbox[];
+}
+
+/**
+ * Effective backdrop URL for a sketch spread: the selected version's url, else the newest
+ * (illustrations[0]), else null when the spread has no generated image yet. Shared by the
+ * canvas adapter, the sidebar thumbnail, and the content-area preview.
+ */
+export function getSketchSpreadEffectiveUrl(spread: SketchSpread): string | null {
+  const illustrations = spread.images[0]?.illustrations ?? [];
+  return illustrations.find((i) => i.is_selected)?.media_url ?? illustrations[0]?.media_url ?? null;
 }
 
 export interface Sketch {

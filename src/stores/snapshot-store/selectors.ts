@@ -136,6 +136,40 @@ export const useSketchEntityGenerating = (kind: SketchEntityKind, entityKey: str
     }),
   );
 
+// Sketch SPREAD generate-job selectors (ephemeral). Same ref-stability discipline as the entity
+// job above: stable ref / boolean → no useShallow; fresh objects of PRIMITIVES → useShallow safe.
+export const useSketchSpreadGenerateJob = () => useSnapshotStore((s) => s.sketchSpreadGenerateJob);
+
+export const useIsSketchSpreadGenerating = (): boolean =>
+  useSnapshotStore((s) => s.sketchSpreadGenerateJob?.status === 'running');
+
+export const useSketchSpreadGenerateProgress = () =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const job = s.sketchSpreadGenerateJob;
+      if (!job) return null;
+      const done = job.tasks.filter((t) => t.status === 'completed' || t.status === 'error').length;
+      return { done, total: job.tasks.length };
+    }),
+  );
+
+export const useSketchSpreadGenerating = (spreadId: string) =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const task = s.sketchSpreadGenerateJob?.tasks.find((t) => t.spreadId === spreadId);
+      const status = task?.status ?? 'idle';
+      return { status, isGenerating: status === 'running', error: task?.error };
+    }),
+  );
+
+// Unified 1-sketch-job guard: true while EITHER the entity-sheet job OR the spread-image job is
+// running. Single store read (both Generate buttons + the nav-guard share it). Boolean → no useShallow.
+export const useIsAnySketchGenerating = (): boolean =>
+  useSnapshotStore(
+    (s) =>
+      s.sketchGenerateJob?.status === 'running' || s.sketchSpreadGenerateJob?.status === 'running',
+  );
+
 // Fetch state selectors
 export const useSnapshotFetchLoading = () => useSnapshotStore((s) => s.fetchLoading);
 export const useSnapshotFetchError = () => useSnapshotStore((s) => s.fetchError);
@@ -526,13 +560,17 @@ export const useSnapshotActions = () =>
       startSketchGenerateJob: s.startSketchGenerateJob,
       cancelSketchGenerateJob: s.cancelSketchGenerateJob,
       dismissSketchGenerateJob: s.dismissSketchGenerateJob,
+      // Sketch spread generate job (sequential spread-image generation)
+      startSketchSpreadGenerateJob: s.startSketchSpreadGenerateJob,
+      cancelSketchSpreadGenerateJob: s.cancelSketchSpreadGenerateJob,
+      dismissSketchSpreadGenerateJob: s.dismissSketchSpreadGenerateJob,
       // Sketch (spread-level CRUD — sketch-spread creative space)
       setSketch: s.setSketch,
       setSketchSpreads: s.setSketchSpreads,
       addSketchSpread: s.addSketchSpread,
       deleteSketchSpread: s.deleteSketchSpread,
       reorderSketchSpreads: s.reorderSketchSpreads,
-      setSketchSpreadMediaUrl: s.setSketchSpreadMediaUrl,
+      addSketchSpreadImageVersion: s.addSketchSpreadImageVersion,
       updateSketchPageArtDirection: s.updateSketchPageArtDirection,
       updateSketchTextbox: s.updateSketchTextbox,
       deleteSketchTextbox: s.deleteSketchTextbox,
@@ -554,5 +592,6 @@ export const useSnapshotActions = () =>
       fetchSnapshot: s.fetchSnapshot,
       saveSnapshot: s.saveSnapshot,
       autoSaveSnapshot: s.autoSaveSnapshot,
+      flushSnapshot: s.flushSnapshot,
     })),
   );

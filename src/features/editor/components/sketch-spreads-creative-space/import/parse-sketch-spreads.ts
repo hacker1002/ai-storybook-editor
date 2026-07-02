@@ -158,10 +158,10 @@ export function buildTextbox(
 }
 
 /**
- * Map one ParsedSpreadCell (spread × lane) → a thin SketchSpread (media_url:null).
+ * Map one ParsedSpreadCell (spread × lane) → a thin SketchSpread (no image yet: images:[]).
  * Narration is PER PAGE (design §4, mirroring the full-book importer): a DPS spread gets one
  * wide bottom textbox; a 2-page spread gets a left AND a right bottom textbox (each skipped when
- * its Lời văn is empty). Image stays single (media_url:null) — left+right share one backdrop.
+ * its Lời văn is empty). Image stays single — left+right share one backdrop, generated later.
  */
 export function buildSketchSpread(cell: ParsedSpreadCell, book: SketchImportBook): SketchSpread {
   const left = cell.pages[0];
@@ -169,7 +169,7 @@ export function buildSketchSpread(cell: ParsedSpreadCell, book: SketchImportBook
     const textbox = buildTextbox(left?.loi_van, book, DEFAULT_DPS_TEXTBOX_GEO);
     return {
       id: newUuid(),
-      media_url: null,
+      images: [],
       pages: [{ type: 'full', art_direction: buildArtDirection(left) }],
       textboxes: textbox ? [textbox] : [],
     };
@@ -182,7 +182,7 @@ export function buildSketchSpread(cell: ParsedSpreadCell, book: SketchImportBook
   ].filter((tb): tb is SketchTextbox => tb !== null);
   return {
     id: newUuid(),
-    media_url: null,
+    images: [],
     pages: [
       { type: 'left', art_direction: buildArtDirection(left) },
       { type: 'right', art_direction: buildArtDirection(right ?? left) },

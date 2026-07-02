@@ -205,7 +205,8 @@ export interface SketchSlice {
   addSketchSpread: (spread: SketchSpread) => void;
   deleteSketchSpread: (id: string) => void;
   reorderSketchSpreads: (from: number, to: number) => void;
-  setSketchSpreadMediaUrl: (id: string, mediaUrl: string) => void;
+  /** Prepend a generated backdrop version onto the spread (versioned images[] model). */
+  addSketchSpreadImageVersion: (spreadId: string, mediaUrl: string) => void;
   updateSketchPageArtDirection: (
     spreadId: string,
     pageType: SketchPageType,
@@ -246,6 +247,10 @@ export interface FetchSlice {
   fetchSnapshot: (bookId: string) => Promise<void>;
   saveSnapshot: () => Promise<void>;
   autoSaveSnapshot: () => Promise<void>;
+  /** Awaited flush: resolves only once the current state is persisted (or nothing to save).
+   *  Unlike autoSaveSnapshot (fire-and-forget), callers await this when a downstream step must
+   *  read the just-written snapshot from the DB (e.g. sequential spread-image generation). */
+  flushSnapshot: () => Promise<void>;
 }
 
 export interface DummiesSlice {
@@ -636,7 +641,47 @@ export interface SketchGenerateJobSlice {
   dismissSketchGenerateJob: () => void;
 }
 
-export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & {
+// --- Sketch Spread Generate Job Types (ephemeral, not persisted to DB) ---
+// One job = N spreads, generated SEQUENTIALLY (1 spread-image API call/spread) in DOC-ORDER.
+// Distinct from SketchGenerateJobSlice (entity sheets): here each spread's result is prepended as
+// a versioned backdrop (addSketchSpreadImageVersion) and the snapshot is AWAIT-flushed to the DB
+// before the next spread runs, so the backend can read prior spreads for consistency.
+
+export type SketchSpreadTaskStatus = 'pending' | 'running' | 'completed' | 'error';
+
+export interface SketchSpreadGenerateTask {
+  spreadId: string;
+  ordinal: number;        // 1-based doc-order position at enqueue — aria/toast only
+  status: SketchSpreadTaskStatus;
+  imageUrl?: string;
+  error?: string;         // friendly message or backend code
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface SketchSpreadGenerateJob {
+  id: string;
+  status: 'running' | 'completed' | 'cancelled';
+  tasks: SketchSpreadGenerateTask[]; // doc-order at enqueue
+  currentIndex: number;              // -1 when not started / finished
+  cancelRequested: boolean;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface StartSketchSpreadGenerateJobParams {
+  spreadIds: string[];    // target set (checked ?? [focused]); slice sorts to doc-order itself
+  artStyleId: string;     // caller resolves book.artstyle_id, must be non-null
+}
+
+export interface SketchSpreadGenerateJobSlice {
+  sketchSpreadGenerateJob: SketchSpreadGenerateJob | null;
+  startSketchSpreadGenerateJob: (params: StartSketchSpreadGenerateJobParams) => void;
+  cancelSketchSpreadGenerateJob: () => void;
+  dismissSketchSpreadGenerateJob: () => void;
+}
+
+export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; sketch?: Sketch; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };
