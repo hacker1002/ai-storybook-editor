@@ -1,12 +1,12 @@
-// import-script-pipeline.ts — Orchestrates the client-side import (design spec §5):
-// parseExcel → assembleSnapshot → validate → (errors? stop, no write) →
-// createImportedBook. Returns a stable contract the modal renders directly. The
-// snapshot is built + validated in-memory BEFORE any DB write (atomicity §9).
+// import-script-pipeline.ts — Orchestrates the client-side SKETCH import (design 07-01
+// §5): parseExcel → assembleSketchSnapshot → validate → (errors? stop, no write) →
+// createImportedBook (books.step=1 + snapshots.sketch). The snapshot is built + validated
+// in-memory BEFORE any DB write (atomicity §9). Returns a stable contract the modal renders.
 
 import { createLogger } from '@/utils/logger';
 import { parseExcel } from './parse-excel-workbook';
-import { assembleSnapshot } from './build-snapshot-from-parsed';
-import { validateImportSnapshot } from './validate-import-snapshot';
+import { assembleSketchSnapshot } from './build-snapshot-from-parsed';
+import { validateSketchImport } from './validate-import-snapshot';
 import { createImportedBook } from './create-imported-book';
 import type { ImportModalMeta, ImportScriptResult } from './import-script-types';
 
@@ -16,8 +16,8 @@ export async function importScript(file: File, meta: ImportModalMeta): Promise<I
   log.info('importScript', 'start', { fileName: file.name, title: meta.title });
   try {
     const parsed = await parseExcel(file);
-    const snapshot = assembleSnapshot(parsed, meta);
-    const { errors, warnings } = validateImportSnapshot(snapshot, parsed, meta);
+    const { snapshot, issues } = assembleSketchSnapshot(parsed, meta);
+    const { errors, warnings } = validateSketchImport(snapshot, parsed, meta, issues);
 
     if (errors.length > 0) {
       log.warn('importScript', 'validation failed — no write', {

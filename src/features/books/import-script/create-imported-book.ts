@@ -1,16 +1,20 @@
-// create-imported-book.ts — Atomic write for an imported book (validated decision
-// S1). Build + validate the snapshot fully in-memory FIRST; this only runs once
-// there are no errors. Inserts books@step=2 → populated snapshot → sets
-// current_version. Rolls back (deletes the book) if the snapshot insert fails, so
-// a failed import never leaves an orphan empty book. NOT a reuse of createBook
-// (which hardcodes step:1 + an empty snapshot).
+// create-imported-book.ts — Atomic write for an imported SKETCH book (design 07-01).
+// Build + validate the snapshot fully in-memory FIRST; this only runs once there are no
+// errors. Inserts books@step=1 (sketch) → populated snapshot (sketch column) → sets
+// current_version. Rolls back (deletes the book) if the snapshot insert fails, so a
+// failed import never leaves an orphan empty book. NOT a reuse of createBook.
 
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
+import type { IllustrationData } from '@/types/illustration-types';
 import type { ImportModalMeta } from './import-script-types';
-import type { ImportedSnapshot } from './build-snapshot-from-parsed';
+import { BOOK_STEP_SKETCH, type ImportedSketchSnapshot } from './build-snapshot-from-parsed';
 
 const log = createLogger('Books', 'CreateImportedBook');
+
+/** Empty illustration payload — keeps the snapshots column set intact (parity with
+ *  saveSnapshot); the imported book lives in the sketch phase, not illustration. */
+const EMPTY_ILLUSTRATION: IllustrationData = { spreads: [], sections: [] };
 
 /** YYYYMMDDHHmm — same stamp shape as book-store/snapshot-store. */
 function versionStamp(): string {
@@ -21,7 +25,7 @@ function versionStamp(): string {
 
 export async function createImportedBook(
   meta: ImportModalMeta,
-  snapshot: ImportedSnapshot,
+  snapshot: ImportedSketchSnapshot,
 ): Promise<string> {
   const {
     data: { user },
@@ -42,7 +46,7 @@ export async function createImportedBook(
       dimension: meta.dimension,
       target_audience: meta.target_audience,
       artstyle_id: meta.artstyle_id ?? null,
-      step: 2, // illustration phase
+      step: BOOK_STEP_SKETCH, // sketch phase
       type: 1,
       original_language: meta.original_language,
     })
@@ -59,12 +63,13 @@ export async function createImportedBook(
     .from('snapshots')
     .insert({
       book_id: book.id,
-      docs: snapshot.docs,
-      dummies: [],
-      illustration: snapshot.illustration,
-      props: snapshot.props,
+      sketch: snapshot.sketch,
       characters: snapshot.characters,
+      props: snapshot.props,
       stages: snapshot.stages,
+      docs: [],
+      dummies: [],
+      illustration: EMPTY_ILLUSTRATION,
       version,
       save_type: 1,
     })

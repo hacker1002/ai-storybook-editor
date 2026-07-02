@@ -1,15 +1,18 @@
-// validate-import-snapshot.ts — Fail-fast collect-all validation (design spec §9).
-// Gathers EVERY error before reporting (never throws on the first), so the modal
-// can surface a complete list. Pure; no DB. Returns { errors, warnings }.
+// validate-import-snapshot.ts — Fail-fast collect-all validation for the SKETCH import
+// (design 07-01 §9). Gathers EVERY error before reporting (never throws on the first),
+// so the modal can surface a complete list. Pure; no DB. Seeded with the spread-parse
+// issues so structural warnings/errors from the shared parser flow through.
 
 import { createLogger } from '@/utils/logger';
-import { FLOW_END } from './import-script-constants';
-import { canonNodeKey } from './parse-excel-workbook';
-import type { ImportedSnapshot } from './build-snapshot-from-parsed';
 import type { Character } from '@/types/character-types';
 import type { Prop } from '@/types/prop-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImportModalMeta, ParsedWorkbook } from './import-script-types';
+import { getSketchTextboxContent } from '@/types/sketch';
+import type { ArtDirection } from '@/types/sketch';
+import type { ImportModalMeta } from './import-script-types';
+import type { ImportedWorkbook } from './parse-excel-workbook';
+import type { ImportedSketchSnapshot } from './build-snapshot-from-parsed';
+import type { ImportIssues } from './sketch-spread-excel.types';
 
 const log = createLogger('Books', 'ValidateImport');
 
@@ -27,9 +30,7 @@ interface EntityLike {
   variants: { key: string; type: number }[];
 }
 
-/** Per-entity: unique variant keys (error), exactly one base (>1 = error, 0 = warn).
- *  0-base is advisory ("nên" §9) — stages like `bedroom: night+day` legitimately
- *  carry no base; >1 base is a real duplicate (always a doubled 'base' key). */
+/** Per-entity: unique variant keys (error), exactly one base (>1 = error, 0 = warn). */
 function checkEntityVariants(
   label: string,
   entities: EntityLike[],
@@ -39,9 +40,7 @@ function checkEntityVariants(
   for (const e of entities) {
     const seen = new Set<string>();
     for (const v of e.variants) {
-      if (seen.has(v.key)) {
-        errors.push(`${label} "${e.key}": variant "${v.key}" bị trùng`);
-      }
+      if (seen.has(v.key)) errors.push(`${label} "${e.key}": variant "${v.key}" bị trùng`);
       seen.add(v.key);
     }
     const baseCount = e.variants.filter((v) => v.type === 0).length;
@@ -50,7 +49,7 @@ function checkEntityVariants(
   }
 }
 
-function collectKnownKeys(snapshot: ImportedSnapshot): Set<string> {
+function collectKnownKeys(snapshot: ImportedSketchSnapshot): Set<string> {
   const keys = new Set<string>();
   const add = (entities: { key: string; variants: { key: string }[] }[]) => {
     for (const e of entities) {
@@ -64,86 +63,69 @@ function collectKnownKeys(snapshot: ImportedSnapshot): Set<string> {
   return keys;
 }
 
-export function validateImportSnapshot(
-  snapshot: ImportedSnapshot,
-  parsed: ParsedWorkbook,
+/** art_direction field values (excluding `stage`, which step 4 validates on its own) for
+ *  @ref scanning — avoids double-reporting a dangling stage as both error + warning. */
+function artDirectionProseValues(ad: ArtDirection): string[] {
+  return Object.entries(ad)
+    .filter(([k, v]) => k !== 'stage' && typeof v === 'string')
+    .map(([, v]) => v as string);
+}
+
+export function validateSketchImport(
+  snapshot: ImportedSketchSnapshot,
+  parsed: ImportedWorkbook,
   meta: ImportModalMeta,
+  seed: ImportIssues,
 ): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [...parsed.warnings];
+  const errors: string[] = [...seed.errors];
+  const warnings: string[] = [...seed.warnings];
 
-  // 1. Flow node ↔ Storyboard cell bijection — joined by canonical (lane, number),
-  //    NOT raw node_id (the default lane appears both bare and prefixed).
-  const nodeCanon = new Map(parsed.nodes.map((n) => [canonNodeKey(n.lane, n.spread_number), n.node_id] as const));
-  const cellCanon = new Map(parsed.cells.map((c) => [canonNodeKey(c.lane, c.spread_number), c.node_id] as const));
-  for (const [canon, id] of nodeCanon) {
-    if (!cellCanon.has(canon)) errors.push(`Node Flow "${id}" thiếu nội dung trong Storyboard`);
-  }
-  for (const [canon, id] of cellCanon) {
-    if (!nodeCanon.has(canon)) errors.push(`Storyboard "${id}" không có node tương ứng trong Flow`);
-  }
-
-  // 2. Every choice.to resolves to an existing node.
-  const nodeIds = new Set(parsed.nodes.map((n) => n.node_id));
-  for (const e of parsed.edges) {
-    if (e.type === 'choice' && !nodeIds.has(e.to)) {
-      errors.push(`Choice trỏ tới node không tồn tại: "${e.to}"`);
-    }
-  }
-
-  // 3. Every node has ≥1 out-edge (ending nodes carry a type='end'/→END edge).
-  const fromSet = new Set(parsed.edges.map((e) => e.from));
-  for (const n of parsed.nodes) {
-    if (!fromSet.has(n.node_id)) {
-      errors.push(`Node "${n.node_id}" không có edge ra (dead-end)`);
-    }
-  }
-  // also: any `to` (non-END) must be a known node
-  for (const e of parsed.edges) {
-    if (e.to && e.to.toUpperCase() !== FLOW_END && !nodeIds.has(e.to)) {
-      errors.push(`Edge trỏ tới node không tồn tại: "${e.from}" → "${e.to}"`);
-    }
-  }
-
-  // 4. Language code + narration presence.
+  // 1. Language code validity.
   if (!LANG_RE.test(meta.original_language)) {
     errors.push(`original_language không hợp lệ: "${meta.original_language}"`);
   }
-  const hasNarration = parsed.cells.some((c) => c.pages.some((p) => Boolean(p.loi_van)));
-  if (parsed.cells.length > 0 && !hasNarration) {
+
+  // 2. Narration presence — any textbox in any spread carrying any language content.
+  const hasNarration = snapshot.sketch.spreads.some((spread) =>
+    spread.textboxes.some((tb) => Object.keys(tb).some((k) => k !== 'id' && getSketchTextboxContent(tb, k))),
+  );
+  if (snapshot.sketch.spreads.length > 0 && !hasNarration) {
     warnings.push('Không tìm thấy "Lời văn" nào — narration sẽ trống');
   }
 
-  // 5. Entity variant uniqueness + single base.
+  // 3. Entity variant uniqueness + single base.
   checkEntityVariants('Character', snapshot.characters, errors, warnings);
   checkEntityVariants('Prop', snapshot.props, errors, warnings);
   checkEntityVariants('Stage', snapshot.stages, errors, warnings);
 
-  // 6. stage_variant (@key/variant) must resolve to an existing stage variant → error.
+  // 4. art_direction.stage: an @-ref MUST resolve to a catalog stage variant → error if
+  //    dangling/malformed (spec 07-01 §9). A non-@ value (author prose) is advisory only —
+  //    it never blocks the import (the Stage row is conventionally an @key/variant ref).
   const stageIndex = new Map<string, Set<string>>();
-  for (const s of snapshot.stages) {
-    stageIndex.set(s.key, new Set(s.variants.map((v) => v.key)));
-  }
-  const danglingStage = new Set<string>();
-  for (const spread of snapshot.illustration.spreads) {
-    for (const img of spread.raw_images ?? []) {
-      const sv = (img.stage_variant ?? '').trim();
-      if (!sv || danglingStage.has(sv)) continue;
+  for (const s of snapshot.stages) stageIndex.set(s.key, new Set(s.variants.map((v) => v.key)));
+  const seenStage = new Set<string>();
+  for (const spread of snapshot.sketch.spreads) {
+    for (const page of spread.pages) {
+      const sv = (page.art_direction.stage ?? '').trim();
+      if (!sv || seenStage.has(sv)) continue;
+      seenStage.add(sv);
+      if (!sv.startsWith('@')) {
+        warnings.push(`stage "${sv}" không phải @ref entity (không chặn import)`);
+        continue;
+      }
       const m = STAGE_VARIANT_RE.exec(sv);
       if (!m) {
-        danglingStage.add(sv);
-        errors.push(`stage_variant sai định dạng "@key/variant": "${sv}"`);
+        errors.push(`stage sai định dạng "@key/variant": "${sv}"`);
         continue;
       }
       const [, key, variant] = m;
       if (!stageIndex.get(key)?.has(variant)) {
-        danglingStage.add(sv);
-        errors.push(`stage_variant "${sv}" không khớp stage nào trong catalog`);
+        errors.push(`stage "${sv}" không khớp stage nào trong catalog`);
       }
     }
   }
 
-  // Warn — @ref in prose descriptions that doesn't resolve (prompt-ref, non-blocking).
+  // 5. Warn — @ref in prose (entity descriptions + art_direction fields) that doesn't resolve.
   const knownKeys = collectKnownKeys(snapshot);
   const warnedRefs = new Set<string>();
   const scanRefs = (text: string | undefined) => {
@@ -152,16 +134,18 @@ export function validateImportSnapshot(
       const key = m[1];
       if (!knownKeys.has(key) && !warnedRefs.has(key)) {
         warnedRefs.add(key);
-        warnings.push(`@ref "@${key}" trong mô tả không khớp entity nào (prompt-ref)`);
+        warnings.push(`@ref "@${key}" không khớp entity nào (prompt-ref)`);
       }
     }
   };
   for (const e of [...parsed.characters, ...parsed.props, ...parsed.stages]) scanRefs(e.description);
-  for (const spread of snapshot.illustration.spreads) {
-    for (const img of spread.raw_images ?? []) scanRefs(img.visual_description);
+  for (const spread of snapshot.sketch.spreads) {
+    for (const page of spread.pages) {
+      for (const value of artDirectionProseValues(page.art_direction)) scanRefs(value);
+    }
   }
 
-  log.info('validateImportSnapshot', 'done', {
+  log.info('validateSketchImport', 'done', {
     errorCount: errors.length,
     warningCount: warnings.length,
   });
