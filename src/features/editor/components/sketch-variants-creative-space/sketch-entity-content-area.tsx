@@ -162,7 +162,11 @@ export function SketchEntityContentArea({
       <div className="flex-1 overflow-auto p-6">
         <div className="relative flex h-full items-center justify-center">
           {focusGen.isGenerating ? (
-            entity?.media_url ? <SheetImage src={entity.media_url} name={name} /> : <EmptyPreview cfg={cfg} />
+            entity?.media_url ? (
+              <SheetImage key={entity.media_url} src={entity.media_url} name={name} onRetry={handleRetryFocus} />
+            ) : (
+              <EmptyPreview cfg={cfg} />
+            )
           ) : focusGen.error ? (
             <div className="flex flex-col items-center text-center text-muted-foreground">
               <AlertTriangle className="h-10 w-10 mb-3 text-destructive" aria-hidden="true" />
@@ -173,7 +177,7 @@ export function SketchEntityContentArea({
               </Button>
             </div>
           ) : entity?.media_url ? (
-            <SheetImage src={entity.media_url} name={name} />
+            <SheetImage key={entity.media_url} src={entity.media_url} name={name} onRetry={handleRetryFocus} />
           ) : (
             <EmptyPreview cfg={cfg} />
           )}
@@ -215,13 +219,58 @@ export function SketchEntityContentArea({
   );
 }
 
-function SheetImage({ src, name }: { src: string; name: string }) {
+// Self-contained load state so switching entities never shows the previous entity's
+// image while the new one downloads. Reset-on-src-change is done by remounting via
+// `key={src}` at the call sites (NOT useEffect+setState — banned by the React 19 lint).
+// On a dead storage URL (404), regenerate is the correct recovery — it produces a fresh
+// file — so the error state offers Retry (spec 02 edge case), not just a static hint.
+function SheetImage({ src, name, onRetry }: { src: string; name: string; onRetry: () => void }) {
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+
+  // Callback ref covers the browser-cache race: a cached image can be `complete`
+  // before React attaches onLoad, which then never fires → spinner would hang.
+  const measureRef = (node: HTMLImageElement | null) => {
+    if (node?.complete && node.naturalWidth > 0) setStatus('loaded');
+  };
+
+  if (status === 'error') {
+    return (
+      <div className="flex flex-col items-center text-center text-muted-foreground">
+        <ImageOff className="h-10 w-10 mb-3 opacity-60" aria-hidden="true" />
+        <p className="text-sm">Couldn't load {name} sheet</p>
+        <Button size="sm" variant="outline" className="mt-3" onClick={onRetry}>
+          <Sparkles className="h-4 w-4 mr-1.5" />
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <img
-      src={src}
-      alt={`${name} sketch sheet`}
-      className="max-h-full max-w-full object-contain rounded-md"
-    />
+    <>
+      <img
+        ref={measureRef}
+        src={src}
+        alt={`${name} sketch sheet`}
+        onLoad={() => setStatus('loaded')}
+        onError={() => {
+          log.warn('SheetImage', 'sheet image failed to load', { name });
+          setStatus('error');
+        }}
+        className={`max-h-full max-w-full object-contain rounded-md transition-opacity duration-200 ${
+          status === 'loaded' ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+      {status === 'loading' && (
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          role="status"
+          aria-label={`Loading ${name} sheet`}
+        >
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+        </div>
+      )}
+    </>
   );
 }
 
