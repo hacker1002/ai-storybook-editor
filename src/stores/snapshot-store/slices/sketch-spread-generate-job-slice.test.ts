@@ -3,8 +3,9 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { createSketchSlice } from './sketch-slice';
 import { createSketchSpreadGenerateJobSlice } from './sketch-spread-generate-job-slice';
-import type { SketchSpread } from '@/types/sketch';
-import { callGenerateSketchSpread } from '@/apis/sketch-spread-api';
+import type { SketchSpread, SketchPage, SketchPageType, ArtDirection } from '@/types/sketch';
+import { getSketchSpreadPageImageUrl } from '@/types/sketch';
+import { callGenerateSketchSpread, type SketchGeneratePage } from '@/apis/sketch-spread-api';
 
 // Mock the sonner toast (the snapshotId-null path toasts) + the api-client seam.
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
@@ -30,11 +31,29 @@ function createTestStore(metaId: string | null = 'snap-1') {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-const spread = (id: string): SketchSpread => ({ id, images: [], pages: [], textboxes: [] });
+// Minimal page (art_direction unused by the job orchestration).
+const page = (type: SketchPageType): SketchPage => ({ type, art_direction: {} as ArtDirection });
+// Single-'full'-page spread — 1 generate call, mirrors the original per-spread test assumptions.
+const spread = (id: string): SketchSpread => ({ id, images: [], pages: [page('full')], textboxes: [] });
+// Two-page spread — drives the left→right per-page loop + flush-after-left path.
+const twoPageSpread = (id: string): SketchSpread => ({
+  id,
+  images: [],
+  pages: [page('left'), page('right')],
+  textboxes: [],
+});
 
-const ok = (url: string) => ({
+const ok = (url: string, page: SketchGeneratePage = 'full') => ({
   success: true as const,
-  data: { imageUrl: url, storagePath: `path/${url}`, pageLayout: 'full' as const },
+  data: {
+    imageUrl: url,
+    storagePath: `path/${url}`,
+    page,
+    targetRatio: page === 'full' ? '2:1' : '1:1',
+    genAspectRatio: page === 'full' ? '2:1' : '1:1',
+    trimSide: null as 'right' | 'bottom' | null,
+    trimFraction: 0,
+  },
 });
 
 interface Deferred<T> {
@@ -105,6 +124,38 @@ describe('SketchSpreadGenerateJobSlice', () => {
     expect(job.status).toBe('completed');
     expect(job.currentIndex).toBe(-1);
     expect(job.tasks.every((t: { status: string }) => t.status === 'completed')).toBe(true);
+  });
+
+  it('2-page spread: generates left then right, flushing left before right', async () => {
+    store.getState().setSketchSpreads([twoPageSpread('a')]);
+    const dLeft = deferred<ReturnType<typeof ok>>();
+    const dRight = deferred<ReturnType<typeof ok>>();
+    mockedCall.mockReturnValueOnce(dLeft.promise as never).mockReturnValueOnce(dRight.promise as never);
+
+    start(['a']);
+    await tick(); // initial flush + first (left) call
+
+    expect(mockedCall).toHaveBeenCalledTimes(1);
+    expect(mockedCall.mock.calls[0][0].page).toBe('left');
+    const flushesAfterInitial = flushSnapshot.mock.calls.length;
+
+    dLeft.resolve(ok('a-left.png', 'left'));
+    await tick();
+
+    // Left version written + flush-after-left fired + RIGHT dispatched (gutter continuity R1).
+    expect(getSketchSpreadPageImageUrl(store.getState().sketch.spreads[0], 'left')).toBe('a-left.png');
+    expect(flushSnapshot.mock.calls.length).toBeGreaterThan(flushesAfterInitial);
+    expect(mockedCall).toHaveBeenCalledTimes(2);
+    expect(mockedCall.mock.calls[1][0].page).toBe('right');
+
+    dRight.resolve(ok('a-right.png', 'right'));
+    await tick();
+
+    expect(getSketchSpreadPageImageUrl(store.getState().sketch.spreads[0], 'right')).toBe('a-right.png');
+    const job = store.getState().sketchSpreadGenerateJob;
+    expect(job.status).toBe('completed');
+    expect(job.tasks[0].status).toBe('completed');
+    expect(job.tasks[0].imageUrl).toBe('a-right.png'); // task url = last page generated
   });
 
   it('sorts targets into DOC-ORDER (position in sketch.spreads[])', async () => {
@@ -184,6 +235,32 @@ describe('SketchSpreadGenerateJobSlice', () => {
     expect(job.status).toBe('cancelled');
     expect(job.tasks[0].status).toBe('completed'); // in-flight 'a' finished
     expect(mockedCall).toHaveBeenCalledTimes(1); // 'b' never dispatched
+  });
+
+  it('cancel between left→right marks the task terminal (not stuck running) + keeps left', async () => {
+    store.getState().setSketchSpreads([twoPageSpread('a')]);
+    const dLeft = deferred<ReturnType<typeof ok>>();
+    // Only the left call should ever fire — right must NOT be dispatched after cancel.
+    mockedCall.mockReturnValueOnce(dLeft.promise as never);
+
+    start(['a']);
+    await tick(); // initial flush + left call
+    expect(mockedCall).toHaveBeenCalledTimes(1);
+    expect(mockedCall.mock.calls[0][0].page).toBe('left');
+
+    // Cancel while the left call is in flight → the right iteration's pre-check aborts the spread.
+    store.getState().cancelSketchSpreadGenerateJob();
+    dLeft.resolve(ok('a-left.png', 'left'));
+    await tick(); // left resolves → addVersion + flush-after-left
+    await tick(); // right pre-check sees cancel → terminal task + finalize
+
+    const job = store.getState().sketchSpreadGenerateJob;
+    expect(job.status).toBe('cancelled');
+    // Task is TERMINAL (left persisted → completed), NOT stuck at 'running' (spinner would hang).
+    expect(job.tasks[0].status).toBe('completed');
+    expect(job.tasks[0].imageUrl).toBe('a-left.png');
+    expect(getSketchSpreadPageImageUrl(store.getState().sketch.spreads[0], 'left')).toBe('a-left.png');
+    expect(mockedCall).toHaveBeenCalledTimes(1); // right never dispatched
   });
 
   it('enforces one job at a time (second start is a no-op)', async () => {

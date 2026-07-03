@@ -205,8 +205,13 @@ export interface SketchSlice {
   addSketchSpread: (spread: SketchSpread) => void;
   deleteSketchSpread: (id: string) => void;
   reorderSketchSpreads: (from: number, to: number) => void;
-  /** Prepend a generated backdrop version onto the spread (versioned images[] model). */
-  addSketchSpreadImageVersion: (spreadId: string, mediaUrl: string) => void;
+  /** Prepend a generated version onto the spread's PER-PAGE image (keyed by page `type`),
+   *  creating that page's image container on first generate. */
+  addSketchSpreadImageVersion: (
+    spreadId: string,
+    pageType: SketchPageType,
+    mediaUrl: string,
+  ) => void;
   updateSketchPageArtDirection: (
     spreadId: string,
     pageType: SketchPageType,

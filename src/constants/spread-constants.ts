@@ -113,5 +113,13 @@ export const DIMMED_BY_OVERLAP_OPACITY = 0.4;
 /** Z-index reserved for sticky selection frame + hover preview overlay. */
 export const MAX_INTERACTIVE_Z = 9000;
 
+/** Z-index for confirm/alert dialogs raised over a creative-space canvas
+ *  (e.g. sketch-spread "Regenerate spreads?"). The shared shadcn AlertDialog/Dialog
+ *  ship at z-50, which the canvas item band (LAYER_CONFIG media/objects/text 1–700
+ *  + sticky selection frame up to MAX_INTERACTIVE_Z) paints over — the modal mounts
+ *  but is occluded by textboxes. Must clear the whole interactive band. Pass to
+ *  AlertDialogContent's `zIndex` prop (lifts overlay + content together). */
+export const CANVAS_CONFIRM_DIALOG_Z = MAX_INTERACTIVE_Z + 1;
+
 /** Pixel delta below which a frame mousedown→mouseup is treated as a pure click. */
 export const CLICK_NO_DRAG_THRESHOLD_PX = 3;

@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, SketchSlice } from '../types';
-import type { Sketch, SketchEntity, SketchSpread, SketchSpreadImage } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchSpread, SketchSpreadImage, SketchSpreadIllustration } from '@/types/sketch';
 import type { SketchVariant, SketchEntityKind, SketchPageType, ArtDirection, SketchTextboxContent } from '@/types/sketch';
 import { isSketchTextboxContent } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
@@ -42,10 +42,18 @@ function asEntityArray(v: unknown): SketchEntity[] {
   return Array.isArray(v) ? (v as SketchEntity[]) : [];
 }
 
+const VALID_PAGE_TYPES: readonly SketchPageType[] = ['left', 'right', 'full'];
+function isValidPageType(v: unknown): v is SketchPageType {
+  return typeof v === 'string' && (VALID_PAGE_TYPES as readonly string[]).includes(v);
+}
+
 /**
- * Back-compat per-spread normalizer for the versioned `images[]` backdrop model:
- *  - already-new shape (`images` is an array) → keep verbatim, clamp to ≤1 image.
- *  - legacy scalar `media_url: string` → wrap in a single image/illustration (is_selected).
+ * Back-compat per-spread normalizer for the PER-PAGE versioned `images[]` model (1..2 images,
+ * keyed by unique page `type`):
+ *  - already-new shape (`images` is an array) → ensure each element has a valid unique `type`,
+ *    inferring from `pages` order for legacy single-backdrop rows that predate `type`; dedupe by
+ *    type (keep first). NO length clamp — 'full' → 1, 'left'+'right' → 2.
+ *  - legacy scalar `media_url: string` → wrap as ONE image with the first page's type.
  *  - no image at all → `images: []`.
  * `pages` / `textboxes` always default to []. Non-object rows collapse to an empty spread.
  */
@@ -57,13 +65,35 @@ export function normalizeSketchSpread(raw: unknown): SketchSpread {
   const pages = Array.isArray(raw.pages) ? (raw.pages as SketchSpread['pages']) : [];
   const textboxes = Array.isArray(raw.textboxes) ? (raw.textboxes as SketchSpread['textboxes']) : [];
 
+  // Ordered page types drive `type` inference for legacy images (single backdrop, no `type`).
+  // Fall back to ['full'] when pages are absent so inference always has a target.
+  const pageTypes = pages.map((p) => p?.type).filter(isValidPageType);
+  const fallbackTypes: SketchPageType[] = pageTypes.length > 0 ? pageTypes : ['full'];
+
   let images: SketchSpreadImage[];
   if (Array.isArray(raw.images)) {
-    images = (raw.images as SketchSpreadImage[]).slice(0, 1); // clamp ≤1 (already new shape)
+    const seen = new Set<SketchPageType>();
+    const built: SketchSpreadImage[] = [];
+    (raw.images as Array<Partial<SketchSpreadImage>>).forEach((img, i) => {
+      const type: SketchPageType = isValidPageType(img?.type)
+        ? img.type
+        : fallbackTypes[i] ?? fallbackTypes[fallbackTypes.length - 1] ?? 'full';
+      if (seen.has(type)) return; // dedupe by page type (keep first)
+      seen.add(type);
+      built.push({
+        id: typeof img?.id === 'string' ? img.id : crypto.randomUUID(),
+        type,
+        illustrations: Array.isArray(img?.illustrations)
+          ? (img.illustrations as SketchSpreadIllustration[])
+          : [],
+      });
+    });
+    images = built;
   } else if (typeof raw.media_url === 'string') {
     images = [
       {
         id: crypto.randomUUID(),
+        type: fallbackTypes[0],
         illustrations: [
           { media_url: raw.media_url, created_time: new Date().toISOString(), is_selected: true },
         ],
@@ -222,17 +252,20 @@ export const createSketchSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  // Prepend a new generated version onto the spread's single backdrop image, auto-select it,
-  // and clear the previous selection. Creates the image container on first generate. Marks dirty
-  // so the awaited flushSnapshot() in the spread-generate job persists it before the next spread.
-  addSketchSpreadImageVersion: (spreadId: string, mediaUrl: string) =>
+  // Prepend a new generated version onto the spread's PER-PAGE image (keyed by page `type`),
+  // auto-select it, and clear the previous selection. Creates that page's image container on
+  // first generate for the page. Marks dirty so the awaited flushSnapshot() in the spread-generate
+  // job persists it before the next page/spread reads it back for consistency.
+  addSketchSpreadImageVersion: (spreadId: string, pageType: SketchPageType, mediaUrl: string) =>
     set((state) => {
       const spread = state.sketch.spreads.find((s) => s.id === spreadId);
       if (!spread) return;
-      if (spread.images.length === 0) {
-        spread.images = [{ id: crypto.randomUUID(), illustrations: [] }];
+      let img = spread.images.find((im) => im.type === pageType);
+      if (!img) {
+        log.debug('addSketchSpreadImageVersion', 'create page image', { spreadId, pageType });
+        spread.images.push({ id: crypto.randomUUID(), type: pageType, illustrations: [] });
+        img = spread.images[spread.images.length - 1]; // re-read as immer draft proxy
       }
-      const img = spread.images[0];
       img.illustrations.forEach((ill) => {
         ill.is_selected = false;
       });
@@ -241,7 +274,7 @@ export const createSketchSlice: StateCreator<
         created_time: new Date().toISOString(),
         is_selected: true,
       });
-      log.debug('addSketchSpreadImageVersion', 'prepend', { spreadId });
+      log.info('addSketchSpreadImageVersion', 'prepend version', { spreadId, pageType });
       state.sync.isDirty = true;
     }),
 

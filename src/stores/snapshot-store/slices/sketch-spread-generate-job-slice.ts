@@ -21,10 +21,22 @@ import type {
 } from '../types';
 import { callGenerateSketchSpread } from '@/apis/sketch-spread-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
+import type { SketchSpread, SketchPageType } from '@/types/sketch';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'SketchSpreadGenerateJobSlice');
+
+/**
+ * Pages to generate for a spread, IN ORDER: 'full' alone, else 'left' BEFORE 'right'. Left-before-
+ * right is mandatory — the backend only builds CURRENT_SPREAD_LEFT_PAGE (gutter continuity) for
+ * 'right' once the left page is drawn + persisted. Sorted explicitly, not from pages[] order.
+ */
+function orderedPageTypes(spread: SketchSpread): SketchPageType[] {
+  const present = new Set(spread.pages.map((p) => p.type));
+  if (present.has('full')) return ['full'];
+  return (['left', 'right'] as SketchPageType[]).filter((t) => present.has(t));
+}
 
 // Backend error codes → user-facing English (mirrors SKETCH_ERROR_MESSAGES in the entity job).
 const SKETCH_SPREAD_ERROR_MESSAGES: Record<string, string> = {
@@ -111,29 +123,76 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
       });
 
       try {
-        const result = await callGenerateSketchSpread({
-          snapshotId,
-          sketchSpreadId: task.spreadId,
-          artStyleId,
-        });
+        // PER-PAGE loop: 'full' → 1 call; 2-page → 'left' then 'right'. One API call = one page.
+        const pageTypes = orderedPageTypes(spread);
+        let lastUrl = '';
+        let cancelledMidSpread = false;
 
-        if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: job replaced during await
-        if (!result.success || !result.data) throw new Error(classifyError(result));
+        for (const pageType of pageTypes) {
+          // Re-check cancel / job-replacement BEFORE each page call → clean stop between left→right.
+          const cur = get().sketchSpreadGenerateJob;
+          if (!cur || cur.id !== jobId) return;
+          if (cur.cancelRequested) {
+            cancelledMidSpread = true;
+            break;
+          }
 
-        const url = result.data.imageUrl;
-        log.info('runJob', 'spread image done', { jobId, spreadId: task.spreadId });
+          const result = await callGenerateSketchSpread({
+            snapshotId,
+            sketchSpreadId: task.spreadId,
+            artStyleId,
+            page: pageType,
+          });
+
+          if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: job replaced during await
+          if (!result.success || !result.data) throw new Error(classifyError(result));
+
+          lastUrl = result.data.imageUrl;
+          log.info('runJob', 'spread page done', { jobId, spreadId: task.spreadId, page: pageType });
+
+          // Prepend the version (sync.isDirty) into the page's slot.
+          get().addSketchSpreadImageVersion(task.spreadId, pageType, lastUrl);
+
+          // Flush AFTER 'left' (before 'right') so the backend's CURRENT_SPREAD_LEFT_PAGE read for
+          // 'right' sees the left page already persisted in the DB (gutter continuity — R1).
+          if (pageType === 'left' && pageTypes.includes('right')) {
+            await get().flushSnapshot();
+            if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: reset during flush
+          }
+        }
+
+        // Cancel arrived mid-spread → stop the whole job cleanly; finalize() marks it 'cancelled'.
+        // Mark THIS task terminal too (the tasks[] status has no 'cancelled' member) — otherwise it
+        // stays 'running' and the per-page spinner overlay never clears until the next job replaces
+        // the job object. Any page already generated was persisted (flush-after-left): if a page
+        // landed, the task is 'completed' (its image exists); if cancel hit before the first page
+        // produced anything, it's 'error'.
+        if (cancelledMidSpread) {
+          set((state) => {
+            const j = state.sketchSpreadGenerateJob;
+            if (!j || j.id !== jobId) return;
+            if (lastUrl) {
+              j.tasks[i].status = 'completed';
+              j.tasks[i].imageUrl = lastUrl;
+            } else {
+              j.tasks[i].status = 'error';
+              j.tasks[i].error = 'Cancelled before this spread finished';
+            }
+            j.tasks[i].completedAt = new Date().toISOString();
+          });
+          break;
+        }
 
         set((state) => {
           const j = state.sketchSpreadGenerateJob;
           if (!j || j.id !== jobId) return;
           j.tasks[i].status = 'completed';
-          j.tasks[i].imageUrl = url;
+          j.tasks[i].imageUrl = lastUrl;
           j.tasks[i].completedAt = new Date().toISOString();
         });
 
-        // Prepend the version (sync.isDirty) then AWAIT the flush so the next spread's
-        // consistency read sees this image already persisted in the DB.
-        get().addSketchSpreadImageVersion(task.spreadId, url);
+        // AWAIT the flush after the whole spread so the NEXT spread's PREVIOUS_SPREADS_SHEET read
+        // sees this spread's pages already persisted in the DB.
         await get().flushSnapshot();
         if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: reset during flush
       } catch (err) {

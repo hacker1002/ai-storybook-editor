@@ -1,20 +1,12 @@
 // sketch-spread-content-area.tsx — right panel of the sketch-spread space.
-// Reuses CanvasSpreadView via the SketchSpread→BaseSpread adapter (single-spread focus).
-//
-// Interaction model (validation decisions):
-//  - Backdrop image: SELECTABLE, but drag/resize LOCKED. Selecting it shows a remix-style
-//    image toolbar (Extract + Edit — STUB actions this pass).
-//  - Textbox: fully editable (double-click text edit + drag/resize) — writes commit to the
-//    sketch store per-language via updateSketchTextbox / deleteSketchTextbox.
-//  - Generate: STUB button (endpoint TBD).
-//
-// Per-item drag/resize gating (SPIKE result): CanvasSpreadView's canDragItem/canResizeItem are
-// panel-wide, but the SelectionFrame only applies them to the *currently selected* item. So we
-// drive those booleans from the selected item's TYPE (captured by wrapping each render-prop's
-// onSelect) → image locked, textbox free, with no custom SelectionFrame.
+// Renders the dedicated SketchSpreadCanvas (per-page images, fit-to-screen, no bleed/staging).
+// This panel owns ONLY the Generate toolbar + regenerate confirm; all canvas interaction —
+// textbox select/drag/resize/edit/delete, per-page locked images, selection state, zoom — lives
+// inside SketchSpreadCanvas. Replaces the former CanvasSpreadView<BaseSpread> + SketchSpread→
+// BaseSpread adapter + render-prop path (removed in the dedicated-canvas cutover).
 
-import { useCallback, useMemo, useState } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
+import { useState } from 'react';
+import { Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,10 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { CanvasSpreadView } from '@/features/editor/components/canvas-spread-view';
-import { EditableImage, EditableTextbox } from '@/features/editor/components/shared-components';
-import { SpreadsTextToolbar } from '@/features/editor/components/spreads-creative-space/spreads-text-toolbar';
-import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
+import { SketchSpreadCanvas } from './sketch-spread-canvas';
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import {
   useSketchSpreadById,
@@ -38,28 +27,13 @@ import {
   useIsSketchSpreadGenerating,
   useSketchSpreadGenerateProgress,
   useIsAnySketchGenerating,
-  useSketchSpreadGenerating,
 } from '@/stores/snapshot-store/selectors';
-import { useCurrentBook, useBookTemplateLayout, useBookTypography } from '@/stores/book-store';
-import { useLanguageCode } from '@/stores/editor-settings-store';
-import { createLogger } from '@/utils/logger';
-import type {
-  ItemType,
-  ImageItemContext,
-  TextItemContext,
-  ImageToolbarContext,
-  TextToolbarContext,
-  SpreadItemActionUnion,
-} from '@/types/canvas-types';
-import type { BaseSpread, SpreadTextbox } from '@/types/spread-types';
-import type { SketchTextboxContent } from '@/types/sketch';
+import { useCurrentBook } from '@/stores/book-store';
 import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
-import { toBaseSpread } from './sketch-spread-to-base-spread-adapter';
-import { SketchSpreadImageToolbar } from './sketch-spread-image-toolbar';
+import { CANVAS_CONFIRM_DIALOG_Z } from '@/constants/spread-constants';
+import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'SketchSpreadContentArea');
-
-const RENDER_ITEMS: ItemType[] = ['image', 'textbox'];
 
 export interface SketchSpreadContentAreaProps {
   spreadId: string;
@@ -68,36 +42,17 @@ export interface SketchSpreadContentAreaProps {
   checkedSpreadIds: string[];
 }
 
-type SelectedItemType = 'image' | 'textbox' | null;
-
 export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSpreadContentAreaProps) {
   const spread = useSketchSpreadById(spreadId);
   const book = useCurrentBook();
-  const bookTypography = useBookTypography();
-  const pageNumbering = useBookTemplateLayout()?.page_numbering;
-  const {
-    updateSketchTextbox,
-    deleteSketchTextbox,
-    startSketchSpreadGenerateJob,
-    cancelSketchSpreadGenerateJob,
-  } = useSnapshotActions();
+  const { startSketchSpreadGenerateJob, cancelSketchSpreadGenerateJob } = useSnapshotActions();
 
   // Generate-job state (1 sketch job global). `anyGen` disables Generate while EITHER sketch job
-  // (entity-sheet or spread-image) runs; isSpreadJob/progress/focusGen reflect the spread job.
+  // (entity-sheet or spread-image) runs; isSpreadJob/progress reflect the spread-image job.
   const isSpreadJob = useIsSketchSpreadGenerating();
   const progress = useSketchSpreadGenerateProgress();
   const anyGen = useIsAnySketchGenerating();
-  const focusGen = useSketchSpreadGenerating(spreadId);
   const [pendingTarget, setPendingTarget] = useState<string[] | null>(null);
-
-  // Content language follows the header language selector (same as other creative spaces).
-  // Fall back to the book's original language until editor settings hydrate.
-  const langCode = useLanguageCode() || book?.original_language;
-
-  // Fixed single-spread focus view — no zoom control (design intent).
-  const [zoomLevel, setZoomLevel] = useState(100);
-  // Selected item TYPE drives per-item drag/resize gating (see file header).
-  const [selectedItemType, setSelectedItemType] = useState<SelectedItemType>(null);
 
   // Generate target: bulk-checked spreads if any, else the focused spread (job slice sorts doc-order).
   const target = checkedSpreadIds.length > 0 ? checkedSpreadIds : [spreadId];
@@ -107,38 +62,6 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
     : checkedSpreadIds.length > 0
       ? `Generate (${checkedSpreadIds.length})`
       : 'Generate';
-
-  const base = useMemo<BaseSpread | null>(
-    () => (spread ? toBaseSpread(spread) : null),
-    [spread],
-  );
-
-  // Route canvas item writes to the sketch store. Only textbox is editable; image is locked
-  // and Generate/Extract/Edit are stubs, so image/page updates are intentionally ignored.
-  const handleSpreadItemAction = useCallback(
-    (params: SpreadItemActionUnion) => {
-      const { spreadId: sid, itemType, action, itemId, data } = params;
-      if (itemType !== 'textbox' || !langCode) {
-        log.debug('handleSpreadItemAction', 'ignored', { itemType, action });
-        return;
-      }
-      if (action === 'delete') {
-        log.info('handleSpreadItemAction', 'delete textbox', { spreadId: sid, textboxId: itemId });
-        deleteSketchTextbox(sid, String(itemId));
-        return;
-      }
-      if (action === 'update') {
-        // Panel emits localized patches: data = { [langCode]: { text, geometry, typography } }.
-        const patch = data as Partial<SpreadTextbox> | null;
-        const content = patch?.[langCode];
-        if (content && typeof content === 'object') {
-          log.debug('handleSpreadItemAction', 'update textbox', { spreadId: sid, textboxId: itemId });
-          updateSketchTextbox(sid, String(itemId), langCode, content as SketchTextboxContent);
-        }
-      }
-    },
-    [langCode, updateSketchTextbox, deleteSketchTextbox],
-  );
 
   const handleGenerate = () => {
     log.info('handleGenerate', 'start', { targetCount: target.length });
@@ -152,7 +75,8 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
       return;
     }
     // Resolve "already has an image" at click-time via getState() (NOT a hook — React 19 forbids
-    // hooks in callbacks). Any target with an effective backdrop url triggers the regen confirm.
+    // hooks in callbacks). Any target with a per-page image (images[].illustrations) triggers the
+    // regen confirm — getSketchSpreadEffectiveUrl is non-null once any page has been generated.
     const spreads = useSnapshotStore.getState().sketch.spreads;
     const hadExisting = target.some((id) => {
       const s = spreads.find((x) => x.id === id);
@@ -173,85 +97,11 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
     setPendingTarget(null);
   };
 
-  const renderImageItem = useCallback(
-    (ctx: ImageItemContext<BaseSpread>) => (
-      // Selectable (isSelectable) but NOT double-click editable; drag/resize is gated OFF via
-      // canDragItem/canResizeItem while an image is the selected item.
-      <EditableImage
-        image={ctx.item}
-        index={ctx.itemIndex}
-        zIndex={ctx.zIndex}
-        isSelected={ctx.isSelected}
-        isSelectable={ctx.isSpreadSelected}
-        isEditable={false}
-        onSelect={() => {
-          setSelectedItemType('image');
-          ctx.onSelect();
-        }}
-      />
-    ),
-    [],
-  );
-
-  const renderImageToolbar = useCallback(
-    (ctx: ImageToolbarContext<BaseSpread>) => (
-      <SketchSpreadImageToolbar
-        context={{
-          item: ctx.item,
-          selectedGeometry: ctx.selectedGeometry,
-          canvasRef: ctx.canvasRef,
-          onExtract: () => toast.info('Extract — coming soon.'),
-          onEdit: () => toast.info('Edit — coming soon.'),
-        }}
-      />
-    ),
-    [],
-  );
-
-  const renderTextItem = useCallback(
-    (ctx: TextItemContext<BaseSpread>) => {
-      const result = getTextboxContentForLanguage(
-        ctx.item as unknown as Record<string, unknown>,
-        langCode ?? '',
-        bookTypography,
-      );
-      if (!result) return null;
-      const { langKey, content } = result;
-      return (
-        <EditableTextbox
-          textboxContent={content}
-          index={ctx.itemIndex}
-          zIndex={ctx.zIndex}
-          isSelected={ctx.isSelected}
-          isSelectable={ctx.isSpreadSelected}
-          isEditable={ctx.isSpreadSelected}
-          isEditing={ctx.isEditing}
-          onSelect={() => {
-            setSelectedItemType('textbox');
-            ctx.onSelect();
-          }}
-          onTextChange={(newText) =>
-            ctx.onUpdate({ [langKey]: { ...content, text: newText } } as unknown as Partial<SpreadTextbox>)
-          }
-          onEditingChange={ctx.onEditingChange ?? (() => {})}
-        />
-      );
-    },
-    [langCode, bookTypography],
-  );
-
-  const renderTextToolbar = useCallback(
-    (ctx: TextToolbarContext<BaseSpread>) => <SpreadsTextToolbar context={ctx} />,
-    [],
-  );
-
   // Race guard: parent re-focuses after a delete, but render null defensively.
-  if (!spread || !base) {
+  if (!spread) {
     log.debug('render', 'spread missing — render null', { spreadId });
     return null;
   }
-
-  const canEditSelected = selectedItemType === 'textbox';
 
   return (
     <section className="flex flex-1 flex-col overflow-hidden" role="region" aria-label="Spread canvas">
@@ -279,58 +129,13 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
         )}
       </div>
 
-      <div className="relative flex-1 overflow-auto">
-        <CanvasSpreadView<BaseSpread>
-          spreads={[base]}
-          selectedSpreadId={base.id}
-          viewMode="edit"
-          zoomLevel={zoomLevel}
-          columnsPerRow={1}
-          onSpreadSelect={() => {}}
-          onViewModeChange={() => {}}
-          onZoomChange={setZoomLevel}
-          onColumnsChange={() => {}}
-          onUpdateSpreadItem={handleSpreadItemAction}
-          onDeselect={() => setSelectedItemType(null)}
-          // Belt-and-suspenders for the drag/resize gate: the normal path updates
-          // selectedItemType via each render-prop's wrapped onSelect, but the smart-hit-test
-          // path (inert here — prop not passed) selects via onCanvasItemSelect instead. Wiring
-          // it too keeps the image locked / textbox free if smart hit-test is ever enabled.
-          onCanvasItemSelect={(sel) =>
-            setSelectedItemType(sel.type === 'textbox' ? 'textbox' : sel.type === 'image' ? 'image' : null)
-          }
-          isEditable
-          canAddSpread={false}
-          canDeleteSpread={false}
-          canReorderSpread={false}
-          canDragItem={canEditSelected}
-          canResizeItem={canEditSelected}
-          showViewToggle={false}
-          renderItems={RENDER_ITEMS}
-          renderImageItem={renderImageItem}
-          renderImageToolbar={renderImageToolbar}
-          renderTextItem={renderTextItem}
-          renderTextToolbar={renderTextToolbar}
-          pageNumbering={pageNumbering ?? undefined}
-          forceLanguageCode={langCode}
-        />
-
-        {/* Spinner overlay while the FOCUSED spread is being generated. */}
-        {focusGen.isGenerating && (
-          <div
-            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/70"
-            role="status"
-            aria-label="Generating spread image"
-          >
-            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">Generating spread image…</p>
-          </div>
-        )}
+      <div className="relative flex-1 overflow-hidden">
+        <SketchSpreadCanvas spreadId={spreadId} />
       </div>
 
       {/* Regenerate confirm — mirrors the sidebar delete-confirm / entity-space regen dialog. */}
       <AlertDialog open={pendingTarget !== null} onOpenChange={(open) => !open && setPendingTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent zIndex={CANVAS_CONFIRM_DIALOG_Z}>
           <AlertDialogHeader>
             <AlertDialogTitle>Regenerate spreads?</AlertDialogTitle>
             <AlertDialogDescription>

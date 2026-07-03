@@ -89,19 +89,31 @@ describe('normalizeSketch', () => {
   });
 });
 
-describe('normalizeSketchSpread (versioned images[] back-compat)', () => {
-  it('wraps a legacy scalar media_url into one selected illustration', () => {
-    const out = normalizeSketchSpread({ id: 's1', media_url: 'http://x/i.png', pages: [], textboxes: [] });
+describe('normalizeSketchSpread (per-page versioned images[] back-compat)', () => {
+  it('wraps a legacy scalar media_url into one selected illustration (type inferred from pages)', () => {
+    const out = normalizeSketchSpread({ id: 's1', media_url: 'http://x/i.png', pages: [{ type: 'full' }], textboxes: [] });
     expect(out.images).toHaveLength(1);
+    expect(out.images[0].type).toBe('full');
     expect(out.images[0].illustrations[0]).toMatchObject({ media_url: 'http://x/i.png', is_selected: true });
   });
 
-  it('keeps an already-new images[] verbatim and clamps to ≤1', () => {
+  it('assigns per-page types to legacy typeless images from page order (no clamp)', () => {
     const images = [
       { id: 'i1', illustrations: [{ media_url: 'u1', created_time: 't', is_selected: true }] },
       { id: 'i2', illustrations: [{ media_url: 'u2', created_time: 't', is_selected: true }] },
     ];
-    const out = normalizeSketchSpread({ id: 's1', images, pages: [], textboxes: [] });
+    const out = normalizeSketchSpread({ id: 's1', images, pages: [{ type: 'left' }, { type: 'right' }], textboxes: [] });
+    expect(out.images).toHaveLength(2);
+    expect(out.images.map((im) => im.type)).toEqual(['left', 'right']);
+    expect(out.images[0].id).toBe('i1');
+  });
+
+  it('dedupes images by page type (keeps first)', () => {
+    const images = [
+      { id: 'i1', type: 'full', illustrations: [] },
+      { id: 'i2', type: 'full', illustrations: [] },
+    ];
+    const out = normalizeSketchSpread({ id: 's1', images, pages: [{ type: 'full' }], textboxes: [] });
     expect(out.images).toHaveLength(1);
     expect(out.images[0].id).toBe('i1');
   });
@@ -119,7 +131,7 @@ describe('normalizeSketchSpread (versioned images[] back-compat)', () => {
 describe('getSketchSpreadEffectiveUrl', () => {
   const withIllustrations = (
     ill: { media_url: string; created_time: string; is_selected: boolean }[],
-  ): SketchSpread => ({ id: 's', images: ill.length ? [{ id: 'i', illustrations: ill }] : [], pages: [], textboxes: [] });
+  ): SketchSpread => ({ id: 's', images: ill.length ? [{ id: 'i', type: 'full', illustrations: ill }] : [], pages: [], textboxes: [] });
 
   it('returns the selected version url', () => {
     const s = withIllustrations([
@@ -285,20 +297,34 @@ describe('SketchSlice spread actions', () => {
     expect(store.getState().sync.isDirty).toBe(false);
   });
 
-  it('addSketchSpreadImageVersion prepends + auto-selects on the matched spread only', () => {
+  it('addSketchSpreadImageVersion prepends + auto-selects on the matched spread + page only', () => {
     seed(spread('a'), spread('b'));
-    store.getState().addSketchSpreadImageVersion('a', 'https://x/s1.png');
+    store.getState().addSketchSpreadImageVersion('a', 'left', 'https://x/s1.png');
     const imgs = store.getState().sketch.spreads[0].images;
     expect(imgs).toHaveLength(1);
+    expect(imgs[0].type).toBe('left');
     expect(imgs[0].illustrations[0]).toMatchObject({ media_url: 'https://x/s1.png', is_selected: true });
-    // Second generate: new version prepended + selected, previous deselected.
-    store.getState().addSketchSpreadImageVersion('a', 'https://x/s2.png');
+    // Second generate on the SAME page: new version prepended + selected, previous deselected.
+    store.getState().addSketchSpreadImageVersion('a', 'left', 'https://x/s2.png');
     const ill = store.getState().sketch.spreads[0].images[0].illustrations;
     expect(ill.map((i: { media_url: string }) => i.media_url)).toEqual(['https://x/s2.png', 'https://x/s1.png']);
     expect(ill[0].is_selected).toBe(true);
     expect(ill[1].is_selected).toBe(false);
     // Sibling spread untouched.
     expect(store.getState().sketch.spreads[1].images).toEqual([]);
+  });
+
+  it('addSketchSpreadImageVersion creates a separate image slot per page type', () => {
+    seed(spread('a', ['left', 'right']));
+    store.getState().addSketchSpreadImageVersion('a', 'left', 'https://x/left.png');
+    store.getState().addSketchSpreadImageVersion('a', 'right', 'https://x/right.png');
+    const imgs = store.getState().sketch.spreads[0].images;
+    expect(imgs).toHaveLength(2);
+    expect(imgs.map((im: { type: string }) => im.type).sort()).toEqual(['left', 'right']);
+    const left = imgs.find((im: { type: string }) => im.type === 'left');
+    const right = imgs.find((im: { type: string }) => im.type === 'right');
+    expect(left.illustrations[0].media_url).toBe('https://x/left.png');
+    expect(right.illustrations[0].media_url).toBe('https://x/right.png');
   });
 
   it('updateSketchPageArtDirection merges patch into the page matched by type', () => {
@@ -359,7 +385,7 @@ describe('SketchSlice spread actions', () => {
   it('mutations set isDirty; missing-target actions do not', () => {
     seed(spread('a'));
     resetDirty();
-    store.getState().addSketchSpreadImageVersion('missing', 'u');
+    store.getState().addSketchSpreadImageVersion('missing', 'full', 'u');
     store.getState().deleteSketchTextbox('missing', 't');
     store.getState().updateSketchTextbox('missing', 't', 'en', { text: 'x' });
     expect(store.getState().sync.isDirty).toBe(false);
