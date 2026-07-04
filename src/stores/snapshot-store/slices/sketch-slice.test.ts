@@ -314,6 +314,30 @@ describe('SketchSlice spread actions', () => {
     expect(store.getState().sketch.spreads[1].images).toEqual([]);
   });
 
+  it('selectSketchSpreadImageVersion flips is_selected to an existing version without prepending', () => {
+    seed(spread('a'));
+    store.getState().addSketchSpreadImageVersion('a', 'left', 'https://x/v1.png');
+    store.getState().addSketchSpreadImageVersion('a', 'left', 'https://x/v2.png'); // v2 is head/selected
+    resetDirty();
+    store.getState().selectSketchSpreadImageVersion('a', 'left', 'https://x/v1.png');
+    const ill = store.getState().sketch.spreads[0].images[0].illustrations;
+    // Order unchanged (no prepend); selection moved to v1.
+    expect(ill.map((i: { media_url: string }) => i.media_url)).toEqual(['https://x/v2.png', 'https://x/v1.png']);
+    expect(ill.find((i: { media_url: string }) => i.media_url === 'https://x/v1.png').is_selected).toBe(true);
+    expect(ill.find((i: { media_url: string }) => i.media_url === 'https://x/v2.png').is_selected).toBe(false);
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('selectSketchSpreadImageVersion no-ops (isDirty stays false) on unknown url or already-selected', () => {
+    seed(spread('a'));
+    store.getState().addSketchSpreadImageVersion('a', 'left', 'https://x/v1.png');
+    resetDirty();
+    store.getState().selectSketchSpreadImageVersion('a', 'left', 'https://x/missing.png'); // unknown url
+    store.getState().selectSketchSpreadImageVersion('a', 'left', 'https://x/v1.png'); // already selected
+    expect(store.getState().sync.isDirty).toBe(false);
+    expect(store.getState().sketch.spreads[0].images[0].illustrations[0].is_selected).toBe(true);
+  });
+
   it('addSketchSpreadImageVersion creates a separate image slot per page type', () => {
     seed(spread('a', ['left', 'right']));
     store.getState().addSketchSpreadImageVersion('a', 'left', 'https://x/left.png');

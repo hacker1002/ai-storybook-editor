@@ -7,14 +7,17 @@
 // per-page backdrops (validation session 1: NOT EditableImage).
 //
 // Interaction model:
-//  - Page images: LOCKED (plain <img> cover, pointer-events:none) — never selectable/draggable.
+//  - Page images: geometry-LOCKED cover (never drag/resize/crop) but SELECTABLE (validation
+//    session 1) — selecting one mounts the floating SketchImageToolbar (Edit + Extract). Edit /
+//    Extract are caller-owns-write: their result is appended as a NEW page-image version
+//    (addSketchSpreadImageVersion), never spawned as a layer. Selection is mutual-exclusive with
+//    the textbox selection (one item at a time). Escape deselects; Delete/Backspace do NOT delete
+//    a page image (it is versioned, not deletable). While the spread's generate job runs the image
+//    is non-selectable and the toolbar/modal are hidden (guard-at-render race-guard).
 //  - Textboxes: select / drag / resize (hard-clamped to [0,100], min 5%) / inline-edit / toolbar /
 //    delete. NO rotate, NO add-textbox. Per-language via the current header language.
 //  - Keyboard (local, only when a textbox is selected & not editing): Delete/Backspace → delete,
 //    Escape → deselect, Arrow → nudge 1% (Shift 10%).
-//
-// NOT wired into sketch-spread-content-area here — that is Phase 04. This component only needs to
-// compile + lint clean standalone.
 
 'use client';
 
@@ -53,8 +56,16 @@ import type {
   Typography,
 } from '@/types/canvas-types';
 import type { SpreadTextboxContent } from '@/types/spread-types';
+import { useCurrentBook, useBookActions } from '@/stores/book-store';
+import {
+  upsertCropPreset,
+  deleteCropPreset,
+} from '@/features/editor/components/shared-components/extract-image-modal/crop-preset-utils';
+import type { CropPreset } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { LockedPageImage } from './sketch-spread-canvas-page-image';
+import { SketchImageToolbar } from './sketch-image-toolbar';
+import { SketchImageToolsModals } from './sketch-image-tools-modals';
 import { computeSketchPageNumbers } from './compute-sketch-page-numbers';
 
 const log = createLogger('Editor', 'SketchSpreadCanvas');
@@ -108,8 +119,15 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
   const langCode = useLanguageCode();
   const focusGen = useSketchSpreadGenerating(spreadId);
   const spreadIds = useSketchSpreadIds();
-  const { updateSketchTextbox, deleteSketchTextbox } = useSnapshotActions();
+  const {
+    updateSketchTextbox,
+    deleteSketchTextbox,
+    addSketchSpreadImageVersion,
+    selectSketchSpreadImageVersion,
+  } = useSnapshotActions();
   const setZoomLevel = useSetZoomLevel();
+  const book = useCurrentBook();
+  const { updateBook } = useBookActions();
 
   const frameRef = useRef<HTMLDivElement>(null);
   // Latest committed-pending geometry during an active drag/resize — read only in handlers.
@@ -120,6 +138,29 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
   const [activeHandle, setActiveHandle] = useState<ResizeHandle | null>(null);
   // Live drag/resize preview (local) — committed to the store on END (not per-frame).
   const [previewGeometry, setPreviewGeometry] = useState<Geometry | null>(null);
+  // Page-image selection (mutual-exclusive with textbox) + which shared modal is open. selImg is
+  // live-derived from selectedImageId below, so `activeModal` alone (no imageId) is enough state.
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [activeModal, setActiveModal] = useState<'edit' | 'extract' | null>(null);
+
+  // Crop presets live on the book (book.crop_presets), CRUD'd via book-store updateBook — mirror
+  // raw/object main-views so the sketch Extract crop tab gets FULL preset management.
+  const handleUpsertCropPreset = useCallback(
+    (preset: CropPreset) => {
+      if (!book) return;
+      log.debug('handleUpsertCropPreset', 'upsert crop preset', { presetId: preset.id });
+      void updateBook(book.id, { crop_presets: upsertCropPreset(book.crop_presets ?? [], preset) });
+    },
+    [book, updateBook],
+  );
+  const handleDeleteCropPreset = useCallback(
+    (presetId: string) => {
+      if (!book) return;
+      log.debug('handleDeleteCropPreset', 'delete crop preset', { presetId });
+      void updateBook(book.id, { crop_presets: deleteCropPreset(book.crop_presets ?? [], presetId) });
+    },
+    [book, updateBook],
+  );
 
   // Broadcast zoom=100 on mount so reused EditableTextbox/SelectionFrame read the right scale
   // instead of a stale value left by another creative space (insight #1). This calls the store
@@ -139,9 +180,32 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
     setEditingTextboxId(null);
     setPreviewGeometry(null);
     setActiveHandle(null);
+    setSelectedImageId(null);
+    // Clear any open modal too — otherwise re-selecting the same image would auto-reopen it.
+    setActiveModal(null);
     // Drop any in-flight drag geometry so a stale value can't commit onto the next selection
     // if the SelectionFrame unmounts mid-drag (selection flips before onDragEnd fires).
     latestGeoRef.current = null;
+  }, []);
+
+  // Selecting a page image clears any textbox selection (one item at a time), and vice versa.
+  const selectImage = useCallback((imageId: string) => {
+    log.debug('selectImage', 'select page image', { imageId });
+    setSelectedImageId(imageId);
+    setSelectedTextboxId(null);
+    setEditingTextboxId(null);
+    setPreviewGeometry(null);
+    setActiveHandle(null);
+    // Clear any stale modal intent so mere (re)selection can't auto-open a modal that survived an
+    // unmount which bypassed onOpenChange (e.g. a generation-gate flip).
+    setActiveModal(null);
+    latestGeoRef.current = null;
+  }, []);
+
+  const selectTextbox = useCallback((textboxId: string) => {
+    setSelectedTextboxId(textboxId);
+    setSelectedImageId(null);
+    setActiveModal(null);
   }, []);
 
   const commitGeometry = useCallback(
@@ -175,6 +239,16 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
   // selected and NOT in inline-edit. Delete/Backspace → delete, Escape → deselect, Arrow → nudge.
   const handleFrameKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Image selection: Escape deselects. NOTE: Delete/Backspace are intentionally NOT bound for
+      // a selected page image — the page image is never deleted, only versioned.
+      if (selectedImageId) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          deselect();
+        }
+        return;
+      }
+
       if (!selectedTextboxId || editingTextboxId) return;
 
       // Escape always clears the (possibly stale) selection.
@@ -217,7 +291,7 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
       });
       updateSketchTextbox(spreadId, selectedTextboxId, langCode, { geometry: next });
     },
-    [selectedTextboxId, editingTextboxId, spread, langCode, spreadId, deselect, deleteSketchTextbox, updateSketchTextbox],
+    [selectedImageId, selectedTextboxId, editingTextboxId, spread, langCode, spreadId, deselect, deleteSketchTextbox, updateSketchTextbox],
   );
 
   if (!spread) {
@@ -238,6 +312,15 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
   } as unknown as BaseSpread;
 
   const ratio = trim.width / trim.height;
+
+  // Live-derive the selected page image from the store each render (mirror the remix canvas) so an
+  // Edit/Extract commit that appends a new version is reflected without re-opening. `showImageUI`
+  // is the render-time race-guard: while the spread's generate job runs we keep the selection but
+  // hide the toolbar/modal (no set-state-in-effect — React-19 rule).
+  const selImg = spread.images.find((im) => im.id === selectedImageId);
+  const selUrl = selImg ? getSketchSpreadPageImageUrl(spread, selImg.type) : null;
+  const selOrdinal = selImg ? spread.pages.findIndex((p) => p.type === selImg.type) + 1 : 0;
+  const showImageUI = Boolean(selImg) && !focusGen.isGenerating;
 
   return (
     <div
@@ -283,11 +366,12 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
         />
         <SpineDivider />
 
-        {/* --- Image layer (per page type; locked plain <img> cover) --- */}
+        {/* --- Image layer (per page type; geometry-locked cover, selectable) --- */}
         {spread.pages.map((p, i) => {
           const geometry = SKETCH_PAGE_GEOMETRY[p.type];
           if (!geometry) return null; // guard a corrupt page type (unvalidated in normalizer)
           const url = getSketchSpreadPageImageUrl(spread, p.type);
+          const img = spread.images.find((im) => im.type === p.type);
           return (
             <LockedPageImage
               key={`${p.type}-${url ?? 'none'}`}
@@ -295,6 +379,8 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
               url={url}
               generating={focusGen.isGenerating}
               ordinal={i + 1}
+              isSelected={Boolean(img) && img?.id === selectedImageId}
+              onSelect={img ? () => selectImage(img.id) : undefined}
             />
           );
         })}
@@ -325,7 +411,7 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
             isSpreadSelected: true,
             selectedGeometry: displayGeometry,
             canvasRef: frameRef,
-            onSelect: () => setSelectedTextboxId(tb.id),
+            onSelect: () => selectTextbox(tb.id),
             onTextChange: (text: string) =>
               updateSketchTextbox(spreadId, tb.id, langCode, { text }),
             // Toolbar geometry edits emit { [langCode]: fullContent }; unwrap → per-language patch.
@@ -360,8 +446,8 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
                 isEditable
                 isEditing={isEdit}
                 onSelect={() => {
-                  log.info('selectTextbox', 'textbox selected', { index: i });
-                  setSelectedTextboxId(tb.id);
+                  log.info('onSelectTextbox', 'textbox selected', { index: i });
+                  selectTextbox(tb.id);
                 }}
                 onTextChange={(text) => updateSketchTextbox(spreadId, tb.id, langCode, { text })}
                 onEditingChange={(editing) => setEditingTextboxId(editing ? tb.id : null)}
@@ -412,7 +498,40 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
             </Fragment>
           );
         })}
+
+        {/* --- Selected page image: floating Edit/Extract toolbar (portal) --- */}
+        {showImageUI && selImg && (
+          <SketchImageToolbar
+            selectedGeometry={SKETCH_PAGE_GEOMETRY[selImg.type]}
+            canvasRef={frameRef}
+            onEditImage={() => {
+              log.info('onEditImage', 'open sketch edit modal', { pageType: selImg.type });
+              setActiveModal('edit');
+            }}
+            onExtractImage={() => {
+              log.info('onExtractImage', 'open sketch extract modal', { pageType: selImg.type });
+              setActiveModal('extract');
+            }}
+          />
+        )}
       </div>
+
+      {/* --- Shared image modals (caller-owns-write → result appended as a new page version). --- */}
+      {activeModal && selImg && !focusGen.isGenerating && (
+        <SketchImageToolsModals
+          activeModal={activeModal}
+          image={selImg}
+          imageUrl={selUrl}
+          ordinal={selOrdinal}
+          spreadId={spreadId}
+          cropPresets={book?.crop_presets ?? undefined}
+          onUpsertCropPreset={handleUpsertCropPreset}
+          onDeleteCropPreset={handleDeleteCropPreset}
+          onPersistVersion={(url) => addSketchSpreadImageVersion(spreadId, selImg.type, url)}
+          onSelectVersion={(url) => selectSketchSpreadImageVersion(spreadId, selImg.type, url)}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
     </div>
   );
 }

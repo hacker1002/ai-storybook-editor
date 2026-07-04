@@ -278,6 +278,28 @@ export const createSketchSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
+  // Re-select an EXISTING version of the spread's per-page image by media_url (clears the prior
+  // selection). Mirrors addSketchSpreadImageVersion's selection semantics WITHOUT prepending —
+  // used when the Edit modal re-picks an older variant (caller-owns-write). Marks dirty so the
+  // effective url change persists.
+  selectSketchSpreadImageVersion: (spreadId: string, pageType: SketchPageType, mediaUrl: string) =>
+    set((state) => {
+      const spread = state.sketch.spreads.find((s) => s.id === spreadId);
+      if (!spread) return;
+      const img = spread.images.find((im) => im.type === pageType);
+      if (!img) {
+        log.debug('selectSketchSpreadImageVersion', 'no page image', { spreadId, pageType });
+        return;
+      }
+      const target = img.illustrations.find((ill) => ill.media_url === mediaUrl);
+      if (!target || target.is_selected) return; // unknown url or already selected → no-op
+      img.illustrations.forEach((ill) => {
+        ill.is_selected = ill.media_url === mediaUrl;
+      });
+      log.info('selectSketchSpreadImageVersion', 'select version', { spreadId, pageType });
+      state.sync.isDirty = true;
+    }),
+
   // Art-direction identity = page `type` ('left'|'right'|'full'); merges a partial patch.
   updateSketchPageArtDirection: (
     spreadId: string,

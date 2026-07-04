@@ -24,7 +24,7 @@ import type { EditToolKey } from './edit-image-modal/edit-image-modal-constants'
 import type { ExtractTabKey } from './extract-image-modal/extract-image-modal-constants';
 
 /** Creative space whose image toolbar mounts the shared Generate/Edit/Extract modals. */
-export type ToolSpace = 'raw' | 'object' | 'remix';
+export type ToolSpace = 'raw' | 'object' | 'remix' | 'sketch';
 
 /** Per-space availability lists (gate #1). A key present here is available-in-space; the
  *  modal registry's `enabled` flag still decides active vs coming-soon. */
@@ -52,6 +52,14 @@ export const SPACE_TOOL_MATRIX: Record<ToolSpace, SpaceToolConfig> = {
     generate: ['upload'],
     edit: ['inpaint', 'upscale', 'erasor', 'remove_background'],
     extract: [],
+  },
+  sketch: {
+    // Sketch page image = caller-owns-write (result → new page-image version, not a layer).
+    // Generate button hidden here: sketch pages are (re)generated via the dedicated per-page
+    // Generate-SPREAD job, not this image toolbar.
+    generate: [],
+    edit: ['inpaint', 'erasor'], // region redraw + erase
+    extract: ['crop'],           // crop = reframe/recompose page → new version
   },
 };
 

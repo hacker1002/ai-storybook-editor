@@ -212,6 +212,13 @@ export interface SketchSlice {
     pageType: SketchPageType,
     mediaUrl: string,
   ) => void;
+  /** Re-select an EXISTING per-page image version by media_url (clears the prior selection).
+   *  Used by the Edit modal when the user re-picks an older variant (no new version appended). */
+  selectSketchSpreadImageVersion: (
+    spreadId: string,
+    pageType: SketchPageType,
+    mediaUrl: string,
+  ) => void;
   updateSketchPageArtDirection: (
     spreadId: string,
     pageType: SketchPageType,

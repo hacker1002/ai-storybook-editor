@@ -571,6 +571,7 @@ export const useSnapshotActions = () =>
       deleteSketchSpread: s.deleteSketchSpread,
       reorderSketchSpreads: s.reorderSketchSpreads,
       addSketchSpreadImageVersion: s.addSketchSpreadImageVersion,
+      selectSketchSpreadImageVersion: s.selectSketchSpreadImageVersion,
       updateSketchPageArtDirection: s.updateSketchPageArtDirection,
       updateSketchTextbox: s.updateSketchTextbox,
       deleteSketchTextbox: s.deleteSketchTextbox,

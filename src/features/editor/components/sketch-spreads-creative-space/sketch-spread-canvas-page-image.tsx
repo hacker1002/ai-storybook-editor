@@ -1,12 +1,17 @@
 // sketch-spread-canvas-page-image.tsx — LockedPageImage: a per-page sketch backdrop for the
-// dedicated SketchSpreadCanvas. Deliberately a PLAIN <img object-fit:cover> (NOT EditableImage —
-// validation session 1): non-selectable, non-draggable, clipped to its per-page cell.
+// dedicated SketchSpreadCanvas. A PLAIN <img object-fit:cover> (NOT EditableImage — keeps cover;
+// EditableImage is object-contain): geometry-LOCKED (never drag/resize/crop) but, since
+// validation session 1 (2026-07-04), SELECTABLE — clicking a rendered page image selects it so
+// the SketchImageToolbar (Edit/Extract) can mount. Selection highlight = an inset ring drawn on
+// the cell (NOT SelectionFrame, which forces a hard border + a Moveable mount even when
+// drag/resize are disabled). Inset (not outside) so the highlight stays visible for a full-bleed
+// page whose cell fills — and is clipped by — the frame's overflow.
 //
 // States:
-//  - has url            → <img> cover fill
+//  - has url            → <img> cover fill (selectable when not generating)
 //  - onError            → static "image unavailable" placeholder (imgError local state)
-//  - no url             → static "no sketch yet" placeholder
-//  - generating (spread focus job running) → spinner overlay on top of whichever state
+//  - no url             → static "no sketch yet" placeholder (never selectable)
+//  - generating (spread focus job running) → spinner overlay + non-selectable (race-guard)
 //
 // Error state resets naturally on url change because the parent keys this component by url
 // (remount) — avoids a set-state-in-effect (React-19 lint error).
@@ -29,14 +34,51 @@ export interface LockedPageImageProps {
   generating: boolean;
   /** 1-based page ordinal for the alt text (no sensitive data). */
   ordinal: number;
+  /** Selection highlight — inset ring when true. */
+  isSelected: boolean;
+  /** Select this page image. Only wired when the image is selectable (has url, not generating). */
+  onSelect?: () => void;
 }
 
-export function LockedPageImage({ geometry, url, generating, ordinal }: LockedPageImageProps) {
+export function LockedPageImage({
+  geometry,
+  url,
+  generating,
+  ordinal,
+  isSelected,
+  onSelect,
+}: LockedPageImageProps) {
   const [imgError, setImgError] = useState(false);
+
+  // A page image is selectable only when it has a resolved url and no generate job is running
+  // (race-guard — design §5.2). Placeholder / errored / generating pages are inert.
+  const canSelect = Boolean(url) && !imgError && !generating;
+
+  const handleSelect = () => {
+    if (!canSelect) return;
+    log.debug('handleSelect', 'select page image', { ordinal, isSelected });
+    onSelect?.();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!canSelect) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleSelect();
+    }
+  };
+
+  const cellClassName = [
+    'absolute overflow-hidden',
+    canSelect ? 'cursor-pointer pointer-events-auto' : 'pointer-events-none',
+    isSelected ? 'ring-2 ring-inset ring-primary' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div
-      className="pointer-events-none absolute overflow-hidden"
+      className={cellClassName}
       style={{
         left: `${geometry.x}%`,
         top: `${geometry.y}%`,
@@ -44,11 +86,18 @@ export function LockedPageImage({ geometry, url, generating, ordinal }: LockedPa
         height: `${geometry.h}%`,
       }}
       data-sketch-page-image={ordinal}
+      // Selectable → a toggle button (valid aria-pressed); otherwise a static labeled image.
+      role={canSelect ? 'button' : 'img'}
+      aria-label={`Spread page ${ordinal} sketch`}
+      aria-pressed={canSelect ? isSelected : undefined}
+      tabIndex={canSelect ? 0 : -1}
+      onClick={canSelect ? handleSelect : undefined}
+      onKeyDown={canSelect ? handleKeyDown : undefined}
     >
       {url && !imgError ? (
         <img
           src={url}
-          alt={`Spread page ${ordinal} sketch`}
+          alt=""
           draggable={false}
           onError={() => {
             log.debug('onError', 'page image load failed', { ordinal });
