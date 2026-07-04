@@ -79,6 +79,7 @@ export function getIconsForStep(step: PipelineStep): IconRailItemConfig[] {
 
 // Default creative space per step (overrides first-icon fallback)
 const STEP_DEFAULT_CREATIVE_SPACE: Partial<Record<PipelineStep, string>> = {
+  sketch: 'sketch-spread',
   illustration: 'spread',
 };
 
