@@ -30,6 +30,7 @@ import {
 import { useCurrentBook } from '@/stores/book-store';
 import type { SketchEntityKind } from '@/types/sketch';
 import { titleCase, type KindConfig } from './sketch-variants-constants';
+import { ImageDownloadButton } from '@/features/editor/components/shared-components/image-download-button';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'SketchEntityContentArea');
@@ -248,19 +249,31 @@ function SheetImage({ src, name, onRetry }: { src: string; name: string; onRetry
 
   return (
     <>
-      <img
-        ref={measureRef}
-        src={src}
-        alt={`${name} sketch sheet`}
-        onLoad={() => setStatus('loaded')}
-        onError={() => {
-          log.warn('SheetImage', 'sheet image failed to load', { name });
-          setStatus('error');
-        }}
-        className={`max-h-full max-w-full object-contain rounded-md transition-opacity duration-200 ${
-          status === 'loaded' ? 'opacity-100' : 'opacity-0'
-        }`}
-      />
+      {/* inline-block group shrink-wraps the object-contain image so the hover download
+          button anchors to the image's rendered top-right corner (not the letterboxed cell). */}
+      <div className="group relative inline-block max-h-full max-w-full">
+        <img
+          ref={measureRef}
+          src={src}
+          alt={`${name} sketch sheet`}
+          onLoad={() => setStatus('loaded')}
+          onError={() => {
+            log.warn('SheetImage', 'sheet image failed to load', { name });
+            setStatus('error');
+          }}
+          className={`max-h-full max-w-full object-contain rounded-md transition-opacity duration-200 ${
+            status === 'loaded' ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        {status === 'loaded' && (
+          <ImageDownloadButton
+            url={src}
+            filename={`${name}-sketch-sheet`}
+            label={`Download ${name} sheet`}
+            className="absolute right-2 bottom-2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          />
+        )}
+      </div>
       {status === 'loading' && (
         <div
           className="absolute inset-0 flex items-center justify-center"

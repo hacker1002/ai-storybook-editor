@@ -29,3 +29,4 @@ export { CreateAssetDialog } from './create-asset-dialog';
 export type { CreateAssetDialogProps } from './create-asset-dialog';
 export { EditImagePopover } from './edit-image-popover';
 export type { EditImagePopoverProps, EditImagePopoverReference } from './edit-image-popover';
+export { ImageDownloadButton } from './image-download-button';

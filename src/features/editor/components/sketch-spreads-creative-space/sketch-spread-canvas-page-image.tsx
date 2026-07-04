@@ -15,12 +15,16 @@
 //
 // Error state resets naturally on url change because the parent keys this component by url
 // (remount) — avoids a set-state-in-effect (React-19 lint error).
+//
+// A hover-revealed ImageDownloadButton (bottom-right, group-hover) is shown whenever a real image
+// is rendered; its click stopPropagation-s so downloading never toggles cell selection.
 
 'use client';
 
 import { useState } from 'react';
 import { ImageOff, Loader2 } from 'lucide-react';
 import type { Geometry } from '@/types/canvas-types';
+import { ImageDownloadButton } from '@/features/editor/components/shared-components/image-download-button';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'SketchLockedPageImage');
@@ -68,8 +72,13 @@ export function LockedPageImage({
     }
   };
 
+  // Show the hover download button whenever a real image is rendered (has url, not errored,
+  // not generating). It needs pointer events, which the cell only grants when canSelect —
+  // and canSelect === (url && !imgError && !generating), so the two align exactly.
+  const showDownload = Boolean(url) && !imgError && !generating;
+
   const cellClassName = [
-    'absolute overflow-hidden',
+    'group absolute overflow-hidden',
     canSelect ? 'cursor-pointer pointer-events-auto' : 'pointer-events-none',
     isSelected ? 'ring-2 ring-inset ring-primary' : '',
   ]
@@ -110,6 +119,15 @@ export function LockedPageImage({
           <ImageOff className="h-6 w-6 opacity-60" aria-hidden="true" />
           <span className="text-[11px]">{imgError ? 'Image unavailable' : 'No sketch yet'}</span>
         </div>
+      )}
+
+      {showDownload && url && (
+        <ImageDownloadButton
+          url={url}
+          filename={`spread-page-${ordinal}`}
+          label={`Download spread page ${ordinal}`}
+          className="absolute right-1.5 bottom-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        />
       )}
 
       {generating && (
