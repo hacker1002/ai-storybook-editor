@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { useSketchSpreadById, useSnapshotActions } from '@/stores/snapshot-store/selectors';
 import type { ArtDirection, SketchPageType, SketchSpread } from '@/types/sketch';
 import { AD_FIELD_LAYOUT, AD_KEYS, AD_LABELS, PAGE_LABELS } from './edit-spread-modal.constants';
+import { CANVAS_CONFIRM_DIALOG_Z } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'EditSpreadModal');
@@ -155,7 +156,10 @@ export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent
+        zIndex={CANVAS_CONFIRM_DIALOG_Z}
+        className="max-w-3xl max-h-[85vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>Edit spread — art direction</DialogTitle>
           <DialogDescription>
