@@ -56,7 +56,9 @@ import type {
   Typography,
 } from '@/types/canvas-types';
 import type { SpreadTextboxContent } from '@/types/spread-types';
-import { useCurrentBook, useBookActions } from '@/stores/book-store';
+import { useCurrentBook, useBookActions, useBookStepTypography } from '@/stores/book-store';
+import { mapTypographyToTextbox } from '@/constants/book-defaults';
+import { DEFAULT_TYPOGRAPHY } from '@/constants/config-constants';
 import {
   upsertCropPreset,
   deleteCropPreset,
@@ -128,6 +130,9 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
   const setZoomLevel = useSetZoomLevel();
   const book = useCurrentBook();
   const { updateBook } = useBookActions();
+  // Sketch-step book typography — backfills the 8 fields legacy sketch textboxes
+  // (stored only { size, color }) omit, at render time (no store mutation).
+  const sketchStepTypo = useBookStepTypography('sketch');
 
   const frameRef = useRef<HTMLDivElement>(null);
   // Latest committed-pending geometry during an active drag/resize — read only in handlers.
@@ -325,7 +330,11 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
   return (
     <div
       className="relative flex h-full w-full items-center justify-center overflow-hidden"
-      style={{ containerType: 'size' }}
+      // isolate: contain the canvas stacking band (divider z:1 … textbox/frame z:700) so it can't
+      // out-paint the SpreadsTextToolbar, which portals to document.body with z-auto. Without this,
+      // `container-type: size` on a z-auto relative box does NOT confine children in Chrome, and the
+      // spine divider / textboxes leak to the root context and paint over the floating toolbar.
+      style={{ containerType: 'size', isolation: 'isolate' }}
     >
       <div
         ref={frameRef}
@@ -390,15 +399,24 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
           const content = getSketchTextboxContent(tb, langCode);
           if (!content) return null; // no content for the current language → skip
 
+          // Legacy sketch textboxes persisted only { size, color }; backfill the
+          // remaining 8 typography fields from book.typography.sketch[lang] at
+          // render time (user-set values win; no store mutation).
+          const resolvedTypography: Typography = {
+            ...mapTypographyToTextbox(sketchStepTypo?.[langCode] ?? DEFAULT_TYPOGRAPHY),
+            ...content.typography,
+          };
+
           const isSel = tb.id === selectedTextboxId;
           const isEdit = tb.id === editingTextboxId;
           const displayGeometry = isSel && previewGeometry ? previewGeometry : content.geometry;
           // During a live drag/resize the textbox renders at the preview geometry so it moves with
           // the SelectionFrame; the store write happens once on END (commitGeometry).
-          const displayContent: SpreadTextboxContent =
-            displayGeometry === content.geometry
-              ? (content as SpreadTextboxContent)
-              : ({ ...content, geometry: displayGeometry } as SpreadTextboxContent);
+          const displayContent: SpreadTextboxContent = {
+            ...(content as SpreadTextboxContent),
+            typography: resolvedTypography,
+            geometry: displayGeometry,
+          };
 
           const startGeometry = content.geometry;
 
@@ -423,7 +441,9 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
             },
             onFormatText: (format: Partial<Typography>) =>
               updateSketchTextbox(spreadId, tb.id, langCode, {
-                typography: { ...content.typography, ...format },
+                // Persist the resolved (full 10-field) typography so a format edit
+                // also upgrades a legacy { size, color } textbox in one write.
+                typography: { ...resolvedTypography, ...format },
               }),
             onDelete: () => {
               log.info('onDelete', 'delete textbox via toolbar', { textboxId: tb.id });

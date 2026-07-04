@@ -236,6 +236,18 @@ export interface TypographySettings {
   text_transform: string;
 }
 
+// ── Book typography (books.typography JSONB, DB-CHANGELOG 2026-07-04 BREAKING) ──
+// Nested by editor step: { [step]: { [language_key]: TypographySettings } }.
+// Each step slice owns an independent per-language typography map so Force Apply
+// / edits in one step never bleed into another. `branch.typography` stays FLAT
+// (separate column/type BranchTypographySettings) — do NOT nest that one.
+export type TypographyStep = 'sketch' | 'illustration' | 'retouch';
+/** Flat per-language typography map for a single step (legacy book.typography shape). */
+export type StepTypography = Record<string, TypographySettings>;
+/** Full nested book typography keyed by step. */
+export type BookTypography = Record<TypographyStep, StepTypography>;
+export const TYPOGRAPHY_STEPS: TypographyStep[] = ['sketch', 'illustration', 'retouch'];
+
 // Per-language narrator voice entry (inside NarratorSettings hybrid JSONB)
 export interface NarratorLanguageEntry {
   voice_id: string;
@@ -340,7 +352,7 @@ export interface Book {
   era_id: string | null;
   location_id: string | null;
   artstyle_id: string | null;
-  typography: Record<string, TypographySettings> | null;
+  typography: BookTypography | null;
   narrator: NarratorSettings | null;
   shape: BookShape | null;
   branch: BookBranch | null;

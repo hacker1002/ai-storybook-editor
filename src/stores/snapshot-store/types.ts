@@ -1,4 +1,4 @@
-import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType } from '@/types/editor';
+import type { ManuscriptDoc, SnapshotMeta, SyncState, DocType, TypographyStep, TypographySettings } from '@/types/editor';
 import type {
   Sketch,
   SketchEntity,
@@ -326,6 +326,21 @@ export interface IllustrationSlice {
   deleteBranchSettingLocale: (spreadId: string, languageKey: string) => void;
   updateBranchLocale: (spreadId: string, branchIndex: number, languageKey: string, content: BranchLocalizedContent) => void;
   deleteBranchLocale: (spreadId: string, branchIndex: number, languageKey: string) => void;
+}
+
+// TypographyApplySlice — cross-cutting "Force Apply" engine. No own state;
+// mutates textboxes across state.sketch + state.illustration by step.
+export interface TypographyApplySlice {
+  /**
+   * Override the typography block on every textbox of `step` + `lang`
+   * (text/geometry/audio preserved). Skips textboxes lacking that language
+   * entry. Sets dirty; the debounced flusher persists in one write.
+   */
+  applyTypographyToStepTextboxes: (
+    step: TypographyStep,
+    lang: string,
+    typo: TypographySettings,
+  ) => void;
 }
 
 // RetouchSlice — no own state, operates on playable layers in state.illustration.spreads[]
@@ -693,7 +708,7 @@ export interface SketchSpreadGenerateJobSlice {
   dismissSketchSpreadGenerateJob: () => void;
 }
 
-export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & {
+export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & TypographyApplySlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; sketch?: Sketch; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

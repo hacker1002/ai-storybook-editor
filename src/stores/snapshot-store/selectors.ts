@@ -456,6 +456,8 @@ export const useSnapshotActions = () =>
       deleteBranchSettingLocale: s.deleteBranchSettingLocale,
       updateBranchLocale: s.updateBranchLocale,
       deleteBranchLocale: s.deleteBranchLocale,
+      // Typography Force Apply (cross-step)
+      applyTypographyToStepTextboxes: s.applyTypographyToStepTextboxes,
       // Retouch (playable layers on illustration.spreads)
       addRetouchImage: s.addRetouchImage,
       updateRetouchImage: s.updateRetouchImage,

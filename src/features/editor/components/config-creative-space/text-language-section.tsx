@@ -17,6 +17,9 @@ interface TextLanguageSectionProps {
   langLabel: string;
   typography: TypographySettings;
   onChange: (langCode: string, updates: Partial<TypographySettings>) => void;
+  /** Opens the Force Apply confirm for this language (pushes typography to every
+   *  textbox of the active step). Omit to hide the button. */
+  onForceApply?: () => void;
 }
 
 export function TextLanguageSection({
@@ -24,6 +27,7 @@ export function TextLanguageSection({
   langLabel,
   typography,
   onChange,
+  onForceApply,
 }: TextLanguageSectionProps) {
   const typo = { ...DEFAULT_TYPOGRAPHY, ...typography };
 
@@ -68,8 +72,20 @@ export function TextLanguageSection({
 
   return (
     <div className="flex flex-col gap-4 border-b pb-5 last:border-b-0">
-      {/* Language header */}
-      <p className="text-xs font-bold uppercase tracking-wider">{langLabel}</p>
+      {/* Language header + Force Apply */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-wider">{langLabel}</p>
+        {onForceApply && (
+          <button
+            type="button"
+            onClick={onForceApply}
+            className="rounded border border-primary/40 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+            title="Ghi đè typography xuống mọi textbox của bước hiện tại"
+          >
+            Force Apply
+          </button>
+        )}
+      </div>
 
       {/* TEXTBOX TYPOGRAPHY */}
       <div>

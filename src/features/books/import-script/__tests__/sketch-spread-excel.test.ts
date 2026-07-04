@@ -20,10 +20,14 @@ import {
 const book: SketchImportBook = {
   original_language: 'vi_VN',
   typography: {
-    vi_VN: {
-      size: 20, weight: 400, style: 'normal', family: 'Nunito', color: '#111111',
-      line_height: 1.4, letter_spacing: 0, decoration: 'none', text_align: 'left', text_transform: 'none',
+    sketch: {
+      vi_VN: {
+        size: 20, weight: 400, style: 'normal', family: 'Nunito', color: '#111111',
+        line_height: 1.4, letter_spacing: 0, decoration: 'none', text_align: 'left', text_transform: 'none',
+      },
     },
+    illustration: {},
+    retouch: {},
   },
 };
 

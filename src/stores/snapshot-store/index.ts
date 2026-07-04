@@ -51,6 +51,7 @@ import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
 import { createIllustrationSlice } from './slices/illustration-slice';
 import { createRetouchSlice } from './slices/retouch-slice';
+import { createTypographyApplySlice } from './slices/typography-apply-slice';
 import { createQuizSlice } from './slices/quiz-slice';
 import { createPropsSlice } from './slices/props-slice';
 import { createCharactersSlice } from './slices/characters-slice';
@@ -71,6 +72,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createDummiesSlice(...args),
         ...createIllustrationSlice(...args),
         ...createRetouchSlice(...args),
+        ...createTypographyApplySlice(...args),
         ...createQuizSlice(...args),
         ...createPropsSlice(...args),
         ...createCharactersSlice(...args),

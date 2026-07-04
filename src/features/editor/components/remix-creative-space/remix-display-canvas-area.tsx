@@ -24,7 +24,7 @@ import { RemixImageToolbar } from './remix-image-toolbar';
 import { useRemixActions } from '@/stores/remix-store/selectors';
 import { useSpaceViewSlot, useEditorSpaceViewStore } from '@/stores/editor-space-view-store';
 import { useLanguageCode } from '@/stores/editor-settings-store';
-import { useBookTypography, useCurrentBook } from '@/stores/book-store';
+import { useBookStepTypography, useCurrentBook } from '@/stores/book-store';
 import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
 import { createLogger } from '@/utils/logger';
 import type { Illustration } from '@/types/prop-types';
@@ -66,7 +66,7 @@ export function RemixDisplayCanvasArea({ spreads, remixId, pageNumbering }: Prop
   const book = useCurrentBook();
   const bookId = book?.id ?? '';
   const langCode = useLanguageCode();
-  const bookTypography = useBookTypography();
+  const bookTypography = useBookStepTypography('retouch');
   const state = useSpaceViewSlot(bookId, 'remix');
   const patchSpace = useEditorSpaceViewStore((s) => s.patchSpace);
   const { updateRemixSpreadImage } = useRemixActions();

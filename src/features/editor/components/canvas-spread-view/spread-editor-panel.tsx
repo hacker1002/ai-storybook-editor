@@ -69,7 +69,7 @@ import type {
   SpreadItemActionUnion,
 } from "@/types/canvas-types";
 import { useLanguageCode } from "@/stores/editor-settings-store";
-import { useBookTypography } from "@/stores/book-store";
+import { useBookStepTypography } from "@/stores/book-store";
 import type { PageNumberingSettings } from "@/types/editor";
 import { PageNumberingOverlay } from "./page-numbering-overlay";
 import { useZoomCenterScroll } from "../../hooks/use-zoom-center-scroll";
@@ -280,7 +280,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   // book.original_language), it takes priority over the editor's current
   // language so textbox reads/writes always target the same language key.
   const editorLangCode = forceLanguageCode ?? currentEditorLangCode;
-  const bookTypography = useBookTypography();
+  const bookTypography = useBookStepTypography('illustration');
   const canvasWidth = useCanvasWidth();
   const canvasHeight = useCanvasHeight();
   const trimPct = useTrimPct();

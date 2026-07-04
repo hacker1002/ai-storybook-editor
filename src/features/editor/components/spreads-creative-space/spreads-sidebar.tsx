@@ -15,7 +15,7 @@ import {
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { useSnapshotStore } from "@/stores/snapshot-store";
-import { useBookShape, useBookTypography } from "@/stores/book-store";
+import { useBookShape, useBookStepTypography } from "@/stores/book-store";
 import { FALLBACK_SHAPE } from "@/constants/book-defaults";
 import { createLogger } from "@/utils/logger";
 import { useLanguageCode } from "@/stores/editor-settings-store";
@@ -137,7 +137,7 @@ export function SpreadsSidebar({
   const actions = useSnapshotActions();
   const langCode = useLanguageCode();
   const bookShape = useBookShape();
-  const bookTypography = useBookTypography();
+  const bookTypography = useBookStepTypography('illustration');
 
   // Local UI state
   const [isAddOpen, setIsAddOpen] = useState(false);

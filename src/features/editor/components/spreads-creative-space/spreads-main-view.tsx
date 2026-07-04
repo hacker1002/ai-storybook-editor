@@ -29,7 +29,7 @@ import {
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
 import { useLanguageCode } from '@/stores/editor-settings-store';
-import { useCurrentBook, useBookTemplateLayout, useBookTypography, useBookActions } from '@/stores/book-store';
+import { useCurrentBook, useBookTemplateLayout, useBookStepTypography, useBookActions } from '@/stores/book-store';
 import { useTemplateLayouts } from '@/hooks/use-template-layouts';
 import {
   buildIllustrationItemsFromTemplate,
@@ -126,7 +126,7 @@ export function SpreadsMainView({
   const book = useCurrentBook();
   const { updateBook } = useBookActions();
   const templateLayout = useBookTemplateLayout();
-  const bookTypography = useBookTypography();
+  const bookTypography = useBookStepTypography('illustration');
   const { spreadLayouts, singlePageLayouts, allLayouts } = useTemplateLayouts(book?.book_type ?? null);
 
   // DB layouts → LayoutOption[] for page toolbar dropdown (page-item filters by type internally)

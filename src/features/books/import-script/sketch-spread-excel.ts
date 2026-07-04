@@ -208,9 +208,9 @@ function defaultTextboxGeo(type: SketchPageType): Geometry {
   return { ...DEFAULT_LEFT_TEXTBOX_GEO };
 }
 
-/** Base typography for a language: book.typography[lang] (mapped) else default. */
+/** Base typography for a language: book.typography.sketch[lang] (mapped) else default. */
 function baseTypography(book: SketchImportBook, lang: string): Typography {
-  const perLang = book.typography?.[lang];
+  const perLang = book.typography?.sketch?.[lang];
   return perLang ? mapTypographyToTextbox(perLang) : { ...DEFAULT_TEXTBOX_TYPOGRAPHY };
 }
 

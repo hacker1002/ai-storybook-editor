@@ -4,7 +4,7 @@
 // book-creation import (07-01) and the editor `＋` sketch-spread import (04).
 
 import type { Geometry } from '@/types/spread-types';
-import type { TypographySettings } from '@/types/editor';
+import type { BookTypography } from '@/types/editor';
 import type { SketchSpread } from '@/types/sketch';
 
 /** Raw cell value as produced by `sheet_to_json(header:1)`. */
@@ -42,11 +42,11 @@ export interface ImportIssues {
 }
 
 /** Minimal book shape the parser needs (avoids importing the full Book type).
- *  `typography` is the book's PER-LANGUAGE map (keyed by language code), same as
- *  `Book.typography` — NOT a flat Typography. */
+ *  `typography` is the book's nested-by-step map (`Book.typography`); the sketch
+ *  parser slices `.sketch` at the call site to get the per-language map. */
 export interface SketchImportBook {
   original_language: string;
-  typography?: Record<string, TypographySettings> | null;
+  typography?: BookTypography | null;
 }
 
 /** Result contract shared by both callers (editor `＋` + book import). */

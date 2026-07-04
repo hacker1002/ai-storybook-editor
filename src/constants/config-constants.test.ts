@@ -8,7 +8,12 @@
 //     filling missing ones with is_enabled: true.
 
 import { describe, it, expect } from 'vitest';
-import { normalizeBookRemix, normalizeRemixTraits } from './config-constants';
+import {
+  normalizeBookRemix,
+  normalizeRemixTraits,
+  normalizeBookTypography,
+  DEFAULT_TYPOGRAPHY,
+} from './config-constants';
 import { TRAIT_TYPES } from './trait-constants';
 
 describe('normalizeBookRemix', () => {
@@ -72,5 +77,57 @@ describe('normalizeRemixTraits', () => {
     expect(traits.find((t) => t.type === 'face')!.is_enabled).toBe(false);
     // Missing entries default to true.
     expect(traits.find((t) => t.type === 'hair')!.is_enabled).toBe(true);
+  });
+});
+
+describe('normalizeBookTypography', () => {
+  it('returns null for null/undefined (preserves "not configured" state)', () => {
+    expect(normalizeBookTypography(null)).toBeNull();
+    expect(normalizeBookTypography(undefined)).toBeNull();
+  });
+
+  it('returns null for non-object raw', () => {
+    expect(normalizeBookTypography('garbage')).toBeNull();
+    expect(normalizeBookTypography(42)).toBeNull();
+  });
+
+  it('clones legacy-flat map into all 3 steps with INDEPENDENT deep copies', () => {
+    const flat = { en_US: { ...DEFAULT_TYPOGRAPHY, size: 20 } };
+    const result = normalizeBookTypography(flat)!;
+
+    // All three steps carry the same values...
+    expect(result.sketch.en_US.size).toBe(20);
+    expect(result.illustration.en_US.size).toBe(20);
+    expect(result.retouch.en_US.size).toBe(20);
+
+    // ...but are NOT shared references (mutating one must not bleed to others).
+    result.sketch.en_US.size = 99;
+    expect(result.illustration.en_US.size).toBe(20);
+    expect(result.retouch.en_US.size).toBe(20);
+    // And detached from the source object.
+    expect(result.illustration.en_US).not.toBe(flat.en_US);
+  });
+
+  it('passes through nested shape and fills any missing step key with {}', () => {
+    const nested = {
+      sketch: { en_US: { ...DEFAULT_TYPOGRAPHY, size: 10 } },
+      illustration: { vi_VN: { ...DEFAULT_TYPOGRAPHY, size: 11 } },
+      // retouch missing
+    };
+    const result = normalizeBookTypography(nested)!;
+    expect(result.sketch.en_US.size).toBe(10);
+    expect(result.illustration.vi_VN.size).toBe(11);
+    expect(result.retouch).toEqual({});
+  });
+
+  it('is idempotent (normalizing a normalized value is stable)', () => {
+    const flat = { en_US: { ...DEFAULT_TYPOGRAPHY, size: 20 } };
+    const once = normalizeBookTypography(flat)!;
+    const twice = normalizeBookTypography(once)!;
+    expect(twice).toEqual(once);
+  });
+
+  it('treats an empty object as empty nested (no crash)', () => {
+    expect(normalizeBookTypography({})).toEqual({ sketch: {}, illustration: {}, retouch: {} });
   });
 });

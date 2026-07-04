@@ -20,7 +20,9 @@ import {
   NARRATOR_LANGUAGE_KEY_REGEX,
   VOLUME_DEFAULT,
   normalizeBookRemix,
+  normalizeBookTypography,
 } from "@/constants/config-constants";
+import type { TypographyStep, StepTypography } from "@/types/editor";
 import { createLogger } from "@/utils/logger";
 
 const log = createLogger("Store", "BookStore");
@@ -115,7 +117,11 @@ export const useBookStore = create<BookStore>()(
             return null;
           }
 
-          const normalized: Book = { ...data, remix: normalizeBookRemix(data.remix) };
+          const normalized: Book = {
+            ...data,
+            remix: normalizeBookRemix(data.remix),
+            typography: normalizeBookTypography(data.typography),
+          };
           log.info("fetchBook", "done", { bookId });
           set({ currentBook: normalized, isLoading: false });
           return normalized;
@@ -199,7 +205,10 @@ export const useBookStore = create<BookStore>()(
               },
               ...state.books,
             ],
-            currentBook: bookData,
+            currentBook: {
+              ...bookData,
+              typography: normalizeBookTypography(bookData.typography),
+            },
             isLoading: false,
             lastFetchedAt: null,
           }));
@@ -308,7 +317,13 @@ export const useBookStore = create<BookStore>()(
           const prev = get().currentBook?.id ?? null;
           const next = book?.id ?? null;
           log.info("setCurrentBook", "transition", { prev, next });
-          set({ currentBook: book });
+          // Hydrated books from print-export / share-preview may carry raw
+          // (legacy-flat) typography; normalize so consumers read the nested
+          // step shape. Idempotent for already-nested books.
+          const normalized = book
+            ? { ...book, typography: normalizeBookTypography(book.typography) }
+            : null;
+          set({ currentBook: normalized });
         },
 
         clearBooks: () =>
@@ -348,6 +363,16 @@ export const useBookShape = () =>
   useBookStore((s) => s.currentBook?.shape ?? null);
 export const useBookTypography = () =>
   useBookStore((s) => s.currentBook?.typography ?? null);
+/**
+ * Per-step typography slice `book.typography[step]` (flat `{ [lang]: ... }`).
+ * Each consumer binds exactly one step (sketch/illustration/retouch) so the flat
+ * helpers (createDefaultTextbox, getTextboxContentForLanguage, …) keep their
+ * original `Record<lang, TypographySettings>` signature.
+ */
+export const useBookStepTypography = (
+  step: TypographyStep,
+): StepTypography | null =>
+  useBookStore((s) => s.currentBook?.typography?.[step] ?? null);
 export const useBookBranch = () =>
   useBookStore((s) => s.currentBook?.branch ?? null);
 export const useBookBranchTypography = (languageCode: string): BranchTypographySettings =>

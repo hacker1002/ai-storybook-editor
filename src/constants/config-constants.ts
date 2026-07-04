@@ -15,7 +15,10 @@ import type {
   RemixCharacterEntry,
   RemixTraitEntry,
   RemixLanguageCode,
+  BookTypography,
+  StepTypography,
 } from '@/types/editor';
+import { TYPOGRAPHY_STEPS } from '@/types/editor';
 import { TRAIT_TYPES } from '@/constants/trait-constants';
 import { createLogger } from '@/utils/logger';
 
@@ -317,6 +320,65 @@ export function normalizeRemixTraits(traits: RemixTraitEntry[] | undefined): Rem
   return TRAIT_TYPES.map(
     (type) => traits?.find((t) => t.type === type) ?? { type, is_enabled: true },
   );
+}
+
+// ── Book typography normalize (flat legacy → nested-by-step) ──────────────────
+
+/** Deep-copy a single step's per-language typography map (fresh leaf objects).
+ *  Leaf copy is shallow (`{...typo}`) — safe because TypographySettings is all
+ *  primitives; revisit if a nested field is ever added. */
+function cloneStepTypography(slice: StepTypography | undefined | null): StepTypography {
+  if (!slice || typeof slice !== 'object') return {};
+  const out: StepTypography = {};
+  for (const [lang, typo] of Object.entries(slice)) {
+    if (typo && typeof typo === 'object') {
+      out[lang] = { ...(typo as TypographySettings) };
+    }
+  }
+  return out;
+}
+
+/**
+ * Normalize `books.typography` JSONB to the nested-by-step shape
+ * `{ sketch, illustration, retouch }` (DB-CHANGELOG 2026-07-04 BREAKING).
+ *
+ * Back-compat: legacy books stored a FLAT per-language map
+ * (`{ [lang]: TypographySettings }`). Detected by the absence of any step key;
+ * that flat map is cloned into all three steps with an INDEPENDENT deep copy per
+ * step so later per-step edits / Force Apply never bleed across steps via a
+ * shared reference.
+ *
+ * Idempotent: an already-nested value passes through (missing step keys filled
+ * with `{}`). Returns null only when raw is null/undefined (preserves the
+ * "typography not configured" empty-state branch).
+ */
+export function normalizeBookTypography(raw: unknown): BookTypography | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'object') {
+    log.warn('normalizeBookTypography', 'unexpected non-object', { type: typeof raw });
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  const hasStepKey = TYPOGRAPHY_STEPS.some(
+    (step) => typeof r[step] === 'object' && r[step] !== null,
+  );
+
+  if (!hasStepKey) {
+    log.info('normalizeBookTypography', 'shape detected', { shape: 'legacy-flat' });
+    const flat = r as StepTypography;
+    return {
+      sketch: cloneStepTypography(flat),
+      illustration: cloneStepTypography(flat),
+      retouch: cloneStepTypography(flat),
+    };
+  }
+
+  log.info('normalizeBookTypography', 'shape detected', { shape: 'nested' });
+  return {
+    sketch: cloneStepTypography(r.sketch as StepTypography),
+    illustration: cloneStepTypography(r.illustration as StepTypography),
+    retouch: cloneStepTypography(r.retouch as StepTypography),
+  };
 }
 
 // ── Preview texts ────────────────────────────────────────────────────────────

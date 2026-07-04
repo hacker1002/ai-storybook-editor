@@ -18,7 +18,7 @@ import {
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { usePlayEdition } from "@/stores/animation-playback-store";
-import { useBookShape, useBookTypography } from "@/stores/book-store";
+import { useBookShape, useBookStepTypography } from "@/stores/book-store";
 import { FALLBACK_SHAPE, mapTypographyToTextbox } from "@/constants/book-defaults";
 import { DEFAULT_TYPOGRAPHY } from "@/constants/config-constants";
 import { AUDIO_DEFAULTS } from "@/constants/spread-constants";
@@ -89,7 +89,7 @@ export function ObjectsSidebar({
   const actions = useSnapshotActions();
   const editorLangCode = useLanguageCode();
   const bookShape = useBookShape();
-  const bookTypography = useBookTypography();
+  const bookTypography = useBookStepTypography('retouch');
   const playEdition = usePlayEdition();
 
   // Local UI state
