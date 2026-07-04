@@ -3,7 +3,7 @@
 // draft-local + commit-on-save pattern of sibling edit-variants-modal.tsx.
 // Only art_direction is edited here — narration/textboxes live on the canvas.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,10 +16,21 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { useSketchSpreadById, useSnapshotActions } from '@/stores/snapshot-store/selectors';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  useSketchEntities,
+  useSketchSpreadById,
+  useSnapshotActions,
+} from '@/stores/snapshot-store/selectors';
 import type { ArtDirection, SketchPageType, SketchSpread } from '@/types/sketch';
-import { AD_FIELD_LAYOUT, AD_KEYS, AD_LABELS, PAGE_LABELS } from './edit-spread-modal.constants';
-import { CANVAS_CONFIRM_DIALOG_Z } from '@/constants/spread-constants';
+import { AD_FIELD_ORDER, AD_KEYS, AD_LABELS, PAGE_LABELS } from './edit-spread-modal.constants';
+import { CANVAS_CONFIRM_DIALOG_Z, CANVAS_DIALOG_POPOVER_Z } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'EditSpreadModal');
@@ -59,16 +70,13 @@ interface LabeledTextareaProps {
 /** Reusable label-over-textarea for one art-direction field. */
 function LabeledTextarea({ fieldKey, pageType, value, onChange }: LabeledTextareaProps) {
   const label = AD_LABELS[fieldKey];
-  // `stage` holds verbatim `@key/variant` reference text — plain textarea, no resolution.
-  const placeholder =
-    fieldKey === 'stage' ? 'e.g. @forest/night' : `Describe ${label.toLowerCase()}…`;
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Textarea
         className="min-h-[64px] text-sm resize-y"
         value={value}
-        placeholder={placeholder}
+        placeholder={`Describe ${label.toLowerCase()}…`}
         aria-label={`${label} — ${PAGE_LABELS[pageType]}`}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -76,29 +84,84 @@ function LabeledTextarea({ fieldKey, pageType, value, onChange }: LabeledTextare
   );
 }
 
-interface ArtDirectionGridProps {
+// Sentinel for the "no stage" option — Radix SelectItem forbids an empty-string value,
+// so map it to '' on change and back to placeholder (undefined) when the draft is empty.
+const STAGE_NONE_VALUE = '__none__';
+
+interface StageSelectProps {
+  pageType: SketchPageType;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+/** `stage` art-direction field as a dropdown of `@{key}/{variant}` refs sourced from the
+ *  sketch stage entities. A non-empty current value is always kept in the option list so a
+ *  legacy / externally-set ref still displays even if its entity/variant was removed. The
+ *  dropdown portals to body → its z must clear the canvas-lifted dialog (CANVAS_DIALOG_POPOVER_Z),
+ *  else it paints behind the modal. */
+function StageSelect({ pageType, value, onChange }: StageSelectProps) {
+  const stages = useSketchEntities('stages');
+  const label = AD_LABELS.stage;
+  const options = useMemo(() => {
+    const refs = stages.flatMap((entity) =>
+      entity.variants.map((variant) => `@${entity.key}/${variant.key}`),
+    );
+    if (value && !refs.includes(value)) refs.unshift(value);
+    return refs;
+  }, [stages, value]);
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select
+        value={value === '' ? undefined : value}
+        onValueChange={(next) => onChange(next === STAGE_NONE_VALUE ? '' : next)}
+      >
+        <SelectTrigger className="text-sm" aria-label={`${label} — ${PAGE_LABELS[pageType]}`}>
+          <SelectValue placeholder="Select a stage…" />
+        </SelectTrigger>
+        <SelectContent style={{ zIndex: CANVAS_DIALOG_POPOVER_Z }}>
+          <SelectItem value={STAGE_NONE_VALUE}>— None —</SelectItem>
+          {options.map((ref) => (
+            <SelectItem key={ref} value={ref}>
+              {ref}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+interface ArtDirectionFieldsProps {
   pageType: SketchPageType;
   value: ArtDirection;
   onFieldChange: (key: keyof ArtDirection, value: string) => void;
 }
 
-/** Two-column grid of the 13 art-direction fields for a single page. */
-function ArtDirectionGrid({ pageType, value, onFieldChange }: ArtDirectionGridProps) {
+/** Single-column stack (one field per row) of the editable art-direction fields for a page.
+ *  `stage` renders as a dropdown; the rest as textareas. */
+function ArtDirectionFields({ pageType, value, onFieldChange }: ArtDirectionFieldsProps) {
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-      {AD_FIELD_LAYOUT.map((column, columnIndex) => (
-        <div key={columnIndex} className="space-y-3">
-          {column.map((key) => (
-            <LabeledTextarea
-              key={key}
-              fieldKey={key}
-              pageType={pageType}
-              value={value[key] ?? ''}
-              onChange={(next) => onFieldChange(key, next)}
-            />
-          ))}
-        </div>
-      ))}
+    <div className="space-y-3">
+      {AD_FIELD_ORDER.map((key) =>
+        key === 'stage' ? (
+          <StageSelect
+            key={key}
+            pageType={pageType}
+            value={value.stage ?? ''}
+            onChange={(next) => onFieldChange('stage', next)}
+          />
+        ) : (
+          <LabeledTextarea
+            key={key}
+            fieldKey={key}
+            pageType={pageType}
+            value={value[key] ?? ''}
+            onChange={(next) => onFieldChange(key, next)}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -158,7 +221,7 @@ export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         zIndex={CANVAS_CONFIRM_DIALOG_Z}
-        className="max-w-3xl max-h-[85vh] overflow-y-auto"
+        className="min-w-[720px] max-w-[60vw] max-h-[85vh] overflow-y-auto"
       >
         <DialogHeader>
           <DialogTitle>Edit spread — art direction</DialogTitle>
@@ -183,7 +246,7 @@ export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
 
             {spread.pages.map((page) => (
               <TabsContent key={page.type} value={page.type} className="mt-4">
-                <ArtDirectionGrid
+                <ArtDirectionFields
                   pageType={page.type}
                   value={seedArtDirection(draft[page.type])}
                   onFieldChange={(key, value) => handleFieldChange(page.type, key, value)}
@@ -193,7 +256,7 @@ export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
           </Tabs>
         ) : (
           <div className="mt-4">
-            <ArtDirectionGrid
+            <ArtDirectionFields
               pageType={spread.pages[0].type}
               value={seedArtDirection(draft[spread.pages[0].type])}
               onFieldChange={(key, value) =>

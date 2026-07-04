@@ -121,5 +121,11 @@ export const MAX_INTERACTIVE_Z = 9000;
  *  AlertDialogContent's `zIndex` prop (lifts overlay + content together). */
 export const CANVAS_CONFIRM_DIALOG_Z = MAX_INTERACTIVE_Z + 1;
 
+/** Z-index for a portaled dropdown/popover (Radix Select, etc.) rendered INSIDE a
+ *  canvas-lifted dialog. Both portal to body as siblings, so the dropdown must sit
+ *  ABOVE CANVAS_CONFIRM_DIALOG_Z or it paints behind its own dialog. Still under the
+ *  item toolbar portal (9999). */
+export const CANVAS_DIALOG_POPOVER_Z = CANVAS_CONFIRM_DIALOG_Z + 1;
+
 /** Pixel delta below which a frame mousedown→mouseup is treated as a pure click. */
 export const CLICK_NO_DRAG_THRESHOLD_PX = 3;
