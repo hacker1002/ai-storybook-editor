@@ -126,6 +126,19 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
     });
   }, []);
 
+  // Callback ref: assign the node AND close the cached-image gap. A cached image can finish
+  // loading before React attaches `onLoad` (or mount already `complete`), so `onLoad` never fires
+  // and `canvasSize` stays null → the canvas never sizes/draws and marks paint nothing. When the
+  // node is already decoded on attach, run the load path once. Deferred to a microtask so canvasRef
+  // (attached AFTER this <img> in JSX order on first mount) is ready.
+  const attachSourceImg = useCallback(
+    (node: HTMLImageElement | null) => {
+      sourceImgRef.current = node;
+      if (node && node.complete && node.naturalWidth > 0) queueMicrotask(handleImageLoad);
+    },
+    [handleImageLoad],
+  );
+
   // ── Workspace render: draw image then composite mark TRANSLUCENT (2-pass — no setState) ──
   // Mark is rendered to an OFFSCREEN canvas at full alpha, then drawn once with
   // globalAlpha=INPAINT_MARK_ALPHA, so overlapping strokes don't darken-stack (set-of-mark).
@@ -378,7 +391,7 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
             isn't CORS-tainted. Keyed by url so a version swap reliably re-fires onLoad. */}
         <img
           key={selectedVersion?.media_url ?? 'none'}
-          ref={sourceImgRef}
+          ref={attachSourceImg}
           src={selectedVersion?.media_url}
           alt=""
           crossOrigin="anonymous"
@@ -417,6 +430,7 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
       scaleFactor,
       displayW,
       displayH,
+      attachSourceImg,
       handleImageLoad,
       handlePointerDown,
       handlePointerMove,

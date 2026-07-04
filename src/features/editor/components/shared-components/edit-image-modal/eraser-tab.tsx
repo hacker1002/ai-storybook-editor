@@ -117,6 +117,19 @@ export function useEraserTabState({ selectedVersion, pathPrefix, zoom }: UseEras
     });
   }, []);
 
+  // Callback ref: assign the node AND close the cached-image gap. A cached image can finish
+  // loading before React attaches `onLoad` (or mount already `complete`), so `onLoad` never fires
+  // and `canvasSize` stays null → the canvas never sizes/draws and strokes commit to state but
+  // paint nothing. When the node is already decoded on attach, run the load path once. Deferred to
+  // a microtask so canvasRef (attached AFTER this <img> in JSX order on first mount) is ready.
+  const attachSourceImg = useCallback(
+    (node: HTMLImageElement | null) => {
+      sourceImgRef.current = node;
+      if (node && node.complete && node.naturalWidth > 0) queueMicrotask(handleImageLoad);
+    },
+    [handleImageLoad],
+  );
+
   // ── Workspace render: draw image then composite strokes (no setState — canvas side effect) ──
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -412,7 +425,7 @@ export function useEraserTabState({ selectedVersion, pathPrefix, zoom }: UseEras
             isn't CORS-tainted. Keyed by url so a version swap reliably re-fires onLoad. */}
         <img
           key={selectedVersion?.media_url ?? 'none'}
-          ref={sourceImgRef}
+          ref={attachSourceImg}
           src={selectedVersion?.media_url}
           alt=""
           crossOrigin="anonymous"
@@ -453,6 +466,7 @@ export function useEraserTabState({ selectedVersion, pathPrefix, zoom }: UseEras
       displayH,
       colorMode,
       color,
+      attachSourceImg,
       handleImageLoad,
       handlePointerDown,
       handlePointerMove,
