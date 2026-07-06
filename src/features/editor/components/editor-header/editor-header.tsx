@@ -23,6 +23,9 @@ interface EditorHeaderProps {
   onNavigateHome: () => void;
   onStepChange: (targetStep: PipelineStep) => void;
   onLanguageChange: (newLang: Language, prevLang: Language) => void;
+  /** Persist current unsaved changes into the working-draft snapshot. Invoked
+   *  only from the clickable "Unsaved" state of the save indicator. */
+  onSave: () => void;
 }
 
 export function EditorHeader({
@@ -36,6 +39,7 @@ export function EditorHeader({
   onNavigateHome,
   onStepChange,
   onLanguageChange,
+  onSave,
 }: EditorHeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -126,7 +130,7 @@ export function EditorHeader({
       {/* Right Section */}
       <div className="flex items-center gap-2">
         {/* Save Status */}
-        <SaveStatusIndicator status={saveStatus} />
+        <SaveStatusIndicator status={saveStatus} onSave={onSave} />
 
         {/* Language Selector */}
         <LanguageSelector onLanguageChange={onLanguageChange} />
@@ -147,9 +151,10 @@ export function EditorHeader({
 
 interface SaveStatusIndicatorProps {
   status: SaveStatus;
+  onSave: () => void;
 }
 
-function SaveStatusIndicator({ status }: SaveStatusIndicatorProps) {
+function SaveStatusIndicator({ status, onSave }: SaveStatusIndicatorProps) {
   const config: Record<SaveStatus, { icon: React.ElementType; text: string; className: string; spin?: boolean }> = {
     saved:          { icon: Check,        text: 'Saved',         className: 'text-green-600' },
     dirty:          { icon: AlertCircle,  text: 'Unsaved',       className: 'text-yellow-600' },
@@ -159,11 +164,38 @@ function SaveStatusIndicator({ status }: SaveStatusIndicatorProps) {
   };
 
   const { icon: Icon, text, className, spin } = config[status];
+  const body = (
+    <>
+      <Icon className={cn('h-4 w-4', spin && 'animate-spin')} />
+      <span className="hidden sm:inline">{text}</span>
+    </>
+  );
+
+  // Only the "Unsaved" (dirty) state is actionable: click persists the working
+  // draft. autoSaveSnapshot() self-guards, so the click is a safe no-op if the
+  // state changes out from under it between render and click.
+  if (status === 'dirty') {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          log.info('SaveStatusIndicator', 'manual save from unsaved indicator');
+          onSave();
+        }}
+        title="Lưu thay đổi vào bản nháp hiện tại"
+        className={cn(
+          'flex items-center gap-1 rounded-md px-2 py-1 text-sm transition-colors hover:bg-muted cursor-pointer',
+          className,
+        )}
+      >
+        {body}
+      </button>
+    );
+  }
 
   return (
     <span className={cn('flex items-center gap-1 text-sm', className)}>
-      <Icon className={cn('h-4 w-4', spin && 'animate-spin')} />
-      <span className="hidden sm:inline">{text}</span>
+      {body}
     </span>
   );
 }

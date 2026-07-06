@@ -175,17 +175,20 @@ export function EditorPage() {
   const saveStatus = deriveSaveStatus(sync);
 
   // Handlers
-  // Flush dirty snapshot before navigating away. Fire-and-forget: never block
-  // UI navigation on the network round-trip. autoSaveSnapshot() self-guards on
-  // !isDirty / isSaving (snapshot-store/index.ts), so redundant calls no-op.
+  // Creative-space switches no longer auto-save (user decision 2026-07-06). Draft
+  // persistence now happens via the 60s idle timer (useAutoSave), the tab-hide
+  // flush (useFlushOnHidden), the History space's own on-mount save, or the manual
+  // "Unsaved" header click (handleManualSave). Pure UI state change here.
   const handleCreativeSpaceChange = (target: CreativeSpaceType) => {
-    // 'history' owns its own awaited save-then-load (history-creative-space.tsx);
-    // a fire-and-forget save here would flip isSaving and defeat that await → stale list.
-    if (target !== 'history' && target !== activeCreativeSpace) {
-      log.debug('handleCreativeSpaceChange', 'flush before switch', { from: activeCreativeSpace, to: target });
-      autoSaveSnapshot();
-    }
     setActiveCreativeSpace(target);
+  };
+
+  // Persist current unsaved changes into the working-draft snapshot on demand,
+  // triggered by clicking the "Unsaved" save indicator. autoSaveSnapshot()
+  // self-guards on !isDirty / isSaving, so a redundant click no-ops.
+  const handleManualSave = () => {
+    log.info('handleManualSave', 'manual draft save from header indicator');
+    autoSaveSnapshot();
   };
 
   const handleStepChange = (targetStep: PipelineStep) => {
@@ -277,6 +280,7 @@ export function EditorPage() {
           onNavigateHome={handleNavigateHome}
           onStepChange={handleStepChange}
           onLanguageChange={handleLanguageChange}
+          onSave={handleManualSave}
         />
 
         {/* Main Content */}
