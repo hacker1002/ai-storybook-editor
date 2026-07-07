@@ -49,14 +49,7 @@ export async function callImageApi<R extends { success: boolean; error?: string 
 
   log.info('callImageApi', 'request', { path, method: 'POST', payloadKeys: Object.keys(payload || {}) });
 
-  const authHeader = await getAuthHeader();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-API-Key': imageApiKey,
-  };
-  if (authHeader) {
-    headers['Authorization'] = authHeader;
-  }
+  const headers = await buildHeaders(true);
 
   try {
     const response = await fetch(url, {
@@ -76,6 +69,51 @@ export async function callImageApi<R extends { success: boolean; error?: string 
   } catch (err) {
     return classifyFetchError(path, err);
   }
+}
+
+/**
+ * GET counterpart of callImageApi for read-only endpoints (e.g. collaboration
+ * list-invitations). Same auth (X-API-Key + optional Bearer) and error
+ * classification; no request body. Bearer is REQUIRED by JWT-gated endpoints —
+ * unauthenticated callers get a 401 ImageApiFailure (expected pre-login).
+ */
+export async function callImageApiGet<R extends { success: boolean; error?: string }>(
+  path: string
+): Promise<R | ImageApiFailure> {
+  const url = `${imageApiBaseUrl}${path}`;
+
+  log.info('callImageApiGet', 'request', { path, method: 'GET' });
+
+  const headers = await buildHeaders(false);
+
+  try {
+    const response = await fetch(url, { method: 'GET', headers });
+
+    if (!response.ok) {
+      const { message, errorCode } = await extractErrorInfo(path, response);
+      return { success: false, error: message, httpStatus: response.status, errorCode };
+    }
+
+    const data = await response.json();
+    log.debug('callImageApiGet', 'response ok', { path, status: response.status });
+    return data as R;
+  } catch (err) {
+    return classifyFetchError(path, err);
+  }
+}
+
+/** Build the shared image-api headers: always X-API-Key, Bearer when a session
+ *  exists, Content-Type only when a JSON body is sent. */
+async function buildHeaders(withJsonBody: boolean): Promise<Record<string, string>> {
+  const authHeader = await getAuthHeader();
+  const headers: Record<string, string> = { 'X-API-Key': imageApiKey };
+  if (withJsonBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (authHeader) {
+    headers['Authorization'] = authHeader;
+  }
+  return headers;
 }
 
 function classifyFetchError(path: string, err: unknown): ImageApiFailure {

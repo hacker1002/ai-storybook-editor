@@ -3,10 +3,17 @@ import { Search, Bell } from 'lucide-react'
 import { AppSidebar } from './app-sidebar'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { CollaborationInviteGate } from '@/features/collaboration/collaboration-invite-gate'
+import { useAuthUser } from '@/stores/auth-store'
 
 export function AppLayout() {
+  // Key the gate on the user id so a same-tab account switch (multi-tab auth
+  // broadcast, no route change) remounts it with a fresh queue — never flashes
+  // the previous user's invitation while the new user's list is fetching.
+  const userId = useAuthUser()?.id ?? 'anon'
   return (
     <div className="flex h-screen bg-background">
+      <CollaborationInviteGate key={userId} />
       <AppSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-14 items-center justify-between border-b px-6">

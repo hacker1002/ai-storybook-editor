@@ -43,7 +43,7 @@ interface BookStore {
   error: string | null;
   lastFetchedAt: number | null;
 
-  fetchBooks: () => Promise<void>;
+  fetchBooks: (opts?: { force?: boolean }) => Promise<void>;
   fetchBook: (bookId: string) => Promise<Book | null>;
   createBook: (params: CreateBookParams) => Promise<Book | null>;
   updateBook: (bookId: string, updates: Partial<Book>) => Promise<boolean>;
@@ -65,10 +65,14 @@ export const useBookStore = create<BookStore>()(
         error: null,
         lastFetchedAt: null,
 
-        fetchBooks: async () => {
+        // `opts.force` bypasses the cache-hit short-circuit — needed after
+        // accepting a collaboration so the just-joined book is re-pulled
+        // instead of served from the (now stale) cached list.
+        fetchBooks: async (opts) => {
           const { lastFetchedAt, books } = get();
 
           if (
+            !opts?.force &&
             lastFetchedAt &&
             Date.now() - lastFetchedAt < CACHE_DURATION &&
             books.length > 0

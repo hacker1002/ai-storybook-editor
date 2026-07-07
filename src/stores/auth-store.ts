@@ -107,3 +107,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ user: null, session: null, isAuthenticated: false });
   },
 }));
+
+// Single-field selector hooks — subscribe to exactly one slice so consumers
+// (e.g. CollaborationInviteGate) re-render only on the field they read.
+export const useAuthUser = () => useAuthStore((s) => s.user);
+export const useIsAuthenticated = () => useAuthStore((s) => s.isAuthenticated);
+export const useAuthInitialized = () => useAuthStore((s) => s.isInitialized);
