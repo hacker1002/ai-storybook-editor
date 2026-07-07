@@ -6,6 +6,31 @@ const log = createLogger('API', 'ImageApiClient');
 const imageApiBaseUrl = import.meta.env.VITE_IMAGE_API_BASE_URL as string;
 const imageApiKey = import.meta.env.VITE_IMAGE_API_KEY as string;
 
+/**
+ * Read (GET) endpoints get a bounded timeout so a slow/hung upstream degrades to
+ * a retryable TIMEOUT failure instead of an indefinite pending fetch — the
+ * collaborator-space "infinite spinner" failure mode (loaders gate on a promise
+ * that never settles). Mutating POSTs deliberately get NO default timeout: the
+ * AI image/chat endpoints legitimately run for minutes.
+ */
+const DEFAULT_GET_TIMEOUT_MS = 30_000;
+
+/** `fetch` with an optional abort-on-timeout. Omitting `timeoutMs` = no timeout. */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs?: number
+): Promise<Response> {
+  if (!timeoutMs) return fetch(url, init);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Failure shape returned by callImageApi on non-2xx or network error. */
 export interface ImageApiFailure {
   success: false;
@@ -87,7 +112,7 @@ export async function callImageApiGet<R extends { success: boolean; error?: stri
   const headers = await buildHeaders(false);
 
   try {
-    const response = await fetch(url, { method: 'GET', headers });
+    const response = await fetchWithTimeout(url, { method: 'GET', headers }, DEFAULT_GET_TIMEOUT_MS);
 
     if (!response.ok) {
       const { message, errorCode } = await extractErrorInfo(path, response);
@@ -119,6 +144,19 @@ async function buildHeaders(withJsonBody: boolean): Promise<Record<string, strin
 function classifyFetchError(path: string, err: unknown): ImageApiFailure {
   const name = (err as { name?: string } | null)?.name;
   const rawMessage = err instanceof Error ? err.message : String(err);
+
+  // AbortError = our client-side timeout fired (fetchWithTimeout). Surface it as
+  // a distinct retryable TIMEOUT so the UI can prompt a retry instead of reading
+  // it as a generic unknown failure.
+  if (name === 'AbortError') {
+    log.error('callImageApi', 'request timed out', { path, message: rawMessage });
+    return {
+      success: false,
+      error: 'Máy chủ phản hồi quá lâu — vui lòng thử lại.',
+      httpStatus: 0,
+      errorCode: 'TIMEOUT',
+    };
+  }
 
   // TypeError from fetch = connection-level: offline, DNS, CORS, gateway reset mid-stream (including upstream timeout closing connection)
   if (err instanceof TypeError) {
