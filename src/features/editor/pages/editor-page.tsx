@@ -9,6 +9,7 @@ import {
   deriveSaveStatus,
 } from '@/stores/snapshot-store';
 import { useBookStore, useCurrentBook, useBooksLoading, useBooksError } from '@/stores/book-store';
+import { useAuthStore } from '@/stores/auth-store';
 import { useArtStyleStore } from '@/stores/art-style-store';
 import { getDefaultCreativeSpace, AVAILABLE_LANGUAGES } from '@/constants/editor-constants';
 import { PIPELINE_STEP_MAP } from '@/constants/book-enums';
@@ -26,6 +27,8 @@ import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { HistoryCreativeSpace } from '../components/history-creative-space';
 import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creative-space';
 import { SharesCreativeSpace } from '../components/shares-creative-space';
+import { CollaboratorsCreativeSpace } from '../components/collaborators-creative-space';
+import { useMyCollaboration } from '../components/collaborators-creative-space/hooks/use-my-collaboration';
 import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { RemixCreativeSpace } from '../components/remix-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -80,6 +83,16 @@ export function EditorPage() {
   const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('sketch-character');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notificationCount] = useState(3);
+
+  // ── Collaboration-mode gating (viewer = non-owner) ─────────────────────────
+  // isOwner drives owner zero-regression (all rail items + step links active).
+  // Until `book` loads we cannot know ownership → assume owner (skip the fetch); the
+  // editor renders a loading spinner during that window, so no gating shows until
+  // `book` resolves and isOwner is authoritative. UX-ONLY gate — the real fence is
+  // RLS (`is_book_collaborator`) + a future authorization gateway, never this flag.
+  const currentUserId = useAuthStore((s) => s.user?.id) ?? null;
+  const isOwner = book ? book.owner_id === currentUserId : true;
+  const { access_rights: myRights } = useMyCollaboration(bookId ?? null, currentUserId, isOwner);
 
   // Fetch book and snapshot on mount
   useEffect(() => {
@@ -255,9 +268,10 @@ export function EditorPage() {
       // sketch-spread (storyboard) — standalone space (not a `kind` of the entity space).
       case 'sketch-spread':
         return <SketchSpreadsCreativeSpace />;
+      case 'collaborator':
+        return <CollaboratorsCreativeSpace />;
       case 'quiz':
       case 'issue':
-      case 'collaborator':
         return <MockCreativeSpace name={activeCreativeSpace} />;
       default:
         return <MockCreativeSpace name="Unknown" />;
@@ -281,6 +295,8 @@ export function EditorPage() {
           onStepChange={handleStepChange}
           onLanguageChange={handleLanguageChange}
           onSave={handleManualSave}
+          isOwner={isOwner}
+          myRights={myRights}
         />
 
         {/* Main Content */}
@@ -289,6 +305,8 @@ export function EditorPage() {
           <IconRail
             activeCreativeSpace={activeCreativeSpace}
             onCreativeSpaceChange={handleCreativeSpaceChange}
+            isOwner={isOwner}
+            myRights={myRights}
           />
 
           {/* Creative Space */}

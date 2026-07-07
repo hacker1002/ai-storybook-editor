@@ -22,25 +22,42 @@ export function IconRailItem({ item, isActive, onClick }: IconRailItemProps) {
     return null;
   }
 
+  // Collaboration-mode gating: a disabled item (viewer = non-owner, resource/utility
+  // not granted) renders greyed + a reason tooltip and swallows its click. We use
+  // `aria-disabled` (NOT the native `disabled` prop) so the tooltip still fires on
+  // hover — a truly disabled button receives no pointer events. UX-only gate.
+  const disabled = item.isDisabled === true;
+
+  const handleClick = () => {
+    if (disabled) {
+      log.debug('handleClick', 'disabled item click ignored (no-op)', { id: item.id });
+      return;
+    }
+    onClick();
+  };
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
-          onClick={onClick}
+          onClick={handleClick}
           aria-current={isActive ? 'page' : undefined}
+          aria-disabled={disabled ? true : undefined}
           aria-label={item.label}
           className={cn(
             'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
-            isActive
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            disabled
+              ? 'text-muted-foreground opacity-40 cursor-not-allowed'
+              : isActive
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
           )}
         >
           <IconComponent className="h-5 w-5" />
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">
-        <p>{item.label}</p>
+        <p>{disabled ? 'Not shared with you' : item.label}</p>
       </TooltipContent>
     </Tooltip>
   );

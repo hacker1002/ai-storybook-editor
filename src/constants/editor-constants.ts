@@ -90,6 +90,36 @@ export function getDefaultCreativeSpace(step: PipelineStep): string {
   return icons?.[0]?.id ?? 'sketch-character';
 }
 
+// ── Collaboration-mode gating (viewer = non-owner) ───────────────────────────
+// Consumed by IconRail (§4.5) to grey-out ungranted rail items for a collaborator.
+// UX-ONLY (prevents dead-ends) — NOT a security boundary. The real fence is RLS
+// (`is_book_collaborator`) + a future authorization gateway on writes. See design
+// `collaborator-creative-space/README.md` §4.4.
+
+/** Default utility rail ids always disabled for a non-owner (only `preview` stays active). */
+export const DEFAULT_GATED = new Set<string>(['history', 'issue', 'share', 'collaborator', 'setting']);
+
+/**
+ * Icon-rail entity id → `access_rights.steps[currentStep].resources` key. An entity
+ * icon is disabled for a non-owner when its mapped resource is not granted. Ids not
+ * present here (e.g. `preview`) are never resource-gated.
+ * NOTE: retouch id `remix` → resource `remixes`; `object` → `objects`; `quiz` → `quiz`.
+ */
+export const ENTITY_RESOURCE_MAP: Record<string, string> = {
+  'sketch-character': 'characters',
+  'sketch-prop': 'props',
+  'sketch-stage': 'stages',
+  'sketch-spread': 'spreads',
+  character: 'characters',
+  prop: 'props',
+  stage: 'stages',
+  spread: 'spreads',
+  branch: 'branches',
+  object: 'objects',
+  quiz: 'quiz',
+  remix: 'remixes',
+};
+
 // Brief attribute options - re-export from book-enums for backwards compatibility
 export {
   TARGET_AUDIENCE_OPTIONS as TARGET_AUDIENCES,

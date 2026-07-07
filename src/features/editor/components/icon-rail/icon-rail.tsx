@@ -2,18 +2,61 @@ import { useEffect } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { useCurrentStep } from '@/stores/editor-settings-store';
-import { getIconsForStep, DEFAULT_ICONS, PREVIEW_ICON, SETTING_ICON } from '@/constants/editor-constants';
+import {
+  getIconsForStep,
+  DEFAULT_ICONS,
+  PREVIEW_ICON,
+  SETTING_ICON,
+  DEFAULT_GATED,
+  ENTITY_RESOURCE_MAP,
+} from '@/constants/editor-constants';
 import { IconRailItem } from './icon-rail-item';
-import type { CreativeSpaceType } from '@/types/editor';
+import type { CreativeSpaceType, IconRailItemConfig } from '@/types/editor';
+import type { AccessRights } from '@/features/editor/components/collaborators-creative-space/collaboration-space-types';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Editor', 'IconRail');
 
 interface IconRailProps {
   activeCreativeSpace: CreativeSpaceType;
   onCreativeSpaceChange: (creativeSpace: CreativeSpaceType) => void;
+  /**
+   * Collaboration-mode gating (viewer = non-owner). `isOwner` short-circuits ALL
+   * gating first → owner behaves EXACTLY as before (zero regression). `myRights` =
+   * the viewer's OWN access matrix (null for owner, or defensively-null non-owner →
+   * disable everything). UX-only gate; the real fence is RLS + authz gateway.
+   */
+  isOwner: boolean;
+  myRights: AccessRights | null;
 }
 
-export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRailProps) {
+export function IconRail({ activeCreativeSpace, onCreativeSpaceChange, isOwner, myRights }: IconRailProps) {
   const currentStep = useCurrentStep();
   const stepIcons = getIconsForStep(currentStep);
+
+  // Derive per-item disabled state (render-time only, never stored). Owner path
+  // short-circuits FIRST → isDisabled always false → no styling/behavior change.
+  const isDisabled = (item: IconRailItemConfig): boolean => {
+    if (isOwner) return false;
+    if (!myRights) return true; // non-owner with no rights row → disable all (defensive)
+    if (DEFAULT_GATED.has(item.id)) return true; // history/issue/share/collaborator/setting
+    const resourceKey = ENTITY_RESOURCE_MAP[item.id];
+    if (resourceKey) {
+      return !(myRights.steps[currentStep]?.resources?.[resourceKey] ?? false);
+    }
+    return false; // preview (and any unmapped id) → active
+  };
+
+  // Guarded change: a disabled item must not switch the creative space (no-op). The
+  // IconRailItem also self-guards; this is defense-in-depth so onCreativeSpaceChange
+  // is never called for a gated item.
+  const handleItemClick = (item: IconRailItemConfig) => {
+    if (isDisabled(item)) {
+      log.debug('handleItemClick', 'disabled item click ignored (no-op)', { id: item.id });
+      return;
+    }
+    onCreativeSpaceChange(item.id);
+  };
 
   // Auto-select first icon when step changes and current space is invalid
   useEffect(() => {
@@ -41,9 +84,9 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRai
           {stepIcons.map((item) => (
             <IconRailItem
               key={item.id}
-              item={item}
+              item={{ ...item, isDisabled: isDisabled(item) }}
               isActive={activeCreativeSpace === item.id}
-              onClick={() => onCreativeSpaceChange(item.id)}
+              onClick={() => handleItemClick(item)}
             />
           ))}
         </div>
@@ -54,9 +97,9 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRai
         {/* Preview icon (always visible — uses retouch animation data) */}
         <div className="flex flex-col items-center gap-1 mb-1">
           <IconRailItem
-            item={PREVIEW_ICON}
+            item={{ ...PREVIEW_ICON, isDisabled: isDisabled(PREVIEW_ICON) }}
             isActive={activeCreativeSpace === PREVIEW_ICON.id}
-            onClick={() => onCreativeSpaceChange(PREVIEW_ICON.id)}
+            onClick={() => handleItemClick(PREVIEW_ICON)}
           />
         </div>
 
@@ -65,9 +108,9 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRai
           {DEFAULT_ICONS.map((item) => (
             <IconRailItem
               key={item.id}
-              item={item}
+              item={{ ...item, isDisabled: isDisabled(item) }}
               isActive={activeCreativeSpace === item.id}
-              onClick={() => onCreativeSpaceChange(item.id)}
+              onClick={() => handleItemClick(item)}
             />
           ))}
         </div>
@@ -77,9 +120,9 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange }: IconRai
 
         {/* Settings icon (isolated at bottom) */}
         <IconRailItem
-          item={SETTING_ICON}
+          item={{ ...SETTING_ICON, isDisabled: isDisabled(SETTING_ICON) }}
           isActive={activeCreativeSpace === SETTING_ICON.id}
-          onClick={() => onCreativeSpaceChange(SETTING_ICON.id)}
+          onClick={() => handleItemClick(SETTING_ICON)}
         />
       </nav>
     </TooltipProvider>

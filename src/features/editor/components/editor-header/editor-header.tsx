@@ -7,6 +7,7 @@ import { PIPELINE_STEPS } from '@/constants/editor-constants';
 import { MenuPopover } from './menu-popover';
 import { LanguageSelector } from './language-selector';
 import type { PipelineStep, SaveStatus, Language, UserPoints, EditorMode } from '@/types/editor';
+import type { AccessRights } from '@/features/editor/components/collaborators-creative-space/collaboration-space-types';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
@@ -26,6 +27,14 @@ interface EditorHeaderProps {
   /** Persist current unsaved changes into the working-draft snapshot. Invoked
    *  only from the clickable "Unsaved" state of the save indicator. */
   onSave: () => void;
+  /**
+   * Collaboration-mode gating (viewer = non-owner). `isOwner` short-circuits FIRST →
+   * all StepBreadcrumb links active (zero regression). Non-owner → a step link is
+   * greyed + no-op when the step isn't granted in the viewer's own `access_rights`.
+   * UX-only gate; the real fence is RLS + a future authorization gateway.
+   */
+  isOwner: boolean;
+  myRights: AccessRights | null;
 }
 
 export function EditorHeader({
@@ -40,11 +49,22 @@ export function EditorHeader({
   onStepChange,
   onLanguageChange,
   onSave,
+  isOwner,
+  myRights,
 }: EditorHeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState(bookTitle);
   const currentStep = useCurrentStep();
+
+  // Non-owner: grey-out step links the viewer isn't granted. Owner short-circuits
+  // FIRST → always false → StepBreadcrumb unchanged. Defensive: a non-owner with no
+  // rights row disables all steps (matches icon-rail's defensive default).
+  const isStepDisabled = (stepKey: PipelineStep): boolean => {
+    if (isOwner) return false;
+    if (!myRights) return true;
+    return myRights.steps[stepKey]?.enabled === false;
+  };
 
   const handleTitleClick = () => {
     setEditTitleValue(bookTitle);
@@ -108,23 +128,39 @@ export function EditorHeader({
 
       {/* Center Section - Step Breadcrumb */}
       <nav className="flex items-center gap-1">
-        {PIPELINE_STEPS.map((step, index) => (
-          <div key={step.key} className="flex items-center">
-            {index > 0 && <ChevronRight className="mx-1 h-4 w-4 text-muted-foreground" />}
-            {step.key === currentStep ? (
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
-                {step.label}
-              </span>
-            ) : (
-              <button
-                onClick={() => onStepChange(step.key)}
-                className="px-2 py-1 text-sm text-muted-foreground hover:text-foreground"
-              >
-                {step.label}
-              </button>
-            )}
-          </div>
-        ))}
+        {PIPELINE_STEPS.map((step, index) => {
+          const stepDisabled = isStepDisabled(step.key);
+          return (
+            <div key={step.key} className="flex items-center">
+              {index > 0 && <ChevronRight className="mx-1 h-4 w-4 text-muted-foreground" />}
+              {step.key === currentStep ? (
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+                  {step.label}
+                </span>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (stepDisabled) {
+                      log.debug('onStepChange', 'disabled step link ignored (no-op)', { step: step.key });
+                      return;
+                    }
+                    onStepChange(step.key);
+                  }}
+                  aria-disabled={stepDisabled ? true : undefined}
+                  title={stepDisabled ? 'Not shared with you' : undefined}
+                  className={cn(
+                    'px-2 py-1 text-sm',
+                    stepDisabled
+                      ? 'text-muted-foreground/40 cursor-not-allowed'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {step.label}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Right Section */}

@@ -45,6 +45,13 @@ export interface IconRailItemConfig {
   id: CreativeSpaceType;
   icon: string;
   label: string;
+  /**
+   * Collaboration-mode gating flag — DERIVED at render (never stored/persisted).
+   * When true the rail item renders greyed + reason tooltip and its click is a
+   * no-op. UX-only (prevents dead-ends for a non-owner collaborator); the real
+   * fence is RLS + a future authorization gateway, never this flag.
+   */
+  isDisabled?: boolean;
 }
 
 // Snapshot metadata
