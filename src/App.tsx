@@ -35,13 +35,19 @@ const HumanDetailPage = lazy(() =>
 const SIDEBAR_PLACEHOLDER_ROUTES: Array<{ path: string; title: string }> = [
   { path: '/products',   title: 'Products' },
   { path: '/assets',     title: 'Assets' },
+  { path: '/characters', title: 'Characters' },
+  { path: '/props',      title: 'Props' },
   { path: '/concepts',   title: 'Concepts' },
+  { path: '/items',      title: 'Items' },
+  { path: '/remixes',    title: 'Remixes' },
+  { path: '/videos',     title: 'Videos' },
   { path: '/categories', title: 'Categories' },
   { path: '/eras',       title: 'Eras' },
   { path: '/locations',  title: 'Locations' },
   { path: '/themes',     title: 'Themes' },
   { path: '/genres',     title: 'Genres' },
   { path: '/formats',    title: 'Formats' },
+  { path: '/layouts',    title: 'Layouts' },
 ];
 
 function PlaceholderPage({ title }: { title: string }) {
