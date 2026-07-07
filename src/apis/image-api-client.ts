@@ -127,6 +127,73 @@ export async function callImageApiGet<R extends { success: boolean; error?: stri
   }
 }
 
+/**
+ * PATCH counterpart of callImageApi for partial-update endpoints (e.g. admin
+ * user update). Same auth (X-API-Key + optional Bearer), JSON body, and error
+ * classification. No default timeout — consistent with mutating POSTs.
+ */
+export async function callImageApiPatch<R extends { success: boolean; error?: string }>(
+  path: string,
+  body: object
+): Promise<R | ImageApiFailure> {
+  const url = `${imageApiBaseUrl}${path}`;
+  const payload = body as Record<string, unknown>;
+
+  log.info('callImageApiPatch', 'request', { path, method: 'PATCH', payloadKeys: Object.keys(payload || {}) });
+
+  const headers = await buildHeaders(true);
+
+  try {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const { message, errorCode } = await extractErrorInfo(path, response);
+      return { success: false, error: message, httpStatus: response.status, errorCode };
+    }
+
+    const data = await response.json();
+    log.debug('callImageApiPatch', 'response ok', { path, status: response.status });
+    return data as R;
+  } catch (err) {
+    return classifyFetchError(path, err);
+  }
+}
+
+/**
+ * DELETE counterpart of callImageApi for destructive endpoints (e.g. admin user
+ * soft-delete). Sends X-API-Key + optional Bearer, no request body, and reuses
+ * the shared error classification. No default timeout — consistent with mutating
+ * POSTs (a soft-delete + auth-ban round-trip can be slow upstream).
+ */
+export async function callImageApiDelete<R extends { success: boolean; error?: string }>(
+  path: string
+): Promise<R | ImageApiFailure> {
+  const url = `${imageApiBaseUrl}${path}`;
+
+  log.info('callImageApiDelete', 'request', { path, method: 'DELETE' });
+
+  const headers = await buildHeaders(false);
+
+  try {
+    const response = await fetch(url, { method: 'DELETE', headers });
+
+    if (!response.ok) {
+      const { message, errorCode } = await extractErrorInfo(path, response);
+      return { success: false, error: message, httpStatus: response.status, errorCode };
+    }
+
+    const data = await response.json();
+    log.debug('callImageApiDelete', 'response ok', { path, status: response.status });
+    return data as R;
+  } catch (err) {
+    return classifyFetchError(path, err);
+  }
+}
+
 /** Build the shared image-api headers: always X-API-Key, Bearer when a session
  *  exists, Content-Type only when a JSON body is sent. */
 async function buildHeaders(withJsonBody: boolean): Promise<Record<string, string>> {

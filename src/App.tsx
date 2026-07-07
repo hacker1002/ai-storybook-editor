@@ -9,6 +9,7 @@ import { VoicesPage } from '@/features/voices';
 import { SoundsPage } from '@/features/sounds';
 import { MusicsPage } from '@/features/musics';
 import { HumansPage } from '@/features/humans';
+import { UsersPage, RequireAdmin } from '@/features/users';
 import { StylesPage } from '@/features/styles';
 import { BooksPage } from '@/features/books';
 import { DemoCanvasSpreadView, DemoPlayableSpreadView, DemoRivePlayer, DemoRemotionSpike } from '@/features/demo-spread-views';
@@ -125,6 +126,7 @@ export default function App() {
           <Route path="/sounds" element={<SoundsPage />} />
           <Route path="/musics" element={<MusicsPage />} />
           <Route path="/humans" element={<HumansPage />} />
+          <Route path="/users" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
           <Route path="/styles" element={<StylesPage />} />
           <Route path="/books" element={<BooksPage />} />
           <Route
