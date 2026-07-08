@@ -259,6 +259,11 @@ export interface FetchSlice {
   fetchSnapshot: (bookId: string) => Promise<void>;
   saveSnapshot: () => Promise<void>;
   autoSaveSnapshot: () => Promise<void>;
+  /** Clears the snapshot-global dirty flag WITHOUT writing. Used on collab-space exit
+   *  when every mutation was already persisted via the gateway (which never touches
+   *  isDirty), so leaving to a non-collab space cannot trigger a stale owner-direct
+   *  autosave that clobbers concurrent collaborator writes (ADR-043 / M1). */
+  clearDirty: () => void;
   /** Awaited flush: resolves only once the current state is persisted (or nothing to save).
    *  Unlike autoSaveSnapshot (fire-and-forget), callers await this when a downstream step must
    *  read the just-written snapshot from the DB (e.g. sequential spread-image generation). */
@@ -640,6 +645,10 @@ export interface SketchGenerateTask {
   status: SketchTaskStatus;
   imageUrl?: string;
   error?: string;            // friendly message or backend code
+  /** true = target was 409-blocked by another editor (collab) and skipped — NOT a
+   *  generation failure. Kept distinct from `status:'error'` so the summary toast /
+   *  per-row UI can separate "being edited" skips from real failures. */
+  skipped?: boolean;
   startedAt?: string;
   completedAt?: string;
 }
@@ -651,6 +660,10 @@ export interface SketchGenerateJob {
   tasks: SketchGenerateTask[];
   currentIndex: number;      // -1 when not started / finished
   cancelRequested: boolean;
+  /** collab edit-lock: count of targets skipped because another editor holds the lock. */
+  skipped: number;
+  /** display names of the skipped targets (for the summary toast / detail copy). */
+  skippedNames: string[];
   createdAt: string;
   completedAt?: string;
 }
@@ -682,6 +695,10 @@ export interface SketchSpreadGenerateTask {
   status: SketchSpreadTaskStatus;
   imageUrl?: string;
   error?: string;         // friendly message or backend code
+  /** true = ALL of the spread's pages were 409-blocked by another editor (collab) and
+   *  the spread was skipped — NOT a generation failure. A partially-blocked spread
+   *  (one page done) counts as generated, not skipped. */
+  skipped?: boolean;
   startedAt?: string;
   completedAt?: string;
 }
@@ -692,6 +709,10 @@ export interface SketchSpreadGenerateJob {
   tasks: SketchSpreadGenerateTask[]; // doc-order at enqueue
   currentIndex: number;              // -1 when not started / finished
   cancelRequested: boolean;
+  /** collab edit-lock: count of spreads fully skipped (all pages locked by another editor). */
+  skipped: number;
+  /** display names of the skipped spreads (e.g. "spread #3") for the summary toast. */
+  skippedNames: string[];
   createdAt: string;
   completedAt?: string;
 }

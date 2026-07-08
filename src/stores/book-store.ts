@@ -353,6 +353,10 @@ export const useBookStore = create<BookStore>()(
 // State selectors
 export const useBooks = () => useBookStore((s) => s.books);
 export const useCurrentBook = () => useBookStore((s) => s.currentBook);
+/** Primitive book id (string | null) — stable dep for effects that only key on the
+ *  open book (e.g. the sketch collab-persist mount) without re-firing on other field
+ *  changes of the book object. */
+export const useCurrentBookId = () => useBookStore((s) => s.currentBook?.id ?? null);
 export const useBooksLoading = () => useBookStore((s) => s.isLoading);
 export const useBooksError = () => useBookStore((s) => s.error);
 

@@ -10,6 +10,15 @@ import { callGenerateSketchSheet } from '@/apis/sketch-sheet-api';
 vi.mock('@/apis/sketch-sheet-api', () => ({ callGenerateSketchSheet: vi.fn() }));
 const mockedCall = vi.mocked(callGenerateSketchSheet);
 
+// Isolate the resource-lock store: this unit test imports the slice DIRECTLY (bypassing
+// snapshot-store/index), so the real module would close the slice ↔ store cycle. collabPersist=false
+// routes runJob down the legacy autoSaveSnapshot path these tests were written for. The collab
+// (lock/save/release) path is covered by its own tests.
+vi.mock('@/stores/resource-lock-store', () => ({
+  useResourceLockStore: { getState: () => ({ collabPersist: false, myUserId: null, holderNames: new Map() }) },
+  FALLBACK_HOLDER_NAME: 'another editor',
+}));
+
 // Isolated harness: sketch slice (state + setSketchEntityMediaUrl) + the job slice, plus the
 // only cross-slice deps the job slice touches (sync.isDirty via setter, autoSaveSnapshot stub).
 /* eslint-disable @typescript-eslint/no-explicit-any */

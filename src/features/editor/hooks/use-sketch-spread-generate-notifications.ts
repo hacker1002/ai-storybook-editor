@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import type { SketchSpreadGenerateJob } from '@/stores/snapshot-store/types';
+import { summarizeGenerateJob, generateSummarySuffix } from './generate-summary-toast';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
 
@@ -23,11 +24,10 @@ export function useSketchSpreadGenerateNotifications(): void {
   useEffect(() => {
     const prev = prevRef.current;
     if (prev?.status === 'running' && job && job.id === prev.id && job.status !== 'running') {
-      const done = job.tasks.filter((t) => t.status === 'completed').length;
-      const fail = job.tasks.filter((t) => t.status === 'error').length;
-      const total = job.tasks.length;
+      const { done, skipped, fail, total } = summarizeGenerateJob(job);
+      const suffix = generateSummarySuffix(skipped, fail);
 
-      if (done === 0 && fail === 0) {
+      if (done === 0 && fail === 0 && skipped === 0) {
         // Terminal without any task producing a result (aborted before running — e.g. no snapshot
         // id, or cancelled immediately). The abort path already toasted; a "0/N generated" summary
         // here would be misleading (and double-toast the error). Dismiss silently.
@@ -36,11 +36,11 @@ export function useSketchSpreadGenerateNotifications(): void {
           status: job.status,
         });
       } else if (job.status === 'cancelled') {
-        log.info('toast', 'job cancelled', { jobId: job.id, done, total });
-        toast.info(`Cancelled — ${done}/${total} spreads generated`);
-      } else if (fail > 0) {
-        log.warn('toast', 'job completed with failures', { jobId: job.id, done, fail, total });
-        toast.warning(`${done}/${total} spreads generated · ${fail} failed`);
+        log.info('toast', 'job cancelled', { jobId: job.id, done, skipped, total });
+        toast.info(`Cancelled — ${done}/${total} spreads generated${suffix}`);
+      } else if (fail > 0 || skipped > 0) {
+        log.warn('toast', 'job completed with skips/failures', { jobId: job.id, done, skipped, fail, total });
+        toast.warning(`${done}/${total} spreads generated${suffix}`);
       } else {
         log.info('toast', 'job completed', { jobId: job.id, done, total });
         toast.success(`${done}/${total} spreads generated`);

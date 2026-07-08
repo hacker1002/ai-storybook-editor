@@ -18,11 +18,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Upload } from 'lucide-react';
 import { useSketchEntityKeys, useSnapshotActions } from '@/stores/snapshot-store/selectors';
+import { useCurrentBookId } from '@/stores/book-store';
+import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
+import { isLockedByOtherNow, type LockTarget } from '@/stores/resource-lock-store';
+import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
 import type { SketchEntityKind } from '@/types/sketch';
 import { SketchEntitySidebar } from './sketch-entity-sidebar';
 import { SketchEntityContentArea } from './sketch-entity-content-area';
 import { EditVariantsModal } from './edit-variants-modal';
-import { KIND_CONFIG } from './sketch-variants-constants';
+import { KIND_CONFIG, KIND_TO_RESOURCE_TYPE } from './sketch-variants-constants';
 import {
   parseSketchEntitiesFromFile,
   type ParseSketchEntitiesResult,
@@ -46,7 +50,12 @@ interface SketchVariantsCreativeSpaceProps {
 export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpaceProps) {
   const cfg = KIND_CONFIG[kind];
   const entityKeys = useSketchEntityKeys(kind);
+  const bookId = useCurrentBookId();
   const { setSketchEntities, removeSketchEntity } = useSnapshotActions();
+
+  // Collaborator edit-lock: open the realtime lock channel + route flushes through
+  // the gateway (suppress owner-direct autoSave) for as long as this space is mounted.
+  useCollabPersistSession(bookId);
 
   const [userSelectedKey, setUserSelectedKey] = useState<string | null>(null);
   const [checkedKeys, setCheckedKeys] = useState<string[]>([]);
@@ -112,12 +121,32 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
     [entityKeys],
   );
 
+  // Delete = destructive structural op (entity type 3/4/5, keyed). The row is already
+  // greyed when locked (phase 05); this is the click-time guard (render→click TOCTOU),
+  // then acquire → local delete → save(action=4 delete) → release.
   const handleDelete = useCallback(
-    (key: string) => {
-      log.info('handleDelete', 'delete entity', { kind, key });
-      removeSketchEntity(kind, key);
-      setCheckedKeys((prev) => prev.filter((k) => k !== key));
-      setUserSelectedKey((prev) => (prev === key ? null : prev));
+    async (key: string) => {
+      log.info('handleDelete', 'delete entity requested', { kind, key });
+      const target: LockTarget = {
+        step: 1,
+        resource_type: KIND_TO_RESOURCE_TYPE[kind],
+        resource_id: key,
+        locale: null,
+      };
+      if (isLockedByOtherNow(target)) {
+        log.info('handleDelete', 'blocked — entity locked by other', { kind, key });
+        toast.info('Mục này đang được người khác chỉnh sửa — vui lòng thử lại sau.');
+        return;
+      }
+      await runLockedDelete(
+        target,
+        { action_type: 4, patch: null, target_ref: { kind, entity: key } },
+        () => {
+          removeSketchEntity(kind, key);
+          setCheckedKeys((prev) => prev.filter((k) => k !== key));
+          setUserSelectedKey((prev) => (prev === key ? null : prev));
+        },
+      );
     },
     [kind, removeSketchEntity],
   );

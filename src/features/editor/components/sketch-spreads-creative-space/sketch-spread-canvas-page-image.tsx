@@ -23,9 +23,17 @@
 
 import { useState } from 'react';
 import { ImageOff, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Geometry } from '@/types/canvas-types';
 import { ImageDownloadButton } from '@/features/editor/components/shared-components/image-download-button';
+import {
+  useIsLockedByOther,
+  useLockHolderName,
+  FALLBACK_HOLDER_NAME,
+  type LockTarget,
+} from '@/stores/resource-lock-store';
 import { createLogger } from '@/utils/logger';
+import { LockedByOtherOverlay } from './sketch-locked-by-other-overlay';
 
 const log = createLogger('Editor', 'SketchLockedPageImage');
 
@@ -42,6 +50,9 @@ export interface LockedPageImageProps {
   isSelected: boolean;
   /** Select this page image. Only wired when the image is selectable (has url, not generating). */
   onSelect?: () => void;
+  /** SketchSpreadImage.id backing this page — the edit-lock resource_id (type 1). Undefined for a
+   *  page with no image yet (nothing lockable). */
+  imageId?: string;
 }
 
 export function LockedPageImage({
@@ -51,17 +62,33 @@ export function LockedPageImage({
   ordinal,
   isSelected,
   onSelect,
+  imageId,
 }: LockedPageImageProps) {
   const [imgError, setImgError] = useState(false);
 
-  // A page image is selectable only when it has a resolved url and no generate job is running
-  // (race-guard — design §5.2). Placeholder / errored / generating pages are inert.
-  const canSelect = Boolean(url) && !imgError && !generating;
+  // Advisory grey-out: is THIS page image locked by another editor? (phase-02 selectors; a fresh
+  // target object is fine — the selectors return primitives, so no re-render loop.) resource_id ''
+  // when the page has no image → never matches a lock → false.
+  const lockTarget: LockTarget = { step: 1, resource_type: 1, resource_id: imageId ?? '', locale: null };
+  const lockedByOther = useIsLockedByOther(lockTarget);
+  const holderName = useLockHolderName(lockTarget);
+
+  // A page image is selectable only when it has a resolved url, no generate job is running
+  // (race-guard — design §5.2), and no OTHER editor holds its lock. Placeholder / errored /
+  // generating / other-held pages are inert.
+  const canSelect = Boolean(url) && !imgError && !generating && !lockedByOther;
 
   const handleSelect = () => {
     if (!canSelect) return;
     log.debug('handleSelect', 'select page image', { ordinal, isSelected });
     onSelect?.();
+  };
+
+  // Clicking an other-held page image never selects — it just surfaces who is editing.
+  const handleLockedClick = () => {
+    const name = holderName ?? FALLBACK_HOLDER_NAME;
+    log.debug('handleLockedClick', 'blocked — locked by other', { ordinal });
+    toast.info(`${name} is editing this page`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -73,14 +100,18 @@ export function LockedPageImage({
   };
 
   // Show the hover download button whenever a real image is rendered (has url, not errored,
-  // not generating). It needs pointer events, which the cell only grants when canSelect —
-  // and canSelect === (url && !imgError && !generating), so the two align exactly.
-  const showDownload = Boolean(url) && !imgError && !generating;
+  // not generating) and it is not other-held. It needs pointer events, which the cell only grants
+  // when canSelect (or locked); align it with a real, non-locked image.
+  const showDownload = Boolean(url) && !imgError && !generating && !lockedByOther;
 
   const cellClassName = [
     'group absolute overflow-hidden',
-    canSelect ? 'cursor-pointer pointer-events-auto' : 'pointer-events-none',
-    isSelected ? 'ring-2 ring-inset ring-primary' : '',
+    lockedByOther
+      ? 'cursor-not-allowed pointer-events-auto'
+      : canSelect
+        ? 'cursor-pointer pointer-events-auto'
+        : 'pointer-events-none',
+    isSelected && !lockedByOther ? 'ring-2 ring-inset ring-primary' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -95,12 +126,18 @@ export function LockedPageImage({
         height: `${geometry.h}%`,
       }}
       data-sketch-page-image={ordinal}
-      // Selectable → a toggle button (valid aria-pressed); otherwise a static labeled image.
+      // Selectable → a toggle button (valid aria-pressed); other-held / inert → static labeled image.
       role={canSelect ? 'button' : 'img'}
-      aria-label={`Spread page ${ordinal} sketch`}
+      aria-label={
+        lockedByOther
+          ? `Spread page ${ordinal} sketch — locked by ${holderName ?? FALLBACK_HOLDER_NAME}`
+          : `Spread page ${ordinal} sketch`
+      }
+      aria-disabled={lockedByOther || undefined}
       aria-pressed={canSelect ? isSelected : undefined}
+      title={lockedByOther ? `${holderName ?? FALLBACK_HOLDER_NAME} is editing` : undefined}
       tabIndex={canSelect ? 0 : -1}
-      onClick={canSelect ? handleSelect : undefined}
+      onClick={lockedByOther ? handleLockedClick : canSelect ? handleSelect : undefined}
       onKeyDown={canSelect ? handleKeyDown : undefined}
     >
       {url && !imgError ? (
@@ -128,6 +165,11 @@ export function LockedPageImage({
           label={`Download spread page ${ordinal}`}
           className="absolute right-1.5 bottom-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
         />
+      )}
+
+      {/* Other-held → dim veil + 🔒 badge (cell owns the click/hover → veil stays pointer-inert). */}
+      {lockedByOther && url && !imgError && (
+        <LockedByOtherOverlay holderName={holderName} />
       )}
 
       {generating && (

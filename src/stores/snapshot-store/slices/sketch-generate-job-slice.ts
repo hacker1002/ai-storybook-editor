@@ -13,9 +13,36 @@ import type { SnapshotStore, SketchGenerateJobSlice, SketchGenerateTask } from '
 import type { SketchEntityKind } from '@/types/sketch';
 import { callGenerateSketchSheet } from '@/apis/sketch-sheet-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
+// resource-lock-store is loaded by snapshot-store/index (line 6) BEFORE the slices, so this static
+// import resolves cleanly in the app. The isolated slice unit tests import this module directly
+// (bypassing index) and therefore mock '@/stores/resource-lock-store' to avoid the module cycle
+// (slice → resource-lock-store → auth-store → snapshot-store/index → slice).
+import {
+  useResourceLockStore,
+  FALLBACK_HOLDER_NAME,
+  type LockTarget,
+  type ResourceType,
+} from '@/stores/resource-lock-store';
+import {
+  insertGenerateSummaryLog,
+  ACTION_TYPE_UPLOAD,
+  TARGET_TYPE_ENTITY,
+} from '@/apis/activity-log-client';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'SketchGenerateJobSlice');
+
+/** Entity kind → lock `resource_type` (gateway enum: 3 character · 4 prop · 5 stage). */
+const ENTITY_RESOURCE_TYPE: Record<SketchEntityKind, ResourceType> = {
+  characters: 3,
+  props: 4,
+  stages: 5,
+};
+
+/** LockTarget for a whole sketch entity (language-agnostic → locale null). */
+function entityLockTarget(kind: SketchEntityKind, key: string): LockTarget {
+  return { step: 1, resource_type: ENTITY_RESOURCE_TYPE[kind], resource_id: key, locale: null };
+}
 
 // Backend error codes → user-facing English (mirrors ART_STYLE_ERROR_MESSAGES in image-task-slice).
 // VALIDATION_ERROR here is a defensive net only — >12-variant / empty entities are client-filtered
@@ -57,6 +84,14 @@ export const createSketchGenerateJobSlice: StateCreator<
     if (!initial || initial.id !== jobId) return;
     const taskCount = initial.tasks.length;
 
+    // collabPersist = inside a sketch collab space (always true in practice). When true, every
+    // write routes through the resource-lock gateway: per entity acquire → generate → save(log=false)
+    // → release, and a SINGLE summary audit row at the end. When false (legacy solo path), keep the
+    // owner-direct autoSaveSnapshot flow untouched (KISS — don't break non-collab callers).
+    const resourceLock = useResourceLockStore.getState();
+    const collab = resourceLock.collabPersist;
+    const generatedKeys: string[] = []; // entities that produced a sheet this job (summary ref)
+
     for (let i = 0; i < taskCount; i++) {
       const job = get().sketchGenerateJob;
       if (!job || job.id !== jobId) return; // reset / replaced by a new job
@@ -77,6 +112,39 @@ export const createSketchGenerateJobSlice: StateCreator<
         continue;
       }
 
+      // ── collab: acquire the entity lock BEFORE generating. 409 (held by another) → SKIP this
+      //    entity (do NOT abort the job) so we never clobber someone else's in-flight edit.
+      const lockTarget = collab ? entityLockTarget(kind, task.entityKey) : null;
+      if (lockTarget) {
+        const acq = await resourceLock.acquire(lockTarget);
+        if (get().sketchGenerateJob?.id !== jobId) {
+          if (acq.ok) await resourceLock.release(lockTarget); // job replaced during acquire — clean up
+          return;
+        }
+        if (!acq.ok) {
+          log.info('runJob', 'entity locked by another editor — skip', {
+            jobId,
+            entityKey: task.entityKey,
+            holder: acq.holder,
+          });
+          // Read holderNames FRESH (acquire's resolveHolderNames populates it async, after the
+          // snapshot captured in `resourceLock`); falls back to the generic name if still unresolved.
+          const holderName =
+            useResourceLockStore.getState().holderNames.get(acq.holder) || FALLBACK_HOLDER_NAME;
+          set((state) => {
+            const j = state.sketchGenerateJob;
+            if (!j || j.id !== jobId) return;
+            j.skipped += 1;
+            j.skippedNames.push(task.entityName);
+            j.tasks[i].status = 'error';
+            j.tasks[i].skipped = true;
+            j.tasks[i].error = `Skipped — ${holderName} is editing`;
+            j.tasks[i].completedAt = new Date().toISOString();
+          });
+          continue; // no lock held → nothing to release
+        }
+      }
+
       set((state) => {
         const j = state.sketchGenerateJob;
         if (!j || j.id !== jobId) return;
@@ -92,7 +160,7 @@ export const createSketchGenerateJobSlice: StateCreator<
           artStyleId,
         });
 
-        if (get().sketchGenerateJob?.id !== jobId) return; // race: job replaced during the await
+        if (get().sketchGenerateJob?.id !== jobId) return; // race: job replaced (finally releases lock)
         if (!result.success || !result.data) throw new Error(classifyError(result));
 
         const url = result.data.imageUrl;
@@ -106,21 +174,47 @@ export const createSketchGenerateJobSlice: StateCreator<
           j.tasks[i].completedAt = new Date().toISOString();
         });
 
-        // Persist media_url onto the entity (sketch-slice sets sync.isDirty) + flush per-entity.
+        // Persist media_url onto the entity (sketch-slice sets sync.isDirty).
         get().setSketchEntityMediaUrl(kind, task.entityKey, url);
-        void get().autoSaveSnapshot(); // fire-and-forget; self-guards on isSaving/!isDirty
+        generatedKeys.push(task.entityKey);
+
+        if (lockTarget) {
+          // collab: flush DATA-ONLY through the gateway under the held lock (replaces
+          // autoSaveSnapshot). log:false → no per-target audit; the job writes one summary row.
+          const node = get().sketch[kind].find((e) => e.key === task.entityKey) ?? null;
+          const saveRes = await resourceLock.save(lockTarget, {
+            action_type: ACTION_TYPE_UPLOAD,
+            patch: node,
+            target_ref: { kind, entity: task.entityKey },
+            log: false,
+          });
+          if (get().sketchGenerateJob?.id !== jobId) return; // finally releases lock
+          if (!saveRes.ok) {
+            log.warn('runJob', 'entity save under lock failed — sheet may not persist', {
+              jobId,
+              entityKey: task.entityKey,
+              lost: saveRes.lost,
+            });
+          }
+        } else {
+          // legacy solo path: fire-and-forget owner-direct autosave; self-guards on isSaving/!isDirty.
+          void get().autoSaveSnapshot();
+        }
       } catch (err) {
-        if (get().sketchGenerateJob?.id !== jobId) return;
-        const msg = err instanceof Error ? err.message : 'Sketch generation failed';
-        log.error('runJob', 'entity failed', { jobId, entityKey: task.entityKey, error: msg });
-        set((state) => {
-          const j = state.sketchGenerateJob;
-          if (!j || j.id !== jobId) return;
-          j.tasks[i].status = 'error';
-          j.tasks[i].error = msg;
-          j.tasks[i].completedAt = new Date().toISOString();
-        });
+        if (get().sketchGenerateJob?.id === jobId) {
+          const msg = err instanceof Error ? err.message : 'Sketch generation failed';
+          log.error('runJob', 'entity failed', { jobId, entityKey: task.entityKey, error: msg });
+          set((state) => {
+            const j = state.sketchGenerateJob;
+            if (!j || j.id !== jobId) return;
+            j.tasks[i].status = 'error';
+            j.tasks[i].error = msg;
+            j.tasks[i].completedAt = new Date().toISOString();
+          });
+        }
         // NO break — partial success: continue to the next entity.
+      } finally {
+        if (lockTarget) await resourceLock.release(lockTarget); // n+ release ASAP so others can edit
       }
     }
 
@@ -132,8 +226,22 @@ export const createSketchGenerateJobSlice: StateCreator<
       j.currentIndex = -1;
       j.completedAt = new Date().toISOString();
     });
-    // Final flush to cover any intermediate autosave skipped by the isSaving self-guard.
-    void get().autoSaveSnapshot();
+
+    if (collab) {
+      // ONE summary audit row per job (client-direct) — only when something was generated.
+      if (generatedKeys.length > 0) {
+        void insertGenerateSummaryLog({
+          bookId: get().meta.bookId ?? '',
+          actorId: resourceLock.myUserId ?? '',
+          actionType: ACTION_TYPE_UPLOAD,
+          targetType: TARGET_TYPE_ENTITY,
+          targetRef: { kind, entities: generatedKeys, count: generatedKeys.length },
+        });
+      }
+    } else {
+      // legacy: final flush to cover any intermediate autosave skipped by the isSaving self-guard.
+      void get().autoSaveSnapshot();
+    }
   }
 
   return {
@@ -178,6 +286,8 @@ export const createSketchGenerateJobSlice: StateCreator<
           tasks,
           currentIndex: 0,
           cancelRequested: false,
+          skipped: 0,
+          skippedNames: [],
           createdAt: new Date().toISOString(),
         };
       });

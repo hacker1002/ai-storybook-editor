@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import type { SketchGenerateJob } from '@/stores/snapshot-store/types';
+import { summarizeGenerateJob, generateSummarySuffix } from './generate-summary-toast';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
 
@@ -23,16 +24,15 @@ export function useSketchGenerateNotifications(): void {
   useEffect(() => {
     const prev = prevRef.current;
     if (prev?.status === 'running' && job && job.id === prev.id && job.status !== 'running') {
-      const done = job.tasks.filter((t) => t.status === 'completed').length;
-      const fail = job.tasks.filter((t) => t.status === 'error').length;
-      const total = job.tasks.length;
-
+      const { done, skipped, fail, total } = summarizeGenerateJob(job);
+      const suffix = generateSummarySuffix(skipped, fail);
+      // role="status" (polite) is provided by the Sonner Toaster's aria-live region.
       if (job.status === 'cancelled') {
-        log.info('toast', 'job cancelled', { jobId: job.id, done, total });
-        toast.info(`Sketch generation cancelled — ${done}/${total} done`);
-      } else if (fail > 0) {
-        log.warn('toast', 'job completed with failures', { jobId: job.id, done, fail, total });
-        toast.warning(`${done}/${total} sheets generated · ${fail} failed`);
+        log.info('toast', 'job cancelled', { jobId: job.id, done, skipped, total });
+        toast.info(`Sketch generation cancelled — ${done}/${total} done${suffix}`);
+      } else if (fail > 0 || skipped > 0) {
+        log.warn('toast', 'job completed with skips/failures', { jobId: job.id, done, skipped, fail, total });
+        toast.warning(`${done}/${total} sheets generated${suffix}`);
       } else {
         log.info('toast', 'job completed', { jobId: job.id, done, total });
         toast.success(`${done}/${total} sheets generated`);

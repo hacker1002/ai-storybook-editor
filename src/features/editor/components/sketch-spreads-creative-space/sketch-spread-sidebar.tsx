@@ -6,8 +6,8 @@
 // Reorder = native HTML5 drag-and-drop, index-based (no extractable hook / no new dep;
 // handler shape copied from canvas-spread-view/spread-thumbnail-list.tsx).
 
-import { useRef, useState } from 'react';
-import { FileSpreadsheet, Loader2, GripVertical, Pencil, Trash2, BookOpen, FileText, Clock, Check, AlertTriangle } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { FileSpreadsheet, Loader2, GripVertical, Pencil, Trash2, BookOpen, FileText, Clock, Check, AlertTriangle, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -22,6 +22,11 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useSketchSpreadById, useSketchSpreadGenerating } from '@/stores/snapshot-store/selectors';
+import {
+  useIsSpreadLockedByOther,
+  useLockHolderName,
+  type LockTarget,
+} from '@/stores/resource-lock-store';
 import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
 import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
@@ -247,6 +252,19 @@ function SketchSpreadListItem({
   const spread = useSketchSpreadById(spreadId);
   const gen = useSketchSpreadGenerating(spreadId); // per-row generate status (primitives; useShallow-safe)
 
+  // Edit-lock grey-out (advisory): the spread's structural lock (type 6) OR any child
+  // IMAGE lock (type 1) held by another editor disables reorder/✏/🗑 + shows a 🔒 badge.
+  // Selector returns a boolean → stable under Object.is despite `childImageIds` being a
+  // fresh array each render. (Textbox locks are click-time-guarded in the delete flow.)
+  const childImageIds = useMemo(() => spread?.images.map((im) => im.id) ?? [], [spread]);
+  const lockedByOther = useIsSpreadLockedByOther(spreadId, childImageIds);
+  const spreadLockTarget = useMemo<LockTarget>(
+    () => ({ step: 1, resource_type: 6, resource_id: spreadId, locale: null }),
+    [spreadId],
+  );
+  const holderName = useLockHolderName(spreadLockTarget);
+  const lockTooltip = `${holderName ?? 'another editor'} is editing`;
+
   // Selector may return undefined mid-delete/mid-load — skip the row.
   if (!spread) {
     log.debug('SketchSpreadListItem', 'spread not found', { spreadId });
@@ -271,14 +289,21 @@ function SketchSpreadListItem({
       role="listitem"
       aria-current={isSelected}
       onClick={onSelect}
-      draggable
+      draggable={!lockedByOther}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      {/* Drag handle — visual affordance (whole row is draggable) */}
-      <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground cursor-grab" aria-hidden />
+      {/* Drag handle — visual affordance (whole row is draggable); disabled + greyed
+          while locked by another editor (reorder acquires this spread's type-6 lock). */}
+      <GripVertical
+        className={cn(
+          'h-4 w-4 shrink-0 text-muted-foreground',
+          lockedByOther ? 'opacity-40 cursor-not-allowed' : 'cursor-grab',
+        )}
+        aria-hidden
+      />
 
       {/* Bulk-select checkbox — isolate its toggle from row-select (focus) */}
       <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -334,11 +359,27 @@ function SketchSpreadListItem({
         <span className="text-sm font-medium truncate block">{label}</span>
       </button>
 
-      {/* Edit — visible on hover/focus */}
+      {/* Locked-by-other badge — always visible (advisory); tooltip names the holder */}
+      {lockedByOther && (
+        <span
+          className="shrink-0 flex items-center text-muted-foreground"
+          title={lockTooltip}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Lock className="h-3.5 w-3.5" aria-label={lockTooltip} />
+        </span>
+      )}
+
+      {/* Edit — visible on hover/focus; disabled + greyed when locked by another editor */}
       <Button
         variant="ghost"
         size="icon"
-        className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0"
+        className={cn(
+          'h-6 w-6 transition-opacity shrink-0',
+          lockedByOther ? 'opacity-40' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+        )}
+        disabled={lockedByOther}
+        title={lockedByOther ? lockTooltip : undefined}
         onClick={(e) => {
           e.stopPropagation();
           onEdit();
@@ -348,13 +389,18 @@ function SketchSpreadListItem({
         <Pencil className="h-3 w-3" />
       </Button>
 
-      {/* Delete — confirm via AlertDialog */}
+      {/* Delete — confirm via AlertDialog; disabled when locked by another editor */}
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0 text-destructive hover:text-destructive"
+            className={cn(
+              'h-6 w-6 transition-opacity shrink-0 text-destructive hover:text-destructive',
+              lockedByOther ? 'opacity-40' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+            )}
+            disabled={lockedByOther}
+            title={lockedByOther ? lockTooltip : undefined}
             onClick={(e) => e.stopPropagation()}
             aria-label={`Delete ${label}`}
           >

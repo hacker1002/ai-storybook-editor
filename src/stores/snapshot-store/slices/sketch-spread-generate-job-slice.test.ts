@@ -12,6 +12,14 @@ vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: v
 vi.mock('@/apis/sketch-spread-api', () => ({ callGenerateSketchSpread: vi.fn() }));
 const mockedCall = vi.mocked(callGenerateSketchSpread);
 
+// Isolate the resource-lock store: this unit test imports the slice DIRECTLY (bypassing
+// snapshot-store/index), so the real module would close the slice ↔ store cycle. collabPersist=false
+// routes runJob down the legacy flushSnapshot path these tests were written for. The collab
+// (2 image-lock/spread, per-page save) path is covered by its own tests.
+vi.mock('@/stores/resource-lock-store', () => ({
+  useResourceLockStore: { getState: () => ({ collabPersist: false, myUserId: null, holderNames: new Map() }) },
+}));
+
 // Isolated harness: sketch slice (state + addSketchSpreadImageVersion) + the spread-job slice, plus
 // the only cross-slice deps runJob touches — sync (isDirty via producer), meta.id (snapshotId
 // resolved after the initial flush) and flushSnapshot (awaited; stubbed to a no-op).

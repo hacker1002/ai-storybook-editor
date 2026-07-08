@@ -18,7 +18,17 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useSketchSpreadIds, useSnapshotActions } from '@/stores/snapshot-store/selectors';
-import { useCurrentBook } from '@/stores/book-store';
+import { useSnapshotStore } from '@/stores/snapshot-store';
+import { useCurrentBook, useCurrentBookId } from '@/stores/book-store';
+import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
+import {
+  useResourceLockStore,
+  FALLBACK_HOLDER_NAME,
+  isSpreadStructurallyLockedByOther,
+  type LockTarget,
+} from '@/stores/resource-lock-store';
+import { reorderResource } from '@/apis/resource-lock-api';
+import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
 import { createLogger } from '@/utils/logger';
 import { SketchSpreadSidebar } from './sketch-spread-sidebar';
 import { SketchSpreadContentArea } from './sketch-spread-content-area';
@@ -40,7 +50,12 @@ function reportWarnings(warnings: string[]): void {
 export function SketchSpreadsCreativeSpace() {
   const spreadIds = useSketchSpreadIds();
   const book = useCurrentBook();
+  const bookId = useCurrentBookId();
   const { reorderSketchSpreads, deleteSketchSpread, setSketchSpreads } = useSnapshotActions();
+
+  // Collaborator edit-lock: open the realtime lock channel + route flushes through
+  // the gateway (suppress owner-direct autoSave) for as long as this space is mounted.
+  useCollabPersistSession(bookId);
 
   const [userSelectedId, setUserSelectedId] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<string[]>([]); // bulk-select (checkbox) — distinct from row focus
@@ -55,23 +70,107 @@ export function SketchSpreadsCreativeSpace() {
     return spreadIds[0] ?? null;
   }, [spreadIds, userSelectedId]);
 
+  // Reorder = structural op (type-6 lock, phase 08 order-write endpoint). Optimistic
+  // local reorder → acquire the DRAGGED spread's lock → permute server-side (client
+  // sends ONLY ordered_ids, never node bodies → no stale-array clobber) → release.
+  // NO child-lock guard: reorder does not touch content (SRS §4.5). Revert to the
+  // pre-reorder snapshot on acquire-block / endpoint failure.
   const handleReorder = useCallback(
-    (from: number, to: number) => {
-      log.info('handleReorder', 'reorder spreads', { from, to });
-      reorderSketchSpreads(from, to);
+    async (from: number, to: number) => {
+      log.info('handleReorder', 'reorder spreads requested', { from, to });
+      const oldSpreads = useSnapshotStore.getState().sketch.spreads; // pre-reorder snapshot (exact revert)
+      const currentIds = oldSpreads.map((s) => s.id);
+      const len = currentIds.length;
+      // Mirror `reorderSketchSpreads` clamp/no-op semantics so the optimistic UI and
+      // the `ordered_ids` we send stay identical.
+      const f = Math.max(0, Math.min(from, len - 1));
+      const t = Math.max(0, Math.min(to, len - 1));
+      if (len === 0 || f === t) {
+        log.debug('handleReorder', 'no-op reorder', { from, to, len });
+        return;
+      }
+      const draggedId = currentIds[f];
+      // Guard BEFORE the optimistic mutation so a null book never flashes an
+      // apply-then-revert (nothing has moved yet to revert).
+      if (!bookId) {
+        log.warn('handleReorder', 'no book connected — skip reorder', { draggedId });
+        toast.error('Không xác định được sách — vui lòng tải lại trang.');
+        return;
+      }
+      const newIds = [...currentIds];
+      const [moved] = newIds.splice(f, 1);
+      newIds.splice(t, 0, moved);
+
+      const target: LockTarget = { step: 1, resource_type: 6, resource_id: draggedId, locale: null };
+      reorderSketchSpreads(from, to); // optimistic UI
+
+      const store = useResourceLockStore.getState();
+      const acq = await store.acquire(target);
+      if (!acq.ok) {
+        setSketchSpreads(oldSpreads);
+        const name = acq.holder
+          ? store.holderNames.get(acq.holder) ?? FALLBACK_HOLDER_NAME
+          : FALLBACK_HOLDER_NAME;
+        log.info('handleReorder', 'acquire blocked — revert', { draggedId, hasHolder: !!acq.holder });
+        toast.info(`${name} đang chỉnh sửa — vui lòng thử lại sau.`);
+        return;
+      }
+      try {
+        const res = await reorderResource({
+          bookId,
+          step: 1,
+          resourceType: 6,
+          resourceId: draggedId,
+          orderedIds: newIds,
+          // 1-based to match the `spread_number` ordinal used by edit/delete/generate
+          // audits in the same target_type=1 activity feed (f/t are 0-based indices).
+          targetRef: { from: f + 1, to: t + 1 },
+        });
+        if (!res.ok) {
+          setSketchSpreads(oldSpreads); // revert exact pre-reorder order
+          log.warn('handleReorder', 'reorder endpoint failed — reverted', { draggedId, code: res.code });
+          if (res.code === 'SET_MISMATCH') {
+            toast.error('Danh sách spread đã thay đổi — tải lại trang rồi thử lại.');
+          } else {
+            toast.error('Không sắp xếp lại được — vui lòng thử lại.');
+          }
+        }
+      } finally {
+        await store.release(target);
+      }
     },
-    [reorderSketchSpreads],
+    [bookId, reorderSketchSpreads, setSketchSpreads],
   );
 
+  // Delete = destructive structural op (type-6 lock). Guard child-lock FIRST (type-6
+  // key differs from content keys 1/2, so scan children explicitly — SRS §4.5), then
+  // acquire → local delete → save(action=4 delete) → release.
   const handleDelete = useCallback(
-    (id: string) => {
-      log.info('handleDelete', 'delete spread', { id });
-      deleteSketchSpread(id);
-      setUserSelectedId((prev) => (prev === id ? null : prev));
-      setEditingId((prev) => (prev === id ? null : prev));
-      setCheckedIds((prev) => prev.filter((x) => x !== id));
+    async (id: string) => {
+      log.info('handleDelete', 'delete spread requested', { id });
+      const spread = useSnapshotStore.getState().sketch.spreads.find((s) => s.id === id);
+      const childImageIds = spread?.images.map((im) => im.id) ?? [];
+      const childTextboxIds = spread?.textboxes.map((tb) => tb.id) ?? [];
+      if (isSpreadStructurallyLockedByOther(id, childImageIds, childTextboxIds)) {
+        log.info('handleDelete', 'blocked — spread or a child node is locked by other', { id });
+        toast.info('Spread này đang được người khác chỉnh sửa — vui lòng thử lại sau.');
+        return;
+      }
+      const idx = spreadIds.indexOf(id);
+      const spread_number = idx >= 0 ? idx + 1 : 1; // 1-based doc-order position (audit)
+      const target: LockTarget = { step: 1, resource_type: 6, resource_id: id, locale: null };
+      await runLockedDelete(
+        target,
+        { action_type: 4, patch: null, target_ref: { spread_number } },
+        () => {
+          deleteSketchSpread(id);
+          setUserSelectedId((prev) => (prev === id ? null : prev));
+          setEditingId((prev) => (prev === id ? null : prev));
+          setCheckedIds((prev) => prev.filter((x) => x !== id));
+        },
+      );
     },
-    [deleteSketchSpread],
+    [spreadIds, deleteSketchSpread],
   );
 
   const handleCheck = useCallback((id: string, next: boolean) => {

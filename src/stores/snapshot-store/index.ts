@@ -3,6 +3,7 @@ import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
+import { useResourceLockStore } from '@/stores/resource-lock-store';
 import type { SnapshotStore } from './types';
 import type { BaseSpread } from '@/types/spread-types';
 
@@ -188,6 +189,17 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
         saveSnapshot: async () => {
           const [set, get] = args;
+
+          // Collab persist (inside a sketch space): owner-direct manual publish is
+          // suppressed — writing the WHOLE local snapshot would clobber concurrent
+          // collaborator gateway-saves (no realtime snapshot sync). Every write is
+          // routed through the gateway (write-path §7 / ADR-043). Mirrors the
+          // autoSaveSnapshot guard below — the manual Save path was previously ungated.
+          if (useResourceLockStore.getState().collabPersist) {
+            log.warn('saveSnapshot', 'collabPersist active — skip owner-direct manual save (gateway is the write path)');
+            return;
+          }
+
           const { meta, docs, sketch, dummies, illustration, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving) return;
@@ -249,8 +261,24 @@ export const useSnapshotStore = create<SnapshotStore>()(
           });
         },
 
+        clearDirty: () => {
+          const [set] = args;
+          set((state) => {
+            state.sync.isDirty = false;
+          });
+        },
+
         autoSaveSnapshot: async () => {
           const [set, get] = args;
+
+          // Collab persist (inside a sketch space): owner-direct autoSave is suppressed —
+          // every flush is routed through the gateway `releaseAndSave` (write-path §7 /
+          // ADR-043). Defense-in-depth: the primary gate is use-auto-save not scheduling.
+          if (useResourceLockStore.getState().collabPersist) {
+            log.debug('autoSaveSnapshot', 'collabPersist active — skip owner-direct autoSave (gateway routes flush)');
+            return;
+          }
+
           const { meta, docs, sketch, dummies, illustration, props, characters, stages, sync } = get();
 
           if (!meta.bookId || sync.isSaving || !sync.isDirty) return;

@@ -4,6 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import { Plus, Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -18,8 +19,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useSketchEntityByKey, useSnapshotActions } from '@/stores/snapshot-store/selectors';
-import type { SketchEntityKind, SketchVariant } from '@/types/sketch';
-import { titleCase } from './sketch-variants-constants';
+import { useSnapshotStore } from '@/stores/snapshot-store';
+import { useResourceLockSession } from '@/features/editor/hooks/use-resource-lock-session';
+import { type LockTarget } from '@/stores/resource-lock-store';
+import type { SketchEntity, SketchEntityKind, SketchVariant } from '@/types/sketch';
+import { KIND_TO_RESOURCE_TYPE, titleCase } from './sketch-variants-constants';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'EditVariantsModal');
@@ -95,7 +99,41 @@ function VariantKeyInput({ existingKeys, onConfirm, onCancel }: VariantKeyInputP
 
 export function EditVariantsModal({ kind, entityKey, onClose }: EditVariantsModalProps) {
   const entity = useSketchEntityByKey(kind, entityKey);
-  const { upsertSketchVariant } = useSnapshotActions();
+  const { upsertSketchVariant, upsertSketchEntity } = useSnapshotActions();
+
+  // Edit-lock session: opening this modal IS the entity edit-session. The hook is the
+  // single owner of acquire → baseline snapshot → heartbeat → release-and-save-if-dirty.
+  // Target is language-agnostic (locale: null); resource_type per kind (3/4/5).
+  const lockTarget = useMemo<LockTarget>(
+    () => ({ step: 1, resource_type: KIND_TO_RESOURCE_TYPE[kind], resource_id: entityKey, locale: null }),
+    [kind, entityKey],
+  );
+  const { status } = useResourceLockSession({
+    target: lockTarget,
+    // Live (non-reactive) read: baseline is snapshotted at acquire, dirty-diffed at
+    // release. Reading getState() (not the render-captured `entity`) guarantees the
+    // release-time node reflects a just-committed Save even without a re-render.
+    getNode: () => useSnapshotStore.getState().sketch[kind].find((e) => e.key === entityKey) ?? null,
+    buildPayload: (node) => ({
+      action_type: 3, // edit
+      patch: node,
+      target_ref: { kind, entity: entityKey },
+    }),
+    onBlocked: (holder) => {
+      log.warn('onBlocked', 'entity held by another editor — close', { kind, entityKey, hasHolder: !!holder });
+      toast.error(`${holder || 'another editor'} đang sửa`);
+      onClose();
+    },
+    onLost: (baseline) => {
+      log.warn('onLost', 'lock lost mid-edit — revert entity + close', { kind, entityKey });
+      if (baseline) upsertSketchEntity(kind, baseline as SketchEntity);
+      toast.error('Bạn đã mất quyền khoá — thay đổi đã được hoàn tác');
+      onClose();
+    },
+  });
+  // Guard the fast-Save race: baseline is only captured once the lock is 'held'. If Save
+  // committed before that, release cleanup would see key ∉ myLocks and skip the save.
+  const canSave = status === 'held';
 
   // Seed draft once from the store. Empty entity → one blank `base` tab.
   const [draft, setDraft] = useState<SketchVariant[]>(() => {
@@ -189,7 +227,13 @@ export function EditVariantsModal({ kind, entityKey, onClose }: EditVariantsModa
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Save</Button>
+          <Button
+            onClick={handleSave}
+            disabled={!canSave}
+            title={canSave ? undefined : 'Đang thiết lập quyền khoá…'}
+          >
+            Save
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

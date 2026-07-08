@@ -20,6 +20,8 @@ const spreadJob = (
   tasks: tasks.map((t, i) => ({ ...t, ordinal: i + 1 })),
   currentIndex: 0,
   cancelRequested: false,
+  skipped: 0,
+  skippedNames: [],
   createdAt: '',
 });
 

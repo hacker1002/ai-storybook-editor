@@ -21,7 +21,8 @@
 
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { PageItem } from '@/features/editor/components/canvas-spread-view/page-item';
 import { SelectionFrame } from '@/features/editor/components/canvas-spread-view/selection-frame';
 import { clamp } from '@/features/editor/components/canvas-spread-view/utils/coordinate-utils';
@@ -45,7 +46,15 @@ import {
   getSketchSpreadPageImageUrl,
   getSketchTextboxContent,
 } from '@/types/sketch';
-import type { SketchTextbox, SketchTextboxContent } from '@/types/sketch';
+import type { SketchTextbox, SketchTextboxContent, SketchSpreadImage } from '@/types/sketch';
+import { useSnapshotStore } from '@/stores/snapshot-store';
+import { useResourceLockSession } from '@/features/editor/hooks/use-resource-lock-session';
+import {
+  useResourceLockStore,
+  FALLBACK_HOLDER_NAME,
+  type LockTarget,
+  type SavePayload,
+} from '@/stores/resource-lock-store';
 import type {
   BaseSpread,
   Geometry,
@@ -69,6 +78,8 @@ import { LockedPageImage } from './sketch-spread-canvas-page-image';
 import { SketchImageToolbar } from './sketch-image-toolbar';
 import { SketchImageToolsModals } from './sketch-image-tools-modals';
 import { computeSketchPageNumbers } from './compute-sketch-page-numbers';
+import { SketchTextboxLockGate } from './sketch-spread-canvas-textbox-lock-gate';
+import { LockedByOtherOverlay } from './sketch-locked-by-other-overlay';
 
 const log = createLogger('Editor', 'SketchSpreadCanvas');
 
@@ -126,6 +137,7 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
     deleteSketchTextbox,
     addSketchSpreadImageVersion,
     selectSketchSpreadImageVersion,
+    setSketchSpreads,
   } = useSnapshotActions();
   const setZoomLevel = useSetZoomLevel();
   const book = useCurrentBook();
@@ -299,6 +311,112 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
     [selectedImageId, selectedTextboxId, editingTextboxId, spread, langCode, spreadId, deselect, deleteSketchTextbox, updateSketchTextbox],
   );
 
+  // ── Collaborator edit-lock lifecycle ─────────────────────────────────────────
+  // The current selection (image XOR textbox) IS the lock target: selecting acquires, deselecting
+  // release-and-saves-if-dirty (design §18). Edits stay LOCAL until release (collabPersist).
+  const lockTarget: LockTarget | null = useMemo(() => {
+    // selectedImageId holds SketchSpreadImage.id → it IS the lock resource_id (type 1) directly.
+    if (selectedImageId) {
+      return { step: 1, resource_type: 1, resource_id: selectedImageId, locale: null };
+    }
+    if (selectedTextboxId) {
+      return { step: 1, resource_type: 2, resource_id: selectedTextboxId, locale: langCode };
+    }
+    return null;
+  }, [selectedImageId, selectedTextboxId, langCode]);
+
+  // Live snapshot node for the selected target (plain JSON — no Maps/Dates). Read the store each
+  // call so an Edit/Extract version-append is reflected in the release-time dirty diff.
+  const getLockNode = useCallback((): unknown => {
+    const spr = useSnapshotStore.getState().sketch.spreads.find((sp) => sp.id === spreadId);
+    if (!spr) return null;
+    if (selectedImageId) {
+      return spr.images.find((im) => im.id === selectedImageId) ?? null;
+    }
+    if (selectedTextboxId) {
+      const tb = spr.textboxes.find((t) => t.id === selectedTextboxId);
+      return tb ? getSketchTextboxContent(tb, langCode) ?? null : null;
+    }
+    return null;
+  }, [spreadId, selectedImageId, selectedTextboxId, langCode]);
+
+  // Node → gateway save payload (audit map, design §6). action_type 3 = edit.
+  const buildLockPayload = useCallback(
+    (node: unknown): SavePayload => {
+      const idx = spreadIds.indexOf(spreadId);
+      const spread_number = idx >= 0 ? idx + 1 : 1; // 1-based doc-order spread position
+      if (selectedImageId) {
+        // page ∈ left|right|full — taken from the (post-prepend) image node's own type.
+        const page = (node as SketchSpreadImage | null)?.type;
+        return { action_type: 3, patch: node, target_ref: { spread_number, page } };
+      }
+      return {
+        action_type: 3,
+        patch: node,
+        target_ref: { spread_number, textbox_id: selectedTextboxId, locale: langCode },
+      };
+    },
+    [spreadIds, spreadId, selectedImageId, selectedTextboxId, langCode],
+  );
+
+  // 409 on acquire → another editor holds it. Revert the optimistic selection + toast. `holder` is
+  // a user id (MAY be '') — resolve its cached name best-effort, else the generic fallback.
+  const onLockBlocked = useCallback(
+    (holder: string) => {
+      const name = holder
+        ? useResourceLockStore.getState().holderNames.get(holder) ?? FALLBACK_HOLDER_NAME
+        : FALLBACK_HOLDER_NAME;
+      log.info('onLockBlocked', 'acquire blocked — revert selection', { hasHolder: !!holder });
+      toast.info(`${name} is editing this — try again shortly`);
+      deselect();
+    },
+    [deselect],
+  );
+
+  // Heartbeat 409 → the lock was stolen mid-edit (SRS §10 = REVERT to baseline, unlike a save-lost
+  // which keeps local). Write the pre-edit node back, force-deselect, toast.
+  const onLockLost = useCallback(
+    (baseline: unknown) => {
+      log.warn('onLockLost', 'lock lost via heartbeat — revert node + deselect', {
+        hasImage: !!selectedImageId,
+        hasTextbox: !!selectedTextboxId,
+      });
+      if (selectedImageId && baseline) {
+        // Rebuild spreads with the target image restored to baseline (reuse setSketchSpreads — no
+        // dedicated revert action needed). Undoes any prepended Edit/Extract version.
+        const spreads = useSnapshotStore.getState().sketch.spreads;
+        const next = spreads.map((sp) =>
+          sp.id !== spreadId
+            ? sp
+            : {
+                ...sp,
+                images: sp.images.map((im) =>
+                  im.id === selectedImageId ? (baseline as SketchSpreadImage) : im,
+                ),
+              },
+        );
+        setSketchSpreads(next);
+      } else if (selectedTextboxId && baseline) {
+        // Full-content merge restores every field (text/geometry/typography) to baseline.
+        updateSketchTextbox(spreadId, selectedTextboxId, langCode, baseline as SketchTextboxContent);
+      }
+      deselect();
+      toast.warning('You lost the edit lock — your changes were reverted');
+    },
+    [selectedImageId, selectedTextboxId, spreadId, langCode, setSketchSpreads, updateSketchTextbox, deselect],
+  );
+
+  // Single session for the ONE selected resource (image XOR textbox). langCode lives in the target,
+  // so switching header language while holding a textbox auto re-keys (release old locale
+  // dirty-checked → acquire new).
+  useResourceLockSession({
+    target: lockTarget,
+    getNode: getLockNode,
+    buildPayload: buildLockPayload,
+    onBlocked: onLockBlocked,
+    onLost: onLockLost,
+  });
+
   if (!spread) {
     log.debug('render', 'no spread — render null', { spreadId });
     return null;
@@ -390,6 +508,7 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
               ordinal={i + 1}
               isSelected={Boolean(img) && img?.id === selectedImageId}
               onSelect={img ? () => selectImage(img.id) : undefined}
+              imageId={img?.id}
             />
           );
         })}
@@ -456,7 +575,32 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
           };
 
           return (
-            <Fragment key={tb.id}>
+            <SketchTextboxLockGate key={tb.id} textboxId={tb.id} langCode={langCode}>
+              {(lockedByOther, holderName) =>
+                lockedByOther ? (
+                  <>
+                    {/* Other-held → static, non-selectable textbox + dim veil (no frame/toolbar). */}
+                    <EditableTextbox
+                      textboxContent={displayContent}
+                      index={i}
+                      zIndex={LAYER_CONFIG.TEXT.min + i}
+                      isSelected={false}
+                      isSelectable={false}
+                      isEditable={false}
+                      isEditing={false}
+                      onSelect={() => {}}
+                      onTextChange={() => {}}
+                      onEditingChange={() => {}}
+                    />
+                    <LockedByOtherOverlay
+                      holderName={holderName}
+                      geometry={content.geometry}
+                      zIndex={LAYER_CONFIG.TEXT.max}
+                      interactive
+                    />
+                  </>
+                ) : (
+                <>
               <EditableTextbox
                 textboxContent={displayContent}
                 index={i}
@@ -515,7 +659,10 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
                   <SpreadsTextToolbar<BaseSpread> context={toolbarContext} />
                 </>
               )}
-            </Fragment>
+                </>
+                )
+              }
+            </SketchTextboxLockGate>
           );
         })}
 

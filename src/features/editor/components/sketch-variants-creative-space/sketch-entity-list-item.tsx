@@ -2,7 +2,8 @@
 // Reads its own entity (id-based selector → no re-render on sibling edits).
 // Layout: [checkbox] [titleCase name + @key + variant count] [edit] [delete-confirm].
 
-import { Pencil, Trash2, Loader2, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { useMemo } from 'react';
+import { Pencil, Trash2, Loader2, MoreHorizontal, AlertTriangle, Lock } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,8 +18,13 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useSketchEntityByKey, useSketchEntityGenerating } from '@/stores/snapshot-store/selectors';
+import {
+  useIsLockedByOther,
+  useLockHolderName,
+  type LockTarget,
+} from '@/stores/resource-lock-store';
 import type { SketchEntityKind } from '@/types/sketch';
-import { titleCase } from './sketch-variants-constants';
+import { KIND_TO_RESOURCE_TYPE, titleCase } from './sketch-variants-constants';
 import { cn } from '@/utils/utils';
 
 interface SketchEntityListItemProps {
@@ -48,6 +54,17 @@ export function SketchEntityListItem({
   const gen = useSketchEntityGenerating(kind, entityKey);
   const variantCount = entity?.variants.length ?? 0;
   const name = titleCase(entityKey);
+
+  // Edit-lock grey-out (advisory): another editor holding this entity's lock disables
+  // ✏/🗑 + shows a 🔒 badge with the holder's name. Row body still focus-previews
+  // (focus ≠ lock — SRS §4.3). Structural delete guard is phase 07; here we only disable.
+  const lockTarget = useMemo<LockTarget>(
+    () => ({ step: 1, resource_type: KIND_TO_RESOURCE_TYPE[kind], resource_id: entityKey, locale: null }),
+    [kind, entityKey],
+  );
+  const lockedByOther = useIsLockedByOther(lockTarget);
+  const holderName = useLockHolderName(lockTarget);
+  const lockTooltip = `${holderName ?? 'another editor'} is editing`;
 
   // Per-row job status: queued (⋯) / running (spinner) / error (⚠). Idle + completed render
   // nothing (the generated image itself is the "done" signal in the preview).
@@ -98,11 +115,27 @@ export function SketchEntityListItem({
         </span>
       )}
 
-      {/* Edit variants — visible on hover */}
+      {/* Locked-by-other badge — always visible (advisory), tooltip names the holder */}
+      {lockedByOther && (
+        <span
+          className="shrink-0 flex items-center text-muted-foreground"
+          title={lockTooltip}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Lock className="h-3.5 w-3.5" aria-label={lockTooltip} />
+        </span>
+      )}
+
+      {/* Edit variants — visible on hover; disabled + greyed when locked by another editor */}
       <Button
         variant="ghost"
         size="icon"
-        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+        className={cn(
+          'h-6 w-6 transition-opacity shrink-0',
+          lockedByOther ? 'opacity-40' : 'opacity-0 group-hover:opacity-100',
+        )}
+        disabled={lockedByOther}
+        title={lockedByOther ? lockTooltip : undefined}
         onClick={(e) => {
           e.stopPropagation();
           onEdit();
@@ -112,13 +145,18 @@ export function SketchEntityListItem({
         <Pencil className="h-3 w-3" />
       </Button>
 
-      {/* Delete — confirm via AlertDialog */}
+      {/* Delete — confirm via AlertDialog; disabled when locked by another editor */}
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-destructive hover:text-destructive"
+            className={cn(
+              'h-6 w-6 transition-opacity shrink-0 text-destructive hover:text-destructive',
+              lockedByOther ? 'opacity-40' : 'opacity-0 group-hover:opacity-100',
+            )}
+            disabled={lockedByOther}
+            title={lockedByOther ? lockTooltip : undefined}
             onClick={(e) => e.stopPropagation()}
             aria-label={`Delete ${name}`}
           >
