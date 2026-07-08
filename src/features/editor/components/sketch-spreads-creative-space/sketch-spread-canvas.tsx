@@ -79,7 +79,7 @@ import { SketchImageToolbar } from './sketch-image-toolbar';
 import { SketchImageToolsModals } from './sketch-image-tools-modals';
 import { computeSketchPageNumbers } from './compute-sketch-page-numbers';
 import { SketchTextboxLockGate } from './sketch-spread-canvas-textbox-lock-gate';
-import { LockedByOtherOverlay } from './sketch-locked-by-other-overlay';
+import { LockedByOtherOverlay } from '../shared-components/sketch-locked-by-other-overlay';
 
 const log = createLogger('Editor', 'SketchSpreadCanvas');
 

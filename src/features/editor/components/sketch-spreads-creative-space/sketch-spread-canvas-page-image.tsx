@@ -33,7 +33,7 @@ import {
   type LockTarget,
 } from '@/stores/resource-lock-store';
 import { createLogger } from '@/utils/logger';
-import { LockedByOtherOverlay } from './sketch-locked-by-other-overlay';
+import { LockedByOtherOverlay } from '../shared-components/sketch-locked-by-other-overlay';
 
 const log = createLogger('Editor', 'SketchLockedPageImage');
 

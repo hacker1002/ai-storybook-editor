@@ -28,9 +28,11 @@ import {
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
 import { useCurrentBook } from '@/stores/book-store';
+import { useAllResourcesLockedByOther, useLockHolderName } from '@/stores/resource-lock-store';
 import type { SketchEntityKind } from '@/types/sketch';
-import { titleCase, type KindConfig } from './sketch-variants-constants';
+import { KIND_TO_RESOURCE_TYPE, titleCase, type KindConfig } from './sketch-variants-constants';
 import { ImageDownloadButton } from '@/features/editor/components/shared-components/image-download-button';
+import { LockedByOtherOverlay } from '@/features/editor/components/shared-components/sketch-locked-by-other-overlay';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'SketchEntityContentArea');
@@ -68,12 +70,32 @@ export function SketchEntityContentArea({
 
   const name = titleCase(selectedEntityKey);
   const target = checkedKeys.length > 0 ? checkedKeys : selectedEntityKey ? [selectedEntityKey] : [];
+
+  // Edit-lock gate: the generate job SKIPS entities locked by another editor (acquire→409→skip),
+  // so a Generate/Retry click on an all-locked target does nothing but read as "generated but not
+  // saved". Disable when every target is locked-by-other; a mixed batch stays enabled (job skips the
+  // locked ones, generates the rest). `selectedLockHolder` (non-null ⇔ focused entity locked-by-other)
+  // gates the single-entity Retry + names the holder in the tooltip.
+  const resourceType = KIND_TO_RESOURCE_TYPE[kind];
+  const allTargetsLockedByOther = useAllResourcesLockedByOther(resourceType, target);
+  const selectedLockHolder = useLockHolderName({
+    step: 1,
+    resource_type: resourceType,
+    resource_id: selectedEntityKey,
+    locale: null,
+  });
+  const selectedLockedByOther = selectedLockHolder !== null;
+
   const label = isJobRunning
     ? `Generating… (${progress?.done ?? 0}/${progress?.total ?? 0})`
     : checkedKeys.length > 0
       ? `Generate (${checkedKeys.length})`
       : 'Generate';
-  const canGenerate = !isJobRunning && Boolean(book?.artstyle_id) && target.length > 0;
+  const canGenerate =
+    !isJobRunning && Boolean(book?.artstyle_id) && target.length > 0 && !allTargetsLockedByOther;
+  const generateLockTooltip = allTargetsLockedByOther
+    ? `${selectedLockHolder ?? 'another editor'} is editing`
+    : undefined;
 
   // Resolve target keys → eligible (1..12 variants) at click-time via getState() (NOT a hook —
   // React 19 forbids hooks in callbacks). Empty-variant entities are skipped; >12 are flagged.
@@ -129,6 +151,10 @@ export function SketchEntityContentArea({
   };
 
   const handleRetryFocus = () => {
+    if (selectedLockedByOther) {
+      log.debug('handleRetryFocus', 'blocked — focused entity locked by another editor', { kind, selectedEntityKey });
+      return;
+    }
     if (book?.artstyle_id && selectedEntityKey) {
       log.info('handleRetryFocus', 'retry focused entity', { kind, selectedEntityKey });
       startSketchGenerateJob({ kind, entityKeys: [selectedEntityKey], artStyleId: book.artstyle_id });
@@ -143,6 +169,7 @@ export function SketchEntityContentArea({
           size="sm"
           onClick={handleGenerate}
           disabled={!canGenerate}
+          title={generateLockTooltip}
           aria-busy={isJobRunning}
           aria-label={label}
         >
@@ -164,7 +191,14 @@ export function SketchEntityContentArea({
         <div className="relative flex h-full items-center justify-center">
           {focusGen.isGenerating ? (
             entity?.media_url ? (
-              <SheetImage key={entity.media_url} src={entity.media_url} name={name} onRetry={handleRetryFocus} />
+              <SheetImage
+                key={entity.media_url}
+                src={entity.media_url}
+                name={name}
+                onRetry={handleRetryFocus}
+                lockedByOther={selectedLockedByOther}
+                holderName={selectedLockHolder}
+              />
             ) : (
               <EmptyPreview cfg={cfg} />
             )
@@ -172,13 +206,27 @@ export function SketchEntityContentArea({
             <div className="flex flex-col items-center text-center text-muted-foreground">
               <AlertTriangle className="h-10 w-10 mb-3 text-destructive" aria-hidden="true" />
               <p className="text-sm text-destructive">{focusGen.error}</p>
-              <Button size="sm" variant="outline" className="mt-3" onClick={handleRetryFocus}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={handleRetryFocus}
+                disabled={selectedLockedByOther}
+                title={selectedLockedByOther ? `${selectedLockHolder ?? 'another editor'} is editing` : undefined}
+              >
                 <Sparkles className="h-4 w-4 mr-1.5" />
                 Retry
               </Button>
             </div>
           ) : entity?.media_url ? (
-            <SheetImage key={entity.media_url} src={entity.media_url} name={name} onRetry={handleRetryFocus} />
+            <SheetImage
+              key={entity.media_url}
+              src={entity.media_url}
+              name={name}
+              onRetry={handleRetryFocus}
+              lockedByOther={selectedLockedByOther}
+              holderName={selectedLockHolder}
+            />
           ) : (
             <EmptyPreview cfg={cfg} />
           )}
@@ -225,7 +273,21 @@ export function SketchEntityContentArea({
 // `key={src}` at the call sites (NOT useEffect+setState — banned by the React 19 lint).
 // On a dead storage URL (404), regenerate is the correct recovery — it produces a fresh
 // file — so the error state offers Retry (spec 02 edge case), not just a static hint.
-function SheetImage({ src, name, onRetry }: { src: string; name: string; onRetry: () => void }) {
+function SheetImage({
+  src,
+  name,
+  onRetry,
+  lockedByOther = false,
+  holderName = null,
+}: {
+  src: string;
+  name: string;
+  onRetry: () => void;
+  /** Another editor holds this entity's lock → dim veil + 🔒 holder badge (mirrors the spread page
+   *  image), and the hover Download is suppressed (read-only surface). */
+  lockedByOther?: boolean;
+  holderName?: string | null;
+}) {
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
 
   // Callback ref covers the browser-cache race: a cached image can be `complete`
@@ -265,7 +327,7 @@ function SheetImage({ src, name, onRetry }: { src: string; name: string; onRetry
             status === 'loaded' ? 'opacity-100' : 'opacity-0'
           }`}
         />
-        {status === 'loaded' && (
+        {status === 'loaded' && !lockedByOther && (
           <ImageDownloadButton
             url={src}
             filename={`${name}-sketch-sheet`}
@@ -273,6 +335,10 @@ function SheetImage({ src, name, onRetry }: { src: string; name: string; onRetry
             className="absolute right-2 bottom-2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
           />
         )}
+        {/* Other editor holds this entity → dim veil + 🔒 holder badge (same overlay as the spread
+            page image). Advisory only — the acquire 409 is authority; the Generate/Retry gates
+            already block the action. */}
+        {status === 'loaded' && lockedByOther && <LockedByOtherOverlay holderName={holderName} />}
       </div>
       {status === 'loading' && (
         <div
