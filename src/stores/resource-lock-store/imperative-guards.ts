@@ -17,6 +17,40 @@ function heldByOther(entry: LockEntry | undefined, me: string | null, now: numbe
   return !!entry && entry.holder_user_id !== me && new Date(entry.expires_at).getTime() > now;
 }
 
+/** True when `entry` is a LIVE lock held by ME (not expired). Inverse of
+ *  `heldByOther` — powers the content-sync lock-skip (never clobber a node I'm
+ *  actively editing). */
+function heldByMe(entry: LockEntry | undefined, me: string | null, now: number): boolean {
+  return !!entry && !!me && entry.holder_user_id === me && new Date(entry.expires_at).getTime() > now;
+}
+
+/**
+ * Do I currently hold a LIVE lock on this exact target? Imperative + expiry-aware
+ * (mirror of `isLockedByOtherNow`, inverted). Used by the content-sync handler
+ * (phase 05) to skip merging a remote `node` patch onto a node I'm mid-edit on.
+ */
+export function holdsLiveLock(target: LockTarget): boolean {
+  const s = useResourceLockStore.getState();
+  if (!s.bookId) return false;
+  return heldByMe(s.registry.get(keyOf(s.bookId, target)), s.myUserId, Date.now());
+}
+
+/**
+ * Do I hold ANY live lock in this book right now? Imperative + expiry-aware. Used
+ * by the content-sync `set`-scope skip (whole-replace generate output is coarse →
+ * skip if I'm editing anything, phase 05 v1).
+ */
+export function hasAnyLiveLock(): boolean {
+  const s = useResourceLockStore.getState();
+  const me = s.myUserId;
+  if (!me) return false;
+  const now = Date.now();
+  for (const entry of s.registry.values()) {
+    if (heldByMe(entry, me, now)) return true;
+  }
+  return false;
+}
+
 /**
  * Delete-spread child-lock guard (SRS §4.5). The spread's type-6 STRUCTURAL lock is
  * a DIFFERENT registry key than its CONTENT locks (type 1 image / type 2 textbox),

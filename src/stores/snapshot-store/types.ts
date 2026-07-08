@@ -243,6 +243,11 @@ export interface DocsSlice {
   getDoc: (docType: DocType) => ManuscriptDoc | undefined;
 }
 
+/** Persisted snapshot columns addressable by the collab content-sync merge (phase 04).
+ *  These are exactly the JSONB columns of `snapshots` that map 1:1 to a store slice
+ *  (`state[column]`). Content-sync-store (phase 03) imports this from here (single source). */
+export type SnapshotColumn = 'sketch' | 'illustration' | 'characters' | 'props' | 'stages';
+
 export interface MetaSlice {
   meta: SnapshotMeta;
   sync: SyncState;
@@ -251,6 +256,15 @@ export interface MetaSlice {
   markClean: () => void;
   setSaving: (isSaving: boolean) => void;
   setSaveError: (error: string | null) => void;
+  /** Collab content-sync (phase 04): merge ONE remote node into `state[column]` at
+   *  `path` (`value == null` → remove). Never sets `sync.isDirty`, never touches nodes
+   *  outside `path`. Empty path / absent intermediate / absent column → no-op. */
+  applyRemoteNodePatch: (column: SnapshotColumn, path: string[], value: unknown) => void;
+  /** Collab content-sync (phase 04): reconcile the local collection at `state[column]`+`path`
+   *  against a fetched array — adopt the server's ORDER + MEMBERSHIP but KEEP the local
+   *  element object for any matching `id` (preserves a peer's in-progress edit; new id → use
+   *  fetched). Never sets `sync.isDirty`. No-op when either side is not an array. */
+  reconcileCollectionByIds: (column: SnapshotColumn, path: string[], fetchedArray: unknown[]) => void;
 }
 
 export interface FetchSlice {

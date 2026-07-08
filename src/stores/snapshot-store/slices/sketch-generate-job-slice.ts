@@ -236,6 +236,12 @@ export const createSketchGenerateJobSlice: StateCreator<
           actionType: ACTION_TYPE_UPLOAD,
           targetType: TARGET_TYPE_ENTITY,
           targetRef: { kind, entities: generatedKeys, count: generatedKeys.length },
+          // content-sync scope 'set': a peer refetches + whole-replaces this entity collection
+          // (sketch.<kind>) at the active version. `kind` is the same key that indexes
+          // get().sketch[kind] → symmetric with the peer's get_snapshot_node('sketch',[kind]).
+          metadata: {
+            sync: { scope: 'set', version: get().meta.id ?? '', targets: [{ column: 'sketch', path: [kind] }] },
+          },
         });
       }
     } else {

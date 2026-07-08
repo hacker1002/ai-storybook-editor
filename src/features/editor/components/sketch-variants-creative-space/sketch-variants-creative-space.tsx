@@ -20,6 +20,7 @@ import { Upload } from 'lucide-react';
 import { useSketchEntityKeys, useSnapshotActions } from '@/stores/snapshot-store/selectors';
 import { useCurrentBookId } from '@/stores/book-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
+import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { isLockedByOtherNow, type LockTarget } from '@/stores/resource-lock-store';
 import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
 import type { SketchEntityKind } from '@/types/sketch';
@@ -56,6 +57,9 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
   // Collaborator edit-lock: open the realtime lock channel + route flushes through
   // the gateway (suppress owner-direct autoSave) for as long as this space is mounted.
   useCollabPersistSession(bookId);
+  // Collaborator content-sync: refetch + merge peer edits (node / reorder / generate) into
+  // the snapshot store so B sees fresh content without a manual refresh (ADR-043 follow-up).
+  useContentSyncSession(bookId);
 
   const [userSelectedKey, setUserSelectedKey] = useState<string | null>(null);
   const [checkedKeys, setCheckedKeys] = useState<string[]>([]);

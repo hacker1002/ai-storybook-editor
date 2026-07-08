@@ -471,6 +471,11 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
         actionType: ACTION_TYPE_UPLOAD,
         targetType: TARGET_TYPE_SPREAD,
         targetRef: { spread_numbers: auditSpreadNumbers, count: auditSpreadNumbers.length },
+        // content-sync scope 'set': a peer refetches + whole-replaces sketch.spreads at the
+        // active version (one summary event covers the whole generate job).
+        metadata: {
+          sync: { scope: 'set', version: get().meta.id ?? '', targets: [{ column: 'sketch', path: ['spreads'] }] },
+        },
       });
     }
 

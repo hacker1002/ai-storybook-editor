@@ -21,6 +21,7 @@ import { useSketchSpreadIds, useSnapshotActions } from '@/stores/snapshot-store/
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import { useCurrentBook, useCurrentBookId } from '@/stores/book-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
+import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import {
   useResourceLockStore,
   FALLBACK_HOLDER_NAME,
@@ -56,6 +57,9 @@ export function SketchSpreadsCreativeSpace() {
   // Collaborator edit-lock: open the realtime lock channel + route flushes through
   // the gateway (suppress owner-direct autoSave) for as long as this space is mounted.
   useCollabPersistSession(bookId);
+  // Collaborator content-sync: refetch + merge peer edits (node / reorder / generate) into
+  // the snapshot store so B sees fresh content without a manual refresh (ADR-043 follow-up).
+  useContentSyncSession(bookId);
 
   const [userSelectedId, setUserSelectedId] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<string[]>([]); // bulk-select (checkbox) — distinct from row focus
