@@ -29,6 +29,7 @@ import { MockCreativeSpace } from '../components/creative-space-mocks/mock-creat
 import { SharesCreativeSpace } from '../components/shares-creative-space';
 import { CollaboratorsCreativeSpace } from '../components/collaborators-creative-space';
 import { useMyCollaboration } from '../components/collaborators-creative-space/hooks/use-my-collaboration';
+import { useLogBookLogin } from '../components/collaborators-creative-space/hooks/use-log-book-login';
 import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { RemixCreativeSpace } from '../components/remix-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -93,6 +94,10 @@ export function EditorPage() {
   const currentUserId = useAuthStore((s) => s.user?.id) ?? null;
   const isOwner = book ? book.owner_id === currentUserId : true;
   const { access_rights: myRights } = useMyCollaboration(bookId ?? null, currentUserId, isOwner);
+
+  // Audit: append a once-per-session "login" row when this user opens the book (owner +
+  // collaborator). Book-scoped, client-direct write per DB design — see the hook header.
+  useLogBookLogin(bookId ?? null, currentUserId);
 
   // Fetch book and snapshot on mount
   useEffect(() => {
