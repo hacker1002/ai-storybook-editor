@@ -17,7 +17,7 @@
 // resets cleanly and a stale debounce can never write to the wrong row.
 
 import { useMemo, useState } from 'react';
-import { Users, Send, PauseCircle, PlayCircle } from 'lucide-react';
+import { Users, Send, Ban, PlayCircle } from 'lucide-react';
 import { useCurrentBook } from '@/stores/book-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { Button } from '@/components/ui/button';
@@ -93,7 +93,7 @@ function CollaboratorHeaderActions({
   const canSend = status === 0; // pending → invited
   const canToggleSuspend = status === 2 || status === 3; // active ↔ suspended
   const isSuspended = status === 3;
-  const SuspendIcon = isSuspended ? PlayCircle : PauseCircle;
+  const SuspendIcon = isSuspended ? PlayCircle : Ban;
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm" disabled={!canToggleSuspend || isSaving} onClick={onSuspendToggle}>
@@ -219,7 +219,7 @@ export function CollaboratorsCreativeSpace() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {selected ? (
           <>
-            <div className="flex items-center justify-between border-b px-3 py-2">
+            <div className="flex h-14 shrink-0 items-center justify-between border-b px-3">
               <TabBar activeTab={activeTab} onChange={setActiveTab} />
               <CollaboratorHeaderActions
                 status={selected.status}
@@ -233,7 +233,6 @@ export function CollaboratorsCreativeSpace() {
                 <CollaboratorInfoTab
                   key={selected.id}
                   collaboration={selected}
-                  bookLanguages={bookLanguages.map((l) => l.code)}
                   isSaving={isSaving}
                   onRightsChange={(next) => updateRights(selected.id, next)}
                 />

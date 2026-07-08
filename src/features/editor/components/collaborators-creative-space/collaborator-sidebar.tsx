@@ -84,8 +84,9 @@ export function CollaboratorSidebar({
         aria-label="Collaborators sidebar"
         className="flex h-full w-[280px] flex-col border-r bg-muted/30"
       >
-        {/* Header: filter funnel + title + add */}
-        <div className="flex items-center justify-between border-b px-3 py-2">
+        {/* Header: filter funnel + title + add (h-14 = canonical editor header height,
+            shared with the detail header so both panels align). */}
+        <div className="flex h-14 shrink-0 items-center justify-between border-b px-3">
           <div className="flex items-center gap-1.5">
             <CollaboratorFilterPopover
               filter={filter}

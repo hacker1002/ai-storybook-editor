@@ -1,6 +1,7 @@
-// CollaboratorInfoTab — read-only collaborator header + the access-rights editor
-// (LanguagesField + PipelineStepMatrix). No picker, no password field (both removed
-// vs the old recording); the email is display-only.
+// CollaboratorInfoTab — the access-rights editor (LanguagesField + PipelineStepMatrix).
+// The read-only collaborator header (avatar/name/email/status) was removed — that identity
+// already lives in the sidebar row + the parent-rendered detail header. Languages always
+// show the full 5-language catalog (AVAILABLE_LANGUAGES), not just the book's enabled set.
 //
 // The rights matrix is OPTIMISTIC: `localRights` renders instantly, the persist is
 // DEBOUNCED 500ms and FLUSHED on unmount (so switching tab/collaborator within the
@@ -18,8 +19,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createLogger } from '@/utils/logger';
 import { AVAILABLE_LANGUAGES } from '@/constants/editor-constants';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CollaboratorAvatar } from './collaborator-avatar';
-import { CollaboratorStatusBadge } from './collaborator-status-badge';
 import { PipelineStepMatrix } from './pipeline-step-matrix';
 import {
   STEP_RESOURCES,
@@ -37,15 +36,18 @@ const STEP_ORDER: PipelineStep[] = ['sketch', 'illustration', 'retouch'];
 
 interface CollaboratorInfoTabProps {
   collaboration: Collaboration;
-  bookLanguages: string[]; // the book's ENABLED language codes (options, not a catalog)
   isSaving: boolean;
   onRightsChange: (next: AccessRights) => void;
 }
 
-/** Display label for a language code: "English (en_US)" when known, else the raw code. */
+/** Display label for a language code: "English (en_US)" when known, else the raw code.
+ *  Strips a trailing region parenthetical from the catalog name (e.g. "English (US)" →
+ *  "English", "中文 (简体)" → "中文") so appending the code never double-parens. */
 function languageLabel(code: string): string {
   const known = AVAILABLE_LANGUAGES.find((l) => l.code === code);
-  return known?.name ? `${known.name} (${code})` : code;
+  if (!known?.name) return code;
+  const base = known.name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  return `${base} (${code})`;
 }
 
 /**
@@ -67,7 +69,6 @@ function rightsSignature(r: AccessRights): string {
 
 export function CollaboratorInfoTab({
   collaboration,
-  bookLanguages,
   isSaving,
   onRightsChange,
 }: CollaboratorInfoTabProps) {
@@ -152,48 +153,28 @@ export function CollaboratorInfoTab({
     applyRights({ ...localRights, steps: { ...localRights.steps, [step]: next } });
   };
 
-  const name = collaboration.profile?.name ?? 'Unknown user';
-  const email = collaboration.profile?.email;
-
   return (
     <div className="space-y-5 p-4">
-      {/* Read-only header: avatar · name · email · status badge (no picker, no password). */}
-      <header className="rounded-lg border p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Collaborator</span>
-          <CollaboratorStatusBadge status={collaboration.status} />
-        </div>
-        <div className="flex items-center gap-3">
-          <CollaboratorAvatar name={collaboration.profile?.name} avatarUrl={collaboration.profile?.avatar} className="h-10 w-10" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{name}</p>
-            {email && <p className="truncate text-xs text-muted-foreground">{email}</p>}
-          </div>
-        </div>
-      </header>
-
-      {/* LANGUAGES — options = the book's enabled languages; checked = code ∈ access_rights.languages. */}
+      {/* LANGUAGES — always the full catalog (5); checked = code ∈ access_rights.languages.
+          The read-only collaborator header was removed (avatar/name/email/status live in the
+          sidebar row + parent detail header). */}
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4>
           {isSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
         </div>
-        {bookLanguages.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No languages enabled for this book.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-1.5">
-            {bookLanguages.map((code) => (
-              <label key={code} className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox
-                  checked={localRights.languages.includes(code)}
-                  onCheckedChange={() => toggleLanguage(code)}
-                  aria-label={languageLabel(code)}
-                />
-                <span className="truncate">{languageLabel(code)}</span>
-              </label>
-            ))}
-          </div>
-        )}
+        <div className="space-y-1.5">
+          {AVAILABLE_LANGUAGES.map(({ code }) => (
+            <label key={code} className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={localRights.languages.includes(code)}
+                onCheckedChange={() => toggleLanguage(code)}
+                aria-label={languageLabel(code)}
+              />
+              <span className="truncate">{languageLabel(code)}</span>
+            </label>
+          ))}
+        </div>
       </section>
 
       {/* PIPELINE STEP — tri-state matrix (see pipeline-step-matrix.tsx). */}
