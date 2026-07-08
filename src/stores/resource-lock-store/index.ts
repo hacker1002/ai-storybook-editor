@@ -271,6 +271,13 @@ export const useResourceLockStore = create<ResourceLockState>()(
       },
 
       releaseAndSave: async (t, dirty, payload) => {
+        // Bind bookId ONCE up-front, then call the API fns directly with it — do NOT route through
+        // get().save / get().release, which re-read get().bookId at await-resume time. This method is
+        // fire-and-forget from the lock-session cleanup; on a space/book UNMOUNT that cleanup runs
+        // immediately before useCollabPersistSession's disconnect() nulls bookId. The save's network
+        // await lets disconnect interleave, so a re-read would see null and SKIP the unlock → the
+        // peer's grey-out lingers until the lock TTL (~60s). Capturing bookId keeps the whole
+        // save→unlock bound to this book regardless of a concurrent disconnect.
         const bookId = get().bookId;
         if (!bookId) {
           log.warn('releaseAndSave', 'no book connected', {});
@@ -280,7 +287,7 @@ export const useResourceLockStore = create<ResourceLockState>()(
         log.info('releaseAndSave', 'start', { key, dirty, hasPayload: !!payload });
         if (dirty && payload) {
           // save REQUIRES a live lock (precondition) → must run BEFORE unlock.
-          const r = await get().save(t, payload);
+          const r = await saveResource(bookId, t, payload);
           if (!r.ok && r.lost) {
             log.warn('releaseAndSave', 'lock lost — keep local changes, skip unlock', { key });
             // Lock already gone/stolen → unlock is a no-op; just drop local bookkeeping.
@@ -288,7 +295,9 @@ export const useResourceLockStore = create<ResourceLockState>()(
             return;
           }
         }
-        await get().release(t);
+        await releaseResourceLock(bookId, t);
+        get().removeMyLock(t);
+        log.info('releaseAndSave', 'released', { key });
       },
 
       // ── Phase-03 surface ─────────────────────────────────────────────────────
@@ -334,6 +343,13 @@ export const useResourceLockStore = create<ResourceLockState>()(
 
       // ── Internal (channel/timer wiring) ──────────────────────────────────────
       applyUpsert: (row) => {
+        // Handles INSERT (acquire) AND UPDATE (heartbeat-renew + UNLOCK). Unlock is a
+        // *soft-release*: the gateway UPDATEs expires_at=now() instead of DELETE (a DELETE
+        // realtime event is only delivered under REPLICA IDENTITY FULL and was arriving
+        // unreliably → peers saw released locks linger to the TTL). So an unlock lands here
+        // as an already-expired entry; we still store it, but the expiry-aware selectors
+        // (expires_at > now()) immediately read it as free → grey-out lifts at once, and the
+        // 15s prune drops the tombstone. See migration 20260708000003 + api/resource/03-unlock.
         const key = rowKey(row);
         const next = new Map(get().registry);
         next.set(key, rowToEntry(row));

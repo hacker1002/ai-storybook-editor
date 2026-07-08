@@ -130,7 +130,13 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
       </div>
 
       <div className="relative flex-1 overflow-hidden">
-        <SketchSpreadCanvas spreadId={spreadId} />
+        {/* key={spreadId}: remount on spread switch so the canvas's LOCAL selection resets and its
+            edit-lock session cleanup releases the previous spread's held lock (mirrors the
+            key={editingId} remount used for EditSpreadModal). lockTarget derives only from the
+            canvas's own selectedImageId/selectedTextboxId — a bare spreadId prop change leaves those
+            (and thus the lock) untouched, so without a remount the old lock is never released and
+            heartbeat renews it indefinitely. */}
+        <SketchSpreadCanvas key={spreadId} spreadId={spreadId} />
       </div>
 
       {/* Regenerate confirm — mirrors the sidebar delete-confirm / entity-space regen dialog. */}

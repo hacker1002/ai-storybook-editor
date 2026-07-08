@@ -448,6 +448,13 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
   return (
     <div
       className="relative flex h-full w-full items-center justify-center overflow-hidden"
+      // Deselect on a click in the letterbox gutter AROUND the fitted frame too — not just inside
+      // the empty frame. The frame is centered with margins, so gutter clicks land HERE, not on the
+      // inner frame's own onPointerDown; without this handler they do nothing and the current
+      // selection (hence the edit lock) is never released → the lock stays held and heartbeat renews
+      // it indefinitely. The shared handler's `target === currentTarget` guard means clicks on the
+      // frame / its children / portaled toolbars are ignored (only a bare gutter click deselects).
+      onPointerDown={handleFramePointerDown}
       // isolate: contain the canvas stacking band (divider z:1 … textbox/frame z:700) so it can't
       // out-paint the SpreadsTextToolbar, which portals to document.body with z-auto. Without this,
       // `container-type: size` on a z-auto relative box does NOT confine children in Chrome, and the
