@@ -7,6 +7,9 @@ import { SpreadsMainView } from "./spreads-main-view";
 import { SpreadsSidebar } from "./spreads-sidebar";
 import { useSnapshotStore } from "@/stores/snapshot-store";
 import { createLogger } from "@/utils/logger";
+import { useCurrentBookId } from "@/stores/book-store";
+import { useCollabPersistSession } from "@/features/editor/hooks/use-collab-persist-session";
+import { useContentSyncSession } from "@/features/editor/hooks/use-content-sync-session";
 import { useSpaceViewState, useEffectiveSpreadId } from "@/features/editor/hooks/use-space-view-state";
 import { ZOOM, COLUMNS } from "@/constants/spread-constants";
 import type { ViewMode } from "@/types/canvas-types";
@@ -15,6 +18,12 @@ import type { SelectedItem } from "./utils";
 const log = createLogger("Editor", "SpreadsCreativeSpace");
 
 export function SpreadsCreativeSpace() {
+  const bookId = useCurrentBookId();
+  // Collab: scene space is collab-LIVE — persist scene writes (raw_image/raw_textbox/shape/spread
+  // + animations coarse-save) via the gateway + realtime content-sync (sketch-space pattern).
+  useCollabPersistSession(bookId);
+  useContentSyncSession(bookId);
+
   // useShallow: .map() returns new array ref each call — must shallow-compare
   const illustrationSpreadIds = useSnapshotStore(
     useShallow((s) => s.illustration?.spreads?.map((sp) => sp.id) ?? [])
