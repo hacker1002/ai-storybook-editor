@@ -6,12 +6,21 @@ import { CharactersSidebar } from './characters-sidebar';
 import { CharactersContentArea, type CharacterContentTab } from './characters-content-area';
 import { useCharacterKeys } from '@/stores/snapshot-store/selectors';
 import { createLogger } from '@/utils/logger';
+import { useCurrentBookId } from '@/stores/book-store';
+import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
+import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 
 const log = createLogger('Editor', 'CharactersCreativeSpace');
 
 const DEFAULT_CHARACTER_TAB: CharacterContentTab = 'variants';
 
 export function CharactersCreativeSpace() {
+  const bookId = useCurrentBookId();
+  // Collab: entity space is collab-LIVE — persist entity writes via the gateway + realtime
+  // content-sync (mirrors the sketch space; entity modals mount useResourceLockSession per-resource).
+  useCollabPersistSession(bookId);
+  useContentSyncSession(bookId);
+
   const characterKeys = useCharacterKeys();
   const [userSelectedCharacterKey, setUserSelectedCharacterKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<CharacterContentTab>(DEFAULT_CHARACTER_TAB);

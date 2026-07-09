@@ -7,11 +7,20 @@ import { StagesContentArea } from './stages-content-area';
 import { useStageKeys } from '@/stores/snapshot-store/selectors';
 import { useLocationActions } from '@/stores/location-store';
 import { createLogger } from '@/utils/logger';
+import { useCurrentBookId } from '@/stores/book-store';
+import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
+import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import type { StageContentTab } from './stages-content-area';
 
 const log = createLogger('Editor', 'StagesCreativeSpace');
 
 export function StagesCreativeSpace() {
+  const bookId = useCurrentBookId();
+  // Collab: entity space is collab-LIVE — persist entity writes via the gateway + realtime
+  // content-sync (mirrors the sketch space; entity modals mount useResourceLockSession per-resource).
+  useCollabPersistSession(bookId);
+  useContentSyncSession(bookId);
+
   const stageKeys = useStageKeys();
   const { fetchLocations } = useLocationActions();
   const [userSelectedStageKey, setUserSelectedStageKey] = useState<string | null>(null);

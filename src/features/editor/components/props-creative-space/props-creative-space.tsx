@@ -8,10 +8,19 @@ import { usePropKeys } from '@/stores/snapshot-store/selectors';
 import { DEFAULT_CONTENT_TAB } from '@/constants/prop-constants';
 import type { ContentTab } from '@/types/prop-types';
 import { createLogger } from '@/utils/logger';
+import { useCurrentBookId } from '@/stores/book-store';
+import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
+import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 
 const log = createLogger('Editor', 'PropsCreativeSpace');
 
 export function PropsCreativeSpace() {
+  const bookId = useCurrentBookId();
+  // Collab: entity space is collab-LIVE — persist entity writes via the gateway + realtime
+  // content-sync (mirrors the sketch space; entity modals mount useResourceLockSession per-resource).
+  useCollabPersistSession(bookId);
+  useContentSyncSession(bookId);
+
   const propKeys = usePropKeys();
   const [userSelectedPropKey, setUserSelectedPropKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ContentTab>(DEFAULT_CONTENT_TAB);
