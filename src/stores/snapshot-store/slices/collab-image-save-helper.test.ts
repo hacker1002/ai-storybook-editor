@@ -72,13 +72,39 @@ describe('collab-image-save-helper', () => {
       });
     });
 
-    it('mapping constant covers all 5 entity types', () => {
+    it('mapping constant covers all entity + scene-overlay kinds', () => {
       expect(ENTITY_TYPE_TO_RESOURCE_TYPE).toEqual({
         character: 3,
         prop: 4,
         stage: 5,
         illustration_image: 1,
         retouch_image: 1,
+        scene_raw_textbox: 7, // ADR-044 P03 scene overlay
+        scene_retouch_shape: 8, // ADR-044 P03 scene overlay
+      });
+    });
+
+    it('scene raw_textbox locks the leaf node → rtype 7, resource_id = childKey, locale passthrough', () => {
+      expect(resolveImageLockTarget('scene_raw_textbox', 'sp1', 'tb1')).toEqual({
+        step: 2,
+        resource_type: 7,
+        resource_id: 'tb1',
+        locale: null,
+      });
+      expect(resolveImageLockTarget('scene_raw_textbox', 'sp1', 'tb1', 'en_US')).toEqual({
+        step: 2,
+        resource_type: 7,
+        resource_id: 'tb1',
+        locale: 'en_US',
+      });
+    });
+
+    it('scene shape locks the leaf node → rtype 8, resource_id = childKey, no locale', () => {
+      expect(resolveImageLockTarget('scene_retouch_shape', 'sp1', 'shp1')).toEqual({
+        step: 2,
+        resource_type: 8,
+        resource_id: 'shp1',
+        locale: null,
       });
     });
   });
@@ -98,6 +124,39 @@ describe('collab-image-save-helper', () => {
       const [, payload] = h.save.mock.calls[0];
       expect(payload).toMatchObject({ action_type: 5, patch: NODE, log: true, target_ref: { kind: 'character', entity: 'hero' } });
       expect(h.release).toHaveBeenCalledWith(target);
+    });
+
+    it('nested create: forwards parent_id + collection into the save payload (action_type 2)', async () => {
+      h.acquire.mockResolvedValue({ ok: true });
+      h.save.mockResolvedValue({ ok: true });
+
+      const outcome = await saveImageResourceUnderLock(
+        target,
+        NODE,
+        2,
+        { spread_id: 'sp1', image_id: 'ri1' },
+        { parentId: 'sp1', collection: 'raw_images' },
+      );
+
+      expect(outcome).toBe('saved');
+      const [, payload] = h.save.mock.calls[0];
+      expect(payload).toMatchObject({
+        action_type: 2,
+        patch: NODE,
+        parent_id: 'sp1',
+        collection: 'raw_images',
+      });
+    });
+
+    it('no nested arg (edit): payload omits parent_id + collection entirely', async () => {
+      h.acquire.mockResolvedValue({ ok: true });
+      h.save.mockResolvedValue({ ok: true });
+
+      await saveImageResourceUnderLock(target, NODE, 3, { spread_id: 'sp1' });
+
+      const [, payload] = h.save.mock.calls[0];
+      expect(payload).not.toHaveProperty('parent_id');
+      expect(payload).not.toHaveProperty('collection');
     });
 
     it("skipped: acquire 409 → 'skipped', save + release NOT called", async () => {

@@ -150,6 +150,10 @@ export async function saveResource(bookId: string, t: LockTarget, p: SavePayload
     target_ref: p.target_ref,
     metadata: p.metadata,
     log: p.log,
+    // Nested-node CREATE only (action_type 2 of a spread-CHILD) — both undefined otherwise, so
+    // JSON.stringify drops them → edit/delete/generate bodies stay byte-identical to before.
+    parent_id: p.parent_id,
+    collection: p.collection,
   };
   const res = await callImageApi<SaveOkResponse>('/api/resource/save', body);
   if (res.success) {

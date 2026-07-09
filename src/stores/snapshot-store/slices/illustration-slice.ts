@@ -21,6 +21,15 @@ import {
   updateBranchLocaleAction,
   deleteBranchLocaleAction,
 } from './illustration-branching-helpers';
+import {
+  persistSpreadCollab,
+  persistSpreadDeleteCollab,
+  persistSpreadReorderCollab,
+  persistSceneImageCollab,
+  persistSceneImageDeleteCollab,
+  persistSceneTextboxCollab,
+  persistSceneTextboxDeleteCollab,
+} from './collab-scene-save-helper';
 
 const log = createLogger('Store', 'IllustrationSlice');
 
@@ -29,7 +38,7 @@ export const createIllustrationSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   IllustrationSlice
-> = (set) => ({
+> = (set, get) => ({
   illustration: { spreads: [], sections: [] },
 
   setIllustration: (data) =>
@@ -40,14 +49,17 @@ export const createIllustrationSlice: StateCreator<
 
   // --- Spread CRUD ---
 
-  addIllustrationSpread: (spread) =>
+  addIllustrationSpread: (spread) => {
     set((state) => {
       log.debug('addIllustrationSpread', 'add', { spreadId: spread.id });
       state.illustration.spreads.push(spread);
       state.sync.isDirty = true;
-    }),
+    });
+    // collab: persist the new spread node (create, scope:'node') — no-op solo.
+    void persistSpreadCollab(get, spread.id, 2);
+  },
 
-  updateIllustrationSpread: (spreadId, updates) =>
+  updateIllustrationSpread: (spreadId, updates) => {
     set((state) => {
       const idx = state.illustration.spreads.findIndex((s) => s.id === spreadId);
       if (idx !== -1) {
@@ -55,9 +67,12 @@ export const createIllustrationSlice: StateCreator<
         Object.assign(state.illustration.spreads[idx], updates);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: persist the whole spread node (edit, scope:'node') — no-op solo.
+    void persistSpreadCollab(get, spreadId, 3);
+  },
 
-  deleteIllustrationSpread: (spreadId) =>
+  deleteIllustrationSpread: (spreadId) => {
     set((state) => {
       const deletedIndex = state.illustration.spreads.findIndex((s) => s.id === spreadId);
       if (deletedIndex === -1) return;
@@ -128,9 +143,12 @@ export const createIllustrationSlice: StateCreator<
 
       renumberSpreadPages(state.illustration.spreads);
       state.sync.isDirty = true;
-    }),
+    });
+    // collab: persist the removal (delete, scope:'collection') — no-op solo.
+    void persistSpreadDeleteCollab(spreadId);
+  },
 
-  reorderIllustrationSpreads: (fromIndex, toIndex) =>
+  reorderIllustrationSpreads: (fromIndex, toIndex) => {
     set((state) => {
       const { spreads } = state.illustration;
       if (fromIndex >= 0 && toIndex >= 0 && fromIndex < spreads.length && toIndex < spreads.length) {
@@ -144,11 +162,19 @@ export const createIllustrationSlice: StateCreator<
         renumberSpreadPages(spreads);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: persist the new order (reorder, scope:'collection') — no-op solo. The dragged
+    // spread lands at toIndex after the splice (mirror the entity-reorder call-site guard).
+    const spreads = get().illustration.spreads;
+    if (fromIndex >= 0 && toIndex >= 0 && fromIndex < spreads.length && toIndex < spreads.length && fromIndex !== toIndex) {
+      const draggedId = spreads[toIndex]?.id;
+      if (draggedId) void persistSpreadReorderCollab(get, draggedId, fromIndex, toIndex);
+    }
+  },
 
   // --- Raw Images (illustration phase, player_visible always false) ---
 
-  addRawImage: (spreadId, image) =>
+  addRawImage: (spreadId, image) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -157,9 +183,12 @@ export const createIllustrationSlice: StateCreator<
         spread.raw_images.push(image);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: persist the new raw_image node (create, scope:'node') — no-op solo.
+    void persistSceneImageCollab(get, spreadId, image.id, 2);
+  },
 
-  updateRawImage: (spreadId, imageId, updates) =>
+  updateRawImage: (spreadId, imageId, updates) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.raw_images) {
@@ -170,9 +199,12 @@ export const createIllustrationSlice: StateCreator<
           state.sync.isDirty = true;
         }
       }
-    }),
+    });
+    // collab: persist the whole raw_image node (edit, scope:'node') — no-op solo.
+    void persistSceneImageCollab(get, spreadId, imageId, 3);
+  },
 
-  deleteRawImage: (spreadId, imageId) =>
+  deleteRawImage: (spreadId, imageId) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.raw_images) {
@@ -180,11 +212,14 @@ export const createIllustrationSlice: StateCreator<
         spread.raw_images = spread.raw_images.filter((i) => i.id !== imageId);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: persist the removal (delete, scope:'collection') — no-op solo.
+    void persistSceneImageDeleteCollab(spreadId, imageId);
+  },
 
   // --- Raw Textboxes (illustration phase, player_visible always false) ---
 
-  addRawTextbox: (spreadId, textbox) =>
+  addRawTextbox: (spreadId, textbox) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -193,9 +228,12 @@ export const createIllustrationSlice: StateCreator<
         spread.raw_textboxes.push(textbox);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: persist the new raw_textbox node (create, whole node, scope:'node') — no-op solo.
+    void persistSceneTextboxCollab(get, spreadId, textbox.id, 2);
+  },
 
-  updateRawTextbox: (spreadId, textboxId, updates) =>
+  updateRawTextbox: (spreadId, textboxId, updates) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.raw_textboxes) {
@@ -206,9 +244,13 @@ export const createIllustrationSlice: StateCreator<
           state.sync.isDirty = true;
         }
       }
-    }),
+    });
+    // collab: persist the edit (locale-scoped `[locale]` sub-object when `updates` carries a
+    // language_key, else the whole node; scope:'node') — no-op solo.
+    void persistSceneTextboxCollab(get, spreadId, textboxId, 3, updates);
+  },
 
-  deleteRawTextbox: (spreadId, textboxId) =>
+  deleteRawTextbox: (spreadId, textboxId) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.raw_textboxes) {
@@ -216,7 +258,10 @@ export const createIllustrationSlice: StateCreator<
         spread.raw_textboxes = spread.raw_textboxes.filter((t) => t.id !== textboxId);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: persist the removal (delete, scope:'collection') — no-op solo.
+    void persistSceneTextboxDeleteCollab(spreadId, textboxId);
+  },
 
   // --- Clear ---
 

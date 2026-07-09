@@ -38,35 +38,50 @@ const log = createLogger('Store', 'CollabImageSaveHelper');
  *  'skipped'/'failed' keep working — a 'forbidden' outcome falls through their generic path. */
 export type ImageSaveOutcome = 'saved' | 'skipped' | 'failed' | 'forbidden';
 
-/** ImageTaskEntityType → gateway `resource_type` (1 image · 3 character · 4 prop · 5 stage).
- *  Entities lock their WHOLE node (rtype 3/4/5); scene + retouch images lock the leaf image (rtype 1). */
-export const ENTITY_TYPE_TO_RESOURCE_TYPE: Record<ImageTaskEntityType, ResourceType> = {
+/** Scene overlay node-kinds opened by ADR-044 P03 (step=2 illustration scene):
+ *  `scene_raw_textbox` → `spreads[].raw_textboxes[]` (rtype 7, `<locale>` sub-object like a
+ *  textbox); `scene_retouch_shape` → `spreads[].shapes[]` (rtype 8, no locale). Not part of
+ *  `ImageTaskEntityType` (they carry no image task) — a separate leaf-node vocabulary. */
+export type SceneNodeKind = 'scene_raw_textbox' | 'scene_retouch_shape';
+
+/** Everything `resolveImageLockTarget` can address: image-task entities + scene overlay leaves. */
+export type CollabResourceKind = ImageTaskEntityType | SceneNodeKind;
+
+/** CollabResourceKind → gateway `resource_type` (1 image · 3 character · 4 prop · 5 stage ·
+ *  7 scene raw_textbox · 8 scene shape). Entities lock their WHOLE node (rtype 3/4/5);
+ *  scene + retouch images (rtype 1) and scene textbox/shape (rtype 7/8) lock the leaf node. */
+export const ENTITY_TYPE_TO_RESOURCE_TYPE: Record<CollabResourceKind, ResourceType> = {
   character: 3,
   prop: 4,
   stage: 5,
   illustration_image: 1, // scene raw image  → illustration.spreads[].raw_images[]
   retouch_image: 1, //       retouch image → illustration.spreads[].images[]
+  scene_raw_textbox: 7, //   scene raw textbox → illustration.spreads[].raw_textboxes[]
+  scene_retouch_shape: 8, // scene shape       → illustration.spreads[].shapes[]
 };
 
-/** Entity kinds lock the WHOLE entity node → resource_id = entity key (not the child/variant). */
-const ENTITY_KINDS: ReadonlySet<ImageTaskEntityType> = new Set(['character', 'prop', 'stage']);
+/** Entity kinds lock the WHOLE entity node → resource_id = entity key (not the child/leaf). */
+const ENTITY_KINDS: ReadonlySet<string> = new Set(['character', 'prop', 'stage']);
 
 /**
- * Build the step=2 LockTarget for an image resource (child resolver).
+ * Build the step=2 LockTarget for an image/scene-overlay resource (leaf resolver).
  * - character/prop/stage → lock the entity node, resource_id = `entityKey`.
- * - illustration_image / retouch_image → lock the leaf image, resource_id = `childKey`.
- * step is ALWAYS 2 (illustration/retouch phase) and locale ALWAYS null (language-agnostic).
+ * - illustration_image / retouch_image / scene_raw_textbox / scene_retouch_shape → lock the
+ *   leaf node, resource_id = `childKey` (image / textbox / shape id).
+ * step is ALWAYS 2 (illustration/retouch/scene phase). `locale` is null for everything EXCEPT a
+ * locale-scoped scene raw_textbox edit (mirrors rtype-2 textbox: the `<language_key>` sub-object).
  */
 export function resolveImageLockTarget(
-  entityType: ImageTaskEntityType,
+  entityType: CollabResourceKind,
   entityKey: string,
   childKey: string,
+  locale: string | null = null,
 ): LockTarget {
   return {
     step: 2,
     resource_type: ENTITY_TYPE_TO_RESOURCE_TYPE[entityType],
     resource_id: ENTITY_KINDS.has(entityType) ? entityKey : childKey,
-    locale: null,
+    locale,
   };
 }
 
@@ -88,8 +103,13 @@ export function resolveLockHolderName(target: LockTarget): string {
  * @param patch      the FULL fresh node body to persist. Caller MUST read it via getState() at
  *                   call time (never a task-creation closure var) to avoid stale-closure writes.
  *                   `null`/`undefined` (node deleted mid-flight) → bail 'failed' (no lock churn).
- * @param actionType crud audit enum: 3 edit · 5 upload/generate
+ * @param actionType crud audit enum: 2 create · 3 edit · 5 upload/generate
  * @param targetRef  audit ref, identifying keys only (e.g. { spread_id, image_id } | { kind, entity })
+ * @param nested     nested-node CREATE only (`action_type` 2 of a spread-CHILD): { parentId = parent
+ *                   spread id, collection = target array name }. Forwarded to the gateway save body
+ *                   as `parent_id`/`collection` so the gateway appends the brand-new node. OMIT for
+ *                   edit/delete and for root-level creates (spread/entity) — the body then carries
+ *                   neither field (byte-identical to before).
  * @returns 'saved' | 'skipped' (409 acquire) | 'failed' (save rejected / node missing)
  *
  * `log: true` → the gateway emits the node-scope content-sync event + a single audit row (no client
@@ -101,6 +121,7 @@ export async function saveImageResourceUnderLock(
   patch: unknown,
   actionType: SavePayload['action_type'],
   targetRef?: Record<string, unknown>,
+  nested?: { parentId: string; collection: string },
 ): Promise<ImageSaveOutcome> {
   if (patch == null) {
     log.warn('saveImageResourceUnderLock', 'node missing at save time — bail', {
@@ -132,6 +153,8 @@ export async function saveImageResourceUnderLock(
         patch,
         target_ref: targetRef,
         log: true,
+        // Present only on a nested-node create — maps to the gateway `parent_id`/`collection`.
+        ...(nested ? { parent_id: nested.parentId, collection: nested.collection } : {}),
       });
       if (res.ok) {
         log.info('saveImageResourceUnderLock', 'saved', {

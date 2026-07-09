@@ -8,8 +8,14 @@
 export type Step = 1 | 2;
 
 /** Resource kind inside a snapshot.
- *  1 image · 2 textbox · 3 character · 4 prop · 5 stage · 6 spread. */
-export type ResourceType = 1 | 2 | 3 | 4 | 5 | 6;
+ *  1 image · 2 textbox · 3 character · 4 prop · 5 stage · 6 spread ·
+ *  7 scene raw_textbox · 8 scene shape (7/8 are step=2 illustration-scene
+ *  overlays opened by ADR-044 P03 — `spreads[].raw_textboxes[]`/`shapes[]`) ·
+ *  9 objects/retouch node — ONE GENERIC type for every objects-space playable node kind
+ *  (`spreads[].{videos,auto_pics,audios,auto_audios,composites,quizzes}[]`); the backend
+ *  addresses all of them by id, distinguishing the owning array via `collection` on create
+ *  (ADR-044 P06 — backend rtype collapse). */
+export type ResourceType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 /** Addresses one lockable resource. `locale` is set for textboxes (per-language)
  *  and null for language-agnostic resources (image / entity / spread). */
@@ -38,6 +44,13 @@ export interface SavePayload {
   metadata?: Record<string, unknown>;
   /** default true; false = patch-only (generate per-target — audit summarized per job). */
   log?: boolean;
+  /** Nested-node CREATE only (`action_type` 2 of a spread-CHILD): the parent spread id the new
+   *  node is inserted under. OMITTED for edit/delete and for root-level creates (spread/entity,
+   *  which append at the spreads/column root). Serialized into the `/api/resource/save` body. */
+  parent_id?: string;
+  /** Nested-node CREATE only (pairs with `parent_id`): the target array name on the parent to
+   *  append the new node to — `raw_images` · `raw_textboxes` · `shapes`. OMITTED otherwise. */
+  collection?: string;
 }
 
 /** Lifecycle status of a single lock session (consumed by phase-03 hook). */

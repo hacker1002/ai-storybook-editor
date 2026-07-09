@@ -12,8 +12,23 @@ import type {
 import type { IllustrationData } from '@/types/illustration-types';
 import { QUIZ_TYPE } from '@/types/spread-types';
 import { createLogger } from '@/utils/logger';
+import {
+  persistRetouchNodeCollab,
+  persistRetouchDeleteCollab,
+} from './collab-retouch-save-helper';
 
 const log = createLogger('Store', 'QuizSlice');
+
+/** Every quiz write is addressed at the WHOLE-quiz-node grain (rtype 9, collection 'quizzes') — a
+ *  quiz sub-node edit (item/pair/zone/decor/locale/container) is a node-scope EDIT of its owning
+ *  quiz. These thin wrappers keep the per-mutator call sites to a single line (DRY). NO-OP solo. */
+type QuizGet = () => SnapshotStore;
+function persistQuizNode(get: QuizGet, spreadId: string, quizId: string, actionType: 2 | 3): void {
+  void persistRetouchNodeCollab(get, { spreadId, nodeId: quizId, collection: 'quizzes', actionType });
+}
+function persistQuizDelete(spreadId: string, quizId: string): void {
+  void persistRetouchDeleteCollab(spreadId, quizId, 'quizzes');
+}
 
 // ============================================================================
 // Helpers
@@ -256,12 +271,12 @@ export const createQuizSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   QuizSlice
-> = (set) => ({
+> = (set, get) => ({
   quizValidationErrors: {},
 
   // --- Quiz-level CRUD ---
 
-  addQuiz: (spreadId, quiz) =>
+  addQuiz: (spreadId, quiz) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (!spread) {
@@ -277,9 +292,12 @@ export const createQuizSlice: StateCreator<
       if (issues.length > 0) {
         log.warn('addQuiz', 'validation issues', { quizId: quiz.id, count: issues.length });
       }
-    }),
+    });
+    // collab: persist the new quiz node (create, rtype 9, collection 'quizzes') — no-op solo.
+    persistQuizNode(get, spreadId, quiz.id, 2);
+  },
 
-  updateQuiz: (spreadId, quizId, updates) =>
+  updateQuiz: (spreadId, quizId, updates) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) {
@@ -290,9 +308,11 @@ export const createQuizSlice: StateCreator<
       Object.assign(quiz, updates);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  deleteQuiz: (spreadId, quizId) =>
+  deleteQuiz: (spreadId, quizId) => {
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (!spread) return;
@@ -300,31 +320,38 @@ export const createQuizSlice: StateCreator<
       spread.quizzes = spread.quizzes?.filter((q) => q.id !== quizId) ?? [];
       state.sync.isDirty = true;
       delete state.quizValidationErrors[quizId];
-    }),
+    });
+    // collab: persist the removal (delete, rtype 9, collection 'quizzes') — no-op solo.
+    persistQuizDelete(spreadId, quizId);
+  },
 
   // --- Quiz-level locale (question + audio_url per language) ---
 
-  upsertQuizLocale: (spreadId, quizId, languageKey, content) =>
+  upsertQuizLocale: (spreadId, quizId, languageKey, content) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
       log.debug('upsertQuizLocale', 'upsert', { spreadId, quizId, languageKey });
       (quiz as Record<string, unknown>)[languageKey] = content;
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  deleteQuizLocale: (spreadId, quizId, languageKey) =>
+  deleteQuizLocale: (spreadId, quizId, languageKey) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
       log.debug('deleteQuizLocale', 'delete', { spreadId, quizId, languageKey });
       delete (quiz as Record<string, unknown>)[languageKey];
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
   // --- answer_setting / quiz_container ---
 
-  updateQuizAnswerSetting: (spreadId, quizId, updates) =>
+  updateQuizAnswerSetting: (spreadId, quizId, updates) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
@@ -332,29 +359,35 @@ export const createQuizSlice: StateCreator<
       Object.assign(quiz.answer_setting, updates);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  updateQuizContainer: (spreadId, quizId, updates) =>
+  updateQuizContainer: (spreadId, quizId, updates) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
       log.debug('updateQuizContainer', 'update', { spreadId, quizId, keys: Object.keys(updates) });
       Object.assign(quiz.quiz_container, updates);
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
   // --- item_container (per-role) ---
 
-  setItemContainerStyle: (spreadId, quizId, role, style) =>
+  setItemContainerStyle: (spreadId, quizId, role, style) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
       log.debug('setItemContainerStyle', 'set', { spreadId, quizId, role });
       quiz.item_container[role] = style;
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  updateItemContainerStyle: (spreadId, quizId, role, updates) =>
+  updateItemContainerStyle: (spreadId, quizId, role, updates) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
@@ -366,11 +399,13 @@ export const createQuizSlice: StateCreator<
       log.debug('updateItemContainerStyle', 'update', { spreadId, quizId, role, keys: Object.keys(updates) });
       Object.assign(existing, updates);
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
   // --- elements.items[] CRUD ---
 
-  addQuizItem: (spreadId, quizId, item) =>
+  addQuizItem: (spreadId, quizId, item) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
@@ -379,9 +414,11 @@ export const createQuizSlice: StateCreator<
       quiz.elements.items.push(item);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  updateQuizItem: (spreadId, quizId, itemId, updates) =>
+  updateQuizItem: (spreadId, quizId, itemId, updates) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz?.elements.items) return;
@@ -394,9 +431,11 @@ export const createQuizSlice: StateCreator<
       Object.assign(existing, updates);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  deleteQuizItem: (spreadId, quizId, itemId) =>
+  deleteQuizItem: (spreadId, quizId, itemId) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz?.elements.items) return;
@@ -404,9 +443,11 @@ export const createQuizSlice: StateCreator<
       quiz.elements.items = quiz.elements.items.filter((i) => i.id !== itemId);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  reorderQuizItems: (spreadId, quizId, fromIndex, toIndex) =>
+  reorderQuizItems: (spreadId, quizId, fromIndex, toIndex) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       const items = quiz?.elements.items;
@@ -424,9 +465,12 @@ export const createQuizSlice: StateCreator<
       const [removed] = items.splice(fromIndex, 1);
       items.splice(toIndex, 0, removed);
       state.sync.isDirty = true;
-    }),
+    });
+    // Item order lives inside the quiz node → a node-scope EDIT (not the collection /reorder path).
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  upsertQuizItemLocale: (spreadId, quizId, itemId, languageKey, content) =>
+  upsertQuizItemLocale: (spreadId, quizId, itemId, languageKey, content) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       const item = quiz?.elements.items?.find((i) => i.id === itemId);
@@ -434,9 +478,11 @@ export const createQuizSlice: StateCreator<
       log.debug('upsertQuizItemLocale', 'upsert', { spreadId, quizId, itemId, languageKey });
       (item as Record<string, unknown>)[languageKey] = content;
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  deleteQuizItemLocale: (spreadId, quizId, itemId, languageKey) =>
+  deleteQuizItemLocale: (spreadId, quizId, itemId, languageKey) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       const item = quiz?.elements.items?.find((i) => i.id === itemId);
@@ -444,11 +490,13 @@ export const createQuizSlice: StateCreator<
       log.debug('deleteQuizItemLocale', 'delete', { spreadId, quizId, itemId, languageKey });
       delete (item as Record<string, unknown>)[languageKey];
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
   // --- elements.pairs[] (type 1) ---
 
-  addQuizPair: (spreadId, quizId, pair) =>
+  addQuizPair: (spreadId, quizId, pair) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
@@ -457,9 +505,11 @@ export const createQuizSlice: StateCreator<
       quiz.elements.pairs.push(pair);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  deleteQuizPair: (spreadId, quizId, pairIndex) =>
+  deleteQuizPair: (spreadId, quizId, pairIndex) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       const pairs = quiz?.elements.pairs;
@@ -468,9 +518,11 @@ export const createQuizSlice: StateCreator<
       pairs.splice(pairIndex, 1);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  clearQuizPairs: (spreadId, quizId) =>
+  clearQuizPairs: (spreadId, quizId) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
@@ -478,11 +530,13 @@ export const createQuizSlice: StateCreator<
       quiz.elements.pairs = [];
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
   // --- elements.target_zones[] (type 3, 4) ---
 
-  addQuizTargetZone: (spreadId, quizId, zone) =>
+  addQuizTargetZone: (spreadId, quizId, zone) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
@@ -491,9 +545,11 @@ export const createQuizSlice: StateCreator<
       quiz.elements.target_zones.push(zone);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  updateQuizTargetZone: (spreadId, quizId, zoneId, updates) =>
+  updateQuizTargetZone: (spreadId, quizId, zoneId, updates) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       const zone = quiz?.elements.target_zones?.find((z) => z.id === zoneId);
@@ -502,9 +558,11 @@ export const createQuizSlice: StateCreator<
       Object.assign(zone, updates);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  deleteQuizTargetZone: (spreadId, quizId, zoneId) =>
+  deleteQuizTargetZone: (spreadId, quizId, zoneId) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz?.elements.target_zones) return;
@@ -512,11 +570,13 @@ export const createQuizSlice: StateCreator<
       quiz.elements.target_zones = quiz.elements.target_zones.filter((z) => z.id !== zoneId);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
   // --- elements.images[] (type 3, 4) ---
 
-  addQuizDecorImage: (spreadId, quizId, image) =>
+  addQuizDecorImage: (spreadId, quizId, image) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       if (!quiz) return;
@@ -525,9 +585,11 @@ export const createQuizSlice: StateCreator<
       quiz.elements.images.push(image);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  updateQuizDecorImage: (spreadId, quizId, imageIndex, updates) =>
+  updateQuizDecorImage: (spreadId, quizId, imageIndex, updates) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       const images = quiz?.elements.images;
@@ -535,9 +597,11 @@ export const createQuizSlice: StateCreator<
       log.debug('updateQuizDecorImage', 'update', { spreadId, quizId, imageIndex, keys: Object.keys(updates) });
       Object.assign(images[imageIndex], updates);
       state.sync.isDirty = true;
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
-  deleteQuizDecorImage: (spreadId, quizId, imageIndex) =>
+  deleteQuizDecorImage: (spreadId, quizId, imageIndex) => {
     set((state) => {
       const quiz = findQuiz(state.illustration, spreadId, quizId);
       const images = quiz?.elements.images;
@@ -546,7 +610,9 @@ export const createQuizSlice: StateCreator<
       images.splice(imageIndex, 1);
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
-    }),
+    });
+    persistQuizNode(get, spreadId, quizId, 3);
+  },
 
   // --- Validation utilities ---
 
