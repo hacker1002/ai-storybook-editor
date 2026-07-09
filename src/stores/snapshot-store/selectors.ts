@@ -7,7 +7,7 @@ import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/i
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask, QuizValidationIssue } from './types';
+import type { ImageTask, QuizValidationIssue, SnapshotStore } from './types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -210,8 +210,18 @@ export const useRetouchSpreadById = (spreadId: string): BaseSpread | undefined =
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId));
 export const useRetouchSpreadCount = (): number => useSnapshotStore((s) => s.illustration.spreads.length);
 
+/** Pure lookup of a retouch image node (illustration.spreads[].images[]). Shared by the reactive
+ *  `useRetouchImageById` hook AND imperative callers (e.g. the collab save reads the FRESH node via
+ *  `useSnapshotStore.getState()` to avoid a stale-closure write). */
+export const findRetouchImageNode = (
+  state: SnapshotStore,
+  spreadId: string,
+  imageId: string,
+): SpreadImage | undefined =>
+  state.illustration.spreads.find((sp) => sp.id === spreadId)?.images.find((i) => i.id === imageId);
+
 export const useRetouchImageById = (spreadId: string, imageId: string): SpreadImage | undefined =>
-  useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.images.find((i) => i.id === imageId));
+  useSnapshotStore((s) => findRetouchImageNode(s, spreadId, imageId));
 export const useRetouchTextboxById = (spreadId: string, textboxId: string): SpreadTextbox | undefined =>
   useSnapshotStore((s) => s.illustration.spreads.find((sp) => sp.id === spreadId)?.textboxes.find((t) => t.id === textboxId));
 export const useRetouchShapeById = (spreadId: string, shapeId: string): SpreadShape | undefined =>

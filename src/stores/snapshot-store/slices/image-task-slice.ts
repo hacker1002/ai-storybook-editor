@@ -16,9 +16,26 @@ import {
 } from '@/apis/illustration-api';
 import { callEditObjectImage } from '@/apis/retouch-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
+// resource-lock-store is loaded by snapshot-store/index BEFORE the slices, so this static import
+// resolves cleanly in the app. Isolated slice unit tests import this module directly and mock
+// '@/stores/resource-lock-store' to break the slice ↔ store module cycle (collabPersist=false there
+// keeps the solo path — the collab lock/save/release path has its own tests).
+import { useResourceLockStore, type SavePayload } from '@/stores/resource-lock-store';
+import {
+  saveImageResourceUnderLock,
+  resolveImageLockTarget,
+  resolveLockHolderName,
+} from './collab-image-save-helper';
+import { ACTION_TYPE_UPLOAD } from '@/apis/activity-log-client';
+import { toastLockedByOther } from '@/utils/collab-save-toasts';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'ImageTaskSlice');
+
+// crud audit enum for a per-resource collab save (see SavePayload): generate + upload share
+// action_type 5 (upload); edit is 3. Kept as literals so they type-narrow to SavePayload['action_type'].
+const ACTION_TYPE_GENERATE = ACTION_TYPE_UPLOAD; // 5
+const ACTION_TYPE_EDIT: SavePayload['action_type'] = 3;
 
 // Maps backend art-style error codes → user-facing guidance for the illustration generate flow.
 // Validation S1 Q4: hardcoded English (intentionally diverges from the VI convention in image-api-client.ts).
@@ -97,6 +114,113 @@ function prependIllustration(
     is_selected: true,
     type,
   });
+}
+
+/**
+ * Reads the FULL fresh node a collab save patches (ADR-044): the WHOLE entity node for
+ * character/prop/stage, or the leaf image node for scene (raw_images) / retouch (images).
+ * Returns null when the entity/child no longer exists (deleted mid-flight → caller skips the save).
+ */
+function readImageResourceNode(
+  state: SnapshotStore,
+  entityType: ImageTaskEntityType,
+  entityKey: string,
+  childKey: string,
+): unknown | null {
+  switch (entityType) {
+    case 'character':
+      return state.characters.find((c) => c.key === entityKey) ?? null;
+    case 'prop':
+      return state.props.find((p) => p.key === entityKey) ?? null;
+    case 'stage':
+      return state.stages.find((s) => s.key === entityKey) ?? null;
+    case 'illustration_image':
+      return (
+        state.illustration?.spreads
+          ?.find((s) => s.id === entityKey)
+          ?.raw_images?.find((img) => img.id === childKey) ?? null
+      );
+    case 'retouch_image':
+      return (
+        state.illustration?.spreads
+          ?.find((s) => s.id === entityKey)
+          ?.images?.find((img) => img.id === childKey) ?? null
+      );
+    default:
+      return null;
+  }
+}
+
+/** Audit ref for a collab save — identifying keys only (never a node body / media URL). */
+function buildImageTargetRef(
+  entityType: ImageTaskEntityType,
+  entityKey: string,
+  childKey: string,
+): Record<string, unknown> {
+  if (entityType === 'illustration_image' || entityType === 'retouch_image') {
+    return { spread_id: entityKey, image_id: childKey };
+  }
+  return { kind: entityType, entity: entityKey };
+}
+
+/**
+ * collab per-resource save: AFTER the local optimistic mutate (isDirty), patch the SAME node
+ * through the gateway under a lock (ADR-044). NO-OP under the solo path (collabPersist=false) — the
+ * whole-doc autosave already owns persistence there, so the solo path stays byte-identical.
+ *
+ * Fire-and-forget from the callers (`void …`); never throws (the helper is self-guarded). The node
+ * is read FRESH via `get()` at call time (post-mutate) — never a task-creation closure var — to
+ * avoid a stale-closure write. DORMANT until P04 flips an illustration space collab-on.
+ */
+async function persistIllustrationCollab(
+  get: () => SnapshotStore,
+  entityType: ImageTaskEntityType,
+  entityKey: string,
+  childKey: string,
+  actionType: SavePayload['action_type'],
+): Promise<void> {
+  const collab = useResourceLockStore.getState().collabPersist;
+  if (!collab) {
+    log.debug('persistIllustrationCollab', 'solo path — whole-doc autosave owns persistence', {
+      entityType,
+    });
+    return; // solo path UNCHANGED
+  }
+
+  const target = resolveImageLockTarget(entityType, entityKey, childKey);
+  const node = readImageResourceNode(get(), entityType, entityKey, childKey); // FRESH via getState()
+  if (!node) {
+    log.warn('persistIllustrationCollab', 'node missing at save time — skip gateway save', {
+      entityType,
+      resourceId: target.resource_id,
+    });
+    return;
+  }
+
+  log.info('persistIllustrationCollab', 'collab save', {
+    entityType,
+    resourceType: target.resource_type,
+    action: actionType,
+  });
+  const outcome = await saveImageResourceUnderLock(
+    target,
+    node,
+    actionType,
+    buildImageTargetRef(entityType, entityKey, childKey),
+  );
+  if (outcome === 'skipped') {
+    const holder = resolveLockHolderName(target);
+    log.info('persistIllustrationCollab', 'skipped — locked by another editor', {
+      entityType,
+      resourceId: target.resource_id,
+    });
+    toastLockedByOther(holder);
+  } else if (outcome === 'failed') {
+    log.warn('persistIllustrationCollab', 'collab save failed', {
+      entityType,
+      resourceId: target.resource_id,
+    });
+  }
 }
 
 /** Routes a generate call to the correct illustration API based on discriminated union params.
@@ -288,6 +412,9 @@ export const createImageTaskSlice: StateCreator<
             task.completedAt = new Date().toISOString();
           }
         });
+
+        // collab: persist the freshly-mutated node under a lock through the gateway (no-op solo).
+        void persistIllustrationCollab(get, entityType, entityKey, childKey, ACTION_TYPE_GENERATE);
       })
       .catch((err) => {
         const taskStillExists = get().imageTasks.some((t) => t.id === taskId);
@@ -364,6 +491,9 @@ export const createImageTaskSlice: StateCreator<
             task.completedAt = new Date().toISOString();
           }
         });
+
+        // collab: persist the freshly-mutated node under a lock through the gateway (no-op solo).
+        void persistIllustrationCollab(get, entityType, entityKey, childKey, ACTION_TYPE_EDIT);
       })
       .catch((err) => {
         const taskStillExists = get().imageTasks.some((t) => t.id === taskId);
@@ -397,6 +527,10 @@ export const createImageTaskSlice: StateCreator<
       prependIllustration(illustrations, mediaUrl, 'uploaded');
       state.sync.isDirty = true;
     });
+
+    // collab: persist the freshly-mutated node under a lock through the gateway (no-op solo).
+    // Upload shares the generate audit enum (action_type 5). Fire-and-forget — method returns void.
+    void persistIllustrationCollab(get, entityType, entityKey, childKey, ACTION_TYPE_GENERATE);
   },
 
   dismissTask: (taskId) =>

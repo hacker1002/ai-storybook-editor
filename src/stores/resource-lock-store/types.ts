@@ -2,8 +2,10 @@
 // feature. Mirrors the `resource_locks` table + the `resource/*` gateway contract
 // (see ai-storybook-design/api/resource, component/stores/resource-lock-store.md).
 
-/** Workflow step. Phase-02 scope = sketch only (gateway enum also allows 2/3). */
-export type Step = 1;
+/** Workflow step. 1 = sketch, 2 = illustration/retouch (ADR-044 per-resource save).
+ *  Gateway enum also allows 3 (retouch-only), but illustration+retouch both address
+ *  step=2 (retouch images live physically in the `illustration` column — see plan). */
+export type Step = 1 | 2;
 
 /** Resource kind inside a snapshot.
  *  1 image · 2 textbox · 3 character · 4 prop · 5 stage · 6 spread. */

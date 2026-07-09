@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Zap } from "lucide-react";
+import { Zap, Users } from "lucide-react";
 import { ObjectsMainView } from "./objects-main-view";
 import { ObjectsSidebar } from "./objects-sidebar";
 import { AnimationEditorSidebar } from "./animation-editor-sidebar";
@@ -583,6 +583,20 @@ export function ObjectsCreativeSpace() {
       />
 
       <div className="relative flex-1 min-w-0 overflow-hidden">
+        {/* Collab affordance — greyed "Coming soon" (never-hide, MEMORY). The objects
+            (retouch) space is NOT yet collab-enabled: its ~40 write-ops are not wired to the
+            per-resource gateway save, so the flip is deferred. Whole-doc autosave stays active
+            here (0 regression). Rendered disabled, never hidden, so the capability is visible. */}
+        <div
+          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/80 px-3 py-1 text-xs font-medium text-muted-foreground opacity-60 cursor-not-allowed select-none"
+          aria-disabled="true"
+          title="Collaborative editing — Coming soon"
+        >
+          <Users className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Collab</span>
+          <span className="text-[10px] uppercase tracking-wide">Coming soon</span>
+        </div>
+
         <ObjectsMainView
           selectedSpreadId={selectedSpreadId ?? ""}
           selectedItemId={selectedItemId}

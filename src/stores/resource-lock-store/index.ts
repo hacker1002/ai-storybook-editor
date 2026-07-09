@@ -65,7 +65,7 @@ export interface ResourceLockState {
   acquire: (t: LockTarget) => Promise<{ ok: true } | { ok: false; code: 'LOCK_HELD'; holder: string }>;
   renew: (t: LockTarget) => Promise<boolean>;
   release: (t: LockTarget) => Promise<void>;
-  save: (t: LockTarget, p: SavePayload) => Promise<{ ok: true } | { ok: false; lost: boolean }>;
+  save: (t: LockTarget, p: SavePayload) => Promise<{ ok: true } | { ok: false; lost: boolean; forbidden: boolean }>;
   releaseAndSave: (t: LockTarget, dirty: boolean, payload?: SavePayload) => Promise<void>;
 
   // === Phase-03 surface ===
@@ -256,7 +256,7 @@ export const useResourceLockStore = create<ResourceLockState>()(
         const bookId = get().bookId;
         if (!bookId) {
           log.warn('save', 'no book connected', {});
-          return { ok: false, lost: false };
+          return { ok: false, lost: false, forbidden: false };
         }
         const key = keyOf(bookId, t);
         log.info('save', 'request', { key, action: p.action_type, log: p.log !== false });
@@ -266,8 +266,9 @@ export const useResourceLockStore = create<ResourceLockState>()(
           return { ok: true };
         }
         if (r.lost) log.warn('save', 'save rejected — lock/node lost', { key });
+        else if (r.forbidden) log.warn('save', 'save forbidden — missing resource access', { key });
         else log.error('save', 'save failed', { key });
-        return { ok: false, lost: r.lost };
+        return { ok: false, lost: r.lost, forbidden: r.forbidden };
       },
 
       releaseAndSave: async (t, dirty, payload) => {

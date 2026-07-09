@@ -56,10 +56,13 @@ export type AcquireResult =
 export type RenewResult = { ok: true } | { ok: false; lost: boolean };
 
 /** save → written (ok) or failed. `lost` = 409 (lock gone) or 404 (node gone),
- *  i.e. the write could not be applied and local changes must be kept/reverted. */
+ *  i.e. the write could not be applied and local changes must be kept/reverted.
+ *  `forbidden` = 403 (actor lacks access to this resource type — e.g. a retouch-only
+ *  collaborator saving a step=2 illustration node); an EXPECTED access-gate outcome the
+ *  caller surfaces distinctly (toast), not a transient/system failure. */
 export type SaveResult =
   | { ok: true; snapshot_id: string; updated_at: string }
-  | { ok: false; lost: boolean };
+  | { ok: false; lost: boolean; forbidden: boolean };
 
 /** reorder → applied (ok) or failed. `code` surfaces the client-actionable gateway
  *  rejections: `LOCK_REQUIRED` (409 — acquire the type-6 lock first), `SET_MISMATCH`
@@ -154,8 +157,15 @@ export async function saveResource(bookId: string, t: LockTarget, p: SavePayload
   }
   const fail = res as ImageApiFailure;
   const lost = fail.httpStatus === 409 || fail.httpStatus === 404;
+  const forbidden = fail.httpStatus === 403;
   if (lost) {
     log.warn('saveResource', 'save rejected — lock/node lost', {
+      httpStatus: fail.httpStatus,
+      code: fail.errorCode,
+    });
+  } else if (forbidden) {
+    // Expected access-gate rejection (no illustration access) — warn, not error.
+    log.warn('saveResource', 'save forbidden — missing resource access', {
       httpStatus: fail.httpStatus,
       code: fail.errorCode,
     });
@@ -166,7 +176,7 @@ export async function saveResource(bookId: string, t: LockTarget, p: SavePayload
       error: fail.error,
     });
   }
-  return { ok: false, lost };
+  return { ok: false, lost, forbidden };
 }
 
 /** POST /api/resource/reorder — permute a snapshot collection server-side (phase 08).

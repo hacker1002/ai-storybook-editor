@@ -2,6 +2,11 @@ import type { StateCreator } from 'zustand';
 import type { SnapshotStore, PropsSlice } from '../types';
 import { createLogger } from '@/utils/logger';
 import { cascadeRemixName, cascadeRemixDelete } from '../utils/remix-name-resync';
+import {
+  persistEntityCollab,
+  persistEntityDeleteCollab,
+  persistEntityReorderCollab,
+} from './collab-entity-save-helper';
 
 const log = createLogger('Store', 'PropsSlice');
 
@@ -10,7 +15,7 @@ export const createPropsSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   PropsSlice
-> = (set) => ({
+> = (set, get) => ({
   props: [],
 
   setProps: (props) =>
@@ -21,12 +26,15 @@ export const createPropsSlice: StateCreator<
 
   // --- Top-level CRUD ---
 
-  addProp: (prop) =>
+  addProp: (prop) => {
     set((state) => {
       log.debug('addProp', 'add', { key: prop.key });
       state.props.push(prop);
       state.sync.isDirty = true;
-    }),
+    });
+    // collab: persist the new entity node (create, scope:'node') — no-op solo.
+    void persistEntityCollab(get, 'prop', prop.key, 2);
+  },
 
   updateProp: (key, updates) => {
     set((state) => {
@@ -40,6 +48,9 @@ export const createPropsSlice: StateCreator<
     if (typeof updates.name === 'string') {
       cascadeRemixName('prop', key, updates.name);
     }
+    // collab: persist the whole entity node (edit, scope:'node') — no-op solo. The
+    // book.remix cascade above is a SEPARATE persistence path (books table, not suppressed).
+    void persistEntityCollab(get, 'prop', key, 3);
   },
 
   deleteProp: (key) => {
@@ -51,9 +62,11 @@ export const createPropsSlice: StateCreator<
       state.sync.isDirty = true;
     });
     cascadeRemixDelete('prop', key);
+    // collab: persist the removal (delete, scope:'collection') — no-op solo.
+    void persistEntityDeleteCollab('prop', key);
   },
 
-  reorderProps: (fromIndex, toIndex) =>
+  reorderProps: (fromIndex, toIndex) => {
     set((state) => {
       if (fromIndex >= 0 && toIndex >= 0 && fromIndex < state.props.length && toIndex < state.props.length) {
         log.debug('reorderProps', 'reorder', { fromIndex, toIndex });
@@ -61,11 +74,18 @@ export const createPropsSlice: StateCreator<
         state.props.splice(toIndex, 0, removed);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: persist the new order (reorder, scope:'collection') — no-op solo.
+    const props = get().props;
+    if (fromIndex >= 0 && toIndex >= 0 && fromIndex < props.length && toIndex < props.length && fromIndex !== toIndex) {
+      const draggedKey = props[toIndex]?.key;
+      if (draggedKey) void persistEntityReorderCollab(get, 'prop', draggedKey, fromIndex, toIndex);
+    }
+  },
 
   // --- Nested: Variants ---
 
-  addPropVariant: (propKey, propVariant) =>
+  addPropVariant: (propKey, propVariant) => {
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
@@ -73,9 +93,12 @@ export const createPropsSlice: StateCreator<
         prop.variants.push(propVariant);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: variant add is a WITHIN-node edit → whole entity-node re-patch (scope:'node').
+    void persistEntityCollab(get, 'prop', propKey, 3);
+  },
 
-  updatePropVariant: (propKey, variantKey, updates) =>
+  updatePropVariant: (propKey, variantKey, updates) => {
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
@@ -86,9 +109,12 @@ export const createPropsSlice: StateCreator<
           state.sync.isDirty = true;
         }
       }
-    }),
+    });
+    // collab: variant edit (incl. illustration select+delete) stays WITHIN the entity node.
+    void persistEntityCollab(get, 'prop', propKey, 3);
+  },
 
-  deletePropVariant: (propKey, variantKey) =>
+  deletePropVariant: (propKey, variantKey) => {
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
@@ -100,11 +126,14 @@ export const createPropsSlice: StateCreator<
         );
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: variant delete stays WITHIN the entity node → whole-node re-patch (scope:'node').
+    void persistEntityCollab(get, 'prop', propKey, 3);
+  },
 
   // --- Nested: Sounds ---
 
-  addPropSound: (propKey, sound) =>
+  addPropSound: (propKey, sound) => {
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
@@ -112,9 +141,12 @@ export const createPropsSlice: StateCreator<
         prop.sounds.push(sound);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: sound add stays WITHIN the entity node → whole-node re-patch (scope:'node').
+    void persistEntityCollab(get, 'prop', propKey, 3);
+  },
 
-  updatePropSound: (propKey, soundKey, updates) =>
+  updatePropSound: (propKey, soundKey, updates) => {
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
@@ -125,9 +157,12 @@ export const createPropsSlice: StateCreator<
           state.sync.isDirty = true;
         }
       }
-    }),
+    });
+    // collab: sound edit stays WITHIN the entity node → whole-node re-patch (scope:'node').
+    void persistEntityCollab(get, 'prop', propKey, 3);
+  },
 
-  deletePropSound: (propKey, soundKey) =>
+  deletePropSound: (propKey, soundKey) => {
     set((state) => {
       const prop = state.props.find((p) => p.key === propKey);
       if (prop) {
@@ -135,5 +170,8 @@ export const createPropsSlice: StateCreator<
         prop.sounds = prop.sounds.filter((s) => s.key !== soundKey);
         state.sync.isDirty = true;
       }
-    }),
+    });
+    // collab: sound delete stays WITHIN the entity node → whole-node re-patch (scope:'node').
+    void persistEntityCollab(get, 'prop', propKey, 3);
+  },
 });
