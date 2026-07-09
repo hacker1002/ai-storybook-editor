@@ -148,3 +148,73 @@ describe('reconcileCollectionByIds (reorder/delete — keep local object)', () =
     expect(useSnapshotStore.getState().sync.isDirty).toBe(false);
   });
 });
+
+// P04b: bare-array TOP-LEVEL columns (characters/props/stages) — path=[]. Previously the
+// reconcile was a no-op here (setNodeAtPath refuses the empty path); the fix replaces the
+// whole column directly (collection scope), identity-preserving. Node-scope whole-column
+// writes must STILL be refused via applyRemoteNodePatch's empty-path guard (unchanged).
+describe('reconcileCollectionByIds (bare-array top-level column — P04b fix)', () => {
+  const makeChars3 = () =>
+    asState([
+      { key: 'c0', name: 'Alice', variants: [{ key: 'v0', media_url: 'local-edit' }] },
+      { key: 'c1', name: 'Bob', variants: [] },
+      { key: 'c2', name: 'Cara', variants: [] },
+    ]);
+
+  beforeEach(() => {
+    useSnapshotStore.setState((s) => {
+      s.characters = makeChars3();
+      s.props = asState([{ key: 'p0', name: 'Ball' }, { key: 'p1', name: 'Box' }]);
+      s.stages = asState([{ key: 's0', name: 'Park' }, { key: 's1', name: 'Home' }]);
+      s.sync.isDirty = false;
+    });
+  });
+
+  it('reorders a bare characters column (path=[]) — adopts server order, keeps local edit', () => {
+    // Server: reordered [c2, c0, c1]; c0 fetched copy is STALE (no in-progress variant edit).
+    useSnapshotStore.getState().reconcileCollectionByIds('characters', [], [
+      { key: 'c2', name: 'Cara', variants: [] },
+      { key: 'c0', name: 'Alice', variants: [] },
+      { key: 'c1', name: 'Bob', variants: [] },
+    ]);
+    const chars = useSnapshotStore.getState().characters as unknown as Array<{ key: string; variants: unknown[] }>;
+    expect(chars.map((c) => c.key)).toEqual(['c2', 'c0', 'c1']); // order adopted (no no-op)
+    // Local c0 object kept → in-progress variant edit survives (matched by `key`, not `id`).
+    expect(chars[1].variants).toEqual([{ key: 'v0', media_url: 'local-edit' }]);
+    expect(useSnapshotStore.getState().sync.isDirty).toBe(false);
+  });
+
+  it('deletes from a bare characters column (path=[]) — drops removed key, keeps local edit', () => {
+    // Server: c1 deleted → [c0, c2].
+    useSnapshotStore.getState().reconcileCollectionByIds('characters', [], [
+      { key: 'c0', name: 'Alice', variants: [] },
+      { key: 'c2', name: 'Cara', variants: [] },
+    ]);
+    const chars = useSnapshotStore.getState().characters as unknown as Array<{ key: string; variants: unknown[] }>;
+    expect(chars.map((c) => c.key)).toEqual(['c0', 'c2']); // c1 dropped, no leftover/dup
+    expect(chars.find((c) => c.key === 'c1')).toBeUndefined();
+    // Local c0 kept (identity match) → edit preserved through the delete reconcile.
+    expect(chars[0].variants).toEqual([{ key: 'v0', media_url: 'local-edit' }]);
+    expect(useSnapshotStore.getState().sync.isDirty).toBe(false);
+  });
+
+  it('reconciles bare props + stages columns too (path=[])', () => {
+    useSnapshotStore.getState().reconcileCollectionByIds('props', [], [
+      { key: 'p1', name: 'Box' },
+      { key: 'p0', name: 'Ball' },
+    ]);
+    useSnapshotStore.getState().reconcileCollectionByIds('stages', [], [{ key: 's1', name: 'Home' }]);
+    const st = useSnapshotStore.getState();
+    expect((st.props as unknown as Array<{ key: string }>).map((p) => p.key)).toEqual(['p1', 'p0']);
+    expect((st.stages as unknown as Array<{ key: string }>).map((s) => s.key)).toEqual(['s1']); // s0 dropped
+    expect(st.sync.isDirty).toBe(false);
+  });
+
+  it('node-scope whole-column write STILL refused (applyRemoteNodePatch empty path is a no-op)', () => {
+    const before = JSON.stringify(useSnapshotStore.getState().characters);
+    // A node-scope patch must NEVER clobber the whole column — even with a non-empty payload.
+    useSnapshotStore.getState().applyRemoteNodePatch('characters', [], [{ key: 'zzz', name: 'Intruder' }]);
+    expect(JSON.stringify(useSnapshotStore.getState().characters)).toBe(before);
+    expect(useSnapshotStore.getState().sync.isDirty).toBe(false);
+  });
+});

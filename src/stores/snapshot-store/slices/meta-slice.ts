@@ -90,11 +90,13 @@ export const createMetaSlice: StateCreator<
 
   reconcileCollectionByIds: (column: SnapshotColumn, path: string[], fetchedArray: unknown[]) =>
     set((state) => {
-      // NOTE: bare-array-column reconcile (empty path → whole column) is intentionally a
-      // no-op in v1 — setNodeAtPath guards empty path (whole-column clobber). v1 only syncs
-      // the 2 sketch spaces, whose collections are all NESTED under `sketch` (path
-      // ['spreads'] / ['characters'] / ['props'] / ['stages']). Top-level column reconcile
-      // (illustration/objects spaces) is out of v1 scope — wire it in a later phase.
+      // Collection-scope reconcile (reorder / delete). Handles BOTH nested collections
+      // (path=['spreads'] under `illustration`/`sketch`) AND bare-array TOP-LEVEL columns
+      // (characters / props / stages, path=[]). For a bare-array column, setNodeAtPath refuses
+      // the empty path (its whole-column clobber guard protects node-scope writes), so the
+      // whole-column replace is applied DIRECTLY below — the ONE legitimate whole-column write.
+      // Node-scope writes STAY guarded in applyRemoteNodePatch (its empty-path guard is intact);
+      // only this collection-scope reconcile may replace a whole bare-array column (P04b fix).
       const arr = getNodeAtPath(state[column], path);
       if (!Array.isArray(arr) || !Array.isArray(fetchedArray)) {
         log.debug('reconcileCollectionByIds', 'no-op (not array)', { column, pathLen: path.length });
@@ -103,7 +105,7 @@ export const createMetaSlice: StateCreator<
       // Adopt the server's order + membership, but KEEP the local element object for any
       // matching identity (preserves a peer's in-progress edit — collection scope carries
       // only order/membership; content edits arrive separately via applyRemoteNodePatch).
-      // Identity = `id ?? key`: spreads/images are `id`-keyed, sketch entities
+      // Identity = `id ?? key`: spreads/images are `id`-keyed, entities
       // (characters/props/stages) are `key`-keyed. Elements with NO identity fall back to the
       // fetched object (never collapse onto one Map slot → avoids duplicate/dropped corruption).
       const identityOf = (el: unknown): unknown => {
@@ -119,6 +121,20 @@ export const createMetaSlice: StateCreator<
         const idty = identityOf(el);
         return (idty != null ? localByIdentity.get(idty) : undefined) ?? el;
       });
+
+      if (path.length === 0) {
+        // Bare-array top-level column (characters / props / stages) — replace the whole
+        // column directly (immer-tracked draft assign), identity-preserving. This is the
+        // collection-scope-only path; node-scope whole-column writes remain refused.
+        (state as Record<string, unknown>)[column] = reconciled;
+        log.debug('reconcileCollectionByIds', 'reconciled (bare column)', {
+          column,
+          localCount: arr.length,
+          fetchedCount: fetchedArray.length,
+        });
+        return;
+      }
+
       const res = setNodeAtPath(state[column], path, reconciled);
       log.debug('reconcileCollectionByIds', res.ok ? 'reconciled' : 'no-op', {
         column,
