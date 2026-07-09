@@ -14,6 +14,9 @@ import {
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
 import { createLogger } from "@/utils/logger";
+import { useCurrentBookId } from "@/stores/book-store";
+import { useCollabPersistSession } from "@/features/editor/hooks/use-collab-persist-session";
+import { useContentSyncSession } from "@/features/editor/hooks/use-content-sync-session";
 import {
   useSpaceViewState,
   useEffectiveSpreadId,
@@ -54,6 +57,12 @@ import type { MotionLineGeometry } from "@/features/editor/components/canvas-spr
 const log = createLogger("Editor", "ObjectsCreativeSpace");
 
 export function ObjectsCreativeSpace() {
+  const bookId = useCurrentBookId();
+  // Collab: objects/retouch space is collab-LIVE — persist retouch writes (video/audio/composite/
+  // quiz per-node + animations coarse-save) via the gateway + realtime content-sync.
+  useCollabPersistSession(bookId);
+  useContentSyncSession(bookId);
+
   // --- Store selectors ---
   const retouchSpreadIds = useRetouchSpreadIds();
   const currentLanguage = useCurrentLanguage();
@@ -583,18 +592,15 @@ export function ObjectsCreativeSpace() {
       />
 
       <div className="relative flex-1 min-w-0 overflow-hidden">
-        {/* Collab affordance — greyed "Coming soon" (never-hide, MEMORY). The objects
-            (retouch) space is NOT yet collab-enabled: its ~40 write-ops are not wired to the
-            per-resource gateway save, so the flip is deferred. Whole-doc autosave stays active
-            here (0 regression). Rendered disabled, never hidden, so the capability is visible. */}
+        {/* Collab affordance — ACTIVE. The objects (retouch) space is collab-enabled: its
+            write-ops persist via the per-resource gateway save (whole-doc autosave is suppressed
+            while collab-on). Rendered as an active status badge, never hidden. */}
         <div
-          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/80 px-3 py-1 text-xs font-medium text-muted-foreground opacity-60 cursor-not-allowed select-none"
-          aria-disabled="true"
-          title="Collaborative editing — Coming soon"
+          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-foreground select-none"
+          title="Collaborative editing — active"
         >
           <Users className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Collab</span>
-          <span className="text-[10px] uppercase tracking-wide">Coming soon</span>
         </div>
 
         <ObjectsMainView
