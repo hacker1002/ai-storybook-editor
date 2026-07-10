@@ -23,6 +23,7 @@ import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-pers
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { isLockedByOtherNow, type LockTarget } from '@/stores/resource-lock-store';
 import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
+import { runLockedCollectionSave } from '@/features/editor/utils/structural-lock-collection-save';
 import type { SketchEntityKind } from '@/types/sketch';
 import { SketchEntitySidebar } from './sketch-entity-sidebar';
 import { SketchEntityContentArea } from './sketch-entity-content-area';
@@ -74,11 +75,38 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
     return entityKeys[0] ?? null;
   }, [entityKeys, userSelectedKey]);
 
+  // Commit = optimistic local whole-array replace + gateway collection-scope save (the ONLY
+  // persistence path in the sketch space — `useCollabPersistSession` suppresses owner-direct
+  // autosave). `kind` doubles as the sentinel resource_id AND the target collection name
+  // (`sketch.<kind>`). Coarse lock (see runLockedCollectionSave). NOTE: `result.entities`
+  // (thin {key, media_url, variants}) IS the exact `sketch.<kind>` node shape.
   const commitImport = useCallback(
-    (result: ParseSketchEntitiesResult) => {
-      setSketchEntities(kind, result.entities);
-      setCheckedKeys([]);
+    async (result: ParseSketchEntitiesResult) => {
+      const target: LockTarget = {
+        step: 1,
+        resource_type: KIND_TO_RESOURCE_TYPE[kind],
+        resource_id: kind, // sentinel = collection name (coarse whole-array import lock)
+        locale: null,
+      };
+      const outcome = await runLockedCollectionSave(
+        target,
+        {
+          action_type: 3, // edit (replace-all)
+          patch: result.entities,
+          collection: kind,
+          target_ref: { kind, count: result.entities.length },
+        },
+        () => {
+          setSketchEntities(kind, result.entities);
+          setCheckedKeys([]);
+        },
+      );
+      if (outcome === 'blocked') return; // nothing applied; holder toast already shown
       reportWarnings(result.issues.warnings);
+      if (outcome === 'failed') {
+        toast.error('Import chưa lưu được — vui lòng tải lại trang.');
+        return;
+      }
       toast.success(`Imported ${result.entities.length} ${cfg.title.toLowerCase()}`);
     },
     [kind, cfg.title, setSketchEntities],
@@ -95,7 +123,7 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
           return;
         }
         if (entityKeys.length === 0) {
-          commitImport(result); // nothing to overwrite → commit directly
+          await commitImport(result); // nothing to overwrite → commit directly (keep spinner through save)
         } else {
           setPendingImport(result); // confirm replace via AlertDialog
         }
@@ -110,7 +138,7 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
   );
 
   const confirmImport = useCallback(() => {
-    if (pendingImport) commitImport(pendingImport);
+    if (pendingImport) void commitImport(pendingImport);
     setPendingImport(null);
   }, [pendingImport, commitImport]);
 

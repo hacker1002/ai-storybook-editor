@@ -30,6 +30,7 @@ import {
 } from '@/stores/resource-lock-store';
 import { reorderResource } from '@/apis/resource-lock-api';
 import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
+import { runLockedCollectionSave } from '@/features/editor/utils/structural-lock-collection-save';
 import { createLogger } from '@/utils/logger';
 import { SketchSpreadSidebar } from './sketch-spread-sidebar';
 import { SketchSpreadContentArea } from './sketch-spread-content-area';
@@ -188,11 +189,32 @@ export function SketchSpreadsCreativeSpace() {
     [spreadIds],
   );
 
+  // Commit = optimistic local whole-array replace + gateway collection-scope save (the ONLY
+  // persistence path — `useCollabPersistSession` suppresses owner-direct autosave). rtype 6
+  // (spread); sentinel resource_id + collection = 'spreads' → writes `sketch.spreads` whole.
+  // `result.spreads` IS the exact `sketch.spreads` node shape. Coarse lock (accepted race).
   const commitImport = useCallback(
-    (result: ParseSketchSpreadsResult) => {
-      setSketchSpreads(result.spreads);
-      setCheckedIds([]); // stale ids after a full replace
+    async (result: ParseSketchSpreadsResult) => {
+      const target: LockTarget = { step: 1, resource_type: 6, resource_id: 'spreads', locale: null };
+      const outcome = await runLockedCollectionSave(
+        target,
+        {
+          action_type: 3, // edit (replace-all)
+          patch: result.spreads,
+          collection: 'spreads',
+          target_ref: { count: result.spreads.length },
+        },
+        () => {
+          setSketchSpreads(result.spreads);
+          setCheckedIds([]); // stale ids after a full replace
+        },
+      );
+      if (outcome === 'blocked') return; // nothing applied; holder toast already shown
       reportWarnings(result.issues.warnings);
+      if (outcome === 'failed') {
+        toast.error('Import chưa lưu được — vui lòng tải lại trang.');
+        return;
+      }
       toast.success(`Imported ${result.spreads.length} spread${result.spreads.length === 1 ? '' : 's'}`);
     },
     [setSketchSpreads],
@@ -216,7 +238,7 @@ export function SketchSpreadsCreativeSpace() {
           return;
         }
         if (spreadIds.length === 0) {
-          commitImport(result); // nothing to overwrite → commit directly
+          await commitImport(result); // nothing to overwrite → commit directly (keep spinner through save)
         } else {
           setPendingImport(result); // confirm replace via AlertDialog
         }
@@ -231,7 +253,7 @@ export function SketchSpreadsCreativeSpace() {
   );
 
   const confirmImport = useCallback(() => {
-    if (pendingImport) commitImport(pendingImport);
+    if (pendingImport) void commitImport(pendingImport);
     setPendingImport(null);
   }, [pendingImport, commitImport]);
 
