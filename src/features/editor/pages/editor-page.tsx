@@ -34,6 +34,7 @@ import { ConfigCreativeSpace } from '../components/config-creative-space';
 import { RemixCreativeSpace } from '../components/remix-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { InteractionLayerProvider } from '../contexts';
+import { EditHistoryBridge } from '../components/edit-history-bridge';
 import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
@@ -286,6 +287,8 @@ export function EditorPage() {
   return (
     <TooltipProvider delayDuration={300}>
       <InteractionLayerProvider>
+      {/* Undo/redo capture + hotkey (ADR-045) — headless, must be inside InteractionLayerProvider. */}
+      <EditHistoryBridge />
       <div className="flex h-screen w-screen max-w-full flex-col overflow-hidden">
         {/* Header */}
         <EditorHeader

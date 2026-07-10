@@ -30,6 +30,9 @@ export const createMetaSlice: StateCreator<
 > = (set) => ({
   meta: DEFAULT_META,
   sync: DEFAULT_SYNC,
+  // Transient guard read by the undo/redo capture subscription (edit-history-store) so a
+  // realtime content-sync merge is never captured as a local undo step. NOT persisted.
+  isApplyingRemotePatch: false,
 
   setMeta: (meta) =>
     set((state) => {
@@ -60,6 +63,12 @@ export const createMetaSlice: StateCreator<
     set((state) => {
       log.debug('setSaveError', 'update save error', { hasError: !!error });
       state.sync.error = error;
+    }),
+
+  setApplyingRemotePatch: (v) =>
+    set((state) => {
+      // debug-only — flips many times per collab session; keep noise low.
+      state.isApplyingRemotePatch = v;
     }),
 
   // --- Collab content-sync merge (phase 04) — NEVER set sync.isDirty ---
@@ -144,5 +153,31 @@ export const createMetaSlice: StateCreator<
         reason: res.ok ? undefined : res.reason,
       });
       // Intentionally do NOT set state.sync.isDirty.
+    }),
+
+  // --- Undo/redo apply (edit-history-store, ADR-045) — DIRTIES (unlike the two above) ---
+  // Restores a captured snapshot node. Same positional path-walker family as
+  // applyRemoteNodePatch, but it sets sync.isDirty so the held-session release-time save
+  // persists the restored value. The caller (undo/redo) wraps this in `isApplyingHistory`
+  // so the resulting subtree change does NOT re-trigger the capture subscription.
+  replaceNodeById: (column: SnapshotColumn, path: string[], value: unknown) =>
+    set((state) => {
+      if (path.length === 0) {
+        log.warn('replaceNodeById', 'empty path — skip (whole-column guard)', { column });
+        return;
+      }
+      const root = state[column];
+      if (root == null) {
+        log.warn('replaceNodeById', 'column absent — skip', { column });
+        return;
+      }
+      const res = setNodeAtPath(root, path, value);
+      // NOTE: never log `value` — may be a large media / manuscript node. Metadata only.
+      if (!res.ok) {
+        log.debug('replaceNodeById', 'no-op', { column, pathLen: path.length, reason: res.reason });
+        return;
+      }
+      state.sync.isDirty = true;
+      log.debug('replaceNodeById', 'applied', { column, pathLen: path.length, removed: !!res.removed });
     }),
 });

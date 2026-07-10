@@ -43,6 +43,22 @@ export interface ContentSyncState {
 // ── Non-reactive module scope ─────────────────────────────────────────────────
 let channelHandle: ChannelHandle | null = null;
 
+/**
+ * Wrap a SYNCHRONOUS snapshot-store remote merge so the undo/redo capture subscription
+ * (edit-history-store) SKIPS it — a peer's realtime edit must never become a local undo
+ * step (ADR-045). Sets `isApplyingRemotePatch` around the mutation ONLY (never around an
+ * await), so the flag is true exactly while the subtree changes fire synchronously.
+ */
+function withRemotePatchGuard(apply: () => void): void {
+  const store = useSnapshotStore.getState();
+  store.setApplyingRemotePatch(true);
+  try {
+    apply();
+  } finally {
+    store.setApplyingRemotePatch(false);
+  }
+}
+
 /** Still viewing the version the event targeted? Re-checked AFTER the RPC await so
  *  navigating to another version mid-fetch never merges cross-version (closes R3). */
 function versionStillMatches(eventVersion: string): boolean {
@@ -80,7 +96,9 @@ async function applySync(sync: MetadataSync): Promise<void> {
         const value = await fetchSnapshotNode(sync.version, sync.column, sync.path);
         if (value === undefined) return; // rpc error — leave B's view untouched
         if (!versionStillMatches(sync.version)) return;
-        useSnapshotStore.getState().applyRemoteNodePatch(sync.column, sync.path, value); // null → remove
+        withRemotePatchGuard(() =>
+          useSnapshotStore.getState().applyRemoteNodePatch(sync.column, sync.path, value), // null → remove
+        );
         break;
       }
       case 'collection': {
@@ -90,11 +108,15 @@ async function applySync(sync: MetadataSync): Promise<void> {
         if (node === undefined) return; // rpc error — skip
         if (!versionStillMatches(sync.version)) return;
         if (Array.isArray(node)) {
-          useSnapshotStore.getState().reconcileCollectionByIds(sync.column, sync.path, node);
+          withRemotePatchGuard(() =>
+            useSnapshotStore.getState().reconcileCollectionByIds(sync.column, sync.path, node),
+          );
         } else if (node !== null) {
           // Object parent (textbox-locale delete → `path` addresses the textbox OBJECT / locale map).
           // reconcile-by-id needs an array; whole-replace so the removed locale key is reflected.
-          useSnapshotStore.getState().applyRemoteNodePatch(sync.column, sync.path, node);
+          withRemotePatchGuard(() =>
+            useSnapshotStore.getState().applyRemoteNodePatch(sync.column, sync.path, node),
+          );
         } else {
           // null parent = the whole collection at `path` vanished (rare — structural collections
           // don't disappear on reorder/delete). SKIP: never delete the structural key here, else a
@@ -117,7 +139,9 @@ async function applySync(sync: MetadataSync): Promise<void> {
           // the structural key sketch.<collection> → selector crash). null→remove is node-only.
           if (arr == null) continue;
           if (!versionStillMatches(sync.version)) return;
-          useSnapshotStore.getState().applyRemoteNodePatch(t.column, t.path, arr);
+          withRemotePatchGuard(() =>
+            useSnapshotStore.getState().applyRemoteNodePatch(t.column, t.path, arr),
+          );
         }
         break;
       }

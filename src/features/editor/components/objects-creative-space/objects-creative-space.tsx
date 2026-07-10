@@ -21,6 +21,9 @@ import { useCollabPersistSession } from "@/features/editor/hooks/use-collab-pers
 import { useContentSyncSession } from "@/features/editor/hooks/use-content-sync-session";
 import { useHeldResourceSession } from "@/features/editor/hooks/use-held-resource-session";
 import { RETOUCH_OWNED_KEYS } from "@/stores/snapshot-store/slices/collab-owned-subtree";
+import { useEditHistoryStore } from "@/stores/edit-history-store";
+import { buildItemKey } from "@/stores/edit-history-store/item-key";
+import { UndoRedoControls } from "@/features/editor/components/shared-components/undo-redo-controls";
 import type { LockTarget, SavePayload } from "@/stores/resource-lock-store";
 import { toastLockRequired } from "@/utils/collab-save-toasts";
 import {
@@ -172,6 +175,23 @@ export function ObjectsCreativeSpace() {
     [lockedSpreadId, actions, resetSelection],
   );
 
+  // ── Undo/redo nexus (ADR-045) — begin/endSession tie 1:1 to the retouch held session.
+  // Share the ONE baseline clone the hook already made. onReleased covers release/switch/LOST.
+  const beginSession = useEditHistoryStore((s) => s.beginSession);
+  const endSession = useEditHistoryStore((s) => s.endSession);
+  const handleRetouchAcquired = useCallback(
+    (target: LockTarget, baseline: unknown) => {
+      beginSession(buildItemKey("retouch", target), baseline, "retouch");
+    },
+    [beginSession],
+  );
+  const handleRetouchReleased = useCallback(
+    (target: LockTarget) => {
+      endSession(buildItemKey("retouch", target));
+    },
+    [endSession],
+  );
+
   const { status: retouchLockStatus, saveNow: retouchSaveNow } = useHeldResourceSession({
     target: retouchLockTarget,
     getNode: getRetouchNode,
@@ -179,7 +199,8 @@ export function ObjectsCreativeSpace() {
     buildPayload: buildRetouchPayload,
     onBlocked: handleRetouchLockBlocked,
     onLost: handleRetouchLockLost,
-    // onAcquired / onReleased are wired by P04 (undo/redo nexus).
+    onAcquired: handleRetouchAcquired,
+    onReleased: handleRetouchReleased,
   });
 
   // The active spread is editable only while THIS editor holds its retouch lock (grey-out otherwise).
@@ -721,6 +742,9 @@ export function ObjectsCreativeSpace() {
             <span>{retouchLockStatus === "acquiring" ? "Locking…" : "Click a spread to edit"}</span>
           </div>
         )}
+
+        {/* Per-spread RETOUCH undo/redo (ADR-045) — disabled until there's history for the held spread. */}
+        <UndoRedoControls className="absolute top-3 right-3 z-10" />
 
         <ObjectsMainView
           selectedSpreadId={selectedSpreadId ?? ""}

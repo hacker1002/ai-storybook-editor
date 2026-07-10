@@ -15,6 +15,9 @@ import { useCollabPersistSession } from "@/features/editor/hooks/use-collab-pers
 import { useContentSyncSession } from "@/features/editor/hooks/use-content-sync-session";
 import { useHeldResourceSession } from "@/features/editor/hooks/use-held-resource-session";
 import { SCENE_OWNED_KEYS } from "@/stores/snapshot-store/slices/collab-owned-subtree";
+import { useEditHistoryStore } from "@/stores/edit-history-store";
+import { buildItemKey } from "@/stores/edit-history-store/item-key";
+import { UndoRedoControls } from "@/features/editor/components/shared-components/undo-redo-controls";
 import type { LockTarget, SavePayload } from "@/stores/resource-lock-store";
 import { useSpaceViewState, useEffectiveSpreadId } from "@/features/editor/hooks/use-space-view-state";
 import { ZOOM, COLUMNS } from "@/constants/spread-constants";
@@ -111,6 +114,24 @@ export function SpreadsCreativeSpace() {
     [lockedSpreadId, actions],
   );
 
+  // ── Undo/redo nexus (ADR-045) — begin/endSession tie 1:1 to the held-session lifecycle.
+  // Share the ONE baseline clone the hook already made (no re-clone). onReleased fires on
+  // release / switch / unmount / lock-LOST (the hook calls it in all those paths).
+  const beginSession = useEditHistoryStore((s) => s.beginSession);
+  const endSession = useEditHistoryStore((s) => s.endSession);
+  const handleSceneAcquired = useCallback(
+    (target: LockTarget, baseline: unknown) => {
+      beginSession(buildItemKey("illustration-scene", target), baseline, "illustration-scene");
+    },
+    [beginSession],
+  );
+  const handleSceneReleased = useCallback(
+    (target: LockTarget) => {
+      endSession(buildItemKey("illustration-scene", target));
+    },
+    [endSession],
+  );
+
   const { status: sceneLockStatus, saveNow: sceneSaveNow } = useHeldResourceSession({
     target: sceneLockTarget,
     getNode: getSceneNode,
@@ -118,7 +139,8 @@ export function SpreadsCreativeSpace() {
     buildPayload: buildScenePayload,
     onBlocked: handleSceneLockBlocked,
     onLost: handleSceneLockLost,
-    // onAcquired / onReleased are wired by P04 (undo/redo nexus).
+    onAcquired: handleSceneAcquired,
+    onReleased: handleSceneReleased,
   });
 
   // The active spread is editable only while THIS editor holds its SCENE lock (grey-out otherwise).
@@ -183,6 +205,9 @@ export function SpreadsCreativeSpace() {
             <span>{sceneLockStatus === "acquiring" ? "Locking…" : "Click a spread to edit"}</span>
           </div>
         )}
+
+        {/* Per-spread SCENE undo/redo (ADR-045) — disabled until there's history for the held spread. */}
+        <UndoRedoControls className="absolute top-3 right-3 z-10" />
 
         <SpreadsMainView
           selectedSpreadId={effectiveSpreadId ?? ""}

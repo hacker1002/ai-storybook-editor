@@ -251,11 +251,18 @@ export type SnapshotColumn = 'sketch' | 'illustration' | 'characters' | 'props' 
 export interface MetaSlice {
   meta: SnapshotMeta;
   sync: SyncState;
+  /** True WHILE a collab content-sync remote merge (`applyRemoteNodePatch` /
+   *  `reconcileCollectionByIds`) is being applied. The undo/redo capture subscription
+   *  (edit-history-store) reads this to SKIP remote merges so a peer's edit never becomes a
+   *  local undo step. Transient — set true immediately before + false immediately after each
+   *  merge call in `content-sync-store/index.ts::applySync`. */
+  isApplyingRemotePatch: boolean;
   setMeta: (meta: SnapshotMeta) => void;
   markDirty: () => void;
   markClean: () => void;
   setSaving: (isSaving: boolean) => void;
   setSaveError: (error: string | null) => void;
+  setApplyingRemotePatch: (v: boolean) => void;
   /** Collab content-sync (phase 04): merge ONE remote node into `state[column]` at
    *  `path` (`value == null` → remove). Never sets `sync.isDirty`, never touches nodes
    *  outside `path`. Empty path / absent intermediate / absent column → no-op. */
@@ -265,6 +272,12 @@ export interface MetaSlice {
    *  element object for any matching `id` (preserves a peer's in-progress edit; new id → use
    *  fetched). Never sets `sync.isDirty`. No-op when either side is not an array. */
   reconcileCollectionByIds: (column: SnapshotColumn, path: string[], fetchedArray: unknown[]) => void;
+  /** Undo/redo apply (edit-history-store, ADR-045): write `value` at the positional
+   *  `state[column]` + `path` node AND set `sync.isDirty=true` (so the release-time save
+   *  persists it). Same path-walker as `applyRemoteNodePatch` but it DIRTIES — used to restore
+   *  a captured snapshot. The caller (undo/redo) guards with `isApplyingHistory` so the write
+   *  does not re-trigger capture. Empty path / absent intermediate / absent column → no-op. */
+  replaceNodeById: (column: SnapshotColumn, path: string[], value: unknown) => void;
 }
 
 export interface FetchSlice {

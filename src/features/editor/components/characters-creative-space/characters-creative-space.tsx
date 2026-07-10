@@ -20,8 +20,11 @@ import { useCurrentBookId } from '@/stores/book-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resource-session';
+import { useEditHistoryStore } from '@/stores/edit-history-store';
+import { buildItemKey } from '@/stores/edit-history-store/item-key';
 import type { LockTarget, SavePayload } from '@/stores/resource-lock-store';
 import { CollabEditBadge } from '@/features/editor/components/shared-components/collab-edit-badge';
+import { UndoRedoControls } from '@/features/editor/components/shared-components/undo-redo-controls';
 
 const log = createLogger('Editor', 'CharactersCreativeSpace');
 
@@ -90,6 +93,22 @@ export function CharactersCreativeSpace() {
     [lockedKey, actions],
   );
 
+  // ── Undo/redo nexus (ADR-045) — per-entity WHOLE-node history; shares the held baseline clone.
+  const beginSession = useEditHistoryStore((s) => s.beginSession);
+  const endSession = useEditHistoryStore((s) => s.endSession);
+  const handleAcquired = useCallback(
+    (target: LockTarget, baseline: unknown) => {
+      beginSession(buildItemKey('illustration-entity', target), baseline, 'illustration-entity');
+    },
+    [beginSession],
+  );
+  const handleReleased = useCallback(
+    (target: LockTarget) => {
+      endSession(buildItemKey('illustration-entity', target));
+    },
+    [endSession],
+  );
+
   const { status: lockStatus } = useHeldResourceSession({
     target: lockTarget,
     getNode,
@@ -97,7 +116,8 @@ export function CharactersCreativeSpace() {
     buildPayload,
     onBlocked: handleLockBlocked,
     onLost: handleLockLost,
-    // onAcquired / onReleased are wired by P04 (undo/redo nexus).
+    onAcquired: handleAcquired,
+    onReleased: handleReleased,
   });
 
   // Editable only while THIS editor holds the lock for the character on screen (grey-out otherwise).
@@ -146,6 +166,8 @@ export function CharactersCreativeSpace() {
           status={lockStatus}
           idleLabel="Click a character to edit"
         />
+        {/* Per-entity undo/redo (ADR-045) — disabled until there's history for the held entity. */}
+        <UndoRedoControls className="absolute top-3 right-3 z-10" />
         {selectedCharacterKey ? (
           <CharactersContentArea
             // key={lockedKey ?? selectedCharacterKey} resets per-entity panel state on switch via

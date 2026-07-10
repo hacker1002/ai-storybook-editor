@@ -19,8 +19,11 @@ import { useCurrentBookId } from '@/stores/book-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resource-session';
+import { useEditHistoryStore } from '@/stores/edit-history-store';
+import { buildItemKey } from '@/stores/edit-history-store/item-key';
 import type { LockTarget, SavePayload } from '@/stores/resource-lock-store';
 import { CollabEditBadge } from '@/features/editor/components/shared-components/collab-edit-badge';
+import { UndoRedoControls } from '@/features/editor/components/shared-components/undo-redo-controls';
 import type { StageContentTab } from './stages-content-area';
 
 const log = createLogger('Editor', 'StagesCreativeSpace');
@@ -88,6 +91,22 @@ export function StagesCreativeSpace() {
     [lockedKey, actions],
   );
 
+  // ── Undo/redo nexus (ADR-045) — per-entity WHOLE-node history; shares the held baseline clone.
+  const beginSession = useEditHistoryStore((s) => s.beginSession);
+  const endSession = useEditHistoryStore((s) => s.endSession);
+  const handleAcquired = useCallback(
+    (target: LockTarget, baseline: unknown) => {
+      beginSession(buildItemKey('illustration-entity', target), baseline, 'illustration-entity');
+    },
+    [beginSession],
+  );
+  const handleReleased = useCallback(
+    (target: LockTarget) => {
+      endSession(buildItemKey('illustration-entity', target));
+    },
+    [endSession],
+  );
+
   const { status: lockStatus } = useHeldResourceSession({
     target: lockTarget,
     getNode,
@@ -95,6 +114,8 @@ export function StagesCreativeSpace() {
     buildPayload,
     onBlocked: handleLockBlocked,
     onLost: handleLockLost,
+    onAcquired: handleAcquired,
+    onReleased: handleReleased,
   });
 
   const entityEditable = lockStatus === 'held' && lockedKey === selectedStageKey && lockedKey !== null;
@@ -133,6 +154,8 @@ export function StagesCreativeSpace() {
           status={lockStatus}
           idleLabel="Click a stage to edit"
         />
+        {/* Per-entity undo/redo (ADR-045) — disabled until there's history for the held entity. */}
+        <UndoRedoControls className="absolute top-3 right-3 z-10" />
         {selectedStageKey ? (
           <StagesContentArea
             key={lockedKey ?? selectedStageKey}
