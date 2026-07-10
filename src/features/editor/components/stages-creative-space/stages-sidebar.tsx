@@ -34,6 +34,11 @@ interface StagesSidebarProps {
   stageKeys: string[];
   selectedStageKey: string | null;
   onStageSelect: (key: string) => void;
+  /** Collab held-session gate (ADR-044): this editor holds the SELECTED stage's lock. Only the
+   *  selected+held item may be renamed/deleted or have its location edited. */
+  editable: boolean;
+  /** Called after deleting the held stage so the space can drop the lock (→ release-save). */
+  onEntityDeleted: (key: string) => void;
 }
 
 /** Build a blank Stage record ready for addStage */
@@ -69,6 +74,8 @@ export function StagesSidebar({
   stageKeys,
   selectedStageKey,
   onStageSelect,
+  editable,
+  onEntityDeleted,
 }: StagesSidebarProps) {
   const allStages = useStages();
   const { addStage, updateStage, deleteStage, reorderStages } =
@@ -126,16 +133,29 @@ export function StagesSidebar({
 
   const handleDeleteStage = useCallback(
     (key: string) => {
+      // Collab gate: delete is an owned-node mutation → only the SELECTED+held stage may be deleted.
+      // After delete, notify the space to drop the lock so the held session release-saves.
+      if (!editable || key !== selectedStageKey) {
+        log.debug("handleDeleteStage", "blocked — stage not held", { key });
+        return;
+      }
       log.info("handleDeleteStage", "deleting stage", { key });
       deleteStage(key);
+      onEntityDeleted(key);
       if (expandedStageKey === key) setExpandedStageKey(null);
       if (editingNameKey === key) setEditingNameKey(null);
     },
-    [deleteStage, expandedStageKey, editingNameKey]
+    [deleteStage, onEntityDeleted, editable, selectedStageKey, expandedStageKey, editingNameKey]
   );
 
   const handleRenameStage = useCallback(
     (key: string, newName: string) => {
+      // Collab gate: rename mutates the entity node → only the SELECTED+held stage.
+      if (!editable || key !== selectedStageKey) {
+        log.debug("handleRenameStage", "blocked — stage not held", { key });
+        setEditingNameKey(null);
+        return;
+      }
       const trimmed = newName.trim();
       if (trimmed) {
         log.debug("handleRenameStage", "renaming", { key, newName: trimmed });
@@ -143,7 +163,7 @@ export function StagesSidebar({
       }
       setEditingNameKey(null);
     },
-    [updateStage]
+    [updateStage, editable, selectedStageKey]
   );
 
   const handleDrop = useCallback(
@@ -365,6 +385,8 @@ export function StagesSidebar({
               isSelected={key === selectedStageKey}
               isExpanded={key === expandedStageKey}
               isEditingName={key === editingNameKey}
+              // Per-item collab gate: only the SELECTED+held stage is editable.
+              editable={editable && key === selectedStageKey}
               onToggle={() => handleToggle(key)}
               onSelect={() => onStageSelect(key)}
               onStartRename={() => setEditingNameKey(key)}

@@ -18,10 +18,12 @@ const DEFAULT_SOUND_NAMES = new Set<string>([]);
 interface StageSoundsTabPanelProps {
   stageKey: string;
   sounds: StageSound[];
+  /** Collab held-session gate (ADR-044): blocks sound edits + disables affordances when not held. */
+  editable: boolean;
 }
 
-export function StageSoundsTabPanel({ stageKey, sounds }: StageSoundsTabPanelProps) {
-  log.debug('render', 'init', { stageKey, count: sounds.length });
+export function StageSoundsTabPanel({ stageKey, sounds, editable }: StageSoundsTabPanelProps) {
+  log.debug('render', 'init', { stageKey, count: sounds.length, editable });
 
   const { updateStageSound } = useSnapshotActions();
   const allSounds = useSounds();
@@ -44,6 +46,7 @@ export function StageSoundsTabPanel({ stageKey, sounds }: StageSoundsTabPanelPro
   };
 
   const handleLibrarySelect = (selected: LibrarySound) => {
+    if (!editable) return; // collab gate
     if (!browseSoundKey) return;
     const current = sounds.find((s) => s.key === browseSoundKey);
     const shouldOverwriteName =
@@ -86,6 +89,7 @@ export function StageSoundsTabPanel({ stageKey, sounds }: StageSoundsTabPanelPro
             key={sound.key}
             stageKey={stageKey}
             sound={sound}
+            editable={editable}
             onBrowse={() => handleBrowse(sound.key)}
           />
         ))}

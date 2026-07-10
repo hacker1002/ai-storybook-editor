@@ -38,6 +38,11 @@ interface CharactersSidebarProps {
   characterKeys: string[];
   selectedCharacterKey: string | null;
   onCharacterSelect: (key: string) => void;
+  /** Collab held-session gate (ADR-044): this editor holds the SELECTED character's lock. Only the
+   *  selected+held item may be renamed/deleted or have its basic-info/personality edited. */
+  editable: boolean;
+  /** Called after deleting the held character so the space can drop the lock (→ release-save). */
+  onEntityDeleted: (key: string) => void;
 }
 
 /** Build a blank Character record ready for addCharacter */
@@ -88,6 +93,8 @@ export function CharactersSidebar({
   characterKeys,
   selectedCharacterKey,
   onCharacterSelect,
+  editable,
+  onEntityDeleted,
 }: CharactersSidebarProps) {
   const allCharacters = useCharacters();
   const { addCharacter, updateCharacter, deleteCharacter, reorderCharacters } =
@@ -168,16 +175,29 @@ export function CharactersSidebar({
 
   const handleDeleteCharacter = useCallback(
     (key: string) => {
+      // Collab gate: delete is an owned-node mutation → only the SELECTED+held character may be
+      // deleted. After delete, notify the space to drop the lock so the held session release-saves.
+      if (!editable || key !== selectedCharacterKey) {
+        log.debug("handleDeleteCharacter", "blocked — character not held", { key });
+        return;
+      }
       log.info("handleDeleteCharacter", "deleting character", { key });
       deleteCharacter(key);
+      onEntityDeleted(key);
       if (expandedCharacterKey === key) setExpandedCharacterKey(null);
       if (editingNameKey === key) setEditingNameKey(null);
     },
-    [deleteCharacter, expandedCharacterKey, editingNameKey]
+    [deleteCharacter, onEntityDeleted, editable, selectedCharacterKey, expandedCharacterKey, editingNameKey]
   );
 
   const handleRenameCharacter = useCallback(
     (key: string, newName: string) => {
+      // Collab gate: rename mutates the entity node → only the SELECTED+held character.
+      if (!editable || key !== selectedCharacterKey) {
+        log.debug("handleRenameCharacter", "blocked — character not held", { key });
+        setEditingNameKey(null);
+        return;
+      }
       const trimmed = newName.trim();
       if (trimmed) {
         log.debug("handleRenameCharacter", "renaming", { key, newName: trimmed });
@@ -185,7 +205,7 @@ export function CharactersSidebar({
       }
       setEditingNameKey(null);
     },
-    [updateCharacter]
+    [updateCharacter, editable, selectedCharacterKey]
   );
 
   const handleDrop = useCallback(
@@ -423,6 +443,8 @@ export function CharactersSidebar({
               isSelected={key === selectedCharacterKey}
               isExpanded={key === expandedCharacterKey}
               isEditingName={key === editingNameKey}
+              // Per-item collab gate: only the SELECTED+held character is editable.
+              editable={editable && key === selectedCharacterKey}
               onToggle={() => handleToggle(key)}
               onSelect={() => onCharacterSelect(key)}
               onStartRename={() => setEditingNameKey(key)}

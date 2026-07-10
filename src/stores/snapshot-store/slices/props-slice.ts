@@ -2,6 +2,13 @@ import type { StateCreator } from 'zustand';
 import type { SnapshotStore, PropsSlice } from '../types';
 import { createLogger } from '@/utils/logger';
 import { cascadeRemixName, cascadeRemixDelete } from '../utils/remix-name-resync';
+// ADR-044 §Revision 2026-07-10 (per-entity HELD session): create/edit/delete mutators mutate +
+// dirty only — the entity held session saves the WHOLE prop node on lock release. Only the
+// cross-entity REORDER stays on its own `persistEntityReorderCollab` path (out of held-session/undo
+// scope). See characters-slice.ts for the shared `revertEntityNode` onLost revert.
+// CREATE + DELETE are collection-level ops (a node-scoped release-save can't express them) → they
+// KEEP the explicit persistEntityCollab(action 2)/persistEntityDeleteCollab(action 4) path; only
+// EDIT moves to the held session.
 import {
   persistEntityCollab,
   persistEntityDeleteCollab,
@@ -32,7 +39,7 @@ export const createPropsSlice: StateCreator<
       state.props.push(prop);
       state.sync.isDirty = true;
     });
-    // collab: persist the new entity node (create, scope:'node') — no-op solo.
+    // collab: CREATE is a collection add → explicit save (action 2); held session covers later edits.
     void persistEntityCollab(get, 'prop', prop.key, 2);
   },
 
@@ -48,9 +55,8 @@ export const createPropsSlice: StateCreator<
     if (typeof updates.name === 'string') {
       cascadeRemixName('prop', key, updates.name);
     }
-    // collab: persist the whole entity node (edit, scope:'node') — no-op solo. The
-    // book.remix cascade above is a SEPARATE persistence path (books table, not suppressed).
-    void persistEntityCollab(get, 'prop', key, 3);
+    // collab: mutate + dirty only — held session saves the whole node on release. The book.remix
+    // cascade above is a SEPARATE persistence path (books table, not suppressed).
   },
 
   deleteProp: (key) => {
@@ -62,7 +68,8 @@ export const createPropsSlice: StateCreator<
       state.sync.isDirty = true;
     });
     cascadeRemixDelete('prop', key);
-    // collab: persist the removal (delete, scope:'collection') — no-op solo.
+    // collab: DELETE is a collection remove → explicit save (action 4); held session skips its
+    // node-save on the now-null node (null-node guard).
     void persistEntityDeleteCollab('prop', key);
   },
 
@@ -75,7 +82,9 @@ export const createPropsSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: persist the new order (reorder, scope:'collection') — no-op solo.
+    // collab: persist the new order (reorder, scope:'collection') — no-op solo. KEPT on its own path
+    // (cross-entity reorder is out of the held-session/undo scope). Read the dragged key from the
+    // POST-mutate state; skip true no-ops (out-of-range / same index).
     const props = get().props;
     if (fromIndex >= 0 && toIndex >= 0 && fromIndex < props.length && toIndex < props.length && fromIndex !== toIndex) {
       const draggedKey = props[toIndex]?.key;
@@ -94,8 +103,7 @@ export const createPropsSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: variant add is a WITHIN-node edit → whole entity-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'prop', propKey, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
 
   updatePropVariant: (propKey, variantKey, updates) => {
@@ -110,8 +118,8 @@ export const createPropsSlice: StateCreator<
         }
       }
     });
-    // collab: variant edit (incl. illustration select+delete) stays WITHIN the entity node.
-    void persistEntityCollab(get, 'prop', propKey, 3);
+    // collab: within-node edit (incl. illustration select+delete, generate/edit write-back) — held
+    // session saves the whole entity node on release.
   },
 
   deletePropVariant: (propKey, variantKey) => {
@@ -127,8 +135,7 @@ export const createPropsSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: variant delete stays WITHIN the entity node → whole-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'prop', propKey, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
 
   // --- Nested: Sounds ---
@@ -142,8 +149,7 @@ export const createPropsSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: sound add stays WITHIN the entity node → whole-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'prop', propKey, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
 
   updatePropSound: (propKey, soundKey, updates) => {
@@ -158,8 +164,7 @@ export const createPropsSlice: StateCreator<
         }
       }
     });
-    // collab: sound edit stays WITHIN the entity node → whole-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'prop', propKey, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
 
   deletePropSound: (propKey, soundKey) => {
@@ -171,7 +176,6 @@ export const createPropsSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: sound delete stays WITHIN the entity node → whole-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'prop', propKey, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
 });

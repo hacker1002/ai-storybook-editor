@@ -552,6 +552,8 @@ export const useSnapshotActions = () =>
       updateCharacterVariant: s.updateCharacterVariant,
       deleteCharacterVariant: s.deleteCharacterVariant,
       updateCharacterVoiceSetting: s.updateCharacterVoiceSetting,
+      // Entity held-session onLost revert (ADR-044) — cross-column (character/prop/stage)
+      revertEntityNode: s.revertEntityNode,
       // Stages
       setStages: s.setStages,
       addStage: s.addStage,

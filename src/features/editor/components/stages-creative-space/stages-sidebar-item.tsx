@@ -51,6 +51,10 @@ interface StagesSidebarItemProps {
   isSelected: boolean;
   isExpanded: boolean;
   isEditingName: boolean;
+  /** Collab held-session gate (ADR-044): this item is the SELECTED+held stage. When false the
+   *  location edit + rename/delete affordances are blocked + disabled. Expand/select + drag stay
+   *  enabled (select is the lock-acquire trigger; reorder is out of scope). */
+  editable: boolean;
   onToggle: () => void;
   onSelect: () => void;
   onStartRename: () => void;
@@ -67,6 +71,7 @@ export function StagesSidebarItem({
   isSelected,
   isExpanded,
   isEditingName,
+  editable,
   onToggle,
   onSelect,
   onStartRename,
@@ -87,6 +92,7 @@ export function StagesSidebarItem({
   // Sync editValue when entering rename mode
   function handleStartRename(e: React.MouseEvent) {
     e.stopPropagation();
+    if (!editable) return; // collab gate
     setEditValue(stage?.name ?? "");
     onStartRename();
   }
@@ -204,6 +210,7 @@ export function StagesSidebarItem({
                 size="icon"
                 className="mt-0.5 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                 onClick={handleStartRename}
+                disabled={!editable}
                 tabIndex={-1}
                 aria-label="Edit name"
               >
@@ -226,8 +233,9 @@ export function StagesSidebarItem({
               <label className="text-xs text-muted-foreground">Location</label>
               <Select
                 value={stage?.location_id || LOCATION_NONE}
-                disabled={isLocationsLoading}
+                disabled={isLocationsLoading || !editable}
                 onValueChange={(val) => {
+                  if (!editable) return; // collab gate
                   const locationId = val === LOCATION_NONE ? "" : val;
                   log.debug("onUpdateLocation", "location changed", {
                     stageKey,
@@ -266,6 +274,8 @@ export function StagesSidebarItem({
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:text-destructive"
+                    disabled={!editable}
+                    title={editable ? undefined : "Click this stage to edit"}
                     aria-label="Delete stage"
                   >
                     <Trash2 className="h-3 w-3" />

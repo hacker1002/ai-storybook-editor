@@ -53,6 +53,10 @@ interface PropsSidebarItemProps {
   isSelected: boolean;
   isExpanded: boolean;
   isEditingName: boolean;
+  /** Collab held-session gate (ADR-044): this item is the SELECTED+held prop. When false the
+   *  category/type edits + rename/delete affordances are blocked/disabled. Expand/select + drag
+   *  stay enabled (select is the lock-acquire trigger; reorder is out of scope). */
+  editable: boolean;
   onToggle: () => void;
   onSelect: () => void;
   onStartRename: () => void;
@@ -71,6 +75,7 @@ export function PropsSidebarItem({
   isSelected,
   isExpanded,
   isEditingName,
+  editable,
   onToggle,
   onSelect,
   onStartRename,
@@ -97,6 +102,7 @@ export function PropsSidebarItem({
   // Sync editValue when entering rename mode
   function handleStartRename(e: React.MouseEvent) {
     e.stopPropagation();
+    if (!editable) return; // collab gate
     setEditValue(prop?.name ?? "");
     onStartRename();
   }
@@ -159,7 +165,7 @@ export function PropsSidebarItem({
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") onFinishRename(editValue);
+                      if (e.key === "Enter") onFinishRename(editable ? editValue : (prop?.name ?? ""));
                       if (e.key === "Escape") onFinishRename(prop?.name ?? "");
                     }}
                     onClick={(e) => e.stopPropagation()}
@@ -205,6 +211,7 @@ export function PropsSidebarItem({
                 size="icon"
                 className="mt-0.5 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                 onClick={handleStartRename}
+                disabled={!editable}
                 tabIndex={-1}
                 aria-label="Edit name"
               >
@@ -236,6 +243,7 @@ export function PropsSidebarItem({
                   onUpdateCategory(val);
                 }}
                 placeholder="Select category..."
+                disabled={!editable}
               />
             </div>
 
@@ -248,6 +256,7 @@ export function PropsSidebarItem({
                   log.debug("onUpdateType", "type changed", { propKey, val });
                   onUpdateType(val);
                 }}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8">
                   <SelectValue />
@@ -279,6 +288,8 @@ export function PropsSidebarItem({
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:text-destructive"
+                    disabled={!editable}
+                    title={editable ? undefined : "Click this prop to edit"}
                     aria-label="Delete prop"
                   >
                     <Trash2 className="h-3 w-3" />

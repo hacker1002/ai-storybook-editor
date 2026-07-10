@@ -25,12 +25,16 @@ interface CharactersContentAreaProps {
   selectedCharacterKey: string;
   activeTab: CharacterContentTab;
   onTabChange: (tab: CharacterContentTab) => void;
+  /** Collab held-session gate: this editor holds the character's lock (ADR-044). When false every
+   *  entity mutation is blocked + its affordance disabled/greyed (never hidden). */
+  editable: boolean;
 }
 
 export function CharactersContentArea({
   selectedCharacterKey,
   activeTab,
   onTabChange,
+  editable,
 }: CharactersContentAreaProps) {
   const character = useCharacterByKey(selectedCharacterKey);
   const { addCharacterVariant } = useSnapshotActions();
@@ -38,7 +42,8 @@ export function CharactersContentArea({
   const [isCreateVariantModalOpen, setIsCreateVariantModalOpen] = useState(false);
 
   const handleAddClick = () => {
-    log.debug('handleAddClick', 'add click', { activeTab });
+    log.debug('handleAddClick', 'add click', { activeTab, editable });
+    if (!editable) return; // gate: adding a variant mutates the held entity node
     if (activeTab === 'variants') {
       setIsCreateVariantModalOpen(true);
     }
@@ -46,6 +51,7 @@ export function CharactersContentArea({
   };
 
   const handleConfirmCreateVariant = (name: string, key: string) => {
+    if (!editable) return;
     log.info('handleConfirmCreateVariant', 'creating variant', { characterKey: selectedCharacterKey, key });
     addCharacterVariant(selectedCharacterKey, {
       name,
@@ -91,8 +97,14 @@ export function CharactersContentArea({
           size="icon"
           className="h-7 w-7"
           onClick={handleAddClick}
-          disabled={activeTab !== 'variants'}
-          title={activeTab === 'variants' ? 'Add variant' : undefined}
+          disabled={activeTab !== 'variants' || !editable}
+          title={
+            activeTab !== 'variants'
+              ? undefined
+              : editable
+                ? 'Add variant'
+                : 'Click this character to edit'
+          }
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -105,6 +117,7 @@ export function CharactersContentArea({
             key={selectedCharacterKey}
             characterKey={selectedCharacterKey}
             variants={character.variants}
+            editable={editable}
           />
         )}
         {activeTab === 'variants' && !character && (
@@ -117,6 +130,7 @@ export function CharactersContentArea({
             key={selectedCharacterKey}
             characterKey={selectedCharacterKey}
             voiceSetting={character.voice_setting}
+            editable={editable}
           />
         )}
         {activeTab === 'voices' && !character && (

@@ -55,6 +55,8 @@ interface VariantItemProps {
   variantData: PropVariant;
   isExpanded: boolean;
   onToggle: () => void;
+  /** Collab held-session gate (ADR-044): when false every variant mutation is blocked + disabled. */
+  editable: boolean;
 }
 
 export function VariantItem({
@@ -62,6 +64,7 @@ export function VariantItem({
   variantData,
   isExpanded,
   onToggle,
+  editable,
 }: VariantItemProps) {
   const { deletePropVariant, updatePropVariant, startGenerateTask, startEditTask } = useSnapshotActions();
   const prop = usePropByKey(propKey);
@@ -104,6 +107,7 @@ export function VariantItem({
     variantData.illustrations[selectedIllustrationIndex];
 
   const handleBlurSave = () => {
+    if (!editable) return; // collab gate
     const trimmed = promptText.trim();
     if (trimmed === (variantData.visual_description ?? "")) return;
     log.debug("handleBlurSave", "save visual_description", {
@@ -124,6 +128,7 @@ export function VariantItem({
   };
 
   const handleEditImage = () => {
+    if (!editable) return; // collab gate
     const trimmed = editPromptText.trim();
     if (!trimmed || !selectedIllustration || isProcessing) return;
 
@@ -164,9 +169,10 @@ export function VariantItem({
     : undefined;
 
   // Non-base states cannot generate without base illustration; all states need a book art style.
-  const isGenerateDisabled = isProcessing || !promptText.trim() || !artStyleId || (!isBase && !basePropImageUrl);
+  const isGenerateDisabled = !editable || isProcessing || !promptText.trim() || !artStyleId || (!isBase && !basePropImageUrl);
 
   const handleGenerate = () => {
+    if (!editable) return; // collab gate
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
 
@@ -240,6 +246,7 @@ export function VariantItem({
     if (!file) return;
     // Reset input so same file can be re-selected
     e.target.value = "";
+    if (!editable) return; // collab gate
 
     log.info("handleUpload", "start upload", {
       propKey,
@@ -283,6 +290,7 @@ export function VariantItem({
   };
 
   const handleDeleteVariant = () => {
+    if (!editable) return; // collab gate
     log.info("handleDeleteVariant", "delete state", {
       propKey,
       variantKey: variantData.key,
@@ -316,7 +324,7 @@ export function VariantItem({
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                        if (editable && renameValue.trim() && renameValue.trim() !== variantData.name) {
                           log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
                           updatePropVariant(propKey, variantData.key, { name: renameValue.trim() });
                         }
@@ -331,7 +339,7 @@ export function VariantItem({
                     size="icon"
                     className="h-6 w-6 shrink-0"
                     onClick={() => {
-                      if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                      if (editable && renameValue.trim() && renameValue.trim() !== variantData.name) {
                         log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
                         updatePropVariant(propKey, variantData.key, { name: renameValue.trim() });
                       }
@@ -361,13 +369,15 @@ export function VariantItem({
                       variant="ghost"
                       size="icon"
                       className="h-5 w-5 shrink-0"
+                      disabled={!editable}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (!editable) return;
                         setRenameValue(variantData.name);
                         setIsRenaming(true);
                         log.debug('handleStartRename', 'start', { variantKey: variantData.key });
                       }}
-                      title="Rename variant"
+                      title={editable ? "Rename variant" : "Click this prop to edit"}
                     >
                       <Pencil className="h-3 w-3 text-muted-foreground" />
                     </Button>
@@ -405,9 +415,11 @@ export function VariantItem({
             variant="outline"
             size="sm"
             className="h-8 gap-1.5"
-            disabled={isUploading}
+            disabled={isUploading || !editable}
+            title={editable ? undefined : "Click this prop to edit"}
             onClick={(e) => {
               e.stopPropagation();
+              if (!editable) return;
               handleUploadClick();
             }}
           >
@@ -423,8 +435,9 @@ export function VariantItem({
                   variant="outline"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  disabled={!editable}
                   onClick={(e) => e.stopPropagation()}
-                  title="Delete variant"
+                  title={editable ? "Delete variant" : "Click this prop to edit"}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -495,7 +508,7 @@ export function VariantItem({
                       referenceImages={editRefs.images}
                       onAttachClick={editRefs.openPicker}
                       onRemoveReference={editRefs.removeImage}
-                      disabled={isProcessing}
+                      disabled={isProcessing || !editable}
                     />
                     <Button
                       size="sm"
@@ -587,7 +600,7 @@ export function VariantItem({
                 variant="ghost"
                 className="h-6 w-6 p-0"
                 onClick={generateRefs.openPicker}
-                disabled={isProcessing}
+                disabled={isProcessing || !editable}
                 aria-label="Attach reference image"
               >
                 <Paperclip className="h-4 w-4" />
@@ -623,7 +636,7 @@ export function VariantItem({
               onBlur={handleBlurSave}
               placeholder="Describe the visual appearance..."
               className="min-h-[80px]"
-              disabled={isProcessing}
+              disabled={isProcessing || !editable}
             />
           </div>
 

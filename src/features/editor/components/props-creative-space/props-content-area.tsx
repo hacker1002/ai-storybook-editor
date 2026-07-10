@@ -19,9 +19,11 @@ interface PropsContentAreaProps {
   selectedPropKey: string;
   activeTab: ContentTab;
   onTabChange: (tab: ContentTab) => void;
+  /** Collab held-session gate (ADR-044): blocks + disables every entity mutation when not held. */
+  editable: boolean;
 }
 
-export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: PropsContentAreaProps) {
+export function PropsContentArea({ selectedPropKey, activeTab, onTabChange, editable }: PropsContentAreaProps) {
   const prop = usePropByKey(selectedPropKey);
   const { addPropVariant, addPropSound } = useSnapshotActions();
 
@@ -29,7 +31,8 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
   const [isCreateSoundModalOpen, setIsCreateSoundModalOpen] = useState(false);
 
   const handleAddClick = () => {
-    log.debug('handleAddClick', 'add click', { activeTab });
+    log.debug('handleAddClick', 'add click', { activeTab, editable });
+    if (!editable) return; // gate: adding a variant/sound mutates the held entity node
     if (activeTab === 'variants') {
       setIsCreateVariantModalOpen(true);
     } else if (activeTab === 'sounds') {
@@ -38,6 +41,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
   };
 
   const handleConfirmCreateVariant = (name: string, key: string) => {
+    if (!editable) return;
     log.info('handleConfirmCreateVariant', 'creating variant', { propKey: selectedPropKey, key });
     addPropVariant(selectedPropKey, {
       name,
@@ -50,6 +54,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
   };
 
   const handleConfirmCreateSound = (name: string, key: string) => {
+    if (!editable) return;
     log.info('handleConfirmCreateSound', 'creating sound', { propKey: selectedPropKey, key });
     addPropSound(selectedPropKey, {
       name,
@@ -92,7 +97,12 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
           size="icon"
           className="h-7 w-7"
           onClick={handleAddClick}
-          title={`Add ${activeTab === 'variants' ? 'variant' : activeTab === 'sounds' ? 'sound' : 'item'}`}
+          disabled={!editable || activeTab === 'crops'}
+          title={
+            editable
+              ? `Add ${activeTab === 'variants' ? 'variant' : activeTab === 'sounds' ? 'sound' : 'item'}`
+              : 'Click this prop to edit'
+          }
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -101,7 +111,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
       {/* Tab Panel */}
       <div className="flex-1 min-h-0 overflow-auto" role="tabpanel">
         {activeTab === 'variants' && prop && (
-          <VariantsTabPanel key={selectedPropKey} propKey={selectedPropKey} variants={prop.variants} />
+          <VariantsTabPanel key={selectedPropKey} propKey={selectedPropKey} variants={prop.variants} editable={editable} />
         )}
         {activeTab === 'variants' && !prop && (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -109,7 +119,7 @@ export function PropsContentArea({ selectedPropKey, activeTab, onTabChange }: Pr
           </div>
         )}
         {activeTab === 'sounds' && prop && (
-          <SoundsTabPanel key={selectedPropKey} propKey={selectedPropKey} sounds={prop.sounds} />
+          <SoundsTabPanel key={selectedPropKey} propKey={selectedPropKey} sounds={prop.sounds} editable={editable} />
         )}
         {activeTab === 'sounds' && !prop && (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">

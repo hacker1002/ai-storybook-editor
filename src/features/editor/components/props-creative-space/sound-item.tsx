@@ -28,9 +28,11 @@ interface SoundItemProps {
   propKey: string;
   sound: PropSound;
   onBrowse: () => void;
+  /** Collab held-session gate (ADR-044): blocks rename/upload/delete + disables their affordances. */
+  editable: boolean;
 }
 
-export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
+export function SoundItem({ propKey, sound, onBrowse, editable }: SoundItemProps) {
   const { updatePropSound, deletePropSound } = useSnapshotActions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -38,13 +40,14 @@ export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleStartRename = () => {
+    if (!editable) return; // collab gate
     setRenameValue(sound.name);
     setIsRenaming(true);
     log.debug('handleStartRename', 'start', { soundKey: sound.key });
   };
 
   const handleFinishRename = (accept: boolean) => {
-    if (accept && renameValue.trim() && renameValue.trim() !== sound.name) {
+    if (accept && editable && renameValue.trim() && renameValue.trim() !== sound.name) {
       log.info('handleFinishRename', 'renamed', { soundKey: sound.key, newName: renameValue.trim() });
       updatePropSound(propKey, sound.key, { name: renameValue.trim() });
     }
@@ -59,6 +62,7 @@ export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    if (!editable) return; // collab gate
 
     setIsUploading(true);
     log.info('handleUpload', 'start', { soundKey: sound.key, fileName: file.name, size: file.size });
@@ -78,6 +82,7 @@ export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
   };
 
   const handleDelete = () => {
+    if (!editable) return; // collab gate
     log.info('handleDelete', 'delete sound', { propKey, soundKey: sound.key });
     deletePropSound(propKey, sound.key);
   };
@@ -128,7 +133,8 @@ export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
                   size="icon"
                   className="h-5 w-5 shrink-0"
                   onClick={handleStartRename}
-                  title="Rename sound"
+                  disabled={!editable}
+                  title={editable ? "Rename sound" : "Click this prop to edit"}
                 >
                   <Pencil className="h-3 w-3 text-muted-foreground" />
                 </Button>
@@ -146,6 +152,8 @@ export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
             size="sm"
             className="h-7 gap-1 text-xs"
             onClick={onBrowse}
+            disabled={!editable}
+            title={editable ? undefined : "Click this prop to edit"}
             aria-label="Browse sound library"
           >
             <Music className="h-3 w-3" />
@@ -165,7 +173,7 @@ export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
             size="sm"
             className="h-7 gap-1 text-xs"
             onClick={handleUploadClick}
-            disabled={isUploading}
+            disabled={isUploading || !editable}
           >
             <Upload className="h-3 w-3" />
             {isUploading ? 'Uploading...' : 'Upload'}
@@ -178,7 +186,8 @@ export function SoundItem({ propKey, sound, onBrowse }: SoundItemProps) {
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                title="Delete sound"
+                disabled={!editable}
+                title={editable ? "Delete sound" : "Click this prop to edit"}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

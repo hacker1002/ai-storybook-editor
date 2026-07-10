@@ -57,6 +57,7 @@ interface AppearanceSectionProps {
   appearance: CharacterAppearance;
   isExpanded: boolean;
   sectionId: string;
+  editable: boolean;
   onToggle: () => void;
   onBlur: (field: keyof CharacterAppearance, value: string) => void;
 }
@@ -66,6 +67,7 @@ function AppearanceSection({
   appearance,
   isExpanded,
   sectionId,
+  editable,
   onToggle,
   onBlur,
 }: AppearanceSectionProps) {
@@ -99,27 +101,27 @@ function AppearanceSection({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-height`}>Height</label>
-              <Input id={`${variantKey}-height`} type="number" defaultValue={appearance.height || ''} placeholder="e.g. 165" className="h-8 text-sm" aria-label="Height" onBlur={(e) => onBlur('height', e.target.value)} />
+              <Input id={`${variantKey}-height`} type="number" defaultValue={appearance.height || ''} placeholder="e.g. 165" className="h-8 text-sm" aria-label="Height" disabled={!editable} onBlur={(e) => onBlur('height', e.target.value)} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-build`}>Build</label>
-              <Input id={`${variantKey}-build`} defaultValue={appearance.build} placeholder="e.g. Athletic" className="h-8 text-sm" aria-label="Build" onBlur={(e) => onBlur('build', e.target.value)} />
+              <Input id={`${variantKey}-build`} defaultValue={appearance.build} placeholder="e.g. Athletic" className="h-8 text-sm" aria-label="Build" disabled={!editable} onBlur={(e) => onBlur('build', e.target.value)} />
             </div>
           </div>
           {/* Row 2: Hair (full width) */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-hair`}>Hair</label>
-            <Input id={`${variantKey}-hair`} defaultValue={appearance.hair} placeholder="e.g. Long auburn" className="h-8 text-sm" aria-label="Hair" onBlur={(e) => onBlur('hair', e.target.value)} />
+            <Input id={`${variantKey}-hair`} defaultValue={appearance.hair} placeholder="e.g. Long auburn" className="h-8 text-sm" aria-label="Hair" disabled={!editable} onBlur={(e) => onBlur('hair', e.target.value)} />
           </div>
           {/* Row 3: Eyes (full width) */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-eyes`}>Eyes</label>
-            <Input id={`${variantKey}-eyes`} defaultValue={appearance.eyes} placeholder="e.g. Green" className="h-8 text-sm" aria-label="Eyes" onBlur={(e) => onBlur('eyes', e.target.value)} />
+            <Input id={`${variantKey}-eyes`} defaultValue={appearance.eyes} placeholder="e.g. Green" className="h-8 text-sm" aria-label="Eyes" disabled={!editable} onBlur={(e) => onBlur('eyes', e.target.value)} />
           </div>
           {/* Row 4: Face (full width) */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-face`}>Face</label>
-            <Input id={`${variantKey}-face`} defaultValue={appearance.face} placeholder="e.g. Heart-shaped" className="h-8 text-sm" aria-label="Face" onBlur={(e) => onBlur('face', e.target.value)} />
+            <Input id={`${variantKey}-face`} defaultValue={appearance.face} placeholder="e.g. Heart-shaped" className="h-8 text-sm" aria-label="Face" disabled={!editable} onBlur={(e) => onBlur('face', e.target.value)} />
           </div>
         </div>
       )}
@@ -134,9 +136,11 @@ interface VariantItemProps {
   variantData: CharacterVariant;
   isExpanded: boolean;
   onToggle: () => void;
+  /** Collab held-session gate (ADR-044): when false every variant mutation is blocked + disabled. */
+  editable: boolean;
 }
 
-export function VariantItem({ characterKey, variantData, isExpanded, onToggle }: VariantItemProps) {
+export function VariantItem({ characterKey, variantData, isExpanded, onToggle, editable }: VariantItemProps) {
   const { deleteCharacterVariant, updateCharacterVariant, startGenerateTask, startEditTask } =
     useSnapshotActions();
   const character = useCharacterByKey(characterKey);
@@ -169,6 +173,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
   const selectedIllustration = variantData.illustrations[selectedIllustrationIndex];
 
   const handleBlurSave = () => {
+    if (!editable) return; // collab gate
     const trimmed = promptText.trim();
     if (trimmed === (variantData.visual_description ?? '')) return;
     log.debug('handleBlurSave', 'save visual_description', { characterKey, variantKey: variantData.key });
@@ -181,9 +186,11 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
     : undefined;
 
   // Non-base variants cannot generate without base illustration; all variants need a book art style.
-  const isGenerateDisabled = isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseVariantImageUrl);
+  // Collab: also disabled unless this editor holds the entity lock (`editable`).
+  const isGenerateDisabled = !editable || isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseVariantImageUrl);
 
   const handleGenerate = () => {
+    if (!editable) return; // collab gate
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
     // Null-guard: require book.artstyle_id (UUID) — contract rejects empty art style with 400.
@@ -238,6 +245,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
   };
 
   const handleEditImage = () => {
+    if (!editable) return; // collab gate
     const trimmed = editPromptText.trim();
     if (!trimmed || !selectedIllustration || isProcessing) return;
     log.info('handleEditImage', 'start', { characterKey, variantKey: variantData.key, refCount: editRefs.images.length });
@@ -263,6 +271,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    if (!editable) return; // collab gate
     log.info('handleUpload', 'start', { characterKey, variantKey: variantData.key, fileName: file.name });
     setIsUploading(true);
     try {
@@ -283,11 +292,13 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
   };
 
   const handleDeleteVariant = () => {
+    if (!editable) return; // collab gate
     log.info('handleDeleteVariant', 'delete', { characterKey, variantKey: variantData.key });
     deleteCharacterVariant(characterKey, variantData.key);
   };
 
   const handleAppearanceBlur = (field: keyof CharacterAppearance, rawValue: string) => {
+    if (!editable) return; // collab gate
     const value = field === 'height' ? Number(rawValue) || 0 : rawValue.trim();
     if (value === variantData.appearance[field]) return;
     log.debug('handleAppearanceBlur', 'save', { characterKey, variantKey: variantData.key, field, value });
@@ -315,7 +326,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                        if (editable && renameValue.trim() && renameValue.trim() !== variantData.name) {
                           updateCharacterVariant(characterKey, variantData.key, { name: renameValue.trim() });
                           log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
                         }
@@ -327,7 +338,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
                   />
                   <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label="Accept rename"
                     onClick={() => {
-                      if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                      if (editable && renameValue.trim() && renameValue.trim() !== variantData.name) {
                         updateCharacterVariant(characterKey, variantData.key, { name: renameValue.trim() });
                       }
                       setIsRenaming(false);
@@ -343,8 +354,8 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
                 <>
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium text-sm truncate">{variantData.name}</span>
-                    <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" title="Rename variant"
-                      onClick={(e) => { e.stopPropagation(); setRenameValue(variantData.name); setIsRenaming(true); log.debug('handleStartRename', 'start', { variantKey: variantData.key }); }}
+                    <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" title={editable ? 'Rename variant' : 'Click this character to edit'} disabled={!editable}
+                      onClick={(e) => { e.stopPropagation(); if (!editable) return; setRenameValue(variantData.name); setIsRenaming(true); log.debug('handleStartRename', 'start', { variantKey: variantData.key }); }}
                     >
                       <Pencil className="h-3 w-3 text-muted-foreground" />
                     </Button>
@@ -359,8 +370,9 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
           <input ref={uploadInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={handleFileSelected} className="hidden" />
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" disabled={isUploading}
-            onClick={(e) => { e.stopPropagation(); uploadInputRef.current?.click(); }}
+          <Button variant="outline" size="sm" className="h-8 gap-1.5" disabled={isUploading || !editable}
+            title={editable ? undefined : 'Click this character to edit'}
+            onClick={(e) => { e.stopPropagation(); if (!editable) return; uploadInputRef.current?.click(); }}
           >
             <Upload className="h-3.5 w-3.5" />
             {isUploading ? 'Uploading...' : 'Upload'}
@@ -370,7 +382,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
           {!isBase && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={(e) => e.stopPropagation()} title="Delete variant">
+                <Button variant="outline" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" disabled={!editable} onClick={(e) => e.stopPropagation()} title={editable ? 'Delete variant' : 'Click this character to edit'}>
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </AlertDialogTrigger>
@@ -395,6 +407,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
         <div className="space-y-4 px-3 pt-3 pb-3">
           {/* Image preview + thumbnail gallery */}
           <VariantItemImageArea
+            editable={editable}
             variantName={variantData.name}
             illustrations={variantData.illustrations}
             sortedIllustrations={sortedIllustrations}
@@ -428,7 +441,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
             <input ref={generateRefs.inputRef} type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={generateRefs.handleFilesSelected} className="hidden" />
             <div className="flex items-center gap-2 mb-2">
               <Label className="text-xs text-muted-foreground">VISUAL DESCRIPTION</Label>
-              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={generateRefs.openPicker} disabled={isProcessing} aria-label="Attach reference image">
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={generateRefs.openPicker} disabled={isProcessing || !editable} aria-label="Attach reference image">
                 <Paperclip className="h-4 w-4" />
               </Button>
               {generateRefs.images.length > 0 && (
@@ -453,7 +466,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
               onBlur={handleBlurSave}
               placeholder="Describe the visual appearance..."
               className="min-h-[80px]"
-              disabled={isProcessing}
+              disabled={isProcessing || !editable}
               aria-label="Visual description prompt"
             />
           </div>
@@ -481,6 +494,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle }:
             appearance={variantData.appearance}
             isExpanded={appearanceExpanded}
             sectionId={sectionId}
+            editable={editable}
             onToggle={() => setAppearanceExpanded((v) => !v)}
             onBlur={handleAppearanceBlur}
           />

@@ -24,6 +24,8 @@ interface VariantAttributeSectionsProps {
   temporal: StageTemporal;
   sensory: StageSensory;
   emotional: StageEmotional;
+  /** Collab held-session gate (ADR-044): blocks attribute edits + disables the selects/input. */
+  editable: boolean;
 }
 
 const SEASON_OPTIONS = ['Spring', 'Summer', 'Autumn', 'Winter', 'Rainy', 'Dry'];
@@ -40,6 +42,7 @@ export function VariantAttributeSections({
   temporal,
   sensory,
   emotional,
+  editable,
 }: VariantAttributeSectionsProps) {
   const { updateStageVariant } = useSnapshotActions();
   const eras = useEras();
@@ -58,6 +61,7 @@ export function VariantAttributeSections({
   };
 
   const handleTemporalSelectChange = (field: keyof StageTemporal, value: string) => {
+    if (!editable) return; // collab gate
     // Empty option sentinel value
     const finalValue = value === '__empty__' ? '' : value;
     log.debug('handleTemporalSelectChange', 'update', { stageKey, variantKey, field, value: finalValue });
@@ -66,12 +70,14 @@ export function VariantAttributeSections({
 
   // Update sensory field
   const handleSensoryBlur = (field: keyof StageSensory, value: string) => {
+    if (!editable) return; // collab gate
     if (value === sensory[field]) return;
     log.debug('handleSensoryBlur', 'update', { stageKey, variantKey, field, value });
     updateStageVariant(stageKey, variantKey, { sensory: { ...sensory, [field]: value } });
   };
 
   const handleSensorySelectChange = (field: keyof StageSensory, value: string) => {
+    if (!editable) return; // collab gate
     const finalValue = value === '__empty__' ? '' : value;
     log.debug('handleSensorySelectChange', 'update', { stageKey, variantKey, field, value: finalValue });
     updateStageVariant(stageKey, variantKey, { sensory: { ...sensory, [field]: finalValue } });
@@ -79,6 +85,7 @@ export function VariantAttributeSections({
 
   // Update emotional field
   const handleEmotionalSelectChange = (field: keyof StageEmotional, value: string) => {
+    if (!editable) return; // collab gate
     const finalValue = value === '__empty__' ? '' : value;
     log.debug('handleEmotionalSelectChange', 'update', { stageKey, variantKey, field, value: finalValue });
     updateStageVariant(stageKey, variantKey, { emotional: { ...emotional, [field]: finalValue } });
@@ -104,6 +111,7 @@ export function VariantAttributeSections({
               <Select
                 value={temporal.era || '__empty__'}
                 onValueChange={(value) => handleTemporalSelectChange('era', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />
@@ -123,6 +131,7 @@ export function VariantAttributeSections({
               <Select
                 value={temporal.season || '__empty__'}
                 onValueChange={(value) => handleTemporalSelectChange('season', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />
@@ -142,6 +151,7 @@ export function VariantAttributeSections({
               <Select
                 value={temporal.weather || '__empty__'}
                 onValueChange={(value) => handleTemporalSelectChange('weather', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />
@@ -161,6 +171,7 @@ export function VariantAttributeSections({
               <Select
                 value={temporal.time_of_day || '__empty__'}
                 onValueChange={(value) => handleTemporalSelectChange('time_of_day', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />
@@ -195,6 +206,7 @@ export function VariantAttributeSections({
               <Select
                 value={sensory.atmosphere || '__empty__'}
                 onValueChange={(value) => handleSensorySelectChange('atmosphere', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />
@@ -215,6 +227,7 @@ export function VariantAttributeSections({
                 defaultValue={sensory.soundscape}
                 placeholder="Describe sounds..."
                 className="h-8 text-sm"
+                disabled={!editable}
                 onBlur={(e) => handleSensoryBlur('soundscape', e.target.value.trim())}
               />
             </div>
@@ -225,6 +238,7 @@ export function VariantAttributeSections({
               <Select
                 value={sensory.lighting || '__empty__'}
                 onValueChange={(value) => handleSensorySelectChange('lighting', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />
@@ -244,6 +258,7 @@ export function VariantAttributeSections({
               <Select
                 value={sensory.color_palette || '__empty__'}
                 onValueChange={(value) => handleSensorySelectChange('color_palette', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />
@@ -278,6 +293,7 @@ export function VariantAttributeSections({
               <Select
                 value={emotional.mood || '__empty__'}
                 onValueChange={(value) => handleEmotionalSelectChange('mood', value)}
+                disabled={!editable}
               >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select..." />

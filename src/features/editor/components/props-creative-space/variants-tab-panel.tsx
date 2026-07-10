@@ -10,11 +10,13 @@ const log = createLogger("Editor", "VariantsTabPanel");
 interface VariantsTabPanelProps {
   propKey: string;
   variants: PropVariant[];
+  /** Collab held-session gate (ADR-044): threaded to each VariantItem. */
+  editable: boolean;
 }
 
 // NOTE: Parent must render with key={propKey} so this component remounts on prop change,
 // resetting expandedVariantKey to the first variant automatically.
-export function VariantsTabPanel({ propKey, variants }: VariantsTabPanelProps) {
+export function VariantsTabPanel({ propKey, variants, editable }: VariantsTabPanelProps) {
   const firstKey = variants.length > 0 ? variants[0].key : null;
   log.debug("mount/render", "init", { propKey, firstKey });
   const [expandedVariantKey, setExpandedVariantKey] = useState<string | null>(
@@ -46,6 +48,7 @@ export function VariantsTabPanel({ propKey, variants }: VariantsTabPanelProps) {
           variantData={v}
           isExpanded={expandedVariantKey === v.key}
           onToggle={() => handleToggle(v.key)}
+          editable={editable}
         />
       ))}
     </div>

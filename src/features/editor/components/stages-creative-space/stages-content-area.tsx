@@ -23,9 +23,12 @@ interface StagesContentAreaProps {
   selectedStageKey: string;
   activeTab: StageContentTab;
   onTabChange: (tab: StageContentTab) => void;
+  /** Collab held-session gate (ADR-044): blocks entity mutations + disables affordances when the
+   *  stage lock is not held by this editor. */
+  editable: boolean;
 }
 
-export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: StagesContentAreaProps) {
+export function StagesContentArea({ selectedStageKey, activeTab, onTabChange, editable }: StagesContentAreaProps) {
   const stage = useStageByKey(selectedStageKey);
   const { addStageVariant, addStageSound } = useSnapshotActions();
 
@@ -33,7 +36,8 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
   const [isCreateSoundModalOpen, setIsCreateSoundModalOpen] = useState(false);
 
   const handleAddClick = () => {
-    log.debug('handleAddClick', 'add click', { activeTab });
+    log.debug('handleAddClick', 'add click', { activeTab, editable });
+    if (!editable) return; // gate: adding a variant/sound mutates the held entity node
     if (activeTab === 'variants') {
       setIsCreateVariantModalOpen(true);
     } else if (activeTab === 'sounds') {
@@ -42,6 +46,7 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
   };
 
   const handleConfirmCreateVariant = (name: string, key: string) => {
+    if (!editable) return;
     log.info('handleConfirmCreateVariant', 'creating variant', { stageKey: selectedStageKey, key });
     addStageVariant(selectedStageKey, {
       name,
@@ -57,6 +62,7 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
   };
 
   const handleConfirmCreateSound = (name: string, key: string) => {
+    if (!editable) return;
     log.info('handleConfirmCreateSound', 'creating sound', { stageKey: selectedStageKey, key });
     addStageSound(selectedStageKey, {
       name,
@@ -99,7 +105,8 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
           size="icon"
           className="h-7 w-7"
           onClick={handleAddClick}
-          title={`Add ${activeTab === 'variants' ? 'variant' : 'sound'}`}
+          disabled={!editable}
+          title={editable ? `Add ${activeTab === 'variants' ? 'variant' : 'sound'}` : 'Click this stage to edit'}
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -108,7 +115,7 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
       {/* Tab Panel */}
       <div className="flex-1 min-h-0 overflow-auto" role="tabpanel">
         {activeTab === 'variants' && stage && (
-          <VariantsTabPanel key={selectedStageKey} stageKey={selectedStageKey} variants={stage.variants} />
+          <VariantsTabPanel key={selectedStageKey} stageKey={selectedStageKey} variants={stage.variants} editable={editable} />
         )}
         {activeTab === 'variants' && !stage && (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -116,7 +123,7 @@ export function StagesContentArea({ selectedStageKey, activeTab, onTabChange }: 
           </div>
         )}
         {activeTab === 'sounds' && stage && (
-          <StageSoundsTabPanel key={selectedStageKey} stageKey={selectedStageKey} sounds={stage.sounds} />
+          <StageSoundsTabPanel key={selectedStageKey} stageKey={selectedStageKey} sounds={stage.sounds} editable={editable} />
         )}
         {activeTab === 'sounds' && !stage && (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">

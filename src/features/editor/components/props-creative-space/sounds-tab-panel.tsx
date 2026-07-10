@@ -18,10 +18,12 @@ const DEFAULT_SOUND_NAMES = new Set<string>([]);
 interface SoundsTabPanelProps {
   propKey: string;
   sounds: PropSound[];
+  /** Collab held-session gate (ADR-044): blocks sound library-select + threaded to each SoundItem. */
+  editable: boolean;
 }
 
-export function SoundsTabPanel({ propKey, sounds }: SoundsTabPanelProps) {
-  log.debug('render', 'init', { propKey, count: sounds.length });
+export function SoundsTabPanel({ propKey, sounds, editable }: SoundsTabPanelProps) {
+  log.debug('render', 'init', { propKey, count: sounds.length, editable });
 
   const { updatePropSound } = useSnapshotActions();
   const allSounds = useSounds();
@@ -44,6 +46,7 @@ export function SoundsTabPanel({ propKey, sounds }: SoundsTabPanelProps) {
   };
 
   const handleLibrarySelect = (selected: LibrarySound) => {
+    if (!editable) return; // collab gate
     if (!browseSoundKey) return;
     const current = sounds.find((s) => s.key === browseSoundKey);
     const shouldOverwriteName =
@@ -87,6 +90,7 @@ export function SoundsTabPanel({ propKey, sounds }: SoundsTabPanelProps) {
             propKey={propKey}
             sound={sound}
             onBrowse={() => handleBrowse(sound.key)}
+            editable={editable}
           />
         ))}
       </div>

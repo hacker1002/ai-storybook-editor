@@ -11,6 +11,8 @@ import { cn } from '@/utils/utils';
 // Logger omitted: pure presentational component; parent VariantItem handles logging
 
 interface VariantItemImageAreaProps {
+  /** Collab held-session gate (ADR-044): disables the edit-image affordance when not held. */
+  editable: boolean;
   variantName: string;
   illustrations: Illustration[];
   sortedIllustrations: Illustration[];
@@ -32,6 +34,7 @@ interface VariantItemImageAreaProps {
 }
 
 export function VariantItemImageArea({
+  editable,
   variantName,
   illustrations,
   sortedIllustrations,
@@ -90,7 +93,7 @@ export function VariantItemImageArea({
                 referenceImages={editRefImages}
                 onAttachClick={onEditRefPickerOpen}
                 onRemoveReference={onEditRefRemove}
-                disabled={isProcessing}
+                disabled={isProcessing || !editable}
               />
               <Button
                 size="sm"

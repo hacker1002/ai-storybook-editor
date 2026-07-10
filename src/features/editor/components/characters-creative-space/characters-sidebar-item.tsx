@@ -87,6 +87,10 @@ interface CharactersSidebarItemProps {
   isSelected: boolean;
   isExpanded: boolean;
   isEditingName: boolean;
+  /** Collab held-session gate (ADR-044): this item is the SELECTED+held character. When false the
+   *  basic-info/personality edits + rename/delete affordances are blocked and disabled/greyed.
+   *  Expand/select + drag stay enabled (select is the lock-acquire trigger; reorder is out of scope). */
+  editable: boolean;
   onToggle: () => void;
   onSelect: () => void;
   onStartRename: () => void;
@@ -103,6 +107,7 @@ export function CharactersSidebarItem({
   isSelected,
   isExpanded,
   isEditingName,
+  editable,
   onToggle,
   onSelect,
   onStartRename,
@@ -131,6 +136,7 @@ export function CharactersSidebarItem({
   // Sync editValue when entering rename mode
   function handleStartRename(e: React.MouseEvent) {
     e.stopPropagation();
+    if (!editable) return; // collab gate
     setEditValue(character?.name ?? "");
     onStartRename();
   }
@@ -160,7 +166,7 @@ export function CharactersSidebarItem({
 
   // Basic info field update helpers (spread existing to preserve other fields)
   function handleGenderChange(gender: string) {
-    if (!character) return;
+    if (!character || !editable) return;
     log.debug("handleGenderChange", "gender changed", { characterKey, gender });
     updateCharacter(characterKey, {
       basic_info: { ...character.basic_info, gender },
@@ -168,7 +174,7 @@ export function CharactersSidebarItem({
   }
 
   function handleAgeBlur(age: string) {
-    if (!character) return;
+    if (!character || !editable) return;
     log.debug("handleAgeBlur", "age saved", { characterKey, age });
     updateCharacter(characterKey, {
       basic_info: { ...character.basic_info, age },
@@ -176,7 +182,7 @@ export function CharactersSidebarItem({
   }
 
   function handleCategoryChange(category_id: string) {
-    if (!character) return;
+    if (!character || !editable) return;
     log.debug("handleCategoryChange", "category changed", { characterKey, category_id });
     updateCharacter(characterKey, {
       basic_info: { ...character.basic_info, category_id },
@@ -184,7 +190,7 @@ export function CharactersSidebarItem({
   }
 
   function handleRoleChange(role: string) {
-    if (!character) return;
+    if (!character || !editable) return;
     log.debug("handleRoleChange", "role changed", { characterKey, role });
     updateCharacter(characterKey, {
       basic_info: { ...character.basic_info, role },
@@ -195,7 +201,7 @@ export function CharactersSidebarItem({
     field: keyof import("@/types/character-types").CharacterPersonality,
     value: string
   ) {
-    if (!character) return;
+    if (!character || !editable) return;
     log.debug("handlePersonalityBlur", "personality field saved", { characterKey, field });
     updateCharacter(characterKey, {
       personality: { ...character.personality, [field]: value },
@@ -294,6 +300,7 @@ export function CharactersSidebarItem({
                 size="icon"
                 className="mt-0.5 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                 onClick={handleStartRename}
+                disabled={!editable}
                 tabIndex={-1}
                 aria-label="Edit name"
               >
@@ -339,6 +346,7 @@ export function CharactersSidebarItem({
                     <Select
                       value={character?.basic_info.gender ?? ""}
                       onValueChange={handleGenderChange}
+                      disabled={!editable}
                     >
                       <SelectTrigger className="h-8">
                         <SelectValue placeholder="Select..." />
@@ -360,6 +368,7 @@ export function CharactersSidebarItem({
                       className="h-8"
                       defaultValue={character?.basic_info.age ?? ""}
                       placeholder="e.g. 25"
+                      disabled={!editable}
                       onBlur={(e) => handleAgeBlur(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -375,6 +384,7 @@ export function CharactersSidebarItem({
                       value={character?.basic_info.category_id ?? null}
                       onChange={handleCategoryChange}
                       placeholder="Select category..."
+                      disabled={!editable}
                     />
                   </div>
 
@@ -386,6 +396,7 @@ export function CharactersSidebarItem({
                     <Select
                       value={character?.basic_info.role ?? ""}
                       onValueChange={handleRoleChange}
+                      disabled={!editable}
                     >
                       <SelectTrigger className="h-8">
                         <SelectValue placeholder="Select..." />
@@ -440,6 +451,7 @@ export function CharactersSidebarItem({
                       className="text-xs resize-none min-h-[56px]"
                       defaultValue={character?.personality[key] ?? ""}
                       placeholder={placeholder}
+                      disabled={!editable}
                       onBlur={(e) => handlePersonalityBlur(key, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -467,6 +479,8 @@ export function CharactersSidebarItem({
                     variant="outline"
                     size="sm"
                     className="text-destructive hover:text-destructive"
+                    disabled={!editable}
+                    title={editable ? undefined : "Click this character to edit"}
                     aria-label="Delete character"
                   >
                     <Trash2 className="h-3 w-3" />

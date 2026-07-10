@@ -24,6 +24,10 @@ export interface VoicePreviewCardProps {
   isActivePlayer: boolean;
   onRequestPreview: () => void;
   onPlayStart: () => void;
+  /** When true, the Preview (generate) trigger is force-disabled — e.g. the collab held-session
+   *  gate (ADR-044) where requesting a preview would mutate the entity node without holding its
+   *  lock. Playback of an already-generated preview is unaffected. Defaults to false. */
+  disabled?: boolean;
 }
 
 type PreviewState = 'idle' | 'generating' | 'has-media';
@@ -42,12 +46,13 @@ export function VoicePreviewCard({
   isActivePlayer,
   onRequestPreview,
   onPlayStart,
+  disabled = false,
 }: VoicePreviewCardProps) {
   const previewText = PREVIEW_TEXTS[languageCode] ?? '';
   const state = deriveState(mediaUrl, isGenerating);
   log.debug('render', 'state derived', { languageCode, state });
 
-  const canTrigger = !!voiceId && !isGenerating;
+  const canTrigger = !!voiceId && !isGenerating && !disabled;
 
   const prevGeneratingRef = useRef(isGenerating);
   const [autoPlayKey, setAutoPlayKey] = useState(0);

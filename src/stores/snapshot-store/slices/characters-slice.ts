@@ -2,6 +2,15 @@ import type { StateCreator } from 'zustand';
 import type { SnapshotStore, CharactersSlice } from '../types';
 import { createLogger } from '@/utils/logger';
 import { cascadeRemixName, cascadeRemixDelete } from '../utils/remix-name-resync';
+// ADR-044 §Revision 2026-07-10 (per-entity HELD session): entity EDIT no longer fire-and-forgets —
+// it mutates + dirties only, and the entity held session (`useHeldResourceSession` mounted per
+// entity space) saves the WHOLE entity node on lock release. CREATE + DELETE, however, are
+// COLLECTION-level ops on the parent column (add/remove the node) that a node-scoped release-save
+// CANNOT express — a released deleted node has no node to save (would 400) and a freshly-created
+// node may be non-dirty at release — so they KEEP the explicit `persistEntityCollab`(action 2) /
+// `persistEntityDeleteCollab`(action 4) path. Cross-entity REORDER also stays on its own path
+// (`persistEntityReorderCollab`, out of held-session/undo scope). `revertEntityNode` below is the
+// held-session `onLost` revert (mirror of `revertRetouchOwnedSubtree`), shared across all 3 columns.
 import {
   persistEntityCollab,
   persistEntityDeleteCollab,
@@ -32,7 +41,8 @@ export const createCharactersSlice: StateCreator<
       state.characters.push(character);
       state.sync.isDirty = true;
     });
-    // collab: persist the new entity node (create, scope:'node') — no-op solo.
+    // collab: CREATE is a collection add → explicit save (action 2). The space acquires the lock
+    // on the new entity afterwards for subsequent edits (held session covers edits).
     void persistEntityCollab(get, 'character', character.key, 2);
   },
 
@@ -48,9 +58,8 @@ export const createCharactersSlice: StateCreator<
     if (typeof updates.name === 'string') {
       cascadeRemixName('character', key, updates.name);
     }
-    // collab: persist the whole entity node (edit, scope:'node') — no-op solo. The
+    // collab: mutate + dirty only — the entity held session saves the whole node on release. The
     // book.remix cascade above is a SEPARATE persistence path (books table, not suppressed).
-    void persistEntityCollab(get, 'character', key, 3);
   },
 
   deleteCharacter: (key) => {
@@ -61,7 +70,8 @@ export const createCharactersSlice: StateCreator<
       state.sync.isDirty = true;
     });
     cascadeRemixDelete('character', key);
-    // collab: persist the removal (delete, scope:'collection') — no-op solo.
+    // collab: DELETE is a collection remove → explicit save (action 4). The held session's release
+    // then sees getNode()===null and skips its node-save (null-node guard), so no redundant 400.
     void persistEntityDeleteCollab('character', key);
   },
 
@@ -94,8 +104,7 @@ export const createCharactersSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: variant add is a WITHIN-node edit → whole entity-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'character', key, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
 
   updateCharacterVariant: (key, variantKey, updates) => {
@@ -110,9 +119,8 @@ export const createCharactersSlice: StateCreator<
         }
       }
     });
-    // collab: covers visual_description / rename AND illustration select+delete
-    // ({ illustrations }) — all WITHIN the entity node → whole-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'character', key, 3);
+    // collab: within-node edit (visual_description / rename / illustration select+delete / generate
+    // + edit image write-back) — held session saves the whole entity node on release.
   },
 
   deleteCharacterVariant: (key, variantKey) => {
@@ -127,8 +135,7 @@ export const createCharactersSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: variant delete stays WITHIN the entity node → whole-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'character', key, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
 
   // --- Nested: Voice Setting (single-object) ---
@@ -145,7 +152,34 @@ export const createCharactersSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: voice_setting lives inside the entity node → whole-node re-patch (scope:'node').
-    void persistEntityCollab(get, 'character', characterKey, 3);
+    // collab: within-node edit — held session saves the whole entity node on release.
   },
+
+  // --- Held-session onLost revert (ADR-044 §Revision 2026-07-10) ---
+  //
+  // Cross-entity revert shared by all 3 entity spaces (character/prop/stage). When a per-entity
+  // lock is LOST mid-edit (heartbeat 409), the held session's `onLost` restores the WHOLE entity
+  // node to the pre-edit baseline (a structuredClone captured at acquire) so my un-saved local
+  // edits don't linger. Entities are per-entity grain (ownedKeys=undefined → whole node), so this
+  // is a full node replace — the analog of `revertRetouchOwnedSubtree` for the entity columns. It
+  // lives in the characters slice but the immer `set` has whole-state access, so it addresses the
+  // props/stages columns too via the `kind` discriminator. No-op (no throw) on an unknown key.
+  revertEntityNode: (kind, key, baseline) =>
+    set((state) => {
+      const column =
+        kind === 'character' ? state.characters : kind === 'prop' ? state.props : state.stages;
+      const idx = column.findIndex((e) => e.key === key);
+      if (idx === -1) {
+        log.warn('revertEntityNode', 'entity not found — skip revert', { kind, key });
+        return;
+      }
+      if (baseline == null) {
+        log.warn('revertEntityNode', 'baseline null — skip revert', { kind, key });
+        return;
+      }
+      // structuredClone so the reverted node never aliases the (possibly frozen) baseline clone.
+      column[idx] = structuredClone(baseline) as (typeof column)[number];
+      state.sync.isDirty = true;
+      log.info('revertEntityNode', 'reverted entity node to baseline', { kind, key });
+    }),
 });

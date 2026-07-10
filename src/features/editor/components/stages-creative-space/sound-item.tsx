@@ -27,10 +27,12 @@ const log = createLogger('Editor', 'StageSoundItem');
 interface StageSoundItemProps {
   stageKey: string;
   sound: StageSound;
+  /** Collab held-session gate (ADR-044): blocks sound rename/upload/delete when not held. */
+  editable: boolean;
   onBrowse: () => void;
 }
 
-export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProps) {
+export function StageSoundItem({ stageKey, sound, editable, onBrowse }: StageSoundItemProps) {
   const { updateStageSound, deleteStageSound } = useSnapshotActions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -38,13 +40,14 @@ export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProp
   const [isUploading, setIsUploading] = useState(false);
 
   const handleStartRename = () => {
+    if (!editable) return; // collab gate
     setRenameValue(sound.name);
     setIsRenaming(true);
     log.debug('handleStartRename', 'start', { soundKey: sound.key });
   };
 
   const handleFinishRename = (accept: boolean) => {
-    if (accept && renameValue.trim() && renameValue.trim() !== sound.name) {
+    if (accept && editable && renameValue.trim() && renameValue.trim() !== sound.name) {
       log.info('handleFinishRename', 'renamed', { soundKey: sound.key, newName: renameValue.trim() });
       updateStageSound(stageKey, sound.key, { name: renameValue.trim() });
     }
@@ -59,6 +62,7 @@ export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProp
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    if (!editable) return; // collab gate
 
     setIsUploading(true);
     log.info('handleUpload', 'start', { soundKey: sound.key, fileName: file.name, size: file.size });
@@ -78,6 +82,7 @@ export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProp
   };
 
   const handleDelete = () => {
+    if (!editable) return; // collab gate
     log.info('handleDelete', 'delete sound', { stageKey, soundKey: sound.key });
     deleteStageSound(stageKey, sound.key);
   };
@@ -128,7 +133,8 @@ export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProp
                   size="icon"
                   className="h-5 w-5 shrink-0"
                   onClick={handleStartRename}
-                  title="Rename sound"
+                  disabled={!editable}
+                  title={editable ? 'Rename sound' : 'Click this stage to edit'}
                 >
                   <Pencil className="h-3 w-3 text-muted-foreground" />
                 </Button>
@@ -146,6 +152,8 @@ export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProp
             size="sm"
             className="h-7 gap-1 text-xs"
             onClick={onBrowse}
+            disabled={!editable}
+            title={editable ? undefined : 'Click this stage to edit'}
             aria-label="Browse sound library"
           >
             <Music className="h-3 w-3" />
@@ -165,7 +173,8 @@ export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProp
             size="sm"
             className="h-7 gap-1 text-xs"
             onClick={handleUploadClick}
-            disabled={isUploading}
+            disabled={isUploading || !editable}
+            title={editable ? undefined : 'Click this stage to edit'}
           >
             <Upload className="h-3 w-3" />
             {isUploading ? 'Uploading...' : 'Upload'}
@@ -178,7 +187,8 @@ export function StageSoundItem({ stageKey, sound, onBrowse }: StageSoundItemProp
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                title="Delete sound"
+                disabled={!editable}
+                title={editable ? 'Delete sound' : 'Click this stage to edit'}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

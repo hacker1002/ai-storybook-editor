@@ -38,6 +38,11 @@ interface PropsSidebarProps {
   propKeys: string[];
   selectedPropKey: string | null;
   onPropSelect: (key: string) => void;
+  /** Collab held-session gate (ADR-044): this editor holds the SELECTED prop's lock. Only the
+   *  selected+held item may be renamed/deleted or have its category/type edited. */
+  editable: boolean;
+  /** Called after deleting the held prop so the space can drop the lock (→ release-save). */
+  onEntityDeleted: (key: string) => void;
 }
 
 /** Build a blank Prop record ready for addProp */
@@ -66,6 +71,8 @@ export function PropsSidebar({
   propKeys,
   selectedPropKey,
   onPropSelect,
+  editable,
+  onEntityDeleted,
 }: PropsSidebarProps) {
   const allProps = useProps();
   const { addProp, updateProp, deleteProp, reorderProps } =
@@ -140,16 +147,28 @@ export function PropsSidebar({
 
   const handleDeleteProp = useCallback(
     (key: string) => {
+      // Collab gate: only the SELECTED+held prop may be deleted. After delete, notify the space to
+      // drop the lock so the held session release-saves the (now removed) node.
+      if (!editable || key !== selectedPropKey) {
+        log.debug("handleDeleteProp", "blocked — prop not held", { key });
+        return;
+      }
       log.info("handleDeleteProp", "deleting prop", { key });
       deleteProp(key);
+      onEntityDeleted(key);
       if (expandedPropKey === key) setExpandedPropKey(null);
       if (editingNameKey === key) setEditingNameKey(null);
     },
-    [deleteProp, expandedPropKey, editingNameKey]
+    [deleteProp, onEntityDeleted, editable, selectedPropKey, expandedPropKey, editingNameKey]
   );
 
   const handleRenameProp = useCallback(
     (key: string, newName: string) => {
+      if (!editable || key !== selectedPropKey) {
+        log.debug("handleRenameProp", "blocked — prop not held", { key });
+        setEditingNameKey(null);
+        return;
+      }
       const trimmed = newName.trim();
       if (trimmed) {
         log.debug("handleRenameProp", "renaming", { key, newName: trimmed });
@@ -157,26 +176,34 @@ export function PropsSidebar({
       }
       setEditingNameKey(null);
     },
-    [updateProp]
+    [updateProp, editable, selectedPropKey]
   );
 
   const handleUpdateCategory = useCallback(
     (key: string, categoryId: string) => {
+      if (!editable || key !== selectedPropKey) {
+        log.debug("handleUpdateCategory", "blocked — prop not held", { key });
+        return;
+      }
       log.debug("handleUpdateCategory", "updating category", {
         key,
         categoryId,
       });
       updateProp(key, { category_id: categoryId });
     },
-    [updateProp]
+    [updateProp, editable, selectedPropKey]
   );
 
   const handleUpdateType = useCallback(
     (key: string, type: string) => {
+      if (!editable || key !== selectedPropKey) {
+        log.debug("handleUpdateType", "blocked — prop not held", { key });
+        return;
+      }
       log.debug("handleUpdateType", "updating type", { key, type });
       updateProp(key, { type: type as Prop["type"] });
     },
-    [updateProp]
+    [updateProp, editable, selectedPropKey]
   );
 
   const handleDrop = useCallback(
@@ -399,6 +426,8 @@ export function PropsSidebar({
               isSelected={key === selectedPropKey}
               isExpanded={key === expandedPropKey}
               isEditingName={key === editingNameKey}
+              // Per-item collab gate: only the SELECTED+held prop is editable.
+              editable={editable && key === selectedPropKey}
               onToggle={() => handleToggle(key)}
               onSelect={() => onPropSelect(key)}
               onStartRename={() => setEditingNameKey(key)}

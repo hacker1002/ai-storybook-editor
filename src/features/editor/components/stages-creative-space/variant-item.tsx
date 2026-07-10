@@ -54,9 +54,11 @@ interface VariantItemProps {
   variantData: StageVariant;
   isExpanded: boolean;
   onToggle: () => void;
+  /** Collab held-session gate (ADR-044): when false every variant mutation is blocked + disabled. */
+  editable: boolean;
 }
 
-export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: VariantItemProps) {
+export function VariantItem({ stageKey, variantData, isExpanded, onToggle, editable }: VariantItemProps) {
   const { deleteStageVariant, updateStageVariant, startGenerateTask, startEditTask } = useSnapshotActions();
   const stage = useStageByKey(stageKey);
   const locations = useLocations();
@@ -94,6 +96,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
   const selectedIllustration = variantData.illustrations[selectedIllustrationIndex];
 
   const handleBlurSave = () => {
+    if (!editable) return; // collab gate
     const trimmed = promptText.trim();
     if (trimmed === (variantData.visual_description ?? '')) return;
     log.debug('handleBlurSave', 'save visual_description', { stageKey, variantKey: variantData.key });
@@ -106,7 +109,8 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
     : undefined;
 
   // Non-base variants cannot generate without base illustration; all variants need a book art style.
-  const isGenerateDisabled = isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseStageImageUrl);
+  // Collab: also disabled unless this editor holds the entity lock (`editable`).
+  const isGenerateDisabled = !editable || isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseStageImageUrl);
 
   // Resolve era description from era store
   const resolvedEraDescription = variantData.temporal.era
@@ -114,6 +118,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
     : undefined;
 
   const handleGenerate = () => {
+    if (!editable) return; // collab gate
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || isProcessing) return;
 
@@ -180,6 +185,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
   };
 
   const handleEditImage = () => {
+    if (!editable) return; // collab gate
     const trimmed = editPromptText.trim();
     if (!trimmed || !selectedIllustration || isProcessing) return;
 
@@ -215,6 +221,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    if (!editable) return; // collab gate
 
     log.info('handleUpload', 'start upload', {
       stageKey,
@@ -250,6 +257,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
   };
 
   const handleDeleteVariant = () => {
+    if (!editable) return; // collab gate
     log.info('handleDeleteVariant', 'delete variant', { stageKey, variantKey: variantData.key });
     deleteStageVariant(stageKey, variantData.key);
   };
@@ -280,7 +288,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                        if (editable && renameValue.trim() && renameValue.trim() !== variantData.name) {
                           log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
                           updateStageVariant(stageKey, variantData.key, { name: renameValue.trim() });
                         }
@@ -295,7 +303,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
                     size="icon"
                     className="h-6 w-6 shrink-0"
                     onClick={() => {
-                      if (renameValue.trim() && renameValue.trim() !== variantData.name) {
+                      if (editable && renameValue.trim() && renameValue.trim() !== variantData.name) {
                         log.info('handleRename', 'renamed', { variantKey: variantData.key, newName: renameValue.trim() });
                         updateStageVariant(stageKey, variantData.key, { name: renameValue.trim() });
                       }
@@ -323,13 +331,15 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
                       variant="ghost"
                       size="icon"
                       className="h-5 w-5 shrink-0"
+                      disabled={!editable}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (!editable) return;
                         setRenameValue(variantData.name);
                         setIsRenaming(true);
                         log.debug('handleStartRename', 'start', { variantKey: variantData.key });
                       }}
-                      title="Rename variant"
+                      title={editable ? 'Rename variant' : 'Click this stage to edit'}
                     >
                       <Pencil className="h-3 w-3 text-muted-foreground" />
                     </Button>
@@ -354,9 +364,11 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
             variant="outline"
             size="sm"
             className="h-8 gap-1.5"
-            disabled={isUploading}
+            disabled={isUploading || !editable}
+            title={editable ? undefined : 'Click this stage to edit'}
             onClick={(e) => {
               e.stopPropagation();
+              if (!editable) return;
               uploadInputRef.current?.click();
             }}
           >
@@ -371,8 +383,9 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
                   variant="outline"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  disabled={!editable}
                   onClick={(e) => e.stopPropagation()}
-                  title="Delete variant"
+                  title={editable ? 'Delete variant' : 'Click this stage to edit'}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -403,6 +416,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
         <div className="space-y-4 px-3 pt-3 pb-3">
           {/* Image preview + thumbnail gallery */}
           <VariantItemImageArea
+            editable={editable}
             variantName={variantData.name}
             illustrations={variantData.illustrations}
             sortedIllustrations={sortedIllustrations}
@@ -448,7 +462,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
                 variant="ghost"
                 className="h-6 w-6 p-0"
                 onClick={generateRefs.openPicker}
-                disabled={isProcessing}
+                disabled={isProcessing || !editable}
                 aria-label="Attach reference image"
               >
                 <Paperclip className="h-4 w-4" />
@@ -478,7 +492,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
               onBlur={handleBlurSave}
               placeholder="Describe the visual appearance..."
               className="min-h-[80px]"
-              disabled={isProcessing}
+              disabled={isProcessing || !editable}
             />
           </div>
 
@@ -517,6 +531,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle }: Var
             temporal={variantData.temporal}
             sensory={variantData.sensory}
             emotional={variantData.emotional}
+            editable={editable}
           />
         </div>
       </CollapsibleContent>

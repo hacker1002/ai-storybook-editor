@@ -56,11 +56,15 @@ function detectChangedField(
 export interface VoiceSettingTabPanelProps {
   characterKey: string;
   voiceSetting: CharacterVoiceSetting | null;
+  /** Collab held-session gate (ADR-044): voice + inference edits and preview generation mutate the
+   *  character node — blocked + disabled when this editor does not hold the lock. */
+  editable: boolean;
 }
 
 export function VoiceSettingTabPanel({
   characterKey,
   voiceSetting,
+  editable,
 }: VoiceSettingTabPanelProps) {
   const { updateCharacterVoiceSetting } = useSnapshotActions();
   const {
@@ -87,16 +91,18 @@ export function VoiceSettingTabPanel({
 
   const handleVoiceChange = React.useCallback(
     (nextVoiceId: string) => {
+      if (!editable) return; // collab gate
       const current = vsRef.current;
       const next = buildNextWithVoiceChange(current, nextVoiceId);
       log.info('handleVoiceChange', 'voice set + invalidate previews', { characterKey });
       updateCharacterVoiceSetting(characterKey, next);
     },
-    [characterKey, updateCharacterVoiceSetting],
+    [characterKey, updateCharacterVoiceSetting, editable],
   );
 
   const handleInferenceChange = React.useCallback(
     (next: VoiceInferenceParamsValue) => {
+      if (!editable) return; // collab gate
       const current = vsRef.current;
       const changedField = detectChangedField(extractInference(current), next);
       if (!changedField) {
@@ -111,22 +117,24 @@ export function VoiceSettingTabPanel({
       const merged = buildNextWithInferenceMerge(current, next);
       updateCharacterVoiceSetting(characterKey, merged);
     },
-    [characterKey, updateCharacterVoiceSetting],
+    [characterKey, updateCharacterVoiceSetting, editable],
   );
 
   const handleInferenceReset = React.useCallback(() => {
+    if (!editable) return; // collab gate
     const current = vsRef.current;
     const next = buildNextWithInferenceReset(current);
     log.info('handleInferenceReset', 'reset inference to defaults + clear previews');
     updateCharacterVoiceSetting(characterKey, next);
-  }, [characterKey, updateCharacterVoiceSetting]);
+  }, [characterKey, updateCharacterVoiceSetting, editable]);
 
   const handleRequestPreview = React.useCallback(
     (langCode: string) => {
+      if (!editable) return; // collab gate — preview generation writes media_url onto the node
       log.info('handleRequestPreview', 'preview requested', { langCode });
       void requestPreview(langCode);
     },
-    [requestPreview],
+    [requestPreview, editable],
   );
 
   const handlePlayStart = React.useCallback(
@@ -149,7 +157,7 @@ export function VoiceSettingTabPanel({
               groupByLanguage
               value={voiceId}
               onChange={handleVoiceChange}
-              disabled={generatingLangCode !== null}
+              disabled={generatingLangCode !== null || !editable}
             />
           </div>
 
@@ -159,7 +167,7 @@ export function VoiceSettingTabPanel({
             value={inference}
             onChange={handleInferenceChange}
             onReset={handleInferenceReset}
-            disabled={generatingLangCode !== null}
+            disabled={generatingLangCode !== null || !editable}
           />
 
           <Separator />
@@ -182,6 +190,7 @@ export function VoiceSettingTabPanel({
                   isActivePlayer={playingLangCode === lang.code}
                   onRequestPreview={() => handleRequestPreview(lang.code)}
                   onPlayStart={() => handlePlayStart(lang.code)}
+                  disabled={!editable}
                 />
               );
 

@@ -443,6 +443,11 @@ export interface CharactersSlice {
   updateCharacterVariant: (key: string, variantKey: string, updates: Partial<CharacterVariant>) => void;
   deleteCharacterVariant: (key: string, variantKey: string) => void;
   updateCharacterVoiceSetting: (characterKey: string, next: CharacterVoiceSetting) => void;
+  /** onLost revert (ADR-044 per-entity held session): restore a WHOLE entity node
+   *  (character/prop/stage — per-entity grain, ownedKeys=undefined) to a pre-edit baseline (a
+   *  structuredClone captured at acquire). Cross-column via the `kind` discriminator; used when a
+   *  per-entity lock is stolen mid-edit so un-saved local changes don't linger. No-op on unknown key. */
+  revertEntityNode: (kind: 'character' | 'prop' | 'stage', key: string, baseline: unknown) => void;
 }
 
 export interface StagesSlice {

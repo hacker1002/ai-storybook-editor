@@ -159,9 +159,14 @@ export function useHeldResourceSession(
         log.debug('cleanup', 'no lock held — skip release', { key });
         return;
       }
-      const projected = project(cbRef.current.getNode());
-      const dirty = !dequal(projected, baselineRef.current);
-      log.info('release', 'release-and-save', { key, dirty });
+      const rawNode = cbRef.current.getNode();
+      // A null node = the held resource was DELETED out from under the session (entity
+      // delete, or a spread removed) → nothing to persist here; the deletion is saved by
+      // the explicit collection-op path (action 4). Release the lock WITHOUT a save (a
+      // null whole-node patch would 400 on the gateway).
+      const projected = project(rawNode);
+      const dirty = rawNode != null && !dequal(projected, baselineRef.current);
+      log.info('release', 'release-and-save', { key, dirty, nodeGone: rawNode == null });
       void s.releaseAndSave(target, dirty, dirty ? cbRef.current.buildPayload(projected) : undefined);
       s.removeMyLock(target);
       s.unregisterOnLost(key);
@@ -182,7 +187,12 @@ export function useHeldResourceSession(
       log.debug('saveNow', 'not holding — skip', { key });
       return false;
     }
-    const projected = project(cbRef.current.getNode());
+    const rawNode = cbRef.current.getNode();
+    if (rawNode == null) {
+      log.debug('saveNow', 'node gone — skip (deletion handled by explicit path)', { key });
+      return false;
+    }
+    const projected = project(rawNode);
     if (dequal(projected, baselineRef.current)) {
       log.debug('saveNow', 'not dirty — skip', { key });
       return true; // already persisted; nothing to do
