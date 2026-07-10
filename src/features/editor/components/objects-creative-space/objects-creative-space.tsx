@@ -3,7 +3,8 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Zap, Users } from "lucide-react";
+import { toast } from "sonner";
+import { Zap, Users, Lock } from "lucide-react";
 import { ObjectsMainView } from "./objects-main-view";
 import { ObjectsSidebar } from "./objects-sidebar";
 import { AnimationEditorSidebar } from "./animation-editor-sidebar";
@@ -13,10 +14,15 @@ import {
   useRetouchAnimations,
   useSnapshotActions,
 } from "@/stores/snapshot-store/selectors";
+import { useSnapshotStore } from "@/stores/snapshot-store";
 import { createLogger } from "@/utils/logger";
 import { useCurrentBookId } from "@/stores/book-store";
 import { useCollabPersistSession } from "@/features/editor/hooks/use-collab-persist-session";
 import { useContentSyncSession } from "@/features/editor/hooks/use-content-sync-session";
+import { useHeldResourceSession } from "@/features/editor/hooks/use-held-resource-session";
+import { RETOUCH_OWNED_KEYS } from "@/stores/snapshot-store/slices/collab-owned-subtree";
+import type { LockTarget, SavePayload } from "@/stores/resource-lock-store";
+import { toastLockRequired } from "@/utils/collab-save-toasts";
 import {
   useSpaceViewState,
   useEffectiveSpreadId,
@@ -58,8 +64,12 @@ const log = createLogger("Editor", "ObjectsCreativeSpace");
 
 export function ObjectsCreativeSpace() {
   const bookId = useCurrentBookId();
-  // Collab: objects/retouch space is collab-LIVE — persist retouch writes (video/audio/composite/
-  // quiz per-node + animations coarse-save) via the gateway + realtime content-sync.
+  // Collab: objects/retouch space is collab-LIVE. ADR-044 §Revision 2026-07-10 (per-spread held
+  // session): a click on a spread acquires ONE per-spread retouch lock (step 3 / rtype 10); every
+  // retouch write (video/audio/auto_pic/auto_audio/composite/quiz/animation + edited image versions)
+  // mutates the snapshot node and is persisted as ONE owned-key sub-tree on release / saveNow —
+  // replacing the former per-node fire-and-forget saves. `useContentSyncSession` reconciles the
+  // realtime winner's version back into the store.
   useCollabPersistSession(bookId);
   useContentSyncSession(bookId);
 
@@ -77,6 +87,10 @@ export function ObjectsCreativeSpace() {
   const [expandedAnimIndex, setExpandedAnimIndex] = useState<number | null>(null);
   const [filterState, setFilterState] = useState<AnimationFilterState>(createDefaultFilterState);
   const [drawZoomAreaMode, setDrawZoomAreaMode] = useState(false);
+  // LOCK-ON-CLICK choke point (ADR-044): the spread the user CLICKED to edit → the retouch held
+  // lock target. Stays null until a genuine user click (never auto-selected) so the lock never
+  // auto-acquires on the auto-select / view-restore path.
+  const [lockedSpreadId, setLockedSpreadId] = useState<string | null>(null);
 
   // Spread ratio for Camera Zoom default geometry / overlay aspect lock
   const canvasWidth = useCanvasWidth();
@@ -91,6 +105,92 @@ export function ObjectsCreativeSpace() {
 
   const currentSpread = useRetouchSpreadById(selectedSpreadId ?? "");
   const animations = useRetouchAnimations(selectedSpreadId ?? "");
+
+  // ── Retouch per-spread held session (ADR-044 §Revision 2026-07-10) ──────────────────────────
+  // Reset the per-item / animation selection (shared by spread-switch + lock-blocked/lost).
+  const resetSelection = useCallback(() => {
+    setSelectedItemId(null);
+    setExpandedAnimIndex(null);
+    setDrawZoomAreaMode(false);
+  }, []);
+
+  // Lock target — null until a USER click sets `lockedSpreadId` (lock-on-click). Keyed on the STRING
+  // id only (React-19: no object dep churn).
+  const retouchLockTarget = useMemo<LockTarget | null>(
+    () =>
+      lockedSpreadId
+        ? { step: 3, resource_type: 10, resource_id: lockedSpreadId, locale: null }
+        : null,
+    [lockedSpreadId],
+  );
+
+  // Live (non-reactive) read of the locked spread node — baseline + dirty-diff source. Reads
+  // getState() by the closure `lockedSpreadId` so a switch's release-cleanup still sees the OLD id.
+  const getRetouchNode = useCallback(
+    () =>
+      lockedSpreadId
+        ? useSnapshotStore.getState().illustration.spreads.find((s) => s.id === lockedSpreadId) ?? null
+        : null,
+    [lockedSpreadId],
+  );
+
+  // Owned sub-tree → gateway save payload (backend contract: action_type 3 edit, patch = retouch
+  // owned-key sub-object, log:true). step/rtype/id/locale come from the LockTarget.
+  const buildRetouchPayload = useCallback(
+    (subtree: unknown): SavePayload => ({ action_type: 3, patch: subtree, log: true }),
+    [],
+  );
+
+  // 409 on acquire → another editor holds this spread's objects. Toast + drop the click (target →
+  // null → idle) so a re-click can retry.
+  const handleRetouchLockBlocked = useCallback(
+    (holder: string) => {
+      log.info("handleRetouchLockBlocked", "spread objects held by another editor", {
+        hasHolder: !!holder,
+      });
+      toast.info("Another editor is editing this spread's objects — your change was not saved.");
+      setLockedSpreadId(null);
+      resetSelection();
+    },
+    [resetSelection],
+  );
+
+  // Heartbeat 409 → lock stolen mid-edit. Revert the retouch owned sub-tree to the pre-edit baseline
+  // (drop un-saved local edits), deselect, and drop the lock.
+  const handleRetouchLockLost = useCallback(
+    (baseline: unknown) => {
+      log.warn("handleRetouchLockLost", "retouch lock lost — revert + deselect", {
+        hasBaseline: baseline != null,
+      });
+      if (lockedSpreadId && baseline != null) {
+        actions.revertRetouchOwnedSubtree(lockedSpreadId, baseline);
+      }
+      setLockedSpreadId(null);
+      resetSelection();
+      toast.warning("You lost the edit lock for this spread — your changes were reverted.");
+    },
+    [lockedSpreadId, actions, resetSelection],
+  );
+
+  const { status: retouchLockStatus, saveNow: retouchSaveNow } = useHeldResourceSession({
+    target: retouchLockTarget,
+    getNode: getRetouchNode,
+    ownedKeys: RETOUCH_OWNED_KEYS,
+    buildPayload: buildRetouchPayload,
+    onBlocked: handleRetouchLockBlocked,
+    onLost: handleRetouchLockLost,
+    // onAcquired / onReleased are wired by P04 (undo/redo nexus).
+  });
+
+  // The active spread is editable only while THIS editor holds its retouch lock (grey-out otherwise).
+  const spreadEditable = retouchLockStatus === "held" && lockedSpreadId === selectedSpreadId;
+
+  // USER-initiated spread click → acquire (switch = release-then-acquire, handled by the hook when
+  // the target string key changes). NEVER called from the programmatic auto-select path.
+  const handleSpreadUserSelect = useCallback((spreadId: string) => {
+    log.info("handleSpreadUserSelect", "user selected spread — set held target", { spreadId });
+    setLockedSpreadId(spreadId);
+  }, []);
 
   // --- Derived data (useMemo) ---
   const languageCode = currentLanguage.code;
@@ -222,11 +322,9 @@ export function ObjectsCreativeSpace() {
     (spreadId: string) => {
       log.info("handleSpreadSelect", "spread selected", { spreadId });
       patch({ activeSpreadId: spreadId });
-      setSelectedItemId(null);
-      setExpandedAnimIndex(null);
-      setDrawZoomAreaMode(false);
+      resetSelection();
     },
-    [patch],
+    [patch, resetSelection],
   );
 
   const handleItemSelect = useCallback((item: SelectedItem | null) => {
@@ -257,6 +355,14 @@ export function ObjectsCreativeSpace() {
   const handleAddAnimation = useCallback(
     async (effectType: number) => {
       if (!selectedSpreadId) return;
+      // Lock-on-click gate (ADR-044): animations ∈ RETOUCH_OWNED_KEYS — block when the spread's
+      // objects lock is not held, else the mutation dirties the node but the held session never
+      // saves it (silent non-persistence).
+      if (!spreadEditable) {
+        log.debug("handleAddAnimation", "blocked — spread not held", { selectedSpreadId, effectType });
+        toastLockRequired();
+        return;
+      }
 
       // Camera Zoom (19) — spread-level: enter draw mode, animation created on draw complete.
       if (effectType === 19) {
@@ -383,6 +489,7 @@ export function ObjectsCreativeSpace() {
     [
       animationSelectedItem,
       selectedSpreadId,
+      spreadEditable,
       animations,
       actions,
       currentSpread,
@@ -393,7 +500,7 @@ export function ObjectsCreativeSpace() {
 
   const handleDrawZoomAreaComplete = useCallback(
     (geometry: ZoomAreaGeometry) => {
-      if (!selectedSpreadId) return;
+      if (!selectedSpreadId || !spreadEditable) return;
       log.info("handleDrawZoomAreaComplete", "create camera zoom animation", {
         w: geometry.w,
         h: geometry.h,
@@ -416,7 +523,7 @@ export function ObjectsCreativeSpace() {
       setExpandedAnimIndex(animations.length);
       setDrawZoomAreaMode(false);
     },
-    [selectedSpreadId, animations, actions],
+    [selectedSpreadId, spreadEditable, animations, actions],
   );
 
   const handleDrawZoomAreaCancel = useCallback(() => {
@@ -426,7 +533,7 @@ export function ObjectsCreativeSpace() {
 
   const handleCameraZoomGeometryChange = useCallback(
     (animationIndex: number, geometry: ZoomAreaGeometry) => {
-      if (!selectedSpreadId) return;
+      if (!selectedSpreadId || !spreadEditable) return;
       const current = animations[animationIndex];
       if (!current) {
         log.warn("handleCameraZoomGeometryChange", "animation not found", { animationIndex });
@@ -437,12 +544,12 @@ export function ObjectsCreativeSpace() {
         effect: { ...current.effect, geometry },
       });
     },
-    [selectedSpreadId, animations, actions],
+    [selectedSpreadId, spreadEditable, animations, actions],
   );
 
   const handleMotionLineGeometryChange = useCallback(
     (animationIndex: number, geometry: MotionLineGeometry) => {
-      if (!selectedSpreadId) return;
+      if (!selectedSpreadId || !spreadEditable) return;
       const current = animations[animationIndex];
       if (!current) {
         log.warn("handleMotionLineGeometryChange", "animation not found", { animationIndex });
@@ -464,12 +571,12 @@ export function ObjectsCreativeSpace() {
         effect: { ...current.effect, geometry },
       });
     },
-    [selectedSpreadId, animations, actions],
+    [selectedSpreadId, spreadEditable, animations, actions],
   );
 
   const handleUpdateAnimation = useCallback(
     (index: number, updates: Partial<SpreadAnimation>) => {
-      if (!selectedSpreadId) return;
+      if (!selectedSpreadId || !spreadEditable) return;
       log.debug("handleUpdateAnimation", "updating", {
         index,
         keys: Object.keys(updates),
@@ -520,12 +627,12 @@ export function ObjectsCreativeSpace() {
         actions.updateRetouchAnimation(selectedSpreadId, index, updates);
       }
     },
-    [selectedSpreadId, animations, actions, currentSpread],
+    [selectedSpreadId, spreadEditable, animations, actions, currentSpread],
   );
 
   const handleDeleteAnimation = useCallback(
     (index: number) => {
-      if (!selectedSpreadId) return;
+      if (!selectedSpreadId || !spreadEditable) return;
       log.info("handleDeleteAnimation", "deleting", { index });
       actions.deleteRetouchAnimation(selectedSpreadId, index);
       if (expandedAnimIndex === index) {
@@ -534,12 +641,12 @@ export function ObjectsCreativeSpace() {
         setExpandedAnimIndex(expandedAnimIndex - 1);
       }
     },
-    [selectedSpreadId, actions, expandedAnimIndex],
+    [selectedSpreadId, spreadEditable, actions, expandedAnimIndex],
   );
 
   const handleReorderAnimation = useCallback(
     (fromIndex: number, toIndex: number) => {
-      if (!selectedSpreadId) return;
+      if (!selectedSpreadId || !spreadEditable) return;
       log.debug("handleReorderAnimation", "reordering", {
         fromIndex,
         toIndex,
@@ -556,7 +663,7 @@ export function ObjectsCreativeSpace() {
         return prev;
       });
     },
-    [selectedSpreadId, actions, expandedAnimIndex],
+    [selectedSpreadId, spreadEditable, actions, expandedAnimIndex],
   );
 
   const handleFilterChange = useCallback(
@@ -589,25 +696,40 @@ export function ObjectsCreativeSpace() {
         selectedSpreadId={selectedSpreadId ?? ""}
         selectedItemId={selectedItemId}
         onItemSelect={handleItemSelect}
+        isEditable={spreadEditable}
       />
 
       <div className="relative flex-1 min-w-0 overflow-hidden">
-        {/* Collab affordance — ACTIVE. The objects (retouch) space is collab-enabled: its
-            write-ops persist via the per-resource gateway save (whole-doc autosave is suppressed
-            while collab-on). Rendered as an active status badge, never hidden. */}
-        <div
-          className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-foreground select-none"
-          title="Collaborative editing — active"
-        >
-          <Users className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Collab</span>
-        </div>
+        {/* Collab lock affordance (ADR-044 per-spread held session). NEVER hidden — 2-state
+            (active/disabled): held → "Editing" (this editor owns the spread's objects lock); not
+            held → greyed "Locked — click a spread to edit" (lock-on-click). The canvas itself is
+            greyed via isEditable=false (see spreadEditable) so items are non-editable until held. */}
+        {spreadEditable ? (
+          <div
+            className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-foreground select-none"
+            title="You are editing this spread's objects"
+          >
+            <Users className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            <span>Editing</span>
+          </div>
+        ) : (
+          <div
+            className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground select-none"
+            title="Objects are locked — click a spread to start editing"
+          >
+            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{retouchLockStatus === "acquiring" ? "Locking…" : "Click a spread to edit"}</span>
+          </div>
+        )}
 
         <ObjectsMainView
           selectedSpreadId={selectedSpreadId ?? ""}
           selectedItemId={selectedItemId}
           onSpreadSelect={handleSpreadSelect}
+          onSpreadUserSelect={handleSpreadUserSelect}
           onItemSelect={handleItemSelect}
+          spreadEditable={spreadEditable}
+          onCommitSave={retouchSaveNow}
           zoomLevel={zoomLevel ?? ZOOM.DEFAULT}
           onZoomChange={handleZoomChange}
           expandedAnimation={expandedAnimationRaw}
@@ -653,6 +775,7 @@ export function ObjectsCreativeSpace() {
           onReorderAnimation={handleReorderAnimation}
           onItemSelect={handleAnimationSidebarItemSelect}
           targetHasAudio={targetHasAudio}
+          editable={spreadEditable}
         />
       )}
     </div>

@@ -76,6 +76,10 @@ interface ObjectsSidebarProps {
   selectedSpreadId: string;
   selectedItemId: SelectedItem | null;
   onItemSelect: (item: SelectedItem | null) => void;
+  /** Whether this editor holds the spread's retouch lock (ADR-044 lock-on-click). When false, ALL
+   *  object-list edit affordances (add / visibility toggle / reorder / rename / composite / remove
+   *  variant) are disabled + greyed — never hidden (memory: never hide disabled UI). Default true. */
+  isEditable?: boolean;
 }
 
 // === Main Component ===
@@ -84,6 +88,7 @@ export function ObjectsSidebar({
   selectedSpreadId,
   selectedItemId,
   onItemSelect,
+  isEditable = true,
 }: ObjectsSidebarProps) {
   const spread = useRetouchSpreadById(selectedSpreadId);
   const actions = useSnapshotActions();
@@ -680,9 +685,14 @@ export function ObjectsSidebar({
   return (
     <>
     <nav
-      className="w-[280px] flex flex-col h-full border-r bg-background"
+      className={[
+        "w-[280px] flex flex-col h-full border-r bg-background",
+        // Lock-on-click: greyed + non-interactive when this editor does not hold the spread lock.
+        isEditable ? "" : "opacity-60 pointer-events-none select-none",
+      ].join(" ")}
       role="listbox"
       aria-label="Objects list"
+      aria-disabled={!isEditable}
     >
       {/* Header with Add element popover */}
       <div className="flex items-center h-14 px-3 border-b gap-2">

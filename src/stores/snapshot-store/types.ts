@@ -408,6 +408,13 @@ export interface RetouchSlice {
   addVariantToComposite: (spreadId: string, compositeId: string, variant: CompositeVariant) => void;
   /** When `edition` omitted, removes ALL entries with matching `variantId`. */
   removeVariantFromComposite: (spreadId: string, compositeId: string, variantId: string, edition?: EditionTag) => void;
+
+  /** onLost revert (ADR-044 per-spread held session): restore the retouch OWNED-key sub-tree of a
+   *  spread to a pre-edit baseline (a structuredClone of `extractOwnedSubtree(spread,
+   *  RETOUCH_OWNED_KEYS)`). Owned keys present in the baseline are restored; owned keys absent from
+   *  the baseline are deleted (drops what was added since acquire). Used when the retouch lock is
+   *  stolen mid-edit so un-saved local changes don't linger. */
+  revertRetouchOwnedSubtree: (spreadId: string, baselineSubtree: unknown) => void;
 }
 
 export interface PropsSlice {

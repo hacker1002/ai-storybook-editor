@@ -12,23 +12,14 @@ import type {
 import type { IllustrationData } from '@/types/illustration-types';
 import { QUIZ_TYPE } from '@/types/spread-types';
 import { createLogger } from '@/utils/logger';
-import {
-  persistRetouchNodeCollab,
-  persistRetouchDeleteCollab,
-} from './collab-retouch-save-helper';
 
 const log = createLogger('Store', 'QuizSlice');
 
-/** Every quiz write is addressed at the WHOLE-quiz-node grain (rtype 9, collection 'quizzes') — a
- *  quiz sub-node edit (item/pair/zone/decor/locale/container) is a node-scope EDIT of its owning
- *  quiz. These thin wrappers keep the per-mutator call sites to a single line (DRY). NO-OP solo. */
-type QuizGet = () => SnapshotStore;
-function persistQuizNode(get: QuizGet, spreadId: string, quizId: string, actionType: 2 | 3): void {
-  void persistRetouchNodeCollab(get, { spreadId, nodeId: quizId, collection: 'quizzes', actionType });
-}
-function persistQuizDelete(spreadId: string, quizId: string): void {
-  void persistRetouchDeleteCollab(spreadId, quizId, 'quizzes');
-}
+// ADR-044 §Revision 2026-07-10 (per-spread held session): quizzes are one of RETOUCH_OWNED_KEYS, so
+// every quiz write is now persisted with the rest of the retouch sub-tree by the OBJECTS-space
+// per-spread held session on release / saveNow. The former per-quiz-node fire-and-forget gateway
+// saves (`persistQuizNode` / `persistQuizDelete` → `persistRetouchNodeCollab` /
+// `persistRetouchDeleteCollab`) were REMOVED — these mutators ONLY mutate + dirty the snapshot node.
 
 // ============================================================================
 // Helpers
@@ -271,7 +262,7 @@ export const createQuizSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   QuizSlice
-> = (set, get) => ({
+> = (set) => ({
   quizValidationErrors: {},
 
   // --- Quiz-level CRUD ---
@@ -293,8 +284,6 @@ export const createQuizSlice: StateCreator<
         log.warn('addQuiz', 'validation issues', { quizId: quiz.id, count: issues.length });
       }
     });
-    // collab: persist the new quiz node (create, rtype 9, collection 'quizzes') — no-op solo.
-    persistQuizNode(get, spreadId, quiz.id, 2);
   },
 
   updateQuiz: (spreadId, quizId, updates) => {
@@ -309,7 +298,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   deleteQuiz: (spreadId, quizId) => {
@@ -321,8 +309,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       delete state.quizValidationErrors[quizId];
     });
-    // collab: persist the removal (delete, rtype 9, collection 'quizzes') — no-op solo.
-    persistQuizDelete(spreadId, quizId);
   },
 
   // --- Quiz-level locale (question + audio_url per language) ---
@@ -335,7 +321,6 @@ export const createQuizSlice: StateCreator<
       (quiz as Record<string, unknown>)[languageKey] = content;
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   deleteQuizLocale: (spreadId, quizId, languageKey) => {
@@ -346,7 +331,6 @@ export const createQuizSlice: StateCreator<
       delete (quiz as Record<string, unknown>)[languageKey];
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   // --- answer_setting / quiz_container ---
@@ -360,7 +344,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   updateQuizContainer: (spreadId, quizId, updates) => {
@@ -371,7 +354,6 @@ export const createQuizSlice: StateCreator<
       Object.assign(quiz.quiz_container, updates);
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   // --- item_container (per-role) ---
@@ -384,7 +366,6 @@ export const createQuizSlice: StateCreator<
       quiz.item_container[role] = style;
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   updateItemContainerStyle: (spreadId, quizId, role, updates) => {
@@ -400,7 +381,6 @@ export const createQuizSlice: StateCreator<
       Object.assign(existing, updates);
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   // --- elements.items[] CRUD ---
@@ -415,7 +395,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   updateQuizItem: (spreadId, quizId, itemId, updates) => {
@@ -432,7 +411,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   deleteQuizItem: (spreadId, quizId, itemId) => {
@@ -444,7 +422,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   reorderQuizItems: (spreadId, quizId, fromIndex, toIndex) => {
@@ -466,8 +443,6 @@ export const createQuizSlice: StateCreator<
       items.splice(toIndex, 0, removed);
       state.sync.isDirty = true;
     });
-    // Item order lives inside the quiz node → a node-scope EDIT (not the collection /reorder path).
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   upsertQuizItemLocale: (spreadId, quizId, itemId, languageKey, content) => {
@@ -479,7 +454,6 @@ export const createQuizSlice: StateCreator<
       (item as Record<string, unknown>)[languageKey] = content;
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   deleteQuizItemLocale: (spreadId, quizId, itemId, languageKey) => {
@@ -491,7 +465,6 @@ export const createQuizSlice: StateCreator<
       delete (item as Record<string, unknown>)[languageKey];
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   // --- elements.pairs[] (type 1) ---
@@ -506,7 +479,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   deleteQuizPair: (spreadId, quizId, pairIndex) => {
@@ -519,7 +491,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   clearQuizPairs: (spreadId, quizId) => {
@@ -531,7 +502,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   // --- elements.target_zones[] (type 3, 4) ---
@@ -546,7 +516,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   updateQuizTargetZone: (spreadId, quizId, zoneId, updates) => {
@@ -559,7 +528,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   deleteQuizTargetZone: (spreadId, quizId, zoneId) => {
@@ -571,7 +539,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   // --- elements.images[] (type 3, 4) ---
@@ -586,7 +553,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   updateQuizDecorImage: (spreadId, quizId, imageIndex, updates) => {
@@ -598,7 +564,6 @@ export const createQuizSlice: StateCreator<
       Object.assign(images[imageIndex], updates);
       state.sync.isDirty = true;
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   deleteQuizDecorImage: (spreadId, quizId, imageIndex) => {
@@ -611,7 +576,6 @@ export const createQuizSlice: StateCreator<
       state.sync.isDirty = true;
       state.quizValidationErrors[quizId] = runValidatorsFor(quiz);
     });
-    persistQuizNode(get, spreadId, quizId, 3);
   },
 
   // --- Validation utilities ---

@@ -53,6 +53,11 @@ interface AnimationEditorSidebarProps {
 
   // Read-along conditional visibility — true when target textbox has audio
   targetHasAudio?: boolean;
+
+  /** Whether this editor currently holds the spread's retouch lock (ADR-044 lock-on-click). When
+   *  false, ALL edit affordances are disabled + greyed (never hidden). Mutation handlers are ALSO
+   *  gated by the parent (defense-in-depth). Default true. */
+  editable?: boolean;
 }
 
 export function AnimationEditorSidebar({
@@ -70,6 +75,7 @@ export function AnimationEditorSidebar({
   onReorderAnimation,
   onItemSelect,
   targetHasAudio,
+  editable = true,
 }: AnimationEditorSidebarProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
@@ -83,7 +89,8 @@ export function AnimationEditorSidebar({
 
   // Camera Zoom (effect 19) is spread-level — always allowed regardless of selectedItem.
   // Per-item effects (incl. Camera Focus 18) still need a selected item; rendered disabled when not.
-  const isAddEnabled = true;
+  // Gated on `editable`: when this editor does NOT hold the spread's retouch lock, adding is off.
+  const isAddEnabled = editable;
   const hasActiveFilter =
     filterState.objectFilter !== 'all' ||
     filterState.effectFilter !== 'all' ||
@@ -249,7 +256,13 @@ export function AnimationEditorSidebar({
     <aside
       role="navigation"
       aria-label="Animation editor sidebar"
-      className="flex h-full w-[280px] flex-col border-l bg-background"
+      aria-disabled={!editable}
+      className={[
+        "flex h-full w-[280px] flex-col border-l bg-background",
+        // Lock-on-click: greyed + non-interactive when this editor does not hold the spread lock.
+        // Edit affordances stay VISIBLE (never hidden) but disabled (memory: never hide disabled UI).
+        editable ? "" : "opacity-60 pointer-events-none select-none",
+      ].join(" ")}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b px-3 h-14 shrink-0">

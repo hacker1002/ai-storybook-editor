@@ -501,6 +501,8 @@ export const useSnapshotActions = () =>
       deleteRetouchComposite: s.deleteRetouchComposite,
       addVariantToComposite: s.addVariantToComposite,
       removeVariantFromComposite: s.removeVariantFromComposite,
+      // Retouch per-spread held-session onLost revert (ADR-044)
+      revertRetouchOwnedSubtree: s.revertRetouchOwnedSubtree,
       // Quiz (QuizSlice — type-discriminated quizzes + validation-as-state)
       addQuiz: s.addQuiz,
       updateQuiz: s.updateQuiz,

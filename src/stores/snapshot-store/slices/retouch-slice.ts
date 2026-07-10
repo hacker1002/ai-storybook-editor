@@ -9,13 +9,18 @@ import {
   persistSceneShapeCollab,
   persistSceneShapeDeleteCollab,
 } from './collab-scene-save-helper';
-import {
-  persistRetouchNodeCollab,
-  persistRetouchDeleteCollab,
-  persistAnimationsCollectionCollab,
-} from './collab-retouch-save-helper';
+import { RETOUCH_OWNED_KEYS } from './collab-owned-subtree';
 
 const log = createLogger('Store', 'RetouchSlice');
+
+// ADR-044 §Revision 2026-07-10 (per-spread held session): the OBJECTS/RETOUCH space now holds ONE
+// per-spread lock (step 3 / rtype 10) and saves the WHOLE retouch owned-key sub-tree on release (or
+// via an explicit `saveNow`). The playable-node mutators below therefore ONLY mutate + dirty the
+// snapshot node — the former per-node fire-and-forget gateway saves (`persistRetouchNodeCollab` /
+// `persistRetouchDeleteCollab` / `persistAnimationsCollectionCollab`) were REMOVED here so the
+// held-session save-on-release is the SINGLE writer for these keys (no double-write / lost-write).
+// EXCEPTION — `shapes` (add/update/deleteRetouchShape) still routes through the SCENE rtype-8 path
+// (`persistSceneShapeCollab`); its re-home onto the retouch path is a later (scene) task.
 
 export const createRetouchSlice: StateCreator<
   SnapshotStore,
@@ -156,7 +161,7 @@ export const createRetouchSlice: StateCreator<
 
   // --- Videos ---
 
-  addRetouchVideo: (spreadId, video) => {
+  addRetouchVideo: (spreadId, video) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -165,12 +170,9 @@ export const createRetouchSlice: StateCreator<
         spread.videos.push(video);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the new video node (create, rtype 9, collection 'videos') — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: video.id, collection: 'videos', actionType: 2 });
-  },
+    }),
 
-  updateRetouchVideo: (spreadId, videoId, updates) => {
+  updateRetouchVideo: (spreadId, videoId, updates) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.videos) {
@@ -181,12 +183,9 @@ export const createRetouchSlice: StateCreator<
           state.sync.isDirty = true;
         }
       }
-    });
-    // collab: persist the whole video node (edit, rtype 9) — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: videoId, collection: 'videos', actionType: 3 });
-  },
+    }),
 
-  deleteRetouchVideo: (spreadId, videoId) => {
+  deleteRetouchVideo: (spreadId, videoId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.videos) {
@@ -194,14 +193,11 @@ export const createRetouchSlice: StateCreator<
         spread.videos = spread.videos.filter((v) => v.id !== videoId);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the removal (delete, rtype 9, collection 'videos') — no-op solo.
-    void persistRetouchDeleteCollab(spreadId, videoId, 'videos');
-  },
+    }),
 
   // --- Auto Pics ---
 
-  addRetouchAutoPic: (spreadId, autoPic) => {
+  addRetouchAutoPic: (spreadId, autoPic) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -210,12 +206,9 @@ export const createRetouchSlice: StateCreator<
         spread.auto_pics.push(autoPic);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the new auto_pic node (create, rtype 9, collection 'auto_pics') — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: autoPic.id, collection: 'auto_pics', actionType: 2 });
-  },
+    }),
 
-  updateRetouchAutoPic: (spreadId, autoPicId, updates) => {
+  updateRetouchAutoPic: (spreadId, autoPicId, updates) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.auto_pics) {
@@ -226,12 +219,9 @@ export const createRetouchSlice: StateCreator<
           state.sync.isDirty = true;
         }
       }
-    });
-    // collab: persist the whole auto_pic node (edit, rtype 9) — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: autoPicId, collection: 'auto_pics', actionType: 3 });
-  },
+    }),
 
-  deleteRetouchAutoPic: (spreadId, autoPicId) => {
+  deleteRetouchAutoPic: (spreadId, autoPicId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.auto_pics) {
@@ -251,12 +241,7 @@ export const createRetouchSlice: StateCreator<
         }
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the auto_pic removal (delete, rtype 9, collection 'auto_pics') — no-op solo.
-    // NOTE: the composite-variant cascade above (variant-ref drop + auto-delete) is NOT separately
-    // persisted here — a secondary gap flagged for the P07 flip (see P06-FE report).
-    void persistRetouchDeleteCollab(spreadId, autoPicId, 'auto_pics');
-  },
+    }),
 
   // --- Audios ---
 
@@ -270,9 +255,6 @@ export const createRetouchSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-
-    // collab: persist the new audio node (create, rtype 9, collection 'audios') — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: audio.id, collection: 'audios', actionType: 2 });
 
     // Fire-and-forget media_length capture if missing.
     if (audio.media_url && !audio.media_length) {
@@ -290,7 +272,7 @@ export const createRetouchSlice: StateCreator<
     }
   },
 
-  updateRetouchAudio: (spreadId, audioId, updates) => {
+  updateRetouchAudio: (spreadId, audioId, updates) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.audios) {
@@ -301,12 +283,9 @@ export const createRetouchSlice: StateCreator<
           state.sync.isDirty = true;
         }
       }
-    });
-    // collab: persist the whole audio node (edit, rtype 9) — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: audioId, collection: 'audios', actionType: 3 });
-  },
+    }),
 
-  deleteRetouchAudio: (spreadId, audioId) => {
+  deleteRetouchAudio: (spreadId, audioId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.audios) {
@@ -314,14 +293,11 @@ export const createRetouchSlice: StateCreator<
         spread.audios = spread.audios.filter((a) => a.id !== audioId);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the removal (delete, rtype 9, collection 'audios') — no-op solo.
-    void persistRetouchDeleteCollab(spreadId, audioId, 'audios');
-  },
+    }),
 
   // --- Auto Audios ---
 
-  addRetouchAutoAudio: (spreadId, autoAudio) => {
+  addRetouchAutoAudio: (spreadId, autoAudio) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -332,10 +308,7 @@ export const createRetouchSlice: StateCreator<
         spread.auto_audios.push(coerced);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the new auto_audio node (create, rtype 9, collection 'auto_audios') — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: autoAudio.id, collection: 'auto_audios', actionType: 2 });
-  },
+    }),
 
   updateRetouchAutoAudio: (spreadId, autoAudioId, updates) => {
     set((state) => {
@@ -358,11 +331,9 @@ export const createRetouchSlice: StateCreator<
         }
       }
     });
-    // collab: persist the whole auto_audio node (edit, rtype 9) — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: autoAudioId, collection: 'auto_audios', actionType: 3 });
   },
 
-  deleteRetouchAutoAudio: (spreadId, autoAudioId) => {
+  deleteRetouchAutoAudio: (spreadId, autoAudioId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.auto_audios) {
@@ -370,21 +341,16 @@ export const createRetouchSlice: StateCreator<
         spread.auto_audios = spread.auto_audios.filter((a) => a.id !== autoAudioId);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the removal (delete, rtype 9, collection 'auto_audios') — no-op solo.
-    void persistRetouchDeleteCollab(spreadId, autoAudioId, 'auto_audios');
-  },
+    }),
 
   // --- Animations (index-based) ---
   //
-  // collab: persisted as a WHOLE ARRAY (rtype 9, edit), NOT per-node. `SpreadAnimation` carries NO
-  // stable node `id` (only `target.id`; the snapshot schema mints no animation id) and these
-  // mutators are index-based, so an animation cannot be per-node rtype-9-addressed. Instead every
-  // change (add/update/delete/deleteByTargetId/reorder) re-saves the ENTIRE `spreads[si].animations`
-  // array keyed by the parent SPREAD — see `persistAnimationsCollectionCollab`. Fire-and-forget
-  // (`void …`), read FRESH via `get()` post-mutate, no-op solo.
+  // collab: NO per-mutation save here. `SpreadAnimation` has no stable node id, so it was formerly
+  // whole-array-saved after every change; now `animations` is one of RETOUCH_OWNED_KEYS, persisted
+  // with the rest of the retouch sub-tree by the per-spread held session on release / saveNow.
+  // Mutators below ONLY mutate + dirty.
 
-  addRetouchAnimation: (spreadId, animation) => {
+  addRetouchAnimation: (spreadId, animation) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -393,12 +359,9 @@ export const createRetouchSlice: StateCreator<
         spread.animations.push(animation);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the whole animations array (whole-array edit, rtype 9) — no-op solo.
-    void persistAnimationsCollectionCollab(get, spreadId);
-  },
+    }),
 
-  updateRetouchAnimation: (spreadId, animationIndex, updates) => {
+  updateRetouchAnimation: (spreadId, animationIndex, updates) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.animations && animationIndex >= 0 && animationIndex < spread.animations.length) {
@@ -406,12 +369,9 @@ export const createRetouchSlice: StateCreator<
         Object.assign(spread.animations[animationIndex], updates);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the whole animations array (whole-array edit, rtype 9) — no-op solo.
-    void persistAnimationsCollectionCollab(get, spreadId);
-  },
+    }),
 
-  deleteRetouchAnimation: (spreadId, animationIndex) => {
+  deleteRetouchAnimation: (spreadId, animationIndex) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.animations && animationIndex >= 0 && animationIndex < spread.animations.length) {
@@ -420,12 +380,9 @@ export const createRetouchSlice: StateCreator<
         spread.animations.forEach((anim, i) => { anim.order = i; });
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the whole animations array (whole-array edit, rtype 9) — no-op solo.
-    void persistAnimationsCollectionCollab(get, spreadId);
-  },
+    }),
 
-  deleteRetouchAnimationsByTargetId: (spreadId, targetId) => {
+  deleteRetouchAnimationsByTargetId: (spreadId, targetId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.animations) {
@@ -438,12 +395,9 @@ export const createRetouchSlice: StateCreator<
           log.debug('deleteRetouchAnimationsByTargetId', 'removed', { spreadId, targetId, removed });
         }
       }
-    });
-    // collab: persist the whole animations array (whole-array edit, rtype 9) — no-op solo.
-    void persistAnimationsCollectionCollab(get, spreadId);
-  },
+    }),
 
-  reorderRetouchAnimations: (spreadId, fromIndex, toIndex) => {
+  reorderRetouchAnimations: (spreadId, fromIndex, toIndex) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (
@@ -459,14 +413,11 @@ export const createRetouchSlice: StateCreator<
         spread.animations.forEach((anim, i) => { anim.order = i; });
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the whole animations array (whole-array edit, rtype 9) — no-op solo.
-    void persistAnimationsCollectionCollab(get, spreadId);
-  },
+    }),
 
   // --- Composites (edition-aware wrapper) ---
 
-  addRetouchComposite: (spreadId, composite) => {
+  addRetouchComposite: (spreadId, composite) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread) {
@@ -479,10 +430,7 @@ export const createRetouchSlice: StateCreator<
         spread.composites.push(composite);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the new composite node (create, rtype 9, collection 'composites') — no-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: composite.id, collection: 'composites', actionType: 2 });
-  },
+    }),
 
   updateRetouchComposite: (spreadId, compositeId, updates) => {
     set((state) => {
@@ -543,13 +491,9 @@ export const createRetouchSlice: StateCreator<
 
       state.sync.isDirty = true;
     });
-    // collab: persist the whole composite node (edit, rtype 9) — no-op solo.
-    // NOTE: the write-through cascade to variant image/auto_pic nodes (visibility/z-index above) is
-    // NOT separately persisted here — a secondary gap flagged for the P07 flip (see P06-FE report).
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: compositeId, collection: 'composites', actionType: 3 });
   },
 
-  deleteRetouchComposite: (spreadId, compositeId) => {
+  deleteRetouchComposite: (spreadId, compositeId) =>
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (spread?.composites) {
@@ -557,10 +501,7 @@ export const createRetouchSlice: StateCreator<
         spread.composites = spread.composites.filter((c) => c.id !== compositeId);
         state.sync.isDirty = true;
       }
-    });
-    // collab: persist the removal (delete, rtype 9, collection 'composites') — no-op solo.
-    void persistRetouchDeleteCollab(spreadId, compositeId, 'composites');
-  },
+    }),
 
   addVariantToComposite: (spreadId, compositeId, variant) => {
     set((state) => {
@@ -586,16 +527,9 @@ export const createRetouchSlice: StateCreator<
       composite.variants.push(variant);
       state.sync.isDirty = true;
     });
-    // collab: a variant add is a rtype-9 EDIT of the composite node (patch = composite with the new
-    // variant) — no separate variant address. No-op solo.
-    void persistRetouchNodeCollab(get, { spreadId, nodeId: compositeId, collection: 'composites', actionType: 3 });
   },
 
   removeVariantFromComposite: (spreadId, compositeId, variantId, edition) => {
-    // Capture presence BEFORE the mutation so we can tell "auto-deleted" (present → gone) apart from
-    // "never existed" (a caller bug) — the latter must NOT fire a phantom gateway DELETE.
-    const wasPresent =
-      get().illustration.spreads.find((s) => s.id === spreadId)?.composites?.some((c) => c.id === compositeId) ?? false;
     set((state) => {
       const spread = state.illustration.spreads.find((s) => s.id === spreadId);
       if (!spread?.composites) return;
@@ -629,18 +563,32 @@ export const createRetouchSlice: StateCreator<
 
       state.sync.isDirty = true;
     });
-    // collab: a variant removal is a rtype-9 EDIT of the composite node (patch = composite with the
-    // variant removed); when the composite auto-deletes (< 2 variants) it becomes a DELETE instead.
-    // Read fresh (post-mutate) to pick the outcome; skip entirely if the composite never existed
-    // (guards against a phantom DELETE). No-op solo.
-    if (wasPresent) {
-      const stillExists =
-        get().illustration.spreads.find((s) => s.id === spreadId)?.composites?.some((c) => c.id === compositeId) ?? false;
-      if (stillExists) {
-        void persistRetouchNodeCollab(get, { spreadId, nodeId: compositeId, collection: 'composites', actionType: 3 });
-      } else {
-        void persistRetouchDeleteCollab(spreadId, compositeId, 'composites');
-      }
-    }
   },
+
+  // --- onLost revert (per-spread held session) ---
+  //
+  // ADR-044 §Revision 2026-07-10: when the retouch per-spread lock is LOST mid-edit (heartbeat 409),
+  // the held-session `onLost` writes the pre-edit baseline OWNED sub-tree back so my un-saved edits
+  // don't linger (mirrors the sketch canvas revert). `baselineSubtree` = a structuredClone of
+  // `extractOwnedSubtree(spread, RETOUCH_OWNED_KEYS)` captured at acquire time. For every owned key:
+  // present in baseline → restore it; absent (undefined at acquire) → delete what I added.
+  revertRetouchOwnedSubtree: (spreadId, baselineSubtree) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (!spread) {
+        log.warn('revertRetouchOwnedSubtree', 'spread not found — skip revert', { spreadId });
+        return;
+      }
+      const base = (baselineSubtree ?? {}) as Record<string, unknown>;
+      const target = spread as unknown as Record<string, unknown>;
+      for (const key of RETOUCH_OWNED_KEYS) {
+        if (key in base) target[key] = base[key];
+        else delete target[key];
+      }
+      state.sync.isDirty = true;
+      log.info('revertRetouchOwnedSubtree', 'reverted retouch sub-tree to baseline', {
+        spreadId,
+        keys: Object.keys(base).length,
+      });
+    }),
 });

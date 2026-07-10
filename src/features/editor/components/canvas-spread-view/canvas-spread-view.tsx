@@ -54,6 +54,12 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   zoomLevel: number;
   columnsPerRow: number;
   onSpreadSelect: (spreadId: string) => void; // keep legacy name (Validation Session 1)
+  /** Fires ONLY on a genuine USER spread selection (filmstrip/grid click or double-click) — never
+   *  from the programmatic auto-select effects that also call `onSpreadSelect`. The Objects space
+   *  uses it as the lock-on-click choke point for the per-spread retouch held session (ADR-044): the
+   *  edit-lock must NEVER auto-acquire on a programmatic re-select. Additive/opt-in — other spaces
+   *  omit it and behave unchanged. */
+  onSpreadUserSelect?: (spreadId: string) => void;
   onViewModeChange: (mode: ViewMode) => void;
   onZoomChange: (level: number) => void;
   onColumnsChange: (columns: number) => void;
@@ -158,6 +164,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   zoomLevel,
   columnsPerRow,
   onSpreadSelect,
+  onSpreadUserSelect,
   onViewModeChange,
   onZoomChange,
   onColumnsChange,
@@ -296,13 +303,16 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   const handleSpreadClick = useCallback((spreadId: string) => {
     log.info('handleSpreadClick', 'spread selected', { spreadId });
     onSpreadSelect(spreadId);
-  }, [onSpreadSelect]);
+    // User-initiated → also drive the opt-in lock-on-click seam (never the auto-select effects).
+    onSpreadUserSelect?.(spreadId);
+  }, [onSpreadSelect, onSpreadUserSelect]);
 
   const handleSpreadDoubleClick = useCallback((spreadId: string) => {
     // Grid mode: select and switch to Edit
     onSpreadSelect(spreadId);
+    onSpreadUserSelect?.(spreadId);
     onViewModeChange('edit');
-  }, [onSpreadSelect, onViewModeChange]);
+  }, [onSpreadSelect, onSpreadUserSelect, onViewModeChange]);
 
   const handleDeleteSpread = useCallback((spreadId: string) => {
     const deletingIndex = spreads.findIndex(s => s.id === spreadId);

@@ -22,6 +22,10 @@ interface RetouchGenerateImageModalProps {
   onOpenChange: (open: boolean) => void;
   spreadId: string;
   imageId: string;
+  /** Held-session explicit save (per-spread retouch lock) — persists the uploaded/replaced image
+   *  immediately while the lock is held, so an upload isn't lost if the user never switches spreads.
+   *  Absent ⇒ persisted on the session's release-time save-if-dirty. */
+  onCommitSave?: () => Promise<boolean>;
 }
 
 export function RetouchGenerateImageModal({
@@ -29,6 +33,7 @@ export function RetouchGenerateImageModal({
   onOpenChange,
   spreadId,
   imageId,
+  onCommitSave,
 }: RetouchGenerateImageModalProps) {
   const image = useRetouchImageById(spreadId, imageId);
   const { updateRetouchImage } = useSnapshotActions();
@@ -41,8 +46,14 @@ export function RetouchGenerateImageModal({
         keys: Object.keys(updates),
       });
       updateRetouchImage(spreadId, imageId, updates);
+      // Explicit held-session save NOW (no-op when not holding the spread lock).
+      if (onCommitSave) {
+        void onCommitSave().then((ok) => {
+          if (!ok) log.warn("handleUpdate", "held-session saveNow returned false", { spreadId, imageId });
+        });
+      }
     },
-    [spreadId, imageId, updateRetouchImage],
+    [spreadId, imageId, updateRetouchImage, onCommitSave],
   );
 
   // Image deleted while modal open → parent ILS force-pop closes; render nothing meanwhile.

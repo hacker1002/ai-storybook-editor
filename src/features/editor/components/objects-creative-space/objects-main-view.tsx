@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Languages, Mic, MessageSquare } from "lucide-react";
 import { createLogger } from "@/utils/logger";
+import { toastLockRequired } from "@/utils/collab-save-toasts";
 import { TranslateSpreadModal, type ApplyTranslationsPayload } from "./translate-spread-modal";
 import {
   EnhanceSpreadNarrationModal,
@@ -125,7 +126,15 @@ interface ObjectsMainViewProps {
   selectedSpreadId: string;
   selectedItemId: SelectedItem | null;
   onSpreadSelect: (spreadId: string) => void;
+  /** USER-initiated spread selection (filmstrip/grid click) → the per-spread retouch held-session
+   *  lock-on-click seam (ADR-044). Distinct from `onSpreadSelect`, which also fires programmatically. */
+  onSpreadUserSelect?: (spreadId: string) => void;
   onItemSelect: (item: SelectedItem | null) => void;
+  /** Whether the active spread is currently held by THIS editor's retouch lock. Gates canvas item
+   *  editability (grey-out when not held — lock-on-click). */
+  spreadEditable: boolean;
+  /** Held-session explicit save (forwarded to the retouch Edit-image modal commit). */
+  onCommitSave?: () => Promise<boolean>;
   zoomLevel: number;
   onZoomChange: (level: number) => void;
   // === Animation overlay props (all optional — forwarded to CanvasSpreadView) ===
@@ -143,7 +152,10 @@ export function ObjectsMainView({
   selectedSpreadId,
   selectedItemId,
   onSpreadSelect,
+  onSpreadUserSelect,
   onItemSelect,
+  spreadEditable,
+  onCommitSave,
   zoomLevel,
   onZoomChange,
   expandedAnimation,
@@ -256,6 +268,11 @@ export function ObjectsMainView({
 
   const handleApplyTranslations = useCallback(
     (payload: ApplyTranslationsPayload) => {
+      if (!spreadEditable) {
+        log.debug("handleApplyTranslations", "blocked — spread not held", { spreadId: payload.spreadId });
+        toastLockRequired();
+        return;
+      }
       const spread = retouchSpreads.find(s => s.id === payload.spreadId);
       if (!spread) {
         log.warn("handleApplyTranslations", "spread not found", { spreadId: payload.spreadId });
@@ -298,11 +315,16 @@ export function ObjectsMainView({
       }
       log.info("handleApplyTranslations", "done", { spreadId: payload.spreadId });
     },
-    [retouchSpreads, actions, originalLanguage]
+    [retouchSpreads, actions, originalLanguage, spreadEditable]
   );
 
   const handleApplyEnhancements = useCallback(
     (payload: ApplyEnhancementsPayload) => {
+      if (!spreadEditable) {
+        log.debug("handleApplyEnhancements", "blocked — spread not held", { spreadId: payload.spreadId });
+        toastLockRequired();
+        return;
+      }
       log.info("handleApplyEnhancements", "start", {
         spreadId: payload.spreadId,
         lang: payload.language,
@@ -321,11 +343,16 @@ export function ObjectsMainView({
         updateRetouchTextbox: actions.updateRetouchTextbox,
       });
     },
-    [retouchSpreads, actions]
+    [retouchSpreads, actions, spreadEditable]
   );
 
   const handleApplyAnnotations = useCallback(
     (payload: ApplyAnnotationsPayload) => {
+      if (!spreadEditable) {
+        log.debug("handleApplyAnnotations", "blocked — spread not held", { spreadId: payload.spreadId });
+        toastLockRequired();
+        return;
+      }
       log.info("handleApplyAnnotations", "start", {
         spreadId: payload.spreadId,
         count: payload.results.length,
@@ -362,7 +389,7 @@ export function ObjectsMainView({
         applied,
       });
     },
-    [retouchSpreads, actions]
+    [retouchSpreads, actions, spreadEditable]
   );
 
   const translateLeftAction = useMemo(
@@ -374,14 +401,14 @@ export function ObjectsMainView({
           log.info("translateButton", "click", { spreadId: selectedSpreadId });
           setTranslateModalOpen(true);
         }}
-        disabled={!selectedSpreadId || !selectedSpread}
+        disabled={!selectedSpreadId || !selectedSpread || !spreadEditable}
         aria-label="Translate spread"
       >
         <Languages className="h-4 w-4 mr-1.5" />
         Translate
       </Button>
     ),
-    [selectedSpreadId, selectedSpread]
+    [selectedSpreadId, selectedSpread, spreadEditable]
   );
 
   const narrationLeftAction = useMemo(
@@ -393,14 +420,14 @@ export function ObjectsMainView({
           log.info("narrationButton", "click", { spreadId: selectedSpreadId });
           setNarrationSpreadModalOpen(true);
         }}
-        disabled={!selectedSpreadId || !selectedSpread}
+        disabled={!selectedSpreadId || !selectedSpread || !spreadEditable}
         aria-label="Enhance narration"
       >
         <Mic className="h-4 w-4 mr-1.5" />
         Narration
       </Button>
     ),
-    [selectedSpreadId, selectedSpread]
+    [selectedSpreadId, selectedSpread, spreadEditable]
   );
 
   const annotationLeftAction = useMemo(
@@ -412,14 +439,14 @@ export function ObjectsMainView({
           log.info("annotationButton", "click", { spreadId: selectedSpreadId });
           setAnnotationModalOpen(true);
         }}
-        disabled={!selectedSpreadId || !selectedSpread}
+        disabled={!selectedSpreadId || !selectedSpread || !spreadEditable}
         aria-label="Enhance image annotations"
       >
         <MessageSquare className="h-4 w-4 mr-1.5" />
         Annotations
       </Button>
     ),
-    [selectedSpreadId, selectedSpread]
+    [selectedSpreadId, selectedSpread, spreadEditable]
   );
 
   const combinedLeftActions = useMemo(
@@ -443,9 +470,14 @@ export function ObjectsMainView({
   const handleExtractCreateImages = useCallback(
     (results: ExtractResult[]) => {
       if (!modals.extract.image) return;
+      if (!spreadEditable) {
+        log.debug("handleExtractCreateImages", "blocked — spread not held", { count: results.length });
+        toastLockRequired();
+        return;
+      }
       buildExtractImages(results, modals.extract.image, modals.extract.spreadId, retouchSpreads, actions);
     },
-    [modals.extract.image, modals.extract.spreadId, retouchSpreads, actions]
+    [modals.extract.image, modals.extract.spreadId, retouchSpreads, actions, spreadEditable]
   );
 
   // ── Crop presets (books.crop_presets[]) — controlled persistence via updateBook ──
@@ -489,9 +521,41 @@ export function ObjectsMainView({
   const { handleDeleteSpread, handleSpreadReorder } = useSpreadHandlers(actions);
   const { handleSpreadItemAction } = useSpreadItemDispatch(actions, retouchSpreads);
 
+  // Lock-on-click gate (ADR-044): every canvas item add/update/delete flows through
+  // onUpdateSpreadItem → handleSpreadItemAction; block it when this editor does not hold the spread's
+  // retouch lock (else the mutation dirties the node but the held session never saves it). This is
+  // the single choke point covering drag/resize/rotate, inline text/art-note edits, and deletes.
+  const gatedSpreadItemAction = useCallback(
+    (params: Parameters<typeof handleSpreadItemAction>[0]) => {
+      if (!spreadEditable) {
+        log.debug("gatedSpreadItemAction", "blocked — spread not held", {
+          itemType: params.itemType,
+          action: params.action,
+        });
+        toastLockRequired();
+        return;
+      }
+      handleSpreadItemAction(params);
+    },
+    [spreadEditable, handleSpreadItemAction],
+  );
+
   const { stackRef } = useInteractionLayerContext();
   const { handleDuplicateItem } = useDuplicateItem(retouchSpreads, selectedSpreadId, actions, onItemSelect);
-  useDuplicateHotkey(stackRef, selectedItemId, handleDuplicateItem);
+  // Gate duplicate (covers BOTH the toolbar Clone action AND the Ctrl/Cmd+D hotkey — the hotkey
+  // bypasses toolbar-visibility gating, so it must be blocked here when the spread is not held).
+  const gatedDuplicateItem = useCallback(
+    (itemType: Parameters<typeof handleDuplicateItem>[0], itemId: string) => {
+      if (!spreadEditable) {
+        log.debug("gatedDuplicateItem", "blocked — spread not held", { itemType, itemId });
+        toastLockRequired();
+        return;
+      }
+      handleDuplicateItem(itemType, itemId);
+    },
+    [spreadEditable, handleDuplicateItem],
+  );
+  useDuplicateHotkey(stackRef, selectedItemId, gatedDuplicateItem);
 
   // === Render props for 6 item types ===
 
@@ -835,11 +899,11 @@ export function ObjectsMainView({
           onGenerateImage: () => openGenerate(context.item),
           onEditImage: () => openEdit(context.item),
           onExtractImage: () => openExtract(context.item),
-          onClone: () => handleDuplicateItem("image", context.item.id),
+          onClone: () => gatedDuplicateItem("image", context.item.id),
         }}
       />
     ),
-    [openGenerate, openEdit, openExtract, handleDuplicateItem]
+    [openGenerate, openEdit, openExtract, gatedDuplicateItem]
   );
 
   const { cloneRawImage, cloneRawTextbox } = useCloneRaw(retouchSpreads, selectedSpreadId, actions);
@@ -1001,10 +1065,11 @@ export function ObjectsMainView({
         renderRawImageToolbar={renderRawImageToolbar}
         renderRawTextboxToolbar={renderRawTextboxToolbar}
         onSpreadSelect={onSpreadSelect}
+        onSpreadUserSelect={onSpreadUserSelect}
         onSpreadReorder={handleSpreadReorder}
         onDeleteSpread={handleDeleteSpread}
-        onUpdateSpreadItem={handleSpreadItemAction}
-        isEditable={true}
+        onUpdateSpreadItem={gatedSpreadItemAction}
+        isEditable={spreadEditable}
         preventEditRawItem={true}
         canAddSpread={false}
         canReorderSpread={false}
@@ -1045,6 +1110,7 @@ export function ObjectsMainView({
           onOpenChange={modals.closeGenerate}
           spreadId={modals.generate.spreadId}
           imageId={modals.generate.imageId}
+          onCommitSave={onCommitSave}
         />
       )}
 
@@ -1055,6 +1121,7 @@ export function ObjectsMainView({
           spreadId={modals.edit.spreadId}
           imageId={modals.edit.imageId}
           enabledTools={SPACE_TOOL_MATRIX.object.edit}
+          onCommitSave={onCommitSave}
         />
       )}
 
@@ -1127,7 +1194,15 @@ export function ObjectsMainView({
           audioName={modals.editAudio.item.title ?? "Audio"}
           mediaUrl={modals.editAudio.item.media_url}
           description={modals.editAudio.item.description ?? ""}
-          onSave={modals.handleEditAudioComplete}
+          onSave={(result) => {
+            if (!spreadEditable) {
+              log.debug("editAudioSave", "blocked — spread not held", {});
+              toastLockRequired();
+              modals.closeEditAudio();
+              return;
+            }
+            modals.handleEditAudioComplete(result);
+          }}
         />
       )}
 
@@ -1149,6 +1224,14 @@ export function ObjectsMainView({
             return sounds.find(s => s.mediaUrl === url)?.id ?? null;
           })()}
           onSelect={(sound: LibrarySound) => {
+            // Lock-on-click gate: block sound assignment when the spread is not held (defense-in-depth
+            // — the library opens from a gated toolbar, but could persist across a lock loss).
+            if (!spreadEditable) {
+              log.debug("handleSoundSelect", "blocked — spread not held", { spreadId: browseOpen.spreadId });
+              toastLockRequired();
+              setBrowseOpen(null);
+              return;
+            }
             const spread = retouchSpreads.find(
               s => s.id === browseOpen.spreadId
             );

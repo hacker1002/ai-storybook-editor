@@ -17,3 +17,10 @@ export function toastLockedByOther(holder: string): void {
 export function toastForbiddenIllustration(): void {
   toast.error('Bạn cần quyền chỉnh sửa illustration để lưu thay đổi này.');
 }
+
+/** A retouch mutation was BLOCKED because this editor does not hold the spread's objects lock
+ *  (ADR-044 per-spread held session, lock-on-click). Single toast id → repeated blocked attempts
+ *  replace rather than stack. */
+export function toastLockRequired(): void {
+  toast.info('Click the spread to start editing its objects.', { id: 'retouch-lock-required' });
+}
