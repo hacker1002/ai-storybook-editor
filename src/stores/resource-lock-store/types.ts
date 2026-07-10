@@ -2,20 +2,21 @@
 // feature. Mirrors the `resource_locks` table + the `resource/*` gateway contract
 // (see ai-storybook-design/api/resource, component/stores/resource-lock-store.md).
 
-/** Workflow step. 1 = sketch, 2 = illustration/retouch (ADR-044 per-resource save).
- *  Gateway enum also allows 3 (retouch-only), but illustration+retouch both address
- *  step=2 (retouch images live physically in the `illustration` column — see plan). */
-export type Step = 1 | 2;
+/** Workflow step. 1 = sketch, 2 = illustration (scene), 3 = retouch.
+ *  ADR-044 §Revision 2026-07-10 (per-spread): scene per-spread saves at step=2/rtype=6;
+ *  retouch per-spread saves at step=3/rtype=10 (column-from-step decoupled — the retouch
+ *  sub-tree lives physically in the `illustration` column, gated on retouch access). The
+ *  gateway binds rtype 10 ⇔ step 3 symmetrically. */
+export type Step = 1 | 2 | 3;
 
 /** Resource kind inside a snapshot.
- *  1 image · 2 textbox · 3 character · 4 prop · 5 stage · 6 spread ·
- *  7 scene raw_textbox · 8 scene shape (7/8 are step=2 illustration-scene
- *  overlays opened by ADR-044 P03 — `spreads[].raw_textboxes[]`/`shapes[]`) ·
- *  9 objects/retouch node — ONE GENERIC type for every objects-space playable node kind
- *  (`spreads[].{videos,auto_pics,audios,auto_audios,composites,quizzes}[]`); the backend
- *  addresses all of them by id, distinguishing the owning array via `collection` on create
- *  (ADR-044 P06 — backend rtype collapse). */
-export type ResourceType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+ *  1 image · 2 textbox · 3 character · 4 prop · 5 stage · 6 spread (per-spread SCENE
+ *  sub-tree at step=2 — ADR-044 rev) · 7 scene raw_textbox · 8 scene shape (legacy
+ *  per-item overlays — `spreads[].raw_textboxes[]`/`shapes[]`) · 9 objects/retouch node —
+ *  ONE GENERIC type for every objects-space playable node kind (`spreads[].{videos,
+ *  auto_pics,audios,auto_audios,composites,quizzes}[]`) · 10 retouch_spread (per-spread
+ *  RETOUCH sub-tree at step=3 — ADR-044 rev; the whole retouch owned-key set of a spread). */
+export type ResourceType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 /** Addresses one lockable resource. `locale` is set for textboxes (per-language)
  *  and null for language-agnostic resources (image / entity / spread). */
