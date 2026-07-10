@@ -21,6 +21,11 @@ interface IllustrationEditImageModalProps {
   imageId: string;
   /** Per-space edit-tool availability (matrix gate). Forwarded to EditImageModal. */
   enabledTools?: EditToolKey[];
+  /** Held-session explicit save (per-spread SCENE lock). Persists the whole SCENE owned sub-tree
+   *  (which includes this raw_image) WHILE the lock is held, then rebases the session baseline.
+   *  Absent ⇒ the commit is only persisted on the session's release-time save-if-dirty (ADR-044,
+   *  mirror of RetouchEditImageModal). */
+  onCommitSave?: () => Promise<boolean>;
 }
 
 export function IllustrationEditImageModal({
@@ -29,6 +34,7 @@ export function IllustrationEditImageModal({
   spreadId,
   imageId,
   enabledTools,
+  onCommitSave,
 }: IllustrationEditImageModalProps) {
   const image = useRawImageById(spreadId, imageId);
   const { updateRawImage } = useSnapshotActions();
@@ -36,9 +42,17 @@ export function IllustrationEditImageModal({
   const handleUpdate = useCallback(
     (next: Illustration[]) => {
       log.debug("handleUpdate", "persist illustrations", { spreadId, imageId, count: next.length });
+      // Local optimistic mutate (dirties raw_images — a SCENE_OWNED_KEY).
       updateRawImage(spreadId, imageId, { illustrations: next });
+      // Explicit held-session save NOW (no-op when not holding the spread lock): persists the edit
+      // immediately without waiting for release.
+      if (onCommitSave) {
+        void onCommitSave().then((ok) => {
+          if (!ok) log.warn("handleUpdate", "held-session saveNow returned false", { spreadId, imageId });
+        });
+      }
     },
-    [spreadId, imageId, updateRawImage],
+    [spreadId, imageId, updateRawImage, onCommitSave],
   );
 
   // Image deleted while modal open → parent ILS force-pop closes; render nothing meanwhile.

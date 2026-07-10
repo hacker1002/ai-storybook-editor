@@ -18,6 +18,7 @@ import { useSnapshotStore } from "@/stores/snapshot-store";
 import { useBookShape, useBookStepTypography } from "@/stores/book-store";
 import { FALLBACK_SHAPE } from "@/constants/book-defaults";
 import { createLogger } from "@/utils/logger";
+import { toastLockRequired } from "@/utils/collab-save-toasts";
 import { useLanguageCode } from "@/stores/editor-settings-store";
 import { SpreadsSidebarListItem } from "./spreads-sidebar-list-item";
 import {
@@ -44,6 +45,10 @@ interface SpreadsSidebarProps {
   selectedSpreadId: string;
   selectedItemId: SelectedItem | null;
   onItemSelect: (item: SelectedItem | null) => void;
+  /** Whether THIS editor holds the active spread's SCENE lock (ADR-044 lock-on-click). Gates every
+   *  in-spread edit here (add / rename / reorder); when false the sidebar is display-only (greyed,
+   *  never hidden). */
+  isEditable: boolean;
 }
 
 // === Inline sub-components ===
@@ -129,6 +134,7 @@ export function SpreadsSidebar({
   selectedSpreadId,
   selectedItemId,
   onItemSelect,
+  isEditable,
 }: SpreadsSidebarProps) {
   // Defensive: guard against illustration being undefined during store init
   const spread = useSnapshotStore(
@@ -184,12 +190,25 @@ export function SpreadsSidebar({
   const handleEditStart = useCallback((entry: ElementListEntry) => {
     // Textbox title is auto-derived — renaming not supported
     if (entry.type === "raw_textbox") return;
+    // Lock-on-click gate: renaming is an in-spread edit → require the SCENE lock.
+    if (!isEditable) {
+      log.debug("handleEditStart", "blocked — spread not held", { id: entry.id });
+      toastLockRequired();
+      return;
+    }
     setEditingItemId(entry.id);
     setEditValue(entry.title);
-  }, []);
+  }, [isEditable]);
 
   const handleRenameConfirm = useCallback(() => {
     if (!editingItemId || !editValue.trim()) {
+      setEditingItemId(null);
+      return;
+    }
+    // Defense-in-depth: a lock loss while the inline editor is open must not persist.
+    if (!isEditable) {
+      log.debug("handleRenameConfirm", "blocked — spread not held", { editingItemId });
+      toastLockRequired();
       setEditingItemId(null);
       return;
     }
@@ -221,7 +240,7 @@ export function SpreadsSidebar({
     }
 
     setEditingItemId(null);
-  }, [editingItemId, editValue, allEntries, actions, selectedSpreadId]);
+  }, [editingItemId, editValue, allEntries, actions, selectedSpreadId, isEditable]);
 
   // === Drag and drop handlers ===
 
@@ -235,9 +254,12 @@ export function SpreadsSidebar({
   }, []);
 
   /**
-   * Reorder by replacing the spread's raw array for the element type.
-   * All entries within a layer share the same type (image/shape/textbox),
-   * so we splice the spread's source array directly and call updateIllustrationSpread.
+   * Reorder by replacing the spread's raw array for the element type. All entries within a layer
+   * share the same type (raw_image / raw_textbox), so we splice the spread's source array directly
+   * and call updateIllustrationSpread — an in-spread SCENE edit captured by the held session on
+   * release. `shapes` is NO LONGER reorderable here: it is a RETOUCH-owned key, so a scene rtype-6
+   * merge would DROP the reorder (SCENE_OWNED_KEYS excludes `shapes`). Shape ordering belongs to the
+   * Objects space now — shape rows are non-draggable (ADR-044 §Revision 2026-07-10).
    */
   const handleLayerDrop = useCallback(
     (targetIndex: number, group: LayerGroup) => {
@@ -252,6 +274,15 @@ export function SpreadsSidebar({
       }
 
       if (!spread) return;
+
+      // Lock-on-click gate: reorder is an in-spread edit → require the SCENE lock.
+      if (!isEditable) {
+        log.debug("handleLayerDrop", "blocked — spread not held", { layer: group.layer.label });
+        toastLockRequired();
+        setDragIndex(null);
+        setDragLayerLabel(null);
+        return;
+      }
 
       log.info("handleLayerDrop", "reordering within layer", {
         layer: group.layer.label,
@@ -275,14 +306,6 @@ export function SpreadsSidebar({
         const [moved] = arr.splice(fromIdx, 1);
         arr.splice(toIdx, 0, moved);
         actions.updateIllustrationSpread(selectedSpreadId, { raw_images: arr });
-      } else if (entryType === "shape") {
-        const arr = [...(spread.shapes ?? [])];
-        const fromIdx = arr.findIndex((s) => s.id === draggedEntry.id);
-        const toIdx = arr.findIndex((s) => s.id === targetEntry.id);
-        if (fromIdx === -1 || toIdx === -1) return;
-        const [moved] = arr.splice(fromIdx, 1);
-        arr.splice(toIdx, 0, moved);
-        actions.updateIllustrationSpread(selectedSpreadId, { shapes: arr });
       } else if (entryType === "raw_textbox") {
         const arr = [...(spread.raw_textboxes ?? [])];
         const fromIdx = arr.findIndex((t) => t.id === draggedEntry.id);
@@ -294,11 +317,12 @@ export function SpreadsSidebar({
           raw_textboxes: arr,
         });
       }
+      // NOTE: no `shape` branch — shape reorder intentionally removed (see doc-comment above).
 
       setDragIndex(null);
       setDragLayerLabel(null);
     },
-    [dragIndex, dragLayerLabel, spread, actions, selectedSpreadId]
+    [dragIndex, dragLayerLabel, spread, actions, selectedSpreadId, isEditable]
   );
 
   const handleDragEnd = useCallback(() => {
@@ -308,6 +332,13 @@ export function SpreadsSidebar({
 
   const handleAddElement = useCallback(
     (type: SpreadElementType) => {
+      // Lock-on-click gate: adding an element is an in-spread edit → require the SCENE lock.
+      if (!isEditable) {
+        log.debug("handleAddElement", "blocked — spread not held", { type });
+        toastLockRequired();
+        setIsAddOpen(false);
+        return;
+      }
       log.info("handleAddElement", "adding", { type });
 
       if (type === "raw_image") {
@@ -336,7 +367,7 @@ export function SpreadsSidebar({
 
       setIsAddOpen(false);
     },
-    [actions, selectedSpreadId, langCode, bookShape, bookTypography, onItemSelect]
+    [actions, selectedSpreadId, langCode, bookShape, bookTypography, onItemSelect, isEditable]
   );
 
   // Filter toggles
@@ -394,12 +425,20 @@ export function SpreadsSidebar({
 
         <span className="flex-1 font-semibold text-sm">Elements</span>
 
-        <Popover open={isAddOpen} onOpenChange={setIsAddOpen}>
+        {/* Add element — 2-state (never hidden): disabled + greyed when the spread is not held. */}
+        <Popover open={isAddOpen} onOpenChange={(o) => isEditable && setIsAddOpen(o)}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="p-1 rounded hover:bg-muted transition-colors"
+              className={cn(
+                "p-1 rounded transition-colors",
+                isEditable
+                  ? "hover:bg-muted"
+                  : "opacity-40 cursor-not-allowed"
+              )}
               aria-label="Add element"
+              disabled={!isEditable}
+              title={isEditable ? "Add element" : "Click this spread to edit"}
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -433,6 +472,7 @@ export function SpreadsSidebar({
                   entry={entry}
                   index={index}
                   isSelected={selectedItemId?.id === entry.id}
+                  isEditable={isEditable}
                   editingId={editingItemId}
                   editValue={editValue}
                   onEditValueChange={setEditValue}

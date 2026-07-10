@@ -21,15 +21,26 @@ import {
   updateBranchLocaleAction,
   deleteBranchLocaleAction,
 } from './illustration-branching-helpers';
+// ADR-044 §Revision 2026-07-10 (SCENE per-spread HELD session): the SCENE space now holds ONE
+// per-spread lock (step 2 / rtype 6) and saves the WHOLE scene owned-key sub-tree (SCENE_OWNED_KEYS)
+// on release / saveNow. The IN-SPREAD content mutators below (raw_images / raw_textboxes / a
+// spread-META edit via updateIllustrationSpread — manuscript / pages / branch_setting / etc.)
+// therefore ONLY mutate + dirty; their former per-node fire-and-forget gateway saves
+// (`persistSceneImageCollab` / `persistSceneTextboxCollab` / the `persistSpreadCollab(…,3)` edit)
+// were REMOVED so the held-session save-on-release is the SINGLE writer for these keys (no
+// double-write / lost-write). SPREAD-LEVEL COLLECTION ops — CREATE (action 2), DELETE (action 4),
+// REORDER — CANNOT be expressed by a node-scoped release-save (a released deleted node has no node
+// to save; a fresh spread may be non-dirty at release; a reorder is cross-node), so they KEEP the
+// explicit `persistSpreadCollab(…,2)` / `persistSpreadDeleteCollab` / `persistSpreadReorderCollab`
+// path. `revertSceneOwnedSubtree` below is the held-session `onLost` revert (mirror of
+// `revertRetouchOwnedSubtree`). NOTE `shapes` is a RETOUCH-owned key — the SCENE space no longer
+// writes it through the rtype-6 merge (the sidebar shape-reorder was removed).
 import {
   persistSpreadCollab,
   persistSpreadDeleteCollab,
   persistSpreadReorderCollab,
-  persistSceneImageCollab,
-  persistSceneImageDeleteCollab,
-  persistSceneTextboxCollab,
-  persistSceneTextboxDeleteCollab,
 } from './collab-scene-save-helper';
+import { SCENE_OWNED_KEYS } from './collab-owned-subtree';
 
 const log = createLogger('Store', 'IllustrationSlice');
 
@@ -68,8 +79,10 @@ export const createIllustrationSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: persist the whole spread node (edit, scope:'node') — no-op solo.
-    void persistSpreadCollab(get, spreadId, 3);
+    // collab: spread-META edit (manuscript / pages / branch_setting / raw_* array replace) — mutate
+    // + dirty only; the SCENE per-spread held session saves the owned sub-tree on release (ADR-044).
+    // The former `persistSpreadCollab(get, spreadId, 3)` per-node save was REMOVED (held session is
+    // the single writer). `shapes` is no longer passed here (scene sidebar shape-reorder removed).
   },
 
   deleteIllustrationSpread: (spreadId) => {
@@ -184,8 +197,8 @@ export const createIllustrationSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: persist the new raw_image node (create, scope:'node') — no-op solo.
-    void persistSceneImageCollab(get, spreadId, image.id, 2);
+    // collab: in-spread content add — mutate + dirty only; SCENE held session saves raw_images on
+    // release (ADR-044). Former `persistSceneImageCollab(…,2)` per-node save REMOVED.
   },
 
   updateRawImage: (spreadId, imageId, updates) => {
@@ -200,8 +213,8 @@ export const createIllustrationSlice: StateCreator<
         }
       }
     });
-    // collab: persist the whole raw_image node (edit, scope:'node') — no-op solo.
-    void persistSceneImageCollab(get, spreadId, imageId, 3);
+    // collab: in-spread content edit — mutate + dirty only; SCENE held session saves raw_images on
+    // release (ADR-044). Former `persistSceneImageCollab(…,3)` per-node save REMOVED.
   },
 
   deleteRawImage: (spreadId, imageId) => {
@@ -213,8 +226,8 @@ export const createIllustrationSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: persist the removal (delete, scope:'collection') — no-op solo.
-    void persistSceneImageDeleteCollab(spreadId, imageId);
+    // collab: in-spread child delete — mutate + dirty only; the SCENE held session captures the
+    // shortened raw_images array on release (ADR-044). Former per-collection delete save REMOVED.
   },
 
   // --- Raw Textboxes (illustration phase, player_visible always false) ---
@@ -229,8 +242,8 @@ export const createIllustrationSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: persist the new raw_textbox node (create, whole node, scope:'node') — no-op solo.
-    void persistSceneTextboxCollab(get, spreadId, textbox.id, 2);
+    // collab: in-spread content add — mutate + dirty only; SCENE held session saves raw_textboxes on
+    // release (ADR-044). Former `persistSceneTextboxCollab(…,2)` per-node save REMOVED.
   },
 
   updateRawTextbox: (spreadId, textboxId, updates) => {
@@ -245,9 +258,9 @@ export const createIllustrationSlice: StateCreator<
         }
       }
     });
-    // collab: persist the edit (locale-scoped `[locale]` sub-object when `updates` carries a
-    // language_key, else the whole node; scope:'node') — no-op solo.
-    void persistSceneTextboxCollab(get, spreadId, textboxId, 3, updates);
+    // collab: in-spread content edit (locale-scoped or node-level) — mutate + dirty only; SCENE held
+    // session saves raw_textboxes on release (ADR-044). Former `persistSceneTextboxCollab(…,3)`
+    // per-node save REMOVED.
   },
 
   deleteRawTextbox: (spreadId, textboxId) => {
@@ -259,8 +272,8 @@ export const createIllustrationSlice: StateCreator<
         state.sync.isDirty = true;
       }
     });
-    // collab: persist the removal (delete, scope:'collection') — no-op solo.
-    void persistSceneTextboxDeleteCollab(spreadId, textboxId);
+    // collab: in-spread child delete — mutate + dirty only; the SCENE held session captures the
+    // shortened raw_textboxes array on release (ADR-044). Former per-collection delete save REMOVED.
   },
 
   // --- Clear ---
@@ -301,4 +314,32 @@ export const createIllustrationSlice: StateCreator<
   deleteBranchSettingLocale: (spreadId, languageKey) => set((state) => deleteBranchSettingLocaleAction(state, spreadId, languageKey)),
   updateBranchLocale: (spreadId, branchIndex, languageKey, content) => set((state) => updateBranchLocaleAction(state, spreadId, branchIndex, languageKey, content)),
   deleteBranchLocale: (spreadId, branchIndex, languageKey) => set((state) => deleteBranchLocaleAction(state, spreadId, branchIndex, languageKey)),
+
+  // --- Held-session onLost revert (SCENE per-spread held session — ADR-044 §Revision 2026-07-10) ---
+  //
+  // Mirror of `revertRetouchOwnedSubtree` for the SCENE partition. When the SCENE per-spread lock is
+  // LOST mid-edit (heartbeat 409), the held-session `onLost` writes the pre-edit baseline OWNED
+  // sub-tree back so my un-saved edits don't linger. `baselineSubtree` = a structuredClone of
+  // `extractOwnedSubtree(spread, SCENE_OWNED_KEYS)` captured at acquire. For every SCENE owned key:
+  // present in baseline → restore it; absent (undefined at acquire) → delete what I added. RETOUCH
+  // keys (disjoint partition) are left untouched.
+  revertSceneOwnedSubtree: (spreadId, baselineSubtree) =>
+    set((state) => {
+      const spread = state.illustration.spreads.find((s) => s.id === spreadId);
+      if (!spread) {
+        log.warn('revertSceneOwnedSubtree', 'spread not found — skip revert', { spreadId });
+        return;
+      }
+      const base = (baselineSubtree ?? {}) as Record<string, unknown>;
+      const target = spread as unknown as Record<string, unknown>;
+      for (const key of SCENE_OWNED_KEYS) {
+        if (key in base) target[key] = base[key];
+        else delete target[key];
+      }
+      state.sync.isDirty = true;
+      log.info('revertSceneOwnedSubtree', 'reverted scene sub-tree to baseline', {
+        spreadId,
+        keys: Object.keys(base).length,
+      });
+    }),
 });

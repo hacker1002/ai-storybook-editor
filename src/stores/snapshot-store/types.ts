@@ -345,6 +345,10 @@ export interface IllustrationSlice {
   deleteBranchSettingLocale: (spreadId: string, languageKey: string) => void;
   updateBranchLocale: (spreadId: string, branchIndex: number, languageKey: string, content: BranchLocalizedContent) => void;
   deleteBranchLocale: (spreadId: string, branchIndex: number, languageKey: string) => void;
+
+  // Held-session onLost revert — restore the SCENE owned-key sub-tree of a spread to a pre-edit
+  // baseline (ADR-044 §Revision 2026-07-10; mirror of RetouchSlice.revertRetouchOwnedSubtree).
+  revertSceneOwnedSubtree: (spreadId: string, baselineSubtree: unknown) => void;
 }
 
 // TypographyApplySlice — cross-cutting "Force Apply" engine. No own state;

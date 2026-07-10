@@ -14,6 +14,9 @@ import { ELEMENT_TYPE_CONFIG, type ElementListEntry } from "./utils";
 interface SpreadsSidebarListItemProps {
   entry: ElementListEntry;
   isSelected: boolean;
+  /** Whether the active spread's SCENE lock is held (ADR-044). Gates drag-reorder + rename here;
+   *  when false the row is display-only (greyed affordances, never hidden). */
+  isEditable: boolean;
   editingId: string | null;
   onSelect: () => void;
   onEditStart: () => void;
@@ -31,6 +34,7 @@ interface SpreadsSidebarListItemProps {
 export function SpreadsSidebarListItem({
   entry,
   isSelected,
+  isEditable,
   editingId,
   onSelect,
   onEditStart,
@@ -46,8 +50,22 @@ export function SpreadsSidebarListItem({
 }: SpreadsSidebarListItemProps) {
   const isEditing = editingId === entry.id;
   const isPage = entry.type === "page";
+  // `shapes` is a RETOUCH-owned key — its ordering moved to the Objects space (ADR-044). Shape rows
+  // are display-only here: the reorder control shows greyed/disabled (never hidden).
+  const isShape = entry.type === "shape";
   // Textbox title is auto-derived, page backgrounds are fixed — renaming disabled
   const isRenameable = entry.type !== "raw_textbox" && !isPage;
+  // Drag-reorder is an in-spread SCENE edit → only for raw_image/raw_textbox while the lock is held.
+  const isDraggable = !isPage && !isShape && isEditable;
+  // The reorder handle is shown (never hidden) for non-page rows, but greyed/disabled when it is not
+  // an actionable reorder (shape row, or spread not held).
+  const showGrip = !isPage;
+  const gripDisabled = isShape || !isEditable;
+  const gripTitle = isShape
+    ? "Shape order is managed in the Objects space"
+    : !isEditable
+      ? "Click this spread to edit"
+      : "Drag to reorder";
   const config = ELEMENT_TYPE_CONFIG[entry.type];
   const Icon = config.icon;
 
@@ -59,7 +77,7 @@ export function SpreadsSidebarListItem({
         dragIndex === index && "opacity-40"
       )}
       onClick={onSelect}
-      draggable={!isPage}
+      draggable={isDraggable}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         onDragStart(index);
@@ -73,9 +91,19 @@ export function SpreadsSidebarListItem({
       role="option"
       aria-selected={isSelected}
     >
-      {/* Drag handle (hidden for pages) */}
-      {!isPage && (
-        <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100" />
+      {/* Drag handle (hidden only for pages). Greyed/disabled for shape rows + when not held. */}
+      {showGrip && (
+        <span title={gripTitle} className="flex-shrink-0 inline-flex">
+          <GripVertical
+            className={cn(
+              "w-3.5 h-3.5",
+              gripDisabled
+                ? "text-muted-foreground/50 opacity-40 cursor-not-allowed"
+                : "text-muted-foreground opacity-0 group-hover:opacity-100"
+            )}
+            aria-hidden="true"
+          />
+        </span>
       )}
 
       {/* Type icon */}
@@ -111,7 +139,7 @@ export function SpreadsSidebarListItem({
         <span className="flex-1 truncate min-w-0">{entry.title}</span>
       )}
 
-      {/* Hover actions */}
+      {/* Hover actions — rename. Disabled + greyed when the spread is not held (2-state, never hidden). */}
       {isRenameable && (
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
           <Tooltip>
@@ -122,13 +150,17 @@ export function SpreadsSidebarListItem({
                   e.stopPropagation();
                   onEditStart();
                 }}
-                className="p-0.5 rounded hover:bg-muted"
+                disabled={!isEditable}
+                className={cn(
+                  "p-0.5 rounded",
+                  isEditable ? "hover:bg-muted" : "opacity-40 cursor-not-allowed"
+                )}
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
-              Rename
+              {isEditable ? "Rename" : "Click this spread to edit"}
             </TooltipContent>
           </Tooltip>
         </div>

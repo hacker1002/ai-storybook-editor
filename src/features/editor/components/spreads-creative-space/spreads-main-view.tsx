@@ -37,6 +37,7 @@ import {
   mergeItems,
 } from '@/utils/template-layout-utils';
 import { createLogger } from '@/utils/logger';
+import { toastLockRequired } from '@/utils/collab-save-toasts';
 import { useInteractionLayerContext } from '@/features/editor/contexts/interaction-layer-provider';
 import { useGlobalHotkey } from '@/features/editor/contexts/use-global-hotkey';
 import { SpreadsImageToolbar } from './spreads-image-toolbar';
@@ -96,7 +97,15 @@ interface SpreadsMainViewProps {
   selectedSpreadId: string;
   selectedItemId: SelectedItem | null;
   onSpreadSelect: (spreadId: string) => void;
+  /** USER-initiated spread selection (filmstrip/grid click) → the per-spread SCENE held-session
+   *  lock-on-click seam (ADR-044). Distinct from `onSpreadSelect`, which also fires programmatically. */
+  onSpreadUserSelect?: (spreadId: string) => void;
   onItemSelect: (item: SelectedItem | null) => void;
+  /** Whether the active spread is currently held by THIS editor's SCENE lock. Gates all in-spread
+   *  content editability (grey-out when not held — lock-on-click). */
+  spreadEditable: boolean;
+  /** Held-session explicit save (forwarded to the illustration Edit-image modal commit). */
+  onCommitSave?: () => Promise<boolean>;
   viewMode: ViewMode;
   zoomLevel: number;
   columnsPerRow: number;
@@ -109,7 +118,10 @@ export function SpreadsMainView({
   selectedSpreadId,
   selectedItemId,
   onSpreadSelect,
+  onSpreadUserSelect,
   onItemSelect,
+  spreadEditable,
+  onCommitSave,
   viewMode,
   zoomLevel,
   columnsPerRow,
@@ -306,6 +318,26 @@ export function SpreadsMainView({
     [actions, illustrationSpreads, allLayouts, langCode, bookTypography]
   );
 
+  // Lock-on-click gate (ADR-044): every IN-SPREAD scene write (canvas raw_image / raw_textbox /
+  // shape / page add·update·delete, incl. the Generate modal's image updates which route here)
+  // flows through onUpdateSpreadItem → handleSpreadItemAction; block it when this editor does not
+  // hold the spread's SCENE lock (else the mutation dirties the node but the held session never
+  // saves it). Single choke point for drag/resize/inline-edit/delete on the canvas.
+  const gatedSpreadItemAction = useCallback(
+    (params: SpreadItemActionUnion) => {
+      if (!spreadEditable) {
+        log.debug('gatedSpreadItemAction', 'blocked — spread not held', {
+          itemType: params.itemType,
+          action: params.action,
+        });
+        toastLockRequired();
+        return;
+      }
+      handleSpreadItemAction(params);
+    },
+    [spreadEditable, handleSpreadItemAction]
+  );
+
   // === Generate image modal state ===
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [generateModalImageId, setGenerateModalImageId] = useState<string | null>(null);
@@ -369,6 +401,12 @@ export function SpreadsMainView({
         log.warn('handleExtractCreateImages', 'no source image — ignored', { count: results.length });
         return;
       }
+      // Lock-on-click gate: crops spawn new raw_images (in-spread content) → require the SCENE lock.
+      if (!spreadEditable) {
+        log.debug('handleExtractCreateImages', 'blocked — spread not held', { count: results.length });
+        toastLockRequired();
+        return;
+      }
       buildExtractImages(results, extractModalImage, selectedSpreadId, illustrationSpreads, actions, {
         addImage: actions.addRawImage,
         zTier: null,
@@ -378,7 +416,7 @@ export function SpreadsMainView({
         spreadId: selectedSpreadId,
       });
     },
-    [extractModalImage, selectedSpreadId, illustrationSpreads, actions]
+    [extractModalImage, selectedSpreadId, illustrationSpreads, actions, spreadEditable]
   );
 
   // ── Crop presets (books.crop_presets[]) — controlled persistence via updateBook ──
@@ -452,6 +490,20 @@ export function SpreadsMainView({
     [actions, illustrationSpreads, selectedSpreadId, onItemSelect]
   );
 
+  // Gate duplicate (covers BOTH the toolbar Clone action AND the Ctrl/Cmd+D hotkey — the hotkey
+  // bypasses toolbar-visibility gating, so it must be blocked here when the spread is not held).
+  const gatedDuplicateItem = useCallback(
+    (itemType: 'raw_image' | 'raw_textbox' | 'shape', itemId: string) => {
+      if (!spreadEditable) {
+        log.debug('gatedDuplicateItem', 'blocked — spread not held', { itemType, itemId });
+        toastLockRequired();
+        return;
+      }
+      handleDuplicateItem(itemType, itemId);
+    },
+    [spreadEditable, handleDuplicateItem]
+  );
+
   const { stackRef } = useInteractionLayerContext();
 
   useGlobalHotkey(
@@ -470,12 +522,12 @@ export function SpreadsMainView({
         return;
       }
       log.debug('useGlobalHotkey', 'ctrl-d duplicating', { type: selectedItemId.type, id: selectedItemId.id });
-      handleDuplicateItem(
+      gatedDuplicateItem(
         selectedItemId.type as 'raw_image' | 'raw_textbox' | 'shape',
         selectedItemId.id
       );
     },
-    [selectedItemId, handleDuplicateItem, stackRef]
+    [selectedItemId, gatedDuplicateItem, stackRef]
   );
 
   // === Toolbar render props ===
@@ -488,11 +540,11 @@ export function SpreadsMainView({
           onGenerateImage: () => openGenerateModal(context.item),
           onEditImage: () => openEditModal(context.item),
           onExtractImage: () => openExtractModal(context.item),
-          onClone: () => handleDuplicateItem('raw_image', context.item.id),
+          onClone: () => gatedDuplicateItem('raw_image', context.item.id),
         }}
       />
     ),
-    [openGenerateModal, openEditModal, openExtractModal, handleDuplicateItem]
+    [openGenerateModal, openEditModal, openExtractModal, gatedDuplicateItem]
   );
 
   const renderIllustrationTextToolbar = useCallback(
@@ -500,11 +552,11 @@ export function SpreadsMainView({
       <SpreadsTextToolbar
         context={{
           ...context,
-          onClone: () => handleDuplicateItem('raw_textbox', context.item.id),
+          onClone: () => gatedDuplicateItem('raw_textbox', context.item.id),
         }}
       />
     ),
-    [handleDuplicateItem]
+    [gatedDuplicateItem]
   );
 
   const renderIllustrationShapeToolbar = useCallback(
@@ -512,11 +564,11 @@ export function SpreadsMainView({
       <SpreadsShapeToolbar
         context={{
           ...context,
-          onClone: () => handleDuplicateItem('shape', context.item.id),
+          onClone: () => gatedDuplicateItem('shape', context.item.id),
         }}
       />
     ),
-    [handleDuplicateItem]
+    [gatedDuplicateItem]
   );
 
   const renderIllustrationPageToolbar = useCallback(
@@ -619,16 +671,20 @@ export function SpreadsMainView({
         renderPageToolbar={renderIllustrationPageToolbar}
         availableLayouts={availableLayouts}
         onSpreadSelect={onSpreadSelect}
+        onSpreadUserSelect={onSpreadUserSelect}
         onViewModeChange={onViewModeChange}
         onZoomChange={onZoomChange}
         onColumnsChange={onColumnsChange}
         onSpreadReorder={handleSpreadReorder}
         onSpreadAdd={handleSpreadAdd}
         onDeleteSpread={handleDeleteSpread}
-        onUpdateSpreadItem={handleSpreadItemAction}
-        isEditable={true}
+        onUpdateSpreadItem={gatedSpreadItemAction}
+        // Lock-on-click: in-spread content is editable only while THIS editor holds the spread's
+        // SCENE lock. Spread CREATE stays ungated (add a spread); spread DELETE is gated (must hold
+        // it) → then explicit collection save; spread REORDER stays ungated (out of held scope).
+        isEditable={spreadEditable}
         canAddSpread={true}
-        canDeleteSpread={true}
+        canDeleteSpread={spreadEditable}
         canReorderSpread={true}
         canResizeItem={true}
         canDragItem={true}
@@ -657,6 +713,7 @@ export function SpreadsMainView({
           spreadId={selectedSpreadId}
           imageId={editModalImageId}
           enabledTools={SPACE_TOOL_MATRIX.raw.edit}
+          onCommitSave={onCommitSave}
         />
       )}
 

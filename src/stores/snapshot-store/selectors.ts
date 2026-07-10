@@ -466,6 +466,8 @@ export const useSnapshotActions = () =>
       deleteBranchSettingLocale: s.deleteBranchSettingLocale,
       updateBranchLocale: s.updateBranchLocale,
       deleteBranchLocale: s.deleteBranchLocale,
+      // SCENE per-spread held-session onLost revert (ADR-044)
+      revertSceneOwnedSubtree: s.revertSceneOwnedSubtree,
       // Typography Force Apply (cross-step)
       applyTypographyToStepTextboxes: s.applyTypographyToStepTextboxes,
       // Retouch (playable layers on illustration.spreads)
