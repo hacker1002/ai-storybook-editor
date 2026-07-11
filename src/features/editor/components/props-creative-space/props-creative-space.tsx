@@ -24,7 +24,13 @@ import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resourc
 import { useRegisterEditCommit } from '@/stores/edit-session-status-store';
 import { useEditHistoryStore } from '@/stores/edit-history-store';
 import { buildItemKey } from '@/stores/edit-history-store/item-key';
-import type { LockTarget, SavePayload } from '@/stores/resource-lock-store';
+import {
+  useIsLockedByOther,
+  useLockHolderName,
+  type LockTarget,
+  type SavePayload,
+} from '@/stores/resource-lock-store';
+import { LockedByOtherOverlay } from '@/features/editor/components/shared-components/sketch-locked-by-other-overlay';
 
 const log = createLogger('Editor', 'PropsCreativeSpace');
 
@@ -113,6 +119,15 @@ export function PropsCreativeSpace() {
 
   const entityEditable = lockStatus === 'held' && lockedKey === selectedPropKey && lockedKey !== null;
 
+  // Peer-lock (advisory) for the DISPLAYED prop: another editor holds its held lock → veil the content
+  // + suppress the acquire-on-click. resource_id '' when nothing is shown (never matches → free).
+  const displayedLockTarget = useMemo<LockTarget>(
+    () => ({ step: 2, resource_type: 4, resource_id: selectedPropKey ?? '', locale: null }),
+    [selectedPropKey],
+  );
+  const displayedLockedByOther = useIsLockedByOther(displayedLockTarget);
+  const displayedHolder = useLockHolderName(displayedLockTarget);
+
   // Commit-now for the header "Unsaved" button: release the held lock → save + unlock (keep display).
   const commitEntity = useCallback(() => {
     log.info('commitEntity', 'commit held prop session (save + unlock)');
@@ -120,8 +135,18 @@ export function PropsCreativeSpace() {
   }, []);
   useRegisterEditCommit(commitEntity);
 
+  // USER browse (sidebar row click / arrow-nav) → DISPLAY only, no lock (browse ≠ lock — mirrors
+  // spreads `handleSpreadSelect`, ADR-044 §Revision 2026-07-11). Leaving a HELD prop commits it via
+  // the `prev && prev !== key` guard; the newly shown prop stays READ-ONLY until a real interaction.
   const handlePropSelect = useCallback((key: string) => {
-    log.info('handlePropSelect', 'user selected prop — set held target', { key });
+    log.info('handlePropSelect', 'user browsed prop — display only, no lock', { key });
+    setUserSelectedPropKey(key);
+    setLockedKey((prev) => (prev && prev !== key ? null : prev));
+  }, []);
+
+  // USER interact (name edit / sidebar-detail / content-area click) → acquire this prop's held lock.
+  const handlePropInteract = useCallback((key: string) => {
+    log.info('handlePropInteract', 'user interacted — acquire held lock', { key });
     setUserSelectedPropKey(key);
     setLockedKey(key);
   }, []);
@@ -145,10 +170,20 @@ export function PropsCreativeSpace() {
         propKeys={propKeys}
         selectedPropKey={selectedPropKey}
         onPropSelect={handlePropSelect}
+        onPropInteract={handlePropInteract}
         editable={entityEditable}
         onEntityDeleted={handleEntityDeleted}
       />
-      <div className="relative flex-1 overflow-hidden">
+      <div
+        className="relative flex-1 overflow-hidden"
+        // Click anywhere in the content area = intent to edit → acquire the displayed prop's lock
+        // (lock-on-interact). Capture-phase, guarded so holding this prop makes it a no-op.
+        onPointerDownCapture={() => {
+          if (selectedPropKey && !displayedLockedByOther && lockedKey !== selectedPropKey) {
+            handlePropInteract(selectedPropKey);
+          }
+        }}
+      >
         {/* Edit affordance is global now — the header owns undo/redo + the Unsaved/Saved status
             (ADR-044/045). The canvas/sidebar grey out via editable=false until the lock is held. */}
         {selectedPropKey ? (
@@ -163,6 +198,12 @@ export function PropsCreativeSpace() {
           <div className="flex items-center justify-center h-full">
             <p className="text-muted-foreground">No prop selected</p>
           </div>
+        )}
+        {/* Peer-lock veil: another editor holds the displayed prop. `interactive` → the veil captures
+            pointer events so nothing beneath (download / zoom / version-select / edit / upload) can be
+            clicked through while someone else is editing. */}
+        {displayedLockedByOther && (
+          <LockedByOtherOverlay holderName={displayedHolder} interactive />
         )}
       </div>
     </div>

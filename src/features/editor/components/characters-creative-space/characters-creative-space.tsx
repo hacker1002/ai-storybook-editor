@@ -23,7 +23,13 @@ import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resourc
 import { useRegisterEditCommit } from '@/stores/edit-session-status-store';
 import { useEditHistoryStore } from '@/stores/edit-history-store';
 import { buildItemKey } from '@/stores/edit-history-store/item-key';
-import type { LockTarget, SavePayload } from '@/stores/resource-lock-store';
+import {
+  useIsLockedByOther,
+  useLockHolderName,
+  type LockTarget,
+  type SavePayload,
+} from '@/stores/resource-lock-store';
+import { LockedByOtherOverlay } from '@/features/editor/components/shared-components/sketch-locked-by-other-overlay';
 
 const log = createLogger('Editor', 'CharactersCreativeSpace');
 
@@ -122,6 +128,16 @@ export function CharactersCreativeSpace() {
   // Editable only while THIS editor holds the lock for the character on screen (grey-out otherwise).
   const entityEditable = lockStatus === 'held' && lockedKey === selectedCharacterKey && lockedKey !== null;
 
+  // Peer-lock (advisory) for the DISPLAYED character: another editor holds its held lock → veil the
+  // content + suppress the acquire-on-click. resource_id '' when nothing is shown (never matches a
+  // real key → free). The acquire 409 stays the real authority; this mirrors the realtime registry.
+  const displayedLockTarget = useMemo<LockTarget>(
+    () => ({ step: 2, resource_type: 3, resource_id: selectedCharacterKey ?? '', locale: null }),
+    [selectedCharacterKey],
+  );
+  const displayedLockedByOther = useIsLockedByOther(displayedLockTarget);
+  const displayedHolder = useLockHolderName(displayedLockTarget);
+
   // Commit-now for the header "Unsaved" button: release the held lock → save + unlock (keep display).
   const commitEntity = useCallback(() => {
     log.info('commitEntity', 'commit held character session (save + unlock)');
@@ -129,10 +145,23 @@ export function CharactersCreativeSpace() {
   }, []);
   useRegisterEditCommit(commitEntity);
 
-  // USER-initiated select → set BOTH the display key and the held lock target (lock-on-click). The
-  // held session release-saves the OLD character then acquires the new one when the key changes.
+  // USER browse (sidebar row click / arrow-nav) → set DISPLAY only; does NOT acquire the lock
+  // (browse ≠ lock — mirrors spreads `handleSpreadSelect`, ADR-044 §Revision 2026-07-11). Leaving a
+  // HELD entity commits it: null the held target so the hook release-saves the OLD node; the newly
+  // shown entity stays READ-ONLY until a genuine interaction. The `prev && prev !== key` guard makes
+  // mount/auto-select + re-selecting the same key a no-op (nothing held yet → stays null).
   const handleCharacterSelect = useCallback((key: string) => {
-    log.info('handleCharacterSelect', 'user selected character — set held target', { key });
+    log.info('handleCharacterSelect', 'user browsed character — display only, no lock', { key });
+    setUserSelectedCharacterKey(key);
+    setLockedKey((prev) => (prev && prev !== key ? null : prev));
+  }, []);
+
+  // USER interact (edit-intent: name edit, sidebar-detail/content-area click, variant edit/upload)
+  // → acquire THIS entity's held lock (lock-on-interact). Sets the display key too so a sidebar-detail
+  // interaction on a not-yet-displayed row both shows and locks it. Idempotent: re-firing while
+  // already holding `key` is a setState no-op (guarded at the call sites to avoid churn).
+  const handleCharacterInteract = useCallback((key: string) => {
+    log.info('handleCharacterInteract', 'user interacted — acquire held lock', { key });
     setUserSelectedCharacterKey(key);
     setLockedKey(key);
   }, []);
@@ -162,10 +191,21 @@ export function CharactersCreativeSpace() {
         characterKeys={characterKeys}
         selectedCharacterKey={selectedCharacterKey}
         onCharacterSelect={handleCharacterSelect}
+        onCharacterInteract={handleCharacterInteract}
         editable={entityEditable}
         onEntityDeleted={handleEntityDeleted}
       />
-      <div className="relative flex-1 overflow-hidden">
+      <div
+        className="relative flex-1 overflow-hidden"
+        // Click anywhere in the content area = intent to edit → acquire the displayed entity's lock
+        // (lock-on-interact). Capture-phase so it runs before child handlers (and survives their
+        // stopPropagation); guarded so once we already hold this entity it's a setState no-op.
+        onPointerDownCapture={() => {
+          if (selectedCharacterKey && !displayedLockedByOther && lockedKey !== selectedCharacterKey) {
+            handleCharacterInteract(selectedCharacterKey);
+          }
+        }}
+      >
         {/* Edit affordance is global now — the header owns undo/redo + the Unsaved/Saved status
             (ADR-044/045). The canvas/sidebar grey out via editable=false until the lock is held. */}
         {selectedCharacterKey ? (
@@ -182,6 +222,12 @@ export function CharactersCreativeSpace() {
           <div className="flex items-center justify-center h-full">
             <p className="text-muted-foreground">No character selected</p>
           </div>
+        )}
+        {/* Peer-lock veil: another editor holds the displayed character. `interactive` → the veil
+            CAPTURES pointer events (cursor-not-allowed) so nothing beneath (download / zoom preview /
+            version-select / edit / upload) can be clicked through while someone else is editing. */}
+        {displayedLockedByOther && (
+          <LockedByOtherOverlay holderName={displayedHolder} interactive />
         )}
       </div>
     </div>
