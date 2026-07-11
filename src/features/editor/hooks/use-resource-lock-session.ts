@@ -31,6 +31,7 @@ import {
   type SavePayload,
   type SessionStatus,
 } from '@/stores/resource-lock-store';
+import { useEditSessionStatusStore } from '@/stores/edit-session-status-store';
 
 const log = createLogger('Editor', 'useResourceLockSession');
 
@@ -85,6 +86,12 @@ export function useResourceLockSession(args: UseLockSessionArgs): UseLockSession
     const key = serialized;
     let cancelled = false;
     let baseline: unknown = null;
+    // Order-independent "did WE take & keep this lock" flag, PAIRED with beginHold/endHold on the
+    // shared edit-session-status-store so the header shows Unsaved → Saving… → Saved for sketch
+    // exactly like the 5 held-session spaces (single-sourced status). Kept separate from the
+    // `myLocks.has` release guard below (unchanged) so the hold ref-count can never leak even when a
+    // teardown-order race has already wiped `myLocks`.
+    let held = false;
     log.info('acquire', 'session start', { key });
 
     const store = useResourceLockStore.getState();
@@ -106,6 +113,8 @@ export function useResourceLockSession(args: UseLockSessionArgs): UseLockSession
         // Held → snapshot the baseline for the release-time dirty diff.
         baseline = structuredClone(cbRef.current.getNode());
         store.addMyLock(target); // idempotent — acquire() already added it
+        held = true;
+        useEditSessionStatusStore.getState().beginHold(); // header "Unsaved" until release
         setOutcome({ key, status: 'held' });
         log.info('acquire', 'held', { key });
       })
@@ -122,6 +131,10 @@ export function useResourceLockSession(args: UseLockSessionArgs): UseLockSession
     // Heartbeat 409 → store invokes this cb → caller reverts node + deselects; mark lost.
     store.registerOnLost(key, () => {
       log.warn('onLost', 'lock lost via heartbeat', { key });
+      if (held) {
+        held = false; // stolen → the unmount cleanup must NOT double-endHold
+        useEditSessionStatusStore.getState().endHold();
+      }
       cbRef.current.onLost?.(baseline);
       setOutcome({ key, status: 'lost' });
     });
@@ -129,6 +142,9 @@ export function useResourceLockSession(args: UseLockSessionArgs): UseLockSession
     return () => {
       cancelled = true;
       const s = useResourceLockStore.getState();
+      // Header hold ref-count: symmetric with beginHold above and INDEPENDENT of the myLocks release
+      // guard, so leaving "Unsaved" can never leak even if a teardown-order race wiped myLocks first.
+      if (held) useEditSessionStatusStore.getState().endHold();
       // Not (yet) holding this key — still acquiring, or blocked. Nothing to release;
       // just drop the onLost registration. (Live myLocks read, not a stale closure.)
       if (!s.myLocks.has(key)) {
@@ -139,8 +155,16 @@ export function useResourceLockSession(args: UseLockSessionArgs): UseLockSession
       const node = cbRef.current.getNode();
       const dirty = !dequal(node, baseline);
       log.info('release', 'release-and-save', { key, dirty });
-      // Fire-and-forget: on unmount the component is gone; the lock TTL insures the save.
-      void s.releaseAndSave(target, dirty, dirty ? cbRef.current.buildPayload(node) : undefined);
+      // Drive the header label through the release: Saving… while in flight (dirty), then Saved.
+      // Fire-and-forget on the store side (on unmount the component is gone; the lock TTL insures the
+      // save) but attach a settle handler purely to flip the phase label off the spinner.
+      const ess = useEditSessionStatusStore.getState();
+      if (dirty) ess.markSaving();
+      Promise.resolve(
+        s.releaseAndSave(target, dirty, dirty ? cbRef.current.buildPayload(node) : undefined),
+      )
+        .then(() => ess.markSaved())
+        .catch(() => ess.markSaved());
       s.removeMyLock(target);
       s.unregisterOnLost(key);
     };

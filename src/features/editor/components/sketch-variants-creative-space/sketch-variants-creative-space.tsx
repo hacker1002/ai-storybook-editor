@@ -21,6 +21,7 @@ import { useSketchEntityKeys, useSnapshotActions } from '@/stores/snapshot-store
 import { useCurrentBookId } from '@/stores/book-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
+import { useRegisterEditCommit } from '@/stores/edit-session-status-store';
 import { isLockedByOtherNow, type LockTarget } from '@/stores/resource-lock-store';
 import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
 import { runLockedCollectionSave } from '@/features/editor/utils/structural-lock-collection-save';
@@ -67,6 +68,13 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<ParseSketchEntitiesResult | null>(null);
+
+  // Header "Unsaved" commit for the sketch entity: closing the modal unmounts EditVariantsModal → its
+  // lock hook release-saves the held entity (parity with the 5 held-session spaces' commit-now).
+  // Stable (setter is stable) so the registration effect runs once; also removes the inline-arrow
+  // churn on the modal's onClose below.
+  const closeModal = useCallback(() => setEditingKey(null), []);
+  useRegisterEditCommit(closeModal);
 
   // Derive effective selection in render (NOT an effect): user choice if still valid,
   // else first entity. Keeps focus stable across imports/deletes without set-state loops.
@@ -218,7 +226,7 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
       </div>
 
       {editingKey && (
-        <EditVariantsModal kind={kind} entityKey={editingKey} onClose={() => setEditingKey(null)} />
+        <EditVariantsModal kind={kind} entityKey={editingKey} onClose={closeModal} />
       )}
 
       <AlertDialog open={pendingImport !== null} onOpenChange={(open) => !open && setPendingImport(null)}>

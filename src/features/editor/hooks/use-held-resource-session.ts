@@ -84,13 +84,10 @@ export function useHeldResourceSession(
   const bookId = useResourceLockStore((s) => s.bookId);
   const [outcome, setOutcome] = useState<SessionOutcome | null>(null);
 
-  // Header save-label ownership (ADR-044/045): a mounted collab space switches the header out of
-  // the snapshot auto-save label and onto the session-driven Unsaved → Saving… → Saved cycle.
-  // Ref-counted so it survives StrictMode's mount/unmount/mount and space→space transitions.
-  useEffect(() => {
-    useEditSessionStatusStore.getState().enter();
-    return () => useEditSessionStatusStore.getState().leave();
-  }, []);
+  // NOTE: the collab-space mount signal (enter/leave → `collabUiActive`) is NO LONGER owned here —
+  // it moved to the shared `useCollabPersistSession` (the one hook mounted by ALL 6 collab spaces,
+  // sketch included), so the header label is single-sourced. This hook only drives the per-session
+  // hold + save-phase signals (beginHold/endHold + markSaving/markSaved) on acquire/release below.
 
   // Latest args in a ref (written inside an effect — never the render body).
   const cbRef = useRef(args);
@@ -151,9 +148,8 @@ export function useHeldResourceSession(
         acquired = true;
         setOutcome({ key, status: 'held' });
         log.info('acquire', 'held', { key });
-        // Fresh hold → clear any stale terminal save phase; the active-history key now drives the
-        // header label to "Unsaved" until this session releases.
-        useEditSessionStatusStore.getState().resetPhase();
+        // Fresh hold → header "Unsaved" (holdCount++) and clear any stale terminal save phase.
+        useEditSessionStatusStore.getState().beginHold();
         // Undo nexus: beginSession shares this exact baseline clone.
         cbRef.current.onAcquired?.(target, base);
       })
@@ -170,6 +166,7 @@ export function useHeldResourceSession(
     store.registerOnLost(key, () => {
       log.warn('onLost', 'lock lost via heartbeat', { key });
       acquired = false; // lock stolen → the unmount cleanup must NOT re-release / double-endSession
+      useEditSessionStatusStore.getState().endHold(); // no longer holding → header leaves "Unsaved"
       cbRef.current.onLost?.(baselineRef.current);
       cbRef.current.onReleased?.(target);
       setOutcome({ key, status: 'lost' });
@@ -191,10 +188,13 @@ export function useHeldResourceSession(
       const projected = project(rawNode);
       const dirty = rawNode != null && !dequal(projected, baselineRef.current);
       log.info('release', 'release-and-save', { key, dirty, nodeGone: rawNode == null });
-      // Drive the header label: Saving… while the release-save is in flight, then Saved (both the
-      // dirty save and the clean fast-release resolve to Saved; save errors are toasted by the
-      // gateway path — the label still settles so it never sticks on the spinner).
+      // Drive the header label: leave "Unsaved" (endHold), then Saving… while the release-save is in
+      // flight, then Saved (both the dirty save and the clean fast-release resolve to Saved; save
+      // errors are toasted by the gateway path — the label still settles so it never sticks on the
+      // spinner). endHold + markSaving are synchronous in this cleanup, so the batched render lands on
+      // Saving… (dirty) or Saved (clean), never a flicker back to "Unsaved".
       const ess = useEditSessionStatusStore.getState();
+      ess.endHold();
       if (dirty) ess.markSaving();
       Promise.resolve(
         s.releaseAndSave(

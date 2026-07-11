@@ -35,8 +35,7 @@ import { RemixCreativeSpace } from '../components/remix-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { InteractionLayerProvider } from '../contexts';
 import { EditHistoryBridge } from '../components/edit-history-bridge';
-import { useActiveHistoryKey, useEditHistoryStore } from '@/stores/edit-history-store';
-import { useCollabUiActive, useCollabSavePhase, useEditSessionStatusStore } from '@/stores/edit-session-status-store';
+import { useCollabUiActive, useCollabHolding, useCollabSavePhase, useEditSessionStatusStore } from '@/stores/edit-session-status-store';
 import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
@@ -65,11 +64,14 @@ export function EditorPage() {
   const snapshotLoading = useSnapshotFetchLoading();
   const snapshotError = useSnapshotFetchError();
 
-  // Collab held-session save-label ownership (ADR-044/045): inside a collab creative space the header
-  // reflects the edit session (holding lock → Unsaved, release-save → Saving… → Saved), NOT the 60s
-  // snapshot auto-save loop. Outside those spaces it falls back to the snapshot-derived status.
-  const activeHistoryKey = useActiveHistoryKey();
+  // Collab held-session save-label ownership (ADR-044/045): inside ANY of the 6 collab creative spaces
+  // (5 held-session + both sketch spaces) the header reflects the edit session (holding lock →
+  // Unsaved, release-save → Saving… → Saved), NOT the 60s snapshot auto-save loop. All three signals
+  // are single-sourced in edit-session-status-store (holding is NOT read from the undo edit-history
+  // store — sketch has no edit-history, so that would exclude it). Outside those spaces it falls back
+  // to the snapshot-derived status.
   const collabUiActive = useCollabUiActive();
+  const collabHolding = useCollabHolding();
   const collabSavePhase = useCollabSavePhase();
 
   // Register auto-save timer — must be called exactly once
@@ -201,7 +203,7 @@ export function EditorPage() {
 
   // Derived save status — session-driven inside a collab space, else snapshot-derived.
   const saveStatus: SaveStatus = collabUiActive
-    ? activeHistoryKey != null
+    ? collabHolding
       ? 'dirty' // holding a lock = actively editing → "Unsaved"
       : collabSavePhase === 'saving'
         ? 'auto-saving' // release-save in flight → "Saving..."
@@ -226,8 +228,9 @@ export function EditorPage() {
     // Outside a held session, fall back to the whole-book snapshot draft save. Read from getState so
     // the click uses live values, not the render-closure snapshot.
     const ess = useEditSessionStatusStore.getState();
-    const holding = useEditHistoryStore.getState().activeKey != null;
-    if (ess.mountCount > 0 && holding && ess.commitFn) {
+    // Held-session commit gate reads the single-sourced holdCount (NOT the undo edit-history key —
+    // sketch holds a lock without any edit-history entry, so that check would skip sketch's commit).
+    if (ess.mountCount > 0 && ess.holdCount > 0 && ess.commitFn) {
       log.info('handleManualSave', 'commit held session (save + unlock)');
       ess.commitFn();
       return;

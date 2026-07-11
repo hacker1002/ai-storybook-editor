@@ -12,6 +12,7 @@
 import { useEffect } from 'react';
 import { useResourceLockStore } from '@/stores/resource-lock-store';
 import { useSnapshotStore } from '@/stores/snapshot-store';
+import { useEditSessionStatusStore } from '@/stores/edit-session-status-store';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'useCollabPersistSession');
@@ -20,6 +21,17 @@ const log = createLogger('Editor', 'useCollabPersistSession');
  * @param bookId  the open book (null → no channel; effect is a no-op until it lands).
  */
 export function useCollabPersistSession(bookId: string | null): void {
+  // Header save-label ownership (ADR-044/045) — the ONE choke point for ALL 6 collab spaces (the 5
+  // held-session spaces AND both sketch spaces, which share this hook). A mounted collab space
+  // switches the header off the snapshot auto-save label onto the session-driven Unsaved → Saving…
+  // → Saved cycle (never "Auto-saved"). Ref-counted, so it survives StrictMode's mount/unmount/mount
+  // and space→space transitions. Kept mount-scoped (empty deps) rather than bookId-scoped so the
+  // signal matches the space lifetime, not the async book load.
+  useEffect(() => {
+    useEditSessionStatusStore.getState().enter();
+    return () => useEditSessionStatusStore.getState().leave();
+  }, []);
+
   useEffect(() => {
     if (!bookId) return;
 

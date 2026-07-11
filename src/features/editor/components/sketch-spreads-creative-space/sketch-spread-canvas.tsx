@@ -49,6 +49,7 @@ import {
 import type { SketchTextbox, SketchTextboxContent, SketchSpreadImage } from '@/types/sketch';
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import { useResourceLockSession } from '@/features/editor/hooks/use-resource-lock-session';
+import { useRegisterEditCommit } from '@/stores/edit-session-status-store';
 import {
   useResourceLockStore,
   FALLBACK_HOLDER_NAME,
@@ -416,6 +417,11 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
     onBlocked: onLockBlocked,
     onLost: onLockLost,
   });
+
+  // Header "Unsaved" commit for the sketch spread: deselecting nulls `lockTarget` → the lock hook's
+  // release-saves the held item (parity with the 5 held-session spaces' commit-now). `deselect` is
+  // stable (empty-dep useCallback) so the registration effect runs once.
+  useRegisterEditCommit(deselect);
 
   if (!spread) {
     log.debug('render', 'no spread — render null', { spreadId });
