@@ -59,7 +59,7 @@ interface AppearanceSectionProps {
   sectionId: string;
   editable: boolean;
   onToggle: () => void;
-  onBlur: (field: keyof CharacterAppearance, value: string) => void;
+  onChange: (field: keyof CharacterAppearance, value: string) => void;
 }
 
 function AppearanceSection({
@@ -69,7 +69,7 @@ function AppearanceSection({
   sectionId,
   editable,
   onToggle,
-  onBlur,
+  onChange,
 }: AppearanceSectionProps) {
   const headerId = `${sectionId}-appearance-header`;
   const contentId = `${sectionId}-appearance-content`;
@@ -101,27 +101,27 @@ function AppearanceSection({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-height`}>Height</label>
-              <Input id={`${variantKey}-height`} type="number" defaultValue={appearance.height || ''} placeholder="e.g. 165" className="h-8 text-sm" aria-label="Height" disabled={!editable} onBlur={(e) => onBlur('height', e.target.value)} />
+              <Input id={`${variantKey}-height`} type="number" value={appearance.height || ''} placeholder="e.g. 165" className="h-8 text-sm" aria-label="Height" disabled={!editable} onChange={(e) => onChange('height', e.target.value)} />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-build`}>Build</label>
-              <Input id={`${variantKey}-build`} defaultValue={appearance.build} placeholder="e.g. Athletic" className="h-8 text-sm" aria-label="Build" disabled={!editable} onBlur={(e) => onBlur('build', e.target.value)} />
+              <Input id={`${variantKey}-build`} value={appearance.build ?? ''} placeholder="e.g. Athletic" className="h-8 text-sm" aria-label="Build" disabled={!editable} onChange={(e) => onChange('build', e.target.value)} />
             </div>
           </div>
           {/* Row 2: Hair (full width) */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-hair`}>Hair</label>
-            <Input id={`${variantKey}-hair`} defaultValue={appearance.hair} placeholder="e.g. Long auburn" className="h-8 text-sm" aria-label="Hair" disabled={!editable} onBlur={(e) => onBlur('hair', e.target.value)} />
+            <Input id={`${variantKey}-hair`} value={appearance.hair ?? ''} placeholder="e.g. Long auburn" className="h-8 text-sm" aria-label="Hair" disabled={!editable} onChange={(e) => onChange('hair', e.target.value)} />
           </div>
           {/* Row 3: Eyes (full width) */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-eyes`}>Eyes</label>
-            <Input id={`${variantKey}-eyes`} defaultValue={appearance.eyes} placeholder="e.g. Green" className="h-8 text-sm" aria-label="Eyes" disabled={!editable} onBlur={(e) => onBlur('eyes', e.target.value)} />
+            <Input id={`${variantKey}-eyes`} value={appearance.eyes ?? ''} placeholder="e.g. Green" className="h-8 text-sm" aria-label="Eyes" disabled={!editable} onChange={(e) => onChange('eyes', e.target.value)} />
           </div>
           {/* Row 4: Face (full width) */}
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase" htmlFor={`${variantKey}-face`}>Face</label>
-            <Input id={`${variantKey}-face`} defaultValue={appearance.face} placeholder="e.g. Heart-shaped" className="h-8 text-sm" aria-label="Face" disabled={!editable} onBlur={(e) => onBlur('face', e.target.value)} />
+            <Input id={`${variantKey}-face`} value={appearance.face ?? ''} placeholder="e.g. Heart-shaped" className="h-8 text-sm" aria-label="Face" disabled={!editable} onChange={(e) => onChange('face', e.target.value)} />
           </div>
         </div>
       )}
@@ -152,11 +152,13 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
   const [isUploading, setIsUploading] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(variantData.name);
-  const [selectedIllustrationIndex, setSelectedIllustrationIndex] = useState<number>(() => {
-    const idx = variantData.illustrations.findIndex((ill) => ill.is_selected);
-    return idx >= 0 ? idx : 0;
-  });
-  const [promptText, setPromptText] = useState<string>(variantData.visual_description ?? '');
+  // Selected illustration is DERIVED from the store's is_selected flag (not local state) so an
+  // undo/redo restore of the variant node — or a generate/upload/edit completion — is reflected in
+  // the preview. Thumbnail click writes is_selected back to the store (handleSelectIllustration),
+  // so selection is itself an undoable edit.
+  const selectedIllustrationIndex = Math.max(0, variantData.illustrations.findIndex((ill) => ill.is_selected));
+  // Visual description is controlled from the store (write-on-change) for the same reason.
+  const visualDescription = variantData.visual_description ?? '';
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState('');
   const [appearanceExpanded, setAppearanceExpanded] = useState(false);
@@ -172,12 +174,19 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
   );
   const selectedIllustration = variantData.illustrations[selectedIllustrationIndex];
 
-  const handleBlurSave = () => {
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (!editable) return; // collab gate
-    const trimmed = promptText.trim();
-    if (trimmed === (variantData.visual_description ?? '')) return;
-    log.debug('handleBlurSave', 'save visual_description', { characterKey, variantKey: variantData.key });
-    updateCharacterVariant(characterKey, variantData.key, { visual_description: trimmed });
+    updateCharacterVariant(characterKey, variantData.key, { visual_description: e.target.value });
+  };
+
+  const handleSelectIllustration = (index: number) => {
+    if (!editable) return; // collab gate — selection persists via is_selected (undoable)
+    const target = variantData.illustrations[index];
+    if (!target || target.is_selected) return;
+    log.debug('handleSelectIllustration', 'select', { characterKey, variantKey: variantData.key, index });
+    updateCharacterVariant(characterKey, variantData.key, {
+      illustrations: variantData.illustrations.map((ill, i) => ({ ...ill, is_selected: i === index })),
+    });
   };
 
   // Resolve base variant image URL for non-base variants
@@ -187,11 +196,11 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
 
   // Non-base variants cannot generate without base illustration; all variants need a book art style.
   // Collab: also disabled unless this editor holds the entity lock (`editable`).
-  const isGenerateDisabled = !editable || isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseVariantImageUrl);
+  const isGenerateDisabled = !editable || isProcessing || !visualDescription.trim() || !artStyleId || (!isBase && !baseVariantImageUrl);
 
   const handleGenerate = () => {
     if (!editable) return; // collab gate
-    const trimmedPrompt = promptText.trim();
+    const trimmedPrompt = visualDescription.trim();
     if (!trimmedPrompt || isProcessing) return;
     // Null-guard: require book.artstyle_id (UUID) — contract rejects empty art style with 400.
     if (!artStyleId) {
@@ -280,7 +289,6 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
       const updatedIllustrations = variantData.illustrations.map((ill) => ({ ...ill, is_selected: false }));
       updatedIllustrations.unshift({ media_url: result.publicUrl, created_time: new Date().toISOString(), is_selected: true });
       updateCharacterVariant(characterKey, variantData.key, { illustrations: updatedIllustrations });
-      setSelectedIllustrationIndex(0);
       toast.success('Image uploaded successfully');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
@@ -297,11 +305,11 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
     deleteCharacterVariant(characterKey, variantData.key);
   };
 
-  const handleAppearanceBlur = (field: keyof CharacterAppearance, rawValue: string) => {
+  const handleAppearanceChange = (field: keyof CharacterAppearance, rawValue: string) => {
     if (!editable) return; // collab gate
-    const value = field === 'height' ? Number(rawValue) || 0 : rawValue.trim();
+    const value = field === 'height' ? Number(rawValue) || 0 : rawValue;
     if (value === variantData.appearance[field]) return;
-    log.debug('handleAppearanceBlur', 'save', { characterKey, variantKey: variantData.key, field, value });
+    log.debug('handleAppearanceChange', 'change', { characterKey, variantKey: variantData.key, field });
     updateCharacterVariant(characterKey, variantData.key, {
       appearance: { ...variantData.appearance, [field]: value },
     });
@@ -417,7 +425,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
             isEditPopoverOpen={isEditPopoverOpen}
             editPromptText={editPromptText}
             editRefImages={editRefs.images}
-            onSelectIllustration={setSelectedIllustrationIndex}
+            onSelectIllustration={handleSelectIllustration}
             onDownload={async () => {
               if (!selectedIllustration) return;
               try {
@@ -461,9 +469,8 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
               </div>
             )}
             <Textarea
-              value={promptText}
-              onChange={(e) => setPromptText(e.target.value)}
-              onBlur={handleBlurSave}
+              value={visualDescription}
+              onChange={handleDescriptionChange}
               placeholder="Describe the visual appearance..."
               className="min-h-[80px]"
               disabled={isProcessing || !editable}
@@ -496,7 +503,7 @@ export function VariantItem({ characterKey, variantData, isExpanded, onToggle, e
             sectionId={sectionId}
             editable={editable}
             onToggle={() => setAppearanceExpanded((v) => !v)}
-            onBlur={handleAppearanceBlur}
+            onChange={handleAppearanceChange}
           />
         </div>
       </CollapsibleContent>

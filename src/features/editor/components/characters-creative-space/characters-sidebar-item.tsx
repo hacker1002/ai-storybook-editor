@@ -196,9 +196,12 @@ export function CharactersSidebarItem({
     });
   }
 
-  function handleAgeBlur(age: string) {
+  // Controlled (write-on-change) so an undo/redo store restore is reflected in the field — an
+  // uncontrolled defaultValue would keep the stale typed value until remount. Capture's debounce
+  // coalesces the keystrokes into one undo checkpoint (ADR-045), matching gender/category/role.
+  function handleAgeChange(age: string) {
     if (!character || !editable) return;
-    log.debug("handleAgeBlur", "age saved", { characterKey, age });
+    log.debug("handleAgeChange", "age changed", { characterKey });
     updateCharacter(characterKey, {
       basic_info: { ...character.basic_info, age },
     });
@@ -220,12 +223,12 @@ export function CharactersSidebarItem({
     });
   }
 
-  function handlePersonalityBlur(
+  function handlePersonalityChange(
     field: keyof import("@/types/character-types").CharacterPersonality,
     value: string
   ) {
     if (!character || !editable) return;
-    log.debug("handlePersonalityBlur", "personality field saved", { characterKey, field });
+    log.debug("handlePersonalityChange", "personality field changed", { characterKey, field });
     updateCharacter(characterKey, {
       personality: { ...character.personality, [field]: value },
     });
@@ -408,10 +411,10 @@ export function CharactersSidebarItem({
                     <label className="text-xs text-muted-foreground">Age</label>
                     <Input
                       className="h-8"
-                      defaultValue={character?.basic_info.age ?? ""}
+                      value={character?.basic_info.age ?? ""}
                       placeholder="e.g. 25"
                       disabled={!editable}
-                      onBlur={(e) => handleAgeBlur(e.target.value)}
+                      onChange={(e) => handleAgeChange(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                     />
                   </div>
@@ -491,10 +494,10 @@ export function CharactersSidebarItem({
                     </label>
                     <Textarea
                       className="text-xs resize-none min-h-[56px]"
-                      defaultValue={character?.personality[key] ?? ""}
+                      value={character?.personality[key] ?? ""}
                       placeholder={placeholder}
                       disabled={!editable}
-                      onBlur={(e) => handlePersonalityBlur(key, e.target.value)}
+                      onChange={(e) => handlePersonalityChange(key, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                     />
                   </div>

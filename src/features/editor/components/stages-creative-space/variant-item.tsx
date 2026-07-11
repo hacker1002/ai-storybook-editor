@@ -72,14 +72,13 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle, edita
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(variantData.name);
 
-  // Determine initial selected index: prefer is_selected=true, else 0
-  const initSelectedIdx = () => {
-    const idx = variantData.illustrations.findIndex((ill) => ill.is_selected);
-    return idx >= 0 ? idx : 0;
-  };
-
-  const [selectedIllustrationIndex, setSelectedIllustrationIndex] = useState<number>(initSelectedIdx);
-  const [promptText, setPromptText] = useState<string>(variantData.visual_description ?? '');
+  // Selected illustration is DERIVED from the store's is_selected flag (not local state) so an
+  // undo/redo restore of the variant node — or a generate/upload/edit completion — is reflected in
+  // the preview. Thumbnail click writes is_selected back to the store (handleSelectIllustration),
+  // so selection is itself an undoable edit.
+  const selectedIllustrationIndex = Math.max(0, variantData.illustrations.findIndex((ill) => ill.is_selected));
+  // Visual description is controlled from the store (write-on-change) for the same reason.
+  const visualDescription = variantData.visual_description ?? '';
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState(false);
   const [editPromptText, setEditPromptText] = useState('');
 
@@ -95,12 +94,19 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle, edita
 
   const selectedIllustration = variantData.illustrations[selectedIllustrationIndex];
 
-  const handleBlurSave = () => {
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (!editable) return; // collab gate
-    const trimmed = promptText.trim();
-    if (trimmed === (variantData.visual_description ?? '')) return;
-    log.debug('handleBlurSave', 'save visual_description', { stageKey, variantKey: variantData.key });
-    updateStageVariant(stageKey, variantData.key, { visual_description: trimmed });
+    updateStageVariant(stageKey, variantData.key, { visual_description: e.target.value });
+  };
+
+  const handleSelectIllustration = (index: number) => {
+    if (!editable) return; // collab gate — selection persists via is_selected (undoable)
+    const target = variantData.illustrations[index];
+    if (!target || target.is_selected) return;
+    log.debug('handleSelectIllustration', 'select', { stageKey, variantKey: variantData.key, index });
+    updateStageVariant(stageKey, variantData.key, {
+      illustrations: variantData.illustrations.map((ill, i) => ({ ...ill, is_selected: i === index })),
+    });
   };
 
   // Resolve base variant image URL for non-base variants
@@ -110,7 +116,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle, edita
 
   // Non-base variants cannot generate without base illustration; all variants need a book art style.
   // Collab: also disabled unless this editor holds the entity lock (`editable`).
-  const isGenerateDisabled = !editable || isProcessing || !promptText.trim() || !artStyleId || (!isBase && !baseStageImageUrl);
+  const isGenerateDisabled = !editable || isProcessing || !visualDescription.trim() || !artStyleId || (!isBase && !baseStageImageUrl);
 
   // Resolve era description from era store
   const resolvedEraDescription = variantData.temporal.era
@@ -119,7 +125,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle, edita
 
   const handleGenerate = () => {
     if (!editable) return; // collab gate
-    const trimmedPrompt = promptText.trim();
+    const trimmedPrompt = visualDescription.trim();
     if (!trimmedPrompt || isProcessing) return;
 
     // Null-guard: require book.artstyle_id (UUID) — contract rejects empty art style with 400.
@@ -245,7 +251,6 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle, edita
       });
 
       updateStageVariant(stageKey, variantData.key, { illustrations: updatedIllustrations });
-      setSelectedIllustrationIndex(0);
       toast.success('Image uploaded successfully');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
@@ -426,7 +431,7 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle, edita
             isEditPopoverOpen={isEditPopoverOpen}
             editPromptText={editPromptText}
             editRefImages={editRefs.images}
-            onSelectIllustration={setSelectedIllustrationIndex}
+            onSelectIllustration={handleSelectIllustration}
             onDownload={async () => {
               if (!selectedIllustration) return;
               try {
@@ -487,9 +492,8 @@ export function VariantItem({ stageKey, variantData, isExpanded, onToggle, edita
               </div>
             )}
             <Textarea
-              value={promptText}
-              onChange={(e) => setPromptText(e.target.value)}
-              onBlur={handleBlurSave}
+              value={visualDescription}
+              onChange={handleDescriptionChange}
               placeholder="Describe the visual appearance..."
               className="min-h-[80px]"
               disabled={isProcessing || !editable}

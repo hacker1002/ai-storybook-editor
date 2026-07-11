@@ -49,5 +49,7 @@ export function useUndoRedoHotkey(): void {
     }
   }, []);
 
-  useGlobalHotkey(match, handler, [match, handler]);
+  // runInEditable: session item-undo is a global command — it must fire even when focus sits in a
+  // text field (entity spaces are input-heavy; without this Ctrl+Z was swallowed there, ADR-045).
+  useGlobalHotkey(match, handler, [match, handler], true);
 }

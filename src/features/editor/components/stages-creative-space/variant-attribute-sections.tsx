@@ -68,11 +68,11 @@ export function VariantAttributeSections({
     updateStageVariant(stageKey, variantKey, { temporal: { ...temporal, [field]: finalValue } });
   };
 
-  // Update sensory field
-  const handleSensoryBlur = (field: keyof StageSensory, value: string) => {
+  // Update sensory field — controlled write-on-change so an undo/redo store restore is reflected.
+  const handleSensoryChange = (field: keyof StageSensory, value: string) => {
     if (!editable) return; // collab gate
     if (value === sensory[field]) return;
-    log.debug('handleSensoryBlur', 'update', { stageKey, variantKey, field, value });
+    log.debug('handleSensoryChange', 'update', { stageKey, variantKey, field });
     updateStageVariant(stageKey, variantKey, { sensory: { ...sensory, [field]: value } });
   };
 
@@ -224,11 +224,11 @@ export function VariantAttributeSections({
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block uppercase">Soundscape</label>
               <Input
-                defaultValue={sensory.soundscape}
+                value={sensory.soundscape ?? ''}
                 placeholder="Describe sounds..."
                 className="h-8 text-sm"
                 disabled={!editable}
-                onBlur={(e) => handleSensoryBlur('soundscape', e.target.value.trim())}
+                onChange={(e) => handleSensoryChange('soundscape', e.target.value)}
               />
             </div>
 

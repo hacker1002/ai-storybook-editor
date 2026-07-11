@@ -12,19 +12,22 @@ import { useInteractionLayerContext, type GlobalHotkeyEntry } from "./interactio
  * @param match  - Function returning true when the event should trigger the handler
  * @param handler - Callback to invoke (provider has already called preventDefault)
  * @param deps   - React deps array; include all values captured in match/handler closures
+ * @param runInEditable - Fire the handler even when focus is in an editable element (undo/redo
+ *                        opt in — a global command that must work while a text field is focused).
  */
 export function useGlobalHotkey(
   match: (event: KeyboardEvent) => boolean,
   handler: (event: KeyboardEvent) => void,
-  deps: React.DependencyList
+  deps: React.DependencyList,
+  runInEditable = false
 ): void {
   const { registerGlobalHotkey } = useInteractionLayerContext();
 
   useEffect(() => {
     const id = `global-hotkey-${crypto.randomUUID()}`;
-    const entry: GlobalHotkeyEntry = { id, match, handler };
+    const entry: GlobalHotkeyEntry = { id, match, handler, runInEditable };
     const unregister = registerGlobalHotkey(entry);
     return unregister;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registerGlobalHotkey, ...deps]);
+  }, [registerGlobalHotkey, runInEditable, ...deps]);
 }

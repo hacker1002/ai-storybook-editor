@@ -49,6 +49,14 @@ export interface GlobalHotkeyEntry {
   id: string;
   match: (event: KeyboardEvent) => boolean;
   handler: (event: KeyboardEvent) => void;
+  /**
+   * Run the handler even when focus is in an editable element (INPUT/TEXTAREA/SELECT/
+   * contentEditable). Off by default so text-editing hotkeys (Delete/Arrow) stay with the
+   * field. Undo/redo opt IN: session item-undo (ADR-045) is a global command that must fire
+   * regardless of focus — entity spaces are text-input-heavy, so without this Ctrl+Z is dead
+   * there (preventDefault already killed native undo, then the handler was skipped).
+   */
+  runInEditable?: boolean;
 }
 
 type Subscriber = (status: LayerStatus) => void;
@@ -286,7 +294,7 @@ export function InteractionLayerProvider({
         if (entry.match(e)) {
           e.preventDefault();
           e.stopPropagation();
-          if (!isEditableElement(document.activeElement)) {
+          if (entry.runInEditable || !isEditableElement(document.activeElement)) {
             entry.handler(e);
           }
           return;

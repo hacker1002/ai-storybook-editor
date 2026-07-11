@@ -7,6 +7,7 @@ import { render, act } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { InteractionLayerProvider } from "./interaction-layer-provider";
 import { useInteractionLayer } from "./use-interaction-layer";
+import { useGlobalHotkey } from "./use-global-hotkey";
 import type { Layer, LayerSlot, YieldedFromLinkage } from "./interaction-layer-provider";
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
@@ -43,6 +44,32 @@ function keydown(key: string) {
       new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
     );
   });
+}
+
+/** Fire a Ctrl+<key> keydown at the document level (global-hotkey channel). */
+function keydownCtrl(key: string) {
+  act(() => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true })
+    );
+  });
+}
+
+/** Registers a global hotkey (match/handler channel) for the runInEditable tests. */
+function GlobalHotkeyProbe({
+  onFire,
+  runInEditable,
+}: {
+  onFire: () => void;
+  runInEditable?: boolean;
+}) {
+  useGlobalHotkey(
+    (e) => (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z",
+    () => onFire(),
+    [onFire],
+    runInEditable ?? false
+  );
+  return null;
 }
 
 /** Fire a mousedown event (used for click-outside detection). */
@@ -562,6 +589,46 @@ describe("InteractionLayerProvider + useInteractionLayer — 20 scenarios", () =
     } finally {
       editable.blur();
       editable.remove();
+    }
+  });
+
+  // 25. Global hotkey WITHOUT runInEditable → skipped when focus is in an INPUT (default guard).
+  it("25: global hotkey without runInEditable is skipped inside INPUT", () => {
+    const onFire = vi.fn();
+    render(
+      <Wrap>
+        <GlobalHotkeyProbe onFire={onFire} />
+      </Wrap>
+    );
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    try {
+      input.focus();
+      keydownCtrl("z");
+      expect(onFire).not.toHaveBeenCalled();
+    } finally {
+      input.blur();
+      input.remove();
+    }
+  });
+
+  // 26. Global hotkey WITH runInEditable → fires even inside an INPUT (undo/redo, ADR-045).
+  it("26: global hotkey with runInEditable fires inside INPUT (undo/redo)", () => {
+    const onFire = vi.fn();
+    render(
+      <Wrap>
+        <GlobalHotkeyProbe onFire={onFire} runInEditable />
+      </Wrap>
+    );
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    try {
+      input.focus();
+      keydownCtrl("z");
+      expect(onFire).toHaveBeenCalledTimes(1);
+    } finally {
+      input.blur();
+      input.remove();
     }
   });
 });
