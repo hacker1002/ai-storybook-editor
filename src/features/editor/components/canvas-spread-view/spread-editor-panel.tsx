@@ -15,6 +15,8 @@ import type { MotionLineGeometry } from "./overlays/motion-line-overlay-utils";
 import type { SpreadAnimation } from "@/types/spread-types";
 import { resolveTargetItemGeometry } from "../../utils/composite-resolve-helpers";
 import { PageItem } from "./page-item";
+import { useSpreadPeerLockName } from "@/stores/resource-lock-store";
+import { LockedByOtherOverlay } from "../shared-components/sketch-locked-by-other-overlay";
 import {
   buildImageContext,
   buildTextContext,
@@ -91,6 +93,10 @@ interface SpreadEditorPanelProps<TSpread extends BaseSpread> {
   // View config
   zoomLevel: number;
   isEditable: boolean;
+
+  // Collab peer-lock config (opt-in): whole-spread lock coordinates. When held by another editor,
+  // a dim veil + holder badge covers the canvas. Omitted by non-collab spaces → no overlay.
+  peerLock?: { step: number; resourceType: number };
 
   // Render configuration
   renderItems: ItemType[];
@@ -231,6 +237,7 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   spread,
   zoomLevel,
   isEditable,
+  peerLock,
   renderItems,
   renderImageItem,
   renderTextItem,
@@ -275,6 +282,10 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
   smartHitTestEnabled: smartHitTestEnabledProp = false,
 }: SpreadEditorPanelProps<TSpread>) {
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Collab: non-null when ANOTHER editor holds this spread's whole-spread lock (live) → veil the
+  // canvas + show holder badge. Null when free/mine or not lock-aware (peerLock omitted).
+  const peerLockName = useSpreadPeerLockName(spread.id, peerLock?.step, peerLock?.resourceType);
   const currentEditorLangCode = useLanguageCode();
   // When forceLanguageCode is provided (e.g. by DummyMainView passing
   // book.original_language), it takes priority over the editor's current
@@ -1469,6 +1480,12 @@ export function SpreadEditorPanel<TSpread extends BaseSpread>({
 
             return null;
           })()}
+
+        {/* Collab peer-lock veil + holder badge — top of the canvas frame (above all items /
+            selection / toolbars). Advisory only; the acquire 409 is the real authority. */}
+        {peerLockName && (
+          <LockedByOtherOverlay holderName={peerLockName} zIndex={MAX_INTERACTIVE_Z + 5} />
+        )}
       </div>
       </div>
     </div>

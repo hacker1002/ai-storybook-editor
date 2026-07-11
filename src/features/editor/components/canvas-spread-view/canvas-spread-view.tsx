@@ -101,6 +101,12 @@ interface CanvasSpreadViewProps<TSpread extends BaseSpread> {
   // Item-level callbacks - Unified API
   onUpdateSpreadItem?: OnUpdateSpreadItemFn;
 
+  // Collab peer-lock config (opt-in): whole-spread lock coordinates for THIS space —
+  // SCENE `{step:2,resourceType:6}` (spreads) / RETOUCH `{step:3,resourceType:10}` (objects).
+  // Threaded to the active-canvas overlay + every thumbnail so a spread held by another editor
+  // dims + shows a lock/holder badge. Omitted by non-collab spaces → zero behavior change.
+  peerLock?: { step: number; resourceType: number };
+
   // Feature flags
   isEditable?: boolean;
   canAddSpread?: boolean;
@@ -193,6 +199,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
   onSpreadAdd,
   onDeleteSpread,
   onUpdateSpreadItem,
+  peerLock,
   isEditable = true,
   canAddSpread = false,
   canReorderSpread = false,
@@ -447,6 +454,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 spreadIndex={selectedIndex}
                 zoomLevel={zoomLevel}
                 isEditable={isEditable}
+                peerLock={peerLock}
                 renderItems={renderItems}
                 renderImageItem={renderImageItem}
                 renderTextItem={renderTextItem}
@@ -499,6 +507,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
                 spreads={spreads}
                 selectedId={selectedSpreadId}
                 layout="horizontal"
+                peerLock={peerLock}
                 renderItems={renderItems}
                 renderImageItem={renderImageItem}
                 renderTextItem={renderTextItem}
@@ -529,6 +538,7 @@ export function CanvasSpreadView<TSpread extends BaseSpread>({
             selectedId={selectedSpreadId}
             layout="grid"
             columnsPerRow={columnsPerRow}
+            peerLock={peerLock}
             renderItems={renderItems}
             renderImageItem={renderImageItem}
             renderTextItem={renderTextItem}

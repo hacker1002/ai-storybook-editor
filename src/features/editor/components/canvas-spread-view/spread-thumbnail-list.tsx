@@ -59,6 +59,10 @@ interface SpreadThumbnailListProps<TSpread extends BaseSpread> {
   renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderRawTextbox?: (context: TextItemContext<TSpread>) => ReactNode;
 
+  // Collab peer-lock config (opt-in) — forwarded to each SpreadThumbnail so a spread held by
+  // another editor dims + shows a lock badge. Omitted by non-collab spaces.
+  peerLock?: { step: number; resourceType: number };
+
   // Feature flags
   canAdd: boolean;
   canReorder: boolean;
@@ -90,6 +94,7 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
   renderAutoPicItem,
   renderRawImage,
   renderRawTextbox,
+  peerLock,
   canAdd,
   canReorder,
   canDelete,
@@ -282,6 +287,7 @@ export const SpreadThumbnailList = forwardRef(function SpreadThumbnailListInner<
               renderAutoPicItem={renderAutoPicItem}
               renderRawImage={renderRawImage}
               renderRawTextbox={renderRawTextbox}
+              peerLock={peerLock}
               isDragEnabled={canReorder}
               isDragging={spread.id === draggedId}
               isDropTarget={spread.id === dropTargetId}

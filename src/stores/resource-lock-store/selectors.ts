@@ -6,7 +6,7 @@
 // prune tick mutates `registry`, forcing a re-run so an expired lock flips back to
 // editable without a realtime event.
 
-import { keyOf, FALLBACK_HOLDER_NAME, type LockTarget, type ResourceType } from './types';
+import { keyOf, FALLBACK_HOLDER_NAME, type LockTarget, type ResourceType, type Step } from './types';
 import { useResourceLockStore, type ResourceLockState } from './index';
 
 /** Is a live lock on `target` held by SOMEONE ELSE (not me, not expired)? */
@@ -24,6 +24,34 @@ export function useIsLockedByOther(target: LockTarget): boolean {
 export function useLockHolderName(target: LockTarget): string | null {
   return useResourceLockStore((s: ResourceLockState) => {
     if (!s.bookId) return null;
+    const entry = s.registry.get(keyOf(s.bookId, target));
+    if (!entry) return null;
+    if (entry.holder_user_id === s.myUserId) return null;
+    if (new Date(entry.expires_at).getTime() <= Date.now()) return null;
+    return s.holderNames.get(entry.holder_user_id) ?? FALLBACK_HOLDER_NAME;
+  });
+}
+
+/** Peer-lock holder name for a WHOLE-SPREAD collab lock — SCENE (step 2 / rtype 6) or RETOUCH
+ *  (step 3 / rtype 10). Returns the OTHER holder's display name when someone else holds this
+ *  spread's lock (live), else null (free / mine / expired). `step`/`resourceType` undefined ⇒
+ *  always null, so non-collab canvases (preview/dummy) that reuse CanvasSpreadView pass through
+ *  cleanly. Unlike `useIsSpreadLockedByOther` (sketch: step 1, scans child image/textbox keys),
+ *  the whole spread is ONE lock here, so this is an exact single-key lookup. Primitive return
+ *  (string|null) → Object.is-stable. */
+export function useSpreadPeerLockName(
+  spreadId: string,
+  step: number | undefined,
+  resourceType: number | undefined,
+): string | null {
+  return useResourceLockStore((s: ResourceLockState) => {
+    if (step == null || resourceType == null || !s.bookId || !spreadId) return null;
+    const target: LockTarget = {
+      step: step as Step,
+      resource_type: resourceType as ResourceType,
+      resource_id: spreadId,
+      locale: null,
+    };
     const entry = s.registry.get(keyOf(s.bookId, target));
     if (!entry) return null;
     if (entry.holder_user_id === s.myUserId) return null;

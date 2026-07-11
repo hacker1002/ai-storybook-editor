@@ -68,6 +68,10 @@ import type {
 const EMPTY_SPREADS: BaseSpread[] = [];
 const log = createLogger('Editor', 'SpreadsMainView');
 
+// Whole-spread SCENE lock coords (step 2 / rtype 6) for peer-lock veil + thumbnail badges.
+// Module-const → stable identity → SpreadThumbnail's React.memo stays intact.
+const SCENE_PEER_LOCK = { step: 2, resourceType: 6 } as const;
+
 const matchCtrlD = (e: KeyboardEvent): boolean =>
   (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd';
 
@@ -661,6 +665,7 @@ export function SpreadsMainView({
         viewMode={viewMode}
         zoomLevel={zoomLevel}
         columnsPerRow={columnsPerRow}
+        peerLock={SCENE_PEER_LOCK}
         renderItems={['raw_image', 'raw_textbox', 'shape']}
         renderRawImage={renderIllustrationImage}
         renderRawTextbox={renderIllustrationTextbox}

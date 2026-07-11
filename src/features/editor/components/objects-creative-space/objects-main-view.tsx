@@ -122,6 +122,10 @@ import {
 
 const log = createLogger("UI", "ObjectsMainView");
 
+// Whole-spread RETOUCH lock coords (step 3 / rtype 10) for peer-lock veil + thumbnail badges.
+// Module-const → stable identity → SpreadThumbnail's React.memo stays intact.
+const RETOUCH_PEER_LOCK = { step: 3, resourceType: 10 } as const;
+
 interface ObjectsMainViewProps {
   selectedSpreadId: string;
   selectedItemId: SelectedItem | null;
@@ -1032,6 +1036,7 @@ export function ObjectsMainView({
         viewMode="edit"
         zoomLevel={zoomLevel}
         columnsPerRow={COLUMNS.DEFAULT}
+        peerLock={RETOUCH_PEER_LOCK}
         onViewModeChange={() => {}}
         onZoomChange={onZoomChange}
         onColumnsChange={() => {}}

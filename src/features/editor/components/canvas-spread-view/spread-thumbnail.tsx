@@ -23,6 +23,8 @@ import {
 import { resolveItemZIndex } from "./utils/resolve-item-z-index";
 import { THUMBNAIL, Z_INDEX } from "@/constants/spread-constants";
 import { useCanvasWidth, useCanvasAspectRatio } from "@/stores/editor-settings-store";
+import { Lock } from "lucide-react";
+import { useSpreadPeerLockName } from "@/stores/resource-lock-store";
 import type {
   BaseSpread,
   ItemType,
@@ -60,6 +62,11 @@ interface SpreadThumbnailProps<TSpread extends BaseSpread> {
   renderRawImage?: (context: ImageItemContext<TSpread>) => ReactNode;
   renderRawTextbox?: (context: TextItemContext<TSpread>) => ReactNode;
 
+  // Collab peer-lock config (opt-in): when a whole-spread lock of {step, resourceType} is held by
+  // ANOTHER editor, the thumbnail dims + shows a lock/holder badge. Omitted by non-collab spaces
+  // (preview/dummy) → no lock lookup, no badge. Stable module-const object from the space → memo-safe.
+  peerLock?: { step: number; resourceType: number };
+
   // Drag state
   isDragEnabled?: boolean;
   isDragging?: boolean;
@@ -92,6 +99,7 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   renderAutoPicItem,
   renderRawImage,
   renderRawTextbox,
+  peerLock,
   isDragEnabled = false,
   isDragging = false,
   isDropTarget = false,
@@ -108,6 +116,11 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
   const [containerWidth, setContainerWidth] = useState(0);
   const canvasWidth = useCanvasWidth();
   const canvasAspectRatio = useCanvasAspectRatio();
+
+  // Collab: non-null when ANOTHER editor holds this spread's whole-spread lock (live). Reactive —
+  // re-renders past React.memo on any registry/holder-name change. Null when free/mine or not
+  // lock-aware (peerLock omitted) → no badge.
+  const peerLockName = useSpreadPeerLockName(spread.id, peerLock?.step, peerLock?.resourceType);
 
   // Track container width for medium mode scaling
   useLayoutEffect(() => {
@@ -471,6 +484,20 @@ function SpreadThumbnailInner<TSpread extends BaseSpread>({
               />
             </svg>
           </button>
+        )}
+
+        {/* Collab peer-lock — light dim + centered lock icon (holder name in tooltip). Above content
+            (z:10) and delete (z:20) but pointer-events:none so a click still selects the spread. */}
+        {peerLockName && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center bg-background/40 pointer-events-none"
+            title={`${peerLockName} is editing`}
+            aria-label={`Locked by ${peerLockName}`}
+          >
+            <span className="flex items-center justify-center rounded-full bg-background/90 p-1.5 shadow-sm">
+              <Lock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            </span>
+          </div>
         )}
       </div>
 

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useResourceLockStore } from './index';
-import { useAllResourcesLockedByOther } from './selectors';
-import type { LockEntry } from './types';
+import { useAllResourcesLockedByOther, useSpreadPeerLockName } from './selectors';
+import { FALLBACK_HOLDER_NAME, type LockEntry } from './types';
 
 // Reactive-selector harness: seed bookId / myUserId / registry via setState (no channel),
 // then renderHook the selector. Mirrors imperative-guards.test.ts (same store, imperative twin).
@@ -80,5 +80,78 @@ describe('useAllResourcesLockedByOther', () => {
     useResourceLockStore.setState({ bookId: null });
     const { result } = renderHook(() => useAllResourcesLockedByOther(3, ['kid_hero']));
     expect(result.current).toBe(false);
+  });
+});
+
+describe('useSpreadPeerLockName', () => {
+  const SPREAD = 'sp1';
+  // SCENE whole-spread lock key: step 2 / rtype 6 / locale ''. RETOUCH: step 3 / rtype 10.
+  const SCENE_KEY = `${BOOK}|2|6|${SPREAD}|`;
+  const RETOUCH_KEY = `${BOOK}|3|10|${SPREAD}|`;
+
+  function seedWithNames(pairs: Array<[string, LockEntry]>, names: Array<[string, string]>): void {
+    useResourceLockStore.setState({
+      bookId: BOOK,
+      myUserId: ME,
+      registry: new Map(pairs),
+      holderNames: new Map(names),
+    });
+  }
+
+  beforeEach(() => {
+    useResourceLockStore.setState({ holderNames: new Map() });
+  });
+
+  it('free spread → null', () => {
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 2, 6));
+    expect(result.current).toBeNull();
+  });
+
+  it('held by another editor with a resolved name → that name', () => {
+    seedWithNames([[SCENE_KEY, entry(OTHER, future())]], [[OTHER, 'Alice']]);
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 2, 6));
+    expect(result.current).toBe('Alice');
+  });
+
+  it('held by another editor whose name is not resolved yet → fallback', () => {
+    seedWithNames([[SCENE_KEY, entry(OTHER, future())]], []);
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 2, 6));
+    expect(result.current).toBe(FALLBACK_HOLDER_NAME);
+  });
+
+  it('held by ME → null (own lock never shows a peer badge)', () => {
+    seedWithNames([[SCENE_KEY, entry(ME, future())]], [[ME, 'Me']]);
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 2, 6));
+    expect(result.current).toBeNull();
+  });
+
+  it('expired lock → null (prune-aware expiry)', () => {
+    seedWithNames([[SCENE_KEY, entry(OTHER, past())]], [[OTHER, 'Alice']]);
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 2, 6));
+    expect(result.current).toBeNull();
+  });
+
+  it('RETOUCH lock (step 3 / rtype 10) resolves for the retouch query', () => {
+    seedWithNames([[RETOUCH_KEY, entry(OTHER, future())]], [[OTHER, 'Bob']]);
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 3, 10));
+    expect(result.current).toBe('Bob');
+  });
+
+  it('lock coords are scoped — a RETOUCH lock does not surface on the SCENE query', () => {
+    seedWithNames([[RETOUCH_KEY, entry(OTHER, future())]], [[OTHER, 'Bob']]);
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 2, 6));
+    expect(result.current).toBeNull();
+  });
+
+  it('step/resourceType undefined → null (non-collab canvas passthrough)', () => {
+    seedWithNames([[SCENE_KEY, entry(OTHER, future())]], [[OTHER, 'Alice']]);
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, undefined, undefined));
+    expect(result.current).toBeNull();
+  });
+
+  it('no book connected → null', () => {
+    useResourceLockStore.setState({ bookId: null });
+    const { result } = renderHook(() => useSpreadPeerLockName(SPREAD, 2, 6));
+    expect(result.current).toBeNull();
   });
 });
