@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Zap, Users, Lock } from "lucide-react";
+import { Zap } from "lucide-react";
 import { ObjectsMainView } from "./objects-main-view";
 import { ObjectsSidebar } from "./objects-sidebar";
 import { AnimationEditorSidebar } from "./animation-editor-sidebar";
@@ -20,10 +20,10 @@ import { useCurrentBookId } from "@/stores/book-store";
 import { useCollabPersistSession } from "@/features/editor/hooks/use-collab-persist-session";
 import { useContentSyncSession } from "@/features/editor/hooks/use-content-sync-session";
 import { useHeldResourceSession } from "@/features/editor/hooks/use-held-resource-session";
+import { useRegisterEditCommit } from "@/stores/edit-session-status-store";
 import { RETOUCH_OWNED_KEYS } from "@/stores/snapshot-store/slices/collab-owned-subtree";
 import { useEditHistoryStore } from "@/stores/edit-history-store";
 import { buildItemKey } from "@/stores/edit-history-store/item-key";
-import { UndoRedoControls } from "@/features/editor/components/shared-components/undo-redo-controls";
 import type { LockTarget, SavePayload } from "@/stores/resource-lock-store";
 import { toastLockRequired } from "@/utils/collab-save-toasts";
 import {
@@ -206,12 +206,13 @@ export function ObjectsCreativeSpace() {
   // The active spread is editable only while THIS editor holds its retouch lock (grey-out otherwise).
   const spreadEditable = retouchLockStatus === "held" && lockedSpreadId === selectedSpreadId;
 
-  // USER-initiated spread click → acquire (switch = release-then-acquire, handled by the hook when
-  // the target string key changes). NEVER called from the programmatic auto-select path.
-  const handleSpreadUserSelect = useCallback((spreadId: string) => {
-    log.info("handleSpreadUserSelect", "user selected spread — set held target", { spreadId });
-    setLockedSpreadId(spreadId);
-  }, []);
+  // Commit-now for the header "Unsaved" button: release the held retouch lock → save + unlock.
+  const commitRetouch = useCallback(() => {
+    log.info("commitRetouch", "commit held retouch session (save + unlock)");
+    setLockedSpreadId(null);
+    resetSelection();
+  }, [resetSelection]);
+  useRegisterEditCommit(commitRetouch);
 
   // --- Derived data (useMemo) ---
   const languageCode = currentLanguage.code;
@@ -339,11 +340,16 @@ export function ObjectsCreativeSpace() {
     [patch],
   );
 
+  // LOCK-ON-ITEM-SELECT (ADR-044 §Revision 2026-07-10b — matches the scene space): selecting a
+  // spread no longer locks it. Leaving the currently-edited spread commits it (null the held target
+  // → the hook release-saves the OLD spread). The `prev && prev !== spreadId` guard keeps the mount
+  // / auto-select path a no-op (nothing held yet).
   const handleSpreadSelect = useCallback(
     (spreadId: string) => {
       log.info("handleSpreadSelect", "spread selected", { spreadId });
       patch({ activeSpreadId: spreadId });
       resetSelection();
+      setLockedSpreadId((prev) => (prev && prev !== spreadId ? null : prev));
     },
     [patch, resetSelection],
   );
@@ -352,7 +358,11 @@ export function ObjectsCreativeSpace() {
     log.debug("handleItemSelect", "item selection changed", { item });
     setExpandedAnimIndex(null);
     setSelectedItemId(item);
-  }, []);
+    // Selecting an item = intent to edit → acquire this spread's retouch lock. Deselect keeps it.
+    if (item && selectedSpreadId) {
+      setLockedSpreadId(selectedSpreadId);
+    }
+  }, [selectedSpreadId]);
 
   // Callback from AnimationEditorSidebar — item type/id in animation space; adapt back to SelectedItem
   const handleAnimationSidebarItemSelect = useCallback(
@@ -361,9 +371,14 @@ export function ObjectsCreativeSpace() {
         itemType,
         itemId,
       });
-      setSelectedItemId(adaptFromAnimationItem(itemType, itemId));
+      const adapted = adaptFromAnimationItem(itemType, itemId);
+      setSelectedItemId(adapted);
+      // Editing an animation target is an in-spread (RETOUCH_OWNED_KEYS) op → acquire the lock.
+      if (adapted && selectedSpreadId) {
+        setLockedSpreadId(selectedSpreadId);
+      }
     },
-    [],
+    [selectedSpreadId],
   );
 
   const handleAnimationSidebarToggle = useCallback(() => {
@@ -721,36 +736,13 @@ export function ObjectsCreativeSpace() {
       />
 
       <div className="relative flex-1 min-w-0 overflow-hidden">
-        {/* Collab lock affordance (ADR-044 per-spread held session). NEVER hidden — 2-state
-            (active/disabled): held → "Editing" (this editor owns the spread's objects lock); not
-            held → greyed "Locked — click a spread to edit" (lock-on-click). The canvas itself is
-            greyed via isEditable=false (see spreadEditable) so items are non-editable until held. */}
-        {spreadEditable ? (
-          <div
-            className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-foreground select-none"
-            title="You are editing this spread's objects"
-          >
-            <Users className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-            <span>Editing</span>
-          </div>
-        ) : (
-          <div
-            className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground select-none"
-            title="Objects are locked — click a spread to start editing"
-          >
-            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{retouchLockStatus === "acquiring" ? "Locking…" : "Click a spread to edit"}</span>
-          </div>
-        )}
-
-        {/* Per-spread RETOUCH undo/redo (ADR-045) — disabled until there's history for the held spread. */}
-        <UndoRedoControls className="absolute top-3 right-3 z-10" />
-
+        {/* Edit affordance is global now — the header owns undo/redo + the Unsaved/Saved status
+            (ADR-044/045). The canvas greys out via isEditable=false (see spreadEditable) until the
+            retouch lock is held (lock-on-click). */}
         <ObjectsMainView
           selectedSpreadId={selectedSpreadId ?? ""}
           selectedItemId={selectedItemId}
           onSpreadSelect={handleSpreadSelect}
-          onSpreadUserSelect={handleSpreadUserSelect}
           onItemSelect={handleItemSelect}
           spreadEditable={spreadEditable}
           onCommitSave={retouchSaveNow}

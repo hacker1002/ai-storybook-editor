@@ -4,7 +4,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { toast } from "sonner";
-import { Users, Lock } from "lucide-react";
 import { SpreadsMainView } from "./spreads-main-view";
 import { SpreadsSidebar } from "./spreads-sidebar";
 import { useSnapshotStore } from "@/stores/snapshot-store";
@@ -14,10 +13,10 @@ import { useCurrentBookId } from "@/stores/book-store";
 import { useCollabPersistSession } from "@/features/editor/hooks/use-collab-persist-session";
 import { useContentSyncSession } from "@/features/editor/hooks/use-content-sync-session";
 import { useHeldResourceSession } from "@/features/editor/hooks/use-held-resource-session";
+import { useRegisterEditCommit } from "@/stores/edit-session-status-store";
 import { SCENE_OWNED_KEYS } from "@/stores/snapshot-store/slices/collab-owned-subtree";
 import { useEditHistoryStore } from "@/stores/edit-history-store";
 import { buildItemKey } from "@/stores/edit-history-store/item-key";
-import { UndoRedoControls } from "@/features/editor/components/shared-components/undo-redo-controls";
 import type { LockTarget, SavePayload } from "@/stores/resource-lock-store";
 import { useSpaceViewState, useEffectiveSpreadId } from "@/features/editor/hooks/use-space-view-state";
 import { ZOOM, COLUMNS } from "@/constants/spread-constants";
@@ -146,18 +145,28 @@ export function SpreadsCreativeSpace() {
   // The active spread is editable only while THIS editor holds its SCENE lock (grey-out otherwise).
   const spreadEditable = sceneLockStatus === "held" && lockedSpreadId === effectiveSpreadId;
 
-  // USER-initiated spread click → acquire (switch = release-then-acquire, handled by the hook when
-  // the target string key changes). NEVER called from the programmatic auto-select path.
-  const handleSpreadUserSelect = useCallback((spreadId: string) => {
-    log.info("handleSpreadUserSelect", "user selected spread — set held target", { spreadId });
-    setLockedSpreadId(spreadId);
-  }, []);
-
+  // LOCK-ON-ITEM-SELECT (ADR-044 §Revision 2026-07-10b): selecting a spread NO LONGER locks it —
+  // browsing a spread must never lock (and this sidesteps the first-entry "click spread to unlock
+  // items" gate that made auto-selected spread 1 feel frozen). Leaving the currently-edited spread
+  // commits it: null the held target → the hook release-saves the OLD spread; the new spread stays
+  // read-only until the user selects an item on it. (setLockedSpreadId(prev) is called from BOTH
+  // user clicks and the programmatic auto-select — the `prev && prev !== spreadId` guard makes the
+  // mount/auto-select path a no-op since nothing is held yet.)
   const handleSpreadSelect = useCallback((spreadId: string) => {
     log.info("handleSpreadSelect", "spread selected", { spreadId });
     patch({ activeSpreadId: spreadId });
     setSelectedItemId(null);
+    setLockedSpreadId((prev) => (prev && prev !== spreadId ? null : prev));
   }, [patch]);
+
+  // Commit-now for the header "Unsaved" button: release the held lock → save + unlock. Stable
+  // (setters are stable) so the registration effect runs once.
+  const commitScene = useCallback(() => {
+    log.info("commitScene", "commit held scene session (save + unlock)");
+    setLockedSpreadId(null);
+    setSelectedItemId(null);
+  }, []);
+  useRegisterEditCommit(commitScene);
 
   const handleViewModeChange = useCallback((mode: ViewMode) => { patch({ viewMode: mode }); }, [patch]);
   const handleZoomChange = useCallback((level: number) => { patch({ zoomLevel: level }); }, [patch]);
@@ -167,8 +176,14 @@ export function SpreadsCreativeSpace() {
     (item: SelectedItem | null) => {
       log.debug("handleItemSelect", "item selection changed", { item });
       setSelectedItemId(item);
+      // Selecting an item = intent to edit → acquire this spread's SCENE lock (lock-on-item-select).
+      // Deselect (null) KEEPS the lock (still on this spread); commit happens on spread/space/step
+      // leave or the header commit button.
+      if (item && effectiveSpreadId) {
+        setLockedSpreadId(effectiveSpreadId);
+      }
     },
-    []
+    [effectiveSpreadId]
   );
 
   return (
@@ -184,36 +199,13 @@ export function SpreadsCreativeSpace() {
         isEditable={spreadEditable}
       />
       <div className="relative flex-1 min-w-0 overflow-hidden">
-        {/* Collab lock affordance (ADR-044 per-spread held session). NEVER hidden — 2-state
-            (active/disabled): held → "Editing" (this editor owns the spread's scene lock); not held
-            → greyed "Click a spread to edit" (lock-on-click). The canvas + sidebar are greyed via
-            isEditable=false so in-spread content is non-editable until held. */}
-        {spreadEditable ? (
-          <div
-            className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-foreground select-none"
-            title="You are editing this spread"
-          >
-            <Users className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-            <span>Editing</span>
-          </div>
-        ) : (
-          <div
-            className="absolute top-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground select-none"
-            title="This spread is locked — click it to start editing"
-          >
-            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{sceneLockStatus === "acquiring" ? "Locking…" : "Click a spread to edit"}</span>
-          </div>
-        )}
-
-        {/* Per-spread SCENE undo/redo (ADR-045) — disabled until there's history for the held spread. */}
-        <UndoRedoControls className="absolute top-3 right-3 z-10" />
-
+        {/* Edit affordance is global now — the header owns undo/redo + the Unsaved/Saved status
+            (ADR-044/045). The canvas + sidebar grey out via isEditable=false until the scene lock
+            is held (lock-on-click). */}
         <SpreadsMainView
           selectedSpreadId={effectiveSpreadId ?? ""}
           selectedItemId={selectedItemId}
           onSpreadSelect={handleSpreadSelect}
-          onSpreadUserSelect={handleSpreadUserSelect}
           onItemSelect={handleItemSelect}
           spreadEditable={spreadEditable}
           onCommitSave={sceneSaveNow}

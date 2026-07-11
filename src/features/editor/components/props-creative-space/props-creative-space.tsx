@@ -21,11 +21,10 @@ import { useCurrentBookId } from '@/stores/book-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resource-session';
+import { useRegisterEditCommit } from '@/stores/edit-session-status-store';
 import { useEditHistoryStore } from '@/stores/edit-history-store';
 import { buildItemKey } from '@/stores/edit-history-store/item-key';
 import type { LockTarget, SavePayload } from '@/stores/resource-lock-store';
-import { CollabEditBadge } from '@/features/editor/components/shared-components/collab-edit-badge';
-import { UndoRedoControls } from '@/features/editor/components/shared-components/undo-redo-controls';
 
 const log = createLogger('Editor', 'PropsCreativeSpace');
 
@@ -114,6 +113,13 @@ export function PropsCreativeSpace() {
 
   const entityEditable = lockStatus === 'held' && lockedKey === selectedPropKey && lockedKey !== null;
 
+  // Commit-now for the header "Unsaved" button: release the held lock → save + unlock (keep display).
+  const commitEntity = useCallback(() => {
+    log.info('commitEntity', 'commit held prop session (save + unlock)');
+    setLockedKey(null);
+  }, []);
+  useRegisterEditCommit(commitEntity);
+
   const handlePropSelect = useCallback((key: string) => {
     log.info('handlePropSelect', 'user selected prop — set held target', { key });
     setUserSelectedPropKey(key);
@@ -143,13 +149,8 @@ export function PropsCreativeSpace() {
         onEntityDeleted={handleEntityDeleted}
       />
       <div className="relative flex-1 overflow-hidden">
-        <CollabEditBadge
-          editable={entityEditable}
-          status={lockStatus}
-          idleLabel="Click a prop to edit"
-        />
-        {/* Per-entity undo/redo (ADR-045) — disabled until there's history for the held entity. */}
-        <UndoRedoControls className="absolute top-3 right-3 z-10" />
+        {/* Edit affordance is global now — the header owns undo/redo + the Unsaved/Saved status
+            (ADR-044/045). The canvas/sidebar grey out via editable=false until the lock is held. */}
         {selectedPropKey ? (
           <PropsContentArea
             key={lockedKey ?? selectedPropKey}

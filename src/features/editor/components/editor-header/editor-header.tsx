@@ -6,6 +6,7 @@ import { useCurrentStep } from '@/stores/editor-settings-store';
 import { PIPELINE_STEPS } from '@/constants/editor-constants';
 import { MenuPopover } from './menu-popover';
 import { LanguageSelector } from './language-selector';
+import { UndoRedoControls } from '@/features/editor/components/shared-components/undo-redo-controls';
 import type { PipelineStep, SaveStatus, Language, UserPoints, EditorMode } from '@/types/editor';
 import type { AccessRights } from '@/features/editor/components/collaborators-creative-space/collaboration-space-types';
 import { cn } from '@/utils/utils';
@@ -165,6 +166,10 @@ export function EditorHeader({
 
       {/* Right Section */}
       <div className="flex items-center gap-2">
+        {/* Undo/Redo — global (ADR-045): reads the one active held-session history. Lit while
+            editing, dimmed + disabled otherwise. NEVER hidden (memory: never hide disabled UI). */}
+        <UndoRedoControls />
+
         {/* Save Status */}
         <SaveStatusIndicator status={saveStatus} onSave={onSave} />
 

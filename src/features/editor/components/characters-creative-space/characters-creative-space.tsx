@@ -20,11 +20,10 @@ import { useCurrentBookId } from '@/stores/book-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resource-session';
+import { useRegisterEditCommit } from '@/stores/edit-session-status-store';
 import { useEditHistoryStore } from '@/stores/edit-history-store';
 import { buildItemKey } from '@/stores/edit-history-store/item-key';
 import type { LockTarget, SavePayload } from '@/stores/resource-lock-store';
-import { CollabEditBadge } from '@/features/editor/components/shared-components/collab-edit-badge';
-import { UndoRedoControls } from '@/features/editor/components/shared-components/undo-redo-controls';
 
 const log = createLogger('Editor', 'CharactersCreativeSpace');
 
@@ -123,6 +122,13 @@ export function CharactersCreativeSpace() {
   // Editable only while THIS editor holds the lock for the character on screen (grey-out otherwise).
   const entityEditable = lockStatus === 'held' && lockedKey === selectedCharacterKey && lockedKey !== null;
 
+  // Commit-now for the header "Unsaved" button: release the held lock → save + unlock (keep display).
+  const commitEntity = useCallback(() => {
+    log.info('commitEntity', 'commit held character session (save + unlock)');
+    setLockedKey(null);
+  }, []);
+  useRegisterEditCommit(commitEntity);
+
   // USER-initiated select → set BOTH the display key and the held lock target (lock-on-click). The
   // held session release-saves the OLD character then acquires the new one when the key changes.
   const handleCharacterSelect = useCallback((key: string) => {
@@ -160,14 +166,8 @@ export function CharactersCreativeSpace() {
         onEntityDeleted={handleEntityDeleted}
       />
       <div className="relative flex-1 overflow-hidden">
-        {/* Collab lock affordance — NEVER hidden (2-state: Editing / click-to-edit). */}
-        <CollabEditBadge
-          editable={entityEditable}
-          status={lockStatus}
-          idleLabel="Click a character to edit"
-        />
-        {/* Per-entity undo/redo (ADR-045) — disabled until there's history for the held entity. */}
-        <UndoRedoControls className="absolute top-3 right-3 z-10" />
+        {/* Edit affordance is global now — the header owns undo/redo + the Unsaved/Saved status
+            (ADR-044/045). The canvas/sidebar grey out via editable=false until the lock is held. */}
         {selectedCharacterKey ? (
           <CharactersContentArea
             // key={lockedKey ?? selectedCharacterKey} resets per-entity panel state on switch via

@@ -35,7 +35,9 @@ import { RemixCreativeSpace } from '../components/remix-creative-space';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { InteractionLayerProvider } from '../contexts';
 import { EditHistoryBridge } from '../components/edit-history-bridge';
-import type { CreativeSpaceType, PipelineStep, Language } from '@/types/editor';
+import { useActiveHistoryKey, useEditHistoryStore } from '@/stores/edit-history-store';
+import { useCollabUiActive, useCollabSavePhase, useEditSessionStatusStore } from '@/stores/edit-session-status-store';
+import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
 import { useSketchGenerateNotifications } from '../hooks/use-sketch-generate-notifications';
@@ -62,6 +64,13 @@ export function EditorPage() {
   const sync = useSyncState();
   const snapshotLoading = useSnapshotFetchLoading();
   const snapshotError = useSnapshotFetchError();
+
+  // Collab held-session save-label ownership (ADR-044/045): inside a collab creative space the header
+  // reflects the edit session (holding lock → Unsaved, release-save → Saving… → Saved), NOT the 60s
+  // snapshot auto-save loop. Outside those spaces it falls back to the snapshot-derived status.
+  const activeHistoryKey = useActiveHistoryKey();
+  const collabUiActive = useCollabUiActive();
+  const collabSavePhase = useCollabSavePhase();
 
   // Register auto-save timer — must be called exactly once
   useAutoSave();
@@ -190,8 +199,14 @@ export function EditorPage() {
     );
   }
 
-  // Derived save status
-  const saveStatus = deriveSaveStatus(sync);
+  // Derived save status — session-driven inside a collab space, else snapshot-derived.
+  const saveStatus: SaveStatus = collabUiActive
+    ? activeHistoryKey != null
+      ? 'dirty' // holding a lock = actively editing → "Unsaved"
+      : collabSavePhase === 'saving'
+        ? 'auto-saving' // release-save in flight → "Saving..."
+        : 'saved' // idle/settled → "Saved" (never "Auto-saved" in collab spaces)
+    : deriveSaveStatus(sync);
 
   // Handlers
   // Creative-space switches no longer auto-save (user decision 2026-07-06). Draft
@@ -206,6 +221,17 @@ export function EditorPage() {
   // triggered by clicking the "Unsaved" save indicator. autoSaveSnapshot()
   // self-guards on !isDirty / isSaving, so a redundant click no-ops.
   const handleManualSave = () => {
+    // In a collab space holding a lock, "Unsaved" commits the held session (save + unlock) via the
+    // active space's registered callback; the release-save then flips the label to Saving… → Saved.
+    // Outside a held session, fall back to the whole-book snapshot draft save. Read from getState so
+    // the click uses live values, not the render-closure snapshot.
+    const ess = useEditSessionStatusStore.getState();
+    const holding = useEditHistoryStore.getState().activeKey != null;
+    if (ess.mountCount > 0 && holding && ess.commitFn) {
+      log.info('handleManualSave', 'commit held session (save + unlock)');
+      ess.commitFn();
+      return;
+    }
     log.info('handleManualSave', 'manual draft save from header indicator');
     autoSaveSnapshot();
   };

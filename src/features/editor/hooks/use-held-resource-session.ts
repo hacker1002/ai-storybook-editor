@@ -39,6 +39,7 @@ import {
   type SessionStatus,
 } from '@/stores/resource-lock-store';
 import { extractOwnedSubtree } from '@/stores/snapshot-store/slices/collab-owned-subtree';
+import { useEditSessionStatusStore } from '@/stores/edit-session-status-store';
 
 const log = createLogger('Editor', 'useHeldResourceSession');
 
@@ -83,6 +84,14 @@ export function useHeldResourceSession(
   const bookId = useResourceLockStore((s) => s.bookId);
   const [outcome, setOutcome] = useState<SessionOutcome | null>(null);
 
+  // Header save-label ownership (ADR-044/045): a mounted collab space switches the header out of
+  // the snapshot auto-save label and onto the session-driven Unsaved → Saving… → Saved cycle.
+  // Ref-counted so it survives StrictMode's mount/unmount/mount and space→space transitions.
+  useEffect(() => {
+    useEditSessionStatusStore.getState().enter();
+    return () => useEditSessionStatusStore.getState().leave();
+  }, []);
+
   // Latest args in a ref (written inside an effect — never the render body).
   const cbRef = useRef(args);
   useEffect(() => {
@@ -110,7 +119,17 @@ export function useHeldResourceSession(
     if (!serialized || !target || !bookId) return;
 
     const key = serialized;
+    // Capture bookId up-front: on a space/pipeline UNMOUNT this cleanup runs alongside
+    // useCollabPersistSession's disconnect(), which nulls store.bookId AND wipes store.myLocks.
+    // React fires sibling cleanups in DECLARATION order and collabPersist is declared FIRST, so by
+    // the time we get here the store is already torn down — never read bookId/myLocks back out of it.
+    const capturedBookId = bookId;
     let cancelled = false;
+    // Order-independent "did WE take & keep this lock" flag — replaces the old
+    // `store.myLocks.has(key)` cleanup guard, which false-negatives once disconnect() wiped myLocks
+    // BEFORE this cleanup ran (→ releaseAndSave + onReleased/endSession silently skipped → the lock
+    // lingered to TTL and the header stuck on "Unsaved" with no way to clear it).
+    let acquired = false;
     log.info('acquire', 'held session start', { key });
 
     const store = useResourceLockStore.getState();
@@ -129,8 +148,12 @@ export function useHeldResourceSession(
         const base = structuredClone(project(cbRef.current.getNode()));
         baselineRef.current = base;
         store.addMyLock(target);
+        acquired = true;
         setOutcome({ key, status: 'held' });
         log.info('acquire', 'held', { key });
+        // Fresh hold → clear any stale terminal save phase; the active-history key now drives the
+        // header label to "Unsaved" until this session releases.
+        useEditSessionStatusStore.getState().resetPhase();
         // Undo nexus: beginSession shares this exact baseline clone.
         cbRef.current.onAcquired?.(target, base);
       })
@@ -146,6 +169,7 @@ export function useHeldResourceSession(
 
     store.registerOnLost(key, () => {
       log.warn('onLost', 'lock lost via heartbeat', { key });
+      acquired = false; // lock stolen → the unmount cleanup must NOT re-release / double-endSession
       cbRef.current.onLost?.(baselineRef.current);
       cbRef.current.onReleased?.(target);
       setOutcome({ key, status: 'lost' });
@@ -154,7 +178,7 @@ export function useHeldResourceSession(
     return () => {
       cancelled = true;
       const s = useResourceLockStore.getState();
-      if (!s.myLocks.has(key)) {
+      if (!acquired) {
         s.unregisterOnLost(key);
         log.debug('cleanup', 'no lock held — skip release', { key });
         return;
@@ -167,7 +191,21 @@ export function useHeldResourceSession(
       const projected = project(rawNode);
       const dirty = rawNode != null && !dequal(projected, baselineRef.current);
       log.info('release', 'release-and-save', { key, dirty, nodeGone: rawNode == null });
-      void s.releaseAndSave(target, dirty, dirty ? cbRef.current.buildPayload(projected) : undefined);
+      // Drive the header label: Saving… while the release-save is in flight, then Saved (both the
+      // dirty save and the clean fast-release resolve to Saved; save errors are toasted by the
+      // gateway path — the label still settles so it never sticks on the spinner).
+      const ess = useEditSessionStatusStore.getState();
+      if (dirty) ess.markSaving();
+      Promise.resolve(
+        s.releaseAndSave(
+          target,
+          dirty,
+          dirty ? cbRef.current.buildPayload(projected) : undefined,
+          capturedBookId,
+        ),
+      )
+        .then(() => ess.markSaved())
+        .catch(() => ess.markSaved());
       s.removeMyLock(target);
       s.unregisterOnLost(key);
       baselineRef.current = null;

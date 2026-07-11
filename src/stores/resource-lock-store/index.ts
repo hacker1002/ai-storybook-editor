@@ -66,7 +66,7 @@ export interface ResourceLockState {
   renew: (t: LockTarget) => Promise<boolean>;
   release: (t: LockTarget) => Promise<void>;
   save: (t: LockTarget, p: SavePayload) => Promise<{ ok: true } | { ok: false; lost: boolean; forbidden: boolean }>;
-  releaseAndSave: (t: LockTarget, dirty: boolean, payload?: SavePayload) => Promise<void>;
+  releaseAndSave: (t: LockTarget, dirty: boolean, payload?: SavePayload, bookIdOverride?: string) => Promise<void>;
 
   // === Phase-03 surface ===
   setCollabPersist: (v: boolean) => void;
@@ -271,15 +271,16 @@ export const useResourceLockStore = create<ResourceLockState>()(
         return { ok: false, lost: r.lost, forbidden: r.forbidden };
       },
 
-      releaseAndSave: async (t, dirty, payload) => {
+      releaseAndSave: async (t, dirty, payload, bookIdOverride) => {
         // Bind bookId ONCE up-front, then call the API fns directly with it — do NOT route through
         // get().save / get().release, which re-read get().bookId at await-resume time. This method is
         // fire-and-forget from the lock-session cleanup; on a space/book UNMOUNT that cleanup runs
-        // immediately before useCollabPersistSession's disconnect() nulls bookId. The save's network
-        // await lets disconnect interleave, so a re-read would see null and SKIP the unlock → the
-        // peer's grey-out lingers until the lock TTL (~60s). Capturing bookId keeps the whole
-        // save→unlock bound to this book regardless of a concurrent disconnect.
-        const bookId = get().bookId;
+        // ALONGSIDE useCollabPersistSession's disconnect() (declared first → runs first), which has
+        // ALREADY nulled store.bookId by the time we get here. So the caller passes the bookId it
+        // captured at acquire-time (`bookIdOverride`); we only fall back to get().bookId for the
+        // in-space release path where the store is still connected. This keeps the whole save→unlock
+        // bound to this book regardless of the concurrent disconnect.
+        const bookId = bookIdOverride ?? get().bookId;
         if (!bookId) {
           log.warn('releaseAndSave', 'no book connected', {});
           return;
