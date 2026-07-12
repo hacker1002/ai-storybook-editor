@@ -29,7 +29,7 @@ import {
 } from '@/stores/snapshot-store/selectors';
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
-import { useLanguageCode } from '@/stores/editor-settings-store';
+import { useLanguageCode, useCanvasSize } from '@/stores/editor-settings-store';
 import { useCurrentBook, useBookTemplateLayout, useBookStepTypography, useBookActions } from '@/stores/book-store';
 import { useTemplateLayouts } from '@/hooks/use-template-layouts';
 import {
@@ -140,6 +140,7 @@ export function SpreadsMainView({
   );
   const actions = useSnapshotActions();
   const langCode = useLanguageCode();
+  const canvasSize = useCanvasSize();
   const book = useCurrentBook();
   const { updateBook } = useBookActions();
   const templateLayout = useBookTemplateLayout();
@@ -439,13 +440,13 @@ export function SpreadsMainView({
         toastLockRequired();
         return;
       }
-      buildRawTextboxes(specs, extractModalImage, selectedSpreadId, langCode, actions.addRawTextbox, bookTypography);
+      buildRawTextboxes(specs, extractModalImage, selectedSpreadId, langCode, canvasSize, actions.addRawTextbox, bookTypography);
       log.info('handleExtractCreateTexts', 'spawned raw textboxes', {
         count: specs.length,
         spreadId: selectedSpreadId,
       });
     },
-    [extractModalImage, spreadEditable, selectedSpreadId, langCode, actions, bookTypography]
+    [extractModalImage, spreadEditable, selectedSpreadId, langCode, canvasSize, actions, bookTypography]
   );
 
   // ── Crop presets (books.crop_presets[]) — controlled persistence via updateBook ──
