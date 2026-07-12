@@ -11,8 +11,9 @@ import {
   ExtractImageModal,
   SPACE_TOOL_MATRIX,
 } from '@/features/editor/components/shared-components';
-import type { ExtractResult } from '@/features/editor/components/shared-components';
+import type { ExtractResult, ExtractedTextbox } from '@/features/editor/components/shared-components';
 import { buildExtractImages } from '@/features/editor/components/objects-creative-space/hooks/use-image-builders';
+import { buildRawTextboxes } from '@/features/editor/components/objects-creative-space/hooks/build-raw-textboxes';
 import {
   upsertCropPreset,
   deleteCropPreset,
@@ -423,6 +424,30 @@ export function SpreadsMainView({
     [extractModalImage, selectedSpreadId, illustrationSpreads, actions, spreadEditable]
   );
 
+  // Texts extract (raw space) → spawn raw_textboxes[] into the current illustration spread
+  // (client-side only — no API/upload). Geometry maps each detected box into the source footprint;
+  // typography is the book default (Validation S1 — no box-height font heuristic).
+  const handleExtractCreateTexts = useCallback(
+    (specs: ExtractedTextbox[]) => {
+      if (!extractModalImage) {
+        log.warn('handleExtractCreateTexts', 'no source image — ignored', { count: specs.length });
+        return;
+      }
+      // Lock-on-click gate: spawning raw_textboxes (in-spread content) requires the SCENE lock.
+      if (!spreadEditable) {
+        log.debug('handleExtractCreateTexts', 'blocked — spread not held', { count: specs.length });
+        toastLockRequired();
+        return;
+      }
+      buildRawTextboxes(specs, extractModalImage, selectedSpreadId, langCode, actions.addRawTextbox, bookTypography);
+      log.info('handleExtractCreateTexts', 'spawned raw textboxes', {
+        count: specs.length,
+        spreadId: selectedSpreadId,
+      });
+    },
+    [extractModalImage, spreadEditable, selectedSpreadId, langCode, actions, bookTypography]
+  );
+
   // ── Crop presets (books.crop_presets[]) — controlled persistence via updateBook ──
   const handleUpsertCropPreset = useCallback(
     (preset: CropPreset) => {
@@ -729,6 +754,7 @@ export function SpreadsMainView({
           image={extractModalImage}
           enabledTabs={SPACE_TOOL_MATRIX.raw.extract}
           onCreateImages={handleExtractCreateImages}
+          onCreateTexts={handleExtractCreateTexts}
           cropPresets={book?.crop_presets ?? undefined}
           onUpsertCropPreset={handleUpsertCropPreset}
           onDeleteCropPreset={handleDeleteCropPreset}

@@ -89,6 +89,12 @@ export interface ObjectBoxOverlayProps {
   freeForm?: boolean;
   /** preset mode — Select current value text incl. dirty `*` marker. */
   displayLabel?: (boxId: string) => string;
+  // ── read-only mode (Texts) ──
+  /** true → select-only: no drag/resize/toolbar (geometry immutable). Keeps click-select +
+   *  highlight + numbered badge. Default false (Objects/Crops interactive — no regression). */
+  readOnly?: boolean;
+  /** readOnly mode — render a numbered ordinal badge (box.label) at the box top-left. */
+  numbered?: boolean;
 }
 
 interface DragState {
@@ -116,6 +122,8 @@ export function ObjectBoxOverlay({
   onCloseBox,
   freeForm = false,
   displayLabel,
+  readOnly = false,
+  numbered = false,
 }: ObjectBoxOverlayProps) {
   const areaRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -227,9 +235,18 @@ export function ObjectBoxOverlay({
               width: `${box.w}%`,
               height: `${box.h}%`,
               zIndex: isSelected ? 20 : 10,
-              cursor: disabled ? 'default' : 'move',
+              cursor: readOnly ? 'pointer' : disabled ? 'default' : 'move',
             }}
-            onMouseDown={(e) => beginPointer(e, box, 'drag')}
+            // Interactive tabs drag on mouse-down; Texts (readOnly) is select-only → click to select.
+            onMouseDown={readOnly ? undefined : (e) => beginPointer(e, box, 'drag')}
+            onClick={
+              readOnly
+                ? (e) => {
+                    e.stopPropagation();
+                    onSelectBox(box.id);
+                  }
+                : undefined
+            }
           >
             {/* Border — selected = solid accent + glow; unselected = faded dashed */}
             <div
@@ -241,6 +258,18 @@ export function ObjectBoxOverlay({
               }}
             />
 
+            {/* Texts (readOnly): numbered ordinal badge only — no toolbar, no resize handles. */}
+            {readOnly ? (
+              numbered && (
+                <span
+                  className="pointer-events-none absolute rounded-full px-1.5 py-0.5 text-center text-[11px] font-semibold text-white shadow-sm"
+                  style={{ top: -10, left: -6, minWidth: 18, background: color, zIndex: 30 }}
+                >
+                  {box.label}
+                </span>
+              )
+            ) : (
+            <>
             {/* Control bar — spans the box width. Strip is pointer-events-none so the gap
                 between controls doesn't swallow canvas clicks; interactive children re-enable. */}
             <div
@@ -353,6 +382,8 @@ export function ObjectBoxOverlay({
                   onMouseDown={(e) => beginPointer(e, box, 'resize', corner)}
                 />
               ))}
+            </>
+            )}
           </div>
         );
       })}

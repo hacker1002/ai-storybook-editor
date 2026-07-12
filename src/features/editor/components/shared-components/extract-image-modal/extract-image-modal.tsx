@@ -27,6 +27,7 @@ import {
   type ExtractTabKey,
   type BackgroundRemoveCandidate,
   type CropPreset,
+  type ExtractedTextbox,
 } from "./extract-image-modal-constants";
 import {
   resolveSourceImageUrl,
@@ -37,10 +38,12 @@ import { useSegmentTabState, type SegmentTabHandle } from "./segment-tab";
 import { useLayersTabState, type LayersTabHandle } from "./layers-tab";
 import { useObjectsTabState } from "./objects-tab";
 import { useCropsTabState } from "./crops-tab";
+import { useTextsTabState } from "./texts-tab";
 import { useBackgroundTabState, type BackgroundTabHandle } from "./background-tab";
 import { ExtractImageModalHeader } from "./extract-image-modal-header";
 import { ExtractResultsSidebar } from "./extract-results-sidebar";
 import { ExtractObjectsSidebar } from "./extract-objects-sidebar";
+import { ExtractTextsSidebar } from "./extract-texts-sidebar";
 import { ExtractCropsSidebar } from "./extract-crops-sidebar";
 import { CropPresetConfirmDialog } from "./crop-preset-confirm-dialog";
 import { ExtractCanvas } from "./extract-canvas";
@@ -52,15 +55,17 @@ const EMPTY_RESULTS: ExtractResult[] = [];
 /** Stable empty presets fallback (Crops tab) — same constant-identity rationale. */
 const EMPTY_CROP_PRESETS: CropPreset[] = [];
 
-/** Shared subset of the Objects + Crops box-overlay handles the root drives (canvas overlay,
- *  ⭐ commit, Delete hotkey). Both handles satisfy it structurally. */
+/** Shared subset of the Objects + Crops + Texts box-overlay handles the root drives (canvas
+ *  overlay, selection, Delete hotkey). All three satisfy it structurally. NOTE: `commitExtract`
+ *  is intentionally NOT shared — Objects/Crops return `Promise<ExtractResult[]>` (async crop +
+ *  upload) while Texts returns `ExtractedTextbox[]` (sync spawn). The root routes commit by
+ *  `commitMode`, picking the concrete handle per branch (see handleCommitExtract). */
 type BoxOverlayHandle = {
   selectedBoxId: string | null;
   canRun: boolean;
   CanvasOverlay: React.ReactNode;
   onImageLoad: (e: React.SyntheticEvent<HTMLImageElement>) => void;
   deleteBox: (id: string) => void;
-  commitExtract: (sourceUrl: string) => Promise<ExtractResult[]>;
 };
 
 export interface ExtractImageModalProps {
@@ -68,6 +73,10 @@ export interface ExtractImageModalProps {
   onOpenChange: (open: boolean) => void;
   image: SpreadImage;
   onCreateImages: (results: ExtractResult[]) => void;
+  /** Texts tab ⭐ Extract — parent spawns raw_textboxes[] from the detected specs (client-side,
+   *  no upload). Absent → Extract disabled on the Texts tab (tooltip "Text extract not available
+   *  here") so the button is never a silent no-op. */
+  onCreateTexts?: (textboxes: ExtractedTextbox[]) => void;
   initialTab?: ExtractTabKey;
   /** Per-space tab availability (matrix gate #1). `undefined` → all EXTRACT_TABS (legacy).
    *  Tabs absent from the list are hidden; present-but-unbuilt tabs render as "Coming soon". */
@@ -91,6 +100,7 @@ export function ExtractImageModal({
   onOpenChange,
   image,
   onCreateImages,
+  onCreateTexts,
   initialTab,
   enabledTabs,
   yieldedFrom,
@@ -133,6 +143,7 @@ export function ExtractImageModal({
   const segmentHandle = useSegmentTabState(image, { isBusy, onRequestRun });
   const layersHandle = useLayersTabState(image, { isBusy });
   const objectsHandle = useObjectsTabState(image, { isBusy, detectContext });
+  const textsState = useTextsTabState(image, { isBusy });
   const cropsState = useCropsTabState(image, {
     isBusy,
     cropPresets: cropPresets ?? EMPTY_CROP_PRESETS,
@@ -162,9 +173,11 @@ export function ExtractImageModal({
   // [+] = instant add (no API), ⭐ Extract = crop-on-extract (README §2.3 gating branch).
   const isBoxOverlay = activeContract?.interactionMode === "box-overlay";
   const isCropTab = activeTab === "crop";
-  // Box-overlay tabs (Objects + Crops) share the canvas/commit/Delete-hotkey path; pick the
-  // active handle via the shared structural contract.
-  const boxTab: BoxOverlayHandle = isCropTab ? cropsState : objectsHandle;
+  const isTextsTab = activeTab === "get_text";
+  // Box-overlay tabs (Objects + Crops + Texts) share the canvas overlay / selection / Delete-hotkey
+  // path; pick the active handle via the shared structural contract. Commit + Detect route
+  // separately (per-tab handle) because their signatures diverge (see handleCommitExtract).
+  const boxTab: BoxOverlayHandle = isTextsTab ? textsState : isCropTab ? cropsState : objectsHandle;
   // Title of the box pending crop-preset delete (drives the confirm dialog copy).
   const confirmPresetTitle =
     cropsState.boxes.find((b) => b.id === cropsState.confirmDeleteBoxId)?.title ?? "";
@@ -182,8 +195,12 @@ export function ExtractImageModal({
     ? isBusy || !sourceUrl
     : isBusy || !sourceUrl || !(activeHandle?.canRun ?? false);
   // ⭐ Extract gate — box-overlay: boxes > 0 (active handle); result-grid: has results.
+  // Texts additionally needs a consumer (onCreateTexts) or the client-side spawn is a no-op.
   const commitDisabled = isBoxOverlay
-    ? isBusy || !sourceUrl || !boxTab.canRun
+    ? isBusy ||
+      !sourceUrl ||
+      !boxTab.canRun ||
+      (activeContract?.commitMode === "spawn-textbox" && !onCreateTexts)
     : results.length === 0 || isBusy;
   const processingLabel = isBoxOverlay
     ? "Detecting…"
@@ -202,9 +219,11 @@ export function ExtractImageModal({
         ? layersHandle.ParamsPanel
         : activeTab === "get_object"
           ? objectsHandle.ParamsPanel
-          : activeTab === "background"
-            ? backgroundHandle.ParamsPanel
-            : (
+          : activeTab === "get_text"
+            ? textsState.ParamsPanel
+            : activeTab === "background"
+              ? backgroundHandle.ParamsPanel
+              : (
                 <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
                   Coming soon
                 </div>
@@ -222,9 +241,10 @@ export function ExtractImageModal({
     segmentHandle.reset();
     layersHandle.reset();
     objectsHandle.reset();
+    textsState.reset();
     cropsState.reset();
     backgroundHandle.reset();
-  }, [resolvedInitialTab, segmentHandle, layersHandle, objectsHandle, cropsState, backgroundHandle]);
+  }, [resolvedInitialTab, segmentHandle, layersHandle, objectsHandle, textsState, cropsState, backgroundHandle]);
 
   const handleClose = useCallback(() => {
     if (isBusy) {
@@ -318,30 +338,46 @@ export function ExtractImageModal({
     [activeTab, resultsByTab],
   );
 
-  // 🔍 Detect (box-overlay) — root owns isProcessing; the tab handles its own toasts.
+  // 🔍 Detect (box-overlay) — root owns isProcessing; the tab handles its own toasts. Objects and
+  // Texts both expose { canDetect, detect(sourceUrl) }; route by tab (Crops has no Detect).
   const handleDetect = useCallback(async () => {
-    if (!isBoxOverlay || !sourceUrl || isBusy || !objectsHandle.canDetect) return;
+    const detectHandle = isTextsTab ? textsState : objectsHandle;
+    if (!isBoxOverlay || !sourceUrl || isBusy || !detectHandle.canDetect) return;
     const controller = new AbortController();
     abortRef.current = controller;
     setIsProcessing(true);
-    log.info("handleDetect", "start", { imageId: image.id });
+    log.info("handleDetect", "start", { imageId: image.id, activeTab });
     try {
-      await objectsHandle.detect(sourceUrl);
+      await detectHandle.detect(sourceUrl);
     } finally {
       if (!controller.signal.aborted) setIsProcessing(false);
     }
-  }, [isBoxOverlay, sourceUrl, isBusy, objectsHandle, image.id]);
+  }, [isBoxOverlay, isTextsTab, sourceUrl, isBusy, textsState, objectsHandle, image.id, activeTab]);
 
   const handleCommitExtract = useCallback(async () => {
     if (commitDisabled) return;
 
+    // Texts: spawn-textbox — client-side only. Map boxes → specs and hand them to the parent
+    // (which spawns raw_textboxes[]); no crop/upload/API. Sync → close immediately.
+    if (activeContract?.commitMode === "spawn-textbox") {
+      if (!onCreateTexts) return; // commitDisabled already blocks, but guard the silent no-op.
+      const specs = textsState.commitExtract();
+      if (specs.length === 0) return;
+      log.info("handleCommitExtract", "spawn-textbox", { count: specs.length });
+      onCreateTexts(specs);
+      onOpenChange(false);
+      return;
+    }
+
     // Objects + Crops: crop-on-extract — crop every box → upload → geometry-positioned spawn.
     if (activeContract?.commitMode === "crop-on-extract") {
       if (!sourceUrl) return;
+      // boxTab drops commitExtract (signature diverges for Texts) → pick the concrete crop handle.
+      const cropHandle = isCropTab ? cropsState : objectsHandle;
       setIsCommitting(true);
       log.info("handleCommitExtract", "crop-on-extract start", { activeTab });
       try {
-        const uploaded = await boxTab.commitExtract(sourceUrl);
+        const uploaded = await cropHandle.commitExtract(sourceUrl);
         log.info("handleCommitExtract", "crop-on-extract done", { count: uploaded.length });
         onCreateImages(uploaded);
         onOpenChange(false);
@@ -387,7 +423,11 @@ export function ExtractImageModal({
     commitDisabled,
     activeContract,
     sourceUrl,
-    boxTab,
+    isCropTab,
+    cropsState,
+    objectsHandle,
+    textsState,
+    onCreateTexts,
     results,
     activeTab,
     onCreateImages,
@@ -494,6 +534,14 @@ export function ExtractImageModal({
               onDeleteCropPreset={cropsState.deleteCropPreset}
               addDisabled={runDisabled}
             />
+          ) : isTextsTab ? (
+            <ExtractTextsSidebar
+              title={activeContract?.label ?? ""}
+              texts={textsState.texts}
+              selectedTextId={textsState.selectedBoxId}
+              onSelect={textsState.selectBox}
+              onDelete={textsState.deleteBox}
+            />
           ) : isBoxOverlay ? (
             <ExtractObjectsSidebar
               title={activeContract?.label ?? ""}
@@ -531,7 +579,7 @@ export function ExtractImageModal({
             overlay={isBoxOverlay ? boxTab.CanvasOverlay : undefined}
             onImageLoad={isBoxOverlay ? boxTab.onImageLoad : undefined}
             onDetect={handleDetect}
-            canDetect={objectsHandle.canDetect}
+            canDetect={isTextsTab ? textsState.canDetect : objectsHandle.canDetect}
             detectVisible={isBoxOverlay && !isCropTab}
             zoom={zoom}
             onZoomChange={setZoom}

@@ -107,11 +107,11 @@ describe('resolveInitialKey — Extract tabs', () => {
     ).toBe('get_object');
   });
 
-  it('raw space lands on the built crop tab (get_text still coming-soon)', () => {
-    // raw.extract = ['crop','get_text']. crop is now enabled (Crops tab shipped), so the
-    // landing tab is the built+available crop — get_text remains coming-soon.
+  it('raw space lands on the built get_text tab (leftmost built+available)', () => {
+    // raw.extract = ['crop','get_text']. Both are now enabled (Crops + Texts shipped), so the
+    // landing tab is the leftmost built+available in registry order — get_text precedes crop.
     const tab = resolveInitialKey(EXTRACT_TABS, SPACE_TOOL_MATRIX.raw.extract, undefined, DEFAULT_EXTRACT_TAB);
     expect(SPACE_TOOL_MATRIX.raw.extract).toContain(tab);
-    expect(tab).toBe('crop');
+    expect(tab).toBe('get_text');
   });
 });

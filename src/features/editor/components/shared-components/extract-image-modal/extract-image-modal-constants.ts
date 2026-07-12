@@ -105,11 +105,15 @@ export interface ExtractTabContract {
   /** Result canvas render — default `image` (single <img>); Background = `compare` (before/after slider). */
   resultPreview?: 'image' | 'compare';
   /** ⭐ Extract commit path — default `upload-ephemeral`; Objects = `crop-on-extract`;
-   *  Background = `passthrough` (API returns a permanent URL → no re-upload). */
-  commitMode?: 'upload-ephemeral' | 'crop-on-extract' | 'passthrough';
+   *  Background = `passthrough` (API returns a permanent URL → no re-upload);
+   *  Texts = `spawn-textbox` (client-side only — spawn raw_textboxes, no upload/API). */
+  commitMode?: 'upload-ephemeral' | 'crop-on-extract' | 'passthrough' | 'spawn-textbox';
   /** Right Params sidebar — default true (model/threshold controls). Crops = false
    *  (no model → root hides the sidebar so the canvas spans full width). */
   hasParams?: boolean;
+  /** Box-overlay `[+]` add-manual-box affordance — default true (Objects). Crops keeps its own
+   *  `[+]`; Texts = false (Detect-only, no manual box → root renders no `[+]`). */
+  manualAdd?: boolean;
 }
 
 /** One spread image offered as a "remove from scene" target in the Background tab.
@@ -124,7 +128,7 @@ export interface BackgroundRemoveCandidate {
 // ── Tab registry (README §2.2 — order + labels match mock #ex-fs-tabs) ────────
 export const EXTRACT_TABS: ExtractTabContract[] = [
   { key: 'get_object', label: 'Objects', icon: Tag, runMode: 'replace', enabled: true, interactionMode: 'box-overlay', commitMode: 'crop-on-extract' },
-  { key: 'get_text', label: 'Texts', icon: Type, runMode: 'replace', enabled: false },
+  { key: 'get_text', label: 'Texts', icon: Type, runMode: 'replace', enabled: true, interactionMode: 'box-overlay', commitMode: 'spawn-textbox', manualAdd: false },
   { key: 'crop', label: 'Crops', icon: Crop, runMode: 'replace', enabled: true, interactionMode: 'box-overlay', commitMode: 'crop-on-extract', hasParams: false },
   { key: 'segment', label: 'Segments', icon: Box, runMode: 'append', enabled: true },
   { key: 'layering', label: 'Layers', icon: Layers, runMode: 'replace', enabled: true },
@@ -191,3 +195,36 @@ export const DEFAULT_BACKGROUND_MODEL = 'google/nano-banana-pro';
 export const REMOVE_OBJECTS_MIN = 1;   // API requires ≥1 object to remove
 export const REMOVE_OBJECTS_MAX = 16;  // API cap (08 §Parameters) — seed/add clamp here
 export const BACKGROUND_PROMPT_MAX = 2000;
+
+// ── Texts tab (06-texts-tab.md §2 / api/retouch/11-detect-texts) ─────────────
+// OCR Detect (Gemini) → numbered select-only boxes → ⭐ Extract spawns raw_textboxes[] into the
+// current spread (client-side, NO API). Font size is NOT inferred from box height — spawned
+// textboxes use the book typography default (Validation S1); user adjusts per-box later.
+
+/** ⭐ Extract commit result of the Texts tab (client-side spawn, no API/upload). Minimal by
+ *  design — NO `fontSize` (typography comes from the book default at spawn, Validation S1). */
+export interface ExtractedTextbox {
+  content: string;
+  /** % 0-100 relative to the SOURCE image (already ÷100 from basis 10000). */
+  geometry: { x: number; y: number; w: number; h: number };
+}
+
+/** One detected text region on the source canvas (select-only — geometry is immutable). Mirrors
+ *  ObjectBox for the shared overlay but carries an ordinal `index` badge instead of a ratio. */
+export interface TextBox {
+  id: string;
+  index: number;   // 1-based ordinal → numbered badge (no re-number on delete)
+  content: string;
+  x: number; y: number; w: number; h: number; // % 0-100 (÷100 from basis 10000)
+  color: string;   // TEXT_BOX_COLORS[idx % n] — border + badge
+  confidence?: number;
+}
+
+// OCR model — allowlist group `detect-texts` (11 §Notes, v1 Gemini-only). Same default as Objects.
+export const OCR_MODEL_OPTIONS = ['google/gemini-3.5-flash'] as const;
+export const DEFAULT_OCR_MODEL = 'google/gemini-3.5-flash';
+
+/** Stable distinct colors for text box border + numbered badge (cycled by index). */
+export const TEXT_BOX_COLORS = ['#3b6cf6', '#f59e0b', '#22c55e', '#ef4444', '#a855f7', '#14b8a6'] as const;
+// ⚡ NO font-size constants — spawned textboxes use book typography default (Phase 05); the
+//    box-height→font heuristic was dropped (Validation S1).

@@ -4,4 +4,5 @@ export type {
   ExtractResult,
   ExtractTabKey,
   BackgroundRemoveCandidate,
+  ExtractedTextbox,
 } from "./extract-image-modal-constants";

@@ -164,6 +164,43 @@ export interface DetectObjectsResult {
   };
 }
 
+// --- Detect Texts (11-detect-texts) — OCR bounding boxes for raw_textbox spawn ---
+// Minimal Objects sibling: input is imageUrl + optional model only (no visualDescription /
+// snapshotId — OCR needs no scene context); response carries `texts[]` (no ratio/tag).
+// Types validated against the live OpenAPI (`/docs#/retouch/detect_texts...`).
+
+export interface DetectTextsParams {
+  imageUrl: string;
+  /** OCR model override — allowlist group `detect-texts`. `model` is REQUIRED when `modelParams`
+   *  is present (live OpenAPI required:["model"]). Omit `modelParams` → server default. */
+  modelParams?: { model: string; params?: Record<string, unknown> };
+}
+
+export interface DetectedText {
+  /** Verbatim OCR text — may be multi-line (`\n`). ⚠️ never logged (PII — spec §Security). */
+  content: string;
+  /** Bounding box in basis points: 100% == 10000 (consumer divides by 100 → %). */
+  geometry: { x: number; y: number; w: number; h: number };
+  confidence?: number;
+}
+
+export interface DetectTextsResult {
+  success: boolean;
+  data?: { texts: DetectedText[] };
+  error?: string;
+  httpStatus?: number;
+  errorCode?: string;
+  meta?: {
+    processingTime?: number;
+    model?: string;
+    tokenUsage?: number;
+    sourceWidth?: number;
+    sourceHeight?: number;
+    detectedCount?: number;
+    droppedCount?: number;
+  };
+}
+
 export interface ImageRemoveBgParams {
   imageUrl: string;
   preserveAlpha?: boolean;
@@ -266,6 +303,30 @@ export async function callDetectObjects(
   } else {
     const { error, httpStatus, errorCode } = res as ImageApiFailure;
     log.error('callDetectObjects', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
+}
+
+export async function callDetectTexts(
+  params: DetectTextsParams,
+): Promise<DetectTextsResult | ImageApiFailure> {
+  log.info('callDetectTexts', 'start', {
+    imageUrl: params.imageUrl.slice(0, 80),
+    model: params.modelParams?.model,
+  });
+  const res = await callImageApi<DetectTextsResult>('/api/retouch/detect-texts', params);
+  if (res.success) {
+    const r = res as DetectTextsResult;
+    // ⚠️ count/meta only — never log OCR `content` (PII, spec §Security).
+    log.info('callDetectTexts', 'success', {
+      count: r.data?.texts.length ?? 0,
+      detectedCount: r.meta?.detectedCount,
+      droppedCount: r.meta?.droppedCount,
+      processingMs: r.meta?.processingTime,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.warn('callDetectTexts', 'failed', { errorCode, httpStatus, msg: error?.slice(0, 100) });
   }
   return res;
 }
