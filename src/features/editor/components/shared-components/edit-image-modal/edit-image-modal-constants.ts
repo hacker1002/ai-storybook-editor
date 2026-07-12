@@ -27,9 +27,10 @@ export {
 
 // ── Shared types (README §2.2) ───────────────────────────────────────────────
 
-/** Edit-tool discriminator. `remove_background` + `erasor` are in scope; the rest are
- *  deferred registry slots (rendered disabled with a "Coming soon" tooltip). Key order +
- *  labels mirror the mock #edit-fs-tabs (left → right). */
+/** Edit-tool discriminator. Scope is driven by the `enabled` flag in EDIT_TOOLS below;
+ *  `remove_object` is the only deferred slot (rendered disabled with a "Coming soon"
+ *  tooltip). `remove_text` is in scope — see 06-remove-text-tab.md. Key order + labels
+ *  mirror the mock #edit-fs-tabs (left → right). */
 export type EditToolKey =
   | 'inpaint'
   | 'outpaint'
@@ -60,7 +61,7 @@ export const EDIT_TOOLS: EditToolContract[] = [
   { key: 'outpaint', label: 'Outpaint', icon: Maximize, enabled: true, canvasMode: 'preview' },
   { key: 'upscale', label: 'Upscale', icon: Expand, enabled: true, canvasMode: 'preview' },
   { key: 'remove_object', label: 'Remove Object', icon: CircleSlash, enabled: false, canvasMode: 'paint' },
-  { key: 'remove_text', label: 'Remove Text', icon: Type, enabled: false, canvasMode: 'preview' },
+  { key: 'remove_text', label: 'Remove Text', icon: Type, enabled: true, canvasMode: 'preview' },
   { key: 'remove_background', label: 'Remove BG', icon: ImageOff, enabled: true, canvasMode: 'preview' },
   { key: 'erasor', label: 'Erasor', icon: Eraser, enabled: true, canvasMode: 'paint' },
 ];
@@ -75,6 +76,7 @@ export const COMMIT_HINTS: Partial<Record<EditToolKey, string>> = {
   inpaint: 'Run inpaint',
   outpaint: 'Run outpaint',
   remove_background: 'Run remove background',
+  remove_text: 'Run remove text',
   upscale: 'Run upscale',
   erasor: 'Save erased version',
 };
@@ -145,6 +147,15 @@ export const DEFAULT_RMBG_MODEL: RmbgModel = 'bria/remove-background';
 export type OutputBgMode = 'transparent' | 'color' | 'blur' | 'overlay';
 export const DEFAULT_OUTPUT_BG: OutputBgMode = 'transparent';
 export const DEFAULT_OUTPUT_COLOR = '#FFFFFF';
+
+// ── Remove Text tab (06-remove-text-tab.md §2) ───────────────────────────────
+
+/** Replicate text-removal model allowlist (group `remove-text` — v1 single entry). Select
+ *  renders even at 1 option (ready for allowlist growth). FE default matches API default;
+ *  FE still sends explicit `model` on every call (flat, NOT nested modelParams). */
+export const REMOVE_TEXT_MODEL_OPTIONS = ['flux-kontext-apps/text-removal'] as const;
+export type RemoveTextModel = (typeof REMOVE_TEXT_MODEL_OPTIONS)[number];
+export const DEFAULT_REMOVE_TEXT_MODEL: RemoveTextModel = 'flux-kontext-apps/text-removal';
 
 // ── Upscale tab (03-upscale-tab.md §2) ───────────────────────────────────────
 

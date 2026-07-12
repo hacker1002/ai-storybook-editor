@@ -181,6 +181,27 @@ export interface ImageRemoveBgResult {
   meta?: { processingTime?: number; mimeType?: string; replicatePredictionId?: string; backgroundColor?: string | null };
 }
 
+// ── Remove Text (10-remove-text-image) ─────────────────────────────────────────
+
+export interface RemoveTextImageParams {
+  imageUrl: string;
+  /** Replicate text-removal model — allowlist group `remove-text`. Omit → server default
+   *  (`flux-kontext-apps/text-removal`). Flat `model` (NOT nested `modelParams`). FE sends
+   *  explicit value to match the UI default. */
+  model?: string;
+}
+
+export interface RemoveTextImageResult {
+  success: true;
+  data: { imageUrl: string; storagePath: string };
+  meta?: {
+    processingTime?: number;
+    mimeType?: string;
+    model?: string;
+    replicatePredictionId?: string;
+  };
+}
+
 export interface GenerateNarrationParams {
   script: string;
   voiceId: string;
@@ -319,6 +340,28 @@ export async function callImageRemoveBg(
   } else {
     const { error, httpStatus, errorCode } = res as ImageApiFailure;
     log.error('callImageRemoveBg', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
+  }
+  return res;
+}
+
+export async function callRemoveTextImage(
+  params: RemoveTextImageParams
+): Promise<RemoveTextImageResult | ImageApiFailure> {
+  log.info('callRemoveTextImage', 'start', {
+    imageUrl: params.imageUrl.slice(0, 80),
+    model: params.model,
+  });
+  const res = await callImageApi<RemoveTextImageResult>('/api/retouch/remove-text-image', params);
+  if (res.success) {
+    const r = res as RemoveTextImageResult;
+    log.info('callRemoveTextImage', 'success', {
+      processingMs: r.meta?.processingTime,
+      model: r.meta?.model,
+      predictionId: r.meta?.replicatePredictionId,
+    });
+  } else {
+    const { error, httpStatus, errorCode } = res as ImageApiFailure;
+    log.error('callRemoveTextImage', 'error', { errorCode, httpStatus, msg: error?.slice(0, 100) });
   }
   return res;
 }

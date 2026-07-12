@@ -37,6 +37,7 @@ import {
 import { prependVersion, versionFromMediaUrl, mapEditError } from "./edit-image-modal-utils";
 import { resolveInitialKey } from "../image-tools-space-matrix";
 import { useRemoveBgTabState } from "./remove-bg-tab";
+import { useRemoveTextTabState } from "./remove-text-tab";
 import { useUpscaleTabState } from "./upscale-tab";
 import { useOutpaintTabState } from "./outpaint-tab";
 import { useEraserTabState } from "./eraser-tab";
@@ -51,6 +52,7 @@ const PROCESSING_LABELS: Partial<Record<EditToolKey, string>> = {
   inpaint: "Inpainting…",
   outpaint: "Outpainting…",
   remove_background: "Removing background…",
+  remove_text: "Removing text…",
   upscale: "Upscaling…",
   erasor: "Saving erased version…",
 };
@@ -61,6 +63,7 @@ const ERROR_ACTION_LABELS: Partial<Record<EditToolKey, string>> = {
   inpaint: "Inpaint",
   outpaint: "Outpaint",
   remove_background: "Remove background",
+  remove_text: "Remove text",
   upscale: "Upscale",
   erasor: "Lưu",
 };
@@ -131,6 +134,7 @@ export function EditImageModal({
 
   // ── Per-tab sub-state (all hooks run unconditionally; shell renders the active one) ──
   const removeBgState = useRemoveBgTabState({ selectedVersion });
+  const removeTextState = useRemoveTextTabState({ selectedVersion });
   const upscaleState = useUpscaleTabState({ selectedVersion });
   const outpaintState = useOutpaintTabState({ selectedVersion });
   const erasorState = useEraserTabState({ selectedVersion, pathPrefix, zoom });
@@ -155,7 +159,9 @@ export function EditImageModal({
       ? upscaleState.canCommit
       : activeTool === "outpaint"
         ? outpaintState.canCommit
-        : removeBgState.canCommit;
+        : activeTool === "remove_text"
+          ? removeTextState.canCommit
+          : removeBgState.canCommit;
   const commitDisabled = isProcessing || !selectedVersion || !activeCanCommit;
   const commitHint = COMMIT_HINTS[activeTool] ?? "Commit";
   const processingLabel = PROCESSING_LABELS[activeTool] ?? "Processing…";
@@ -168,11 +174,13 @@ export function EditImageModal({
         ? upscaleState.ParamsPanel
         : activeTool === "outpaint"
           ? outpaintState.ParamsPanel
-          : (
-              <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
-                Coming soon
-              </div>
-            );
+          : activeTool === "remove_text"
+            ? removeTextState.ParamsPanel
+            : (
+                <div className="px-4 py-6 text-center text-sm text-[var(--swap-modal-text-muted)]">
+                  Coming soon
+                </div>
+              );
 
   // ── Reset / close ────────────────────────────────────────────────────────────
   const resetState = useCallback(() => {
@@ -256,7 +264,9 @@ export function EditImageModal({
           ? upscaleState.commit
           : activeTool === "outpaint"
             ? outpaintState.commit
-            : removeBgState.commit;
+            : activeTool === "remove_text"
+              ? removeTextState.commit
+              : removeBgState.commit;
       const newUrl = await commitFn(committed);
       if (runId !== commitRunIdRef.current) {
         log.debug("handleCommit", "stale — dropped", { runId });
@@ -275,7 +285,7 @@ export function EditImageModal({
     } finally {
       if (runId === commitRunIdRef.current) setIsProcessing(false);
     }
-  }, [commitDisabled, selectedVersion, activeTool, isPaint, activePaint, removeBgState, upscaleState, outpaintState, illustrations, onUpdateIllustrations]);
+  }, [commitDisabled, selectedVersion, activeTool, isPaint, activePaint, removeBgState, removeTextState, upscaleState, outpaintState, illustrations, onUpdateIllustrations]);
 
   const handleToggleCompare = useCallback(() => {
     if (!canCompare) return;
