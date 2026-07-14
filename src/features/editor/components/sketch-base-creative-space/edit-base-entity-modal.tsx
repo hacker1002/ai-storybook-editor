@@ -1,8 +1,7 @@
 // edit-base-entity-modal.tsx — "Edit {Character|Prop}" modal (design 04). Tabs = each base
-// entity; every tab exposes TWO editable textareas. The first merges description + height +
-// visual_design under labeled `[section]` headers into ONE box (the DB keeps them as separate
-// fields — see base-entity-text-merge + BaseSheetEntity); the second is art_language. Deleting a
-// section header makes the text unroutable, so parse errors BLOCK Save (per-field validation).
+// entity; every tab exposes TWO editable textareas: visual_design and art_language (the only two
+// fields that drive base-sheet generation). description/height live in the DB but are NOT edited
+// here — the store action is a partial merge, so leaving them out preserves their values.
 // ALL entities are drafted locally; Save commits ONCE, diffing so only changed entities are
 // written (updateSketchBaseEntityText). Switching tabs keeps drafts.
 
@@ -25,14 +24,12 @@ import { useInteractionLayer } from '@/features/editor/contexts';
 import { titleCase } from '@/features/editor/components/sketch-variants-creative-space/sketch-variants-constants';
 import type { BaseKind } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
-import { formatMergedEntityText, parseMergedEntityText } from './base-entity-text-merge';
 
 const log = createLogger('Editor', 'EditBaseEntityModal');
 
-/** Local editable draft for one entity's base variant. `merged` = the single labeled textarea
- *  (description + height + visual_design); `art_language` stays its own box. */
+/** Local editable draft for one entity's base variant — only the two generation-driving fields. */
 interface EntityDraft {
-  merged: string;
+  visual_design: string;
   art_language: string;
 }
 type DraftMap = Record<string, EntityDraft>;
@@ -53,14 +50,7 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
     for (const e of useSnapshotStore.getState().sketch[kind]) {
       const base = e.variants.find((v) => v.key === 'base');
       if (!base) continue;
-      out[e.key] = {
-        merged: formatMergedEntityText({
-          description: base.description,
-          height: base.height ?? '',
-          visual_design: base.visual_design,
-        }),
-        art_language: base.art_language,
-      };
+      out[e.key] = { visual_design: base.visual_design, art_language: base.art_language };
     }
     return out;
   }, [kind]);
@@ -79,25 +69,11 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
     () =>
       Object.keys(initialDrafts).some(
         (k) =>
-          drafts[k]?.merged !== initialDrafts[k].merged ||
+          drafts[k]?.visual_design !== initialDrafts[k].visual_design ||
           drafts[k]?.art_language !== initialDrafts[k].art_language,
       ),
     [drafts, initialDrafts],
   );
-
-  // Parse every entity's merged box so Save can gate on ALL tabs (a corrupt header on an inactive
-  // tab must still block Save — otherwise its text saves to the wrong field or silently drops).
-  const parsedByKey = useMemo(
-    () => Object.fromEntries(Object.keys(drafts).map((k) => [k, parseMergedEntityText(drafts[k].merged)])),
-    [drafts],
-  );
-  const invalidKeys = useMemo(
-    () => Object.keys(parsedByKey).filter((k) => !parsedByKey[k].ok),
-    [parsedByKey],
-  );
-  const activeParse = parsedByKey[activeKey];
-  const activeErrors = activeParse && !activeParse.ok ? activeParse.errors : [];
-  const otherInvalidKeys = invalidKeys.filter((k) => k !== activeKey);
 
   const updateDraft = useCallback(
     (field: keyof EntityDraft, value: string) => {
@@ -111,17 +87,10 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
     for (const key of Object.keys(initialDrafts)) {
       const d = drafts[key];
       const init = initialDrafts[key];
-      if (d.merged === init.merged && d.art_language === init.art_language) continue;
-      const parsed = parseMergedEntityText(d.merged);
-      if (!parsed.ok) {
-        // Guarded by the disabled Save button; keep as a hard stop so we never write a bad parse.
-        log.warn('handleSave', 'skip invalid entity', { kind, entityKey: key, errors: parsed.errors });
-        continue;
-      }
+      if (d.visual_design === init.visual_design && d.art_language === init.art_language) continue;
+      // Partial merge — description/height intentionally omitted so their stored values persist.
       updateSketchBaseEntityText(kind, key, {
-        description: parsed.fields.description,
-        height: parsed.fields.height,
-        visual_design: parsed.fields.visual_design,
+        visual_design: d.visual_design,
         art_language: d.art_language,
       });
       changed += 1;
@@ -149,7 +118,7 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
   });
 
   const activeDraft = drafts[activeKey];
-  const canSave = isDirty && invalidKeys.length === 0;
+  const canSave = isDirty;
 
   return (
     <Dialog open onOpenChange={(open) => !open && guardClose()}>
@@ -177,7 +146,6 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
                 {entityKeys.map((key) => (
                   <TabsTrigger key={key} value={key}>
                     {titleCase(key)}
-                    {invalidKeys.includes(key) && <span className="ml-1 text-destructive">•</span>}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -187,25 +155,13 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Visual Design
               </Label>
-              <p className="text-[11px] text-muted-foreground">
-                Keep the <code>[Description]</code>, <code>[Height]</code> and <code>[Visual design]</code> headers —
-                each section saves to its own field.
-              </p>
               <Textarea
                 className="min-h-[180px] font-mono text-sm"
-                value={activeDraft.merged}
-                placeholder={'[Description]\n…\n\n[Height]\n…\n\n[Visual design]\n…'}
-                aria-label="Visual design (description, height, visual design)"
-                aria-invalid={activeErrors.length > 0}
-                onChange={(e) => updateDraft('merged', e.target.value)}
+                value={activeDraft.visual_design}
+                placeholder="Describe this entity's visual design…"
+                aria-label="Visual design"
+                onChange={(e) => updateDraft('visual_design', e.target.value)}
               />
-              {activeErrors.length > 0 && (
-                <ul className="space-y-0.5 text-xs text-destructive" role="alert">
-                  {activeErrors.map((err) => (
-                    <li key={err}>{err}</li>
-                  ))}
-                </ul>
-              )}
             </div>
 
             <div className="space-y-1.5">
@@ -220,12 +176,6 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
                 onChange={(e) => updateDraft('art_language', e.target.value)}
               />
             </div>
-
-            {otherInvalidKeys.length > 0 && (
-              <p className="text-xs text-destructive" role="alert">
-                Fix section headers on: {otherInvalidKeys.map(titleCase).join(', ')}.
-              </p>
-            )}
           </>
         )}
 

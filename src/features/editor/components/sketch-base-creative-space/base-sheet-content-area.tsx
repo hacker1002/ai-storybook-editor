@@ -128,7 +128,10 @@ function RawSheet({
             src={rawUrl}
             alt="Base sheet"
             className="object-contain"
-            style={{ width: `${zoom}%`, maxWidth: 'none', height: 'auto' }}
+            // width % drives zoom (canonical width-% driver); maxHeight clamps so 100% =
+            // contain-fit (the shorter of pane W/H binds) instead of fit-to-width — otherwise a
+            // landscape pane makes width:100% force an oversized auto height that overflows.
+            style={{ width: `${zoom}%`, maxWidth: 'none', height: 'auto', maxHeight: `${zoom}%` }}
           />
         ) : (
           <div className="m-6 flex min-h-[60%] w-full max-w-3xl flex-col items-center justify-center rounded-md border-2 border-dashed border-muted-foreground/30 p-10 text-center text-muted-foreground">
