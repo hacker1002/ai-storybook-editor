@@ -125,24 +125,6 @@ export function StylesToolbar({
         />
       </div>
 
-      <Select value={filters.type} onValueChange={handleTypeChange}>
-        <SelectTrigger className="w-40" aria-label="Filter by type">
-          <span className="flex items-center gap-2">
-            <Palette className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <SelectValue placeholder={TYPE_LABEL.all}>
-              {TYPE_LABEL[filters.type]}
-            </SelectValue>
-          </span>
-        </SelectTrigger>
-        <SelectContent>
-          {TYPE_OPTIONS.map((opt) => (
-            <SelectItem key={opt} value={opt}>
-              {TYPE_LABEL[opt]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
       <Select value={filters.references} onValueChange={handleReferencesChange}>
         <SelectTrigger className="w-44" aria-label="Filter by references">
           <SelectValue placeholder={REF_LABEL.all}>
@@ -153,6 +135,26 @@ export function StylesToolbar({
           {REF_OPTIONS.map((opt) => (
             <SelectItem key={opt} value={opt}>
               {REF_LABEL[opt]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={filters.type} onValueChange={handleTypeChange}>
+        <SelectTrigger className="w-40" aria-label="Filter by type">
+          {/* div (not span) so SelectTrigger's [&>span]:line-clamp-1 doesn't
+              override display:flex and stack the icon above the label */}
+          <div className="flex items-center gap-2">
+            <Palette className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <SelectValue placeholder={TYPE_LABEL.all}>
+              {TYPE_LABEL[filters.type]}
+            </SelectValue>
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          {TYPE_OPTIONS.map((opt) => (
+            <SelectItem key={opt} value={opt}>
+              {TYPE_LABEL[opt]}
             </SelectItem>
           ))}
         </SelectContent>
