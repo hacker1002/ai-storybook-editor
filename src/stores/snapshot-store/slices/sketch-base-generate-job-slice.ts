@@ -64,8 +64,6 @@ function baseVariantText(entity: SketchEntity): BaseSheetEntity {
   const base = entity.variants.find((v) => v.key === 'base');
   return {
     key: entity.key,
-    description: base?.description ?? '',
-    height: base?.height ?? '',
     visualDescription: base?.visual_design ?? '',
     artLanguage: base?.art_language ?? '',
   };

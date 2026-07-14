@@ -24,11 +24,11 @@ const BASE_SHEET_ENDPOINT: Record<BaseKind, string> = {
 /** Crop (07) is kind-agnostic — single route; `kind` travels in the body. */
 const CROP_BASE_SHEET_ENDPOINT = '/api/sketch/crop-base-sheet';
 
-/** One base entity's text row for the sheet prompt (camelCase — backend contract). */
+/** One base entity's text row for the sheet prompt (camelCase — backend contract).
+ * Only visual_design + art_language drive the sheet; description/height dropped 2026-07-14
+ * (backend model is extra="forbid" → sending either now 400s). */
 export interface BaseSheetEntity {
   key: string;
-  description: string;
-  height: string;
   visualDescription: string;
   artLanguage: string;
 }
