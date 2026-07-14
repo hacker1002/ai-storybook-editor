@@ -53,12 +53,16 @@ export function parseEntities(rows: SketchSheetRow[], keyColumn: string): Sketch
     if (!key) continue;
     let entity = byKey.get(key);
     if (!entity) {
-      entity = { key, media_url: null, variants: [] };
+      entity = { key, variants: [] };
       byKey.set(key, entity);
     }
+    // Excel "description" column → variant `visual_design` (thin single-column import; the
+    // 4-column import in Phase 06 maps description/height/visual_design/art_language separately).
     entity.variants.push({
       key: row[COL.VARIANT] ?? '',
-      visual_description: row[COL.DESCRIPTION] ?? '',
+      description: '',
+      visual_design: row[COL.DESCRIPTION] ?? '',
+      art_language: '',
     });
   }
   return [...byKey.values()];
@@ -117,7 +121,7 @@ export function validateSketchImport(
 
     // warn: in-description @ref unresolved within same kind (cross-kind kept verbatim)
     for (const v of entity.variants) {
-      for (const ref of extractInlineRefs(v.visual_description)) {
+      for (const ref of extractInlineRefs(v.visual_design)) {
         const target = knownKeys.get(ref.key.toLowerCase());
         if (!target) {
           warnings.push(

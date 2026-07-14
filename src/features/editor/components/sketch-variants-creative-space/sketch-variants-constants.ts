@@ -6,13 +6,13 @@ import type { SketchEntityKind } from '@/types/sketch';
 import type { SketchSpace } from '@/types/editor';
 import type { ResourceType } from '@/stores/resource-lock-store';
 
-/** The 3 entity-kind sketch spaces. `sketch-spread` (storyboard) is a different
- *  space and intentionally excluded here. */
-export type SketchEntitySpaceId = Exclude<SketchSpace, 'sketch-spread'>;
+/** Entity-kind sketch space(s) still routed through the shared
+ *  SketchVariantsCreativeSpace. Redesign 2026-07-13: base/variant/lineup became
+ *  FUNCTIONAL spaces (routed elsewhere) and `sketch-spread` is the storyboard space,
+ *  so only `sketch-stage` remains here (kept per user — stages unchanged). */
+export type SketchEntitySpaceId = Extract<SketchSpace, 'sketch-stage'>;
 
 export const SPACE_TO_KIND: Record<SketchEntitySpaceId, SketchEntityKind> = {
-  'sketch-character': 'characters',
-  'sketch-prop': 'props',
   'sketch-stage': 'stages',
 };
 

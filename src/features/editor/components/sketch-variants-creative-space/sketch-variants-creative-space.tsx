@@ -87,7 +87,7 @@ export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpac
   // persistence path in the sketch space — `useCollabPersistSession` suppresses owner-direct
   // autosave). `kind` doubles as the sentinel resource_id AND the target collection name
   // (`sketch.<kind>`). Coarse lock (see runLockedCollectionSave). NOTE: `result.entities`
-  // (thin {key, media_url, variants}) IS the exact `sketch.<kind>` node shape.
+  // (thin {key, variants}) IS the exact `sketch.<kind>` node shape.
   const commitImport = useCallback(
     async (result: ParseSketchEntitiesResult) => {
       const target: LockTarget = {

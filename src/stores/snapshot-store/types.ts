@@ -4,6 +4,10 @@ import type {
   SketchEntity,
   SketchVariant,
   SketchEntityKind,
+  BaseKind,
+  SketchBaseStyle,
+  SketchBaseCrop,
+  BaseEntityText,
   SketchSpread,
   SketchPageType,
   ArtDirection,
@@ -11,7 +15,8 @@ import type {
 } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
-import type { Prop, PropVariant, PropSound } from '@/types/prop-types';
+import type { Prop, PropVariant, PropSound, Illustration, ImageReference } from '@/types/prop-types';
+import type { ReferenceImage } from '@/types/remix';
 import type { Character, CharacterVariant, CharacterVoiceSetting } from '@/types/character-types';
 import type { Stage, StageVariant, StageSound } from '@/types/stage-types';
 import type {
@@ -193,12 +198,35 @@ export interface SketchSlice {
   sketch: Sketch;
   setSketch: (sketch: Sketch) => void;
   clearSketch: () => void;
+
+  // ── Base workspace (char + prop sheets) — pure setters ─────────────────────
+  // (generate orchestration lives in the base-generate job slice; these are the write sinks)
+  setSketchBaseEntities: (entities: { characters: SketchEntity[]; props: SketchEntity[] }) => void; // bulk Excel import
+  addSketchBaseStyle: (kind: BaseKind, style: SketchBaseStyle) => void;                 // append a style attempt
+  removeSketchBaseStyle: (kind: BaseKind, styleIndex: number) => void;                  // drop a style (is_selected clears with it)
+  setSketchBaseStyleSelected: (kind: BaseKind, styleIndex: number) => void;             // 🔒 lock: exclusive is_selected + CLONE crops → variants[base].crop
+  addSketchBaseStyleIllustration: (kind: BaseKind, styleIndex: number, mediaUrl: string) => void;                                 // raw generate result: prepend 'created' + select
+  setSketchBaseStyleIllustrations: (kind: BaseKind, styleIndex: number, illustrations: Illustration[]) => void;                   // raw sheet whole-set (edit-image-modal onUpdate)
+  setSketchBaseStyleCrops: (kind: BaseKind, styleIndex: number, crops: SketchBaseCrop[]) => void;                                 // crop result: replace styles[i].crops[]
+  setSketchBaseCropIllustrations: (kind: BaseKind, styleIndex: number, entityKey: string, illustrations: Illustration[]) => void; // one crop whole-set (edit-image-modal onUpdate)
+  setSketchBaseStyleImageReferences: (kind: BaseKind, styleIndex: number, refs: ImageReference[]) => void;                        // persist uploaded style reference images (title + media_url)
+  updateSketchBaseEntityText: (kind: BaseKind, entityKey: string, updates: Pick<Partial<BaseEntityText>, 'description' | 'height' | 'visual_design' | 'art_language'>) => void; // variants[base] text (all 4 fields editable via the merged Edit modal)
+
   // Entity-level CRUD — `kind` selects the array (sketch.characters | props | stages)
   setSketchEntities: (kind: SketchEntityKind, entities: SketchEntity[]) => void;
   upsertSketchEntity: (kind: SketchEntityKind, entity: SketchEntity) => void;
   removeSketchEntity: (kind: SketchEntityKind, key: string) => void;
-  setSketchEntityMediaUrl: (kind: SketchEntityKind, key: string, mediaUrl: string) => void;
   upsertSketchVariant: (kind: SketchEntityKind, entityKey: string, variant: SketchVariant) => void;
+  updateSketchVariantText: (
+    kind: SketchEntityKind,
+    key: string,
+    variantKey: string,
+    updates: Partial<Pick<SketchVariant, 'description' | 'height' | 'visual_design' | 'art_language'>>,
+  ) => void;
+  // Per-variant imagery (char/prop raw_sheet + crop; stage illustrations) — generate append / edit-image-modal
+  setSketchVariantRawSheetIllustrations: (kind: BaseKind, entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
+  setSketchVariantCropIllustrations: (kind: BaseKind, entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
+  setSketchVariantIllustrations: (kind: 'stages', entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
   // Spread-level CRUD — ships with the sketch-spread creative space.
   // Art-direction is keyed by page `type` (SketchPage has no id); textbox content is per-language.
   setSketchSpreads: (spreads: SketchSpread[]) => void;
@@ -772,7 +800,45 @@ export interface SketchSpreadGenerateJobSlice {
   dismissSketchSpreadGenerateJob: () => void;
 }
 
-export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & TypographyApplySlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & {
+// --- Sketch Base Generate Op Types (ephemeral, not persisted to DB) ---
+// One op = ONE base style attempt (kind, styleIndex): a 2-API chain generate (05|06, AI) → crop
+// (07, CV). SINGLE-FLIGHT (at most one op at a time), per-style 2-phase status. Distinct from the
+// entity (#12) and spread (#13) jobs: the unit is a STYLE (not N entities/spreads), and crop reads
+// NO DB — `imageUrl` is passed straight from the generate result / effective raw, so there is no
+// awaited flush (only a fire-and-forget autoSaveSnapshot at the end).
+
+export type BaseGeneratePhase = 'generating' | 'cropping'; // generating = 05/06 (AI); cropping = 07 (CV)
+
+export interface BaseSheetGenerateOp {
+  kind: BaseKind;
+  styleIndex: number;          // resolved at start (mode 'add' → the just-appended style's index)
+  phase: BaseGeneratePhase;
+  /** classified friendly message; kept on the op until dismiss (content-area shows it inline). */
+  error?: string;
+  startedAt: string;
+  isRecrop: boolean;           // true = crop-only call-site (recropBaseSheet)
+  /** best-effort cancel: stop BEFORE the crop phase; a generate already in flight still finishes. */
+  cancelRequested?: boolean;
+}
+
+export interface StartBaseSheetGenerateParams {
+  kind: BaseKind;
+  mode: 'add' | 'regenerate';
+  styleIndex?: number;         // required for 'regenerate'; ignored for 'add' (job appends a style)
+  stylePrompt: string;
+  referenceImages: ReferenceImage[]; // picker images (label + base64) — slice uploads → persists {title, media_url}
+  artStyleId: string;          // = book.sketchstyle_id (caller validates non-null before calling)
+}
+
+export interface SketchBaseGenerateJobSlice {
+  baseSheetGenerateOp: BaseSheetGenerateOp | null;
+  startBaseSheetGenerate: (params: StartBaseSheetGenerateParams) => void;
+  recropBaseSheet: (kind: BaseKind, styleIndex: number) => void;
+  cancelBaseSheetGenerate: () => void;
+  dismissBaseSheetGenerateError: () => void;
+}
+
+export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & TypographyApplySlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & SketchBaseGenerateJobSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; sketch?: Sketch; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

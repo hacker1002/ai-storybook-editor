@@ -140,7 +140,7 @@ export function EditVariantsModal({ kind, entityKey, onClose }: EditVariantsModa
     const variants = entity?.variants ?? [];
     return variants.length > 0
       ? variants.map((v) => ({ ...v }))
-      : [{ key: 'base', visual_description: '' }];
+      : [{ key: 'base', description: '', visual_design: '', art_language: '' }];
   });
   const [activeKey, setActiveKey] = useState<string>(() => draft[0]?.key ?? 'base');
   const [isAdding, setIsAdding] = useState(false);
@@ -150,13 +150,13 @@ export function EditVariantsModal({ kind, entityKey, onClose }: EditVariantsModa
 
   const handleDescriptionChange = (variantKey: string, description: string) => {
     setDraft((prev) =>
-      prev.map((v) => (v.key === variantKey ? { ...v, visual_description: description } : v)),
+      prev.map((v) => (v.key === variantKey ? { ...v, visual_design: description } : v)),
     );
   };
 
   const handleAddVariant = (newKey: string) => {
     log.debug('handleAddVariant', 'add draft variant', { entityKey, newKey });
-    setDraft((prev) => [...prev, { key: newKey, visual_description: '' }]);
+    setDraft((prev) => [...prev, { key: newKey, description: '', visual_design: '', art_language: '' }]);
     setActiveKey(newKey);
     setIsAdding(false);
   };
@@ -215,7 +215,7 @@ export function EditVariantsModal({ kind, entityKey, onClose }: EditVariantsModa
               </Label>
               <Textarea
                 className="min-h-[160px] text-sm"
-                value={v.visual_description}
+                value={v.visual_design}
                 placeholder="Describe this variant's appearance…"
                 onChange={(e) => handleDescriptionChange(v.key, e.target.value)}
               />

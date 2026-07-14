@@ -54,6 +54,17 @@ export async function fileToBase64(file: File): Promise<string> {
 }
 
 /**
+ * Convert a raw (prefix-stripped) base64 string back into a File. Inverse of fileToBase64 —
+ * used to re-upload picker images (kept as base64) to storage.
+ */
+export function base64ToFile(base64Data: string, mimeType: string, filename: string): File {
+  const binary = atob(base64Data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mimeType });
+}
+
+/**
  * Truncate filename for display
  */
 export function truncateFilename(name: string): string {

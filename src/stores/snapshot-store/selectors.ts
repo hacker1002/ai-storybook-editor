@@ -1,13 +1,23 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType, SaveStatus, SyncState } from '@/types/editor';
-import type { Sketch, SketchEntity, SketchEntityKind, SketchSpread } from '@/types/sketch';
+import type {
+  Sketch,
+  SketchEntity,
+  SketchEntityKind,
+  SketchSpread,
+  SketchBase,
+  SketchBaseStyle,
+  BaseKind,
+  BaseEntityText,
+} from '@/types/sketch';
+import { sheetOf } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/illustration-types';
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask, QuizValidationIssue, SnapshotStore } from './types';
+import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase } from './types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -84,6 +94,33 @@ export const useDocByType = (type: DocType) =>
 
 // Sketch selector (whole-object ref; replaced only on load/setSketch/clearSketch)
 export const useSketch = (): Sketch => useSnapshotStore((s) => s.sketch);
+
+// Base workspace selectors (char + prop sheets). useShallow footgun: only wrap STABLE RAW
+// refs (`.styles`) or shallow string[] maps — never freshly-projected objects/arrays.
+export const useSketchBase = (): SketchBase => useSnapshotStore((s) => s.sketch.base);
+export const useSketchBaseStyles = (kind: BaseKind): SketchBaseStyle[] =>
+  useSnapshotStore(useShallow((s) => sheetOf(s.sketch.base, kind).styles)); // raw ref, no .map()
+export const useSketchBaseSelectedStyleIndex = (kind: BaseKind): number =>
+  useSnapshotStore((s) => sheetOf(s.sketch.base, kind).styles.findIndex((st) => st.is_selected));
+export const useSketchBaseEntityKeys = (kind: BaseKind): string[] =>
+  useSnapshotStore(
+    useShallow((s) => s.sketch[kind].filter((e) => e.variants.some((v) => v.key === 'base')).map((e) => e.key)),
+  );
+// Object-of-primitives → useShallow is safe (shallow-eq on strings, never on nested arrays).
+export const useSketchBaseEntityText = (kind: BaseKind, key: string): BaseEntityText | undefined =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const base = s.sketch[kind].find((e) => e.key === key)?.variants.find((v) => v.key === 'base');
+      if (!base) return undefined;
+      return {
+        key,
+        description: base.description,
+        height: base.height ?? '',
+        visual_design: base.visual_design,
+        art_language: base.art_language,
+      };
+    }),
+  );
 
 // Sketch entity selectors — keyed by kind (characters | props | stages).
 // useSketchEntityKeys mirrors useCharacterKeys: single .map() under useShallow is the
@@ -162,12 +199,37 @@ export const useSketchSpreadGenerating = (spreadId: string) =>
     }),
   );
 
-// Unified 1-sketch-job guard: true while EITHER the entity-sheet job OR the spread-image job is
-// running. Single store read (both Generate buttons + the nav-guard share it). Boolean → no useShallow.
+// Sketch BASE-sheet generate-op selectors (ephemeral, single-flight). Same ref-stability discipline:
+// stable ref / boolean → no useShallow; fresh object of PRIMITIVES → useShallow safe.
+export const useBaseSheetGenerateOp = (): BaseSheetGenerateOp | null =>
+  useSnapshotStore((s) => s.baseSheetGenerateOp);
+
+export const useIsBaseSheetGenerating = (): boolean =>
+  useSnapshotStore((s) => s.baseSheetGenerateOp != null);
+
+// Per-style status — covers BOTH phases (generate + crop): a style is "generating" until crops land.
+export const useBaseSheetGenerateStatus = (kind: BaseKind, styleIndex: number) =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const op = s.baseSheetGenerateOp;
+      const match = !!op && op.kind === kind && op.styleIndex === styleIndex;
+      return {
+        isGenerating: match,
+        phase: (match ? op!.phase : 'idle') as BaseGeneratePhase | 'idle',
+        error: match ? op!.error : undefined,
+      };
+    }),
+  );
+
+// Unified 1-sketch-job guard: true while ANY sketch generation runs — the entity-sheet job OR the
+// spread-image job OR the base-sheet op. Single store read (all 3 Generate buttons + the nav-guard
+// share it → no concurrent burst). Boolean → no useShallow.
 export const useIsAnySketchGenerating = (): boolean =>
   useSnapshotStore(
     (s) =>
-      s.sketchGenerateJob?.status === 'running' || s.sketchSpreadGenerateJob?.status === 'running',
+      s.sketchGenerateJob?.status === 'running' ||
+      s.sketchSpreadGenerateJob?.status === 'running' ||
+      s.baseSheetGenerateOp != null,
   );
 
 // Fetch state selectors
@@ -572,8 +634,22 @@ export const useSnapshotActions = () =>
       setSketchEntities: s.setSketchEntities,
       upsertSketchEntity: s.upsertSketchEntity,
       removeSketchEntity: s.removeSketchEntity,
-      setSketchEntityMediaUrl: s.setSketchEntityMediaUrl,
       upsertSketchVariant: s.upsertSketchVariant,
+      updateSketchVariantText: s.updateSketchVariantText,
+      // Sketch base workspace (char + prop sheets — pure setters)
+      setSketchBaseEntities: s.setSketchBaseEntities,
+      addSketchBaseStyle: s.addSketchBaseStyle,
+      removeSketchBaseStyle: s.removeSketchBaseStyle,
+      setSketchBaseStyleSelected: s.setSketchBaseStyleSelected,
+      addSketchBaseStyleIllustration: s.addSketchBaseStyleIllustration,
+      setSketchBaseStyleIllustrations: s.setSketchBaseStyleIllustrations,
+      setSketchBaseStyleCrops: s.setSketchBaseStyleCrops,
+      setSketchBaseCropIllustrations: s.setSketchBaseCropIllustrations,
+      updateSketchBaseEntityText: s.updateSketchBaseEntityText,
+      // Sketch per-variant imagery (char/prop raw_sheet + crop; stage illustrations)
+      setSketchVariantRawSheetIllustrations: s.setSketchVariantRawSheetIllustrations,
+      setSketchVariantCropIllustrations: s.setSketchVariantCropIllustrations,
+      setSketchVariantIllustrations: s.setSketchVariantIllustrations,
       // Sketch generate job (sequential entity-sheet generation)
       startSketchGenerateJob: s.startSketchGenerateJob,
       cancelSketchGenerateJob: s.cancelSketchGenerateJob,
@@ -582,6 +658,11 @@ export const useSnapshotActions = () =>
       startSketchSpreadGenerateJob: s.startSketchSpreadGenerateJob,
       cancelSketchSpreadGenerateJob: s.cancelSketchSpreadGenerateJob,
       dismissSketchSpreadGenerateJob: s.dismissSketchSpreadGenerateJob,
+      // Sketch base-sheet generate op (single-flight generate→crop chain + crop-only re-run)
+      startBaseSheetGenerate: s.startBaseSheetGenerate,
+      recropBaseSheet: s.recropBaseSheet,
+      cancelBaseSheetGenerate: s.cancelBaseSheetGenerate,
+      dismissBaseSheetGenerateError: s.dismissBaseSheetGenerateError,
       // Sketch (spread-level CRUD — sketch-spread creative space)
       setSketch: s.setSketch,
       setSketchSpreads: s.setSketchSpreads,

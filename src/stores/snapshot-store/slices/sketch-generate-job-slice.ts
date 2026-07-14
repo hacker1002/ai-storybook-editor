@@ -1,8 +1,9 @@
 // sketch-generate-job-slice.ts — orchestrates SEQUENTIAL sketch entity-sheet generation.
 // One job = N entities of a single kind, one API call per entity, run one-at-a-time.
-// After each entity resolves: write entity.media_url (sketch-slice sets sync.isDirty)
-// then fire autoSaveSnapshot() so the sheet is flushed to DB before the next entity — the
-// UI fills in gradually and progress survives a reload. Partial failures never abort the job.
+// SUPERSEDED (design #12 → base-sheet workflow #14): the per-entity sheet URL now lives on the
+// ephemeral task only (entity.media_url was removed in the 2026-07-13 restructure). Each result
+// still fires autoSaveSnapshot()/gateway save so progress survives a reload. Partial failures
+// never abort the job. Kept compile-green until the base-generate job replaces it.
 //
 // Async rule (mirrors image-task-slice): runJob is a PLAIN async function (NOT inside an
 // immer producer). Every mutation between awaits goes through a synchronous set((state)=>…)
@@ -174,8 +175,9 @@ export const createSketchGenerateJobSlice: StateCreator<
           j.tasks[i].completedAt = new Date().toISOString();
         });
 
-        // Persist media_url onto the entity (sketch-slice sets sync.isDirty).
-        get().setSketchEntityMediaUrl(kind, task.entityKey, url);
+        // SUPERSEDED: entity.media_url removed (2026-07-13). The sheet URL is recorded on the
+        // ephemeral task above; the entity node itself is unchanged. generatedKeys drives the
+        // summary log + collab save below.
         generatedKeys.push(task.entityKey);
 
         if (lockTarget) {

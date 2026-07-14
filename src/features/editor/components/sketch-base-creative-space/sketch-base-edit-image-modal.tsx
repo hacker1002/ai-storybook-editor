@@ -1,0 +1,89 @@
+// sketch-base-edit-image-modal.tsx — Store-binding connector for the shared, store-agnostic
+// EditImageModal in the Base space (design README §3.5). Mirrors IllustrationEditImageModal /
+// RetouchEditImageModal: resolves `illustrations` + `onUpdateIllustrations` + `pathPrefix` +
+// `mediaUrl` + `imageTitle` from the `EditImageTarget` scope, then feeds the controlled modal.
+// Mounted only while a target is set, so the store hooks run unconditionally.
+//
+// Tool availability REUSES ToolSpace 'sketch' (SPACE_TOOL_MATRIX.sketch.edit = inpaint + erasor)
+// — no new matrix column (design decision §4.5, KISS). Landing tool = inpaint.
+
+import { useCallback } from 'react';
+import { EditImageModal } from '@/features/editor/components/shared-components/edit-image-modal';
+import { SPACE_TOOL_MATRIX } from '@/features/editor/components/shared-components/image-tools-space-matrix';
+import { useSketchBaseStyles, useSnapshotActions } from '@/stores/snapshot-store/selectors';
+import { titleCase } from '@/features/editor/components/sketch-variants-creative-space/sketch-variants-constants';
+import type { Illustration } from '@/types/prop-types';
+import { createLogger } from '@/utils/logger';
+import { nounForKind, type EditImageTarget } from './sketch-base-constants';
+
+const log = createLogger('Editor', 'SketchBaseEditImageModal');
+
+/** Effective url for the display-only seed: selected version → newest → ''. */
+function effectiveUrl(illustrations: Illustration[]): string {
+  return illustrations.find((i) => i.is_selected)?.media_url ?? illustrations[0]?.media_url ?? '';
+}
+
+export interface SketchBaseEditImageModalProps {
+  target: EditImageTarget;
+  onClose: () => void;
+}
+
+export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImageModalProps) {
+  const styles = useSketchBaseStyles(target.kind);
+  const { setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations } = useSnapshotActions();
+  const style = styles[target.styleIndex];
+
+  const illustrations: Illustration[] =
+    target.scope === 'raw'
+      ? (style?.illustrations ?? [])
+      : (style?.crops.find((c) => c.key === target.entityKey)?.illustrations ?? []);
+
+  const handleUpdate = useCallback(
+    (next: Illustration[]) => {
+      if (target.scope === 'raw') {
+        log.debug('handleUpdate', 'persist raw sheet illustrations', {
+          kind: target.kind,
+          styleIndex: target.styleIndex,
+          count: next.length,
+        });
+        setSketchBaseStyleIllustrations(target.kind, target.styleIndex, next);
+      } else {
+        log.debug('handleUpdate', 'persist crop illustrations', {
+          kind: target.kind,
+          styleIndex: target.styleIndex,
+          entityKey: target.entityKey,
+          count: next.length,
+        });
+        setSketchBaseCropIllustrations(target.kind, target.styleIndex, target.entityKey, next);
+      }
+    },
+    [target, setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations],
+  );
+
+  // Style removed while the modal was open → nothing to bind; render nothing (parent closes).
+  if (!style) return null;
+
+  const pathPrefix =
+    target.scope === 'raw'
+      ? `sketch/base/${target.kind}/${target.styleIndex}/raw`
+      : `sketch/base/${target.kind}/${target.styleIndex}/crop/${target.entityKey}`;
+
+  const imageTitle =
+    target.scope === 'raw'
+      ? `Base sheet — ${titleCase(nounForKind(target.kind))} · Style ${target.styleIndex + 1}`
+      : `Base crop — ${titleCase(target.entityKey)}`;
+
+  return (
+    <EditImageModal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      imageTitle={imageTitle}
+      illustrations={illustrations}
+      mediaUrl={effectiveUrl(illustrations)}
+      onUpdateIllustrations={handleUpdate}
+      pathPrefix={pathPrefix}
+      enabledTools={SPACE_TOOL_MATRIX.sketch.edit}
+      initialTool="inpaint"
+    />
+  );
+}

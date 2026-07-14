@@ -20,8 +20,9 @@ import { PreviewCreativeSpace } from '../components/preview-creative-space';
 import { PropsCreativeSpace } from '../components/props-creative-space';
 import { StagesCreativeSpace } from '../components/stages-creative-space';
 import { CharactersCreativeSpace } from '../components/characters-creative-space';
-import { SketchVariantsCreativeSpace, SPACE_TO_KIND } from '../components/sketch-variants-creative-space';
+import { SketchVariantsCreativeSpace } from '../components/sketch-variants-creative-space';
 import { SketchSpreadsCreativeSpace } from '../components/sketch-spreads-creative-space';
+import { SketchBaseSpace } from '../components/sketch-base-creative-space';
 import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
 import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { HistoryCreativeSpace } from '../components/history-creative-space';
@@ -41,6 +42,7 @@ import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
 import { useSketchGenerateNotifications } from '../hooks/use-sketch-generate-notifications';
 import { useSketchSpreadGenerateNotifications } from '../hooks/use-sketch-spread-generate-notifications';
+import { useBaseSheetGenerateNotifications } from '../hooks/use-base-sheet-generate-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useFlushOnHidden } from '../hooks/use-flush-on-hidden';
 
@@ -91,9 +93,13 @@ export function EditorPage() {
   useSketchGenerateNotifications();
   // Summary toast for the sequential sketch spread-image generate job (running → terminal).
   useSketchSpreadGenerateNotifications();
+  // Error toast for the single-flight base-sheet generate op (settled-with-error → toast + dismiss).
+  useBaseSheetGenerateNotifications();
 
   // Local UI state
-  const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('sketch-character');
+  // Placeholder default only — overwritten on mount (loadData) and on step change by
+  // getDefaultCreativeSpace(step). Active space is NOT persisted, so no migration needed.
+  const [activeCreativeSpace, setActiveCreativeSpace] = useState<CreativeSpaceType>('sketch-base');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notificationCount] = useState(3);
 
@@ -290,19 +296,23 @@ export function EditorPage() {
         return <SharesCreativeSpace />;
       case 'remix':
         return <RemixCreativeSpace />;
-      // Sketch entity spaces (characters/props/stages) — one shared component keyed by kind.
-      // Switch narrows activeCreativeSpace to SketchEntitySpaceId here, so the index is typesafe.
-      // `key={kind}` forces a fresh instance per kind so per-kind UI state (checked set,
-      // focus, edit/import dialogs) never leaks across a space switch.
-      case 'sketch-character':
-      case 'sketch-prop':
-      case 'sketch-stage': {
-        const kind = SPACE_TO_KIND[activeCreativeSpace];
-        return <SketchVariantsCreativeSpace key={kind} kind={kind} />;
-      }
-      // sketch-spread (storyboard) — standalone space (not a `kind` of the entity space).
+      // ── Sketch step (redesign 2026-07-13): 5 functional spaces ──────────────
+      // Base (char + prop sheets — 1 space, no `kind` prop). Overlays (generate/edit/import)
+      // land in Phase 06.
+      case 'sketch-base':
+        return <SketchBaseSpace />;
+      // Stages — unchanged component (shared SketchVariantsCreativeSpace kind='stages').
+      // `key="stages"` forces a fresh instance so per-kind UI state never leaks.
+      case 'sketch-stage':
+        return <SketchVariantsCreativeSpace key="stages" kind="stages" />;
+      // sketch-spread (storyboard) — standalone space.
       case 'sketch-spread':
         return <SketchSpreadsCreativeSpace />;
+      // Variants / Lineup — Coming-soon placeholder (real spaces are follow-up work;
+      // the rail already greys them if the collaborator is gated).
+      case 'sketch-variant':
+      case 'sketch-lineup':
+        return <MockCreativeSpace name={activeCreativeSpace} />;
       case 'collaborator':
         return <CollaboratorsCreativeSpace />;
       case 'quiz':

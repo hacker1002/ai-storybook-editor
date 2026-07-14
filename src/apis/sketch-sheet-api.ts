@@ -2,10 +2,11 @@
 // (character | prop | stage). One sheet = one entity's variants laid out as cells.
 // Mirrors illustration-api.ts convention: flat apis/*.ts + callImageApi<R>.
 //
-// Field mapping (per-kind): SketchVariant has only { key, visual_description } — the
-// backend Pydantic model expects a per-kind entity key field (characterKey|propKey|stageKey)
-// PLUS variantKey + visualDescription. The single-source SKETCH_SHEET_ENDPOINT map keeps
-// path + entityKeyField together so a mismatch can't drift between kinds.
+// Field mapping (per-kind): each SketchVariant carries text fields — the backend Pydantic
+// model expects a per-kind entity key field (characterKey|propKey|stageKey) PLUS variantKey +
+// visualDescription (mapped from `visual_design`). The single-source SKETCH_SHEET_ENDPOINT map
+// keeps path + entityKeyField together so a mismatch can't drift between kinds.
+// NOTE: superseded by the base-sheet workflow (design #12 → #14); kept compile-green only.
 
 import { callImageApi, type ImageApiFailure } from './image-api-client';
 import type { SketchEntityKind, SketchVariant } from '@/types/sketch';
@@ -53,7 +54,7 @@ export async function callGenerateSketchSheet(
     variants: variants.map((v) => ({
       [keyField]: entityKey,
       variantKey: v.key,
-      visualDescription: v.visual_description,
+      visualDescription: v.visual_design,
     })),
     artStyleId,
   };

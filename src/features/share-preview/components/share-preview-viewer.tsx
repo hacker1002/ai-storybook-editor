@@ -111,6 +111,7 @@ export function SharePreviewViewer({ book, snapshot, shareConfig }: SharePreview
       era_id: null,
       location_id: null,
       artstyle_id: null,
+      sketchstyle_id: null,
       typography: book.typography as unknown as Book['typography'],
       narrator: hydrateNarrator(book.narrator),
       shape: book.shape as unknown as Book['shape'],

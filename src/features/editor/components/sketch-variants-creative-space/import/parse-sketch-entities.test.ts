@@ -32,10 +32,9 @@ describe('parseEntities', () => {
     const entities = parseEntities(rows, 'character');
     expect(entities.map((e) => e.key)).toEqual(['kid', 'mom']);
     expect(entities[0].variants).toEqual([
-      { key: 'base', visual_description: 'a small child' },
-      { key: 'hero', visual_description: '@kid/base wearing a cape' },
+      { key: 'base', description: '', visual_design: 'a small child', art_language: '' },
+      { key: 'hero', description: '', visual_design: '@kid/base wearing a cape', art_language: '' },
     ]);
-    expect(entities[0].media_url).toBeNull();
   });
 
   it('skips rows with an empty key column', () => {

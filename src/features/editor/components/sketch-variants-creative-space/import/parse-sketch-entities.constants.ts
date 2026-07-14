@@ -1,6 +1,6 @@
 // Mapping + column constants for sketch entity Excel import (design
 // sketch-variants-creative-space/04-import-sketch-entities.md). One sheet per kind;
-// thin projection (key + variants[{key, visual_description}], media_url always null).
+// thin projection (key + variants[{ key, description, visual_design, art_language }]).
 
 import type { SketchEntityKind } from '@/types/sketch';
 

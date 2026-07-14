@@ -19,8 +19,9 @@ vi.mock('@/stores/resource-lock-store', () => ({
   FALLBACK_HOLDER_NAME: 'another editor',
 }));
 
-// Isolated harness: sketch slice (state + setSketchEntityMediaUrl) + the job slice, plus the
-// only cross-slice deps the job slice touches (sync.isDirty via setter, autoSaveSnapshot stub).
+// Isolated harness: sketch slice + the job slice, plus the only cross-slice deps the job slice
+// touches (autoSaveSnapshot stub). Post-restructure the per-entity sheet URL lives on the
+// ephemeral task (task.imageUrl), not on the entity (entity.media_url was removed).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function createTestStore() {
   const autoSaveSnapshot = vi.fn(async () => {});
@@ -38,8 +39,12 @@ function createTestStore() {
 
 const entity = (key: string, variantKeys: string[] = ['base']): SketchEntity => ({
   key,
-  media_url: null,
-  variants: variantKeys.map((k) => ({ key: k, visual_description: `${key}-${k}` })),
+  variants: variantKeys.map((k) => ({
+    key: k,
+    description: '',
+    visual_design: `${key}-${k}`,
+    art_language: '',
+  })),
 });
 
 const ok = (url: string) => ({
@@ -96,8 +101,8 @@ describe('SketchGenerateJobSlice', () => {
     d1.resolve(ok('kid.png'));
     await tick();
 
-    // First done → media_url written + autosave fired + second call now dispatched.
-    expect(store.getState().sketch.characters[0].media_url).toBe('kid.png');
+    // First done → sheet URL recorded on the task + autosave fired + second call now dispatched.
+    expect(store.getState().sketchGenerateJob.tasks[0].imageUrl).toBe('kid.png');
     expect(autoSaveSnapshot).toHaveBeenCalled();
     expect(mockedCall).toHaveBeenCalledTimes(2);
     expect(mockedCall.mock.calls[1][1].entityKey).toBe('mom');
@@ -105,7 +110,7 @@ describe('SketchGenerateJobSlice', () => {
     d2.resolve(ok('mom.png'));
     await tick();
 
-    expect(store.getState().sketch.characters[1].media_url).toBe('mom.png');
+    expect(store.getState().sketchGenerateJob.tasks[1].imageUrl).toBe('mom.png');
     const job = store.getState().sketchGenerateJob;
     expect(job.status).toBe('completed');
     expect(job.currentIndex).toBe(-1);
@@ -127,8 +132,8 @@ describe('SketchGenerateJobSlice', () => {
     expect(job.tasks[0].status).toBe('error');
     expect(job.tasks[0].error).toContain('image model'); // LLM_ERROR friendly copy
     expect(job.tasks[1].status).toBe('completed');
-    expect(store.getState().sketch.characters[0].media_url).toBeNull();
-    expect(store.getState().sketch.characters[1].media_url).toBe('mom.png');
+    expect(job.tasks[0].imageUrl).toBeUndefined();
+    expect(job.tasks[1].imageUrl).toBe('mom.png');
   });
 
   it('skips empty-variant entities at build time (no task created)', async () => {
@@ -204,7 +209,7 @@ describe('SketchGenerateJobSlice', () => {
     await tick();
   });
 
-  it('race: job cleared mid-await → no media_url write after reset', async () => {
+  it('race: job cleared mid-await → no write after reset', async () => {
     store.getState().setSketchEntities('characters', [entity('kid')]);
     const d1 = deferred<ReturnType<typeof ok>>();
     mockedCall.mockReturnValueOnce(d1.promise as never);
@@ -219,7 +224,7 @@ describe('SketchGenerateJobSlice', () => {
     d1.resolve(ok('kid.png'));
     await tick();
 
-    expect(store.getState().sketch.characters[0].media_url).toBeNull();
+    // Post-await race guard: the cleared job stops runJob before any task write.
     expect(store.getState().sketchGenerateJob).toBeNull();
   });
 });

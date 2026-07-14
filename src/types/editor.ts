@@ -12,7 +12,9 @@ export type PipelineStep = 'sketch' | 'illustration' | 'retouch';
 // Creative space types per pipeline step
 // Sketch spaces are namespaced (`sketch-*`) to stay disjoint from IllustrationSpace
 // (`character`/`prop`/...) so activeCreativeSpace never collides on step auto-switch.
-export type SketchSpace = 'sketch-character' | 'sketch-prop' | 'sketch-stage' | 'sketch-spread';
+// Redesign 2026-07-13: 5 FUNCTIONAL spaces (base/variant/lineup/stage/spread) replace
+// the old 3 look-alike entity spaces — base/variant/lineup each span char + prop.
+export type SketchSpace = 'sketch-base' | 'sketch-variant' | 'sketch-lineup' | 'sketch-stage' | 'sketch-spread';
 export type IllustrationSpace = 'character' | 'prop' | 'stage' | 'spread' | 'branch';
 // 'animation' removed — merged into 'object' space per ADR-028. Phase-06 cleans up consumer references.
 export type RetouchSpace = 'object' | 'quiz' | 'remix';
@@ -359,6 +361,7 @@ export interface Book {
   era_id: string | null;
   location_id: string | null;
   artstyle_id: string | null;
+  sketchstyle_id: string | null;
   typography: BookTypography | null;
   narrator: NarratorSettings | null;
   shape: BookShape | null;

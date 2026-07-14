@@ -1,14 +1,29 @@
 import type { StateCreator } from 'zustand';
 import type { SnapshotStore, SketchSlice } from '../types';
 import type { Sketch, SketchEntity, SketchSpread, SketchSpreadImage, SketchSpreadIllustration } from '@/types/sketch';
-import type { SketchVariant, SketchEntityKind, SketchPageType, ArtDirection, SketchTextboxContent } from '@/types/sketch';
-import { isSketchTextboxContent } from '@/types/sketch';
+import type {
+  SketchVariant,
+  SketchEntityKind,
+  SketchPageType,
+  ArtDirection,
+  SketchTextboxContent,
+  SketchBase,
+  SketchBaseSheet,
+} from '@/types/sketch';
+import type { Illustration } from '@/types/prop-types';
+import { isSketchTextboxContent, sheetOf } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Store', 'SketchSlice');
 
+/** Fresh empty base workspace (2 sheets: character + prop, no styles). */
+function emptyBase(): SketchBase {
+  return { character_sheet: { styles: [] }, prop_sheet: { styles: [] } };
+}
+
 export const DEFAULT_SKETCH: Sketch = {
   id: null,
+  base: emptyBase(),
   characters: [],
   props: [],
   stages: [],
@@ -38,8 +53,56 @@ function isLegacySketchShape(raw: Record<string, unknown>): boolean {
   return false;
 }
 
+const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** Coerce one raw variant → SketchVariant, filling the 3 required text fields when absent
+ *  (backward-compat for blobs written before the 2026-07-13 restructure). Optional imagery
+ *  (height / raw_sheet / crop / illustrations) is copied through by reference only when present. */
+function coerceVariant(raw: unknown): SketchVariant {
+  const r = isPlainObject(raw) ? raw : {};
+  const v: SketchVariant = {
+    key: asStr(r.key),
+    description: asStr(r.description),
+    visual_design: asStr(r.visual_design),
+    art_language: asStr(r.art_language),
+  };
+  if (typeof r.height === 'string') v.height = r.height;
+  if (isPlainObject(r.raw_sheet) && Array.isArray(r.raw_sheet.illustrations)) {
+    v.raw_sheet = { illustrations: r.raw_sheet.illustrations as Illustration[] };
+  }
+  if (isPlainObject(r.crop) && Array.isArray(r.crop.illustrations)) {
+    v.crop = { illustrations: r.crop.illustrations as Illustration[] };
+  }
+  if (Array.isArray(r.illustrations)) v.illustrations = r.illustrations as Illustration[];
+  return v;
+}
+
+function coerceEntity(raw: unknown): SketchEntity {
+  const r = isPlainObject(raw) ? raw : {};
+  return {
+    key: asStr(r.key),
+    variants: Array.isArray(r.variants) ? r.variants.map(coerceVariant) : [],
+  };
+}
+
 function asEntityArray(v: unknown): SketchEntity[] {
-  return Array.isArray(v) ? (v as SketchEntity[]) : [];
+  return Array.isArray(v) ? v.map(coerceEntity) : [];
+}
+
+/** A raw sheet blob → SketchBaseSheet (styles array kept as-is; absent → empty). */
+function normalizeSheet(raw: unknown): SketchBaseSheet {
+  return isPlainObject(raw) && Array.isArray(raw.styles)
+    ? { styles: raw.styles as SketchBaseSheet['styles'] }
+    : { styles: [] };
+}
+
+/** Default the base workspace (2 empty sheets) when the blob predates the restructure. */
+function normalizeBase(raw: unknown): SketchBase {
+  if (!isPlainObject(raw)) return emptyBase();
+  return {
+    character_sheet: normalizeSheet(raw.character_sheet),
+    prop_sheet: normalizeSheet(raw.prop_sheet),
+  };
 }
 
 const VALID_PAGE_TYPES: readonly SketchPageType[] = ['left', 'right', 'full'];
@@ -125,6 +188,7 @@ export function normalizeSketch(raw: unknown): Sketch {
   }
   return {
     id: typeof raw.id === 'string' ? raw.id : null,
+    base: normalizeBase(raw.base),
     characters: asEntityArray(raw.characters),
     props: asEntityArray(raw.props),
     stages: asEntityArray(raw.stages),
@@ -188,16 +252,6 @@ export const createSketchSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  setSketchEntityMediaUrl: (kind: SketchEntityKind, key: string, mediaUrl: string) =>
-    set((state) => {
-      const entity = state.sketch[kind].find((e) => e.key === key);
-      if (entity) {
-        log.debug('setSketchEntityMediaUrl', 'set', { kind, key });
-        entity.media_url = mediaUrl;
-        state.sync.isDirty = true;
-      }
-    }),
-
   upsertSketchVariant: (kind: SketchEntityKind, entityKey: string, variant: SketchVariant) =>
     set((state) => {
       const entity = state.sketch[kind].find((e) => e.key === entityKey);
@@ -212,6 +266,168 @@ export const createSketchSlice: StateCreator<
         else entity.variants[idx] = variant;
         state.sync.isDirty = true;
       }
+    }),
+
+  // --- Entity/variant text + per-variant imagery ---
+
+  updateSketchVariantText: (kind, key, variantKey, updates) =>
+    set((state) => {
+      const variant = state.sketch[kind]
+        .find((e) => e.key === key)
+        ?.variants.find((v) => v.key === variantKey);
+      if (!variant) return;
+      log.debug('updateSketchVariantText', 'merge', { kind, key, variantKey, keys: Object.keys(updates) });
+      if (updates.description !== undefined) variant.description = updates.description;
+      if (updates.height !== undefined) variant.height = updates.height;
+      if (updates.visual_design !== undefined) variant.visual_design = updates.visual_design;
+      if (updates.art_language !== undefined) variant.art_language = updates.art_language;
+      state.sync.isDirty = true;
+    }),
+
+  setSketchVariantRawSheetIllustrations: (kind, entityKey, variantKey, illustrations) =>
+    set((state) => {
+      const variant = state.sketch[kind]
+        .find((e) => e.key === entityKey)
+        ?.variants.find((v) => v.key === variantKey);
+      if (!variant) return;
+      log.debug('setSketchVariantRawSheetIllustrations', 'set', { kind, entityKey, variantKey, count: illustrations.length });
+      variant.raw_sheet = { illustrations };
+      state.sync.isDirty = true;
+    }),
+
+  setSketchVariantCropIllustrations: (kind, entityKey, variantKey, illustrations) =>
+    set((state) => {
+      const variant = state.sketch[kind]
+        .find((e) => e.key === entityKey)
+        ?.variants.find((v) => v.key === variantKey);
+      if (!variant) return;
+      log.debug('setSketchVariantCropIllustrations', 'set', { kind, entityKey, variantKey, count: illustrations.length });
+      variant.crop = { illustrations };
+      state.sync.isDirty = true;
+    }),
+
+  setSketchVariantIllustrations: (kind, entityKey, variantKey, illustrations) =>
+    set((state) => {
+      const variant = state.sketch[kind]
+        .find((e) => e.key === entityKey)
+        ?.variants.find((v) => v.key === variantKey);
+      if (!variant) return;
+      log.debug('setSketchVariantIllustrations', 'set', { kind, entityKey, variantKey, count: illustrations.length });
+      variant.illustrations = illustrations;
+      state.sync.isDirty = true;
+    }),
+
+  // --- Base workspace (char + prop sheets) — pure setters ---
+
+  setSketchBaseEntities: ({ characters, props }) =>
+    set((state) => {
+      log.debug('setSketchBaseEntities', 'bulk import', { characters: characters.length, props: props.length });
+      state.sketch.characters = characters;
+      state.sketch.props = props;
+      state.sync.isDirty = true;
+    }),
+
+  addSketchBaseStyle: (kind, style) =>
+    set((state) => {
+      log.debug('addSketchBaseStyle', 'append', { kind });
+      sheetOf(state.sketch.base, kind).styles.push(style);
+      state.sync.isDirty = true;
+    }),
+
+  removeSketchBaseStyle: (kind, styleIndex) =>
+    set((state) => {
+      const styles = sheetOf(state.sketch.base, kind).styles;
+      if (styleIndex < 0 || styleIndex >= styles.length) return;
+      log.debug('removeSketchBaseStyle', 'remove', { kind, styleIndex });
+      styles.splice(styleIndex, 1);
+      state.sync.isDirty = true;
+    }),
+
+  // 🔒 LOCK: exclusive is_selected within the sheet + CLONE the locked style's crops into
+  // every base entity's variants[base].crop (Illustration is flat → per-element spread = deep clone).
+  setSketchBaseStyleSelected: (kind, styleIndex) =>
+    set((state) => {
+      const styles = sheetOf(state.sketch.base, kind).styles;
+      if (styleIndex < 0 || styleIndex >= styles.length) return;
+      log.debug('setSketchBaseStyleSelected', 'lock style + clone crops', { kind, styleIndex });
+      styles.forEach((s, j) => {
+        s.is_selected = j === styleIndex;
+      });
+      const crops = styles[styleIndex].crops;
+      for (const entity of state.sketch[kind]) {
+        const base = entity.variants.find((v) => v.key === 'base');
+        if (!base) continue;
+        const c = crops.find((cr) => cr.key === entity.key);
+        if (c) base.crop = { illustrations: c.illustrations.map((ill) => ({ ...ill })) };
+      }
+      state.sync.isDirty = true;
+    }),
+
+  addSketchBaseStyleIllustration: (kind, styleIndex, mediaUrl) =>
+    set((state) => {
+      const style = sheetOf(state.sketch.base, kind).styles[styleIndex];
+      if (!style) return;
+      log.debug('addSketchBaseStyleIllustration', 'prepend created', { kind, styleIndex });
+      style.illustrations.forEach((x) => {
+        x.is_selected = false;
+      });
+      style.illustrations.unshift({
+        type: 'created',
+        media_url: mediaUrl,
+        created_time: new Date().toISOString(),
+        is_selected: true,
+      });
+      state.sync.isDirty = true;
+    }),
+
+  setSketchBaseStyleIllustrations: (kind, styleIndex, illustrations) =>
+    set((state) => {
+      const style = sheetOf(state.sketch.base, kind).styles[styleIndex];
+      if (!style) return;
+      log.debug('setSketchBaseStyleIllustrations', 'replace set', { kind, styleIndex, count: illustrations.length });
+      style.illustrations = illustrations;
+      state.sync.isDirty = true;
+    }),
+
+  setSketchBaseStyleCrops: (kind, styleIndex, crops) =>
+    set((state) => {
+      const style = sheetOf(state.sketch.base, kind).styles[styleIndex];
+      if (!style) return;
+      log.debug('setSketchBaseStyleCrops', 'replace crops', { kind, styleIndex, count: crops.length });
+      style.crops = crops;
+      state.sync.isDirty = true;
+    }),
+
+  setSketchBaseCropIllustrations: (kind, styleIndex, entityKey, illustrations) =>
+    set((state) => {
+      const crop = sheetOf(state.sketch.base, kind).styles[styleIndex]?.crops.find((c) => c.key === entityKey);
+      if (!crop) return;
+      log.debug('setSketchBaseCropIllustrations', 'replace crop set', { kind, styleIndex, entityKey, count: illustrations.length });
+      crop.illustrations = illustrations;
+      state.sync.isDirty = true;
+    }),
+
+  setSketchBaseStyleImageReferences: (kind, styleIndex, refs) =>
+    set((state) => {
+      const style = sheetOf(state.sketch.base, kind).styles[styleIndex];
+      if (!style) return;
+      log.debug('setSketchBaseStyleImageReferences', 'set', { kind, styleIndex, count: refs.length });
+      style.image_references = refs;
+      state.sync.isDirty = true;
+    }),
+
+  updateSketchBaseEntityText: (kind, entityKey, updates) =>
+    set((state) => {
+      const base = state.sketch[kind]
+        .find((e) => e.key === entityKey)
+        ?.variants.find((v) => v.key === 'base');
+      if (!base) return;
+      log.debug('updateSketchBaseEntityText', 'merge', { kind, entityKey, keys: Object.keys(updates) });
+      if (updates.description !== undefined) base.description = updates.description;
+      if (updates.height !== undefined) base.height = updates.height;
+      if (updates.visual_design !== undefined) base.visual_design = updates.visual_design;
+      if (updates.art_language !== undefined) base.art_language = updates.art_language;
+      state.sync.isDirty = true;
     }),
 
   // --- Spread-level CRUD (ships with the sketch-spread creative space) ---

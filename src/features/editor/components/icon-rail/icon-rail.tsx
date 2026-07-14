@@ -34,15 +34,26 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange, isOwner, 
   const currentStep = useCurrentStep();
   const stepIcons = getIconsForStep(currentStep);
 
+  // Normalize an ENTITY_RESOURCE_MAP value (string | string[] | undefined) to a
+  // resource-key list. '' / null / undefined → [] (ungated, e.g. preview).
+  const toArray = (v: string | string[] | undefined): string[] =>
+    v == null || v === '' ? [] : Array.isArray(v) ? v : [v];
+  const resolveResources = (item: IconRailItemConfig): string[] =>
+    toArray(ENTITY_RESOURCE_MAP[item.id]);
+
   // Derive per-item disabled state (render-time only, never stored). Owner path
   // short-circuits FIRST → isDisabled always false → no styling/behavior change.
   const isDisabled = (item: IconRailItemConfig): boolean => {
     if (isOwner) return false;
     if (!myRights) return true; // non-owner with no rights row → disable all (defensive)
     if (DEFAULT_GATED.has(item.id)) return true; // history/issue/share/collaborator/setting
-    const resourceKey = ENTITY_RESOURCE_MAP[item.id];
-    if (resourceKey) {
-      return !(myRights.steps[currentStep]?.resources?.[resourceKey] ?? false);
+    const resources = resolveResources(item);
+    if (resources.length) {
+      // any-of gate (design §4.5): sketch base/variant/lineup span BOTH
+      // characters + props → disable ONLY when EVERY mapped resource is un-granted.
+      return resources.every(
+        (r) => !(myRights.steps[currentStep]?.resources?.[r] ?? false),
+      );
     }
     return false; // preview (and any unmapped id) → active
   };
@@ -68,7 +79,7 @@ export function IconRail({ activeCreativeSpace, onCreativeSpaceChange, isOwner, 
     ];
 
     if (!validSpaces.includes(activeCreativeSpace)) {
-      onCreativeSpaceChange(stepIcons[0]?.id ?? 'sketch-character');
+      onCreativeSpaceChange(stepIcons[0]?.id ?? 'sketch-base');
     }
   }, [currentStep, activeCreativeSpace, onCreativeSpaceChange, stepIcons]);
 

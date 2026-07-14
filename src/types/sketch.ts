@@ -5,19 +5,71 @@
 // SCOPE: types + an empty-default field + load-time guard only (no CRUD this phase).
 // Creative spaces are still "coming soon"; full slice + UI deferred.
 import type { Geometry, Typography } from './spread-types';
+// Canonical illustration entry + style reference are REUSED from prop-types (single source);
+// base sheets, crops and per-variant imagery all share the edit-image-modal Illustration shape.
+import type { Illustration, ImageReference } from './prop-types';
 
 export type SketchEntityKind = 'characters' | 'props' | 'stages';
+/** Base sheet workspace covers character + prop only (stage generates directly, no base sheet). */
+export type BaseKind = 'characters' | 'props';
 export type SketchPageType = 'left' | 'right' | 'full';
 
+// char/prop variant: 4 text field + optional raw_sheet/crop imagery.
+// stage variant: no height/raw_sheet/crop → `illustrations[]` generated directly.
 export interface SketchVariant {
-  key: string;
-  visual_description: string;
+  key: string;                                   // variant key (base, hero); ref = @{entity.key}/{key}
+  description: string;                           // ⚡ replaces the legacy visual_description (Excel "description")
+  height?: string;                              // char/prop only (Excel "height"); stage has none
+  visual_design: string;                        // Excel "visual_design"
+  art_language: string;                         // Excel "art_language"
+  // char/prop only:
+  raw_sheet?: { illustrations: Illustration[] }; // 4-cell style sheet. variant 'base': empty/absent (raw lives only in base workspace)
+  crop?: { illustrations: Illustration[] };      // chosen cell. variant 'base': cloned from base.{kind}_sheet.styles[selected].crops[key]
+  // stage only:
+  illustrations?: Illustration[];                // direct generate, no crop
 }
 
+// key matches the top-level snapshot entity key. (per-entity media_url REMOVED — imagery lives on base + per-variant)
 export interface SketchEntity {
   key: string;
-  media_url: string | null;
   variants: SketchVariant[];
+}
+
+// ── Base workspace (generate raw sheets in bulk + crop per entity) ────────────
+export interface SketchBaseCrop {
+  key: string;                                   // entity key — exactly 1 crop / base entity
+  illustrations: Illustration[];                 // crop versions, canonical, edit-able
+}
+
+export interface SketchBaseStyle {
+  style_prompt: string;                          // style description for this generate attempt
+  is_selected: boolean;                          // locked style — across non-empty styles at most 1 true/sheet
+  image_references: ImageReference[];            // style reference images
+  illustrations: Illustration[];                 // RAW sheet versions (1 sheet = ALL base entities), canonical, edit-able
+  crops: SketchBaseCrop[];                       // per-entity crops lifted out of the raw sheet
+}
+
+export interface SketchBaseSheet {
+  styles: SketchBaseStyle[];                     // each element = one art-style attempt (parallel, pick one to lock)
+}
+
+export interface SketchBase {
+  character_sheet: SketchBaseSheet;              // all base characters
+  prop_sheet: SketchBaseSheet;                   // all base props — no stage_sheet
+}
+
+/** Projection of the 'base' variant text (EditBaseEntityModal + crop labels). */
+export interface BaseEntityText {
+  key: string;
+  description: string;                           // import-only
+  height: string;                               // import-only (char/prop)
+  visual_design: string;                        // editable
+  art_language: string;                         // editable
+}
+
+/** Sheet accessor for a base kind (single source — reused by slice + selectors). */
+export function sheetOf(base: SketchBase, kind: BaseKind): SketchBaseSheet {
+  return kind === 'characters' ? base.character_sheet : base.prop_sheet;
 }
 
 export interface ArtDirection {
@@ -131,6 +183,7 @@ export function getSketchSpreadEffectiveUrl(spread: SketchSpread): string | null
 
 export interface Sketch {
   id: string | null;
+  base: SketchBase;                             // ⚡ NEW — base sheet workspace (char + prop)
   characters: SketchEntity[];
   props: SketchEntity[];
   stages: SketchEntity[];

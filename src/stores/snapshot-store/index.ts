@@ -60,6 +60,7 @@ import { createStagesSlice } from './slices/stages-slice';
 import { createImageTaskSlice } from './slices/image-task-slice';
 import { createSketchGenerateJobSlice } from './slices/sketch-generate-job-slice';
 import { createSketchSpreadGenerateJobSlice } from './slices/sketch-spread-generate-job-slice';
+import { createSketchBaseGenerateJobSlice } from './slices/sketch-base-generate-job-slice';
 
 const log = createLogger('Store', 'SnapshotStore');
 
@@ -81,6 +82,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
         ...createImageTaskSlice(...args),
         ...createSketchGenerateJobSlice(...args),
         ...createSketchSpreadGenerateJobSlice(...args),
+        ...createSketchBaseGenerateJobSlice(...args),
 
         // Fetch state
         fetchLoading: false,
@@ -459,6 +461,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
             state.imageTasks = [];
             state.sketchGenerateJob = null;
             state.sketchSpreadGenerateJob = null;
+            state.baseSheetGenerateOp = null;
             state.quizValidationErrors = {};
             state.meta = { id: null, bookId: null, version: null, tag: null, autoSaveId: null };
             state.sync = { isDirty: false, lastSavedAt: null, lastManualSavedAt: null, isSaving: false, isAutoSaving: false, error: null };

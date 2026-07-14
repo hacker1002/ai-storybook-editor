@@ -133,16 +133,21 @@ export function buildStages(rows: ParsedEntityRow[]): Stage[] {
 
 // ── Sketch entity projection ────────────────────────────────────────────────────
 
-/** Full entity catalog → thin sketch projection (design 07-01 §4.3): key + variant
- *  { key, visual_description }, image sheet empty (media_url: null). DRY — derived from
- *  the same full entities, never re-parsed. */
+/** Full entity catalog → thin sketch projection (design 07-01 §4.3): key + variant text
+ *  fields (imagery lives on the base workspace + per-variant). DRY — derived from the same
+ *  full entities, never re-parsed. The source `visual_description` maps to the sketch variant
+ *  `visual_design`; `description`/`art_language` are populated by the 4-column import (Phase 06). */
 export function projectSketchEntities(
   entities: { key: string; variants: { key: string; visual_description: string }[] }[],
 ): SketchEntity[] {
   return entities.map((e) => ({
     key: e.key,
-    media_url: null,
-    variants: e.variants.map((v) => ({ key: v.key, visual_description: v.visual_description })),
+    variants: e.variants.map((v) => ({
+      key: v.key,
+      description: '',
+      visual_design: v.visual_description,
+      art_language: '',
+    })),
   }));
 }
 
@@ -167,6 +172,7 @@ export function assembleSketchSnapshot(
 
   const sketch: Sketch = {
     id: newUuid(),
+    base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
     characters: projectSketchEntities(characters),
     props: projectSketchEntities(props),
     stages: projectSketchEntities(stages),

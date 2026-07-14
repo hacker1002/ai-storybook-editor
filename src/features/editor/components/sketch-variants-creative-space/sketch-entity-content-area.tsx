@@ -29,7 +29,7 @@ import {
 } from '@/stores/snapshot-store/selectors';
 import { useCurrentBook } from '@/stores/book-store';
 import { useAllResourcesLockedByOther, useLockHolderName } from '@/stores/resource-lock-store';
-import type { SketchEntityKind } from '@/types/sketch';
+import type { SketchEntity, SketchEntityKind } from '@/types/sketch';
 import { KIND_TO_RESOURCE_TYPE, titleCase, type KindConfig } from './sketch-variants-constants';
 import { ImageDownloadButton } from '@/features/editor/components/shared-components/image-download-button';
 import { LockedByOtherOverlay } from '@/features/editor/components/shared-components/sketch-locked-by-other-overlay';
@@ -39,6 +39,19 @@ const log = createLogger('Editor', 'SketchEntityContentArea');
 
 /** Backend caps a sheet at 12 variant cells; enforce client-side to avoid a doomed 400. */
 const MAX_SHEET_VARIANTS = 12;
+
+/** Effective sheet preview URL for a sketch entity. The per-entity `media_url` was removed in
+ *  the 2026-07-13 restructure; this component now serves STAGE only, whose imagery lives on
+ *  `variant.illustrations`. Returns the first variant's selected (else newest) illustration url. */
+function entitySheetUrl(entity: SketchEntity | undefined): string | null {
+  if (!entity) return null;
+  for (const v of entity.variants) {
+    const ills = v.illustrations ?? [];
+    const url = ills.find((i) => i.is_selected)?.media_url ?? ills[0]?.media_url;
+    if (url) return url;
+  }
+  return null;
+}
 
 interface SketchEntityContentAreaProps {
   kind: SketchEntityKind;
@@ -61,6 +74,7 @@ export function SketchEntityContentArea({
   checkedKeys,
 }: SketchEntityContentAreaProps) {
   const entity = useSketchEntityByKey(kind, selectedEntityKey);
+  const sheetUrl = entitySheetUrl(entity);
   const book = useCurrentBook();
   const focusGen = useSketchEntityGenerating(kind, selectedEntityKey);
   const progress = useSketchGenerateProgress();
@@ -110,7 +124,7 @@ export function SketchEntityContentArea({
       (e) => e.variants.length >= 1 && e.variants.length <= MAX_SHEET_VARIANTS,
     );
     const eligible = eligibleEntities.map((e) => e.key);
-    const hadExisting = eligibleEntities.some((e) => Boolean(e.media_url));
+    const hadExisting = eligibleEntities.some((e) => Boolean(entitySheetUrl(e)));
     return { eligible, emptyCount, tooManyCount, hadExisting };
   };
 
@@ -190,10 +204,10 @@ export function SketchEntityContentArea({
       <div className="flex-1 overflow-auto p-6">
         <div className="relative flex h-full items-center justify-center">
           {focusGen.isGenerating ? (
-            entity?.media_url ? (
+            sheetUrl ? (
               <SheetImage
-                key={entity.media_url}
-                src={entity.media_url}
+                key={sheetUrl}
+                src={sheetUrl}
                 name={name}
                 onRetry={handleRetryFocus}
                 lockedByOther={selectedLockedByOther}
@@ -218,10 +232,10 @@ export function SketchEntityContentArea({
                 Retry
               </Button>
             </div>
-          ) : entity?.media_url ? (
+          ) : sheetUrl ? (
             <SheetImage
-              key={entity.media_url}
-              src={entity.media_url}
+              key={sheetUrl}
+              src={sheetUrl}
               name={name}
               onRetry={handleRetryFocus}
               lockedByOther={selectedLockedByOther}

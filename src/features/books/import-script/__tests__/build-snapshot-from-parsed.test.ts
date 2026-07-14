@@ -50,17 +50,16 @@ describe('entity mappers', () => {
 });
 
 describe('projectSketchEntities', () => {
-  it('projects the full catalog to thin { key, media_url:null, variants[{key,visual_description}] }', () => {
+  it('projects the full catalog to thin { key, variants[{ key, description, visual_design, art_language }] }', () => {
     const chars = buildCharacters(buildFixtureWorkbook().characters);
     const projected = projectSketchEntities(chars);
     expect(projected).toHaveLength(chars.length);
     const kid = projected[0];
     expect(kid).toEqual({
       key: 'kid',
-      media_url: null,
       variants: [
-        { key: 'base', visual_description: 'Mô tả kid base' },
-        { key: 'hero', visual_description: 'Mô tả kid hero' },
+        { key: 'base', description: '', visual_design: 'Mô tả kid base', art_language: '' },
+        { key: 'hero', description: '', visual_design: 'Mô tả kid hero', art_language: '' },
       ],
     });
   });
@@ -87,10 +86,9 @@ describe('assembleSketchSnapshot', () => {
     expect(snapshot.sketch.stages).toHaveLength(8);
     expect(snapshot.sketch.characters[0]).toEqual({
       key: 'kid',
-      media_url: null,
       variants: [
-        { key: 'base', visual_description: 'Mô tả kid base' },
-        { key: 'hero', visual_description: 'Mô tả kid hero' },
+        { key: 'base', description: '', visual_design: 'Mô tả kid base', art_language: '' },
+        { key: 'hero', description: '', visual_design: 'Mô tả kid hero', art_language: '' },
       ],
     });
   });

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { normalizeSketch, normalizeSketchSpread, DEFAULT_SKETCH, createSketchSlice } from './sketch-slice';
 import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
-import type { Sketch, SketchEntity, SketchSpread, ArtDirection, SketchTextbox } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchVariant, SketchSpread, ArtDirection, SketchTextbox } from '@/types/sketch';
 import type { Geometry, Typography } from '@/types/spread-types';
 
 // Isolated harness: the sketch slice + the only cross-slice field its actions touch
@@ -19,9 +19,17 @@ function createTestStore() {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+// New-shape variant: 3 required text fields (height/imagery optional). `visual_design` carries
+// the description text in the thin single-column import (2026-07-13 restructure).
+const variant = (key: string, visualDesign = ''): SketchVariant => ({
+  key,
+  description: '',
+  visual_design: visualDesign,
+  art_language: '',
+});
+
 const entity = (key: string, variants: SketchEntity['variants'] = []): SketchEntity => ({
   key,
-  media_url: null,
   variants,
 });
 
@@ -48,17 +56,24 @@ describe('normalizeSketch', () => {
   it('preserves a valid new-shape sketch', () => {
     const valid: Sketch = {
       id: 'sk1',
-      characters: [{ key: 'c1', media_url: null, variants: [] }],
+      base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
+      characters: [{ key: 'c1', variants: [] }],
       props: [],
-      stages: [{ key: 'st1', media_url: 'u', variants: [{ key: 'v', visual_description: 'd' }] }],
+      stages: [{ key: 'st1', variants: [{ key: 'v', description: '', visual_design: 'd', art_language: '' }] }],
       spreads: [{ id: 'sp1', images: [], pages: [], textboxes: [] }],
     };
     expect(normalizeSketch(valid)).toEqual(valid);
   });
 
+  it('defaults a missing base workspace to two empty sheets (backward-compat)', () => {
+    const result = normalizeSketch({ id: 'no-base', characters: [], props: [], stages: [], spreads: [] });
+    expect(result.base).toEqual({ character_sheet: { styles: [] }, prop_sheet: { styles: [] } });
+  });
+
   it('defaults missing nested arrays to [] (defensive)', () => {
     expect(normalizeSketch({ id: 'only-id' })).toEqual({
       id: 'only-id',
+      base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
       characters: [],
       props: [],
       stages: [],
@@ -172,9 +187,9 @@ describe('SketchSlice entity actions', () => {
 
   it('upsertSketchEntity replaces in place when key exists', () => {
     store.getState().setSketchEntities('props', [entity('wand'), entity('shield')]);
-    store.getState().upsertSketchEntity('props', entity('wand', [{ key: 'base', visual_description: 'new' }]));
+    store.getState().upsertSketchEntity('props', entity('wand', [variant('base', 'new')]));
     expect(store.getState().sketch.props).toHaveLength(2);
-    expect(store.getState().sketch.props[0].variants).toEqual([{ key: 'base', visual_description: 'new' }]);
+    expect(store.getState().sketch.props[0].variants).toEqual([variant('base', 'new')]);
   });
 
   it('removeSketchEntity filters out the key', () => {
@@ -183,24 +198,17 @@ describe('SketchSlice entity actions', () => {
     expect(store.getState().sketch.stages.map((e: SketchEntity) => e.key)).toEqual(['castle']);
   });
 
-  it('setSketchEntityMediaUrl sets media_url on the matched entity only', () => {
-    store.getState().setSketchEntities('characters', [entity('kid'), entity('mom')]);
-    store.getState().setSketchEntityMediaUrl('characters', 'kid', 'https://x/img.png');
-    expect(store.getState().sketch.characters[0].media_url).toBe('https://x/img.png');
-    expect(store.getState().sketch.characters[1].media_url).toBeNull();
-  });
-
   it('upsertSketchVariant adds then updates a variant in place', () => {
     store.getState().setSketchEntities('characters', [entity('kid')]);
-    store.getState().upsertSketchVariant('characters', 'kid', { key: 'hero', visual_description: 'caped' });
-    expect(store.getState().sketch.characters[0].variants).toEqual([{ key: 'hero', visual_description: 'caped' }]);
-    store.getState().upsertSketchVariant('characters', 'kid', { key: 'hero', visual_description: 'masked' });
-    expect(store.getState().sketch.characters[0].variants).toEqual([{ key: 'hero', visual_description: 'masked' }]);
+    store.getState().upsertSketchVariant('characters', 'kid', variant('hero', 'caped'));
+    expect(store.getState().sketch.characters[0].variants).toEqual([variant('hero', 'caped')]);
+    store.getState().upsertSketchVariant('characters', 'kid', variant('hero', 'masked'));
+    expect(store.getState().sketch.characters[0].variants).toEqual([variant('hero', 'masked')]);
   });
 
   it('upsertSketchVariant is a no-op when the entity is missing', () => {
     store.getState().setSketchEntities('characters', []);
-    store.getState().upsertSketchVariant('characters', 'ghost', { key: 'base', visual_description: 'x' });
+    store.getState().upsertSketchVariant('characters', 'ghost', variant('base', 'x'));
     expect(store.getState().sketch.characters).toEqual([]);
   });
 
@@ -212,11 +220,7 @@ describe('SketchSlice entity actions', () => {
     expect(store.getState().sync.isDirty).toBe(true);
 
     resetDirty();
-    store.getState().setSketchEntityMediaUrl('characters', 'kid', 'u');
-    expect(store.getState().sync.isDirty).toBe(true);
-
-    resetDirty();
-    store.getState().upsertSketchVariant('characters', 'kid', { key: 'base', visual_description: 'x' });
+    store.getState().upsertSketchVariant('characters', 'kid', variant('base', 'x'));
     expect(store.getState().sync.isDirty).toBe(true);
 
     resetDirty();
@@ -227,8 +231,7 @@ describe('SketchSlice entity actions', () => {
   it('find-guarded no-ops leave sync.isDirty false', () => {
     store.getState().setSketchEntities('characters', []); // sets dirty
     resetDirty();
-    store.getState().setSketchEntityMediaUrl('characters', 'ghost', 'u'); // no match
-    store.getState().upsertSketchVariant('characters', 'ghost', { key: 'base', visual_description: 'x' });
+    store.getState().upsertSketchVariant('characters', 'ghost', variant('base', 'x')); // no match
     expect(store.getState().sync.isDirty).toBe(false);
   });
 });
@@ -413,5 +416,374 @@ describe('SketchSlice spread actions', () => {
     store.getState().deleteSketchTextbox('missing', 't');
     store.getState().updateSketchTextbox('missing', 't', 'en', { text: 'x' });
     expect(store.getState().sync.isDirty).toBe(false);
+  });
+});
+
+describe('SketchSlice base (workspace) actions', () => {
+  let store: ReturnType<typeof createTestStore>;
+  beforeEach(() => {
+    store = createTestStore();
+  });
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const resetDirty = () => store.setState((s: any) => { s.sync.isDirty = false; });
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  it('addSketchBaseStyle appends style to sheet + sets isDirty', () => {
+    const style = {
+      style_prompt: 'test style',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [],
+    };
+    store.getState().addSketchBaseStyle('characters', style);
+    expect(store.getState().sketch.base.character_sheet.styles).toHaveLength(1);
+    expect(store.getState().sketch.base.character_sheet.styles[0]).toEqual(style);
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('removeSketchBaseStyle filters out by index + sets isDirty', () => {
+    const s1 = { style_prompt: 'style 1', is_selected: false, image_references: [], illustrations: [], crops: [] };
+    const s2 = { style_prompt: 'style 2', is_selected: false, image_references: [], illustrations: [], crops: [] };
+    store.getState().addSketchBaseStyle('characters', s1);
+    store.getState().addSketchBaseStyle('characters', s2);
+    store.getState().removeSketchBaseStyle('characters', 0);
+    expect(store.getState().sketch.base.character_sheet.styles).toHaveLength(1);
+    expect(store.getState().sketch.base.character_sheet.styles[0].style_prompt).toBe('style 2');
+  });
+
+  it('removeSketchBaseStyle no-ops on out-of-range index (isDirty stays false)', () => {
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'test style',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [],
+    });
+    resetDirty();
+    store.getState().removeSketchBaseStyle('characters', 99);
+    expect(store.getState().sketch.base.character_sheet.styles).toHaveLength(1);
+    expect(store.getState().sync.isDirty).toBe(false);
+  });
+
+  it('addSketchBaseStyleIllustration prepends + sets is_selected true + clears others', () => {
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'test style',
+      is_selected: false,
+      image_references: [],
+      illustrations: [
+        { type: 'created' as const, media_url: 'old.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+      ],
+      crops: [],
+    });
+
+    store.getState().addSketchBaseStyleIllustration('characters', 0, 'new.png');
+
+    const illustrations = store.getState().sketch.base.character_sheet.styles[0].illustrations;
+    expect(illustrations).toHaveLength(2);
+    expect(illustrations[0].media_url).toBe('new.png');
+    expect(illustrations[0].is_selected).toBe(true);
+    expect(illustrations[1].media_url).toBe('old.png');
+    expect(illustrations[1].is_selected).toBe(false);
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('setSketchBaseStyleIllustrations replaces the array', () => {
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'test style',
+      is_selected: false,
+      image_references: [],
+      illustrations: [
+        { type: 'created' as const, media_url: 'old.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+      ],
+      crops: [],
+    });
+
+    const newIlls = [
+      { type: 'created' as const, media_url: 'new1.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+      { type: 'created' as const, media_url: 'new2.png', created_time: '2026-07-13T00:00:00Z', is_selected: false },
+    ];
+    store.getState().setSketchBaseStyleIllustrations('characters', 0, newIlls);
+
+    const illustrations = store.getState().sketch.base.character_sheet.styles[0].illustrations;
+    expect(illustrations).toHaveLength(2);
+    expect(illustrations[0].media_url).toBe('new1.png');
+    expect(illustrations[1].media_url).toBe('new2.png');
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('setSketchBaseStyleCrops replaces crops array', () => {
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'test style',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [
+        {
+          key: 'hero',
+          illustrations: [
+            { type: 'created' as const, media_url: 'old-crop.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+          ],
+        },
+      ],
+    });
+
+    const newCrops = [
+      {
+        key: 'hero',
+        illustrations: [
+          { type: 'created' as const, media_url: 'new-crop.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+        ],
+      },
+      {
+        key: 'villain',
+        illustrations: [
+          { type: 'created' as const, media_url: 'villain-crop.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+        ],
+      },
+    ];
+    store.getState().setSketchBaseStyleCrops('characters', 0, newCrops);
+
+    const crops = store.getState().sketch.base.character_sheet.styles[0].crops;
+    expect(crops).toHaveLength(2);
+    expect(crops[0].key).toBe('hero');
+    expect(crops[0].illustrations[0].media_url).toBe('new-crop.png');
+    expect(crops[1].key).toBe('villain');
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('setSketchBaseCropIllustrations replaces one crop\'s illustrations', () => {
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'test style',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [
+        {
+          key: 'hero',
+          illustrations: [
+            { type: 'created' as const, media_url: 'old.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+          ],
+        },
+        {
+          key: 'villain',
+          illustrations: [
+            { type: 'created' as const, media_url: 'villain.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+          ],
+        },
+      ],
+    });
+
+    const newIlls = [
+      { type: 'created' as const, media_url: 'new-hero.png', created_time: '2026-07-13T00:00:00Z', is_selected: true },
+    ];
+    store.getState().setSketchBaseCropIllustrations('characters', 0, 'hero', newIlls);
+
+    const crops = store.getState().sketch.base.character_sheet.styles[0].crops;
+    expect(crops[0].illustrations[0].media_url).toBe('new-hero.png');
+    // Villain untouched
+    expect(crops[1].illustrations[0].media_url).toBe('villain.png');
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('setSketchBaseStyleSelected sets is_selected exclusive per sheet + clones crops into entity variants[base].crop', () => {
+    // Setup entities
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [variant('base')] },
+      { key: 'villain', variants: [variant('base')] },
+    ]);
+
+    // Setup styles with crops
+    const heroIll = { type: 'created' as const, media_url: 'hero-crop.png', created_time: '2026-07-13T00:00:00Z', is_selected: true };
+    const villainIll = { type: 'created' as const, media_url: 'villain-crop.png', created_time: '2026-07-13T00:00:00Z', is_selected: true };
+
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'style 1',
+      is_selected: true,
+      image_references: [],
+      illustrations: [],
+      crops: [
+        { key: 'hero', illustrations: [heroIll] },
+        { key: 'villain', illustrations: [villainIll] },
+      ],
+    });
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'style 2',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [
+        { key: 'hero', illustrations: [{ type: 'created' as const, media_url: 'hero-crop-2.png', created_time: '2026-07-13T00:00:00Z', is_selected: true }] },
+      ],
+    });
+
+    // Select style 1 → crops cloned into entities
+    store.getState().setSketchBaseStyleSelected('characters', 1); // st2
+
+    // Assert exclusive is_selected
+    expect(store.getState().sketch.base.character_sheet.styles[0].is_selected).toBe(false);
+    expect(store.getState().sketch.base.character_sheet.styles[1].is_selected).toBe(true);
+
+    // Assert crops cloned into variants[base].crop
+    const heroBase = store.getState().sketch.characters[0].variants.find((v: SketchVariant) => v.key === 'base');
+    const villainBase = store.getState().sketch.characters[1].variants.find((v: SketchVariant) => v.key === 'base');
+    expect(heroBase?.crop?.illustrations[0].media_url).toBe('hero-crop-2.png');
+    expect(villainBase?.crop).toBeUndefined(); // no crop in st2 for villain
+  });
+
+  it('setSketchBaseStyleSelected clones with isolation (clone is separate object, not reference)', () => {
+    // Setup entity
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [variant('base')] },
+    ]);
+
+    const cropIll = { type: 'created' as const, media_url: 'hero-crop.png', created_time: '2026-07-13T00:00:00Z', is_selected: true };
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 'test style',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [{ key: 'hero', illustrations: [cropIll] }],
+    });
+
+    // Select style
+    store.getState().setSketchBaseStyleSelected('characters', 0);
+
+    // Get the cloned crop from variant
+    const heroBase = store.getState().sketch.characters[0].variants.find((v: SketchVariant) => v.key === 'base');
+    const clonedCropIll = heroBase?.crop?.illustrations[0];
+
+    // Get the original crop in the style
+    const style = store.getState().sketch.base.character_sheet.styles[0];
+    const originalCropIll = style.crops[0].illustrations[0];
+
+    // Assert they are separate objects (deep clone, not reference)
+    // Same values but different object identity
+    expect(clonedCropIll).not.toBe(originalCropIll);
+    expect(clonedCropIll?.media_url).toBe(originalCropIll.media_url);
+    expect(clonedCropIll?.type).toBe(originalCropIll.type);
+    expect(clonedCropIll?.is_selected).toBe(originalCropIll.is_selected);
+  });
+
+  it('updateSketchBaseEntityText updates only provided fields, leaves others untouched', () => {
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [{ key: 'base', description: 'old desc', height: 'old h', visual_design: 'old design', art_language: 'old lang' }] },
+    ]);
+    resetDirty();
+
+    store.getState().updateSketchBaseEntityText('characters', 'hero', {
+      visual_design: 'new design',
+      art_language: 'new lang',
+    });
+
+    const base = store.getState().sketch.characters[0].variants[0];
+    expect(base.visual_design).toBe('new design');
+    expect(base.art_language).toBe('new lang');
+    expect(base.description).toBe('old desc'); // not in the patch → untouched
+    expect(base.height).toBe('old h'); // not in the patch → untouched
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('updateSketchBaseEntityText persists description + height when provided (merged Edit modal)', () => {
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [{ key: 'base', description: 'original', height: '1.0 m', visual_design: '', art_language: '' }] },
+    ]);
+    resetDirty();
+
+    store.getState().updateSketchBaseEntityText('characters', 'hero', {
+      description: 'edited desc',
+      height: '1.05 m',
+      visual_design: 'new',
+    });
+
+    const base = store.getState().sketch.characters[0].variants[0];
+    expect(base.description).toBe('edited desc');
+    expect(base.height).toBe('1.05 m');
+    expect(base.visual_design).toBe('new');
+  });
+
+  it('setSketchBaseStyleImageReferences replaces image_references on the target style', () => {
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's', is_selected: false, image_references: [], illustrations: [], crops: [],
+    });
+    resetDirty();
+
+    store.getState().setSketchBaseStyleImageReferences('characters', 0, [
+      { title: 'ref-a.jpg', media_url: 'https://cdn/a.png' },
+    ]);
+
+    const style = store.getState().sketch.base.character_sheet.styles[0];
+    expect(style.image_references).toEqual([{ title: 'ref-a.jpg', media_url: 'https://cdn/a.png' }]);
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('normalizeSketch defaults missing base to emptyBase() (2 empty sheets)', () => {
+    const raw = {
+      id: 'sk1',
+      characters: [entity('hero')],
+      props: [],
+      stages: [],
+      spreads: [],
+      // no base field
+    };
+    const result = normalizeSketch(raw);
+    expect(result.base).toEqual({
+      character_sheet: { styles: [] },
+      prop_sheet: { styles: [] },
+    });
+  });
+
+  it('normalizeSketch coerces missing variant text fields to empty string', () => {
+    const raw = {
+      id: 'sk1',
+      base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
+      characters: [
+        {
+          key: 'hero',
+          variants: [
+            {
+              key: 'base',
+              // missing description, visual_design, art_language
+            },
+          ],
+        },
+      ],
+      props: [],
+      stages: [],
+      spreads: [],
+    };
+    const result = normalizeSketch(raw);
+    const heroBase = result.characters[0].variants[0];
+    expect(heroBase.description).toBe('');
+    expect(heroBase.visual_design).toBe('');
+    expect(heroBase.art_language).toBe('');
+  });
+
+  it('normalizeSketch preserves valid base workspace', () => {
+    const base = {
+      character_sheet: {
+        styles: [
+          {
+            style_prompt: 'test style',
+            is_selected: false,
+            image_references: [],
+            illustrations: [],
+            crops: [],
+          },
+        ],
+      },
+      prop_sheet: { styles: [] },
+    };
+    const raw = {
+      id: 'sk1',
+      base,
+      characters: [],
+      props: [],
+      stages: [],
+      spreads: [],
+    };
+    const result = normalizeSketch(raw);
+    expect(result.base).toEqual(base);
   });
 });

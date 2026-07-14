@@ -18,11 +18,16 @@ export const PIPELINE_STEPS: { key: PipelineStep; label: string }[] = [
   { key: 'retouch', label: 'Retouch' },
 ];
 
-// Sketch step icons — 4 namespaced creative spaces (characters/props/stages/spreads).
-// All currently render the "coming soon" placeholder (MockCreativeSpace).
+// Sketch step icons — redesign 2026-07-13: 5 FUNCTIONAL creative spaces
+// (base · variants · lineup · stages · spreads), NOT 3 look-alike entity spaces.
+// Base/Variant/Lineup each span BOTH character + prop (not split by entity kind).
+// Routing (editor-page): base→SketchBaseSpace (Phase 05, temp Mock); variant/lineup→
+// Coming-soon placeholder; stage→SketchVariantsCreativeSpace kind='stages'; spread→
+// SketchSpreadsCreativeSpace. See design 02-icon-rail.md §2.3.
 export const SKETCH_ICONS: IconRailItemConfig[] = [
-  { id: 'sketch-character', icon: 'Smile', label: 'Characters' },
-  { id: 'sketch-prop', icon: 'Box', label: 'Props' },
+  { id: 'sketch-base', icon: 'Shapes', label: 'Base' },
+  { id: 'sketch-variant', icon: 'Copy', label: 'Variants' },
+  { id: 'sketch-lineup', icon: 'Users', label: 'Lineup' },
   { id: 'sketch-stage', icon: 'Mountain', label: 'Stages' },
   { id: 'sketch-spread', icon: 'LayoutGrid', label: 'Spreads' },
 ];
@@ -79,7 +84,7 @@ export function getIconsForStep(step: PipelineStep): IconRailItemConfig[] {
 
 // Default creative space per step (overrides first-icon fallback)
 const STEP_DEFAULT_CREATIVE_SPACE: Partial<Record<PipelineStep, string>> = {
-  sketch: 'sketch-spread',
+  sketch: 'sketch-base',
   illustration: 'spread',
 };
 
@@ -87,7 +92,7 @@ const STEP_DEFAULT_CREATIVE_SPACE: Partial<Record<PipelineStep, string>> = {
 export function getDefaultCreativeSpace(step: PipelineStep): string {
   if (STEP_DEFAULT_CREATIVE_SPACE[step]) return STEP_DEFAULT_CREATIVE_SPACE[step]!;
   const icons = STEP_ICONS[step];
-  return icons?.[0]?.id ?? 'sketch-character';
+  return icons?.[0]?.id ?? 'sketch-base';
 }
 
 // ── Collaboration-mode gating (viewer = non-owner) ───────────────────────────
@@ -100,14 +105,19 @@ export function getDefaultCreativeSpace(step: PipelineStep): string {
 export const DEFAULT_GATED = new Set<string>(['history', 'issue', 'share', 'collaborator', 'setting']);
 
 /**
- * Icon-rail entity id → `access_rights.steps[currentStep].resources` key. An entity
+ * Icon-rail entity id → `access_rights.steps[currentStep].resources` key(s). An entity
  * icon is disabled for a non-owner when its mapped resource is not granted. Ids not
  * present here (e.g. `preview`) are never resource-gated.
+ *
+ * ⚡ Value is `string | string[]` (redesign 2026-07-13). Sketch base/variant/lineup span
+ * BOTH characters + props → map to an ARRAY, gated "any-of": disable ONLY when the
+ * collaborator is blocked from EVERY listed resource (IconRail resolves via `toArray`).
  * NOTE: retouch id `remix` → resource `remixes`; `object` → `objects`; `quiz` → `quiz`.
  */
-export const ENTITY_RESOURCE_MAP: Record<string, string> = {
-  'sketch-character': 'characters',
-  'sketch-prop': 'props',
+export const ENTITY_RESOURCE_MAP: Record<string, string | string[]> = {
+  'sketch-base': ['characters', 'props'],
+  'sketch-variant': ['characters', 'props'],
+  'sketch-lineup': ['characters', 'props'],
   'sketch-stage': 'stages',
   'sketch-spread': 'spreads',
   character: 'characters',

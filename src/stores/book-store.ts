@@ -367,6 +367,12 @@ export const useBookStep = () =>
   useBookStore((s) => s.currentBook?.step ?? null);
 export const useIsSourceBook = () =>
   useBookStore((s) => s.currentBook?.type === 0);
+/** Illustration art-style id (art_styles.type=1). */
+export const useArtStyleId = (): string | null =>
+  useBookStore((s) => s.currentBook?.artstyle_id ?? null);
+/** Sketch style id (art_styles.type=0) — used for ALL sketch generate flows. */
+export const useSketchStyleId = (): string | null =>
+  useBookStore((s) => s.currentBook?.sketchstyle_id ?? null);
 export const useBookShape = () =>
   useBookStore((s) => s.currentBook?.shape ?? null);
 export const useBookTypography = () =>
