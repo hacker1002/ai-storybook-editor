@@ -9,6 +9,9 @@ import { parseTags } from '@/features/styles/utils/style-filters';
 import { MAX_TAG_CHIPS, REF_CAP } from '@/features/styles/constants/constants';
 import type { ArtStyle, StyleImageReference } from '@/types/art-style';
 
+/** type (0=sketch, 1=illustration) → card badge label. */
+const STYLE_TYPE_BADGE: Record<number, string> = { 0: 'Sketch', 1: 'Illustration' };
+
 interface StyleThumbStripProps {
   thumbs: StyleImageReference[];
   styleName: string;
@@ -94,7 +97,12 @@ function StyleCardInner({ style, onEdit, onDelete }: StyleCardProps) {
       <StyleThumbStrip thumbs={thumbs} styleName={style.name} />
 
       <div className="p-3">
-        <h3 className="truncate font-medium">{style.name}</h3>
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="truncate font-medium">{style.name}</h3>
+          <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {STYLE_TYPE_BADGE[style.type] ?? 'Illustration'}
+          </span>
+        </div>
 
         {style.description ? (
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">

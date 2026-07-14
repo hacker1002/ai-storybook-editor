@@ -19,6 +19,7 @@ export const DEFAULT_STYLES_FILTERS: StylesFilterState = {
   search: '',
   references: 'all',
   tags: [],
+  type: 'all',
 };
 
 /** Public Supabase Storage bucket shared across the asset library. */

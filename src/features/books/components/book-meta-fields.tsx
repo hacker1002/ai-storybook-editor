@@ -36,6 +36,7 @@ interface FormatRow {
 interface ArtStyleRow {
   id: string;
   name: string;
+  type: number; // 0=sketch, 1=illustration
   image_references: { title: string; media_url: string }[] | null;
 }
 
@@ -55,6 +56,7 @@ export function BookMetaFields({
 }: BookMetaFieldsProps) {
   const [formats, setFormats] = React.useState<FormatRow[]>([]);
   const [artStyles, setArtStyles] = React.useState<ArtStyleOption[]>([]);
+  const [sketchStyles, setSketchStyles] = React.useState<ArtStyleOption[]>([]);
   const [isLoadingLookups, setIsLoadingLookups] = React.useState(false);
 
   const fetchLookups = React.useCallback(async () => {
@@ -62,7 +64,7 @@ export function BookMetaFields({
     setIsLoadingLookups(true);
     const [formatsRes, artStylesRes] = await Promise.all([
       supabase.from('formats').select('id, name').order('name'),
-      supabase.from('art_styles').select('id, name, image_references').order('name'),
+      supabase.from('art_styles').select('id, name, type, image_references').order('name'),
     ]);
 
     if (formatsRes.error) {
@@ -74,12 +76,15 @@ export function BookMetaFields({
     if (artStylesRes.error) {
       log.error('fetchLookups', 'art_styles failed', { error: artStylesRes.error.message });
     } else {
-      const mapped: ArtStyleOption[] = ((artStylesRes.data ?? []) as ArtStyleRow[]).map((s) => ({
+      // Single round-trip → split client-side by `type` (0=sketch, 1=illustration).
+      const rows = (artStylesRes.data ?? []) as ArtStyleRow[];
+      const toOption = (s: ArtStyleRow): ArtStyleOption => ({
         id: s.id,
         name: s.name,
         thumbnailUrl: s.image_references?.[0]?.media_url,
-      }));
-      setArtStyles(mapped);
+      });
+      setSketchStyles(rows.filter((s) => s.type === 0).map(toOption));
+      setArtStyles(rows.filter((s) => s.type === 1).map(toOption));
     }
 
     log.debug('fetchLookups', 'done', {
@@ -190,6 +195,17 @@ export function BookMetaFields({
           </Select>
         </Field>
       </div>
+
+      <Field label="Sketch Style">
+        <ArtStyleSelect
+          value={value.sketchstyleId}
+          options={sketchStyles}
+          onChange={(id) => onChange({ sketchstyleId: id })}
+          clearable
+          disabled={lookupsBusy}
+          placeholder="Search sketch style..."
+        />
+      </Field>
 
       <Field label="Art Style">
         <ArtStyleSelect

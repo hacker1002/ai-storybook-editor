@@ -3,7 +3,7 @@
 // Select; Tags = multi-select chip popover (OR semantics) that stays open while toggling.
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, Filter, Search } from 'lucide-react';
+import { ChevronDown, Filter, Palette, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,7 +20,11 @@ import {
 } from '@/components/ui/popover';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { SEARCH_DEBOUNCE_MS } from '@/features/styles/constants/constants';
-import type { ReferencesFilter, StylesFilterState } from '@/types/art-style';
+import type {
+  ReferencesFilter,
+  StylesFilterState,
+  StyleTypeFilter,
+} from '@/types/art-style';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Styles', 'StylesToolbar');
@@ -32,6 +36,14 @@ const REF_LABEL: Record<ReferencesFilter, string> = {
 };
 
 const REF_OPTIONS: ReferencesFilter[] = ['all', 'with', 'none'];
+
+const TYPE_LABEL: Record<StyleTypeFilter, string> = {
+  all: 'All types',
+  sketch: 'Sketch',
+  illustration: 'Illustration',
+};
+
+const TYPE_OPTIONS: StyleTypeFilter[] = ['all', 'sketch', 'illustration'];
 
 interface StylesToolbarProps {
   filters: StylesFilterState;
@@ -77,6 +89,14 @@ export function StylesToolbar({
     update({ references: next });
   };
 
+  const handleTypeChange = (raw: string) => {
+    const next = TYPE_OPTIONS.includes(raw as StyleTypeFilter)
+      ? (raw as StyleTypeFilter)
+      : 'all';
+    log.debug('type', 'filter change', { type: next });
+    update({ type: next });
+  };
+
   const toggleTag = (tag: string) => {
     const next = filters.tags.includes(tag)
       ? filters.tags.filter((t) => t !== tag)
@@ -104,6 +124,24 @@ export function StylesToolbar({
           className="pl-10"
         />
       </div>
+
+      <Select value={filters.type} onValueChange={handleTypeChange}>
+        <SelectTrigger className="w-40" aria-label="Filter by type">
+          <span className="flex items-center gap-2">
+            <Palette className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <SelectValue placeholder={TYPE_LABEL.all}>
+              {TYPE_LABEL[filters.type]}
+            </SelectValue>
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          {TYPE_OPTIONS.map((opt) => (
+            <SelectItem key={opt} value={opt}>
+              {TYPE_LABEL[opt]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <Select value={filters.references} onValueChange={handleReferencesChange}>
         <SelectTrigger className="w-44" aria-label="Filter by references">

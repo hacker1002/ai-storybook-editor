@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   insertStyle,
   removeStyleImage,
@@ -49,7 +50,14 @@ interface StyleFormDraft {
   tags: string; // raw comma-separated TEXT
   description: string;
   imageReferences: StyleImageReference[];
+  type: number; // 0=sketch, 1=illustration
 }
+
+/** TYPE segmented options (mirror DB discriminator; label order Sketch→Illustration). */
+const STYLE_TYPE_OPTIONS = [
+  { value: 0, label: 'Sketch' },
+  { value: 1, label: 'Illustration' },
+] as const;
 
 interface StyleFormModalProps {
   mode: StyleFormMode;
@@ -82,9 +90,11 @@ function initDraft(mode: StyleFormMode, style: ArtStyle | null): StyleFormDraft 
       tags: style.tags,
       description: style.description,
       imageReferences: [...style.imageReferences],
+      type: style.type,
     };
   }
-  return { id: genUuid(), name: '', tags: '', description: '', imageReferences: [] };
+  // Create default = Illustration (1) — matches DB DEFAULT + majority case.
+  return { id: genUuid(), name: '', tags: '', description: '', imageReferences: [], type: 1 };
 }
 
 /** trim + lowercase + dedupe comma tags, re-joined as ", " (raw TEXT for DB). */
@@ -299,6 +309,7 @@ export function StyleFormModal({
       tags: normalizeTags(draft.tags),
       description: draft.description.trim(),
       imageReferences: draft.imageReferences,
+      type: draft.type,
     });
 
     try {
@@ -372,6 +383,29 @@ export function StyleFormModal({
               disabled={saving}
               aria-invalid={!nameValid}
             />
+          </div>
+
+          <div>
+            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Type
+            </Label>
+            <div className="mt-2">
+              <ToggleGroup
+                type="single"
+                value={String(draft.type)}
+                onValueChange={(v) => {
+                  const next = Array.isArray(v) ? v[0] : v;
+                  if (next === '') return; // single-select deselect → keep current
+                  setDraft((d) => ({ ...d, type: Number(next) }));
+                }}
+              >
+                {STYLE_TYPE_OPTIONS.map((opt) => (
+                  <ToggleGroupItem key={opt.value} value={String(opt.value)}>
+                    {opt.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
           </div>
 
           <div>

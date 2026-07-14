@@ -138,11 +138,18 @@ export function ConfigGeneralSettings() {
     value: g.id,
     label: resolveMultiLangName(g.name, lang),
   }));
-  const artStyleOptions: ArtStyleOption[] = artStyles.map((s) => ({
+  const toArtStyleOption = (s: (typeof artStyles)[number]): ArtStyleOption => ({
     id: s.id,
     name: s.name,
     thumbnailUrl: s.imageReferences?.[0]?.mediaUrl,
-  }));
+  });
+  // Split the one fetched list by `type` (0=sketch, 1=illustration) — no extra query.
+  const sketchStyleOptions: ArtStyleOption[] = artStyles
+    .filter((s) => s.type === 0)
+    .map(toArtStyleOption);
+  const artStyleOptions: ArtStyleOption[] = artStyles
+    .filter((s) => s.type === 1)
+    .map(toArtStyleOption);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -195,6 +202,13 @@ export function ConfigGeneralSettings() {
     const store = useArtStyleStore.getState();
     store.reset();
     if (artStyleId) void store.fetchArtStyle(artStyleId);
+  };
+
+  // Sketch style only persists book.sketchstyle_id — no prompt-store refresh
+  // (sketch generate-pipeline resolve is a backend follow-up, out of scope).
+  const handleSketchStyleChange = (sketchStyleId: string | null) => {
+    log.info("handleSketchStyleChange", "updating", { sketchStyleId });
+    void updateBook(book.id, { sketchstyle_id: sketchStyleId });
   };
 
   return (
@@ -265,6 +279,18 @@ export function ConfigGeneralSettings() {
             placeholder="Select genres..."
             primaryValue={primaryGenreId ?? undefined}
             onPrimaryChange={handlePrimaryGenreChange}
+          />
+        </div>
+
+        {/* SKETCH STYLE — editable, thumbnail picker (type=0 options) */}
+        <div>
+          <FieldLabel>Sketch Style</FieldLabel>
+          <ArtStyleSelect
+            value={book.sketchstyle_id ?? null}
+            options={sketchStyleOptions}
+            onChange={handleSketchStyleChange}
+            placeholder="Select sketch style..."
+            clearable
           />
         </div>
 

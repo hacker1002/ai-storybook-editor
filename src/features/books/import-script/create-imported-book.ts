@@ -46,6 +46,7 @@ export async function createImportedBook(
       dimension: meta.dimension,
       target_audience: meta.target_audience,
       artstyle_id: meta.artstyle_id ?? null,
+      sketchstyle_id: meta.sketchstyle_id ?? null,
       step: BOOK_STEP_SKETCH, // sketch phase
       type: 1,
       original_language: meta.original_language,

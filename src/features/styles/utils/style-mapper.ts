@@ -15,6 +15,7 @@ export function mapStyleRow(row: ArtStyleRow): ArtStyle {
       mediaUrl: ref.media_url,
     })),
     createdAt: row.created_at,
+    type: row.type ?? 1, // fallback illustration — defensive vs pre-migration rows
   };
 }
 
@@ -30,6 +31,7 @@ export function toStyleRow(
   if (style.name !== undefined) row.name = style.name;
   if (style.tags !== undefined) row.tags = style.tags;
   if (style.description !== undefined) row.description = style.description;
+  if (style.type !== undefined) row.type = style.type;
   if (style.imageReferences !== undefined) {
     row.image_references = style.imageReferences.map((ref) => ({
       title: ref.title,

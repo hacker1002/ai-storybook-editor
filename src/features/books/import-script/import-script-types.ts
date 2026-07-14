@@ -25,6 +25,7 @@ export interface ImportModalMeta {
   dimension: number;
   target_audience: number;
   artstyle_id: string | null;
+  sketchstyle_id: string | null;
   original_language: string;
 }
 

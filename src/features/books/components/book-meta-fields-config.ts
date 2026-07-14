@@ -10,6 +10,7 @@ export interface BookMetaValue {
   targetAudience: string;
   originalLanguage: string;
   artstyleId: string | null;
+  sketchstyleId: string | null;
 }
 
 export const INITIAL_BOOK_META: BookMetaValue = {
@@ -19,6 +20,7 @@ export const INITIAL_BOOK_META: BookMetaValue = {
   targetAudience: '',
   originalLanguage: 'en_US',
   artstyleId: null,
+  sketchstyleId: null,
 };
 
 /** Art Style intentionally EXCLUDED (optional). */

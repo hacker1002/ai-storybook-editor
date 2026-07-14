@@ -151,6 +151,7 @@ export const MODAL_META: ImportModalMeta = {
   dimension: 1,
   target_audience: 1,
   artstyle_id: null,
+  sketchstyle_id: null,
   original_language: 'vi_VN',
 };
 

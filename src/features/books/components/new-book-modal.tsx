@@ -63,6 +63,7 @@ export function NewBookModal({ onClose, onCreated }: NewBookModalProps) {
         target_audience: Number(meta.targetAudience),
         original_language: meta.originalLanguage,
         artstyle_id: meta.artstyleId ?? null,
+        sketchstyle_id: meta.sketchstyleId ?? null,
       });
 
       if (!book) {

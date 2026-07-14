@@ -87,6 +87,7 @@ function ScriptImport({
       dimension: Number(meta.dimension),
       target_audience: Number(meta.targetAudience),
       artstyle_id: meta.artstyleId ?? null,
+      sketchstyle_id: meta.sketchstyleId ?? null,
       original_language: meta.originalLanguage,
     };
 

@@ -35,6 +35,9 @@ export function matchSearch(style: ArtStyle, needle: string): boolean {
 export function applyFilters(styles: ArtStyle[], f: StylesFilterState): ArtStyle[] {
   const needle = f.search.trim().toLowerCase();
   return styles.filter((s) => {
+    // Type filter first (cheapest) — AND-combined with search/references/tags.
+    if (f.type === 'sketch' && s.type !== 0) return false;
+    if (f.type === 'illustration' && s.type !== 1) return false;
     if (needle && !matchSearch(s, needle)) return false;
     if (f.references === 'with' && s.imageReferences.length === 0) return false;
     if (f.references === 'none' && s.imageReferences.length > 0) return false;
