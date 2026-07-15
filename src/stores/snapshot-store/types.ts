@@ -3,6 +3,7 @@ import type {
   Sketch,
   SketchEntity,
   SketchVariant,
+  SketchVariantCrop,
   SketchEntityKind,
   BaseKind,
   SketchBaseStyle,
@@ -12,6 +13,7 @@ import type {
   SketchPageType,
   ArtDirection,
   SketchTextboxContent,
+  VariantRef,
 } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
@@ -204,7 +206,7 @@ export interface SketchSlice {
   setSketchBaseEntities: (entities: { characters: SketchEntity[]; props: SketchEntity[] }) => void; // bulk Excel import
   addSketchBaseStyle: (kind: BaseKind, style: SketchBaseStyle) => void;                 // append a style attempt
   removeSketchBaseStyle: (kind: BaseKind, styleIndex: number) => void;                  // drop a style (is_selected clears with it)
-  setSketchBaseStyleSelected: (kind: BaseKind, styleIndex: number) => void;             // 🔒 lock: exclusive is_selected + CLONE crops → variants[base].crop
+  setSketchBaseStyleSelected: (kind: BaseKind, styleIndex: number) => void;             // 🔒 lock: exclusive is_selected + CLONE crops → variants[base].raw_sheet.crops[0]
   addSketchBaseStyleIllustration: (kind: BaseKind, styleIndex: number, mediaUrl: string) => void;                                 // raw generate result: prepend 'created' + select
   setSketchBaseStyleIllustrations: (kind: BaseKind, styleIndex: number, illustrations: Illustration[]) => void;                   // raw sheet whole-set (edit-image-modal onUpdate)
   setSketchBaseStyleCrops: (kind: BaseKind, styleIndex: number, crops: SketchBaseCrop[]) => void;                                 // crop result: replace styles[i].crops[]
@@ -223,9 +225,11 @@ export interface SketchSlice {
     variantKey: string,
     updates: Partial<Pick<SketchVariant, 'description' | 'height' | 'visual_design' | 'art_language'>>,
   ) => void;
-  // Per-variant imagery (char/prop raw_sheet + crop; stage illustrations) — generate append / edit-image-modal
+  // Per-variant imagery (char/prop raw_sheet.illustrations + raw_sheet.crops[]; stage illustrations) — generate append / re-cut / edit-image-modal
   setSketchVariantRawSheetIllustrations: (kind: BaseKind, entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
-  setSketchVariantCropIllustrations: (kind: BaseKind, entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
+  setSketchVariantCrops: (kind: BaseKind, entityKey: string, variantKey: string, crops: SketchVariantCrop[]) => void;                     // ⚡ re-cut: replace raw_sheet.crops[] (base: 1 clone crop)
+  selectSketchVariantCrop: (kind: BaseKind, entityKey: string, variantKey: string, cropIndex: number) => void;                            // ⚡ lock: set crops[cropIndex].is_selected true, clear others (≤1)
+  setSketchVariantCropIllustrations: (kind: BaseKind, entityKey: string, variantKey: string, cropIndex: number, illustrations: Illustration[]) => void; // one cell whole-set (⚡ + cropIndex)
   setSketchVariantIllustrations: (kind: 'stages', entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
   // Spread-level CRUD — ships with the sketch-spread creative space.
   // Art-direction is keyed by page `type` (SketchPage has no id); textbox content is per-language.
@@ -838,7 +842,36 @@ export interface SketchBaseGenerateJobSlice {
   dismissBaseSheetGenerateError: () => void;
 }
 
-export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & TypographyApplySlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & SketchBaseGenerateJobSlice & {
+// --- Sketch Variant Generate Op Types (ephemeral, not persisted to DB) ---
+// One op = ONE non-base variant (kind, entityKey, variantKey): a 2-phase chain generate the RAW
+// 4-cell sheet (08|09, AI, snapshot-reading) → AUTO-CUT the 4 cells (10, CV) — auto-cut ALWAYS runs
+// (no Re-cut button, no confirm). SINGLE-FLIGHT (at most one op at a time), per-ref 2-phase status.
+// Distinct from the base op (#14): the unit is a VARIANT (not a style), generate is snapshot-reading
+// so the job AWAITS flushSnapshot() before reading meta.id (mirror the spread slice, NOT base which
+// ships text in the payload), and the write sinks are the per-variant raw_sheet setters (phase-01).
+
+export type VariantGeneratePhase = 'generate' | 'cut'; // generate = 08/09 (AI); cut = 10 (CV, auto)
+
+export interface VariantSheetGenerateOp {
+  kind: BaseKind;
+  entityKey: string;
+  variantKey: string; // non-base
+  phase: VariantGeneratePhase;
+  startedAt: string;
+  /** classified friendly message; kept on the op until dismiss (content-area/notifications surface it). */
+  error?: string;
+}
+
+export interface SketchVariantGenerateJobSlice {
+  variantSheetGenerateOp: VariantSheetGenerateOp | null;
+  /** Run the 2-phase generate→auto-cut job for ONE non-base variant. Single-flight; resolves
+   *  artStyleId from book.sketchstyle_id + snapshotId from meta.id (after an awaited flush). */
+  startVariantSheetGenerate: (ref: VariantRef) => void;
+  /** Clear an op that settled with an error (so the notifications hook toasts it once). */
+  dismissVariantSheetGenerateError: () => void;
+}
+
+export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & TypographyApplySlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & SketchBaseGenerateJobSlice & SketchVariantGenerateJobSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; sketch?: Sketch; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

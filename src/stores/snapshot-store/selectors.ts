@@ -1,15 +1,18 @@
+import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
 import type { DocType, SaveStatus, SyncState } from '@/types/editor';
 import type {
   Sketch,
   SketchEntity,
+  SketchVariant,
   SketchEntityKind,
   SketchSpread,
   SketchBase,
   SketchBaseStyle,
   BaseKind,
   BaseEntityText,
+  VariantRef,
 } from '@/types/sketch';
 import { sheetOf } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
@@ -17,7 +20,7 @@ import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/i
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase } from './types';
+import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase, VariantSheetGenerateOp, VariantGeneratePhase } from './types';
 import type {
   BaseSpread,
   SpreadImage,
@@ -135,6 +138,36 @@ export const useSketchEntityByKey = (
 export const useSketchEntityKeys = (kind: SketchEntityKind): string[] =>
   useSnapshotStore(useShallow((s) => (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES).map((e) => e.key)));
 
+// Targeted variant read (whole-object store ref → Object.is-stable; no useShallow). Used by the
+// variant creative space content area + gate. Returns undefined until the variant exists.
+export const useSketchVariantByKey = (
+  kind: SketchEntityKind,
+  entityKey: string,
+  variantKey: string,
+): SketchVariant | undefined =>
+  useSnapshotStore((s) =>
+    (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES)
+      .find((e) => e.key === entityKey)
+      ?.variants.find((v) => v.key === variantKey),
+  );
+
+// Non-base variant refs across a kind (char/prop). useShallow FOOTGUN AVOIDED
+// (memory: zustand useShallow nested arrays): subscribe to the STABLE raw entities ref via a
+// plain selector (Object.is), then project to VariantRef[] with useMemo keyed on that ref — never
+// return a freshly-.map()-ed object array from the store selector (that loops under useShallow).
+export const useSketchVariantRefs = (kind: BaseKind): VariantRef[] => {
+  const entities = useSnapshotStore((s) => s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES); // stable raw ref
+  return useMemo(
+    () =>
+      entities.flatMap((e) =>
+        e.variants
+          .filter((v) => v.key !== 'base')
+          .map((v) => ({ kind, entityKey: e.key, variantKey: v.key })),
+      ),
+    [entities, kind],
+  );
+};
+
 // Sketch spread selectors — ID-based (mirror illustration spreads: useShallow+map for the id
 // list, whole-object find for a single spread). Drives the sketch-spread creative space.
 export const useSketchSpreadIds = (): string[] =>
@@ -218,6 +251,27 @@ export const useBaseSheetGenerateStatus = (kind: BaseKind, styleIndex: number) =
         phase: (match ? op!.phase : 'idle') as BaseGeneratePhase | 'idle',
         error: match ? op!.error : undefined,
       };
+    }),
+  );
+
+// Sketch VARIANT-sheet generate-op selectors (ephemeral, single-flight). Same ref-stability
+// discipline: stable ref → no useShallow; fresh object of PRIMITIVES → useShallow safe.
+export const useVariantSheetGenerateOp = (): VariantSheetGenerateOp | null =>
+  useSnapshotStore((s) => s.variantSheetGenerateOp);
+
+// Per-ref status keyed {kind, entityKey, variantKey}. Busy = matching op with no error yet.
+export const useVariantSheetGenerateStatus = (
+  kind: BaseKind,
+  entityKey: string,
+  variantKey: string,
+): { isBusy: boolean; phase?: VariantGeneratePhase; error?: string } =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const op = s.variantSheetGenerateOp;
+      const match =
+        !!op && op.kind === kind && op.entityKey === entityKey && op.variantKey === variantKey;
+      if (!match) return { isBusy: false };
+      return { isBusy: !op!.error, phase: op!.phase, error: op!.error };
     }),
   );
 
@@ -646,8 +700,10 @@ export const useSnapshotActions = () =>
       setSketchBaseStyleCrops: s.setSketchBaseStyleCrops,
       setSketchBaseCropIllustrations: s.setSketchBaseCropIllustrations,
       updateSketchBaseEntityText: s.updateSketchBaseEntityText,
-      // Sketch per-variant imagery (char/prop raw_sheet + crop; stage illustrations)
+      // Sketch per-variant imagery (char/prop raw_sheet.illustrations + raw_sheet.crops[]; stage illustrations)
       setSketchVariantRawSheetIllustrations: s.setSketchVariantRawSheetIllustrations,
+      setSketchVariantCrops: s.setSketchVariantCrops,
+      selectSketchVariantCrop: s.selectSketchVariantCrop,
       setSketchVariantCropIllustrations: s.setSketchVariantCropIllustrations,
       setSketchVariantIllustrations: s.setSketchVariantIllustrations,
       // Sketch generate job (sequential entity-sheet generation)
@@ -663,6 +719,9 @@ export const useSnapshotActions = () =>
       recropBaseSheet: s.recropBaseSheet,
       cancelBaseSheetGenerate: s.cancelBaseSheetGenerate,
       dismissBaseSheetGenerateError: s.dismissBaseSheetGenerateError,
+      // Sketch variant-sheet generate op (single-flight generate→auto-cut chain)
+      startVariantSheetGenerate: s.startVariantSheetGenerate,
+      dismissVariantSheetGenerateError: s.dismissVariantSheetGenerateError,
       // Sketch (spread-level CRUD — sketch-spread creative space)
       setSketch: s.setSketch,
       setSketchSpreads: s.setSketchSpreads,

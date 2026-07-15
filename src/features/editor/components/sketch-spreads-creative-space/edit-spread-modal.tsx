@@ -1,6 +1,6 @@
 // edit-spread-modal.tsx — art-direction editor for a spread's pages.
 // Draft is local (seeded once from the store); committed on Save. Mirrors the
-// draft-local + commit-on-save pattern of sibling edit-variants-modal.tsx.
+// draft-local + commit-on-save pattern of sibling edit-variant-modal.tsx.
 // Only art_direction is edited here — narration/textboxes live on the canvas.
 
 import { useMemo, useState } from 'react';

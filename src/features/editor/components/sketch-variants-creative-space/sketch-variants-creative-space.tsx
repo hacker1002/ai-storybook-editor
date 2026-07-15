@@ -1,11 +1,15 @@
-// sketch-variants-creative-space.tsx — root of the shared sketch entity creative space.
-// One component for all 3 kinds (characters/props/stages), parameterized by `kind`.
-// Owns 5 local UI states; selection is DERIVED in render (no useEffect+setState — see
-// React 19 lint). Excel import is pure (Phase 02) → errors toast & stop; replacing a
-// non-empty list goes through a confirm AlertDialog (Validation Q3) before commit.
+// sketch-variants-creative-space.tsx — root of the Variant creative space (design README §2). ONE
+// space for BOTH kinds (character + prop non-base variants) — NO `kind` prop. Owns the local UI
+// state (selected variant, active tab, zoom, expanded groups, the two overlay-modal states, the
+// regenerate-confirm target) and DERIVES the effective selection in RENDER (React 19: NO
+// useEffect+setState, NO ref read/write in render body). Generate is an async 2-phase job
+// (generate → auto-cut); the gate mirrors the endpoint's 3 hard preconditions and re-computes
+// reactively because it reads the subscribed entities + art-style id.
+//
+// ⚠️ Export name MUST stay `SketchVariantsCreativeSpace` (editor-page routing imports it).
 
 import { useCallback, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { Copy } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,235 +20,286 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Upload } from 'lucide-react';
-import { useSketchEntityKeys, useSnapshotActions } from '@/stores/snapshot-store/selectors';
-import { useCurrentBookId } from '@/stores/book-store';
-import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
-import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
-import { useRegisterEditCommit } from '@/stores/edit-session-status-store';
-import { isLockedByOtherNow, type LockTarget } from '@/stores/resource-lock-store';
-import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
-import { runLockedCollectionSave } from '@/features/editor/utils/structural-lock-collection-save';
-import type { SketchEntityKind } from '@/types/sketch';
-import { SketchEntitySidebar } from './sketch-entity-sidebar';
-import { SketchEntityContentArea } from './sketch-entity-content-area';
-import { EditVariantsModal } from './edit-variants-modal';
-import { KIND_CONFIG, KIND_TO_RESOURCE_TYPE } from './sketch-variants-constants';
 import {
-  parseSketchEntitiesFromFile,
-  type ParseSketchEntitiesResult,
-} from './import/parse-sketch-entities';
+  useSketchEntities,
+  useSketchVariantByKey,
+  useVariantSheetGenerateOp,
+  useVariantSheetGenerateStatus,
+  useSnapshotActions,
+} from '@/stores/snapshot-store/selectors';
+import { useSketchStyleId } from '@/stores/book-store';
+import { CANVAS_CONFIRM_DIALOG_Z } from '@/constants/spread-constants';
+import type { BaseKind, SketchEntity, VariantRef } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
+import { VariantKindSidebar } from './variant-kind-sidebar';
+import { VariantSheetContentArea } from './variant-sheet-content-area';
+import { EditVariantModal } from './edit-variant-modal';
+import { VariantEditImageModal } from './variant-edit-image-modal';
+import {
+  KIND_GROUPS,
+  ZOOM,
+  isBlank,
+  sameRef,
+  type EditImageTarget,
+  type VariantGate,
+  type VariantGenStatus,
+} from './sketch-variants-constants';
 
 const log = createLogger('Editor', 'SketchVariantsCreativeSpace');
 
-/** Surface validation warnings as a single summary toast (avoid spamming N toasts);
- *  full detail goes to the log. */
-function reportWarnings(warnings: string[]): void {
-  if (warnings.length === 0) return;
-  log.warn('import', 'validation warnings', { count: warnings.length, warnings: warnings.slice(0, 10) });
-  toast.warning(`Imported with ${warnings.length} warning${warnings.length === 1 ? '' : 's'} — check console.`);
+/** Every non-base variant of a kind's entities → VariantRef[] (DRY: refs + gate share the source). */
+function nonBaseRefs(kind: BaseKind, entities: SketchEntity[]): VariantRef[] {
+  return entities.flatMap((e) =>
+    e.variants.filter((v) => v.key !== 'base').map((v) => ({ kind, entityKey: e.key, variantKey: v.key })),
+  );
 }
 
-interface SketchVariantsCreativeSpaceProps {
-  kind: SketchEntityKind;
-}
+export function SketchVariantsCreativeSpace() {
+  // Full entities (both kinds) — the source for BOTH the row refs AND the reactive gate.
+  const charEntities = useSketchEntities('characters');
+  const propEntities = useSketchEntities('props');
+  // book.sketchstyle_id (art_styles.type=0) — REQUIRED to generate; the gate blocks when null.
+  const artStyleId = useSketchStyleId();
+  // Single-flight op — drives the per-row spinner (across both kinds) + the content-area busy state.
+  const op = useVariantSheetGenerateOp();
+  const { startVariantSheetGenerate, selectSketchVariantCrop } = useSnapshotActions();
 
-export function SketchVariantsCreativeSpace({ kind }: SketchVariantsCreativeSpaceProps) {
-  const cfg = KIND_CONFIG[kind];
-  const entityKeys = useSketchEntityKeys(kind);
-  const bookId = useCurrentBookId();
-  const { setSketchEntities, removeSketchEntity } = useSnapshotActions();
+  // ── Local UI state (owner = this root; state-location rule) ────────────────────────────────
+  const [selectedVariant, setSelectedVariant] = useState<VariantRef | null>(null);
+  const [activeTab, setActiveTab] = useState<'raw' | 'crop'>('raw');
+  const [zoom, setZoom] = useState<number>(ZOOM.default);
+  const [expandedGroups, setExpandedGroups] = useState<Record<BaseKind, boolean>>({
+    characters: true,
+    props: true,
+  });
+  const [editingVariant, setEditingVariant] = useState<VariantRef | null>(null);
+  const [editImageTarget, setEditImageTarget] = useState<EditImageTarget | null>(null);
+  // Regenerate confirm target (AlertDialog over canvas) — set EVERY time ✨ hits a variant that
+  // already has crops (user-locked: confirm every time, guards losing the pick + per-cell edits).
+  const [pendingRegenerate, setPendingRegenerate] = useState<VariantRef | null>(null);
 
-  // Collaborator edit-lock: open the realtime lock channel + route flushes through
-  // the gateway (suppress owner-direct autoSave) for as long as this space is mounted.
-  useCollabPersistSession(bookId);
-  // Collaborator content-sync: refetch + merge peer edits (node / reorder / generate) into
-  // the snapshot store so B sees fresh content without a manual refresh (ADR-043 follow-up).
-  useContentSyncSession(bookId);
-
-  const [userSelectedKey, setUserSelectedKey] = useState<string | null>(null);
-  const [checkedKeys, setCheckedKeys] = useState<string[]>([]);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [pendingImport, setPendingImport] = useState<ParseSketchEntitiesResult | null>(null);
-
-  // Header "Unsaved" commit for the sketch entity: closing the modal unmounts EditVariantsModal → its
-  // lock hook release-saves the held entity (parity with the 5 held-session spaces' commit-now).
-  // Stable (setter is stable) so the registration effect runs once; also removes the inline-arrow
-  // churn on the modal's onClose below.
-  const closeModal = useCallback(() => setEditingKey(null), []);
-  useRegisterEditCommit(closeModal);
-
-  // Derive effective selection in render (NOT an effect): user choice if still valid,
-  // else first entity. Keeps focus stable across imports/deletes without set-state loops.
-  const selectedKey = useMemo(() => {
-    if (userSelectedKey && entityKeys.includes(userSelectedKey)) return userSelectedKey;
-    return entityKeys[0] ?? null;
-  }, [entityKeys, userSelectedKey]);
-
-  // Commit = optimistic local whole-array replace + gateway collection-scope save (the ONLY
-  // persistence path in the sketch space — `useCollabPersistSession` suppresses owner-direct
-  // autosave). `kind` doubles as the sentinel resource_id AND the target collection name
-  // (`sketch.<kind>`). Coarse lock (see runLockedCollectionSave). NOTE: `result.entities`
-  // (thin {key, variants}) IS the exact `sketch.<kind>` node shape.
-  const commitImport = useCallback(
-    async (result: ParseSketchEntitiesResult) => {
-      const target: LockTarget = {
-        step: 1,
-        resource_type: KIND_TO_RESOURCE_TYPE[kind],
-        resource_id: kind, // sentinel = collection name (coarse whole-array import lock)
-        locale: null,
-      };
-      const outcome = await runLockedCollectionSave(
-        target,
-        {
-          action_type: 3, // edit (replace-all)
-          patch: result.entities,
-          collection: kind,
-          target_ref: { kind, count: result.entities.length },
-        },
-        () => {
-          setSketchEntities(kind, result.entities);
-          setCheckedKeys([]);
-        },
-      );
-      if (outcome === 'blocked') return; // nothing applied; holder toast already shown
-      reportWarnings(result.issues.warnings);
-      if (outcome === 'failed') {
-        toast.error('Import chưa lưu được — vui lòng tải lại trang.');
-        return;
-      }
-      toast.success(`Imported ${result.entities.length} ${cfg.title.toLowerCase()}`);
-    },
-    [kind, cfg.title, setSketchEntities],
+  // Row refs per kind (non-base), derived from the subscribed entities.
+  const refsByKind = useMemo<Record<BaseKind, VariantRef[]>>(
+    () => ({
+      characters: nonBaseRefs('characters', charEntities),
+      props: nonBaseRefs('props', propEntities),
+    }),
+    [charEntities, propEntities],
+  );
+  const allRefs = useMemo(
+    () => [...refsByKind.characters, ...refsByKind.props],
+    [refsByKind],
   );
 
-  const handleImport = useCallback(
-    async (file: File) => {
-      setIsImporting(true);
-      try {
-        const result = await parseSketchEntitiesFromFile(file, kind);
-        if (result.issues.errors.length > 0) {
-          log.warn('handleImport', 'blocking errors', { errors: result.issues.errors });
-          toast.error(result.issues.errors[0]);
-          return;
-        }
-        if (entityKeys.length === 0) {
-          await commitImport(result); // nothing to overwrite → commit directly (keep spinner through save)
-        } else {
-          setPendingImport(result); // confirm replace via AlertDialog
-        }
-      } catch (err) {
-        log.error('handleImport', 'parse failed', { error: String(err) });
-        toast.error('Could not read the Excel file');
-      } finally {
-        setIsImporting(false);
-      }
-    },
-    [kind, entityKeys.length, commitImport],
+  // Derive the effective selection in RENDER (React 19: never set state in render): keep the user's
+  // choice while it is still present, else fall back to the first available variant. Recomputes with
+  // no effect + no loop when a variant is removed / the lists change.
+  const selected = useMemo<VariantRef | null>(() => {
+    if (selectedVariant && allRefs.some((r) => sameRef(r, selectedVariant))) return selectedVariant;
+    return allRefs[0] ?? null;
+  }, [selectedVariant, allRefs]);
+
+  // Targeted reads for the content area (fallback args when nothing is selected → undefined / idle).
+  const selectedVariantData = useSketchVariantByKey(
+    selected?.kind ?? 'characters',
+    selected?.entityKey ?? '',
+    selected?.variantKey ?? '',
+  );
+  const genStatusSelected = useVariantSheetGenerateStatus(
+    selected?.kind ?? 'characters',
+    selected?.entityKey ?? '',
+    selected?.variantKey ?? '',
   );
 
-  const confirmImport = useCallback(() => {
-    if (pendingImport) void commitImport(pendingImport);
-    setPendingImport(null);
-  }, [pendingImport, commitImport]);
+  // Per-row generate status from the single-flight op (fresh on every phase/error transition).
+  const genStatusByRef = useCallback(
+    (ref: VariantRef): VariantGenStatus => {
+      if (op && sameRef(op, ref)) return { isBusy: !op.error, phase: op.phase, error: op.error };
+      return { isBusy: false };
+    },
+    [op],
+  );
 
-  const handleCheck = useCallback((key: string, next: boolean) => {
-    setCheckedKeys((prev) => (next ? [...new Set([...prev, key])] : prev.filter((k) => k !== key)));
+  // Generate gate — FE fail-fast on the endpoint's 3 hard preconditions. REACTIVE: reads the
+  // subscribed artStyleId + entities, so it re-computes when the art style / base crop / variant
+  // text changes (the ✨ enabled state tracks live data). Never hides — the sidebar disables + tooltips.
+  const gateByRef = useCallback(
+    (ref: VariantRef): VariantGate => {
+      // `!artStyleId` (not `== null`) matches the job's start-guard exactly, so an empty-string
+      // style id gates the same way — otherwise ✨ would render enabled but no-op on click.
+      if (!artStyleId) return { canGenerate: false, reason: 'no-art-style' };
+      const entities = ref.kind === 'characters' ? charEntities : propEntities;
+      const entity = entities.find((e) => e.key === ref.entityKey);
+      const base = entity?.variants.find((v) => v.key === 'base');
+      if (!base?.raw_sheet?.crops?.some((c) => c.is_selected)) {
+        return { canGenerate: false, reason: 'base-not-ready' };
+      }
+      const variant = entity?.variants.find((v) => v.key === ref.variantKey);
+      if (isBlank(variant?.visual_design) && isBlank(variant?.art_language)) {
+        return { canGenerate: false, reason: 'empty-text' };
+      }
+      return { canGenerate: true };
+    },
+    [artStyleId, charEntities, propEntities],
+  );
+
+  // ── Handlers (set state only; job / store side effects delegated) ───────────────────────────
+  const handleSelect = useCallback((ref: VariantRef) => {
+    setSelectedVariant(ref);
+    setActiveTab('raw');
   }, []);
 
-  const handleCheckAll = useCallback(
-    (next: boolean) => {
-      setCheckedKeys(next ? [...entityKeys] : []);
-    },
-    [entityKeys],
-  );
+  const handleToggleGroup = useCallback((kind: BaseKind) => {
+    setExpandedGroups((prev) => ({ ...prev, [kind]: !prev[kind] }));
+  }, []);
 
-  // Delete = destructive structural op (entity type 3/4/5, keyed). The row is already
-  // greyed when locked (phase 05); this is the click-time guard (render→click TOCTOU),
-  // then acquire → local delete → save(action=4 delete) → release.
-  const handleDelete = useCallback(
-    async (key: string) => {
-      log.info('handleDelete', 'delete entity requested', { kind, key });
-      const target: LockTarget = {
-        step: 1,
-        resource_type: KIND_TO_RESOURCE_TYPE[kind],
-        resource_id: key,
-        locale: null,
-      };
-      if (isLockedByOtherNow(target)) {
-        log.info('handleDelete', 'blocked — entity locked by other', { kind, key });
-        toast.info('Mục này đang được người khác chỉnh sửa — vui lòng thử lại sau.');
+  const handleEditVariant = useCallback((ref: VariantRef) => {
+    setEditingVariant(ref);
+  }, []);
+
+  // ✨ Generate: variant already has crops → confirm EVERY time (guards pick/edit); empty → straight.
+  const handleGenerate = useCallback(
+    (ref: VariantRef) => {
+      const entities = ref.kind === 'characters' ? charEntities : propEntities;
+      const variant = entities
+        .find((e) => e.key === ref.entityKey)
+        ?.variants.find((v) => v.key === ref.variantKey);
+      const hasCrops = (variant?.raw_sheet?.crops?.length ?? 0) > 0;
+      if (hasCrops) {
+        log.debug('handleGenerate', 'crops present → confirm regenerate', {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+        });
+        setPendingRegenerate(ref);
         return;
       }
-      await runLockedDelete(
-        target,
-        { action_type: 4, patch: null, target_ref: { kind, entity: key } },
-        () => {
-          removeSketchEntity(kind, key);
-          setCheckedKeys((prev) => prev.filter((k) => k !== key));
-          setUserSelectedKey((prev) => (prev === key ? null : prev));
-        },
-      );
+      log.info('handleGenerate', 'start variant sheet generate', {
+        kind: ref.kind,
+        entityKey: ref.entityKey,
+        variantKey: ref.variantKey,
+      });
+      startVariantSheetGenerate(ref);
     },
-    [kind, removeSketchEntity],
+    [charEntities, propEntities, startVariantSheetGenerate],
   );
 
+  const confirmRegenerate = useCallback(() => {
+    if (pendingRegenerate) {
+      log.info('confirmRegenerate', 'regenerate confirmed', {
+        kind: pendingRegenerate.kind,
+        entityKey: pendingRegenerate.entityKey,
+        variantKey: pendingRegenerate.variantKey,
+      });
+      startVariantSheetGenerate(pendingRegenerate);
+    }
+    setPendingRegenerate(null);
+  }, [pendingRegenerate, startVariantSheetGenerate]);
+
+  const handleSelectCrop = useCallback(
+    (cropIndex: number) => {
+      if (!selected) return;
+      log.debug('handleSelectCrop', 'lock crop', { cropIndex });
+      selectSketchVariantCrop(selected.kind, selected.entityKey, selected.variantKey, cropIndex);
+    },
+    [selected, selectSketchVariantCrop],
+  );
+
+  const handleEditCrop = useCallback(
+    (cropIndex: number) => {
+      if (!selected) return;
+      setEditImageTarget({
+        kind: selected.kind,
+        entityKey: selected.entityKey,
+        variantKey: selected.variantKey,
+        cropIndex,
+      });
+    },
+    [selected],
+  );
+
+  const regenerateMention = pendingRegenerate
+    ? `@${pendingRegenerate.entityKey}/${pendingRegenerate.variantKey}`
+    : '';
+
   return (
-    <div className="flex h-full" role="main" aria-label={`${cfg.title} creative space`}>
-      <SketchEntitySidebar
-        kind={kind}
-        cfg={cfg}
-        entityKeys={entityKeys}
-        selectedEntityKey={selectedKey}
-        checkedKeys={checkedKeys}
-        onSelect={setUserSelectedKey}
-        onCheck={handleCheck}
-        onCheckAll={handleCheckAll}
-        onEdit={setEditingKey}
-        onDelete={handleDelete}
-        onImport={handleImport}
-        isImporting={isImporting}
+    <main className="flex h-full" role="main" aria-label="Sketch variant creative space">
+      <VariantKindSidebar
+        groups={KIND_GROUPS}
+        refsByKind={refsByKind}
+        selectedVariant={selected}
+        expandedGroups={expandedGroups}
+        genStatusByRef={genStatusByRef}
+        gateByRef={gateByRef}
+        onSelect={handleSelect}
+        onToggleGroup={handleToggleGroup}
+        onEditVariant={handleEditVariant}
+        onGenerate={handleGenerate}
       />
 
-      <div className="flex-1 overflow-hidden">
-        {selectedKey ? (
-          <SketchEntityContentArea
-            kind={kind}
-            cfg={cfg}
-            selectedEntityKey={selectedKey}
-            checkedKeys={checkedKeys}
+      <div className="flex flex-1 min-w-[480px] overflow-hidden">
+        {selected ? (
+          <VariantSheetContentArea
+            selectedVariant={selected}
+            variant={selectedVariantData}
+            activeTab={activeTab}
+            zoom={zoom}
+            genStatus={genStatusSelected}
+            onChangeTab={setActiveTab}
+            onChangeZoom={setZoom}
+            onSelectCrop={handleSelectCrop}
+            onEditCrop={handleEditCrop}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-            <Upload className="h-10 w-10 mb-3 opacity-60" aria-hidden="true" />
-            <p className="text-sm">No {cfg.title.toLowerCase()} yet</p>
-            <p className="text-xs mt-1">Import an Excel file from the sidebar to get started.</p>
-          </div>
+          <EmptyState />
         )}
       </div>
 
-      {editingKey && (
-        <EditVariantsModal kind={kind} entityKey={editingKey} onClose={closeModal} />
+      {/* Overlays (mount by state). Text modal writes + flushes; EditImageModal is store-bound by crop. */}
+      {editingVariant && (
+        <EditVariantModal
+          kind={editingVariant.kind}
+          entityKey={editingVariant.entityKey}
+          variantKey={editingVariant.variantKey}
+          onClose={() => setEditingVariant(null)}
+        />
+      )}
+      {editImageTarget && (
+        <VariantEditImageModal target={editImageTarget} onClose={() => setEditImageTarget(null)} />
       )}
 
-      <AlertDialog open={pendingImport !== null} onOpenChange={(open) => !open && setPendingImport(null)}>
-        <AlertDialogContent>
+      {/* Regenerate confirm — over-canvas z (shadcn default z-50 is buried by canvas textboxes). */}
+      <AlertDialog
+        open={pendingRegenerate !== null}
+        onOpenChange={(open) => !open && setPendingRegenerate(null)}
+      >
+        <AlertDialogContent zIndex={CANVAS_CONFIRM_DIALOG_Z}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Replace {cfg.title.toLowerCase()}?</AlertDialogTitle>
+            <AlertDialogTitle>Regenerate {regenerateMention}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This replaces all {entityKeys.length} existing {cfg.title.toLowerCase()} with{' '}
-              {pendingImport?.entities.length ?? 0} from the file. Generated sheets on the current
-              entities will be lost. This cannot be undone.
+              This overwrites the current 4 candidate crops for {regenerateMention}. The picked cell and
+              any per-cell edits will be lost. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmImport}>Replace</AlertDialogAction>
+            <AlertDialogAction onClick={confirmRegenerate}>Regenerate</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </main>
+  );
+}
+
+/** Shown when there is no non-base variant in either kind yet (nothing imported in the Base space). */
+function EmptyState() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+      <Copy className="h-10 w-10 opacity-60" aria-hidden="true" />
+      <div>
+        <p className="text-sm">No variant yet</p>
+        <p className="mt-1 text-xs">Import characters/props in the Base space first.</p>
+      </div>
     </div>
   );
 }

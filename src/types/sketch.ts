@@ -14,17 +14,27 @@ export type SketchEntityKind = 'characters' | 'props' | 'stages';
 export type BaseKind = 'characters' | 'props';
 export type SketchPageType = 'left' | 'right' | 'full';
 
-// char/prop variant: 4 text field + optional raw_sheet/crop imagery.
-// stage variant: no height/raw_sheet/crop → `illustrations[]` generated directly.
+// ── Variant crop (positional — NO key; 2026-07-14) ───────────────────────────
+// One cell cut from the currently-selected raw sheet. Element order = read order of cells 1..4
+// (template_cell_boxes(4)). At most 1 is_selected across the 4 (the locked cell = official image).
+export interface SketchVariantCrop {
+  is_selected: boolean;                          // cell locked as the variant's official image — ≤1/4 true (0 = none yet)
+  illustrations: Illustration[];                 // this cell's edit versions, canonical, edit-able; non-empty → exactly 1 is_selected
+}
+
+// char/prop variant: 4 text field + optional raw_sheet imagery (raw sheet + positional crops[]).
+// stage variant: no height/raw_sheet → `illustrations[]` generated directly.
 export interface SketchVariant {
   key: string;                                   // variant key (base, hero); ref = @{entity.key}/{key}
   description: string;                           // ⚡ replaces the legacy visual_description (Excel "description")
   height?: string;                              // char/prop only (Excel "height"); stage has none
   visual_design: string;                        // Excel "visual_design"
   art_language: string;                         // Excel "art_language"
-  // char/prop only:
-  raw_sheet?: { illustrations: Illustration[] }; // 4-cell style sheet. variant 'base': empty/absent (raw lives only in base workspace)
-  crop?: { illustrations: Illustration[] };      // chosen cell. variant 'base': cloned from base.{kind}_sheet.styles[selected].crops[key]
+  // char/prop only — ⚡ 2026-07-14: the single `crop` field is GONE; crops[] now live INSIDE raw_sheet.
+  raw_sheet?: {
+    illustrations: Illustration[];               // raw 21:9 sheet versions (CUT SOURCE, not displayed). variant 'base': empty/absent (raw lives only in base workspace)
+    crops: SketchVariantCrop[];                  // 4 positional cells cut from the selected sheet. variant 'base': 1 crop cloned from base.{kind}_sheet.styles[selected].crops[key], is_selected=true
+  };
   // stage only:
   illustrations?: Illustration[];                // direct generate, no crop
 }
@@ -33,6 +43,14 @@ export interface SketchVariant {
 export interface SketchEntity {
   key: string;
   variants: SketchVariant[];
+}
+
+/** Lightweight reference to a non-base variant (variantKey ≠ 'base'). Lets the variant creative
+ *  space enumerate variants across a kind without holding whole entity refs (reused by phase-05). */
+export interface VariantRef {
+  kind: BaseKind;
+  entityKey: string;
+  variantKey: string;
 }
 
 // ── Base workspace (generate raw sheets in bulk + crop per entity) ────────────

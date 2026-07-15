@@ -43,6 +43,7 @@ import { useImageTaskNotifications } from '../hooks/use-image-task-notifications
 import { useSketchGenerateNotifications } from '../hooks/use-sketch-generate-notifications';
 import { useSketchSpreadGenerateNotifications } from '../hooks/use-sketch-spread-generate-notifications';
 import { useBaseSheetGenerateNotifications } from '../hooks/use-base-sheet-generate-notifications';
+import { useVariantSheetGenerateNotifications } from '../hooks/use-variant-sheet-generate-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useFlushOnHidden } from '../hooks/use-flush-on-hidden';
 
@@ -95,6 +96,9 @@ export function EditorPage() {
   useSketchSpreadGenerateNotifications();
   // Error toast for the single-flight base-sheet generate op (settled-with-error → toast + dismiss).
   useBaseSheetGenerateNotifications();
+  // Error toast for the single-flight variant-sheet generate op (settled-with-error → toast + dismiss;
+  // the NO_SNAPSHOT precondition is toasted by the slice directly, so the hook only dismisses it).
+  useVariantSheetGenerateNotifications();
 
   // Local UI state
   // Placeholder default only — overwritten on mount (loadData) and on step change by
@@ -301,16 +305,18 @@ export function EditorPage() {
       // land in Phase 06.
       case 'sketch-base':
         return <SketchBaseSpace />;
-      // Stages — unchanged component (shared SketchVariantsCreativeSpace kind='stages').
-      // `key="stages"` forces a fresh instance so per-kind UI state never leaks.
+      // Variants (char + prop NON-BASE variants — 1 space, no `kind` prop). Raw-sheet 4-crop
+      // generate → auto-cut → pick 1/4 → per-crop edit.
+      case 'sketch-variant':
+        return <SketchVariantsCreativeSpace />;
+      // Stages — component TBD. The old shared 3-kind SketchVariantsSpace(kind) was removed; stage
+      // generates directly (no base sheet / crop) and will be redesigned separately. Coming-soon for now.
       case 'sketch-stage':
-        return <SketchVariantsCreativeSpace key="stages" kind="stages" />;
+        return <MockCreativeSpace name={activeCreativeSpace} />;
       // sketch-spread (storyboard) — standalone space.
       case 'sketch-spread':
         return <SketchSpreadsCreativeSpace />;
-      // Variants / Lineup — Coming-soon placeholder (real spaces are follow-up work;
-      // the rail already greys them if the collaborator is gated).
-      case 'sketch-variant':
+      // Lineup — Coming-soon placeholder (real space is follow-up work; the rail greys it if gated).
       case 'sketch-lineup':
         return <MockCreativeSpace name={activeCreativeSpace} />;
       case 'collaborator':

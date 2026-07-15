@@ -70,6 +70,34 @@ describe('SPACE_TOOL_MATRIX.remix.edit — 3-state (Phase 1 wiring)', () => {
   });
 });
 
+describe('SPACE_TOOL_MATRIX.sketch-variant — crop-edit-only column', () => {
+  const variant = SPACE_TOOL_MATRIX['sketch-variant'];
+
+  it('edit is exactly [inpaint, erasor]; generate + extract empty', () => {
+    expect(variant.edit).toEqual(['inpaint', 'erasor']);
+    expect(variant.generate).toEqual([]);
+    expect(variant.extract).toEqual([]);
+  });
+
+  it('inpaint + erasor resolve active (built + available in space)', () => {
+    for (const key of ['inpaint', 'erasor']) {
+      const enabled = EDIT_TOOLS.find((t) => t.key === key)?.enabled ?? false;
+      expect(resolveToolGate(key, variant.edit, enabled)).toBe('active');
+    }
+  });
+
+  it('tools outside the column resolve unavailable', () => {
+    for (const key of ['outpaint', 'upscale', 'remove_object', 'remove_text', 'remove_background']) {
+      const enabled = EDIT_TOOLS.find((t) => t.key === key)?.enabled ?? false;
+      expect(resolveToolGate(key, variant.edit, enabled)).toBe('unavailable');
+    }
+  });
+
+  it('lands on inpaint (never an unavailable tool)', () => {
+    expect(resolveInitialKey(EDIT_TOOLS, variant.edit, undefined, DEFAULT_EDIT_TOOL)).toBe('inpaint');
+  });
+});
+
 describe('resolveInitialKey — Edit tools', () => {
   it('legacy (no gate, no request) → DEFAULT_EDIT_TOOL', () => {
     expect(resolveInitialKey(EDIT_TOOLS, undefined, undefined, DEFAULT_EDIT_TOOL)).toBe('inpaint');

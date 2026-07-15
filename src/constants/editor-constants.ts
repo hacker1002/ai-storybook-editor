@@ -21,9 +21,9 @@ export const PIPELINE_STEPS: { key: PipelineStep; label: string }[] = [
 // Sketch step icons — redesign 2026-07-13: 5 FUNCTIONAL creative spaces
 // (base · variants · lineup · stages · spreads), NOT 3 look-alike entity spaces.
 // Base/Variant/Lineup each span BOTH character + prop (not split by entity kind).
-// Routing (editor-page): base→SketchBaseSpace (Phase 05, temp Mock); variant/lineup→
-// Coming-soon placeholder; stage→SketchVariantsCreativeSpace kind='stages'; spread→
-// SketchSpreadsCreativeSpace. See design 02-icon-rail.md §2.3.
+// Routing (editor-page): base→SketchBaseSpace; variant→SketchVariantsCreativeSpace (char+prop
+// non-base variants, no `kind` prop); lineup/stage→Coming-soon placeholder (stage redesign is
+// follow-up); spread→SketchSpreadsCreativeSpace. See design 02-icon-rail.md §2.3.
 export const SKETCH_ICONS: IconRailItemConfig[] = [
   { id: 'sketch-base', icon: 'Shapes', label: 'Base' },
   { id: 'sketch-variant', icon: 'Copy', label: 'Variants' },

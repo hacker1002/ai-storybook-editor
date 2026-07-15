@@ -3,6 +3,7 @@ import type { SnapshotStore, SketchSlice } from '../types';
 import type { Sketch, SketchEntity, SketchSpread, SketchSpreadImage, SketchSpreadIllustration } from '@/types/sketch';
 import type {
   SketchVariant,
+  SketchVariantCrop,
   SketchEntityKind,
   SketchPageType,
   ArtDirection,
@@ -55,9 +56,21 @@ function isLegacySketchShape(raw: Record<string, unknown>): boolean {
 
 const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
 
+/** Coerce one raw variant-crop blob → SketchVariantCrop (positional cell; is_selected defaults
+ *  to false, illustrations to []). */
+function coerceVariantCrop(raw: unknown): SketchVariantCrop {
+  const r = isPlainObject(raw) ? raw : {};
+  return {
+    is_selected: Boolean(r.is_selected),
+    illustrations: Array.isArray(r.illustrations) ? (r.illustrations as Illustration[]) : [],
+  };
+}
+
 /** Coerce one raw variant → SketchVariant, filling the 3 required text fields when absent
- *  (backward-compat for blobs written before the 2026-07-13 restructure). Optional imagery
- *  (height / raw_sheet / crop / illustrations) is copied through by reference only when present. */
+ *  (backward-compat for blobs written before the 2026-07-13 restructure). raw_sheet parses the
+ *  new `{ illustrations[], crops[] }` model; the legacy single `crop` blob (pre-2026-07-14) is
+ *  mapped LOSSLESSLY into `crops[0]` (is_selected=true). Stage `illustrations[]` copied through
+ *  when present. */
 function coerceVariant(raw: unknown): SketchVariant {
   const r = isPlainObject(raw) ? raw : {};
   const v: SketchVariant = {
@@ -67,13 +80,29 @@ function coerceVariant(raw: unknown): SketchVariant {
     art_language: asStr(r.art_language),
   };
   if (typeof r.height === 'string') v.height = r.height;
-  if (isPlainObject(r.raw_sheet) && Array.isArray(r.raw_sheet.illustrations)) {
-    v.raw_sheet = { illustrations: r.raw_sheet.illustrations as Illustration[] };
+  // Legacy single-cell crop (pre-2026-07-14) → mapped into crops[0] below.
+  const legacyCropIllustrations =
+    isPlainObject(r.crop) && Array.isArray(r.crop.illustrations)
+      ? (r.crop.illustrations as Illustration[])
+      : null;
+  if (isPlainObject(r.raw_sheet)) {
+    const illustrations = Array.isArray(r.raw_sheet.illustrations)
+      ? (r.raw_sheet.illustrations as Illustration[])
+      : [];
+    let crops: SketchVariantCrop[];
+    if (Array.isArray(r.raw_sheet.crops)) {
+      crops = r.raw_sheet.crops.map(coerceVariantCrop); // new positional model
+    } else if (legacyCropIllustrations) {
+      crops = [{ is_selected: true, illustrations: legacyCropIllustrations }]; // BACK-COMPAT
+    } else {
+      crops = [];
+    }
+    v.raw_sheet = { illustrations, crops };
+  } else if (legacyCropIllustrations) {
+    // Legacy blob carrying only `crop` (no raw_sheet).
+    v.raw_sheet = { illustrations: [], crops: [{ is_selected: true, illustrations: legacyCropIllustrations }] };
   }
-  if (isPlainObject(r.crop) && Array.isArray(r.crop.illustrations)) {
-    v.crop = { illustrations: r.crop.illustrations as Illustration[] };
-  }
-  if (Array.isArray(r.illustrations)) v.illustrations = r.illustrations as Illustration[];
+  if (Array.isArray(r.illustrations)) v.illustrations = r.illustrations as Illustration[]; // stage
   return v;
 }
 
@@ -291,18 +320,50 @@ export const createSketchSlice: StateCreator<
         ?.variants.find((v) => v.key === variantKey);
       if (!variant) return;
       log.debug('setSketchVariantRawSheetIllustrations', 'set', { kind, entityKey, variantKey, count: illustrations.length });
-      variant.raw_sheet = { illustrations };
+      // Preserve existing crops[] — writing raw sheet versions must NOT wipe the cut cells.
+      variant.raw_sheet = { illustrations, crops: variant.raw_sheet?.crops ?? [] };
       state.sync.isDirty = true;
     }),
 
-  setSketchVariantCropIllustrations: (kind, entityKey, variantKey, illustrations) =>
+  // Replace the whole positional crops[] (auto-cut / re-cut result). Ensures raw_sheet exists
+  // (creates it with illustrations:[] when absent). base: a single clone crop.
+  setSketchVariantCrops: (kind, entityKey, variantKey, crops) =>
     set((state) => {
       const variant = state.sketch[kind]
         .find((e) => e.key === entityKey)
         ?.variants.find((v) => v.key === variantKey);
       if (!variant) return;
-      log.debug('setSketchVariantCropIllustrations', 'set', { kind, entityKey, variantKey, count: illustrations.length });
-      variant.crop = { illustrations };
+      log.debug('setSketchVariantCrops', 'replace crops', { kind, entityKey, variantKey, count: crops.length });
+      if (variant.raw_sheet) variant.raw_sheet.crops = crops;
+      else variant.raw_sheet = { illustrations: [], crops };
+      state.sync.isDirty = true;
+    }),
+
+  // 🔒 LOCK one cell as the variant's official image: set crops[cropIndex].is_selected true and
+  // clear every other cell's flag (≤1 is_selected invariant). No-op if the cell is absent.
+  selectSketchVariantCrop: (kind, entityKey, variantKey, cropIndex) =>
+    set((state) => {
+      const crops = state.sketch[kind]
+        .find((e) => e.key === entityKey)
+        ?.variants.find((v) => v.key === variantKey)
+        ?.raw_sheet?.crops;
+      if (!crops?.[cropIndex]) return;
+      log.debug('selectSketchVariantCrop', 'lock cell', { kind, entityKey, variantKey, cropIndex });
+      crops.forEach((c, i) => {
+        c.is_selected = i === cropIndex;
+      });
+      state.sync.isDirty = true;
+    }),
+
+  setSketchVariantCropIllustrations: (kind, entityKey, variantKey, cropIndex, illustrations) =>
+    set((state) => {
+      const crop = state.sketch[kind]
+        .find((e) => e.key === entityKey)
+        ?.variants.find((v) => v.key === variantKey)
+        ?.raw_sheet?.crops?.[cropIndex];
+      if (!crop) return;
+      log.debug('setSketchVariantCropIllustrations', 'set', { kind, entityKey, variantKey, cropIndex, count: illustrations.length });
+      crop.illustrations = illustrations;
       state.sync.isDirty = true;
     }),
 
@@ -343,8 +404,9 @@ export const createSketchSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  // 🔒 LOCK: exclusive is_selected within the sheet + CLONE the locked style's crops into
-  // every base entity's variants[base].crop (Illustration is flat → per-element spread = deep clone).
+  // 🔒 LOCK: exclusive is_selected within the sheet + CLONE the locked style's per-entity crop into
+  // every base entity's variants[base].raw_sheet.crops[0] (illustrations:[], the single clone crop
+  // is_selected=true). Illustration is flat → per-element spread = deep clone.
   setSketchBaseStyleSelected: (kind, styleIndex) =>
     set((state) => {
       const styles = sheetOf(state.sketch.base, kind).styles;
@@ -358,7 +420,12 @@ export const createSketchSlice: StateCreator<
         const base = entity.variants.find((v) => v.key === 'base');
         if (!base) continue;
         const c = crops.find((cr) => cr.key === entity.key);
-        if (c) base.crop = { illustrations: c.illustrations.map((ill) => ({ ...ill })) };
+        if (c) {
+          base.raw_sheet = {
+            illustrations: [],
+            crops: [{ is_selected: true, illustrations: c.illustrations.map((ill) => ({ ...ill })) }],
+          };
+        }
       }
       state.sync.isDirty = true;
     }),

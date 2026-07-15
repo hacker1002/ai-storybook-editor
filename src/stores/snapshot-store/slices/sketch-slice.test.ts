@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { normalizeSketch, normalizeSketchSpread, DEFAULT_SKETCH, createSketchSlice } from './sketch-slice';
 import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
-import type { Sketch, SketchEntity, SketchVariant, SketchSpread, ArtDirection, SketchTextbox } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchVariant, SketchVariantCrop, SketchSpread, ArtDirection, SketchTextbox } from '@/types/sketch';
 import type { Geometry, Typography } from '@/types/spread-types';
 
 // Isolated harness: the sketch slice + the only cross-slice field its actions touch
@@ -587,7 +587,7 @@ describe('SketchSlice base (workspace) actions', () => {
     expect(store.getState().sync.isDirty).toBe(true);
   });
 
-  it('setSketchBaseStyleSelected sets is_selected exclusive per sheet + clones crops into entity variants[base].crop', () => {
+  it('setSketchBaseStyleSelected sets is_selected exclusive per sheet + clones crops into entity variants[base].raw_sheet.crops[0]', () => {
     // Setup entities
     store.getState().setSketchEntities('characters', [
       { key: 'hero', variants: [variant('base')] },
@@ -625,11 +625,15 @@ describe('SketchSlice base (workspace) actions', () => {
     expect(store.getState().sketch.base.character_sheet.styles[0].is_selected).toBe(false);
     expect(store.getState().sketch.base.character_sheet.styles[1].is_selected).toBe(true);
 
-    // Assert crops cloned into variants[base].crop
+    // Assert crops cloned into variants[base].raw_sheet.crops[0] (base invariant: 1 crop,
+    // is_selected=true, raw_sheet.illustrations empty).
     const heroBase = store.getState().sketch.characters[0].variants.find((v: SketchVariant) => v.key === 'base');
     const villainBase = store.getState().sketch.characters[1].variants.find((v: SketchVariant) => v.key === 'base');
-    expect(heroBase?.crop?.illustrations[0].media_url).toBe('hero-crop-2.png');
-    expect(villainBase?.crop).toBeUndefined(); // no crop in st2 for villain
+    expect(heroBase?.raw_sheet?.illustrations).toEqual([]);
+    expect(heroBase?.raw_sheet?.crops).toHaveLength(1);
+    expect(heroBase?.raw_sheet?.crops[0].is_selected).toBe(true);
+    expect(heroBase?.raw_sheet?.crops[0].illustrations[0].media_url).toBe('hero-crop-2.png');
+    expect(villainBase?.raw_sheet).toBeUndefined(); // no crop in st2 for villain → untouched
   });
 
   it('setSketchBaseStyleSelected clones with isolation (clone is separate object, not reference)', () => {
@@ -652,7 +656,7 @@ describe('SketchSlice base (workspace) actions', () => {
 
     // Get the cloned crop from variant
     const heroBase = store.getState().sketch.characters[0].variants.find((v: SketchVariant) => v.key === 'base');
-    const clonedCropIll = heroBase?.crop?.illustrations[0];
+    const clonedCropIll = heroBase?.raw_sheet?.crops[0].illustrations[0];
 
     // Get the original crop in the style
     const style = store.getState().sketch.base.character_sheet.styles[0];
@@ -785,5 +789,206 @@ describe('SketchSlice base (workspace) actions', () => {
     };
     const result = normalizeSketch(raw);
     expect(result.base).toEqual(base);
+  });
+});
+
+describe('SketchSlice variant crop model (coerce back-compat + positional crops[])', () => {
+  const emptyBase = () => ({ character_sheet: { styles: [] }, prop_sheet: { styles: [] } });
+
+  it('coerces a legacy variant.crop (no raw_sheet) into raw_sheet.crops[0] is_selected=true (lossless)', () => {
+    const raw = {
+      id: 'sk1',
+      base: emptyBase(),
+      characters: [
+        {
+          key: 'hero',
+          variants: [
+            {
+              key: 'hero_v', description: '', visual_design: '', art_language: '',
+              crop: { illustrations: [{ type: 'created', media_url: 'legacy.png', created_time: 't', is_selected: true }] },
+            },
+          ],
+        },
+      ],
+      props: [], stages: [], spreads: [],
+    };
+    const v = normalizeSketch(raw).characters[0].variants[0];
+    expect(v.raw_sheet?.illustrations).toEqual([]);
+    expect(v.raw_sheet?.crops).toHaveLength(1);
+    expect(v.raw_sheet?.crops[0].is_selected).toBe(true);
+    expect(v.raw_sheet?.crops[0].illustrations[0].media_url).toBe('legacy.png');
+  });
+
+  it('coerces a legacy raw_sheet.illustrations + old crop (no crops[]) → crops[0] mapped', () => {
+    const raw = {
+      id: 'sk1',
+      base: emptyBase(),
+      characters: [
+        {
+          key: 'hero',
+          variants: [
+            {
+              key: 'hero_v', description: '', visual_design: '', art_language: '',
+              raw_sheet: { illustrations: [{ type: 'created', media_url: 'sheet.png', created_time: 't', is_selected: true }] },
+              crop: { illustrations: [{ type: 'created', media_url: 'crop.png', created_time: 't', is_selected: true }] },
+            },
+          ],
+        },
+      ],
+      props: [], stages: [], spreads: [],
+    };
+    const v = normalizeSketch(raw).characters[0].variants[0];
+    expect(v.raw_sheet?.illustrations[0].media_url).toBe('sheet.png');
+    expect(v.raw_sheet?.crops).toHaveLength(1);
+    expect(v.raw_sheet?.crops[0].illustrations[0].media_url).toBe('crop.png');
+  });
+
+  it('coerces a new raw_sheet.crops[] positional array (is_selected defaults false when absent)', () => {
+    const raw = {
+      id: 'sk1',
+      base: emptyBase(),
+      characters: [
+        {
+          key: 'hero',
+          variants: [
+            {
+              key: 'hero_v', description: '', visual_design: '', art_language: '',
+              raw_sheet: {
+                illustrations: [],
+                crops: [
+                  { illustrations: [{ type: 'created', media_url: 'c0.png', created_time: 't', is_selected: true }] }, // no is_selected → false
+                  { is_selected: true, illustrations: [] },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+      props: [], stages: [], spreads: [],
+    };
+    const crops = normalizeSketch(raw).characters[0].variants[0].raw_sheet!.crops;
+    expect(crops).toHaveLength(2);
+    expect(crops[0].is_selected).toBe(false);
+    expect(crops[0].illustrations[0].media_url).toBe('c0.png');
+    expect(crops[1].is_selected).toBe(true);
+    expect(crops[1].illustrations).toEqual([]);
+  });
+});
+
+describe('SketchSlice variant crop actions (positional crops[])', () => {
+  let store: ReturnType<typeof createTestStore>;
+  beforeEach(() => {
+    store = createTestStore();
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const resetDirty = () => store.setState((s: any) => { s.sync.isDirty = false; });
+
+  const ill = (url: string) => ({ type: 'created' as const, media_url: url, created_time: 't', is_selected: true });
+
+  // Seed a char entity: a 'base' variant (no imagery) + 'hero_v' with raw_sheet + 2 positional crops.
+  const seedVariantWithCrops = () =>
+    store.getState().setSketchEntities('characters', [
+      {
+        key: 'hero',
+        variants: [
+          { key: 'base', description: '', visual_design: '', art_language: '' },
+          {
+            key: 'hero_v', description: '', visual_design: '', art_language: '',
+            raw_sheet: {
+              illustrations: [],
+              crops: [
+                { is_selected: false, illustrations: [ill('c0.png')] },
+                { is_selected: false, illustrations: [ill('c1.png')] },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+  const heroV = () =>
+    store.getState().sketch.characters[0].variants.find((v: SketchVariant) => v.key === 'hero_v');
+
+  it('setSketchVariantCrops replaces raw_sheet.crops[] + sets isDirty', () => {
+    seedVariantWithCrops();
+    resetDirty();
+    store.getState().setSketchVariantCrops('characters', 'hero', 'hero_v', [
+      { is_selected: true, illustrations: [ill('n0.png')] },
+    ]);
+    expect(heroV().raw_sheet.crops).toHaveLength(1);
+    expect(heroV().raw_sheet.crops[0].illustrations[0].media_url).toBe('n0.png');
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('setSketchVariantCrops creates raw_sheet (illustrations empty) when absent', () => {
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [{ key: 'hero_v', description: '', visual_design: '', art_language: '' }] },
+    ]);
+    store.getState().setSketchVariantCrops('characters', 'hero', 'hero_v', [{ is_selected: false, illustrations: [] }]);
+    expect(heroV().raw_sheet.illustrations).toEqual([]);
+    expect(heroV().raw_sheet.crops).toHaveLength(1);
+  });
+
+  it('setSketchVariantCrops no-ops when the variant is missing (isDirty stays false)', () => {
+    seedVariantWithCrops();
+    resetDirty();
+    store.getState().setSketchVariantCrops('characters', 'hero', 'ghost', [{ is_selected: false, illustrations: [] }]);
+    expect(store.getState().sync.isDirty).toBe(false);
+  });
+
+  it('selectSketchVariantCrop locks exactly one cell (≤1 is_selected), re-select clears the prior', () => {
+    seedVariantWithCrops();
+    store.getState().selectSketchVariantCrop('characters', 'hero', 'hero_v', 1);
+    let crops = heroV().raw_sheet.crops;
+    expect(crops.filter((c: SketchVariantCrop) => c.is_selected)).toHaveLength(1);
+    expect(crops[1].is_selected).toBe(true);
+    expect(crops[0].is_selected).toBe(false);
+    // Re-select a different cell → previous flag cleared.
+    store.getState().selectSketchVariantCrop('characters', 'hero', 'hero_v', 0);
+    crops = heroV().raw_sheet.crops;
+    expect(crops.filter((c: SketchVariantCrop) => c.is_selected)).toHaveLength(1);
+    expect(crops[0].is_selected).toBe(true);
+    expect(crops[1].is_selected).toBe(false);
+  });
+
+  it('selectSketchVariantCrop no-ops on out-of-range cropIndex (isDirty stays false)', () => {
+    seedVariantWithCrops();
+    resetDirty();
+    store.getState().selectSketchVariantCrop('characters', 'hero', 'hero_v', 9);
+    expect(store.getState().sync.isDirty).toBe(false);
+    expect(heroV().raw_sheet.crops.filter((c: SketchVariantCrop) => c.is_selected)).toHaveLength(0);
+  });
+
+  it('setSketchVariantCropIllustrations writes only crops[cropIndex].illustrations', () => {
+    seedVariantWithCrops();
+    store.getState().setSketchVariantCropIllustrations('characters', 'hero', 'hero_v', 1, [ill('edited.png')]);
+    const crops = heroV().raw_sheet.crops;
+    expect(crops[1].illustrations[0].media_url).toBe('edited.png');
+    expect(crops[0].illustrations[0].media_url).toBe('c0.png'); // untouched
+    expect(store.getState().sync.isDirty).toBe(true);
+  });
+
+  it('setSketchVariantCropIllustrations no-ops on missing cropIndex (isDirty stays false)', () => {
+    seedVariantWithCrops();
+    resetDirty();
+    store.getState().setSketchVariantCropIllustrations('characters', 'hero', 'hero_v', 9, [ill('x.png')]);
+    expect(store.getState().sync.isDirty).toBe(false);
+  });
+
+  it('setSketchVariantRawSheetIllustrations preserves existing crops[] (does not wipe)', () => {
+    seedVariantWithCrops();
+    store.getState().setSketchVariantRawSheetIllustrations('characters', 'hero', 'hero_v', [ill('sheet.png')]);
+    const rs = heroV().raw_sheet;
+    expect(rs.illustrations[0].media_url).toBe('sheet.png');
+    expect(rs.crops).toHaveLength(2); // preserved
+    expect(rs.crops[0].illustrations[0].media_url).toBe('c0.png');
+  });
+
+  it('setSketchVariantRawSheetIllustrations on a variant with no raw_sheet yields empty crops[]', () => {
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [{ key: 'hero_v', description: '', visual_design: '', art_language: '' }] },
+    ]);
+    store.getState().setSketchVariantRawSheetIllustrations('characters', 'hero', 'hero_v', [ill('s.png')]);
+    expect(heroV().raw_sheet.crops).toEqual([]);
   });
 });

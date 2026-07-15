@@ -1,48 +1,83 @@
-// sketch-variants-constants.ts — kind mapping + per-kind labels for the shared
-// SketchVariantsCreativeSpace (one component parameterized by SketchEntityKind).
-// Exported separately so editor-page routing (Phase 04) can map space id → kind.
+// sketch-variants-constants.ts — static config + local UI-state shapes for SketchVariantsSpace.
+// The Variant creative space covers NON-BASE variants of BOTH kinds (character + prop) in ONE
+// space (no `kind` prop). Split out (Phase 05) so root/sidebar/content/modals each stay < 500
+// lines, and so the modal connector can import the state shapes without pulling in the whole root.
+//
+// ⚡ `titleCase` is ALSO consumed by the sibling sketch-base-creative-space (shared helper, single
+//    source — base-sheet-content-area / edit-base-entity-modal / sketch-base-edit-image-modal import
+//    it from here). Do NOT remove or move it.
 
-import type { SketchEntityKind } from '@/types/sketch';
-import type { SketchSpace } from '@/types/editor';
-import type { ResourceType } from '@/stores/resource-lock-store';
+import type { BaseKind, VariantRef } from '@/types/sketch';
 
-/** Entity-kind sketch space(s) still routed through the shared
- *  SketchVariantsCreativeSpace. Redesign 2026-07-13: base/variant/lineup became
- *  FUNCTIONAL spaces (routed elsewhere) and `sketch-spread` is the storyboard space,
- *  so only `sketch-stage` remains here (kept per user — stages unchanged). */
-export type SketchEntitySpaceId = Extract<SketchSpace, 'sketch-stage'>;
-
-export const SPACE_TO_KIND: Record<SketchEntitySpaceId, SketchEntityKind> = {
-  'sketch-stage': 'stages',
-};
-
-export interface KindConfig {
-  /** Plural label (sidebar header / content heading). */
+/** Per-kind config for the two variant groups (Character / Prop). Stage has NO variant sheet. */
+export interface KindGroupConfig {
+  kind: BaseKind;
+  /** Group header title. */
   title: string;
-  /** Singular noun for toasts/messages. */
+  /** Singular noun for empty-state / labels. */
   noun: string;
-  /** Excel sheet name read on import. */
-  sheetName: string;
-  /** Excel key column read on import. */
-  keyColumn: string;
 }
 
-export const KIND_CONFIG: Record<SketchEntityKind, KindConfig> = {
-  characters: { title: 'Characters', noun: 'character', sheetName: 'Characters', keyColumn: 'character' },
-  props: { title: 'Props', noun: 'prop', sheetName: 'Props', keyColumn: 'prop' },
-  stages: { title: 'Stages', noun: 'stage', sheetName: 'Stages', keyColumn: 'stage' },
+/** Fixed order: Character then Prop. Variant workspace covers char + prop only (no Stage). */
+export const KIND_GROUPS: KindGroupConfig[] = [
+  { kind: 'characters', title: 'Character', noun: 'character' },
+  { kind: 'props', title: 'Prop', noun: 'prop' },
+];
+
+/** Zoom bounds for the content-area preview. Applied as CSS width % (NOT transform:scale —
+ *  memory: zoom-via-css-width / reference generate-canvas.tsx) so overflow scroll metrics stay
+ *  correct at > 100% (top/left corners reachable). */
+export const ZOOM = { min: 25, max: 200, step: 5, default: 100 } as const;
+
+/** Two-phase generate status (single-flight op) for a variant row / the content area. */
+export type VariantGeneratePhase = 'generate' | 'cut';
+
+export interface VariantGenStatus {
+  isBusy: boolean;
+  phase?: VariantGeneratePhase;
+  error?: string;
+}
+
+/** Generate gate reasons — FE fail-fast mirroring the endpoint's 3 hard preconditions
+ *  (08/09 §Error): no-art-style · BASE_NOT_READY · EMPTY_VARIANT_DESCRIPTION. */
+export type VariantGateReason = 'no-art-style' | 'base-not-ready' | 'empty-text';
+
+export interface VariantGate {
+  canGenerate: boolean;
+  reason?: VariantGateReason;
+}
+
+/** Tooltip copy per gate reason (design 01 §2.4). */
+export const GATE_TOOLTIP: Record<VariantGateReason, string> = {
+  'no-art-style': 'Set a sketch art style first',
+  'base-not-ready': 'Generate the base variant first',
+  'empty-text': 'Add a description before generating',
 };
 
-/** Entity kind → `resource_locks.resource_type` (edit-lock addressing).
- *  3 character · 4 prop · 5 stage (image=1 · textbox=2 · spread=6 live elsewhere). */
-export const KIND_TO_RESOURCE_TYPE: Record<SketchEntityKind, ResourceType> = {
-  characters: 3,
-  props: 4,
-  stages: 5,
-};
+/** Shared EditImageModal binding target — CROP scope ONLY (the raw 21:9 sheet is an internal
+ *  artifact, never shown or edited in this space). Consumed by the modal connector (§3.4). */
+export interface EditImageTarget {
+  kind: BaseKind;
+  entityKey: string;
+  variantKey: string;
+  cropIndex: number;
+}
 
-/** Display name derived from a thin entity key (entities carry no `name`):
- *  `kid_hero` → `Kid Hero`. */
+/** Structural equality for two variant refs (null-safe). Used by the root (derive selection,
+ *  match the running op) and the sidebar (highlight the selected row). */
+export function sameRef(a: VariantRef | null | undefined, b: VariantRef | null | undefined): boolean {
+  return (
+    !!a && !!b && a.kind === b.kind && a.entityKey === b.entityKey && a.variantKey === b.variantKey
+  );
+}
+
+/** true when a text field is absent / whitespace-only (drives the `empty-text` gate). */
+export function isBlank(value: string | undefined): boolean {
+  return !value || value.trim().length === 0;
+}
+
+/** Display name derived from a thin entity/variant key (`kid_hero` → `Kid Hero`).
+ *  ⚡ Shared helper — ALSO imported by sketch-base-creative-space. Do NOT remove. */
 export function titleCase(key: string): string {
   return key
     .split(/[_\s-]+/)
