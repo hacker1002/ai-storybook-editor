@@ -1,23 +1,40 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { toast } from 'sonner';
 import { createSketchSlice } from './sketch-slice';
 import { createSketchBaseGenerateJobSlice } from './sketch-base-generate-job-slice';
 import type { SketchEntity } from '@/types/sketch';
-import { callGenerateBaseSheet, callCropBaseSheet, type GenerateBaseSheetResult, type CropBaseSheetResult } from '@/apis/sketch-base-api';
+import { callGenerateBaseSheet, type GenerateBaseSheetResult } from '@/apis/sketch-base-api';
+import { callCropSheetRow, type CropSheetRowResult } from '@/apis/sketch-variant-api';
 import { uploadImageToStorage } from '@/apis/storage-api';
 
-// Mock the api-client seam
+// Mock the api-client seams. ⚡2026-07-15: base crop migrated 07 → shared positional cutter (api 10)
+// which lives in sketch-variant-api → mock BOTH modules (generate on base, crop on variant).
 vi.mock('@/apis/sketch-base-api', () => ({
   callGenerateBaseSheet: vi.fn(),
-  callCropBaseSheet: vi.fn(),
+}));
+vi.mock('@/apis/sketch-variant-api', () => ({
+  callCropSheetRow: vi.fn(),
 }));
 const mockedGenerateCall = vi.mocked(callGenerateBaseSheet);
-const mockedCropCall = vi.mocked(callCropBaseSheet);
+const mockedCropCall = vi.mocked(callCropSheetRow);
 
-// Mock resource-lock-store to isolate from collab
+// Mutable collab flag so tests can drive the solo (autoSave) vs collab (gateway flush) persist path.
+const lockState = vi.hoisted(() => ({ collabPersist: false as boolean }));
+
+// Mock resource-lock-store to isolate from collab (collabPersist drives the persist branch).
 vi.mock('@/stores/resource-lock-store', () => ({
-  useResourceLockStore: { getState: () => ({ collabPersist: false, myUserId: null, holderNames: new Map() }) },
+  useResourceLockStore: {
+    getState: () => ({ collabPersist: lockState.collabPersist, myUserId: null, holderNames: new Map() }),
+  },
+}));
+
+// Mock the base-sheet gateway flush (ADR-043 rtype 11) so the collab persist path can be asserted
+// WITHOUT a live lock store. Solo path never calls it (autoSaveSnapshot instead).
+const mockedSheetFlush = vi.hoisted(() => vi.fn(async () => true));
+vi.mock('./collab-sketch-base-sheet-save-helper', () => ({
+  flushSketchBaseSheetUnderLock: mockedSheetFlush,
 }));
 
 // Mock sonner toast
@@ -66,28 +83,37 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-// Success response helper (camelCase matching backend contract)
-const okGenerate = (imageUrl: string): GenerateBaseSheetResult => ({
+// Success response helper (camelCase matching backend contract). `cellOrder` = reading-order entity
+// keys echoed by generate — the slice threads it into the crop step for positional pairing.
+const okGenerate = (imageUrl: string, cellOrder: string[] = ['hero']): GenerateBaseSheetResult => ({
   success: true,
   data: {
     imageUrl,
     storagePath: `path/${imageUrl}`,
-    cellOrder: ['entity1', 'entity2'],
-    grid: { cols: 2, rows: 2, cellWidth: 256, cellHeight: 256 },
+    cellOrder,
+    grid: { cols: cellOrder.length, rows: 1, cellWidth: 256, cellHeight: 256 },
   },
 });
 
-const okCrop = (crops: Array<{ key: string; imageUrl: string }>, skipped?: { key: string }[]): CropBaseSheetResult => ({
+// Api-10 crop-sheet-row success helper: crops carry a 1-based `cell` (NOT an entity key), geometry is
+// w/h, and skipped/geo/fullbleed live under `meta` (non-fatal degraded signals).
+const okCropRow = (
+  crops: Array<{ cell: number; imageUrl: string }>,
+  meta?: CropSheetRowResult['meta'],
+): CropSheetRowResult => ({
   success: true,
   data: {
     crops: crops.map((c) => ({
-      key: c.key,
+      cell: c.cell,
       imageUrl: c.imageUrl,
-      geometry: { x: 0, y: 0, width: 128, height: 128 },
-      source: 'crop',
+      storagePath: `path/${c.imageUrl}`,
+      geometry: { x: 0, y: 0, w: 128, h: 128 },
+      source: 'rect' as const,
     })),
-    skipped,
+    cellCount: crops.length,
+    sheetDimensions: { width: 1024, height: 512 },
   },
+  meta,
 });
 
 describe('SketchBaseGenerateJobSlice', () => {
@@ -98,6 +124,9 @@ describe('SketchBaseGenerateJobSlice', () => {
     mockedGenerateCall.mockReset();
     mockedCropCall.mockReset();
     mockedUpload.mockReset();
+    mockedSheetFlush.mockReset().mockResolvedValue(true);
+    lockState.collabPersist = false; // default: solo (autoSave path)
+    vi.mocked(toast.warning).mockReset();
     ({ store, autoSaveSnapshot } = createTestStore());
   });
 
@@ -118,7 +147,7 @@ describe('SketchBaseGenerateJobSlice', () => {
 
     // Mock successful generate → crop chain
     mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
-    mockedCropCall.mockResolvedValueOnce(okCrop([{ key: 'hero', imageUrl: 'crop-hero.png' }]));
+    mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }]));
 
     // Start the job in 'add' mode (creates a new style)
     store.getState().startBaseSheetGenerate({
@@ -146,8 +175,42 @@ describe('SketchBaseGenerateJobSlice', () => {
     // Assert op finalized (null after success)
     expect(store.getState().baseSheetGenerateOp).toBeNull();
 
-    // Assert autoSave called
+    // Assert autoSave called (solo persist path)
     expect(autoSaveSnapshot).toHaveBeenCalled();
+    // Solo → the gateway sheet flush is NEVER touched.
+    expect(mockedSheetFlush).not.toHaveBeenCalled();
+  });
+
+  it('collab persist: generate → crop chain flushes the whole SHEET via gateway (NOT autoSave)', async () => {
+    lockState.collabPersist = true; // collab space → gateway held-session owns persistence
+    const baseEntity: SketchEntity = {
+      key: 'hero',
+      variants: [{ key: 'base', description: '', visual_design: 'mighty warrior', art_language: '' }],
+    };
+    store.getState().setSketchEntities('characters', [baseEntity]);
+
+    mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
+    mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }]));
+
+    store.getState().startBaseSheetGenerate({
+      kind: 'characters',
+      mode: 'add',
+      stylePrompt: 'test prompt',
+      referenceImages: [],
+      artStyleId: 'style-1',
+    });
+    await tick();
+    await tick();
+    await tick();
+
+    // Raw + crops still written locally.
+    const style = store.getState().sketch.base.character_sheet.styles[0];
+    expect(style.illustrations[0].media_url).toBe('raw.png');
+    expect(style.crops[0].illustrations[0].media_url).toBe('crop-hero.png');
+
+    // Collab → gateway whole-sheet flush (one-shot releaseIfAcquired), NOT the suppressed autoSave.
+    expect(mockedSheetFlush).toHaveBeenCalledWith('characters', expect.any(Object), { releaseIfAcquired: true });
+    expect(autoSaveSnapshot).not.toHaveBeenCalled();
   });
 
   it('opStale: reset op mid-await → crops NOT written', async () => {
@@ -249,7 +312,7 @@ describe('SketchBaseGenerateJobSlice', () => {
     });
 
     // Mock crop result (new crops)
-    mockedCropCall.mockResolvedValueOnce(okCrop([{ key: 'hero', imageUrl: 'new-crop.png' }]));
+    mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'new-crop.png' }]));
 
     // Start recrop (crop-only, references the existing raw at style index 0)
     store.getState().recropBaseSheet('characters', 0);
@@ -313,7 +376,7 @@ describe('SketchBaseGenerateJobSlice', () => {
 
     mockedUpload.mockResolvedValueOnce({ publicUrl: 'https://cdn/ref-a.png', path: 'sketch-base-refs/ref-a.png' });
     mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
-    mockedCropCall.mockResolvedValueOnce(okCrop([{ key: 'hero', imageUrl: 'crop-hero.png' }]));
+    mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }]));
 
     store.getState().startBaseSheetGenerate({
       kind: 'characters',
@@ -342,7 +405,7 @@ describe('SketchBaseGenerateJobSlice', () => {
 
     mockedUpload.mockRejectedValueOnce(new Error('storage down'));
     mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
-    mockedCropCall.mockResolvedValueOnce(okCrop([{ key: 'hero', imageUrl: 'crop-hero.png' }]));
+    mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }]));
 
     store.getState().startBaseSheetGenerate({
       kind: 'characters',
@@ -397,5 +460,110 @@ describe('SketchBaseGenerateJobSlice', () => {
     // op.error set + kept
     expect(store.getState().baseSheetGenerateOp).not.toBeNull();
     expect(store.getState().baseSheetGenerateOp?.error).toContain('crop');
+  });
+
+  it('positional pairing: crops keyed by 1-based cell (skipped middle cell does NOT shift keys) + warn', async () => {
+    // 3 base entities in reading order alpha,bravo,charlie. Backend cuts cells 1 & 3, SKIPS cell 2.
+    const entityKeys = ['alpha', 'bravo', 'charlie'];
+    const entities: SketchEntity[] = entityKeys.map((key) => ({
+      key,
+      variants: [{ key: 'base', description: '', visual_design: `${key} look`, art_language: '' }],
+    }));
+    store.getState().setSketchEntities('characters', entities);
+
+    mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png', entityKeys));
+    // Crops for cell 1 + cell 3 only. If the slice paired by ARRAY INDEX the second crop would wrongly
+    // land on 'bravo' (index 1) — assert it lands on 'charlie' (cell 3 → cellOrder[2]).
+    mockedCropCall.mockResolvedValueOnce(
+      okCropRow(
+        [
+          { cell: 1, imageUrl: 'crop-alpha.png' },
+          { cell: 3, imageUrl: 'crop-charlie.png' },
+        ],
+        { skipped: [{ cell: 2, reason: 'upload failed' }] },
+      ),
+    );
+
+    store.getState().startBaseSheetGenerate({
+      kind: 'characters',
+      mode: 'add',
+      stylePrompt: 'test',
+      referenceImages: [],
+      artStyleId: 'style-1',
+    });
+    await tick();
+    await tick();
+    await tick();
+
+    const style = store.getState().sketch.base.character_sheet.styles[0];
+    expect(style.crops).toHaveLength(2); // only 2 crops written (cell 2 skipped)
+    const alpha = style.crops.find((c: { key: string }) => c.key === 'alpha');
+    const charlie = style.crops.find((c: { key: string }) => c.key === 'charlie');
+    expect(alpha?.illustrations[0].media_url).toBe('crop-alpha.png');
+    expect(charlie?.illustrations[0].media_url).toBe('crop-charlie.png'); // cell 3 → charlie (NOT bravo)
+    expect(style.crops.find((c: { key: string }) => c.key === 'bravo')).toBeUndefined();
+
+    // Non-fatal skipped warn surfaced.
+    expect(vi.mocked(toast.warning)).toHaveBeenCalled();
+  });
+
+  it('degraded meta (geoFallback / fullbleed) → non-fatal warn toast, crops still written', async () => {
+    const baseEntity: SketchEntity = {
+      key: 'hero',
+      variants: [{ key: 'base', description: '', visual_design: 'test', art_language: '' }],
+    };
+    store.getState().setSketchEntities('characters', [baseEntity]);
+
+    mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
+    mockedCropCall.mockResolvedValueOnce(
+      okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }], { geoFallbackCount: 1, fullbleedWarning: true }),
+    );
+
+    store.getState().startBaseSheetGenerate({
+      kind: 'characters',
+      mode: 'add',
+      stylePrompt: 'test',
+      referenceImages: [],
+      artStyleId: 'style-1',
+    });
+    await tick();
+    await tick();
+    await tick();
+
+    const style = store.getState().sketch.base.character_sheet.styles[0];
+    expect(style.crops[0].illustrations[0].media_url).toBe('crop-hero.png'); // crop still written
+    expect(vi.mocked(toast.warning)).toHaveBeenCalled();
+  });
+
+  it('modelParams: threaded through start → generate call; crop uses base pathPrefix + cellCount', async () => {
+    const baseEntity: SketchEntity = {
+      key: 'hero',
+      variants: [{ key: 'base', description: '', visual_design: 'test', art_language: '' }],
+    };
+    store.getState().setSketchEntities('characters', [baseEntity]);
+
+    mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
+    mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }]));
+
+    const modelParams = { model: 'google/nano-banana-pro', params: { temperature: 0.7 } };
+    store.getState().startBaseSheetGenerate({
+      kind: 'characters',
+      mode: 'add',
+      stylePrompt: 'test',
+      referenceImages: [],
+      artStyleId: 'style-1',
+      modelParams,
+    });
+    await tick();
+    await tick();
+    await tick();
+
+    // Generate received modelParams verbatim.
+    const genArg = mockedGenerateCall.mock.calls[0][1];
+    expect(genArg.modelParams).toEqual(modelParams);
+    // crop-sheet-row (api 10) called with the base pathPrefix + cellCount derived from cellOrder.
+    const cropArg = mockedCropCall.mock.calls[0][0];
+    expect(cropArg.pathPrefix).toBe('sketches/base/characters');
+    expect(cropArg.cellCount).toBe(1);
   });
 });

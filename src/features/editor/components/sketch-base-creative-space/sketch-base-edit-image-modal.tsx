@@ -30,7 +30,8 @@ export interface SketchBaseEditImageModalProps {
 
 export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImageModalProps) {
   const styles = useSketchBaseStyles(target.kind);
-  const { setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations } = useSnapshotActions();
+  const { setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations, recropBaseSheet } =
+    useSnapshotActions();
   const style = styles[target.styleIndex];
 
   const illustrations: Illustration[] =
@@ -47,6 +48,14 @@ export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImag
           count: next.length,
         });
         setSketchBaseStyleIllustrations(target.kind, target.styleIndex, next);
+        // Editing the RAW sheet invalidates every crop → auto re-crop overwrites styles[i].crops[]
+        // from the freshly-written raw (recropBaseSheet reads the effective raw synchronously). Only
+        // the raw scope re-crops; a single-crop edit (else branch) must NOT touch its siblings.
+        log.info('handleUpdate', 'raw edited — auto re-crop', {
+          kind: target.kind,
+          styleIndex: target.styleIndex,
+        });
+        recropBaseSheet(target.kind, target.styleIndex);
       } else {
         log.debug('handleUpdate', 'persist crop illustrations', {
           kind: target.kind,
@@ -57,7 +66,7 @@ export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImag
         setSketchBaseCropIllustrations(target.kind, target.styleIndex, target.entityKey, next);
       }
     },
-    [target, setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations],
+    [target, setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations, recropBaseSheet],
   );
 
   // Style removed while the modal was open → nothing to bind; render nothing (parent closes).

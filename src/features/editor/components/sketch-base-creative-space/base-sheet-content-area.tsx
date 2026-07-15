@@ -4,6 +4,10 @@
 // passed `style`/`entityKeys` and reports edit intent via callbacks — the parent owns the
 // EditImageModal mount (Phase 06). Zoom is applied as CSS width % (NOT transform:scale) so the
 // overflow scroll can reach the zoomed image's corners (memory: zoom-via-css-width).
+//
+// Collab (ADR-043): `editable` reflects whether THIS client currently holds the sheet lock for the
+// viewed kind — an affordance signal only (the [✎] buttons stay acquire-seams; the parent renders
+// the interactive peer-lock veil over this whole pane when another editor holds the sheet).
 
 import { Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +37,8 @@ interface BaseSheetContentAreaProps {
   activeTab: 'raw' | 'crop';
   zoom: number;
   isGenerating: boolean;
+  /** Collab: this client holds the sheet lock for the viewed kind (affordance signal only). */
+  editable?: boolean;
   onChangeTab: (tab: 'raw' | 'crop') => void;
   onChangeZoom: (zoom: number) => void;
   onEditRaw: () => void;
@@ -47,6 +53,7 @@ export function BaseSheetContentArea({
   activeTab,
   zoom,
   isGenerating,
+  editable,
   onChangeTab,
   onChangeZoom,
   onEditRaw,
@@ -58,7 +65,7 @@ export function BaseSheetContentArea({
     <section
       className="flex flex-1 flex-col overflow-hidden"
       role="region"
-      aria-label={`${selectedStyle.kind} base ${activeTab}`}
+      aria-label={`${selectedStyle.kind} base ${activeTab}${editable ? ' (editing)' : ''}`}
     >
       {/* Toolbar: Raw/Crop tabs (left) + zoom (right) */}
       <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b px-3">

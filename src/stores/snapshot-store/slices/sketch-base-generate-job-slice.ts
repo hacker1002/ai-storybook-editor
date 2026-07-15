@@ -1,12 +1,20 @@
 // sketch-base-generate-job-slice.ts — orchestrates ONE base-sheet style attempt: a 2-API chain
 // generate the RAW sheet (05|06, AI — all base entities of a kind as cells) → crop each entity out
-// of it (07, CV). The unit is a STYLE (kind, styleIndex), not N entities. SINGLE-FLIGHT: at most one
-// op runs at a time (cross-job guard useIsAnySketchGenerating gates all 3 sketch Generate buttons).
+// of it (10 `crop-sheet-row`, CV, positional). The unit is a STYLE (kind, styleIndex), not N
+// entities. SINGLE-FLIGHT: at most one op runs at a time (cross-job guard useIsAnySketchGenerating
+// gates all 3 sketch Generate buttons).
+//
+// ⚡2026-07-15: the base-only crop route (07 `crop-base-sheet`) was REMOVED backend-side. Crop now
+// reuses the kind-agnostic POSITIONAL cutter (api 10 `callCropSheetRow` — shared with the variant
+// space). Api 10 returns crops in reading order keyed by 1-based `cell`; we pair each crop back to an
+// entity via `cellOrder[cell - 1]` (cellOrder from the generate result / reading-order entity keys).
 //
 // Differs from #12 (entity sheets) / #13 (spreads): per-style 2-phase status (generating → cropping)
 // on ONE op, and crop reads NO DB — `imageUrl` is passed straight from the generate result (or the
-// effective raw for a re-crop), so there is NO awaited flush; only a fire-and-forget
-// autoSaveSnapshot() at the end for durability (base collab-lock not designed yet → collabPersist=false).
+// effective raw for a re-crop), so base generate is INLINE (no flush-BEFORE-generate).
+// ⚡2026-07-15 (ADR-043): the result persist at the end of each chain now routes through the sketch-
+// base collab gateway (rtype 11 whole-sheet flush) when `collabPersist` is on; SOLO keeps the legacy
+// fire-and-forget autoSaveSnapshot() (see `persistBaseSheet`).
 //
 // Async rule (mirrors #13): runGenerate/runCrop are PLAIN async functions (NOT immer producers).
 // Every mutation between awaits goes through a synchronous set((state)=>…) producer. After EVERY
@@ -20,13 +28,19 @@ import type { Illustration, ImageReference } from '@/types/prop-types';
 import type { ReferenceImage } from '@/types/remix';
 import {
   callGenerateBaseSheet,
-  callCropBaseSheet,
   type BaseSheetEntity,
   type BaseReferenceImage,
+  type SketchModelParams,
 } from '@/apis/sketch-base-api';
+// Base crop reuses the shared positional cutter (api 10) — 07 `crop-base-sheet` removed 2026-07-15.
+import { callCropSheetRow } from '@/apis/sketch-variant-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
 import { uploadImageToStorage } from '@/apis/storage-api';
 import { base64ToFile } from '@/utils/file-utils';
+// Collab (ADR-043 sketch-base, rtype 11): persist the WHOLE base.{kind}_sheet node through the
+// gateway held-session instead of the suppressed owner-direct autoSave. Solo → autoSave (below).
+import { useResourceLockStore } from '@/stores/resource-lock-store';
+import { flushSketchBaseSheetUnderLock } from './collab-sketch-base-sheet-save-helper';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
 
@@ -139,37 +153,74 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     });
   }
 
+  // Persist the RESULT of a generate/recrop (raw + crops landed in the store). COLLAB (ADR-043,
+  // rtype 11) → gateway whole-SHEET flush (`releaseIfAcquired:true` one-shot: if the space held-
+  // session still owns the sheet it KEEPS the lock; if the user switched kind during the long AI
+  // call it acquires+releases so no lock lingers). SOLO (incl. the case where the space unmounted →
+  // collabPersist flipped false) → the legacy owner-direct autoSaveSnapshot. Reads the FRESH sheet
+  // node via getState() at call time (base generate is INLINE — no flush-BEFORE-generate).
+  async function persistBaseSheet(kind: BaseKind): Promise<void> {
+    if (useResourceLockStore.getState().collabPersist) {
+      const node = sheetOf(get().sketch.base, kind);
+      await flushSketchBaseSheetUnderLock(kind, node, { releaseIfAcquired: true });
+    } else {
+      void get().autoSaveSnapshot();
+    }
+  }
+
   // ── crop (phase 2) — throws on failure so the caller's catch records the error. NO DB read. ────
+  // `cellOrder` = reading-order entity keys (from the generate result, or the sketch[kind] order on a
+  // re-crop). Api 10 returns crops in reading order keyed by a 1-based `cell`; we pair each crop back
+  // to its entity via cellOrder[cell - 1] — using `cell` (NOT the array index) keeps the pairing
+  // correct even when the backend skipped a cell mid-row (index-shifting).
   async function runCrop(
     kind: BaseKind,
     styleIndex: number,
     imageUrl: string,
-    cropEntities: Array<{ key: string }>,
+    cellOrder: string[],
   ): Promise<void> {
-    const result = await callCropBaseSheet({ imageUrl, entities: cropEntities, kind });
+    const result = await callCropSheetRow({
+      imageUrl,
+      cellCount: cellOrder.length,
+      pathPrefix: `sketches/base/${kind}`,
+    });
     if (opStale(kind, styleIndex)) return; // reset/cancel/removeStyle during crop → drop
     if (!result.success || !result.data) throw new Error(classifyError(result));
 
     const now = new Date().toISOString();
-    get().setSketchBaseStyleCrops(
-      kind,
-      styleIndex,
-      result.data.crops.map((c) => ({
-        key: c.key,
+    const cropRecords = [];
+    for (const c of result.data.crops) {
+      const key = cellOrder[c.cell - 1]; // 1-based cell → entity key (NOT array index — skip-safe)
+      if (!key) {
+        log.warn('runCrop', 'crop cell has no matching entity — dropped', { kind, styleIndex, cell: c.cell });
+        continue;
+      }
+      cropRecords.push({
+        key,
         illustrations: [
           { type: 'created' as const, media_url: c.imageUrl, created_time: now, is_selected: true },
         ],
-      })),
-    );
+      });
+    }
+    get().setSketchBaseStyleCrops(kind, styleIndex, cropRecords);
 
-    const skipped = result.data.skipped;
-    if (skipped && skipped.length > 0) {
-      log.warn('runCrop', 'partial crop — some entities skipped', {
+    // Non-fatal degraded-crop signals (api 10 §meta): skipped cells (upload failed), geo-fallback
+    // (even split — may be misaligned), full-bleed sheet (borders not white — crops may be off).
+    const meta = result.meta;
+    const skippedCount = meta?.skipped?.length ?? 0;
+    if (skippedCount || meta?.geoFallbackCount || meta?.fullbleedWarning) {
+      log.warn('runCrop', 'partial / degraded crop', {
         kind,
         styleIndex,
-        skipped: skipped.length,
+        skipped: skippedCount,
+        geoFallback: meta?.geoFallbackCount ?? 0,
+        fullbleed: meta?.fullbleedWarning ?? false,
       });
-      toast.warning(`${skipped.length} crop(s) failed`);
+      const parts: string[] = [];
+      if (skippedCount) parts.push(`${skippedCount} crop(s) failed`);
+      if (meta?.geoFallbackCount) parts.push(`${meta.geoFallbackCount} cell(s) approximated`);
+      if (meta?.fullbleedWarning) parts.push('sheet borders not detected — crops may be off');
+      toast.warning(parts.join(' · '));
     }
   }
 
@@ -179,7 +230,12 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
   async function runGenerate(
     kind: BaseKind,
     styleIndex: number,
-    params: { stylePrompt: string; referenceImages: ReferenceImage[]; artStyleId: string },
+    params: {
+      stylePrompt: string;
+      referenceImages: ReferenceImage[];
+      artStyleId: string;
+      modelParams?: SketchModelParams;
+    },
     isAdd: boolean,
   ): Promise<void> {
     // entities read AT SLICE (base variant text) — same reading-order for generate + crop.
@@ -203,6 +259,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
         artStyleId: params.artStyleId,
         stylePrompt: params.stylePrompt,
         referenceImages: apiRefs,
+        modelParams: params.modelParams,
       });
       if (opStale(kind, styleIndex)) return;
       if (!result.success || !result.data) throw new Error(classifyError(result));
@@ -211,12 +268,15 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
       get().addSketchBaseStyleIllustration(kind, styleIndex, result.data.imageUrl);
       rawLanded = true;
 
+      // Reading-order entity keys echoed by generate — pair positionally to api-10 crops in runCrop.
+      const cellOrder = result.data.cellOrder;
+
       // Best-effort cancel: stop before the crop phase (raw already saved). Not stale → op is ours.
       if (get().baseSheetGenerateOp?.cancelRequested) {
         log.info('runGenerate', 'cancelled before crop — raw kept, crop skipped', { kind, styleIndex });
       } else {
         setOpPhase('cropping');
-        await runCrop(kind, styleIndex, result.data.imageUrl, entities.map((e) => ({ key: e.key })));
+        await runCrop(kind, styleIndex, result.data.imageUrl, cellOrder);
       }
     } catch (err) {
       if (opStale(kind, styleIndex)) return;
@@ -232,7 +292,8 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     }
 
     if (opStale(kind, styleIndex)) return; // op reset during the last await → nothing to finalize
-    void get().autoSaveSnapshot(); // fire-and-forget durability (crop reads no DB → no awaited flush)
+    // Persist the result (raw + crops). COLLAB → gateway whole-sheet flush; SOLO → autoSaveSnapshot.
+    await persistBaseSheet(kind);
     finalizeOp();
   }
 
@@ -241,10 +302,10 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     kind: BaseKind,
     styleIndex: number,
     rawUrl: string,
-    cropEntities: Array<{ key: string }>,
+    cellOrder: string[],
   ): Promise<void> {
     try {
-      await runCrop(kind, styleIndex, rawUrl, cropEntities);
+      await runCrop(kind, styleIndex, rawUrl, cellOrder);
     } catch (err) {
       if (opStale(kind, styleIndex)) return;
       const msg = err instanceof Error ? err.message : 'Base sheet crop failed';
@@ -253,14 +314,15 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     }
 
     if (opStale(kind, styleIndex)) return;
-    void get().autoSaveSnapshot();
+    // Persist the recropped crops. COLLAB → gateway whole-sheet flush; SOLO → autoSaveSnapshot.
+    await persistBaseSheet(kind);
     finalizeOp();
   }
 
   return {
     baseSheetGenerateOp: null,
 
-    startBaseSheetGenerate: ({ kind, mode, styleIndex, stylePrompt, referenceImages, artStyleId }) => {
+    startBaseSheetGenerate: ({ kind, mode, styleIndex, stylePrompt, referenceImages, artStyleId, modelParams }) => {
       if (get().baseSheetGenerateOp != null) {
         log.warn('startBaseSheetGenerate', 'blocked — an op is already running', { kind });
         return; // single-flight
@@ -312,7 +374,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
         };
       });
 
-      void runGenerate(kind, i, { stylePrompt, referenceImages, artStyleId }, mode === 'add');
+      void runGenerate(kind, i, { stylePrompt, referenceImages, artStyleId, modelParams }, mode === 'add');
     },
 
     recropBaseSheet: (kind, styleIndex) => {
@@ -332,8 +394,9 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
         return;
       }
 
-      const cropEntities = baseEntitiesOf(get().sketch[kind]).map((e) => ({ key: e.key }));
-      log.info('recropBaseSheet', 'start', { kind, styleIndex, entityCount: cropEntities.length });
+      // Reading-order entity keys = the sketch[kind] order (mirrors the generate reading-order).
+      const cellOrder = baseEntitiesOf(get().sketch[kind]).map((e) => e.key);
+      log.info('recropBaseSheet', 'start', { kind, styleIndex, entityCount: cellOrder.length });
       set((state) => {
         state.baseSheetGenerateOp = {
           kind,
@@ -344,7 +407,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
         };
       });
 
-      void runRecrop(kind, styleIndex, rawUrl, cropEntities);
+      void runRecrop(kind, styleIndex, rawUrl, cellOrder);
     },
 
     cancelBaseSheetGenerate: () =>

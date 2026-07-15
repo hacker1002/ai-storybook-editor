@@ -15,8 +15,10 @@ export type Step = 1 | 2 | 3;
  *  per-item overlays — `spreads[].raw_textboxes[]`/`shapes[]`) · 9 objects/retouch node —
  *  ONE GENERIC type for every objects-space playable node kind (`spreads[].{videos,
  *  auto_pics,audios,auto_audios,composites,quizzes}[]`) · 10 retouch_spread (per-spread
- *  RETOUCH sub-tree at step=3 — ADR-044 rev; the whole retouch owned-key set of a spread). */
-export type ResourceType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+ *  RETOUCH sub-tree at step=3 — ADR-044 rev; the whole retouch owned-key set of a spread) ·
+ *  11 base_sheet (sketch-base per-kind sheet — step=1; the whole `sketch.base.{kind}_sheet`
+ *  node, resource_id `character_sheet`|`prop_sheet`; ADR-043 sketch-base collab, Phase 01). */
+export type ResourceType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
 /** Addresses one lockable resource. `locale` is set for textboxes (per-language)
  *  and null for language-agnostic resources (image / entity / spread). */

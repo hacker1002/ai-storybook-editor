@@ -3,6 +3,11 @@
 // job streams raw sheet + crops into the store; base entities are injected AT THE SLICE, never
 // threaded through this modal). Used for both `add` (append a style) and `regenerate`
 // (overwrite styles[styleIndex]). Generate is gated on prompt + a resolved sketch art-style id.
+//
+// Collab (ADR-043): the reference images are STYLE references (they steer the aesthetic — semantics
+// only, no wire change). The generate itself runs UNDER the per-kind sheet lock (rtype 11) that the
+// PARENT already acquired via `handleAddStyle` / regenerate before opening this modal — so this
+// modal does not touch the lock. `modelParams` is NOT exposed here (the job slice uses the DB default).
 
 import { useCallback, useRef, useState } from 'react';
 import { Paperclip, Loader2, X } from 'lucide-react';

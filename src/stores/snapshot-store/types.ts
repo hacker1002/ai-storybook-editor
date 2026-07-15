@@ -46,6 +46,8 @@ import type {
   QuizTargetZone,
   QuizDecorImage,
 } from '@/types/spread-types';
+// Base-sheet generate accepts an optional model override; type reused from the api client (DRY).
+import type { SketchModelParams } from '@/apis/sketch-base-api';
 
 // ============================================================================
 // QuizSlice — validation-as-state + type-discriminated CRUD
@@ -832,6 +834,7 @@ export interface StartBaseSheetGenerateParams {
   stylePrompt: string;
   referenceImages: ReferenceImage[]; // picker images (label + base64) — slice uploads → persists {title, media_url}
   artStyleId: string;          // = book.sketchstyle_id (caller validates non-null before calling)
+  modelParams?: SketchModelParams; // optional model override (allowlist group `sketch-base`); omit → DB default
 }
 
 export interface SketchBaseGenerateJobSlice {
