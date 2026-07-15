@@ -399,7 +399,10 @@ export function SketchBaseSpace() {
             noun={nounForKind(effectiveSelected.kind)}
             activeTab={activeTab}
             zoom={zoom}
-            isGenerating={genStatus.isGenerating}
+            // Phase-scoped: Raw overlay tracks the 05/06 AI phase only (raw shows the instant it
+            // lands, without waiting on crop); Crop overlay tracks the 10 crop phase independently.
+            isGenerating={genStatus.isGenerating && genStatus.phase === 'generating'}
+            isCropping={genStatus.isGenerating && genStatus.phase === 'cropping'}
             editable={editable}
             onChangeTab={setActiveTab}
             onChangeZoom={setZoom}

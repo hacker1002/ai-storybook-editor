@@ -36,7 +36,10 @@ interface BaseSheetContentAreaProps {
   noun: string;
   activeTab: 'raw' | 'crop';
   zoom: number;
+  /** Raw-sheet AI phase (05/06) in-flight → Raw tab overlay only. */
   isGenerating: boolean;
+  /** Crop phase (10) in-flight → Crop tab overlay only. Independent of `isGenerating`. */
+  isCropping: boolean;
   /** Collab: this client holds the sheet lock for the viewed kind (affordance signal only). */
   editable?: boolean;
   onChangeTab: (tab: 'raw' | 'crop') => void;
@@ -53,6 +56,7 @@ export function BaseSheetContentArea({
   activeTab,
   zoom,
   isGenerating,
+  isCropping,
   editable,
   onChangeTab,
   onChangeZoom,
@@ -60,6 +64,8 @@ export function BaseSheetContentArea({
   onEditCrop,
 }: BaseSheetContentAreaProps) {
   const rawUrl = effectiveUrl(style.illustrations);
+  // Any op in-flight (either phase) → freeze all [✎] edit seams to avoid racing the single-flight op.
+  const isBusy = isGenerating || isCropping;
 
   return (
     <section
@@ -90,10 +96,18 @@ export function BaseSheetContentArea({
           noun={noun}
           zoom={zoom}
           isGenerating={isGenerating}
+          disableEdit={isBusy}
           onEditRaw={onEditRaw}
         />
       ) : (
-        <CropGrid style={style} entityKeys={entityKeys} zoom={zoom} onEditCrop={onEditCrop} />
+        <CropGrid
+          style={style}
+          entityKeys={entityKeys}
+          zoom={zoom}
+          isCropping={isCropping}
+          disableEdit={isBusy}
+          onEditCrop={onEditCrop}
+        />
       )}
     </section>
   );
@@ -105,15 +119,18 @@ function RawSheet({
   noun,
   zoom,
   isGenerating,
+  disableEdit,
   onEditRaw,
 }: {
   rawUrl: string | null;
   noun: string;
   zoom: number;
   isGenerating: boolean;
+  /** Freeze edit-all while ANY op runs (incl. the crop phase, when the raw is already visible). */
+  disableEdit: boolean;
   onEditRaw: () => void;
 }) {
-  const canEdit = rawUrl != null && !isGenerating;
+  const canEdit = rawUrl != null && !disableEdit;
 
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -167,11 +184,16 @@ function CropGrid({
   style,
   entityKeys,
   zoom,
+  isCropping,
+  disableEdit,
   onEditCrop,
 }: {
   style: SketchBaseStyle;
   entityKeys: string[];
   zoom: number;
+  /** Crop phase (10) in-flight → overlay the grid (independent of the raw generate phase). */
+  isCropping: boolean;
+  disableEdit: boolean;
   onEditCrop: (entityKey: string) => void;
 }) {
   if (entityKeys.length === 0) {
@@ -183,25 +205,40 @@ function CropGrid({
   }
 
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}
-      >
-        {entityKeys.map((key) => {
-          const crop = style.crops.find((c) => c.key === key);
-          const cropUrl = crop ? effectiveUrl(crop.illustrations) : null;
-          return (
-            <CropCard
-              key={key}
-              entityKey={key}
-              cropUrl={cropUrl}
-              zoom={zoom}
-              onEdit={() => onEditCrop(key)}
-            />
-          );
-        })}
+    <div className="relative flex-1 overflow-hidden">
+      <div className="h-full overflow-auto p-6">
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}
+        >
+          {entityKeys.map((key) => {
+            const crop = style.crops.find((c) => c.key === key);
+            const cropUrl = crop ? effectiveUrl(crop.illustrations) : null;
+            return (
+              <CropCard
+                key={key}
+                entityKey={key}
+                cropUrl={cropUrl}
+                zoom={zoom}
+                disableEdit={disableEdit}
+                onEdit={() => onEditCrop(key)}
+              />
+            );
+          })}
+        </div>
       </div>
+
+      {/* Cropping overlay — mirrors the Raw tab's generating overlay. */}
+      {isCropping && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">Cropping…</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -210,11 +247,13 @@ function CropCard({
   entityKey,
   cropUrl,
   zoom,
+  disableEdit,
   onEdit,
 }: {
   entityKey: string;
   cropUrl: string | null;
   zoom: number;
+  disableEdit: boolean;
   onEdit: () => void;
 }) {
   const name = titleCase(entityKey);
@@ -222,13 +261,15 @@ function CropCard({
     <div className="flex flex-col gap-1.5">
       <div
         className={cn(
-          'relative flex aspect-square items-center justify-center overflow-auto rounded-md border',
+          // aspect-[7/12] = a base crop cell's true ratio (¼ of the 21:9 sheet, 5.25:9) → portrait
+          // crop fits full-height, no square clipping. Matches sketch-variant crop cards.
+          'relative flex aspect-[7/12] items-center justify-center overflow-auto rounded-md border',
           cropUrl ? 'border-border bg-muted/30' : 'border-2 border-dashed border-muted-foreground/30',
         )}
       >
         <EditIconButton
           label={`Edit ${name} crop`}
-          disabled={cropUrl == null}
+          disabled={cropUrl == null || disableEdit}
           onClick={onEdit}
           className="absolute right-2 top-2 z-10"
         />
@@ -238,7 +279,8 @@ function CropCard({
             src={cropUrl}
             alt={`${name} crop`}
             className="object-contain"
-            style={{ width: `${zoom}%`, maxWidth: 'none', height: 'auto' }}
+            // Constrain both axes → 100% = contain-fit (full crop, no clipping); width % still drives zoom.
+            style={{ width: `${zoom}%`, maxWidth: 'none', height: 'auto', maxHeight: `${zoom}%` }}
             onError={() => log.warn('CropCard', 'crop image failed to load', { entityKey })}
           />
         ) : (
