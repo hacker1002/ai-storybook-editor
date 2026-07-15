@@ -49,6 +49,7 @@ import {
   buildSketchEntityPayload,
   flushSketchEntityUnderLock,
 } from '@/stores/snapshot-store/slices/collab-sketch-variant-save-helper';
+import { useEditSessionStatusStore } from '@/stores/edit-session-status-store';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resource-session';
@@ -220,9 +221,11 @@ export function SketchVariantsCreativeSpace() {
     toast.warning('You lost the edit lock for this entity — a later change may not have saved.');
   }, []);
 
-  // Held session drives the SUSTAINED entity lock (peer-lock visibility while editing) + the header
-  // Unsaved→Saving…→Saved cycle (beginHold/markSaving/markSaved) + onBlocked/onLost. Persistence does
-  // NOT go through its `saveNow` — see `persistEntity` below (baseline-independent one-shot).
+  // Held session drives the SUSTAINED entity lock (peer-lock visibility while editing) + onBlocked/
+  // onLost. It does NOT drive the header label (manageHeaderStatus:false) — this space is eager-atomic
+  // (persists per gesture), so a hold-lifetime "Unsaved" would be permanently false; the header
+  // Saving…→Saved is driven by `persistEntity` instead. Persistence does NOT go through its `saveNow`
+  // — see `persistEntity` below (baseline-independent one-shot).
   useHeldResourceSession({
     target: lockTarget,
     getNode,
@@ -230,6 +233,10 @@ export function SketchVariantsCreativeSpace() {
     buildPayload,
     onBlocked: handleLockBlocked,
     onLost: handleLockLost,
+    // Eager-atomic space: every gesture persists immediately via `persistEntity`, so the hold is for
+    // PEER-LOCK visibility only. A hold-lifetime "Unsaved" would be permanently false → opt out of the
+    // shared header signal and drive Saving…→Saved from `persistEntity` (below) instead.
+    manageHeaderStatus: false,
   });
 
   // Single persistence choke point for the edit actions (text / edit-crop / select-crop). COLLAB →
@@ -243,7 +250,14 @@ export function SketchVariantsCreativeSpace() {
       if (useResourceLockStore.getState().collabPersist) {
         const node =
           useSnapshotStore.getState().sketch[kind].find((e) => e.key === entityKey) ?? null;
-        void flushSketchEntityUnderLock(kind, entityKey, node, { releaseIfAcquired: true });
+        // Own the header label (manageHeaderStatus:false on the held session): Saving… while the
+        // gateway write is in flight → Saved when it settles (ok OR rejected — the label must never
+        // stick on the spinner; save errors are surfaced by the flush's own toasts).
+        const ess = useEditSessionStatusStore.getState();
+        ess.markSaving();
+        void flushSketchEntityUnderLock(kind, entityKey, node, { releaseIfAcquired: true }).finally(
+          () => ess.markSaved(),
+        );
       } else {
         void autoSaveSnapshot();
       }

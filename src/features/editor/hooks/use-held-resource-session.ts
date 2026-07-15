@@ -54,6 +54,16 @@ export interface UseHeldResourceSessionArgs {
   ownedKeys?: readonly string[];
   /** Maps the projected node (sub-tree when ownedKeys set, else whole node) → save payload. */
   buildPayload: (projected: unknown) => SavePayload;
+  /**
+   * Drive the SHARED header save-label (beginHold/endHold/markSaving/markSaved). Default `true`
+   * (the 5 continuous-canvas spaces: hold = "Unsaved", settle Saving…→Saved on release). Set
+   * `false` for EAGER-ATOMIC spaces (sketch-variant) that persist per action and drive their OWN
+   * Saving…→Saved: there the hold is for PEER-LOCK visibility only, and a hold-lifetime "Unsaved"
+   * is permanently FALSE (the snapshot is never sustainedly dirty — every gesture saves immediately).
+   * Lock acquire/release, onLost, and the release-time `releaseAndSave` are UNAFFECTED — only the
+   * header-status signals are suppressed.
+   */
+  manageHeaderStatus?: boolean;
   /** 409 on acquire → another editor holds it (holder MAY be ''). Caller toasts; does NOT acquire. */
   onBlocked?: (holder: string) => void;
   /** Heartbeat 409 → lock stolen mid-edit. Receives the pre-edit baseline (non-null here). */
@@ -149,7 +159,10 @@ export function useHeldResourceSession(
         setOutcome({ key, status: 'held' });
         log.info('acquire', 'held', { key });
         // Fresh hold → header "Unsaved" (holdCount++) and clear any stale terminal save phase.
-        useEditSessionStatusStore.getState().beginHold();
+        // Suppressed for eager-atomic spaces (manageHeaderStatus:false) — they own their label.
+        if (cbRef.current.manageHeaderStatus !== false) {
+          useEditSessionStatusStore.getState().beginHold();
+        }
         // Undo nexus: beginSession shares this exact baseline clone.
         cbRef.current.onAcquired?.(target, base);
       })
@@ -166,7 +179,9 @@ export function useHeldResourceSession(
     store.registerOnLost(key, () => {
       log.warn('onLost', 'lock lost via heartbeat', { key });
       acquired = false; // lock stolen → the unmount cleanup must NOT re-release / double-endSession
-      useEditSessionStatusStore.getState().endHold(); // no longer holding → header leaves "Unsaved"
+      if (cbRef.current.manageHeaderStatus !== false) {
+        useEditSessionStatusStore.getState().endHold(); // no longer holding → header leaves "Unsaved"
+      }
       cbRef.current.onLost?.(baselineRef.current);
       cbRef.current.onReleased?.(target);
       setOutcome({ key, status: 'lost' });
@@ -194,8 +209,13 @@ export function useHeldResourceSession(
       // spinner). endHold + markSaving are synchronous in this cleanup, so the batched render lands on
       // Saving… (dirty) or Saved (clean), never a flicker back to "Unsaved".
       const ess = useEditSessionStatusStore.getState();
-      ess.endHold();
-      if (dirty) ess.markSaving();
+      // Eager-atomic spaces (manageHeaderStatus:false) drive their OWN label — skip the shared
+      // hold/save signals here, but STILL run releaseAndSave (persistence is unaffected).
+      const manageStatus = cbRef.current.manageHeaderStatus !== false;
+      if (manageStatus) {
+        ess.endHold();
+        if (dirty) ess.markSaving();
+      }
       Promise.resolve(
         s.releaseAndSave(
           target,
@@ -204,8 +224,12 @@ export function useHeldResourceSession(
           capturedBookId,
         ),
       )
-        .then(() => ess.markSaved())
-        .catch(() => ess.markSaved());
+        .then(() => {
+          if (manageStatus) ess.markSaved();
+        })
+        .catch(() => {
+          if (manageStatus) ess.markSaved();
+        });
       s.removeMyLock(target);
       s.unregisterOnLost(key);
       baselineRef.current = null;
