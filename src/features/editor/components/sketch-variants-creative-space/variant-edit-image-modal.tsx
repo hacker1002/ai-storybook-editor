@@ -23,10 +23,12 @@ function effectiveUrl(illustrations: Illustration[]): string {
 
 export interface VariantEditImageModalProps {
   target: EditImageTarget;
+  /** Persist the WHOLE entity node after a crop edit (parent routes collab saveNow / solo autosave). */
+  onSaved: () => void;
   onClose: () => void;
 }
 
-export function VariantEditImageModal({ target, onClose }: VariantEditImageModalProps) {
+export function VariantEditImageModal({ target, onSaved, onClose }: VariantEditImageModalProps) {
   const variant = useSketchVariantByKey(target.kind, target.entityKey, target.variantKey);
   const { setSketchVariantCropIllustrations } = useSnapshotActions();
 
@@ -49,8 +51,11 @@ export function VariantEditImageModal({ target, onClose }: VariantEditImageModal
         target.cropIndex,
         next,
       );
+      // Persist the whole entity node through the gateway (collab) / autosave (solo). Fire-and-forget.
+      // Previously this modal had NO save at all — crop edits only persisted on the next flush.
+      onSaved();
     },
-    [target, setSketchVariantCropIllustrations],
+    [target, setSketchVariantCropIllustrations, onSaved],
   );
 
   // Crop gone (regenerate/re-cut shifted indices) while the modal was open → nothing to bind.

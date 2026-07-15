@@ -6,8 +6,12 @@
 // slice can classify (BASE_NOT_READY / EMPTY_VARIANT_DESCRIPTION / LLM_ERROR / ALL_CROPS_FAILED …).
 //
 // ⚡ Generate is SNAPSHOT-READING (differs from base, which ships entity text in the payload): the
-// payload carries only { snapshotId, entityKey, variantKey, artStyleId } and the backend reads
+// payload carries only { snapshotId, entityKey, variantKey, modelParams? } and the backend reads
 // `snapshot.sketch` from the DB — so the job MUST flush the snapshot BEFORE calling generate.
+//
+// ⚡ Contract (2026-07-15, ADR-047): `artStyleId` was DROPPED (backend `extra="forbid"` → sending it
+// now 400s VALIDATION_ERROR) — style/medium are inferred from the BASE_VARIANT anchor. An optional
+// `modelParams` (allowlist group `sketch-variant`) replaces it; omit → the backend DB default model.
 //
 // Wire shape is camelCase (backend Pydantic), envelope { success, data, meta? } — the slice reads
 // r.data.*. Contract types below follow api/sketch/08,09 §Result + 10 §Result VERBATIM (grid carries
@@ -30,13 +34,22 @@ const CROP_SHEET_ROW_ENDPOINT = '/api/sketch/crop-sheet-row';
 
 // ── generate (08/09) ────────────────────────────────────────────────────────────────────────────
 
+/** Optional model override (allowlist group `sketch-variant`). Omit → backend DB default model +
+ *  temperature 0.3. `model` = a public id (e.g. `google/nano-banana-pro`); `params.temperature`
+ *  clamps to [0,2] server-side. The variant space has no model UI yet — plumbed through for parity. */
+export interface VariantModelParams {
+  model?: string;
+  params?: { temperature?: number };
+}
+
 export interface GenerateVariantSheetParams {
   /** snapshot.id (UUID). ⚡ Backend reads snapshot.sketch from the DB (snapshot-reading) — the job
    *  flushes the snapshot before calling so the endpoint sees the just-saved variant description. */
   snapshotId: string;
   entityKey: string; // sketch.{characters|props}[].key
   variantKey: string; // sketch.{...}[].variants[].key — MUST be non-base (base → 422)
-  artStyleId: string; // = book.sketchstyle_id (art_styles row, type=0)
+  /** ⚡ artStyleId DROPPED (backend extra=forbid). Optional model override only; omit → DB default. */
+  modelParams?: VariantModelParams;
 }
 
 /** Fixed 4-cell / 1-row / 21:9 grid echoed by generate (per 08 §Result — cols:4, rows:1). Pass-through. */
@@ -123,15 +136,17 @@ export interface CropSheetRowResult {
  */
 export async function callGenerateVariantSheet(
   kind: BaseKind,
-  { snapshotId, entityKey, variantKey, artStyleId }: GenerateVariantSheetParams,
+  { snapshotId, entityKey, variantKey, modelParams }: GenerateVariantSheetParams,
 ): Promise<GenerateVariantSheetResult | ImageApiFailure> {
   const path = VARIANT_SHEET_ENDPOINT[kind];
-  log.info('callGenerateVariantSheet', 'start', { kind, entityKey, variantKey });
+  log.info('callGenerateVariantSheet', 'start', { kind, entityKey, variantKey, hasModelParams: !!modelParams });
   return callImageApi<GenerateVariantSheetResult>(path, {
     snapshotId,
     entityKey,
     variantKey,
-    artStyleId,
+    // Only include modelParams when present — the body is extra="forbid" but the field is optional,
+    // so an absent key (not `undefined`) keeps the request byte-minimal → backend uses its DB default.
+    ...(modelParams ? { modelParams } : {}),
   });
 }
 

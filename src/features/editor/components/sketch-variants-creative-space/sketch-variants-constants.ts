@@ -38,9 +38,11 @@ export interface VariantGenStatus {
   error?: string;
 }
 
-/** Generate gate reasons — FE fail-fast mirroring the endpoint's 3 hard preconditions
- *  (08/09 §Error): no-art-style · BASE_NOT_READY · EMPTY_VARIANT_DESCRIPTION. */
-export type VariantGateReason = 'no-art-style' | 'base-not-ready' | 'empty-text';
+/** Generate gate reasons — FE fail-fast mirroring the endpoint's hard preconditions (08/09 §Error).
+ *  ⚡ ADR-047: the `no-art-style` reason was REMOVED — generate no longer needs an art style (style
+ *  is inferred from the BASE_VARIANT; backend dropped artStyleId). Remaining: BASE_NOT_READY +
+ *  EMPTY_VARIANT_DESCRIPTION. */
+export type VariantGateReason = 'base-not-ready' | 'empty-text';
 
 export interface VariantGate {
   canGenerate: boolean;
@@ -49,7 +51,6 @@ export interface VariantGate {
 
 /** Tooltip copy per gate reason (design 01 §2.4). */
 export const GATE_TOOLTIP: Record<VariantGateReason, string> = {
-  'no-art-style': 'Set a sketch art style first',
   'base-not-ready': 'Generate the base variant first',
   'empty-text': 'Add a description before generating',
 };

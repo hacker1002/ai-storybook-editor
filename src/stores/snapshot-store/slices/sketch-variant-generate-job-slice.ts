@@ -7,12 +7,15 @@
 //
 // ⚡⚡ SNAPSHOT-READING (the #1 correctness point — differs from base #14): generate 08/09 reads
 // `snapshot.sketch` from the DB by snapshotId, so we MUST land the variant's edited text in the DB
-// BEFORE calling generate. We do that with an AWAITED `flushSnapshot()` (legacy solo path), then read
-// snapshotId = get().meta.id. We deliberately do NOT use `autoSaveSnapshot` fire-and-forget here:
-// autoSaveSnapshot self-guards to a no-op when another save already holds `isSaving`, AND is fully
-// suppressed under collab — either way the endpoint would then read STALE DB text and generate the
-// wrong variant. This mirrors sketch-spread-generate-job-slice.ts (also snapshot-reading). Base does
-// NOT need this (base ships entity text inside the generate payload).
+// BEFORE calling generate.
+//   • SOLO (collabPersist=false): AWAITED `flushSnapshot()` (legacy path), then read meta.id.
+//   • COLLAB (collabPersist=true, ADR-047): autoSaveSnapshot/flushSnapshot are SUPPRESSED, so we
+//     persist the WHOLE sketch entity node through the gateway via `flushSketchEntityUnderLock`
+//     (acquires-if-needed, saves, KEEPS the lock held for the component held-session) BEFORE the AI
+//     reads the DB — else it draws from STALE text / missing base crops (risk #1). A failed flush
+//     (peer lock / reject) ABORTS generate so we never burn AI tokens on a stale / peer-owned node.
+// This mirrors sketch-spread-generate-job-slice.ts (also snapshot-reading). Base does NOT need this
+// (base ships entity text inside the generate payload).
 //
 // Async rule (mirrors #13/#14): runGenerate/runCut are PLAIN async functions (NOT immer producers).
 // Every mutation between awaits goes through a synchronous set((state)=>…) producer. After EVERY await
@@ -31,11 +34,13 @@ import {
   callCropSheetRow,
 } from '@/apis/sketch-variant-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
-// resource-lock-store + book-store are leaf stores loaded before the slices in snapshot-store/index,
-// so these static imports resolve cleanly in the app (no cycle back to snapshot-store). The isolated
-// slice unit tests import this module directly (bypassing index) and mock both.
+// resource-lock-store is a leaf store loaded before the slices in snapshot-store/index, so this
+// static import resolves cleanly in the app (no cycle back to snapshot-store). The isolated slice
+// unit tests import this module directly (bypassing index) and mock it.
 import { useResourceLockStore } from '@/stores/resource-lock-store';
-import { useBookStore } from '@/stores/book-store';
+// Sibling slice-helper (same dir) — whole sketch-entity gateway flush that KEEPS the lock held so
+// the component held-session stays the sole releaser (ADR-047). Reads no store (caller passes node).
+import { flushSketchEntityUnderLock } from './collab-sketch-variant-save-helper';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
 
@@ -105,6 +110,12 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
       ?.variants.find((v) => v.key === ref.variantKey);
   }
 
+  /** Resolve the live WHOLE entity node (the gateway save grain — step 1, whole-node). Read FRESH
+   *  at call time (anti stale-closure) so the flush persists the latest text/crops. */
+  function entityNodeOf(ref: VariantRef): unknown | null {
+    return get().sketch[ref.kind].find((e) => e.key === ref.entityKey) ?? null;
+  }
+
   // ── internal producers (immer) — called at await boundaries ──────────────────────────────────
   function setOpPhase(phase: VariantGeneratePhase): void {
     set((state) => {
@@ -167,14 +178,27 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
   }
 
   // ── generate (phase 1) → auto-cut (phase 2) chain. Plain async, fire-and-forget from start. ─────
-  async function runGenerate(ref: VariantRef, { artStyleId }: { artStyleId: string }): Promise<void> {
+  async function runGenerate(ref: VariantRef): Promise<void> {
     try {
-      // ⚡⚡ FLUSH-then-read-meta.id (mirror sketch-spread-generate-job-slice.ts L315-326 — generate
-      // is SNAPSHOT-READING). Do NOT use autoSaveSnapshot fire-and-forget: it self-guards to a no-op
-      // when another save holds isSaving AND is suppressed under collab → the endpoint would read the
-      // OLD DB text. flushSnapshot() AWAITS until isSaving settles + the row is minted.
+      // ⚡⚡ FLUSH-BEFORE-GENERATE (mirror sketch-spread-generate-job-slice.ts — generate is
+      // SNAPSHOT-READING). autoSaveSnapshot self-guards to a no-op when another save holds isSaving
+      // AND is suppressed under collab → the endpoint would read STALE DB text. Land the entity node
+      // in the DB first: SOLO → awaited flushSnapshot(); COLLAB → gateway whole-node flush (keeps lock).
       const collab = useResourceLockStore.getState().collabPersist;
-      if (!collab) {
+      if (collab) {
+        const flushed = await flushSketchEntityUnderLock(ref.kind, ref.entityKey, entityNodeOf(ref));
+        if (opStale(ref)) return; // op reset during the flush
+        if (!flushed) {
+          log.warn('runGenerate', 'flush-before-generate failed — abort (stale DB / peer lock)', {
+            kind: ref.kind,
+            entityKey: ref.entityKey,
+            variantKey: ref.variantKey,
+          });
+          // Do NOT call the AI on a stale / peer-owned node (would burn tokens + write the wrong text).
+          markOpError('Could not save before generating — the entity may be locked by another editor.');
+          return;
+        }
+      } else {
         await get().flushSnapshot(); // legacy solo: land edits + mint the snapshot row
         if (opStale(ref)) return; // op reset during the flush
       }
@@ -187,11 +211,12 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
         return; // do NOT call the endpoint (it would fail SNAPSHOT_NOT_FOUND)
       }
 
+      // ⚡ Contract (ADR-047): artStyleId DROPPED (backend extra=forbid); modelParams optional (omit →
+      // DB default — the variant space has no model UI yet). Style is inferred from the BASE_VARIANT.
       const gen = await callGenerateVariantSheet(ref.kind, {
         snapshotId,
         entityKey: ref.entityKey,
         variantKey: ref.variantKey,
-        artStyleId,
       });
       if (opStale(ref)) return; // reset/replaced during the generate call → drop
       if (!gen.success || !gen.data) throw new Error(classifyError(gen));
@@ -227,7 +252,16 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
     }
 
     if (opStale(ref)) return; // op reset during the last await → nothing to finalize
-    void get().autoSaveSnapshot(); // fire-and-forget durability (raw + crops landed in the store)
+    // Persist the RESULT (raw sheet + crops landed in the store). COLLAB → gateway whole-node flush.
+    // `releaseIfAcquired:true` (one-shot) because by now the user MAY have browsed to another entity
+    // during the long AI call → the held-session already released THIS entity; re-acquiring + keeping
+    // would orphan the lock (H1). If still held (didn't browse), the lock is kept for the held-session.
+    // SOLO (incl. the case where the space unmounted → collabPersist flipped false) → autoSaveSnapshot.
+    if (useResourceLockStore.getState().collabPersist) {
+      void flushSketchEntityUnderLock(ref.kind, ref.entityKey, entityNodeOf(ref), { releaseIfAcquired: true });
+    } else {
+      void get().autoSaveSnapshot();
+    }
     finalizeOp(); // clear the op if it settled without error
   }
 
@@ -240,19 +274,9 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
         return; // single-flight
       }
 
-      // artStyleId = book.sketchstyle_id (art_styles.type=0) — same source the base space uses via
-      // useSketchStyleId(); resolved imperatively here since the op runs off-render.
-      const artStyleId = useBookStore.getState().currentBook?.sketchstyle_id ?? null;
-      if (!artStyleId) {
-        log.warn('startVariantSheetGenerate', 'no sketch style — cannot generate', {
-          kind: ref.kind,
-          entityKey: ref.entityKey,
-          variantKey: ref.variantKey,
-        });
-        toast.warning('Pick a sketch art style in settings first.');
-        return; // snapshotId is resolved AFTER the flush (may be null before the first save)
-      }
-
+      // ⚡ Contract (ADR-047): the art-style gate is GONE — generate no longer requires
+      // book.sketchstyle_id (style is inferred from the BASE_VARIANT anchor; backend dropped
+      // artStyleId). snapshotId is resolved AFTER the flush (may be null before the first save).
       log.info('startVariantSheetGenerate', 'start', {
         kind: ref.kind,
         entityKey: ref.entityKey,
@@ -268,7 +292,7 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
         };
       });
 
-      void runGenerate({ kind: ref.kind, entityKey: ref.entityKey, variantKey: ref.variantKey }, { artStyleId });
+      void runGenerate({ kind: ref.kind, entityKey: ref.entityKey, variantKey: ref.variantKey });
     },
 
     dismissVariantSheetGenerateError: () =>

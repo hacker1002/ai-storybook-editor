@@ -4,9 +4,11 @@
 // prompt. description/height live in the DB but are NOT edited here (the store action is a partial
 // merge, so leaving them out preserves their values).
 //
-// Save writes the two fields then flushes the snapshot to the DB (autoSaveSnapshot, fire-and-forget)
-// BECAUSE the generate endpoint reads snapshot.sketch from the DB (snapshot-reading) — text must land
-// before the user hits ✨. The variant space is NOT collab-locked, so this mirrors the base modal.
+// Save writes the two fields then persists via the parent (`onSaved`, fire-and-forget) BECAUSE the
+// generate endpoint reads snapshot.sketch from the DB (snapshot-reading) — text must land before the
+// user hits ✨. Under collab (ADR-047) the parent routes `onSaved` through the held-session saveNow
+// (whole entity node, keeps the lock); under solo it falls back to autoSaveSnapshot. This modal no
+// longer calls autoSaveSnapshot directly (it is suppressed under collab → would silently no-op).
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -32,6 +34,8 @@ export interface EditVariantModalProps {
   kind: BaseKind;
   entityKey: string;
   variantKey: string; // non-base
+  /** Persist the WHOLE entity node after a dirty save (parent routes collab saveNow / solo autosave). */
+  onSaved: () => void;
   onClose: () => void;
 }
 
@@ -40,8 +44,8 @@ interface VariantTextDraft {
   art_language: string;
 }
 
-export function EditVariantModal({ kind, entityKey, variantKey, onClose }: EditVariantModalProps) {
-  const { updateSketchVariantText, autoSaveSnapshot } = useSnapshotActions();
+export function EditVariantModal({ kind, entityKey, variantKey, onSaved, onClose }: EditVariantModalProps) {
+  const { updateSketchVariantText } = useSnapshotActions();
   const modalContentRef = useRef<HTMLDivElement>(null);
 
   // Baseline seeded ONCE from the store (getState — non-reactive read; mirrors edit-base-entity-modal)
@@ -77,12 +81,12 @@ export function EditVariantModal({ kind, entityKey, variantKey, onClose }: EditV
         visual_design: draft.visual_design,
         art_language: draft.art_language,
       });
-      // Flush DB BEFORE generate — the endpoint reads snapshot.sketch (snapshot-reading). Fire-and-
-      // forget durability (variant space not collab-locked — self-guarded autosave, mirror base).
-      void autoSaveSnapshot();
+      // Persist the WHOLE entity node BEFORE generate — the endpoint reads snapshot.sketch
+      // (snapshot-reading). Parent routes collab saveNow (held lock) / solo autosave. Fire-and-forget.
+      onSaved();
     }
     onClose();
-  }, [isDirty, kind, entityKey, variantKey, draft, updateSketchVariantText, autoSaveSnapshot, onClose]);
+  }, [isDirty, kind, entityKey, variantKey, draft, updateSketchVariantText, onSaved, onClose]);
 
   const guardClose = useCallback(() => {
     if (isDirty && !window.confirm('Huỷ thay đổi chưa lưu?')) return;

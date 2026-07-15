@@ -3,13 +3,20 @@
 // groups (Character / Prop), each listing every NON-BASE variant as a row: mention label (select) +
 // ✏ (edit text) + ✨ (generate raw sheet) / spinner while busy. Rows are read-only (no add/delete).
 //
-// Generate is GATED (gateByRef → 3 reasons). Gated-off ✨ renders DISABLED + tooltip, never hidden
+// Generate is GATED (gateByRef → reasons). Gated-off ✨ renders DISABLED + tooltip, never hidden
 // (memory: never-hide-disabled-ui). While the row's op is busy, ✨ becomes an inert spinner.
+//
+// Collab peer-lock (ADR-047): each row self-reads its ENTITY lock (step 1 / rtype 3 char · 4 prop).
+// When ANOTHER editor holds the entity, the row shows a 🔒 holder badge and disables ✏ + ✨ (greyed,
+// NOT hidden). Advisory — the acquire 409 is the real authority (browse/select stays enabled).
 
-import { ChevronDown, ChevronRight, Loader2, Pencil, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Lock, Pencil, Sparkles } from 'lucide-react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import type { BaseKind, VariantRef } from '@/types/sketch';
 import { cn } from '@/utils/utils';
+import { useIsLockedByOther, useLockHolderName } from '@/stores/resource-lock-store';
+import { resolveSketchVariantLockTarget } from '@/stores/snapshot-store/slices/collab-sketch-variant-save-helper';
 import {
   GATE_TOOLTIP,
   sameRef,
@@ -165,7 +172,24 @@ function VariantRow({
 }) {
   const mention = `@${variantRef.entityKey}/${variantRef.variantKey}`;
   const spinnerLabel = status.phase === 'cut' ? 'Cutting cells…' : 'Generating…';
-  const gateTooltip = gate.reason ? GATE_TOOLTIP[gate.reason] : undefined;
+
+  // Peer-lock (advisory) for THIS row's ENTITY — memoize the target so the primitive selectors stay
+  // subscribed to a stable object (they return primitives → Object.is-stable, no re-render loop).
+  const lockTarget = useMemo(
+    () => resolveSketchVariantLockTarget(variantRef.kind, variantRef.entityKey),
+    [variantRef.kind, variantRef.entityKey],
+  );
+  const lockedByOther = useIsLockedByOther(lockTarget);
+  const holderName = useLockHolderName(lockTarget);
+
+  // ✏/✨ disabled when a peer holds the entity; ✨ additionally gated on the generate preconditions.
+  const editDisabled = lockedByOther;
+  const generateDisabled = lockedByOther || !gate.canGenerate;
+  const gateTooltip = lockedByOther
+    ? `${holderName ?? 'Another editor'} is editing`
+    : gate.reason
+      ? GATE_TOOLTIP[gate.reason]
+      : undefined;
 
   return (
     <div
@@ -173,6 +197,7 @@ function VariantRow({
         'flex items-center gap-1 rounded-md pr-1',
         isSelected ? 'bg-primary/10' : 'hover:bg-muted/50',
       )}
+      aria-disabled={lockedByOther}
     >
       <button
         type="button"
@@ -187,13 +212,29 @@ function VariantRow({
         {mention}
       </button>
 
+      {/* Peer-lock badge — 🔒 + holder name (never hidden; browse stays enabled). */}
+      {lockedByOther && (
+        <span
+          className="flex min-w-0 items-center gap-0.5 rounded bg-background/80 px-1 text-[10px] font-medium text-muted-foreground"
+          title={`${holderName ?? 'Another editor'} is editing`}
+        >
+          <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="max-w-[64px] truncate">{holderName ?? 'Editing'}</span>
+        </span>
+      )}
+
       <Button
         variant="ghost"
         size="icon"
-        className="h-6 w-6 text-muted-foreground"
-        onClick={() => onEditVariant(variantRef)}
+        // aria-disabled (NOT the real attr) → greyed but still hoverable so the tooltip surfaces.
+        className={cn('h-6 w-6 text-muted-foreground', editDisabled && 'cursor-not-allowed opacity-40')}
+        aria-disabled={editDisabled}
+        onClick={() => {
+          if (editDisabled) return;
+          onEditVariant(variantRef);
+        }}
         aria-label={`Edit ${mention}`}
-        title={`Edit ${mention}`}
+        title={editDisabled ? gateTooltip : `Edit ${mention}`}
       >
         <Pencil className="h-4 w-4" />
       </Button>
@@ -214,19 +255,19 @@ function VariantRow({
           // aria-disabled (NOT the real `disabled` attr): shadcn's `disabled:pointer-events-none`
           // would make a real-disabled button transparent to hover → the gate-reason tooltip would
           // never surface. Mirror edit-image-modal-header — greyed via explicit classes + click-guard
-          // so the WHY (no-art-style / base-not-ready / empty-text) stays discoverable (never-hide-ui).
+          // so the WHY (peer-lock / base-not-ready / empty-text) stays discoverable (never-hide-ui).
           className={cn(
             'h-6 w-6 text-muted-foreground',
-            !gate.canGenerate && 'cursor-not-allowed opacity-40',
+            generateDisabled && 'cursor-not-allowed opacity-40',
           )}
-          aria-disabled={!gate.canGenerate}
+          aria-disabled={generateDisabled}
           aria-busy={status.isBusy}
           onClick={() => {
-            if (!gate.canGenerate) return;
+            if (generateDisabled) return;
             onGenerate(variantRef);
           }}
           aria-label={`Generate ${mention} sheet`}
-          title={gate.canGenerate ? `Generate ${mention} sheet` : gateTooltip}
+          title={generateDisabled ? gateTooltip : `Generate ${mention} sheet`}
         >
           <Sparkles className="h-4 w-4" />
         </Button>

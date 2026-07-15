@@ -20,14 +20,18 @@ vi.mock('@/apis/sketch-variant-api', () => ({
 const mockedGen = vi.mocked(callGenerateVariantSheet);
 const mockedCut = vi.mocked(callCropSheetRow);
 
-// Isolate resource-lock (collabPersist=false → legacy flushSnapshot path) + book-store (artStyleId).
-// This unit test imports the slice DIRECTLY (bypassing snapshot-store/index), so the real modules
-// would close the slice ↔ store cycle.
-vi.mock('@/stores/resource-lock-store', () => ({
-  useResourceLockStore: { getState: () => ({ collabPersist: false }) },
+// Isolate resource-lock (mutable collabPersist toggles the solo flushSnapshot vs collab gateway path)
+// + the collab whole-node flush helper (mocked to assert ordering + abort). This unit test imports the
+// slice DIRECTLY (bypassing snapshot-store/index), so the real modules would close the slice ↔ store cycle.
+const h = vi.hoisted(() => ({
+  lockState: { collabPersist: false as boolean },
+  flushEntity: vi.fn(async (_k: string, _e: string, _n: unknown) => true as boolean),
 }));
-vi.mock('@/stores/book-store', () => ({
-  useBookStore: { getState: () => ({ currentBook: { sketchstyle_id: 'style-1' } }) },
+vi.mock('@/stores/resource-lock-store', () => ({
+  useResourceLockStore: { getState: () => h.lockState },
+}));
+vi.mock('./collab-sketch-variant-save-helper', () => ({
+  flushSketchEntityUnderLock: h.flushEntity,
 }));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -123,11 +127,13 @@ describe('SketchVariantGenerateJobSlice', () => {
   beforeEach(() => {
     mockedGen.mockReset();
     mockedCut.mockReset();
+    h.lockState.collabPersist = false; // default: solo path (legacy flushSnapshot)
+    h.flushEntity.mockReset().mockResolvedValue(true);
     ({ store, flushSnapshot, autoSaveSnapshot } = createTestStore());
     store.getState().setSketchEntities('characters', [entityWithVariant()]);
   });
 
-  it('(a) flushes the snapshot BEFORE calling generate', async () => {
+  it('(a) SOLO: flushes the snapshot BEFORE calling generate; payload has NO artStyleId', async () => {
     mockedGen.mockResolvedValueOnce(okGen('raw.png'));
     mockedCut.mockResolvedValueOnce(okCut(['c1.png', 'c2.png', 'c3.png', 'c4.png']));
 
@@ -135,19 +141,67 @@ describe('SketchVariantGenerateJobSlice', () => {
     await tick();
 
     expect(flushSnapshot).toHaveBeenCalled();
+    expect(h.flushEntity).not.toHaveBeenCalled(); // solo uses flushSnapshot, not the gateway helper
     expect(mockedGen).toHaveBeenCalledTimes(1);
     // Order: the awaited flush must run before generate is dispatched.
     expect(flushSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
       mockedGen.mock.invocationCallOrder[0],
     );
-    // Snapshot-reading payload carries the resolved snapshotId + artStyleId (not entity text).
+    // ⚡ ADR-047 contract: snapshot-reading payload carries snapshotId + keys ONLY (artStyleId dropped).
     expect(mockedGen.mock.calls[0][0]).toBe('characters'); // kind dispatch
-    expect(mockedGen.mock.calls[0][1]).toMatchObject({
+    expect(mockedGen.mock.calls[0][1]).toEqual({
       snapshotId: 'snap-1',
       entityKey: 'kid',
       variantKey: 'hero',
-      artStyleId: 'style-1',
     });
+    expect(mockedGen.mock.calls[0][1]).not.toHaveProperty('artStyleId');
+  });
+
+  it('(a2) COLLAB: gateway flush (whole entity node) runs BEFORE generate; NO flushSnapshot', async () => {
+    h.lockState.collabPersist = true;
+    mockedGen.mockResolvedValueOnce(okGen('raw.png'));
+    mockedCut.mockResolvedValueOnce(okCut(['c1.png', 'c2.png', 'c3.png', 'c4.png']));
+
+    store.getState().startVariantSheetGenerate(REF);
+    await tick();
+    await tick();
+
+    // Risk #1: the entity node is persisted through the gateway BEFORE the AI reads the DB.
+    expect(h.flushEntity).toHaveBeenCalled();
+    expect(h.flushEntity.mock.calls[0].slice(0, 2)).toEqual(['characters', 'kid']);
+    expect(flushSnapshot).not.toHaveBeenCalled(); // suppressed under collab
+    expect(mockedGen).toHaveBeenCalledTimes(1);
+    expect(h.flushEntity.mock.invocationCallOrder[0]).toBeLessThan(mockedGen.mock.invocationCallOrder[0]);
+  });
+
+  it('(a3) COLLAB: flush-before FAILS (peer lock) → generate ABORTED, op kept with error', async () => {
+    h.lockState.collabPersist = true;
+    h.flushEntity.mockResolvedValueOnce(false); // peer holds the entity / save rejected
+    mockedGen.mockResolvedValue(okGen('raw.png'));
+
+    store.getState().startVariantSheetGenerate(REF);
+    await tick();
+    await tick();
+
+    expect(h.flushEntity).toHaveBeenCalled();
+    expect(mockedGen).not.toHaveBeenCalled(); // never burn AI tokens on a stale / peer-owned node
+    expect(store.getState().variantSheetGenerateOp?.error).toContain('Could not save before generating');
+  });
+
+  it('(a4) COLLAB: persists the RESULT via the gateway helper (not autoSaveSnapshot)', async () => {
+    h.lockState.collabPersist = true;
+    mockedGen.mockResolvedValueOnce(okGen('raw.png'));
+    mockedCut.mockResolvedValueOnce(okCut(['c1.png', 'c2.png', 'c3.png', 'c4.png']));
+
+    store.getState().startVariantSheetGenerate(REF);
+    await tick();
+    await tick();
+    await tick();
+
+    // flush called twice: flush-before-generate AND persist-after-crops (both whole entity node).
+    expect(h.flushEntity.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(autoSaveSnapshot).not.toHaveBeenCalled(); // collab never dual-writes via autosave
+    expect(store.getState().variantSheetGenerateOp).toBeNull();
   });
 
   it('(b) meta.id == null → toasts + does NOT call generate + keeps the errored op', async () => {
