@@ -7,7 +7,7 @@
 // Zoom is applied as CSS width % (NOT transform:scale) so the overflow scroll reaches the zoomed
 // image's corners (memory: zoom-via-css-width / reference generate-canvas.tsx).
 
-import { Loader2, Pencil } from 'lucide-react';
+import { Check, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ZoomControl } from '@/features/editor/components/shared-components/zoom-control';
@@ -89,7 +89,7 @@ export function VariantSheetContentArea({
   );
 }
 
-/** Raw tab: 4 cut crop cards — radio pick (1/4) + per-cell [✎]. Busy → 4 skeletons; empty → hint. */
+/** Raw tab: 4 cut crop cards — click-to-pick + per-cell [✎]. Busy → single sheet skeleton; empty → hint. */
 function RawCropGrid({
   crops,
   selIdx,
@@ -107,18 +107,12 @@ function RawCropGrid({
 }) {
   if (genStatus.isBusy) {
     const label = genStatus.phase === 'cut' ? 'Cutting cells…' : 'Generating…';
+    // Single sheet-shaped skeleton: the raw 21:9 sheet is generated then cut into 4 — show it as one.
     return (
       <div className="flex-1 overflow-auto p-6" role="status" aria-live="polite">
-        <div className="grid grid-cols-4 gap-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-md border bg-muted/30"
-            >
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
-              <span className="text-xs text-muted-foreground">{label}</span>
-            </div>
-          ))}
+        <div className="flex aspect-[21/9] w-full flex-col items-center justify-center gap-2 rounded-md border bg-muted/30">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+          <span className="text-sm text-muted-foreground">{label}</span>
         </div>
       </div>
     );
@@ -165,9 +159,24 @@ function CropCard({
   const label = `candidate ${index + 1}`;
   return (
     <div className="flex flex-col gap-1.5">
+      {/* The card itself is the pick target — click/Enter/Space selects. Hover lifts it. */}
       <div
+        role="radio"
+        aria-checked={isPicked}
+        aria-label={`Pick ${label}`}
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
         className={cn(
-          'relative flex aspect-[3/4] items-center justify-center overflow-auto rounded-md border',
+          // aspect-[7/12] = a crop cell's true ratio (¼ of the 21:9 sheet, 5.25:9) → image fills, no letterbox.
+          'relative flex aspect-[7/12] cursor-pointer items-center justify-center overflow-auto rounded-md border',
+          'transition-all hover:-translate-y-1 hover:shadow-lg',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           isPicked ? 'ring-2 ring-primary border-primary' : 'border-border bg-muted/30',
         )}
       >
@@ -178,19 +187,31 @@ function CropCard({
         >
           {index + 1}
         </span>
-        <EditIconButton
-          label={`Edit crop ${index + 1}`}
-          disabled={cropUrl == null}
-          onClick={onEdit}
-          className="absolute right-2 top-2 z-10"
-        />
+        {/* Edit must not bubble to the card's select handler. */}
+        <span className="absolute right-2 top-2 z-10" onClick={(e) => e.stopPropagation()}>
+          <EditIconButton
+            label={`Edit crop ${index + 1}`}
+            disabled={cropUrl == null}
+            onClick={onEdit}
+          />
+        </span>
+        {/* Picked → check badge (bottom-right). */}
+        {isPicked && (
+          <span
+            className="absolute bottom-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
+            aria-hidden="true"
+          >
+            <Check className="h-4 w-4" />
+          </span>
+        )}
         {cropUrl ? (
           <img
             key={cropUrl}
             src={cropUrl}
             alt={`Crop ${index + 1}`}
             className="object-contain"
-            style={{ width: `${zoom}%`, maxWidth: 'none', height: 'auto' }}
+            // Constrain both axes → 100% = contain-fit (no head/feet clipping); width % still drives zoom.
+            style={{ width: `${zoom}%`, maxWidth: 'none', height: 'auto', maxHeight: `${zoom}%` }}
             onError={() => log.warn('CropCard', 'crop image failed to load', { index })}
           />
         ) : (
@@ -198,28 +219,15 @@ function CropCard({
         )}
       </div>
 
-      {/* Radio pick control + "selected" affordance. */}
-      <button
-        type="button"
-        role="radio"
-        aria-checked={isPicked}
-        aria-label={`Pick ${label}`}
-        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm hover:bg-muted/50"
-        onClick={onSelect}
+      {/* Non-interactive state caption — selection happens on the card above. */}
+      <p
+        className={cn(
+          'truncate px-1.5 text-sm',
+          isPicked ? 'font-medium text-foreground' : 'text-muted-foreground',
+        )}
       >
-        <span
-          className={cn(
-            'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
-            isPicked ? 'border-primary' : 'border-muted-foreground/50',
-          )}
-          aria-hidden="true"
-        >
-          {isPicked && <span className="h-2 w-2 rounded-full bg-primary" />}
-        </span>
-        <span className={cn('truncate', isPicked && 'font-medium text-foreground')}>
-          {isPicked ? 'Selected' : `Pick #${index + 1}`}
-        </span>
-      </button>
+        {isPicked ? 'Selected' : `Pick #${index + 1}`}
+      </p>
     </div>
   );
 }
