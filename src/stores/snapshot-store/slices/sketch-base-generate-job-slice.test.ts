@@ -7,7 +7,6 @@ import { createSketchBaseGenerateJobSlice } from './sketch-base-generate-job-sli
 import type { SketchEntity } from '@/types/sketch';
 import { callGenerateBaseSheet, type GenerateBaseSheetResult } from '@/apis/sketch-base-api';
 import { callCropSheetRow, type CropSheetRowResult } from '@/apis/sketch-variant-api';
-import { uploadImageToStorage } from '@/apis/storage-api';
 
 // Mock the api-client seams. ⚡2026-07-15: base crop migrated 07 → shared positional cutter (api 10)
 // which lives in sketch-variant-api → mock BOTH modules (generate on base, crop on variant).
@@ -39,15 +38,6 @@ vi.mock('./collab-sketch-base-sheet-save-helper', () => ({
 
 // Mock sonner toast
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
-
-// Mock storage upload + base64→File seams (reference-image persistence path). base64ToFile is
-// mocked so the test does not depend on a global File/atob in the runner.
-vi.mock('@/apis/storage-api', () => ({ uploadImageToStorage: vi.fn() }));
-vi.mock('@/utils/file-utils', async (orig) => ({
-  ...(await orig<typeof import('@/utils/file-utils')>()),
-  base64ToFile: vi.fn(() => new Blob(['x'], { type: 'image/png' })),
-}));
-const mockedUpload = vi.mocked(uploadImageToStorage);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function createTestStore(metaId: string | null = 'snap-1') {
@@ -123,7 +113,6 @@ describe('SketchBaseGenerateJobSlice', () => {
   beforeEach(() => {
     mockedGenerateCall.mockReset();
     mockedCropCall.mockReset();
-    mockedUpload.mockReset();
     mockedSheetFlush.mockReset().mockResolvedValue(true);
     lockState.collabPersist = false; // default: solo (autoSave path)
     vi.mocked(toast.warning).mockReset();
@@ -367,22 +356,25 @@ describe('SketchBaseGenerateJobSlice', () => {
     expect(store.getState().baseSheetGenerateOp).toBeNull();
   });
 
-  it('refs: uploads → persists image_references on the style + sends media_url refs to generate', async () => {
+  it('refs: pre-hosted art-style refs → persisted verbatim on the style + sent as media_url to generate', async () => {
     const baseEntity: SketchEntity = {
       key: 'hero',
       variants: [{ key: 'base', description: '', visual_design: 'test', art_language: '' }],
     };
     store.getState().setSketchEntities('characters', [baseEntity]);
 
-    mockedUpload.mockResolvedValueOnce({ publicUrl: 'https://cdn/ref-a.png', path: 'sketch-base-refs/ref-a.png' });
     mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
     mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }]));
 
+    const refs = [
+      { title: 'ref-a', media_url: 'https://cdn/ref-a.png' },
+      { title: 'ref-b', media_url: 'https://cdn/ref-b.png' },
+    ];
     store.getState().startBaseSheetGenerate({
       kind: 'characters',
       mode: 'add',
       stylePrompt: 'test',
-      referenceImages: [{ label: 'ref-a.jpg', base64Data: 'QUFB', mimeType: 'image/png' }],
+      referenceImages: refs,
       artStyleId: 'style-1',
     });
     await tick();
@@ -390,20 +382,23 @@ describe('SketchBaseGenerateJobSlice', () => {
     await tick();
 
     const style = store.getState().sketch.base.character_sheet.styles[0];
-    expect(style.image_references).toEqual([{ title: 'ref-a.jpg', media_url: 'https://cdn/ref-a.png' }]);
-    // Generate received the uploaded URL (NOT base64).
+    // Persisted verbatim (already hosted — no upload roundtrip).
+    expect(style.image_references).toEqual(refs);
+    // Generate received media_url refs only (title stripped, order preserved).
     const genArg = mockedGenerateCall.mock.calls[0][1];
-    expect(genArg.referenceImages).toEqual([{ media_url: 'https://cdn/ref-a.png' }]);
+    expect(genArg.referenceImages).toEqual([
+      { media_url: 'https://cdn/ref-a.png' },
+      { media_url: 'https://cdn/ref-b.png' },
+    ]);
   });
 
-  it('refs: upload failure → base64 fallback to generate, image_references stays empty', async () => {
+  it('refs: empty → image_references untouched + generate receives an empty array', async () => {
     const baseEntity: SketchEntity = {
       key: 'hero',
       variants: [{ key: 'base', description: '', visual_design: 'test', art_language: '' }],
     };
     store.getState().setSketchEntities('characters', [baseEntity]);
 
-    mockedUpload.mockRejectedValueOnce(new Error('storage down'));
     mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png'));
     mockedCropCall.mockResolvedValueOnce(okCropRow([{ cell: 1, imageUrl: 'crop-hero.png' }]));
 
@@ -411,7 +406,7 @@ describe('SketchBaseGenerateJobSlice', () => {
       kind: 'characters',
       mode: 'add',
       stylePrompt: 'test',
-      referenceImages: [{ label: 'ref-a.jpg', base64Data: 'QUFB', mimeType: 'image/png' }],
+      referenceImages: [],
       artStyleId: 'style-1',
     });
     await tick();
@@ -419,9 +414,9 @@ describe('SketchBaseGenerateJobSlice', () => {
     await tick();
 
     const style = store.getState().sketch.base.character_sheet.styles[0];
-    expect(style.image_references).toEqual([]); // upload failed → not persisted
+    expect(style.image_references).toEqual([]); // never written when no refs picked
     const genArg = mockedGenerateCall.mock.calls[0][1];
-    expect(genArg.referenceImages).toEqual([{ base64Data: 'QUFB', mimeType: 'image/png' }]); // base64 fallback
+    expect(genArg.referenceImages).toEqual([]);
   });
 
   it('error: add-mode crop fail AFTER raw landed → style KEPT (not rolled back) + op.error set', async () => {

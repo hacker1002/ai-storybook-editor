@@ -1,16 +1,21 @@
 // generate-style-modal.tsx — Compact "Generate: Style N" dialog (design 03). Prompt textarea +
-// ≤3 reference images → enqueues a base-sheet generate job, then closes IMMEDIATELY (the async
-// job streams raw sheet + crops into the store; base entities are injected AT THE SLICE, never
-// threaded through this modal). Used for both `add` (append a style) and `regenerate`
-// (overwrite styles[styleIndex]). Generate is gated on prompt + a resolved sketch art-style id.
+// an ART-STYLE picker + a grid of that style's reference images → enqueues a base-sheet generate
+// job, then closes IMMEDIATELY (the async job streams raw sheet + crops into the store; base
+// entities are injected AT THE SLICE, never threaded through this modal). Used for both `add`
+// (append a style) and `regenerate` (overwrite styles[styleIndex]).
 //
-// Collab (ADR-043): the reference images are STYLE references (they steer the aesthetic — semantics
-// only, no wire change). The generate itself runs UNDER the per-kind sheet lock (rtype 11) that the
-// PARENT already acquired via `handleAddStyle` / regenerate before opening this modal — so this
-// modal does not touch the lock. `modelParams` is NOT exposed here (the job slice uses the DB default).
+// Style experimentation (2026-07-15): the caller can pick ANY sketch art-style (type=0), defaulting
+// to book.sketchstyle_id, and choose 1–3 of that style's `image_references` as the STYLE anchors for
+// this attempt. Those refs are already hosted in Storage, so the slice forwards them straight as
+// media_url refs (no upload). Generate is gated on prompt + a chosen style + ≥1 selected reference.
+//
+// Collab (ADR-043): the reference images steer the aesthetic (API MODE A — artStyleId → description
+// only, style from the refs). The generate runs UNDER the per-kind sheet lock (rtype 11) that the
+// PARENT already acquired before opening this modal — so this modal does not touch the lock.
+// `modelParams` is NOT exposed here (the job slice uses the DB default).
 
-import { useCallback, useRef, useState } from 'react';
-import { Paperclip, Loader2, X } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Loader2, Check } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -28,15 +33,23 @@ import {
   useIsAnySketchGenerating,
 } from '@/stores/snapshot-store/selectors';
 import { useSketchStyleId } from '@/stores/book-store';
+import { useArtStyles } from '@/stores/art-styles-store';
+import { ArtStyleSelect } from '@/features/books';
+import type { ArtStyleOption } from '@/features/books/types';
 import { useInteractionLayer } from '@/features/editor/contexts';
-import { useReferenceImagePicker } from '@/features/editor/hooks/use-reference-image-picker';
 import type { BaseKind } from '@/types/sketch';
+import { cn } from '@/utils/utils';
 import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'GenerateStyleModal');
 
-/** Base sheets take ≤3 style reference images (design §2). */
+/** Base sheets take 1..3 STYLE reference images (API `MAX_STYLE_REFERENCES`, design §2). */
 const MAX_REFS = 3;
+
+/** Default selection for a freshly-picked style: the first min(3, len) references. */
+function defaultRefSelection(refCount: number): number[] {
+  return Array.from({ length: Math.min(MAX_REFS, refCount) }, (_, i) => i);
+}
 
 export interface GenerateStyleModalProps {
   kind: BaseKind;
@@ -51,49 +64,99 @@ export interface GenerateStyleModalProps {
 
 export function GenerateStyleModal({ kind, mode, styleIndex, onEnqueued, onClose }: GenerateStyleModalProps) {
   const styles = useSketchBaseStyles(kind);
-  // book.sketchstyle_id (art_styles.type=0) — REQUIRED by the sketch generate endpoint (a
-  // sketch-generate exception to the "no artStyleId" rule); Generate is blocked while null.
-  const artStyleId = useSketchStyleId();
+  // book.sketchstyle_id (art_styles.type=0) — the DEFAULT selection; the picker below can override it
+  // per-attempt (style experimentation, not persisted to the book).
+  const sketchStyleId = useSketchStyleId();
   const { startBaseSheetGenerate } = useSnapshotActions();
   // Cross-job single-flight guard: the slice bails (warn-only) if any sketch generation is already
   // running → block Generate here so the modal can't close as if it worked (no silent drop).
   const isAnyGenerating = useIsAnySketchGenerating();
-  // Destructure (don't hold the picker object) so the reference-list array is a plain binding —
-  // passing the picker's inputRef into a `ref=` prop otherwise taints member reads in render.
-  const { images, inputRef, openPicker, handleFilesSelected, removeImage, clearImages } =
-    useReferenceImagePicker(MAX_REFS);
+
+  // All art styles are fetched app-wide on auth (App.tsx) → filter the sketch pipeline (type=0). No
+  // extra query. Options feed the ArtStyleSelect combobox; the full ArtStyle drives the ref grid.
+  const artStyles = useArtStyles();
+  const sketchStyles = useMemo(() => artStyles.filter((s) => s.type === 0), [artStyles]);
+  const styleOptions: ArtStyleOption[] = useMemo(
+    () => sketchStyles.map((s) => ({ id: s.id, name: s.name, thumbnailUrl: s.imageReferences?.[0]?.mediaUrl })),
+    [sketchStyles],
+  );
+
+  const [selectedStyleId, setSelectedStyleId] = useState<string | null>(sketchStyleId);
+  // Indices into the currently-selected style's `imageReferences`. Init from the default style's
+  // first-3 refs (styles are already loaded by the time this modal opens).
+  const [selectedRefIdxs, setSelectedRefIdxs] = useState<number[]>(() => {
+    const style = artStyles.find((s) => s.id === sketchStyleId && s.type === 0);
+    return defaultRefSelection(style?.imageReferences?.length ?? 0);
+  });
+
+  const selectedStyle = useMemo(
+    () => sketchStyles.find((s) => s.id === selectedStyleId) ?? null,
+    [sketchStyles, selectedStyleId],
+  );
+  // Stabilise the `?? []` fallback so the selectedRefs memo below doesn't re-run every render.
+  const refImages = useMemo(() => selectedStyle?.imageReferences ?? [], [selectedStyle]);
+  const selectedRefs = useMemo(
+    () => selectedRefIdxs.map((i) => refImages[i]).filter(Boolean),
+    [selectedRefIdxs, refImages],
+  );
 
   // "Style N": add → next index; regenerate → the style's own 1-based label.
   const styleNumber = mode === 'add' ? styles.length + 1 : (styleIndex ?? 0) + 1;
 
-  // Regenerate seeds the prompt from the existing style. (Phase 03 stores image_references: [],
-  // so regenerate ref chips start empty — accepted for v1; the picker still allows adding refs.)
+  // Regenerate seeds the prompt from the existing style. (Re-seeding the ref grid from persisted
+  // image_references is a follow-up — the grid starts from the style's default refs either way.)
   const [prompt, setPrompt] = useState(() =>
     mode === 'regenerate' && styleIndex != null ? (styles[styleIndex]?.style_prompt ?? '') : '',
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const modalContentRef = useRef<HTMLDivElement>(null);
 
-  const canGenerate = !isSubmitting && prompt.trim().length > 0 && !!artStyleId && !isAnyGenerating;
+  // Switching styles resets the ref selection to the new style's first-3 (a clean per-style default).
+  const handleStyleChange = useCallback(
+    (id: string | null) => {
+      log.debug('handleStyleChange', 'style picked', { id });
+      setSelectedStyleId(id);
+      const style = sketchStyles.find((s) => s.id === id);
+      setSelectedRefIdxs(defaultRefSelection(style?.imageReferences?.length ?? 0));
+    },
+    [sketchStyles],
+  );
+
+  const toggleRef = useCallback((idx: number) => {
+    setSelectedRefIdxs((prev) => {
+      if (prev.includes(idx)) return prev.filter((i) => i !== idx); // deselect (min-1 enforced by the gate)
+      if (prev.length >= MAX_REFS) return prev; // cap at MAX_REFS — ignore extra picks
+      return [...prev, idx].sort((a, b) => a - b);
+    });
+  }, []);
+
+  const canGenerate =
+    !isSubmitting &&
+    prompt.trim().length > 0 &&
+    !!selectedStyleId &&
+    selectedRefs.length >= 1 &&
+    !isAnyGenerating;
 
   const handleGenerate = useCallback(() => {
-    if (!canGenerate || !artStyleId) {
+    if (!canGenerate || !selectedStyleId) {
       log.debug('handleGenerate', 'blocked — gate not met', {
         hasPrompt: prompt.trim().length > 0,
-        hasArtStyle: !!artStyleId,
+        hasArtStyle: !!selectedStyleId,
+        refCount: selectedRefs.length,
         isAnyGenerating,
       });
       return;
     }
-    // Pass picker images straight through (label + base64). The slice uploads them to storage,
-    // persists {title, media_url} on the style, and sends media_url refs to the generate backend.
+    // Selected refs are the chosen style's hosted image_references → pass {title, media_url} straight
+    // through. The slice persists them on the style and sends media_url refs to the generate backend.
     // add appends to the end (new index = current length); regenerate overwrites styleIndex.
     const targetIndex = mode === 'add' ? styles.length : (styleIndex ?? 0);
     log.info('handleGenerate', 'enqueue base sheet generate', {
       kind,
       mode,
       styleIndex: targetIndex,
-      refCount: images.length,
+      artStyleId: selectedStyleId,
+      refCount: selectedRefs.length,
     });
     setIsSubmitting(true);
     startBaseSheetGenerate({
@@ -101,15 +164,14 @@ export function GenerateStyleModal({ kind, mode, styleIndex, onEnqueued, onClose
       mode,
       styleIndex: mode === 'regenerate' ? styleIndex : undefined,
       stylePrompt: prompt.trim(),
-      referenceImages: images,
-      artStyleId,
+      referenceImages: selectedRefs.map((r) => ({ title: r.title, media_url: r.mediaUrl })),
+      artStyleId: selectedStyleId,
     });
     // Select the (just-enqueued) style so the content-area overlay shows it generating.
     onEnqueued?.(kind, targetIndex);
     // Close immediately after enqueue — results stream into the style via the store.
-    clearImages();
     onClose();
-  }, [canGenerate, artStyleId, isAnyGenerating, images, styles.length, clearImages, kind, mode, styleIndex, prompt, startBaseSheetGenerate, onEnqueued, onClose]);
+  }, [canGenerate, selectedStyleId, selectedRefs, isAnyGenerating, styles.length, kind, mode, styleIndex, prompt, startBaseSheetGenerate, onEnqueued, onClose]);
 
   const handleRequestClose = useCallback(() => {
     if (isSubmitting) return; // Escape / click-outside inert while the enqueue is in flight
@@ -121,6 +183,11 @@ export function GenerateStyleModal({ kind, mode, styleIndex, onEnqueued, onClose
     ref: modalContentRef,
     captureClickOutside: true,
     hotkeys: ['Escape'],
+    // The art-style combobox portals its popover to <body> ([data-radix-popper-content-wrapper]).
+    // Register it as portal/dropdown so a click inside — or a pick that synchronously unmounts the
+    // popper — is NOT mis-read as a click-outside that closes the whole modal.
+    portalSelectors: ['[data-radix-popper-content-wrapper]'],
+    dropdownSelectors: ['[data-radix-popper-content-wrapper]'],
     onHotkey: (key) => {
       if (key === 'Escape') handleRequestClose();
     },
@@ -138,63 +205,87 @@ export function GenerateStyleModal({ kind, mode, styleIndex, onEnqueued, onClose
         <DialogHeader>
           <DialogTitle>Generate: Style {styleNumber}</DialogTitle>
           <DialogDescription className="sr-only">
-            Enter a style prompt and optional reference images to generate the base sheet.
+            Pick an art style and reference images, enter a prompt, then generate the base sheet.
           </DialogDescription>
         </DialogHeader>
 
+        {/* Art style picker (defaults to the book's sketch style; override to experiment). */}
         <div className="space-y-2">
-          {/* Header row: title + reference chips (right of the title) + attach button (pinned right). */}
-          <div className="flex items-center gap-2">
-            <Label htmlFor="style-prompt" className="shrink-0">
-              Prompt
-            </Label>
-            {images.length > 0 && (
-              <div className="flex flex-1 flex-wrap gap-1.5" aria-label="Reference images">
-                {images.map((img, idx) => (
-                  <div
-                    key={`ref-${img.label}-${idx}`}
-                    className="flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
-                  >
-                    <span className="max-w-[120px] truncate">{img.label}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeImage(idx)}
-                      className="rounded hover:text-foreground"
-                      aria-label={`Remove reference image ${img.label}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+          <Label htmlFor="style-art-style">Art style</Label>
+          <ArtStyleSelect
+            value={selectedStyleId}
+            options={styleOptions}
+            onChange={handleStyleChange}
+            disabled={isSubmitting}
+            placeholder="Select a sketch art style…"
+          />
+        </div>
+
+        {/* Reference images from the chosen style — pick 1..3 style anchors (above the prompt). */}
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <Label>Reference images</Label>
+            {refImages.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {selectedRefs.length}/{MAX_REFS} selected
+              </span>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="ml-auto h-7 w-7 shrink-0"
-              onClick={openPicker}
-              disabled={isSubmitting || images.length >= MAX_REFS}
-              aria-label="Attach reference images"
-              title={images.length >= MAX_REFS ? `Max ${MAX_REFS} reference images` : 'Attach reference images'}
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              multiple
-              className="hidden"
-              onChange={handleFilesSelected}
-            />
           </div>
 
+          {refImages.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {selectedStyleId
+                ? 'This art style has no reference images — pick another style to generate.'
+                : 'Select an art style to choose reference images.'}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Style reference images">
+              {refImages.map((ref, idx) => {
+                const isSelected = selectedRefIdxs.includes(idx);
+                const atCap = !isSelected && selectedRefIdxs.length >= MAX_REFS;
+                return (
+                  <button
+                    key={`${ref.mediaUrl}-${idx}`}
+                    type="button"
+                    onClick={() => toggleRef(idx)}
+                    disabled={isSubmitting || atCap}
+                    aria-pressed={isSelected}
+                    aria-label={`${isSelected ? 'Deselect' : 'Select'} reference image ${ref.title || idx + 1}`}
+                    title={ref.title}
+                    className={cn(
+                      'relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 transition',
+                      isSelected ? 'border-primary' : 'border-transparent ring-1 ring-border',
+                      atCap && 'opacity-40',
+                      !isSubmitting && !atCap && 'hover:opacity-90',
+                    )}
+                  >
+                    <img src={ref.mediaUrl} alt={ref.title} className="h-full w-full object-cover" loading="lazy" />
+                    {isSelected && (
+                      <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <Check className="h-3 w-3" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {refImages.length > 0 && selectedRefs.length === 0 && (
+            <p className="text-xs text-destructive" role="status">
+              Select at least 1 reference image.
+            </p>
+          )}
+        </div>
+
+        {/* Prompt */}
+        <div className="space-y-2">
+          <Label htmlFor="style-prompt">Prompt</Label>
           <Textarea
             id="style-prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Enter prompt…"
-            className="min-h-[112px] text-sm"
+            className="min-h-[96px] text-sm"
             aria-label="Style prompt"
             disabled={isSubmitting}
             autoFocus
@@ -206,12 +297,6 @@ export function GenerateStyleModal({ kind, mode, styleIndex, onEnqueued, onClose
             }}
           />
         </div>
-
-        {!artStyleId && (
-          <p className="text-xs text-destructive" role="status">
-            No sketch art style set for this book — set it before generating a base sheet.
-          </p>
-        )}
 
         {isAnyGenerating && (
           <p className="text-xs text-muted-foreground" role="status">

@@ -18,7 +18,6 @@ import type {
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
 import type { IllustrationData, Section, Branch, BranchSetting, BranchLocalizedContent } from '@/types/illustration-types';
 import type { Prop, PropVariant, PropSound, Illustration, ImageReference } from '@/types/prop-types';
-import type { ReferenceImage } from '@/types/remix';
 import type { Character, CharacterVariant, CharacterVoiceSetting } from '@/types/character-types';
 import type { Stage, StageVariant, StageSound } from '@/types/stage-types';
 import type {
@@ -832,8 +831,8 @@ export interface StartBaseSheetGenerateParams {
   mode: 'add' | 'regenerate';
   styleIndex?: number;         // required for 'regenerate'; ignored for 'add' (job appends a style)
   stylePrompt: string;
-  referenceImages: ReferenceImage[]; // picker images (label + base64) — slice uploads → persists {title, media_url}
-  artStyleId: string;          // = book.sketchstyle_id (caller validates non-null before calling)
+  referenceImages: ImageReference[]; // pre-hosted art-style refs {title, media_url} — persisted verbatim + sent as media_url
+  artStyleId: string;          // chosen sketch art-style (defaults to book.sketchstyle_id; caller validates non-null)
   modelParams?: SketchModelParams; // optional model override (allowlist group `sketch-base`); omit → DB default
 }
 

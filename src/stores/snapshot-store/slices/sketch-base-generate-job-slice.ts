@@ -25,7 +25,6 @@ import type { SnapshotStore, SketchBaseGenerateJobSlice, BaseGeneratePhase } fro
 import type { BaseKind, SketchEntity } from '@/types/sketch';
 import { sheetOf } from '@/types/sketch';
 import type { Illustration, ImageReference } from '@/types/prop-types';
-import type { ReferenceImage } from '@/types/remix';
 import {
   callGenerateBaseSheet,
   type BaseSheetEntity,
@@ -35,8 +34,6 @@ import {
 // Base crop reuses the shared positional cutter (api 10) — 07 `crop-base-sheet` removed 2026-07-15.
 import { callCropSheetRow } from '@/apis/sketch-variant-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
-import { uploadImageToStorage } from '@/apis/storage-api';
-import { base64ToFile } from '@/utils/file-utils';
 // Collab (ADR-043 sketch-base, rtype 11): persist the WHOLE base.{kind}_sheet node through the
 // gateway held-session instead of the suppressed owner-direct autoSave. Solo → autoSave (below).
 import { useResourceLockStore } from '@/stores/resource-lock-store';
@@ -86,39 +83,6 @@ function baseVariantText(entity: SketchEntity): BaseSheetEntity {
 /** Effective raw url: selected version → newest → null. */
 function effectiveIllustration(illustrations: Illustration[]): string | null {
   return illustrations.find((i) => i.is_selected)?.media_url ?? illustrations[0]?.media_url ?? null;
-}
-
-/** Storage prefix for user-picked base-sheet style reference images. */
-const BASE_REF_PREFIX = 'sketch-base-refs';
-
-/**
- * Upload picker reference images (base64) to storage so they persist on the style
- * (`image_references: {title, media_url}` — never base64 in JSONB). Returns BOTH the persisted
- * refs and the generate-payload refs: an uploaded image travels to the backend as a `media_url`
- * (fetched + SSRF-guarded); an image whose upload FAILS still falls back to base64 for the
- * generate call (generation fidelity preserved) but is not persisted. Per-image try/catch so one
- * bad upload never sinks the whole generate.
- */
-async function uploadBaseSheetReferences(
-  refs: ReferenceImage[],
-): Promise<{ persisted: ImageReference[]; apiRefs: BaseReferenceImage[] }> {
-  const persisted: ImageReference[] = [];
-  const apiRefs: BaseReferenceImage[] = [];
-  for (const ref of refs) {
-    try {
-      const file = base64ToFile(ref.base64Data, ref.mimeType, ref.label || 'reference');
-      const { publicUrl } = await uploadImageToStorage(file, BASE_REF_PREFIX);
-      persisted.push({ title: ref.label, media_url: publicUrl });
-      apiRefs.push({ media_url: publicUrl });
-    } catch (err) {
-      log.warn('uploadBaseSheetReferences', 'upload failed — base64 fallback for generate, not persisted', {
-        label: ref.label,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      apiRefs.push({ base64Data: ref.base64Data, mimeType: ref.mimeType });
-    }
-  }
-  return { persisted, apiRefs };
 }
 
 export const createSketchBaseGenerateJobSlice: StateCreator<
@@ -232,7 +196,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     styleIndex: number,
     params: {
       stylePrompt: string;
-      referenceImages: ReferenceImage[];
+      referenceImages: ImageReference[];
       artStyleId: string;
       modelParams?: SketchModelParams;
     },
@@ -244,15 +208,15 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     let rawLanded = false;
 
     try {
-      // Upload user refs → storage (persist {title, media_url} on the style) + build the generate
-      // payload refs (uploaded → media_url, failed → base64 fallback). Runs under the live op so a
-      // cancel/reset mid-upload bails via opStale before we write.
-      const { persisted, apiRefs } = await uploadBaseSheetReferences(params.referenceImages);
-      if (opStale(kind, styleIndex)) return;
-      if (persisted.length > 0) {
-        log.info('runGenerate', 'persist style reference images', { kind, styleIndex, count: persisted.length });
-        get().setSketchBaseStyleImageReferences(kind, styleIndex, persisted);
+      // Refs are the CHOSEN art-style's `image_references` ({title, media_url}) picked in the modal —
+      // already hosted in Storage, so no upload roundtrip. Persist them verbatim on the style (provenance
+      // + regenerate re-seed) and forward each as a media_url ref (backend SSRF-guards + fetches). Runs
+      // synchronously on the style we just created/own (op set before this call) → no opStale needed here.
+      if (params.referenceImages.length > 0) {
+        log.info('runGenerate', 'persist style reference images', { kind, styleIndex, count: params.referenceImages.length });
+        get().setSketchBaseStyleImageReferences(kind, styleIndex, params.referenceImages);
       }
+      const apiRefs: BaseReferenceImage[] = params.referenceImages.map((r) => ({ media_url: r.media_url }));
 
       const result = await callGenerateBaseSheet(kind, {
         entities,
