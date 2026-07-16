@@ -55,14 +55,13 @@ export const GATE_TOOLTIP: Record<VariantGateReason, string> = {
   'empty-text': 'Add a description before generating',
 };
 
-/** Shared EditImageModal binding target — CROP scope ONLY (the raw 21:9 sheet is an internal
- *  artifact, never shown or edited in this space). Consumed by the modal connector (§3.4). */
-export interface EditImageTarget {
-  kind: BaseKind;
-  entityKey: string;
-  variantKey: string;
-  cropIndex: number;
-}
+/** Shared EditImageModal binding target, discriminated by SCOPE (mirrors the base space's target).
+ *  `raw` = the 21:9 sheet shown in the Raw tab — committing an edit AUTO re-cuts the 4 cells
+ *  (overwrites crops[]); `crop` = one of the 4 candidate cells — edits that cell ONLY.
+ *  Consumed by the modal connector (§3.4). */
+export type EditImageTarget =
+  | { kind: BaseKind; entityKey: string; variantKey: string; scope: 'raw' }
+  | { kind: BaseKind; entityKey: string; variantKey: string; scope: 'crop'; cropIndex: number };
 
 /** Structural equality for two variant refs (null-safe). Used by the root (derive selection,
  *  match the running op) and the sidebar (highlight the selected row). */

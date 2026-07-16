@@ -4,14 +4,18 @@
 // gateway `_resolve_entity` maps to `sketch.<plural>[key]` — the SAME whole-node contract the
 // illustration entity spaces use at step 2, so NO new rtype / resolver / migration is needed.
 //
-// Two consumers:
-//   • the component held-session (`useHeldResourceSession`) drives the 4 EDIT actions
-//     (text / edit-crop / select-crop) — it acquires/saves/releases the whole node itself,
-//     using `resolveSketchVariantLockTarget` for the target + a whole-node payload.
-//   • the generate JOB slice (off-render, cannot call the React `saveNow`) drives
-//     flush-before-generate + persist-after-crops via `flushSketchEntityUnderLock`, which
-//     saves the whole node UNDER an (acquired-if-needed) lock and KEEPS it held — the
-//     held-session stays the sole releaser (no double-lock / lingering-lock).
+// Three consumers (⚡ updated 2026-07-16 — the space moved from eager-atomic per-gesture to
+// BATCH-AT-RELEASE, ADR-043 Rev):
+//   • the component held-session (`useHeldResourceSession`) is now the PRIMARY path: the cheap
+//     edits (text / edit-crop) only mutate the store under the hold, and the session
+//     acquires/saves/releases the whole node ONCE at release — using `resolveSketchVariantLockTarget`
+//     for the target + a whole-node payload (`buildSketchEntityPayload`).
+//   • the JOB slice (off-render, cannot call the React `saveNow`) drives flush-before-generate +
+//     persist-after for BOTH chains (generate→auto-cut AND the raw-edit→re-cut) via
+//     `flushSketchEntityUnderLock` — AI output must not wait for a release.
+//   • `handleSelectCrop` (space root) direct-flushes THIS helper for the single pick gesture: it
+//     mutates synchronously with the acquire, so the held-session baseline is captured too late to
+//     ever see it (H2) — see the `releaseIfAcquired` doc below.
 //
 // NO-OP under solo (`collabPersist=false`): the whole-doc autosave owns persistence there,
 // so `flushSketchEntityUnderLock` returns `true` (nothing to do) and the caller keeps its

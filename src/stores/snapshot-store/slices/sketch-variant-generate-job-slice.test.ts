@@ -362,4 +362,180 @@ describe('SketchVariantGenerateJobSlice', () => {
     expect(variantHero(store).raw_sheet.crops).toHaveLength(4); // crops still written
     expect(store.getState().variantSheetGenerateOp).toBeNull(); // warning is non-fatal → op finalized
   });
+
+  // ── recropVariantSheet: cut-only re-run (Raw-tab edit commit → crops stale) ───────────────────────
+  describe('recropVariantSheet', () => {
+    const rawIllustrations = (
+      entries: { media_url: string; is_selected: boolean; created_time?: string }[],
+    ) =>
+      entries.map((e) => ({
+        type: 'created' as const,
+        media_url: e.media_url,
+        created_time: e.created_time ?? '2026-07-15T00:00:00Z',
+        is_selected: e.is_selected,
+      }));
+
+    const oldCrop = (url: string) => [
+      {
+        is_selected: true,
+        illustrations: [
+          { type: 'created' as const, media_url: url, created_time: '2026-07-13T00:00:00Z', is_selected: true },
+        ],
+      },
+    ];
+
+    it('(h) happy path: overwrites crops[] with 4 unpicked cells cut from the effective raw url', async () => {
+      store.getState().setSketchVariantRawSheetIllustrations(
+        'characters',
+        'kid',
+        'hero',
+        rawIllustrations([{ media_url: 'raw.png', is_selected: true }]),
+      );
+      // Seed a stale crop set that must be fully replaced.
+      store.getState().setSketchVariantCrops('characters', 'kid', 'hero', oldCrop('old.png'));
+      mockedCut.mockResolvedValueOnce(okCut(['n1.png', 'n2.png', 'n3.png', 'n4.png']));
+
+      store.getState().recropVariantSheet(REF);
+      expect(store.getState().variantSheetGenerateOp?.phase).toBe('cut'); // skips 'generate'
+      await tick();
+      await tick();
+
+      expect(mockedCut).toHaveBeenCalledTimes(1);
+      expect(mockedCut.mock.calls[0][0]).toMatchObject({
+        imageUrl: 'raw.png',
+        cellCount: 4,
+        pathPrefix: 'sketches/variants/characters/kid/hero',
+      });
+      const crops = variantHero(store).raw_sheet.crops;
+      expect(crops).toHaveLength(4);
+      expect(crops.map((c: { illustrations: { media_url: string }[] }) => c.illustrations[0].media_url)).toEqual([
+        'n1.png',
+        'n2.png',
+        'n3.png',
+        'n4.png',
+      ]);
+      expect(crops.every((c: { is_selected: boolean }) => c.is_selected === false)).toBe(true);
+      expect(crops.every((c: { illustrations: { is_selected: boolean }[] }) => c.illustrations[0].is_selected === true)).toBe(true);
+      // Raw sheet itself is untouched by a cut-only re-run.
+      expect(variantHero(store).raw_sheet.illustrations[0].media_url).toBe('raw.png');
+      expect(store.getState().variantSheetGenerateOp).toBeNull();
+    });
+
+    it('(i) guard: no raw sheet (no effective url) → no api call, no op set', () => {
+      // Fresh entityWithVariant fixture: hero variant has no raw_sheet at all.
+      store.getState().recropVariantSheet(REF);
+      expect(mockedCut).not.toHaveBeenCalled();
+      expect(store.getState().variantSheetGenerateOp).toBeNull();
+    });
+
+    it('(j) single-flight: blocked while an op is already running', () => {
+      store.getState().setSketchVariantRawSheetIllustrations(
+        'characters',
+        'kid',
+        'hero',
+        rawIllustrations([{ media_url: 'raw.png', is_selected: true }]),
+      );
+      // Simulate an in-flight op (e.g. a generate op) without resolving it.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      store.setState((s: any) => {
+        s.variantSheetGenerateOp = {
+          kind: 'characters',
+          entityKey: 'kid',
+          variantKey: 'hero',
+          phase: 'generate',
+          startedAt: 'now',
+        };
+      });
+
+      store.getState().recropVariantSheet(REF);
+
+      expect(mockedCut).not.toHaveBeenCalled();
+      expect(store.getState().variantSheetGenerateOp?.phase).toBe('generate'); // unchanged, never set to 'cut'
+    });
+
+    it('(k) failure: callCropSheetRow fails → op keeps a classified error, PREVIOUS crops[] unchanged', async () => {
+      store.getState().setSketchVariantRawSheetIllustrations(
+        'characters',
+        'kid',
+        'hero',
+        rawIllustrations([{ media_url: 'raw.png', is_selected: true }]),
+      );
+      store.getState().setSketchVariantCrops('characters', 'kid', 'hero', oldCrop('old.png'));
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      mockedCut.mockResolvedValueOnce({ success: false, error: 'boom', errorCode: 'ALL_CROPS_FAILED' } as any);
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+
+      store.getState().recropVariantSheet(REF);
+      await tick();
+      await tick();
+
+      const op = store.getState().variantSheetGenerateOp;
+      expect(op).not.toBeNull();
+      expect(op?.error).toContain('Could not cut any cell'); // ALL_CROPS_FAILED friendly copy
+      // Previous crops preserved verbatim — runCut only writes crops[] on success.
+      const crops = variantHero(store).raw_sheet.crops;
+      expect(crops).toHaveLength(1);
+      expect(crops[0].illustrations[0].media_url).toBe('old.png');
+    });
+
+    it('(l) persist-after ALWAYS fires, even on failure: SOLO → autoSaveSnapshot (not the gateway)', async () => {
+      store.getState().setSketchVariantRawSheetIllustrations(
+        'characters',
+        'kid',
+        'hero',
+        rawIllustrations([{ media_url: 'raw.png', is_selected: true }]),
+      );
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      mockedCut.mockResolvedValueOnce({ success: false, error: 'boom', errorCode: 'ALL_CROPS_FAILED' } as any);
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+
+      store.getState().recropVariantSheet(REF);
+      await tick();
+      await tick();
+
+      expect(autoSaveSnapshot).toHaveBeenCalled();
+      expect(h.flushEntity).not.toHaveBeenCalled();
+    });
+
+    it('(m) persist-after COLLAB: flushSketchEntityUnderLock called with releaseIfAcquired:true', async () => {
+      h.lockState.collabPersist = true;
+      store.getState().setSketchVariantRawSheetIllustrations(
+        'characters',
+        'kid',
+        'hero',
+        rawIllustrations([{ media_url: 'raw.png', is_selected: true }]),
+      );
+      mockedCut.mockResolvedValueOnce(okCut(['n1.png', 'n2.png', 'n3.png', 'n4.png']));
+
+      store.getState().recropVariantSheet(REF);
+      await tick();
+      await tick();
+
+      expect(h.flushEntity).toHaveBeenCalledWith('characters', 'kid', expect.any(Object), {
+        releaseIfAcquired: true,
+      });
+      expect(autoSaveSnapshot).not.toHaveBeenCalled();
+      expect(store.getState().variantSheetGenerateOp).toBeNull();
+    });
+
+    it('(n) effective-url precedence: is_selected version wins over the newest (index 0) entry', async () => {
+      // index 0 = "newest" by prepend convention but NOT selected; index 1 = older but is_selected.
+      store.getState().setSketchVariantRawSheetIllustrations(
+        'characters',
+        'kid',
+        'hero',
+        rawIllustrations([
+          { media_url: 'newest.png', is_selected: false, created_time: '2026-07-15T00:00:00Z' },
+          { media_url: 'selected.png', is_selected: true, created_time: '2026-07-14T00:00:00Z' },
+        ]),
+      );
+      mockedCut.mockResolvedValueOnce(okCut(['n1.png', 'n2.png', 'n3.png', 'n4.png']));
+
+      store.getState().recropVariantSheet(REF);
+      await tick();
+      await tick();
+
+      expect(mockedCut.mock.calls[0][0]).toMatchObject({ imageUrl: 'selected.png' });
+    });
+  });
 });

@@ -9,7 +9,8 @@
 // per-KIND HELD SHEET lock (`useHeldResourceSession`, step 1 / rtype 11 base_sheet, whole-sheet
 // grain A). Lock-on-interact (browse ≠ lock): `lockedSheetKind` is set ONLY by a genuine sheet
 // interaction (＋ add / 🔒 lock / [✎] edit / content pointerdown), never by browsing (select/toggle).
-// `manageHeaderStatus:true` (base default, unlike the variant space's eager-atomic false) → the hold
+// `manageHeaderStatus:true` (the default — same as the variant space since its 2026-07-16 migration
+// to batch-at-release) → the hold
 // lifetime is "Unsaved", release-save (switch kind / leave) → Saving…→Saved (edit-one-style-per-
 // session semantics). GRAIN B (per-entity text: import + lock-clone base variant + EditBaseEntityModal)
 // REUSES the variant helper's `flushSketchEntityUnderLock` (rtype 3/4). Peer-lock is advisory (veil +

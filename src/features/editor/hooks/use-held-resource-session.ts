@@ -55,11 +55,13 @@ export interface UseHeldResourceSessionArgs {
   /** Maps the projected node (sub-tree when ownedKeys set, else whole node) → save payload. */
   buildPayload: (projected: unknown) => SavePayload;
   /**
-   * Drive the SHARED header save-label (beginHold/endHold/markSaving/markSaved). Default `true`
-   * (the 5 continuous-canvas spaces: hold = "Unsaved", settle Saving…→Saved on release). Set
-   * `false` for EAGER-ATOMIC spaces (sketch-variant) that persist per action and drive their OWN
-   * Saving…→Saved: there the hold is for PEER-LOCK visibility only, and a hold-lifetime "Unsaved"
-   * is permanently FALSE (the snapshot is never sustainedly dirty — every gesture saves immediately).
+   * Drive the SHARED header save-label (beginHold/endHold/markSaving/markSaved). Default `true` —
+   * the batch-at-release spaces: hold = "Unsaved", settle Saving…→Saved on release. Set `false` only for a
+   * session that persists on its OWN schedule and drives its OWN Saving…→Saved, where a
+   * hold-lifetime "Unsaved" would be permanently FALSE. The sole such consumer today is
+   * `edit-base-entity-modal.tsx` (a transient modal that saves on its Save button).
+   * ⚡ sketch-variant used to opt out here (eager-atomic per gesture) but was migrated to
+   * batch-at-release on 2026-07-16 (ADR-043 Rev) — it now uses the default.
    * Lock acquire/release, onLost, and the release-time `releaseAndSave` are UNAFFECTED — only the
    * header-status signals are suppressed.
    */

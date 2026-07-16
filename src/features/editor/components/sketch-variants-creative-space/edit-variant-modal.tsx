@@ -4,11 +4,11 @@
 // prompt. description/height live in the DB but are NOT edited here (the store action is a partial
 // merge, so leaving them out preserves their values).
 //
-// Save writes the two fields then persists via the parent (`onSaved`, fire-and-forget) BECAUSE the
-// generate endpoint reads snapshot.sketch from the DB (snapshot-reading) — text must land before the
-// user hits ✨. Under collab (ADR-047) the parent routes `onSaved` through the held-session saveNow
-// (whole entity node, keeps the lock); under solo it falls back to autoSaveSnapshot. This modal no
-// longer calls autoSaveSnapshot directly (it is suppressed under collab → would silently no-op).
+// Save ONLY writes the two fields to the store — it does NOT persist (batch-at-release, ADR-043 Rev
+// 2026-07-16): the text lands with the whole entity node at the held-session release-save. The
+// generate endpoint reads snapshot.sketch from the DB (snapshot-reading), but that is covered by the
+// job slice's own flush-BEFORE-generate, which reads the FRESH node — so text edited and never
+// released still reaches the AI. This modal never calls autoSaveSnapshot (suppressed under collab).
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -34,8 +34,6 @@ export interface EditVariantModalProps {
   kind: BaseKind;
   entityKey: string;
   variantKey: string; // non-base
-  /** Persist the WHOLE entity node after a dirty save (parent routes collab saveNow / solo autosave). */
-  onSaved: () => void;
   onClose: () => void;
 }
 
@@ -44,7 +42,7 @@ interface VariantTextDraft {
   art_language: string;
 }
 
-export function EditVariantModal({ kind, entityKey, variantKey, onSaved, onClose }: EditVariantModalProps) {
+export function EditVariantModal({ kind, entityKey, variantKey, onClose }: EditVariantModalProps) {
   const { updateSketchVariantText } = useSnapshotActions();
   const modalContentRef = useRef<HTMLDivElement>(null);
 
@@ -81,12 +79,11 @@ export function EditVariantModal({ kind, entityKey, variantKey, onSaved, onClose
         visual_design: draft.visual_design,
         art_language: draft.art_language,
       });
-      // Persist the WHOLE entity node BEFORE generate — the endpoint reads snapshot.sketch
-      // (snapshot-reading). Parent routes collab saveNow (held lock) / solo autosave. Fire-and-forget.
-      onSaved();
+      // No persist here — the edit is held under the entity lock and lands at the release-save
+      // (batch-at-release). Generate's own flush-before reads this fresh text, so ✨ never draws stale.
     }
     onClose();
-  }, [isDirty, kind, entityKey, variantKey, draft, updateSketchVariantText, onSaved, onClose]);
+  }, [isDirty, kind, entityKey, variantKey, draft, updateSketchVariantText, onClose]);
 
   const guardClose = useCallback(() => {
     if (isDirty && !window.confirm('Huỷ thay đổi chưa lưu?')) return;

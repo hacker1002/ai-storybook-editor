@@ -719,8 +719,9 @@ export const useSnapshotActions = () =>
       recropBaseSheet: s.recropBaseSheet,
       cancelBaseSheetGenerate: s.cancelBaseSheetGenerate,
       dismissBaseSheetGenerateError: s.dismissBaseSheetGenerateError,
-      // Sketch variant-sheet generate op (single-flight generate→auto-cut chain)
+      // Sketch variant-sheet generate op (single-flight generate→auto-cut chain + cut-only re-run)
       startVariantSheetGenerate: s.startVariantSheetGenerate,
+      recropVariantSheet: s.recropVariantSheet,
       dismissVariantSheetGenerateError: s.dismissVariantSheetGenerateError,
       // Sketch (spread-level CRUD — sketch-spread creative space)
       setSketch: s.setSketch,

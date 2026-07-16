@@ -116,6 +116,31 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
     return get().sketch[ref.kind].find((e) => e.key === ref.entityKey) ?? null;
   }
 
+  /** Effective raw sheet url: selected version → newest → null (mirrors the base slice). */
+  function effectiveRawUrl(ref: VariantRef): string | null {
+    const illustrations = variantOf(ref)?.raw_sheet?.illustrations ?? [];
+    return illustrations.find((i) => i.is_selected)?.media_url ?? illustrations[0]?.media_url ?? null;
+  }
+
+  /** Persist the RESULT of a generate/recrop chain (raw sheet + crops already landed in the store).
+   *  ⚡ PERSIST-AFTER is the deliberate EXCEPTION to this space's batch-at-release model (ADR-043 Rev
+   *  2026-07-16): cheap gestures (text / pick / crop edit) wait for the release-save, but AI output
+   *  must never be lost to a crash / leaving the space mid-chain. Fire-and-forget.
+   *  COLLAB → gateway whole-entity flush; `releaseIfAcquired:true` (one-shot) because the user MAY
+   *  have browsed to another entity during the long AI call → the held-session already released THIS
+   *  entity and re-acquiring + keeping would orphan the lock (H1). Still held (didn't browse) → the
+   *  lock is KEPT for the held-session (the sole releaser). SOLO (incl. the space unmounted →
+   *  collabPersist flipped false) → the legacy owner-direct autoSaveSnapshot. */
+  function persistVariantEntity(ref: VariantRef): void {
+    if (useResourceLockStore.getState().collabPersist) {
+      void flushSketchEntityUnderLock(ref.kind, ref.entityKey, entityNodeOf(ref), {
+        releaseIfAcquired: true,
+      });
+    } else {
+      void get().autoSaveSnapshot();
+    }
+  }
+
   // ── internal producers (immer) — called at await boundaries ──────────────────────────────────
   function setOpPhase(phase: VariantGeneratePhase): void {
     set((state) => {
@@ -252,17 +277,35 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
     }
 
     if (opStale(ref)) return; // op reset during the last await → nothing to finalize
-    // Persist the RESULT (raw sheet + crops landed in the store). COLLAB → gateway whole-node flush.
-    // `releaseIfAcquired:true` (one-shot) because by now the user MAY have browsed to another entity
-    // during the long AI call → the held-session already released THIS entity; re-acquiring + keeping
-    // would orphan the lock (H1). If still held (didn't browse), the lock is kept for the held-session.
-    // SOLO (incl. the case where the space unmounted → collabPersist flipped false) → autoSaveSnapshot.
-    if (useResourceLockStore.getState().collabPersist) {
-      void flushSketchEntityUnderLock(ref.kind, ref.entityKey, entityNodeOf(ref), { releaseIfAcquired: true });
-    } else {
-      void get().autoSaveSnapshot();
-    }
+    persistVariantEntity(ref); // persist-after (raw sheet + crops landed in the store)
     finalizeOp(); // clear the op if it settled without error
+  }
+
+  // ── cut-only re-run (call-site #2: the user EDITED the raw sheet in the Raw tab → crops stale). ──
+  // Mirrors runRecrop in #14. A full failure keeps the PREVIOUS crops[] (runCut only writes on
+  // success) → the raw↔crops mismatch is accepted and surfaced by ONE toast from the notifications
+  // hook (markOpError); the user re-triggers by editing the raw again / regenerating. No rollback of
+  // the raw edit, no auto-retry (KISS — chốt Validation Session 1).
+  async function runRecrop(ref: VariantRef, rawImageUrl: string): Promise<void> {
+    try {
+      await runCut(ref, rawImageUrl);
+    } catch (err) {
+      if (opStale(ref)) return;
+      const msg = err instanceof Error ? err.message : 'Variant sheet cut failed';
+      log.error('runRecrop', 'failed', {
+        kind: ref.kind,
+        entityKey: ref.entityKey,
+        variantKey: ref.variantKey,
+        error: msg,
+      });
+      markOpError(msg); // keep the op so the notifications hook toasts once
+    }
+
+    if (opStale(ref)) return; // op reset during the last await → nothing to finalize
+    // Persist even on a cut failure: the RAW edit that triggered this re-cut is already in the store
+    // and must land (the crops simply stay as they were).
+    persistVariantEntity(ref);
+    finalizeOp();
   }
 
   return {
@@ -293,6 +336,52 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
       });
 
       void runGenerate({ kind: ref.kind, entityKey: ref.entityKey, variantKey: ref.variantKey });
+    },
+
+    recropVariantSheet: (ref: VariantRef) => {
+      if (get().variantSheetGenerateOp != null) {
+        // Reachable: the edit-image modal stays OPEN after a raw commit, so a 2nd commit can land
+        // while the 1st re-cut is still in flight. Dropping it silently would leave crops[] cut from
+        // the PREVIOUS raw with no signal and no reason for the user to re-trigger — toast so the
+        // mismatch is visible and actionable (mirrors the recrop-failure policy: non-fatal toast,
+        // keep the old crops, user re-triggers).
+        log.warn('recropVariantSheet', 'blocked — an op is already running', {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+        });
+        toast.warning('Still processing the previous change — the cells were not re-cut. Try again in a moment.');
+        return; // single-flight (shared with generate — one op at a time)
+      }
+
+      // Reads the effective raw SYNCHRONOUSLY, so a caller that just wrote a new raw version (the
+      // Raw-tab edit commit) re-cuts from THAT version.
+      const rawUrl = effectiveRawUrl(ref);
+      if (!rawUrl) {
+        log.warn('recropVariantSheet', 'no raw sheet to cut — skip', {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+        });
+        return; // nothing generated yet → nothing to cut
+      }
+
+      log.info('recropVariantSheet', 'start', {
+        kind: ref.kind,
+        entityKey: ref.entityKey,
+        variantKey: ref.variantKey,
+      });
+      set((state) => {
+        state.variantSheetGenerateOp = {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+          phase: 'cut', // skips 'generate' — the raw already exists (content-area shows "Cutting cells…")
+          startedAt: new Date().toISOString(),
+        };
+      });
+
+      void runRecrop({ kind: ref.kind, entityKey: ref.entityKey, variantKey: ref.variantKey }, rawUrl);
     },
 
     dismissVariantSheetGenerateError: () =>

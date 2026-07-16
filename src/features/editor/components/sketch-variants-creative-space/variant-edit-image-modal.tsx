@@ -1,10 +1,15 @@
 // variant-edit-image-modal.tsx — store-binding connector for the shared, store-agnostic
 // EditImageModal in the Variant space (design README §3.4). Mirrors SketchBaseEditImageModal:
 // resolves `illustrations` + `onUpdateIllustrations` + `pathPrefix` + `mediaUrl` + `imageTitle`
-// from the CROP `EditImageTarget` (raw sheet is never shown/edited), then feeds the controlled modal.
-// Mounted only while a target is set, so the store hooks run unconditionally.
+// from the `EditImageTarget` SCOPE, then feeds the controlled modal. Mounted only while a target is
+// set, so the store hooks run unconditionally.
 //
-// Tool availability = SPACE_TOOL_MATRIX['sketch-variant'].edit (inpaint + erasor). Landing = inpaint.
+// Two scopes (2026-07-16 rework — the raw sheet is VISIBLE + editable in the Raw tab now):
+//   • raw  → the 21:9 sheet. Committing an edit AUTO re-cuts the 4 cells (overwrites crops[]).
+//   • crop → one of the 4 candidate cells. Edits that cell ONLY — never touches its siblings.
+//
+// Tool availability = SPACE_TOOL_MATRIX['sketch-variant'].edit (inpaint + erasor) for BOTH scopes.
+// Landing = inpaint.
 
 import { useCallback } from 'react';
 import { EditImageModal } from '@/features/editor/components/shared-components/edit-image-modal';
@@ -12,7 +17,7 @@ import { SPACE_TOOL_MATRIX } from '@/features/editor/components/shared-component
 import { useSketchVariantByKey, useSnapshotActions } from '@/stores/snapshot-store/selectors';
 import type { Illustration } from '@/types/prop-types';
 import { createLogger } from '@/utils/logger';
-import type { EditImageTarget } from './sketch-variants-constants';
+import { titleCase, type EditImageTarget } from './sketch-variants-constants';
 
 const log = createLogger('Editor', 'VariantEditImageModal');
 
@@ -23,46 +28,73 @@ function effectiveUrl(illustrations: Illustration[]): string {
 
 export interface VariantEditImageModalProps {
   target: EditImageTarget;
-  /** Persist the WHOLE entity node after a crop edit (parent routes collab saveNow / solo autosave). */
-  onSaved: () => void;
   onClose: () => void;
 }
 
-export function VariantEditImageModal({ target, onSaved, onClose }: VariantEditImageModalProps) {
+export function VariantEditImageModal({ target, onClose }: VariantEditImageModalProps) {
   const variant = useSketchVariantByKey(target.kind, target.entityKey, target.variantKey);
-  const { setSketchVariantCropIllustrations } = useSnapshotActions();
+  const { setSketchVariantRawSheetIllustrations, setSketchVariantCropIllustrations, recropVariantSheet } =
+    useSnapshotActions();
 
-  const crop = variant?.raw_sheet?.crops[target.cropIndex];
-  const illustrations: Illustration[] = crop?.illustrations ?? [];
+  const crop = target.scope === 'crop' ? variant?.raw_sheet?.crops[target.cropIndex] : undefined;
+  const illustrations: Illustration[] =
+    target.scope === 'raw'
+      ? (variant?.raw_sheet?.illustrations ?? [])
+      : (crop?.illustrations ?? []);
 
   const handleUpdate = useCallback(
     (next: Illustration[]) => {
-      log.debug('handleUpdate', 'persist crop illustrations', {
-        kind: target.kind,
-        entityKey: target.entityKey,
-        variantKey: target.variantKey,
-        cropIndex: target.cropIndex,
-        count: next.length,
-      });
-      setSketchVariantCropIllustrations(
-        target.kind,
-        target.entityKey,
-        target.variantKey,
-        target.cropIndex,
-        next,
-      );
-      // Persist the whole entity node through the gateway (collab) / autosave (solo). Fire-and-forget.
-      // Previously this modal had NO save at all — crop edits only persisted on the next flush.
-      onSaved();
+      const ref = { kind: target.kind, entityKey: target.entityKey, variantKey: target.variantKey };
+      if (target.scope === 'raw') {
+        log.debug('handleUpdate', 'write raw sheet illustrations', { ...ref, count: next.length });
+        setSketchVariantRawSheetIllustrations(target.kind, target.entityKey, target.variantKey, next);
+        // Changing the RAW sheet invalidates every cell cut from it → auto re-cut overwrites crops[]
+        // (4 fresh cells, none picked) from the version just written (recropVariantSheet reads the
+        // effective raw synchronously). NO confirm (mirrors base §3.5). Only the raw scope re-cuts —
+        // a single-cell edit (else branch) must NOT touch its siblings.
+        //
+        // ⚡ DELIBERATE (user decision 2026-07-16): the shared modal drives this callback from BOTH
+        // `handleCommit` (a real edit) AND `handleSelectVersion` (merely clicking a version thumb),
+        // so selecting an older raw version ALSO re-cuts — silently discarding the pick + per-cell
+        // edits. Chosen on purpose: the invariant "crops[] always match the EFFECTIVE raw" outranks
+        // preserving them, and it keeps parity with sketch-base-edit-image-modal, which has the
+        // identical shape. Do NOT "fix" this by gating on a new-version check without revisiting
+        // that invariant (regenerate confirms for the same loss; version-select intentionally does not).
+        log.info('handleUpdate', 'raw changed (commit or version-select) — auto re-cut', ref);
+        recropVariantSheet(ref);
+      } else {
+        log.debug('handleUpdate', 'write crop illustrations', {
+          ...ref,
+          cropIndex: target.cropIndex,
+          count: next.length,
+        });
+        setSketchVariantCropIllustrations(
+          target.kind,
+          target.entityKey,
+          target.variantKey,
+          target.cropIndex,
+          next,
+        );
+      }
+      // No persist here: cheap gestures batch to the held-session release-save (ADR-043 Rev
+      // 2026-07-16). The re-cut chain persists its own AI result (persist-after, inside the slice).
     },
-    [target, setSketchVariantCropIllustrations, onSaved],
+    [target, setSketchVariantRawSheetIllustrations, setSketchVariantCropIllustrations, recropVariantSheet],
   );
 
-  // Crop gone (regenerate/re-cut shifted indices) while the modal was open → nothing to bind.
-  if (!crop) return null;
+  // Target gone while the modal was open (variant removed, or a re-cut/regenerate shifted the cell
+  // indices) → nothing to bind.
+  if (target.scope === 'raw' ? !variant?.raw_sheet : !crop) return null;
 
-  const pathPrefix = `sketch/variant/${target.kind}/${target.entityKey}/${target.variantKey}/crop/${target.cropIndex}`;
-  const imageTitle = `Variant crop ${target.cropIndex + 1} — @${target.entityKey}/${target.variantKey}`;
+  const pathPrefix =
+    target.scope === 'raw'
+      ? `sketch/variant/${target.kind}/${target.entityKey}/${target.variantKey}/raw`
+      : `sketch/variant/${target.kind}/${target.entityKey}/${target.variantKey}/crop/${target.cropIndex}`;
+
+  const imageTitle =
+    target.scope === 'raw'
+      ? `Variant sheet — ${titleCase(target.entityKey)} · ${titleCase(target.variantKey)}`
+      : `Variant crop ${target.cropIndex + 1} — @${target.entityKey}/${target.variantKey}`;
 
   return (
     <EditImageModal

@@ -5,19 +5,21 @@
 // useEffect+setState, NO ref read/write in render body).
 //
 // Collab (ADR-047 / Path B — the 7th collab space): mounts `useCollabPersistSession` (header
-// Saving…→Saved + suppress owner-direct autosave) + `useContentSyncSession` (peer refetch), and a
-// per-ENTITY HELD lock (`useHeldResourceSession`, step 1 / rtype 3 char · 4 prop, whole-node grain).
-// Lock-on-interact (browse ≠ lock): `activeLockEntity` is set ONLY by a genuine interaction (edit
-// text / edit crop / select crop / generate), never by browsing. Every write persists the WHOLE
-// entity node through the gateway; generate additionally flush-before-generate (snapshot-reading —
-// risk #1) INSIDE the job slice. Peer-lock is advisory (veil + sidebar badge); the acquire 409 is
-// the real authority.
+// Saving…→Saved + suppress owner-direct autosave) + `useContentSyncSession` (peer refetch). The
+// per-ENTITY HELD lock and the whole persist model live in `useVariantEntityLockSession` (step 1 /
+// rtype 3 char · 4 prop, whole-node grain) — this root only reports INTENT to it (`adopt` on a
+// genuine interaction, `releaseUnlessSame` on browse), never touching the lock directly. Peer-lock
+// is advisory (veil + sidebar badge); the acquire 409 is the real authority.
+//
+// ⚡ BATCH-AT-RELEASE (ADR-043 Rev 2026-07-16 — SUPERSEDES the old eager-atomic per-gesture model):
+// cheap gestures (edit text / edit crop) ONLY mutate the store under the held lock; the WHOLE entity
+// node persists ONCE at release. Exceptions (generate / re-cut persist-after in the job slice, and
+// the select-crop H2 flush) are documented in `use-variant-entity-lock-session.ts`.
 //
 // ⚠️ Export name MUST stay `SketchVariantsCreativeSpace` (editor-page routing imports it).
 
 import { useCallback, useMemo, useState } from 'react';
 import { Copy } from 'lucide-react';
-import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,24 +37,16 @@ import {
   useVariantSheetGenerateStatus,
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
-import { useSnapshotStore } from '@/stores/snapshot-store';
 import { useCurrentBookId } from '@/stores/book-store';
 import {
-  useResourceLockStore,
   useIsLockedByOther,
   useLockHolderName,
   type LockTarget,
-  type SavePayload,
 } from '@/stores/resource-lock-store';
-import {
-  resolveSketchVariantLockTarget,
-  buildSketchEntityPayload,
-  flushSketchEntityUnderLock,
-} from '@/stores/snapshot-store/slices/collab-sketch-variant-save-helper';
-import { useEditSessionStatusStore } from '@/stores/edit-session-status-store';
+import { resolveSketchVariantLockTarget } from '@/stores/snapshot-store/slices/collab-sketch-variant-save-helper';
 import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-persist-session';
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
-import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resource-session';
+import { useVariantEntityLockSession } from './use-variant-entity-lock-session';
 import { LockedByOtherOverlay } from '@/features/editor/components/shared-components/sketch-locked-by-other-overlay';
 import { CANVAS_CONFIRM_DIALOG_Z } from '@/constants/spread-constants';
 import type { BaseKind, SketchEntity, VariantRef } from '@/types/sketch';
@@ -73,22 +67,11 @@ import {
 
 const log = createLogger('Editor', 'SketchVariantsCreativeSpace');
 
-/** The entity the user is actively editing → the held-lock target (null = browsing only). */
-interface ActiveLockEntity {
-  kind: BaseKind;
-  entityKey: string;
-}
-
 /** Every non-base variant of a kind's entities → VariantRef[] (DRY: refs + gate share the source). */
 function nonBaseRefs(kind: BaseKind, entities: SketchEntity[]): VariantRef[] {
   return entities.flatMap((e) =>
     e.variants.filter((v) => v.key !== 'base').map((v) => ({ kind, entityKey: e.key, variantKey: v.key })),
   );
-}
-
-/** True when two entity refs point at the SAME sketch entity (kind + key — key is unique per kind only). */
-function sameEntity(a: ActiveLockEntity | null, b: { kind: BaseKind; entityKey: string } | null): boolean {
-  return !!a && !!b && a.kind === b.kind && a.entityKey === b.entityKey;
 }
 
 export function SketchVariantsCreativeSpace() {
@@ -102,7 +85,7 @@ export function SketchVariantsCreativeSpace() {
   const propEntities = useSketchEntities('props');
   // Single-flight op — drives the per-row spinner (across both kinds) + the content-area busy state.
   const op = useVariantSheetGenerateOp();
-  const { startVariantSheetGenerate, selectSketchVariantCrop, autoSaveSnapshot } = useSnapshotActions();
+  const { startVariantSheetGenerate, selectSketchVariantCrop } = useSnapshotActions();
 
   // ── Local UI state (owner = this root; state-location rule) ────────────────────────────────
   const [selectedVariant, setSelectedVariant] = useState<VariantRef | null>(null);
@@ -117,9 +100,6 @@ export function SketchVariantsCreativeSpace() {
   // Regenerate confirm target (AlertDialog over canvas) — set EVERY time ✨ hits a variant that
   // already has crops (user-locked: confirm every time, guards losing the pick + per-cell edits).
   const [pendingRegenerate, setPendingRegenerate] = useState<VariantRef | null>(null);
-  // LOCK-ON-INTERACT choke point: the entity the user is editing → held-lock target. Stays null
-  // until a genuine interaction (never set by browse) so the lock never auto-acquires on mount.
-  const [activeLockEntity, setActiveLockEntity] = useState<ActiveLockEntity | null>(null);
 
   // Row refs per kind (non-base), derived from the subscribed entities.
   const refsByKind = useMemo<Record<BaseKind, VariantRef[]>>(
@@ -184,86 +164,8 @@ export function SketchVariantsCreativeSpace() {
     [charEntities, propEntities],
   );
 
-  // ── Per-entity held session (ADR-047) ──────────────────────────────────────────────────────
-  // Lock target — null until a genuine interaction sets `activeLockEntity` (browse ≠ lock).
-  const lockTarget = useMemo<LockTarget | null>(
-    () =>
-      activeLockEntity
-        ? resolveSketchVariantLockTarget(activeLockEntity.kind, activeLockEntity.entityKey)
-        : null,
-    [activeLockEntity],
-  );
-
-  // Live (non-reactive) read of the WHOLE locked entity node — baseline + dirty-diff source. Reads
-  // getState() by the closure so a switch's release-cleanup still sees the OLD entity.
-  const getNode = useCallback(
-    () =>
-      activeLockEntity
-        ? useSnapshotStore
-            .getState()
-            .sketch[activeLockEntity.kind].find((e) => e.key === activeLockEntity.entityKey) ?? null
-        : null,
-    [activeLockEntity],
-  );
-  const buildPayload = useCallback((node: unknown): SavePayload => buildSketchEntityPayload(node), []);
-
-  // 409 on acquire → another editor holds this entity. Toast + drop the interaction (idle).
-  const handleLockBlocked = useCallback((holder: string) => {
-    log.info('handleLockBlocked', 'entity held by another editor', { hasHolder: !!holder });
-    toast.info('Another editor is editing this entity — your change was not saved.');
-    setActiveLockEntity(null);
-  }, []);
-
-  // Heartbeat 409 → lock stolen mid-edit. Deselect + toast; content-sync reconciles the winner's node.
-  const handleLockLost = useCallback(() => {
-    log.warn('handleLockLost', 'entity lock lost — deselect');
-    setActiveLockEntity(null);
-    toast.warning('You lost the edit lock for this entity — a later change may not have saved.');
-  }, []);
-
-  // Held session drives the SUSTAINED entity lock (peer-lock visibility while editing) + onBlocked/
-  // onLost. It does NOT drive the header label (manageHeaderStatus:false) — this space is eager-atomic
-  // (persists per gesture), so a hold-lifetime "Unsaved" would be permanently false; the header
-  // Saving…→Saved is driven by `persistEntity` instead. Persistence does NOT go through its `saveNow`
-  // — see `persistEntity` below (baseline-independent one-shot).
-  useHeldResourceSession({
-    target: lockTarget,
-    getNode,
-    ownedKeys: undefined, // entity = per-entity grain → baseline/dirty on the WHOLE node
-    buildPayload,
-    onBlocked: handleLockBlocked,
-    onLost: handleLockLost,
-    // Eager-atomic space: every gesture persists immediately via `persistEntity`, so the hold is for
-    // PEER-LOCK visibility only. A hold-lifetime "Unsaved" would be permanently false → opt out of the
-    // shared header signal and drive Saving…→Saved from `persistEntity` (below) instead.
-    manageHeaderStatus: false,
-  });
-
-  // Single persistence choke point for the edit actions (text / edit-crop / select-crop). COLLAB →
-  // `flushSketchEntityUnderLock` (whole node, BASELINE-INDEPENDENT: saves the FRESH node directly, so
-  // a single-gesture pick whose held-session baseline is captured too late is never dropped — H2).
-  // `releaseIfAcquired:true` → one-shot when the entity isn't already held (no lingering lock — H1);
-  // kept when the held-session owns it. SOLO → legacy autoSaveSnapshot. Fire-and-forget. Generate
-  // persists inside its own job slice (flush-before / persist-after), so it is NOT routed here.
-  const persistEntity = useCallback(
-    (kind: BaseKind, entityKey: string) => {
-      if (useResourceLockStore.getState().collabPersist) {
-        const node =
-          useSnapshotStore.getState().sketch[kind].find((e) => e.key === entityKey) ?? null;
-        // Own the header label (manageHeaderStatus:false on the held session): Saving… while the
-        // gateway write is in flight → Saved when it settles (ok OR rejected — the label must never
-        // stick on the spinner; save errors are surfaced by the flush's own toasts).
-        const ess = useEditSessionStatusStore.getState();
-        ess.markSaving();
-        void flushSketchEntityUnderLock(kind, entityKey, node, { releaseIfAcquired: true }).finally(
-          () => ess.markSaved(),
-        );
-      } else {
-        void autoSaveSnapshot();
-      }
-    },
-    [autoSaveSnapshot],
-  );
+  // ── Per-entity held session (ADR-047) — the whole lock + persist lifecycle lives in this hook. ──
+  const lock = useVariantEntityLockSession();
 
   // Peer-lock (advisory) for the DISPLAYED entity — veil the content + suppress acquire-on-interact.
   const displayedLockTarget = useMemo<LockTarget>(
@@ -279,28 +181,34 @@ export function SketchVariantsCreativeSpace() {
   // ── Handlers ────────────────────────────────────────────────────────────────────────────────
   // Browse (display only): switch the shown variant. Leaving a HELD entity commits it (null the
   // held target → the hook release-saves the OLD node). Same-entity re-select keeps the lock.
-  const handleSelect = useCallback((ref: VariantRef) => {
-    setSelectedVariant(ref);
-    setActiveTab('raw');
-    // Browsing to a DIFFERENT entity commits the held one (null → hook release-saves the OLD node);
-    // a same-entity re-select (another variant of it) keeps the lock. `prev` stays null on mount.
-    setActiveLockEntity((prev) => (sameEntity(prev, ref) ? prev : null));
-  }, []);
+  const handleSelect = useCallback(
+    (ref: VariantRef) => {
+      setSelectedVariant(ref);
+      setActiveTab('raw');
+      // Browsing to a DIFFERENT entity commits the held one (release-saves the OLD node); a
+      // same-entity re-select (another variant of it) keeps the lock. No-op on mount (nothing held).
+      lock.releaseUnlessSame(ref);
+    },
+    [lock],
+  );
 
   const handleToggleGroup = useCallback((kind: BaseKind) => {
     setExpandedGroups((prev) => ({ ...prev, [kind]: !prev[kind] }));
   }, []);
 
   // Interact (edit text): acquire this entity's held lock + open the modal.
-  const handleEditVariant = useCallback((ref: VariantRef) => {
-    log.info('handleEditVariant', 'interact — acquire entity lock + open text modal', {
-      kind: ref.kind,
-      entityKey: ref.entityKey,
-    });
-    setSelectedVariant(ref);
-    setActiveLockEntity({ kind: ref.kind, entityKey: ref.entityKey });
-    setEditingVariant(ref);
-  }, []);
+  const handleEditVariant = useCallback(
+    (ref: VariantRef) => {
+      log.info('handleEditVariant', 'interact — acquire entity lock + open text modal', {
+        kind: ref.kind,
+        entityKey: ref.entityKey,
+      });
+      setSelectedVariant(ref);
+      lock.adopt(ref);
+      setEditingVariant(ref);
+    },
+    [lock],
+  );
 
   // ✨ Generate: acquire the entity lock (adopt → held session releases on switch/unmount), then run.
   const doGenerate = useCallback(
@@ -310,10 +218,10 @@ export function SketchVariantsCreativeSpace() {
         entityKey: ref.entityKey,
         variantKey: ref.variantKey,
       });
-      setActiveLockEntity({ kind: ref.kind, entityKey: ref.entityKey });
+      lock.adopt(ref);
       startVariantSheetGenerate(ref);
     },
-    [startVariantSheetGenerate],
+    [lock, startVariantSheetGenerate],
   );
 
   // ✨ entry: variant already has crops → confirm EVERY time (guards pick/edit); empty → straight.
@@ -350,48 +258,69 @@ export function SketchVariantsCreativeSpace() {
     setPendingRegenerate(null);
   }, [pendingRegenerate, doGenerate]);
 
-  // Interact (lock 1/4 crop): acquire the entity lock (sustained peer-lock), mutate the mutex, then
-  // persist the FRESH node directly (baseline-independent → the very first pick after opening the book
-  // is never lost even though the held-session acquire hasn't resolved yet — H2). Fire-and-forget.
+  // Interact (lock 1/4 crop): acquire the entity lock (sustained peer-lock) + flip the mutex, then
+  // flush EAGERLY — this is the one gesture the release-save provably cannot see (H2; the mutation
+  // lands before the held-session captures its baseline). See `flushEntityNow`.
   const handleSelectCrop = useCallback(
     (cropIndex: number) => {
       if (!selected) return;
-      log.debug('handleSelectCrop', 'interact — lock crop + persist', { cropIndex });
-      setActiveLockEntity({ kind: selected.kind, entityKey: selected.entityKey });
+      log.debug('handleSelectCrop', 'interact — acquire entity lock + pick crop', { cropIndex });
+      lock.adopt(selected);
       selectSketchVariantCrop(selected.kind, selected.entityKey, selected.variantKey, cropIndex);
-      persistEntity(selected.kind, selected.entityKey);
+      lock.flushEntityNow(selected);
     },
-    [selected, selectSketchVariantCrop, persistEntity],
+    [selected, selectSketchVariantCrop, lock],
   );
 
-  // Interact (edit crop image): acquire the entity lock + open the edit-image modal.
+  // Interact (edit ONE crop cell): acquire the entity lock + open the edit-image modal on that cell.
   const handleEditCrop = useCallback(
     (cropIndex: number) => {
       if (!selected) return;
-      log.info('handleEditCrop', 'interact — acquire entity lock + open image modal', {
+      log.info('handleEditCrop', 'interact — acquire entity lock + open image modal (crop scope)', {
         kind: selected.kind,
         entityKey: selected.entityKey,
         cropIndex,
       });
-      setActiveLockEntity({ kind: selected.kind, entityKey: selected.entityKey });
+      lock.adopt(selected);
       setEditImageTarget({
         kind: selected.kind,
         entityKey: selected.entityKey,
         variantKey: selected.variantKey,
+        scope: 'crop',
         cropIndex,
       });
     },
-    [selected],
+    [selected, lock],
   );
 
+  // Interact (edit the RAW 21:9 sheet): acquire the entity lock + open the edit-image modal on the
+  // sheet. Committing an edit AUTO re-cuts all 4 cells (the modal chains recropVariantSheet) — no
+  // confirm, per design §3.5 (mirrors the base space).
+  const handleEditRaw = useCallback(() => {
+    if (!selected) return;
+    log.info('handleEditRaw', 'interact — acquire entity lock + open image modal (raw scope)', {
+      kind: selected.kind,
+      entityKey: selected.entityKey,
+      variantKey: selected.variantKey,
+    });
+    lock.adopt(selected);
+    setEditImageTarget({
+      kind: selected.kind,
+      entityKey: selected.entityKey,
+      variantKey: selected.variantKey,
+      scope: 'raw',
+    });
+  }, [selected, lock]);
+
   // Content-area intent to edit → acquire the displayed entity's SUSTAINED lock (peer-lock visibility +
-  // header Unsaved) unless a peer holds it. Persistence itself is baseline-independent (`persistEntity`),
-  // so this is for peer visibility, not save-correctness. Guarded → setState no-op once we hold it.
+  // header "Unsaved") unless a peer holds it. Under batch-at-release the hold is ALSO the save path —
+  // the release-cleanup diffs against the acquire-time baseline — so acquiring on the FIRST interaction
+  // is what makes the edit persistable at all. Guarded → setState no-op once we already hold it.
   const handleContentInteract = useCallback(() => {
-    if (selected && !displayedLockedByOther && !sameEntity(activeLockEntity, selected)) {
-      setActiveLockEntity({ kind: selected.kind, entityKey: selected.entityKey });
+    if (selected && !displayedLockedByOther && !lock.isAdopted(selected)) {
+      lock.adopt(selected);
     }
-  }, [selected, displayedLockedByOther, activeLockEntity]);
+  }, [selected, displayedLockedByOther, lock]);
 
   const regenerateMention = pendingRegenerate
     ? `@${pendingRegenerate.entityKey}/${pendingRegenerate.variantKey}`
@@ -427,6 +356,7 @@ export function SketchVariantsCreativeSpace() {
             onChangeZoom={setZoom}
             onSelectCrop={handleSelectCrop}
             onEditCrop={handleEditCrop}
+            onEditRaw={handleEditRaw}
           />
         ) : (
           <EmptyState />
@@ -438,20 +368,20 @@ export function SketchVariantsCreativeSpace() {
         )}
       </div>
 
-      {/* Overlays (mount by state). Both persist the WHOLE entity node via the held session (onSaved). */}
+      {/* Overlays (mount by state). Neither persists: both mutate the store under the held lock and
+          land at the release-save. (Exception: a RAW edit chains the re-cut, which persists its own
+          AI output inside the job slice.) */}
       {editingVariant && (
         <EditVariantModal
           kind={editingVariant.kind}
           entityKey={editingVariant.entityKey}
           variantKey={editingVariant.variantKey}
-          onSaved={() => persistEntity(editingVariant.kind, editingVariant.entityKey)}
           onClose={() => setEditingVariant(null)}
         />
       )}
       {editImageTarget && (
         <VariantEditImageModal
           target={editImageTarget}
-          onSaved={() => persistEntity(editImageTarget.kind, editImageTarget.entityKey)}
           onClose={() => setEditImageTarget(null)}
         />
       )}

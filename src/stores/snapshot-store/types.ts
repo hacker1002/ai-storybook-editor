@@ -869,6 +869,10 @@ export interface SketchVariantGenerateJobSlice {
   /** Run the 2-phase generate→auto-cut job for ONE non-base variant. Single-flight; resolves
    *  artStyleId from book.sketchstyle_id + snapshotId from meta.id (after an awaited flush). */
   startVariantSheetGenerate: (ref: VariantRef) => void;
+  /** Cut-only re-run against the CURRENT effective raw sheet (call-site: the user edited the raw
+   *  sheet in the Raw tab → its crops are stale). Single-flight; OVERWRITES raw_sheet.crops[] with
+   *  4 fresh, unpicked cells. Mirrors recropBaseSheet (#14). No-op when no raw sheet exists. */
+  recropVariantSheet: (ref: VariantRef) => void;
   /** Clear an op that settled with an error (so the notifications hook toasts it once). */
   dismissVariantSheetGenerateError: () => void;
 }
