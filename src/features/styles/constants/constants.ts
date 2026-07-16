@@ -2,8 +2,12 @@
 
 import type { StylesFilterState } from '@/types/art-style';
 
-/** Max reference images per style (card shows all, no "+N" badge). */
-export const REF_CAP = 3;
+/** Max reference images per style — upload cap in the create/edit modal. */
+export const REF_CAP = 12;
+
+/** Card header preview strip: first N reference thumbnails shown (grid-cols must match).
+ *  Decoupled from REF_CAP so a style can hold more refs than the card previews. */
+export const CARD_REF_THUMBS = 3;
 
 /** Max size for a single reference image upload (10MB). */
 export const MAX_STYLE_IMG_BYTES = 10 * 1024 * 1024;

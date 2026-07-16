@@ -6,7 +6,7 @@ import { memo } from 'react';
 import type { MouseEvent } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { parseTags } from '@/features/styles/utils/style-filters';
-import { MAX_TAG_CHIPS, REF_CAP } from '@/features/styles/constants/constants';
+import { MAX_TAG_CHIPS, CARD_REF_THUMBS } from '@/features/styles/constants/constants';
 import type { ArtStyle, StyleImageReference } from '@/types/art-style';
 
 /** type (0=sketch, 1=illustration) → card badge label. */
@@ -17,12 +17,13 @@ interface StyleThumbStripProps {
   styleName: string;
 }
 
-// Full-bleed top header: REF_CAP fixed portrait columns. Each slot is a gray
-// (bg-muted) cell; present refs overlay an <img>. Empty refs — or images that
-// fail to load (deleted/dangling Storage object) — fall back to the gray cell
-// (onError hides the img imperatively, no React state → no re-render loop).
+// Full-bleed top header: CARD_REF_THUMBS fixed portrait columns (preview strip —
+// a style may hold more refs than shown). Each slot is a gray (bg-muted) cell;
+// present refs overlay an <img>. Empty refs — or images that fail to load
+// (deleted/dangling Storage object) — fall back to the gray cell (onError hides
+// the img imperatively, no React state → no re-render loop).
 function StyleThumbStrip({ thumbs, styleName }: StyleThumbStripProps) {
-  const slots = Array.from({ length: REF_CAP }, (_, i) => thumbs[i]);
+  const slots = Array.from({ length: CARD_REF_THUMBS }, (_, i) => thumbs[i]);
   return (
     // bg-muted on the container fills the gap-0.5 hairlines AND any empty/broken
     // slot (img absolute over a transparent cell → container gray shows through).
