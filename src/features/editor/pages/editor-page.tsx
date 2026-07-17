@@ -23,6 +23,7 @@ import { CharactersCreativeSpace } from '../components/characters-creative-space
 import { SketchVariantsCreativeSpace } from '../components/sketch-variants-creative-space';
 import { SketchSpreadsCreativeSpace } from '../components/sketch-spreads-creative-space';
 import { SketchBaseSpace } from '../components/sketch-base-creative-space';
+import { SketchLineupSpace } from '../components/sketch-lineup-creative-space';
 import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
 import { BranchCreativeSpace } from '../components/branch-creative-space';
 import { HistoryCreativeSpace } from '../components/history-creative-space';
@@ -316,9 +317,9 @@ export function EditorPage() {
       // sketch-spread (storyboard) — standalone space.
       case 'sketch-spread':
         return <SketchSpreadsCreativeSpace />;
-      // Lineup — Coming-soon placeholder (real space is follow-up work; the rail greys it if gated).
+      // Lineup — read-only size-comparison canvas over the locked crops of char + prop variants.
       case 'sketch-lineup':
-        return <MockCreativeSpace name={activeCreativeSpace} />;
+        return <SketchLineupSpace />;
       case 'collaborator':
         return <CollaboratorsCreativeSpace />;
       case 'quiz':

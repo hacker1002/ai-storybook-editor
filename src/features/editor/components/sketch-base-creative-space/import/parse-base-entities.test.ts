@@ -26,15 +26,16 @@ describe('normalizeRow', () => {
 
 describe('parseBaseEntities', () => {
   const rows: BaseSheetRow[] = [
-    { character: 'hero', variant: 'base', description: 'a warrior', height: 'tall', visual_design: 'mighty', art_language: 'epic' },
+    { character: 'hero', variant: 'base', description: 'a warrior', height: '1.1m', visual_design: 'mighty', art_language: 'epic' },
     { character: 'hero', variant: 'wounded', description: '', height: '', visual_design: 'hurt', art_language: '' },
-    { character: 'villain', variant: 'base', description: '', height: 'short', visual_design: 'evil', art_language: 'dark' },
+    { character: 'villain', variant: 'base', description: '', height: '20-30cm', visual_design: 'evil', art_language: 'dark' },
+    { character: 'ghostly', variant: 'base', description: '', height: 'tall', visual_design: '', art_language: '' },
     { character: '', variant: 'ghost', description: 'no key', height: '', visual_design: '', art_language: '' },
   ];
 
   it('groups rows by key column, first-seen order, one variant per row', () => {
     const entities = parseBaseEntities(rows, 'character');
-    expect(entities.map((e) => e.key)).toEqual(['hero', 'villain']);
+    expect(entities.map((e) => e.key)).toEqual(['hero', 'villain', 'ghostly']);
     expect(entities[0].variants).toHaveLength(2);
     expect(entities[0].variants[0]).toMatchObject({ key: 'base', visual_design: 'mighty' });
     expect(entities[0].variants[1]).toMatchObject({ key: 'wounded', visual_design: 'hurt' });
@@ -44,22 +45,34 @@ describe('parseBaseEntities', () => {
     const entities = parseBaseEntities(rows, 'character');
     const heroBase = entities[0].variants[0];
     expect(heroBase.description).toBe('a warrior');
-    expect(heroBase.height).toBe('tall');
+    expect(heroBase.height).toBe(110); // "1.1m" → cm number
     expect(heroBase.visual_design).toBe('mighty');
     expect(heroBase.art_language).toBe('epic');
   });
 
-  it('coerces missing text fields to empty string', () => {
+  it('height parses to a cm NUMBER — range takes the max', () => {
+    const entities = parseBaseEntities(rows, 'character');
+    expect(entities[1].variants[0].height).toBe(30); // villain "20-30cm" → max
+  });
+
+  it('height that is not measurable → null (variant still imported)', () => {
+    const entities = parseBaseEntities(rows, 'character');
+    const ghostly = entities[2];
+    expect(ghostly.variants[0].height).toBeNull(); // "tall"
+    expect(ghostly.variants).toHaveLength(1); // kept, not dropped
+  });
+
+  it('coerces missing text fields to empty string (height → null)', () => {
     const entities = parseBaseEntities(rows, 'character');
     const heroWounded = entities[0].variants[1];
     expect(heroWounded.description).toBe('');
-    expect(heroWounded.height).toBe('');
+    expect(heroWounded.height).toBeNull();
     expect(heroWounded.art_language).toBe('');
   });
 
   it('skips rows with empty key column', () => {
     const entities = parseBaseEntities(rows, 'character');
-    expect(entities.length).toBe(2); // hero + villain, ghost row skipped
+    expect(entities.length).toBe(3); // hero + villain + ghostly, keyless ghost row skipped
   });
 
   it('returns [] for empty rows', () => {
@@ -73,14 +86,14 @@ describe('parseWorkbook (integration with XLSX)', () => {
     // Headers must match COL constants exactly (will be lowercased by normalizeRow)
     const charRows = [
       ['Character', 'Variant', 'Description', 'Height', 'Visual_Design', 'Art_Language'],
-      ['hero', 'base', 'a warrior', 'tall', 'mighty', 'epic'],
+      ['hero', 'base', 'a warrior', '1.1m', 'mighty', 'epic'],
       ['hero', 'wounded', '', '', 'hurt', ''],
-      ['villain', 'base', '', 'short', 'evil', 'dark'],
+      ['villain', 'base', '', '110cm', 'evil', 'dark'],
     ];
     const propRows = [
       ['Prop', 'Variant', 'Description', 'Height', 'Visual_Design', 'Art_Language'],
       ['sword', 'base', 'a blade', '', 'sharp', 'combat'],
-      ['shield', 'base', '', 'large', 'protective', 'defense'],
+      ['shield', 'base', '', '20-30cm', 'protective', 'defense'],
     ];
 
     const wsChar = XLSX.utils.aoa_to_sheet(charRows);
@@ -103,7 +116,7 @@ describe('parseWorkbook (integration with XLSX)', () => {
     expect(heroBase).toMatchObject({
       key: 'base',
       description: 'a warrior',
-      height: 'tall',
+      height: 110, // "1.1m" → m ×100
       visual_design: 'mighty',
       art_language: 'epic',
     });
@@ -112,7 +125,7 @@ describe('parseWorkbook (integration with XLSX)', () => {
     expect(swordBase).toMatchObject({
       key: 'base',
       description: 'a blade',
-      height: '',
+      height: null, // empty cell
       visual_design: 'sharp',
       art_language: 'combat',
     });
@@ -120,14 +133,40 @@ describe('parseWorkbook (integration with XLSX)', () => {
     expect(parsed.issues.errors).toHaveLength(0);
   });
 
-  it('empty cell → empty string', () => {
+  it('height column → cm number: "1.1m"→110, "110cm"→110, "20-30cm"→30 (max)', () => {
+    const buffer = buildTestWorkbook();
+    const parsed = parseWorkbook(buffer, XLSX);
+
+    expect(parsed.result.characters[0].variants[0].height).toBe(110); // hero base "1.1m"
+    expect(parsed.result.characters[1].variants[0].height).toBe(110); // villain base "110cm"
+    expect(parsed.result.props[1].variants[0].height).toBe(30); // shield base "20-30cm"
+  });
+
+  it('empty cell → empty string (height → null, no warning)', () => {
     const buffer = buildTestWorkbook();
     const parsed = parseWorkbook(buffer, XLSX);
 
     const heroWounded = parsed.result.characters[0].variants[1];
     expect(heroWounded.description).toBe('');
-    expect(heroWounded.height).toBe('');
+    expect(heroWounded.height).toBeNull();
     expect(heroWounded.art_language).toBe('');
+    expect(parsed.issues.warnings.some((w) => w.includes('height'))).toBe(false);
+  });
+
+  it('unparseable height → null + warning (variant still imported)', () => {
+    const charRows = [
+      ['Character', 'Variant', 'Description', 'Height', 'Visual_Design', 'Art_Language'],
+      ['hero', 'base', 'a warrior', 'tall', 'mighty', 'epic'],
+    ];
+    const propRows = [['Prop', 'Variant', 'Description', 'Height', 'Visual_Design', 'Art_Language']];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(charRows), 'Characters');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(propRows), 'Props');
+    const parsed = parseWorkbook(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), XLSX);
+
+    expect(parsed.result.characters[0].variants[0].height).toBeNull();
+    expect(parsed.issues.errors).toHaveLength(0); // advisory only — import proceeds
+    expect(parsed.issues.warnings.some((w) => w.includes('height "tall"'))).toBe(true);
   });
 
   it('missing Props sheet → error in issues', () => {

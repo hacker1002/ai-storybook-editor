@@ -27,7 +27,7 @@ export interface SketchVariantCrop {
 export interface SketchVariant {
   key: string;                                   // variant key (base, hero); ref = @{entity.key}/{key}
   description: string;                           // ⚡ replaces the legacy visual_description (Excel "description")
-  height?: string;                              // char/prop only (Excel "height"); stage has none
+  height?: number | null;                       // ⚡ cm (number, 2026-07-17) — char/prop only (Excel "height" parsed via parseHeightCm); stage has none
   visual_design: string;                        // Excel "visual_design"
   art_language: string;                         // Excel "art_language"
   // char/prop only — ⚡ 2026-07-14: the single `crop` field is GONE; crops[] now live INSIDE raw_sheet.
@@ -51,6 +51,19 @@ export interface VariantRef {
   kind: BaseKind;
   entityKey: string;
   variantKey: string;
+}
+
+/** Flat projection of ONE variant (base INCLUDED) for the Lineup space — the locked crop image +
+ *  its real-world height, i.e. everything needed to place it on the shared ruler. Lives here (next
+ *  to VariantRef) because BOTH the store selector (`useSketchLineupEntries`) and the space consume
+ *  it — a feature-owned type would invert the store → feature dependency. */
+export interface LineupEntry {
+  kind: BaseKind;
+  entityKey: string;
+  variantKey: string; // 'base' INCLUDED (unlike VariantRef consumers)
+  ref: string; // "@{entityKey}/{variantKey}" — unique id (key of checkedRefs)
+  imageUrl: string | null; // effective locked crop; null = no crop locked yet
+  heightCm: number | null; // variants[].height (cm); null = not set yet
 }
 
 // ── Base workspace (generate raw sheets in bulk + crop per entity) ────────────
@@ -80,7 +93,7 @@ export interface SketchBase {
 export interface BaseEntityText {
   key: string;
   description: string;                           // import-only
-  height: string;                               // import-only (char/prop)
+  height: number | null;                        // ⚡ cm (number, 2026-07-17) — import-only (char/prop); null = chưa có / parse fail
   visual_design: string;                        // editable
   art_language: string;                         // editable
 }

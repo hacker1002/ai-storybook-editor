@@ -672,7 +672,7 @@ describe('SketchSlice base (workspace) actions', () => {
 
   it('updateSketchBaseEntityText updates only provided fields, leaves others untouched', () => {
     store.getState().setSketchEntities('characters', [
-      { key: 'hero', variants: [{ key: 'base', description: 'old desc', height: 'old h', visual_design: 'old design', art_language: 'old lang' }] },
+      { key: 'hero', variants: [{ key: 'base', description: 'old desc', height: 110, visual_design: 'old design', art_language: 'old lang' }] },
     ]);
     resetDirty();
 
@@ -685,26 +685,37 @@ describe('SketchSlice base (workspace) actions', () => {
     expect(base.visual_design).toBe('new design');
     expect(base.art_language).toBe('new lang');
     expect(base.description).toBe('old desc'); // not in the patch → untouched
-    expect(base.height).toBe('old h'); // not in the patch → untouched
+    expect(base.height).toBe(110); // not in the patch → untouched
     expect(store.getState().sync.isDirty).toBe(true);
   });
 
   it('updateSketchBaseEntityText persists description + height when provided (merged Edit modal)', () => {
     store.getState().setSketchEntities('characters', [
-      { key: 'hero', variants: [{ key: 'base', description: 'original', height: '1.0 m', visual_design: '', art_language: '' }] },
+      { key: 'hero', variants: [{ key: 'base', description: 'original', height: 100, visual_design: '', art_language: '' }] },
     ]);
     resetDirty();
 
     store.getState().updateSketchBaseEntityText('characters', 'hero', {
       description: 'edited desc',
-      height: '1.05 m',
+      height: 105,
       visual_design: 'new',
     });
 
     const base = store.getState().sketch.characters[0].variants[0];
     expect(base.description).toBe('edited desc');
-    expect(base.height).toBe('1.05 m');
+    expect(base.height).toBe(105);
     expect(base.visual_design).toBe('new');
+  });
+
+  it('updateSketchBaseEntityText clears height when passed null (null = xoá, undefined = giữ)', () => {
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [{ key: 'base', description: '', height: 110, visual_design: '', art_language: '' }] },
+    ]);
+    resetDirty();
+
+    store.getState().updateSketchBaseEntityText('characters', 'hero', { height: null });
+
+    expect(store.getState().sketch.characters[0].variants[0].height).toBeNull();
   });
 
   it('setSketchBaseStyleImageReferences replaces image_references on the target style', () => {

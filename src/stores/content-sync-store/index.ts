@@ -18,7 +18,8 @@ import { useSnapshotStore } from '@/stores/snapshot-store';
 import { holdsLiveLock, hasAnyLiveLock, type LockTarget } from '@/stores/resource-lock-store';
 import { openActivityLogChannel, type ChannelHandle } from './channel';
 import { fetchSnapshotNode } from './rpc';
-import type { ActivityLogRawRow, MetadataSync } from './types';
+import { coerceSketchNode } from '@/stores/snapshot-store/slices/sketch-slice';
+import type { ActivityLogRawRow, MetadataSync, SnapshotColumn } from './types';
 
 const log = createLogger('Store', 'ContentSyncStore');
 
@@ -59,6 +60,22 @@ function withRemotePatchGuard(apply: () => void): void {
   }
 }
 
+/**
+ * THE merge boundary: every sync scope reads its node through here, so this is the ONE place a
+ * raw DB jsonb blob becomes a typed snapshot node. `fetchSnapshotNode` returns the column's jsonb
+ * verbatim — unlike a full snapshot load it never passes through `normalizeSketch`, so the sketch
+ * column is coerced here (legacy string `height` → number|null cm; see `coerceSketchNode`).
+ * Other columns pass through unchanged (no read-time migration pending on them).
+ */
+async function fetchSyncNode(
+  version: string,
+  column: SnapshotColumn,
+  path: string[],
+): Promise<unknown> {
+  const value = await fetchSnapshotNode(version, column, path);
+  return column === 'sketch' ? coerceSketchNode(path, value) : value;
+}
+
 /** Still viewing the version the event targeted? Re-checked AFTER the RPC await so
  *  navigating to another version mid-fetch never merges cross-version (closes R3). */
 function versionStillMatches(eventVersion: string): boolean {
@@ -93,7 +110,7 @@ async function applySync(sync: MetadataSync): Promise<void> {
           log.debug('applySync', 'node locked-by-me — skip', { rid: sync.resource_id });
           return;
         }
-        const value = await fetchSnapshotNode(sync.version, sync.column, sync.path);
+        const value = await fetchSyncNode(sync.version, sync.column, sync.path);
         if (value === undefined) return; // rpc error — leave B's view untouched
         if (!versionStillMatches(sync.version)) return;
         withRemotePatchGuard(() =>
@@ -104,7 +121,7 @@ async function applySync(sync: MetadataSync): Promise<void> {
       case 'collection': {
         // reorder + delete. NO lock-skip — reconcile-by-id keeps B's local object for matching
         // identities (never clobbers an in-progress edit) while adopting server order/membership.
-        const node = await fetchSnapshotNode(sync.version, sync.column, sync.path);
+        const node = await fetchSyncNode(sync.version, sync.column, sync.path);
         if (node === undefined) return; // rpc error — skip
         if (!versionStillMatches(sync.version)) return;
         if (Array.isArray(node)) {
@@ -133,7 +150,7 @@ async function applySync(sync: MetadataSync): Promise<void> {
           return;
         }
         for (const t of sync.targets) {
-          const arr = await fetchSnapshotNode(sync.version, t.column, t.path);
+          const arr = await fetchSyncNode(sync.version, t.column, t.path);
           // Skip on BOTH rpc-error (undefined) AND null: a generate target is a collection just
           // written, so null is an anomaly — never applyRemoteNodePatch(null) here (would DELETE
           // the structural key sketch.<collection> → selector crash). null→remove is node-only.

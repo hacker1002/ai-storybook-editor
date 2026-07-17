@@ -1,7 +1,8 @@
 // edit-base-entity-modal.tsx — "Edit {Character|Prop}" modal (design 04). Tabs = each base
-// entity; every tab exposes TWO editable textareas: visual_design and art_language (the only two
-// fields that drive base-sheet generation). description/height live in the DB but are NOT edited
-// here — the store action is a partial merge, so leaving them out preserves their values.
+// entity; every tab exposes THREE editable fields: height (cm) + the visual_design / art_language
+// textareas (the only two fields that drive base-sheet generation — height is lineup metadata and
+// drives no generation). `description` lives in the DB but is NOT edited here — the store action is
+// a partial merge, so leaving it out preserves its value.
 //
 // Collab (ADR-043 sketch-base — GRAIN B): entity TEXT is a per-entity node (step 1 / rtype 3
 // character · 4 prop), INDEPENDENT of the sheet (rtype 11) — so this modal REUSES the variant
@@ -15,7 +16,7 @@
 // a transient modal must not flip the shared header on every tab switch).
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Lock } from 'lucide-react';
+import { AlertCircle, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -29,6 +30,12 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { HeightCmField } from '@/features/editor/components/shared-components/height-cm-field';
+import {
+  heightToDraft,
+  heightDraftToPayload,
+  isHeightDraftValid,
+} from '@/features/editor/components/shared-components/height-cm-draft';
 import { useSketchBaseEntityKeys, useSnapshotActions } from '@/stores/snapshot-store/selectors';
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import {
@@ -52,8 +59,13 @@ import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'EditBaseEntityModal');
 
-/** Local editable draft for one entity's base variant — only the two generation-driving fields. */
+/** Shown on the offending tab's marker + its tooltip — Save is gated across EVERY dirty tab, so the
+ *  cause may sit on a tab the user cannot see (memory: disabled controls must state the WHY). */
+const INVALID_HEIGHT_HINT = 'Height không hợp lệ — số nguyên 1–5000 (cm)';
+
+/** Local editable draft for one entity's base variant — the two generation-driving fields + height. */
 interface EntityDraft {
+  height: string; // RAW string ("" | "110") — parsed to number|null only at Save
   visual_design: string;
   art_language: string;
 }
@@ -77,7 +89,11 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
     for (const e of useSnapshotStore.getState().sketch[kind]) {
       const base = e.variants.find((v) => v.key === 'base');
       if (!base) continue;
-      out[e.key] = { visual_design: base.visual_design, art_language: base.art_language };
+      out[e.key] = {
+        height: heightToDraft(base.height),
+        visual_design: base.visual_design,
+        art_language: base.art_language,
+      };
     }
     return out;
   }, [kind]);
@@ -133,12 +149,24 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
     () =>
       Object.keys(initialDrafts).filter(
         (k) =>
+          drafts[k]?.height !== initialDrafts[k].height ||
           drafts[k]?.visual_design !== initialDrafts[k].visual_design ||
           drafts[k]?.art_language !== initialDrafts[k].art_language,
       ),
     [drafts, initialDrafts],
   );
   const isDirty = changedKeys.length > 0;
+
+  // Save flushes EVERY changed entity, not just the open tab — so the gate must consider every
+  // changed tab's height, or an invalid height on a background tab would slip through. The offending
+  // keys are kept (not just a boolean) so each tab trigger can flag ITSELF: `HeightCmField` only ever
+  // renders the hint for the ACTIVE tab, which would otherwise leave Save greyed with the cause
+  // invisible on a background tab. Gate + marker read the same set, so they can never drift.
+  const invalidKeys = useMemo(
+    () => new Set(changedKeys.filter((k) => !isHeightDraftValid(drafts[k].height))),
+    [changedKeys, drafts],
+  );
+  const allHeightsValid = invalidKeys.size === 0;
 
   const updateDraft = useCallback(
     (field: keyof EntityDraft, value: string) => {
@@ -154,11 +182,20 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
   }, []);
 
   const handleSave = useCallback(async () => {
+    if (!allHeightsValid) {
+      log.debug('handleSave', 'blocked — invalid height draft on a changed tab', { kind });
+      return;
+    }
     const keys = changedKeys;
     for (const key of keys) {
       const d = drafts[key];
-      // Partial merge — description/height intentionally omitted so their stored values persist.
-      updateSketchBaseEntityText(kind, key, { visual_design: d.visual_design, art_language: d.art_language });
+      // Partial merge — `description` intentionally omitted so its stored value persists.
+      // height: "" → an explicit null (clear), else the parsed integer cm.
+      updateSketchBaseEntityText(kind, key, {
+        height: heightDraftToPayload(d.height),
+        visual_design: d.visual_design,
+        art_language: d.art_language,
+      });
     }
     log.info('handleSave', 'commit base entity text edits', { kind, changed: keys.length });
     if (useResourceLockStore.getState().collabPersist) {
@@ -178,7 +215,7 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
       void autoSaveSnapshot();
     }
     onClose();
-  }, [changedKeys, drafts, kind, updateSketchBaseEntityText, autoSaveSnapshot, onClose]);
+  }, [allHeightsValid, changedKeys, drafts, kind, updateSketchBaseEntityText, autoSaveSnapshot, onClose]);
 
   const guardClose = useCallback(() => {
     if (isDirty && !window.confirm('Huỷ thay đổi chưa lưu?')) return;
@@ -197,7 +234,7 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
   });
 
   const activeDraft = drafts[activeKey];
-  const canSave = isDirty;
+  const canSave = isDirty && allHeightsValid;
 
   return (
     <Dialog open onOpenChange={(open) => !open && guardClose()}>
@@ -210,7 +247,7 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
         <DialogHeader>
           <DialogTitle>Edit {cfg}</DialogTitle>
           <DialogDescription className="sr-only">
-            Edit each base entity&rsquo;s visual design and art language.
+            Edit each base entity&rsquo;s height, visual design and art language.
           </DialogDescription>
         </DialogHeader>
 
@@ -223,7 +260,12 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
             <Tabs value={activeKey} onValueChange={handleSelectTab}>
               <TabsList className="h-auto flex-wrap">
                 {entityKeys.map((key) => (
-                  <EntityTabTrigger key={key} kind={kind} entityKey={key} />
+                  <EntityTabTrigger
+                    key={key}
+                    kind={kind}
+                    entityKey={key}
+                    invalid={invalidKeys.has(key)}
+                  />
                 ))}
               </TabsList>
             </Tabs>
@@ -238,6 +280,12 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
                 <span>Another editor is editing {titleCase(activeKey)} — your changes here won&rsquo;t be saved.</span>
               </div>
             )}
+
+            <HeightCmField
+              value={activeDraft.height}
+              disabled={!held}
+              onChange={(v) => updateDraft('height', v)}
+            />
 
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -273,7 +321,7 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
           <Button variant="outline" onClick={guardClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!canSave}>
+          <Button onClick={handleSave} disabled={!canSave} aria-disabled={!canSave}>
             Save
           </Button>
         </DialogFooter>
@@ -283,19 +331,40 @@ export function EditBaseEntityModal({ kind, onClose }: EditBaseEntityModalProps)
 }
 
 /** One entity tab trigger — self-reads its ENTITY peer-lock (rtype 3/4) so a peer-held tab shows a
- *  🔒 badge (never hidden; the tab stays selectable to view). Advisory — the acquire 409 rules. */
-function EntityTabTrigger({ kind, entityKey }: { kind: BaseKind; entityKey: string }) {
+ *  🔒 badge (never hidden; the tab stays selectable to view). Advisory — the acquire 409 rules.
+ *  `invalid` (owned by the parent, which alone holds the drafts) flags the tab whose height blocks
+ *  Save, so the user can navigate to the cause instead of hunting a greyed button. */
+function EntityTabTrigger({
+  kind,
+  entityKey,
+  invalid,
+}: {
+  kind: BaseKind;
+  entityKey: string;
+  invalid: boolean;
+}) {
   const target = useMemo(() => resolveSketchVariantLockTarget(kind, entityKey), [kind, entityKey]);
   const lockedByOther = useIsLockedByOther(target);
   const holder = useLockHolderName(target);
+  // Both states can hold at once (a peer-held tab keeps its local draft) — the tooltip states both.
+  const hints = [
+    invalid ? INVALID_HEIGHT_HINT : null,
+    lockedByOther ? `${holder ?? 'Another editor'} is editing` : null,
+  ].filter((h): h is string => h !== null);
   return (
     <TabsTrigger value={entityKey}>
-      <span
-        className="flex items-center gap-1"
-        title={lockedByOther ? `${holder ?? 'Another editor'} is editing` : undefined}
-      >
+      <span className="flex items-center gap-1" title={hints.length > 0 ? hints.join(' · ') : undefined}>
         {titleCase(entityKey)}
         {lockedByOther && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />}
+        {/* Unlike the advisory 🔒 this marker is the ONLY on-screen cause of a greyed Save, so it
+            carries its own accessible name rather than relying on the hover-only title. */}
+        {invalid && (
+          <AlertCircle
+            className="h-3 w-3 shrink-0 text-destructive"
+            role="img"
+            aria-label={INVALID_HEIGHT_HINT}
+          />
+        )}
       </span>
     </TabsTrigger>
   );

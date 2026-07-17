@@ -17,6 +17,9 @@ export interface CheckboxProps {
   className?: string;
   'aria-label'?: string;
   'aria-labelledby'?: string;
+  /** Id of the element stating WHY the box is disabled — a disabled box is inert to hover, so the
+   *  reason must reach the checkbox itself rather than only a neighbouring ⓘ. */
+  'aria-describedby'?: string;
 }
 
 export const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
@@ -29,6 +32,7 @@ export const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
       className,
       'aria-label': ariaLabel,
       'aria-labelledby': ariaLabelledBy,
+      'aria-describedby': ariaDescribedBy,
     },
     ref,
   ) => {
@@ -41,6 +45,7 @@ export const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
         aria-checked={showDash ? 'mixed' : checked}
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
+        aria-describedby={ariaDescribedBy}
         disabled={disabled}
         onClick={() => onCheckedChange?.(!checked)}
         className={cn(

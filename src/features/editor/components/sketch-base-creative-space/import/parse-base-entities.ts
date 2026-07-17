@@ -13,6 +13,7 @@
 
 import { createLogger } from '@/utils/logger';
 import type { BaseKind, SketchEntity, SketchVariant } from '@/types/sketch';
+import { parseHeightCm } from '@/utils/parse-height-cm';
 import { COL, IMPORT_SHEETS, REF_IN_TEXT_RE, REF_RE } from './parse-base-entities.constants';
 
 const log = createLogger('Editor', 'ParseBaseEntities');
@@ -71,7 +72,10 @@ export function parseBaseEntities(rows: BaseSheetRow[], keyColumn: string): Sket
     const variant: SketchVariant = {
       key: row[COL.VARIANT] ?? '',
       description: row[COL.DESCRIPTION] ?? '',
-      height: row[COL.HEIGHT] ?? '',
+      // ⚡ 2026-07-17: height is a NUMBER of cm — "1.1m"→110, "20-30cm"→30 (max), fail/empty→null.
+      // A cell that fails to parse only drops the height; the variant is still imported (the
+      // advisory warning is raised by validateBaseImport, which owns `issues`).
+      height: parseHeightCm(row[COL.HEIGHT]),
       visual_design: row[COL.VISUAL_DESIGN] ?? '',
       art_language: row[COL.ART_LANGUAGE] ?? '',
     };
@@ -89,9 +93,10 @@ function extractInlineRefs(text: string): Array<{ key: string; variant: string }
   return refs;
 }
 
-/** The four text fields that may carry inline `@ref` mentions. */
+/** The text fields that may carry inline `@ref` mentions. `height` is EXCLUDED — it parses to a
+ *  number of cm (2026-07-17), so it can no longer hold a `@key/variant` mention. */
 function refBearingFields(v: SketchVariant): string[] {
-  return [v.description, v.visual_design, v.art_language, v.height ?? ''];
+  return [v.description, v.visual_design, v.art_language];
 }
 
 /**
@@ -100,7 +105,7 @@ function refBearingFields(v: SketchVariant): string[] {
  * (kept verbatim, warn-only). Mutates the shared `issues`.
  *  - error:  duplicate variant key within an entity.
  *  - warn:   not exactly one `base` variant; `ref` column ≠ own `@key/variant`;
- *            inline `@ref` unresolved within char∪prop.
+ *            inline `@ref` unresolved within char∪prop; `height` cell non-empty but unparseable.
  */
 export function validateBaseImport(
   entities: SketchEntity[],
@@ -147,10 +152,21 @@ export function validateBaseImport(
     }
   }
 
-  // warn: `ref` column should equal the row's own `@key/variant`
   for (const row of rows) {
     const rowKey = row[keyColumn] ?? '';
     if (!rowKey) continue;
+
+    // warn: `height` cell has content but no measurable number → imported as empty (variant kept)
+    const heightCell = row[COL.HEIGHT] ?? '';
+    if (heightCell && parseHeightCm(heightCell) === null) {
+      const variantKey = row[COL.VARIANT] ?? '';
+      log.warn('validateBaseImport', 'height unparseable', { kind, rowKey, variantKey });
+      issues.warnings.push(
+        `Dòng "${rowKey}" (${kind}) variant "${variantKey}": height "${heightCell}" không parse được → bỏ trống.`,
+      );
+    }
+
+    // warn: `ref` column should equal the row's own `@key/variant`
     const refCell = row[COL.REF] ?? '';
     if (!refCell) continue;
     const m = REF_RE.exec(refCell);

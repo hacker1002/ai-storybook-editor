@@ -13,6 +13,7 @@ import type {
   BaseKind,
   BaseEntityText,
   VariantRef,
+  LineupEntry,
 } from '@/types/sketch';
 import { sheetOf } from '@/types/sketch';
 import type { ManuscriptDummy, DummySpread } from '@/types/dummy';
@@ -118,7 +119,7 @@ export const useSketchBaseEntityText = (kind: BaseKind, key: string): BaseEntity
       return {
         key,
         description: base.description,
-        height: base.height ?? '',
+        height: base.height ?? null,
         visual_design: base.visual_design,
         art_language: base.art_language,
       };
@@ -163,6 +164,48 @@ export const useSketchVariantRefs = (kind: BaseKind): VariantRef[] => {
         e.variants
           .filter((v) => v.key !== 'base')
           .map((v) => ({ kind, entityKey: e.key, variantKey: v.key })),
+      ),
+    [entities, kind],
+  );
+};
+
+/**
+ * Effective locked crop image of a char/prop variant — the ONE approved image representing it.
+ * Read-path (structure.md): `raw_sheet.crops[].find(is_selected)` → that crop's selected
+ * illustration → else its newest (illustrations[0]). The 'base' variant travels the SAME path
+ * (its single crop is cloned from the base sheet with is_selected=true). Returns null when no
+ * crop is locked yet (→ the lineup row renders disabled, never hidden).
+ * Pure — usable outside React.
+ */
+export const effectiveCropUrl = (variant: SketchVariant): string | null => {
+  const crop = variant.raw_sheet?.crops.find((c) => c.is_selected);
+  if (!crop) return null;
+  return (
+    crop.illustrations.find((i) => i.is_selected)?.media_url ?? crop.illustrations[0]?.media_url ?? null
+  );
+};
+
+/**
+ * Every variant of a kind (base INCLUDED — unlike useSketchVariantRefs) projected to LineupEntry[]
+ * in snapshot order. Drives the Lineup space sidebar + canvas.
+ *
+ * useShallow FOOTGUN AVOIDED (memory: zustand useShallow nested arrays): the projection builds a
+ * FRESH object array, which never shallow-compares equal → useShallow would loop forever. Subscribe
+ * the STABLE raw entities ref via a plain selector (Object.is), then project in useMemo keyed on it.
+ */
+export const useSketchLineupEntries = (kind: BaseKind): LineupEntry[] => {
+  const entities = useSnapshotStore((s) => s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES); // stable raw ref
+  return useMemo(
+    () =>
+      entities.flatMap((e) =>
+        e.variants.map((v) => ({
+          kind,
+          entityKey: e.key,
+          variantKey: v.key,
+          ref: `@${e.key}/${v.key}`,
+          imageUrl: effectiveCropUrl(v),
+          heightCm: v.height ?? null,
+        })),
       ),
     [entities, kind],
   );

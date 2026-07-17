@@ -14,6 +14,7 @@ import type {
 import type { Illustration } from '@/types/prop-types';
 import { isSketchTextboxContent, sheetOf } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
+import { parseHeightCm } from '@/utils/parse-height-cm';
 
 const log = createLogger('Store', 'SketchSlice');
 
@@ -79,7 +80,12 @@ function coerceVariant(raw: unknown): SketchVariant {
     visual_design: asStr(r.visual_design),
     art_language: asStr(r.art_language),
   };
-  if (typeof r.height === 'string') v.height = r.height;
+  // MIGRATE (read-time, 2026-07-17): height went string → number|null (cm). Every load/merge runs
+  // through here, so a legacy string blob ("~110cm") self-parses to 110; an already-number value is
+  // idempotent; an unparseable one becomes null (the variant itself is never dropped). No DB
+  // migration needed. Presence-gated: a variant with NO height field keeps none (stage variants have
+  // no height at all — writing `height: null` onto every one of them would churn the blob).
+  if ('height' in r) v.height = parseHeightCm(r.height);
   // Legacy single-cell crop (pre-2026-07-14) → mapped into crops[0] below.
   const legacyCropIllustrations =
     isPlainObject(r.crop) && Array.isArray(r.crop.illustrations)
@@ -116,6 +122,35 @@ function coerceEntity(raw: unknown): SketchEntity {
 
 function asEntityArray(v: unknown): SketchEntity[] {
   return Array.isArray(v) ? v.map(coerceEntity) : [];
+}
+
+/** The three entity collections under `sketch` — the only sub-trees that carry variants. */
+const ENTITY_KINDS: readonly string[] = ['characters', 'props', 'stages'] satisfies SketchEntityKind[];
+
+/**
+ * MERGE-BOUNDARY coercer for the realtime content-sync path (column `sketch`).
+ *
+ * `normalizeSketch` only runs on a full snapshot load, but a peer's sync event refetches a
+ * SUB-NODE straight from DB jsonb and merges it verbatim (`applyRemoteNodePatch` /
+ * `reconcileCollectionByIds`). Without this, a legacy `height: "~110cm"` string re-enters a
+ * `number | null` field (the 2026-07-17 migration is read-time only — no DB backfill), so the
+ * type is a lie for any variant not re-saved since. Coercing at the fetch closes all three
+ * scopes (node / collection / set) in one place.
+ *
+ * Addressed by the server's positional path (`resolve_snapshot_path`):
+ *   ['characters']        → the whole entity array   (set + collection scope)
+ *   ['characters','2']    → one entity node          (node scope, rtype 3/4)
+ * Anything else (`['spreads', …]`, `['base', …]`) passes through untouched — variants are never
+ * addressed individually (entities are always saved as a whole composite node), so there is no
+ * deeper case to handle. `null`/`undefined` pass through so the remove semantics survive.
+ * Idempotent + cheap: it re-runs on every merge, and `parseHeightCm(110) === 110`.
+ */
+export function coerceSketchNode(path: string[], value: unknown): unknown {
+  if (value == null) return value; // null → remove; undefined → rpc error (caller skips)
+  if (!ENTITY_KINDS.includes(path[0])) return value;
+  if (path.length === 1) return asEntityArray(value);
+  if (path.length === 2) return coerceEntity(value);
+  return value;
 }
 
 /** A raw sheet blob → SketchBaseSheet (styles array kept as-is; absent → empty). */
