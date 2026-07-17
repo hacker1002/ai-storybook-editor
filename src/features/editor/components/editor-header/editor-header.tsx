@@ -202,6 +202,8 @@ function SaveStatusIndicator({ status, onSave }: SaveStatusIndicatorProps) {
     'auto-saving':  { icon: Loader2,      text: 'Saving...',     className: 'text-muted-foreground', spin: true },
     'auto-saved':   { icon: Loader2,      text: 'Auto-saved',    className: 'text-blue-500' },
     'manual-saving':{ icon: Loader2,      text: 'Publishing...', className: 'text-muted-foreground', spin: true },
+    // ADR-047: degraded sketch resource — saving is REFUSED (consent pending), not merely pending.
+    blocked:        { icon: AlertCircle,  text: 'Không thể lưu (dữ liệu lỗi)', className: 'text-destructive' },
   };
 
   const { icon: Icon, text, className, spin } = config[status];

@@ -24,3 +24,15 @@ export function toastForbiddenIllustration(): void {
 export function toastLockRequired(): void {
   toast.info('Click the spread to start editing its objects.', { id: 'retouch-lock-required' });
 }
+
+/** A save was BLOCKED because the target sketch resource is DEGRADED (unreadable raw data,
+ *  consent pending — ADR-047). Single toast id → repeated blocked saves replace, never stack.
+ *  Never hide disabled UI: the user must always learn WHY the save did not happen. */
+export function toastSaveBlockedDegraded(): void {
+  toast.error('Không thể lưu: dữ liệu cần được kiểm tra trước', {
+    id: 'sketch-degraded-save-blocked',
+    description:
+      'Phần dữ liệu này có cấu trúc không đọc được và đang ở chế độ chỉ đọc. Mở hộp thoại kiểm tra dữ liệu để xử lý.',
+    duration: 10000,
+  });
+}

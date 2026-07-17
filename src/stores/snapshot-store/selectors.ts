@@ -96,6 +96,32 @@ export const useDocByIndex = (index: number) => useSnapshotStore((s) => s.docs[i
 export const useDocByType = (type: DocType) =>
   useSnapshotStore((s) => s.docs.find((d) => d.type === type));
 
+// ── ADR-047 degraded-resource selectors (primitive returns — no useShallow footgun) ──
+
+/** ANY sketch resource degraded → header "Không thể lưu (dữ liệu lỗi)" + autosave suppressed. */
+export const useAnySketchDegraded = (): boolean =>
+  useSnapshotStore((s) => s.sketchDegraded.length > 0);
+
+/** Is this base sheet (or the whole sketch root) degraded? Drives the base-space banner. */
+export const useSketchSheetDegraded = (kind: BaseKind): boolean =>
+  useSnapshotStore((s) =>
+    s.sketchDegraded.some(
+      (d) =>
+        d.resource === 'sketch' ||
+        d.resource === (kind === 'characters' ? 'base.character_sheet' : 'base.prop_sheet'),
+    ),
+  );
+
+/** Is this entity (node-grain, its collection, or the root) degraded? Greys the sidebar row —
+ *  the row stays VISIBLE (never hide disabled UI), only save is blocked. */
+export const useSketchEntityDegraded = (kind: SketchEntityKind, entityKey: string): boolean =>
+  useSnapshotStore((s) =>
+    s.sketchDegraded.some(
+      (d) =>
+        d.resource === 'sketch' || d.resource === kind || d.resource === `${kind}/${entityKey}`,
+    ),
+  );
+
 // Sketch selector (whole-object ref; replaced only on load/setSketch/clearSketch)
 export const useSketch = (): Sketch => useSnapshotStore((s) => s.sketch);
 

@@ -47,6 +47,8 @@ import type {
 } from '@/types/spread-types';
 // Base-sheet generate accepts an optional model override; type reused from the api client (DRY).
 import type { SketchModelParams } from '@/apis/sketch-base-api';
+// ADR-047 degraded-resource bookkeeping (type-only — sketch-normalize is a leaf, no cycle).
+import type { SketchDegradedEntry, SketchDegradedIntake } from './slices/sketch-normalize';
 
 // ============================================================================
 // QuizSlice — validation-as-state + type-discriminated CRUD
@@ -199,6 +201,20 @@ export interface QuizSlice {
 // (ships alongside the sketch-spread creative space).
 export interface SketchSlice {
   sketch: Sketch;
+  /** ADR-047: resources whose raw blob could not be read (typed tree holds a safe placeholder).
+   *  Non-empty ⇒ every save into their subtree is BLOCKED (resource-lock write-blocker) until the
+   *  user consents through the modal. Array (not Set) — devtools/immer serialization. */
+  sketchDegraded: SketchDegradedEntry[];
+  /** ADR-047: resource → the original unreadable raw blob. Side-channel OUTSIDE the typed Sketch —
+   *  never rendered, never saved; dropped on consent (the placeholder then becomes the real value
+   *  at the next normal save). */
+  sketchQuarantine: Record<string, unknown>;
+  /** Append degraded entries (deduped by resource+sig) + quarantine their raw blobs. Used by
+   *  loadSketch (full load) and the content-sync merge path. */
+  markSketchDegraded: (entries: SketchDegradedIntake[]) => void;
+  /** Consent accepted for these resources → drop degraded + quarantine. Does NOT dirty the
+   *  snapshot (D4 — the reset persists at the next normal save, never immediately). */
+  resolveSketchDegraded: (resources: string[]) => void;
   setSketch: (sketch: Sketch) => void;
   clearSketch: () => void;
 

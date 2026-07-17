@@ -17,6 +17,8 @@ import type {
   Step,
   ResourceType,
 } from '@/stores/resource-lock-store/types';
+import { isSketchWriteBlocked } from '@/stores/resource-lock-store/write-blocker';
+import { toastSaveBlockedDegraded } from '@/utils/collab-save-toasts';
 
 const log = createLogger('API', 'ResourceLockApi');
 
@@ -188,6 +190,22 @@ export async function saveResource(bookId: string, t: LockTarget, p: SavePayload
  *  `locale`). 200 → applied; 409 LOCK_REQUIRED (actor must hold the type-6 lock);
  *  400 SET_MISMATCH (id set drifted → refetch); 422 UNSUPPORTED (step≠1 / type≠6). */
 export async function reorderResource(p: ReorderParams): Promise<ReorderResult> {
+  // ADR-047 layer-3 guard: reorder BYPASSES the store `save()` (no lock-store involvement), so
+  // it needs its own degraded check — a reorder of a degraded collection would permute
+  // placeholder data server-side. The caller's failure branch reverts the optimistic reorder.
+  const target: LockTarget = {
+    step: p.step,
+    resource_type: p.resourceType,
+    resource_id: p.resourceId,
+    locale: null,
+  };
+  if (isSketchWriteBlocked(target)) {
+    log.warn('reorderResource', 'write blocked — degraded sketch resource (consent pending)', {
+      resourceId: p.resourceId,
+    });
+    toastSaveBlockedDegraded();
+    return { ok: false, code: 'DEGRADED_BLOCKED' };
+  }
   const body: Record<string, unknown> = {
     book_id: p.bookId,
     step: p.step,

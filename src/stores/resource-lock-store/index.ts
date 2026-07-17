@@ -29,6 +29,8 @@ import {
 } from './channel';
 import { startHeartbeatLoop, startPruneTick } from './heartbeat';
 import { fetchProfileNames } from './holder-names';
+import { isSketchWriteBlocked } from './write-blocker';
+import { toastSaveBlockedDegraded } from '@/utils/collab-save-toasts';
 import {
   keyOf,
   rowKey,
@@ -65,7 +67,9 @@ export interface ResourceLockState {
   acquire: (t: LockTarget) => Promise<{ ok: true } | { ok: false; code: 'LOCK_HELD'; holder: string }>;
   renew: (t: LockTarget) => Promise<boolean>;
   release: (t: LockTarget) => Promise<void>;
-  save: (t: LockTarget, p: SavePayload) => Promise<{ ok: true } | { ok: false; lost: boolean; forbidden: boolean }>;
+  /** `blocked` (ADR-047): the write was refused client-side because the target subtree is
+   *  DEGRADED (consent pending) — distinct from lost/forbidden, nothing reached the gateway. */
+  save: (t: LockTarget, p: SavePayload) => Promise<{ ok: true } | { ok: false; lost: boolean; forbidden: boolean; blocked?: boolean }>;
   releaseAndSave: (t: LockTarget, dirty: boolean, payload?: SavePayload, bookIdOverride?: string) => Promise<void>;
 
   // === Phase-03 surface ===
@@ -259,6 +263,14 @@ export const useResourceLockStore = create<ResourceLockState>()(
           return { ok: false, lost: false, forbidden: false };
         }
         const key = keyOf(bookId, t);
+        // ADR-047 layer-1 guard: the target subtree is DEGRADED (unreadable raw quarantined,
+        // consent pending) → refuse the write so the in-memory placeholder can never reach the
+        // DB. Data-safety guard, NOT authz — the gateway stays the authority.
+        if (isSketchWriteBlocked(t)) {
+          log.warn('save', 'write blocked — degraded sketch resource (consent pending)', { key });
+          toastSaveBlockedDegraded();
+          return { ok: false, lost: false, forbidden: false, blocked: true };
+        }
         log.info('save', 'request', { key, action: p.action_type, log: p.log !== false });
         const r = await saveResource(bookId, t, p);
         if (r.ok) {
@@ -287,6 +299,14 @@ export const useResourceLockStore = create<ResourceLockState>()(
         }
         const key = keyOf(bookId, t);
         log.info('releaseAndSave', 'start', { key, dirty, hasPayload: !!payload });
+        // ADR-047 layer-1 guard: degraded subtree → SKIP the save (the local changes sit on a
+        // placeholder, persisting would wipe the quarantined data) but STILL release the lock —
+        // never strand it. Explicit here rather than relying on save()'s reject shape (I3).
+        if (dirty && payload && isSketchWriteBlocked(t)) {
+          log.warn('releaseAndSave', 'write blocked — degraded resource; skip save, still unlock', { key });
+          toastSaveBlockedDegraded();
+          dirty = false;
+        }
         if (dirty && payload) {
           // save REQUIRES a live lock (precondition) → must run BEFORE unlock.
           const r = await saveResource(bookId, t, payload);
@@ -451,3 +471,4 @@ export type {
 export { keyOf, FALLBACK_HOLDER_NAME } from './types';
 export * from './selectors';
 export * from './imperative-guards';
+export { setSketchWriteBlocker, isSketchWriteBlocked } from './write-blocker';

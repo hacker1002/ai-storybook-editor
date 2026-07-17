@@ -50,6 +50,11 @@ function normalizeSpread(s: BaseSpread): BaseSpread {
 }
 import { createDocsSlice, DEFAULT_DOCS } from './slices/docs-slice';
 import { createSketchSlice, DEFAULT_SKETCH, normalizeSketch } from './slices/sketch-slice';
+import type { SketchAnomaly, SketchDegradedIntake } from './slices/sketch-normalize';
+import { resourceKeyToLockPredicate } from './slices/sketch-resource-registry';
+import { setSketchWriteBlocker } from '@/stores/resource-lock-store/write-blocker';
+import { sigOf, consentKey, readAccepted } from '@/utils/sketch-consent-storage';
+import { toastSaveBlockedDegraded } from '@/utils/collab-save-toasts';
 import { createMetaSlice } from './slices/meta-slice';
 import { createDummiesSlice } from './slices/dummies-slice';
 import { createIllustrationSlice } from './slices/illustration-slice';
@@ -67,34 +72,77 @@ import { createSketchVariantGenerateJobSlice } from './slices/sketch-variant-gen
 
 const log = createLogger('Store', 'SnapshotStore');
 
+/** Result of one sketch load: the normalized tree + the degraded entries to store (ADR-047). */
+interface LoadedSketch {
+  sketch: Sketch;
+  degraded: SketchDegradedIntake[];
+}
+
 /**
- * Read a raw `snapshots.sketch` blob, surfacing any unexpected-shape finding to the user.
+ * Read a raw `snapshots.sketch` blob, routing every finding per its taxonomy class (ADR-047):
+ *  - `report` → ONE aggregated warning toast (stale legacy keys — nothing blocked).
+ *  - `convert` → nothing here (lossless, already debug-logged by the normalizer).
+ *  - `reset`  → the typed tree holds a placeholder; unless the user ALREADY accepted this exact
+ *    blob (localStorage, per snapshot+resource+sig — D11), the resource becomes DEGRADED: raw
+ *    quarantined + every save into its subtree blocked (write-blocker) until the consent modal
+ *    (app-root host) resolves it. The save-block is active from THIS moment — ignoring/closing
+ *    the modal keeps it safe.
  *
- * DATA-SAFETY: `normalizeSketch` never blanks populated data — it REPORTS instead (see its
- * contract). This is the caller half: the slice stays pure (no UI imports) and we aggregate every
- * anomaly of one load into a SINGLE toast. Called OUTSIDE the immer producer on purpose — firing a
- * toast is a side effect and must not run inside a state updater.
+ * Called OUTSIDE the immer producer on purpose — the toast is a side effect and must not run
+ * inside a state updater; the caller assigns `degraded` → state in its producer.
  */
-function loadSketch(raw: unknown, source: string): Sketch {
-  const anomalies: string[] = [];
+function loadSketch(raw: unknown, source: string, snapshotId: string | null): LoadedSketch {
+  const anomalies: SketchAnomaly[] = [];
   const sketch = normalizeSketch(raw, (a) => anomalies.push(a));
-  if (anomalies.length > 0) {
-    log.warn(source, 'sketch shape anomalies — no reset performed, read may be partial', {
-      count: anomalies.length,
-      anomalies: anomalies.slice(0, 5),
-    });
-    // Copy is deliberately NOT "đã giữ nguyên dữ liệu": most anomaly classes mean a part of the
-    // blob could not be read into the model, and a subsequent edit+save WOULD overwrite it. The
-    // honest, actionable message is "we didn't wipe anything — but don't save on top of this".
+
+  const reports = anomalies.filter((a) => a.cls === 'report');
+  if (reports.length > 0) {
     // Stable id: dedupes the StrictMode double-invoke of the fetchSnapshot effect in dev.
-    toast.warning('Sketch data có shape lạ — vui lòng báo team trước khi chỉnh sửa tiếp', {
+    toast.warning('Sketch data còn key cũ không dùng nữa — vui lòng báo team', {
       id: 'sketch-shape-anomaly',
-      description:
-        'Hệ thống KHÔNG tự động xoá dữ liệu, nhưng có thể chưa đọc được hết. Chỉnh sửa rồi lưu sẽ ghi đè phần chưa đọc được.',
+      description: reports[0].message,
       duration: 15000,
     });
   }
-  return sketch;
+
+  const degraded: SketchDegradedIntake[] = [];
+  const applied: string[] = [];
+  for (const a of anomalies) {
+    if (a.cls !== 'reset') continue;
+    const sig = sigOf(a.raw);
+    if (readAccepted(consentKey(snapshotId, a.resource, sig))) {
+      // Previously-consented reset of this exact blob → apply silently (placeholder stands and
+      // persists on the next normal save); no degraded state, no modal.
+      applied.push(a.resource);
+      continue;
+    }
+    degraded.push({ resource: a.resource, path: a.path, message: a.message, sig, raw: a.raw });
+  }
+  if (applied.length > 0) {
+    log.info(source, 'previously-consented resets auto-applied', { resources: applied });
+  }
+  if (degraded.length > 0) {
+    log.warn(source, 'sketch resources degraded — saves into their subtree blocked until consent', {
+      count: degraded.length,
+      resources: degraded.map((d) => d.resource),
+    });
+  }
+  return { sketch, degraded };
+}
+
+/** Project degraded intake entries onto the two state fields (entry list + quarantine map). */
+function degradedStateOf(degraded: SketchDegradedIntake[]): {
+  entries: { resource: SketchDegradedIntake['resource']; path: string; message: string; sig: string }[];
+  quarantine: Record<string, unknown>;
+} {
+  const quarantine: Record<string, unknown> = {};
+  for (const d of degraded) {
+    if (d.raw !== undefined && !(d.resource in quarantine)) quarantine[d.resource] = d.raw;
+  }
+  return {
+    entries: degraded.map(({ resource, path, message, sig }) => ({ resource, path, message, sig })),
+    quarantine,
+  };
 }
 
 export const useSnapshotStore = create<SnapshotStore>()(
@@ -179,8 +227,14 @@ export const useSnapshotStore = create<SnapshotStore>()(
 
           log.info('fetchSnapshot', 'done', { bookId, hasData: !!data, snapshotId: data?.id, saveType: data?.save_type });
           // Normalize (+ toast on anomaly) BEFORE the producer — side effects must stay out of it.
-          const sketch = data ? loadSketch(data.sketch, 'fetchSnapshot') : DEFAULT_SKETCH;
+          const loaded = data
+            ? loadSketch(data.sketch, 'fetchSnapshot', data.id ?? null)
+            : { sketch: DEFAULT_SKETCH, degraded: [] };
+          const { sketch } = loaded;
+          const degradedState = degradedStateOf(loaded.degraded);
           set((state) => {
+            state.sketchDegraded = degradedState.entries;
+            state.sketchQuarantine = degradedState.quarantine;
             if (data) {
               state.meta.id = data.id;
               state.meta.bookId = data.book_id;
@@ -235,6 +289,18 @@ export const useSnapshotStore = create<SnapshotStore>()(
           // autoSaveSnapshot guard below — the manual Save path was previously ungated.
           if (useResourceLockStore.getState().collabPersist) {
             log.warn('saveSnapshot', 'collabPersist active — skip owner-direct manual save (gateway is the write path)');
+            return;
+          }
+
+          // ADR-047 layer-2 guard (coarse, fail-safe): ANY degraded sketch resource suppresses the
+          // WHOLE-column write — this path would persist the in-memory placeholder empties across
+          // every column, a wipe wider than the original bug. Consent lifts it per-resource.
+          // Manual save is USER-INITIATED → toast the refusal (never a silent no-op click).
+          if (get().sketchDegraded.length > 0) {
+            log.warn('saveSnapshot', 'sketch degraded — whole-snapshot manual save suppressed (would persist placeholders)', {
+              degraded: get().sketchDegraded.map((d) => d.resource),
+            });
+            toastSaveBlockedDegraded();
             return;
           }
 
@@ -314,6 +380,17 @@ export const useSnapshotStore = create<SnapshotStore>()(
           // ADR-043). Defense-in-depth: the primary gate is use-auto-save not scheduling.
           if (useResourceLockStore.getState().collabPersist) {
             log.debug('autoSaveSnapshot', 'collabPersist active — skip owner-direct autoSave (gateway routes flush)');
+            return;
+          }
+
+          // ADR-047 layer-2 guard (coarse, fail-safe — phase-04 I2): outside a collab space
+          // `collabPersist` is false, so WITHOUT this check an autosave from e.g. the illustration
+          // space would write the `sketch` column from the in-memory placeholders → wipe the whole
+          // sketch. Any degraded resource ⇒ no whole-column write, period.
+          if (get().sketchDegraded.length > 0) {
+            log.warn('autoSaveSnapshot', 'sketch degraded — whole-snapshot autosave suppressed (would persist placeholders)', {
+              degraded: get().sketchDegraded.map((d) => d.resource),
+            });
             return;
           }
 
@@ -465,10 +542,13 @@ export const useSnapshotStore = create<SnapshotStore>()(
           const [set] = args;
           log.info('initSnapshot', 'init', { hasData: !!data, hasMeta: !!data.meta });
           // Normalize (+ toast on anomaly) BEFORE the producer — side effects must stay out of it.
-          const sketch = loadSketch(data.sketch, 'initSnapshot');
+          const loaded = loadSketch(data.sketch, 'initSnapshot', data.meta?.id ?? null);
+          const degradedState = degradedStateOf(loaded.degraded);
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
-            state.sketch = sketch;
+            state.sketch = loaded.sketch;
+            state.sketchDegraded = degradedState.entries;
+            state.sketchQuarantine = degradedState.quarantine;
             state.dummies = data.dummies ?? [];
             const ill = data.illustration;
             state.illustration = {
@@ -491,6 +571,8 @@ export const useSnapshotStore = create<SnapshotStore>()(
           set((state) => {
             state.docs = DEFAULT_DOCS;
             state.sketch = DEFAULT_SKETCH;
+            state.sketchDegraded = [];
+            state.sketchQuarantine = {};
             state.dummies = [];
             state.illustration = { spreads: [], sections: [] };
             state.props = [];
@@ -513,6 +595,16 @@ export const useSnapshotStore = create<SnapshotStore>()(
     { name: 'snapshot-store' }
   )
 );
+
+// ADR-047 layer-1 seam: install the degraded-write predicate into the resource-lock write-blocker
+// ONCE at module init (dependency inversion — resource-lock-store stays a leaf and never imports
+// this store). The predicate reads LIVE state, so consent/reset changes take effect without
+// re-installing; with `sketchDegraded` empty it short-circuits to false (zero hot-path cost).
+setSketchWriteBlocker((t) => {
+  const degraded = useSnapshotStore.getState().sketchDegraded;
+  if (degraded.length === 0) return false;
+  return degraded.some((d) => resourceKeyToLockPredicate(d.resource)(t));
+});
 
 // Re-export selectors
 export * from './selectors';

@@ -136,7 +136,9 @@ export function SketchSpreadsCreativeSpace() {
           log.warn('handleReorder', 'reorder endpoint failed — reverted', { draggedId, code: res.code });
           if (res.code === 'SET_MISMATCH') {
             toast.error('Danh sách spread đã thay đổi — tải lại trang rồi thử lại.');
-          } else {
+          } else if (res.code !== 'DEGRADED_BLOCKED') {
+            // DEGRADED_BLOCKED already fired its own explanatory toast (ADR-047 api guard) —
+            // a second generic one would bury the reason.
             toast.error('Không sắp xếp lại được — vui lòng thử lại.');
           }
         }

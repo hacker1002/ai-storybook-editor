@@ -10,12 +10,13 @@
 // When ANOTHER editor holds the entity, the row shows a 🔒 holder badge and disables ✏ + ✨ (greyed,
 // NOT hidden). Advisory — the acquire 409 is the real authority (browse/select stays enabled).
 
-import { ChevronDown, ChevronRight, Loader2, Lock, Pencil, Sparkles } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Lock, Pencil, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import type { BaseKind, VariantRef } from '@/types/sketch';
 import { cn } from '@/utils/utils';
 import { useIsLockedByOther, useLockHolderName } from '@/stores/resource-lock-store';
+import { useSketchEntityDegraded } from '@/stores/snapshot-store';
 import { resolveSketchVariantLockTarget } from '@/stores/snapshot-store/slices/collab-sketch-variant-save-helper';
 import {
   GATE_TOOLTIP,
@@ -181,23 +182,31 @@ function VariantRow({
   );
   const lockedByOther = useIsLockedByOther(lockTarget);
   const holderName = useLockHolderName(lockTarget);
+  // ADR-047: entity data unreadable (degraded) → row greyed (NOT hidden) + edit/generate refused;
+  // browse/select stays enabled (D5 — persist is blocked, interaction is not).
+  const degraded = useSketchEntityDegraded(variantRef.kind, variantRef.entityKey);
+  const DEGRADED_TOOLTIP = 'Dữ liệu không đọc được — chỉ xem, không thể lưu. Mở hộp thoại kiểm tra dữ liệu để xử lý.';
 
-  // ✏/✨ disabled when a peer holds the entity; ✨ additionally gated on the generate preconditions.
-  const editDisabled = lockedByOther;
-  const generateDisabled = lockedByOther || !gate.canGenerate;
-  const gateTooltip = lockedByOther
-    ? `${holderName ?? 'Another editor'} is editing`
-    : gate.reason
-      ? GATE_TOOLTIP[gate.reason]
-      : undefined;
+  // ✏/✨ disabled when a peer holds the entity OR the entity is degraded; ✨ additionally gated on
+  // the generate preconditions.
+  const editDisabled = lockedByOther || degraded;
+  const generateDisabled = lockedByOther || degraded || !gate.canGenerate;
+  const gateTooltip = degraded
+    ? DEGRADED_TOOLTIP
+    : lockedByOther
+      ? `${holderName ?? 'Another editor'} is editing`
+      : gate.reason
+        ? GATE_TOOLTIP[gate.reason]
+        : undefined;
 
   return (
     <div
       className={cn(
         'flex items-center gap-1 rounded-md pr-1',
         isSelected ? 'bg-primary/10' : 'hover:bg-muted/50',
+        degraded && 'opacity-60',
       )}
-      aria-disabled={lockedByOther}
+      aria-disabled={lockedByOther || degraded}
     >
       <button
         type="button"
@@ -211,6 +220,17 @@ function VariantRow({
       >
         {mention}
       </button>
+
+      {/* Degraded badge (ADR-047) — data unreadable, save refused (never hidden). */}
+      {degraded && (
+        <span
+          className="flex min-w-0 items-center gap-0.5 rounded bg-background/80 px-1 text-[10px] font-medium text-destructive"
+          title={DEGRADED_TOOLTIP}
+        >
+          <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="max-w-[64px] truncate">Dữ liệu lỗi</span>
+        </span>
+      )}
 
       {/* Peer-lock badge — 🔒 + holder name (never hidden; browse stays enabled). */}
       {lockedByOther && (

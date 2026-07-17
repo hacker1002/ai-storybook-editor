@@ -6,6 +6,7 @@ import {
   useSyncState,
   useSnapshotFetchLoading,
   useSnapshotFetchError,
+  useAnySketchDegraded,
   deriveSaveStatus,
 } from '@/stores/snapshot-store';
 import { useBookStore, useCurrentBook, useBooksLoading, useBooksError } from '@/stores/book-store';
@@ -77,6 +78,9 @@ export function EditorPage() {
   const collabUiActive = useCollabUiActive();
   const collabHolding = useCollabHolding();
   const collabSavePhase = useCollabSavePhase();
+  // ADR-047: any degraded sketch resource → the "Unsaved" label upgrades to "Không thể lưu
+  // (dữ liệu lỗi)" — saving that work is REFUSED until the consent modal resolves it.
+  const anySketchDegraded = useAnySketchDegraded();
 
   // Register auto-save timer — must be called exactly once
   useAutoSave();
@@ -213,13 +217,17 @@ export function EditorPage() {
   }
 
   // Derived save status — session-driven inside a collab space, else snapshot-derived.
-  const saveStatus: SaveStatus = collabUiActive
+  const baseSaveStatus: SaveStatus = collabUiActive
     ? collabHolding
       ? 'dirty' // holding a lock = actively editing → "Unsaved"
       : collabSavePhase === 'saving'
         ? 'auto-saving' // release-save in flight → "Saving..."
         : 'saved' // idle/settled → "Saved" (never "Auto-saved" in collab spaces)
     : deriveSaveStatus(sync);
+  // Degraded override (ADR-047): only upgrades "Unsaved" — an idle "Saved" stays truthful
+  // (healthy resources still save normally; only the degraded subtree is refused).
+  const saveStatus: SaveStatus =
+    anySketchDegraded && baseSaveStatus === 'dirty' ? 'blocked' : baseSaveStatus;
 
   // Handlers
   // Creative-space switches no longer auto-save (user decision 2026-07-06). Draft

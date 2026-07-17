@@ -19,6 +19,8 @@ import { holdsLiveLock, hasAnyLiveLock, type LockTarget } from '@/stores/resourc
 import { openActivityLogChannel, type ChannelHandle } from './channel';
 import { fetchSnapshotNode } from './rpc';
 import { coerceSketchNode } from '@/stores/snapshot-store/slices/sketch-slice';
+import type { SketchAnomaly, SketchDegradedIntake } from '@/stores/snapshot-store/slices/sketch-normalize';
+import { sigOf, consentKey, readAccepted } from '@/utils/sketch-consent-storage';
 import type { ActivityLogRawRow, MetadataSync, SnapshotColumn } from './types';
 
 const log = createLogger('Store', 'ContentSyncStore');
@@ -60,12 +62,38 @@ function withRemotePatchGuard(apply: () => void): void {
   }
 }
 
+// ── ADR-047 merge-path degraded intake (phase-05) ────────────────────────────
+// A peer sync can carry a malformed sketch node; `coerceSketchNode` then merges a PLACEHOLDER
+// and reports the reset here, routed into the SAME degraded/consent machinery as the load path.
+// SYNCHRONOUS on purpose (the plan's 500ms debounce was dropped — review finding): the save-block
+// must be active BEFORE the placeholder lands in state, or a save racing the window could persist
+// it. Burst safety needs no timer — `markSketchDegraded` dedupes by resource+sig and the modal
+// derives from state, so N events collapse to one row anyway.
+function intakeMergeDegraded(resets: SketchAnomaly[]): void {
+  const snapshotId = useSnapshotStore.getState().meta.id;
+  const entries: SketchDegradedIntake[] = [];
+  for (const a of resets) {
+    const sig = sigOf(a.raw);
+    // Already-consented blob (user just accepted this exact shape) → apply silently, no re-ask.
+    if (readAccepted(consentKey(snapshotId, a.resource, sig))) continue;
+    entries.push({ resource: a.resource, path: a.path, message: a.message, sig, raw: a.raw });
+  }
+  if (entries.length === 0) return;
+  log.warn('intakeMergeDegraded', 'peer sync carried unreadable sketch data — resources degraded', {
+    count: entries.length,
+    resources: entries.map((e) => e.resource),
+  });
+  useSnapshotStore.getState().markSketchDegraded(entries);
+}
+
 /**
  * THE merge boundary: every sync scope reads its node through here, so this is the ONE place a
  * raw DB jsonb blob becomes a typed snapshot node. `fetchSnapshotNode` returns the column's jsonb
  * verbatim — unlike a full snapshot load it never passes through `normalizeSketch`, so the sketch
- * column is coerced here (legacy string `height` → number|null cm; see `coerceSketchNode`).
- * Other columns pass through unchanged (no read-time migration pending on them).
+ * column is coerced here (legacy string `height` → number|null cm; base/spreads shape validation —
+ * see `coerceSketchNode`). A `reset` finding means the merged value is a placeholder: the resource
+ * degrades exactly like the load path (save-block + consent modal). Other columns pass through
+ * unchanged (no read-time migration pending on them).
  */
 async function fetchSyncNode(
   version: string,
@@ -73,7 +101,19 @@ async function fetchSyncNode(
   path: string[],
 ): Promise<unknown> {
   const value = await fetchSnapshotNode(version, column, path);
-  return column === 'sketch' ? coerceSketchNode(path, value) : value;
+  if (column !== 'sketch') return value;
+  const anomalies: SketchAnomaly[] = [];
+  const coerced = coerceSketchNode(path, value, (a) => anomalies.push(a));
+  const resets = anomalies.filter((a) => a.cls === 'reset');
+  // Degrade BEFORE returning: the caller merges the returned placeholder into state, so the
+  // save-block must already be armed when it lands (no fail-open window).
+  if (resets.length > 0) intakeMergeDegraded(resets);
+  for (const a of anomalies) {
+    if (a.cls === 'convert') {
+      log.debug('fetchSyncNode', 'lossless convert applied on merge', { resource: a.resource, path: a.path });
+    }
+  }
+  return coerced;
 }
 
 /** Still viewing the version the event targeted? Re-checked AFTER the RPC await so

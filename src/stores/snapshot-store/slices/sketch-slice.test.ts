@@ -1,9 +1,13 @@
+// sketch-slice.test.ts — slice STATE + CRUD actions only. The normalizer suites (data-safety,
+// isolation, taxonomy) moved to sketch-normalize.test.ts with the 2026-07-17 modularization
+// (ADR-047) — this file tests what remains in sketch-slice.ts.
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { normalizeSketch, normalizeSketchSpread, DEFAULT_SKETCH, createSketchSlice } from './sketch-slice';
+import { createSketchSlice } from './sketch-slice';
 import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
-import type { Sketch, SketchEntity, SketchVariant, SketchVariantCrop, SketchSpread, ArtDirection, SketchTextbox } from '@/types/sketch';
+import type { SketchEntity, SketchVariant, SketchVariantCrop, SketchSpread, ArtDirection, SketchTextbox } from '@/types/sketch';
 import type { Geometry, Typography } from '@/types/spread-types';
 
 // Isolated harness: the sketch slice + the only cross-slice field its actions touch
@@ -33,285 +37,6 @@ const entity = (key: string, variants: SketchEntity['variants'] = []): SketchEnt
   variants,
 });
 
-describe('normalizeSketch', () => {
-  it('returns DEFAULT_SKETCH for undefined / null / non-object', () => {
-    expect(normalizeSketch(undefined)).toEqual(DEFAULT_SKETCH);
-    expect(normalizeSketch(null)).toEqual(DEFAULT_SKETCH);
-    expect(normalizeSketch('nope')).toEqual(DEFAULT_SKETCH);
-    expect(normalizeSketch(42)).toEqual(DEFAULT_SKETCH);
-    expect(normalizeSketch([])).toEqual(DEFAULT_SKETCH);
-  });
-
-  // CONTRACT CHANGE (2026-07-17, data-loss fix): legacy markers used to hard-reset the WHOLE
-  // sketch to DEFAULT_SKETCH. They no longer reset anything — the blob is mapped defensively and
-  // the stale markers are reported as an anomaly instead. See the "data-safety" describe below.
-  it('maps a legacy-marker blob defensively instead of resetting to empty', () => {
-    expect(normalizeSketch({ dummy_id: 'd1', spreads: [] })).toEqual(DEFAULT_SKETCH);
-    // ...but a marker blob that CARRIES data keeps it (that is the whole point):
-    const withData = { character_sheets: [{}], characters: [{ key: 'kid', variants: [] }] };
-    expect(normalizeSketch(withData).characters).toEqual([{ key: 'kid', variants: [] }]);
-  });
-
-  it('maps a legacy spread (images[], no pages[]) instead of resetting to empty', () => {
-    const legacy = { id: 'x', spreads: [{ id: 's1', images: [{ id: 'i1' }] }] };
-    const result = normalizeSketch(legacy);
-    expect(result.id).toBe('x');
-    expect(result.spreads).toHaveLength(1);
-    expect(result.spreads[0].id).toBe('s1');
-  });
-
-  it('preserves a valid new-shape sketch', () => {
-    const valid: Sketch = {
-      id: 'sk1',
-      base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
-      characters: [{ key: 'c1', variants: [] }],
-      props: [],
-      stages: [{ key: 'st1', variants: [{ key: 'v', description: '', visual_design: 'd', art_language: '' }] }],
-      spreads: [{ id: 'sp1', images: [], pages: [], textboxes: [] }],
-    };
-    expect(normalizeSketch(valid)).toEqual(valid);
-  });
-
-  it('defaults a missing base workspace to two empty sheets (backward-compat)', () => {
-    const result = normalizeSketch({ id: 'no-base', characters: [], props: [], stages: [], spreads: [] });
-    expect(result.base).toEqual({ character_sheet: { styles: [] }, prop_sheet: { styles: [] } });
-  });
-
-  it('defaults missing nested arrays to [] (defensive)', () => {
-    expect(normalizeSketch({ id: 'only-id' })).toEqual({
-      id: 'only-id',
-      base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
-      characters: [],
-      props: [],
-      stages: [],
-      spreads: [],
-    });
-  });
-
-  it('coerces a non-string id to null', () => {
-    const result = normalizeSketch({ id: 123, characters: [], props: [], stages: [], spreads: [] });
-    expect(result.id).toBeNull();
-  });
-
-  // Discriminator HAZARD (phase-01): the versioned model ADDS images[] to the new spread shape,
-  // which also carries pages[]. A new spread (images + pages) must NOT false-positive as legacy.
-  it('does NOT reset a new-shape spread that has BOTH images[] and pages[]', () => {
-    const raw = {
-      id: 'sk',
-      characters: [],
-      props: [],
-      stages: [],
-      spreads: [
-        { id: 'sp', images: [{ id: 'i', illustrations: [] }], pages: [{ type: 'full' }], textboxes: [] },
-      ],
-    };
-    const result = normalizeSketch(raw);
-    expect(result.spreads).toHaveLength(1);
-    expect(result.spreads[0].id).toBe('sp');
-  });
-});
-
-// REGRESSION NET for the 2026-07-17 silent-data-loss incident: `normalizeSketch` judged the whole
-// blob from `spreads[0]` (isLegacySketchShape) and returned DEFAULT_SKETCH on a false positive,
-// wiping base.character_sheet.styles / characters / props IN MEMORY. The user then edited, the
-// held-session release-save wrote the whole node back, and the empty was PERSISTED.
-// Core rule under test: an unexpected shape NEVER blanks populated data — it is reported instead.
-describe('normalizeSketch data-safety (never silently blank populated data)', () => {
-  const style = (prompt: string) => ({
-    style_prompt: prompt,
-    is_selected: true,
-    image_references: [],
-    illustrations: [],
-    crops: [],
-  });
-
-  // A blob that is populated everywhere AND trips the old `spreads[0]` legacy discriminator
-  // (`images` present, `pages` absent).
-  const populatedLegacySpreadBlob = () => ({
-    id: 'sk1',
-    base: {
-      character_sheet: { styles: [style('watercolor')] },
-      prop_sheet: { styles: [style('inked')] },
-    },
-    characters: [{ key: 'kid', variants: [] }],
-    props: [{ key: 'wand', variants: [] }],
-    stages: [{ key: 'forest', variants: [] }],
-    spreads: [{ id: 's1', images: [{ id: 'i1', illustrations: [] }] }],
-  });
-
-  const collect = (raw: unknown) => {
-    const anomalies: string[] = [];
-    const sketch = normalizeSketch(raw, (a) => anomalies.push(a));
-    return { sketch, anomalies };
-  };
-
-  it('does NOT wipe base styles / characters / props when spreads[0] has images and no pages', () => {
-    const result = normalizeSketch(populatedLegacySpreadBlob());
-    expect(result.base.character_sheet.styles).toHaveLength(1);
-    expect(result.base.character_sheet.styles[0].style_prompt).toBe('watercolor');
-    expect(result.base.prop_sheet.styles).toHaveLength(1);
-    expect(result.characters).toEqual([{ key: 'kid', variants: [] }]);
-    expect(result.props).toEqual([{ key: 'wand', variants: [] }]);
-    expect(result.stages).toEqual([{ key: 'forest', variants: [] }]);
-    // The spread itself survives too (pages defaults to [], images kept).
-    expect(result.spreads).toHaveLength(1);
-    expect(result.spreads[0].id).toBe('s1');
-  });
-
-  it.each(['dummy_id', 'character_sheets', 'prop_sheets'])(
-    'does NOT wipe populated base styles when the legacy marker %s is present',
-    (marker) => {
-      const raw = {
-        [marker]: 'legacy-value',
-        base: { character_sheet: { styles: [style('watercolor')] }, prop_sheet: { styles: [] } },
-        characters: [{ key: 'kid', variants: [] }],
-      };
-      const { sketch, anomalies } = collect(raw);
-      expect(sketch.base.character_sheet.styles).toHaveLength(1);
-      expect(sketch.base.character_sheet.styles[0].style_prompt).toBe('watercolor');
-      expect(sketch.characters).toEqual([{ key: 'kid', variants: [] }]);
-      // Stale top-level keys are not part of the Sketch type → dropped on the next whole-node
-      // save, so the user must be told rather than have it happen silently.
-      expect(anomalies.join(' ')).toContain(marker);
-    },
-  );
-
-  it('does NOT blank a populated styles[] when the sheet carries odd sibling keys', () => {
-    const raw = {
-      base: {
-        character_sheet: { styles: [style('watercolor')], legacy_junk: 42 },
-        prop_sheet: { styles: [] },
-      },
-    };
-    const { sketch, anomalies } = collect(raw);
-    expect(sketch.base.character_sheet.styles).toHaveLength(1);
-    expect(anomalies).toEqual([]); // styles is a valid array → nothing to cry wolf about
-  });
-
-  it('salvages a populated styles[] stored directly in the sheet slot (array, not object)', () => {
-    const raw = { base: { character_sheet: [style('watercolor')], prop_sheet: { styles: [] } } };
-    const { sketch, anomalies } = collect(raw);
-    expect(sketch.base.character_sheet.styles).toHaveLength(1);
-    expect(sketch.base.character_sheet.styles[0].style_prompt).toBe('watercolor');
-    expect(anomalies).toHaveLength(1);
-    expect(anomalies[0]).toContain('base.character_sheet');
-  });
-
-  // A salvaged element must not become a crash: the base-workspace actions dereference
-  // styles[i].crops / .illustrations without full optional chaining, so a recovered element that
-  // isn't shaped like a style would throw on interaction. Salvage must coerce, not just cast.
-  it('element-coerces salvaged styles so a junk element cannot crash the base workspace', () => {
-    const { sketch } = collect({ base: { character_sheet: ['watercolor', { style_prompt: 'ok' }] } });
-    const styles = sketch.base.character_sheet.styles;
-    expect(styles).toHaveLength(2);
-    for (const s of styles) {
-      // The exact shapes the store actions reach into.
-      expect(Array.isArray(s.crops)).toBe(true);
-      expect(Array.isArray(s.illustrations)).toBe(true);
-      expect(Array.isArray(s.image_references)).toBe(true);
-    }
-    expect(styles[1].style_prompt).toBe('ok'); // real style survives salvage intact
-  });
-
-  // Positional jsonb_set writes through the collab gateway can leave an object-map where an array
-  // is expected — the shape most likely to produce the reported `styles: []` symptom.
-  it('salvages an object-map styles ({"0":…,"1":…}) instead of blanking it', () => {
-    const raw = {
-      base: {
-        character_sheet: { styles: { 0: style('watercolor'), 1: style('inked') } },
-        prop_sheet: { styles: [] },
-      },
-    };
-    const { sketch, anomalies } = collect(raw);
-    expect(sketch.base.character_sheet.styles).toHaveLength(2);
-    expect(sketch.base.character_sheet.styles.map((s) => s.style_prompt)).toEqual([
-      'watercolor',
-      'inked',
-    ]);
-    expect(anomalies).toHaveLength(1);
-  });
-
-  it('reports (does not swallow) a malformed sheet and a malformed styles field', () => {
-    expect(collect({ base: { character_sheet: 'nope', prop_sheet: { styles: [] } } }).anomalies)
-      .toHaveLength(1);
-    expect(collect({ base: { character_sheet: { styles: { a: 1 } }, prop_sheet: { styles: [] } } }).anomalies)
-      .toHaveLength(1);
-    expect(collect({ base: 'nope' }).anomalies).toHaveLength(1);
-  });
-
-  it('does NOT blank populated entity collections that are malformed — reports instead', () => {
-    const { sketch, anomalies } = collect({ characters: 'nope', props: [{ key: 'wand', variants: [] }] });
-    expect(sketch.props).toEqual([{ key: 'wand', variants: [] }]); // sibling untouched
-    expect(anomalies.join(' ')).toContain('characters');
-  });
-
-  it('reports a non-object sketch blob but still yields DEFAULT_SKETCH', () => {
-    expect(collect('nope').anomalies).toHaveLength(1);
-    expect(collect(42).anomalies).toHaveLength(1);
-    expect(collect('nope').sketch).toEqual(DEFAULT_SKETCH);
-  });
-
-  // MUST NOT CRY WOLF: a brand-new book genuinely has no sketch — that is not an anomaly, and a
-  // toast there would train users to ignore the real one.
-  it('reports NO anomaly for a genuinely absent sketch (null / undefined = new book)', () => {
-    expect(collect(null)).toEqual({ sketch: DEFAULT_SKETCH, anomalies: [] });
-    expect(collect(undefined)).toEqual({ sketch: DEFAULT_SKETCH, anomalies: [] });
-  });
-
-  it('reports NO anomaly for a well-formed sketch, nor for legitimately absent sub-trees', () => {
-    expect(collect(populatedLegacySpreadBlob()).anomalies).toEqual([]);
-    expect(collect({ id: 'only-id' }).anomalies).toEqual([]); // absent base/characters/spreads
-    expect(collect({ base: {} }).anomalies).toEqual([]); // sheet slots absent → new, not broken
-    expect(collect({ base: { character_sheet: {} } }).anomalies).toEqual([]); // no styles yet
-  });
-
-  it('reports a non-object spreads[] element rather than silently collapsing it', () => {
-    const { sketch, anomalies } = collect({ spreads: [{ id: 'ok', pages: [], textboxes: [] }, null] });
-    expect(sketch.spreads).toHaveLength(2); // slot kept (positional)
-    expect(sketch.spreads[0].id).toBe('ok');
-    expect(anomalies).toHaveLength(1);
-  });
-});
-
-describe('normalizeSketchSpread (per-page versioned images[] back-compat)', () => {
-  it('wraps a legacy scalar media_url into one selected illustration (type inferred from pages)', () => {
-    const out = normalizeSketchSpread({ id: 's1', media_url: 'http://x/i.png', pages: [{ type: 'full' }], textboxes: [] });
-    expect(out.images).toHaveLength(1);
-    expect(out.images[0].type).toBe('full');
-    expect(out.images[0].illustrations[0]).toMatchObject({ media_url: 'http://x/i.png', is_selected: true });
-  });
-
-  it('assigns per-page types to legacy typeless images from page order (no clamp)', () => {
-    const images = [
-      { id: 'i1', illustrations: [{ media_url: 'u1', created_time: 't', is_selected: true }] },
-      { id: 'i2', illustrations: [{ media_url: 'u2', created_time: 't', is_selected: true }] },
-    ];
-    const out = normalizeSketchSpread({ id: 's1', images, pages: [{ type: 'left' }, { type: 'right' }], textboxes: [] });
-    expect(out.images).toHaveLength(2);
-    expect(out.images.map((im) => im.type)).toEqual(['left', 'right']);
-    expect(out.images[0].id).toBe('i1');
-  });
-
-  it('dedupes images by page type (keeps first)', () => {
-    const images = [
-      { id: 'i1', type: 'full', illustrations: [] },
-      { id: 'i2', type: 'full', illustrations: [] },
-    ];
-    const out = normalizeSketchSpread({ id: 's1', images, pages: [{ type: 'full' }], textboxes: [] });
-    expect(out.images).toHaveLength(1);
-    expect(out.images[0].id).toBe('i1');
-  });
-
-  it('defaults to images:[] when the spread has no image', () => {
-    const out = normalizeSketchSpread({ id: 's1', pages: [], textboxes: [] });
-    expect(out.images).toEqual([]);
-  });
-
-  it('collapses a non-object row to an empty spread', () => {
-    expect(normalizeSketchSpread(null)).toEqual({ id: '', images: [], pages: [], textboxes: [] });
-  });
-});
-
 describe('getSketchSpreadEffectiveUrl', () => {
   const withIllustrations = (
     ill: { media_url: string; created_time: string; is_selected: boolean }[],
@@ -332,6 +57,56 @@ describe('getSketchSpreadEffectiveUrl', () => {
 
   it('returns null when the spread has no image', () => {
     expect(getSketchSpreadEffectiveUrl(withIllustrations([]))).toBeNull();
+  });
+});
+
+// ADR-047 degraded/quarantine bookkeeping — the state phase-04's save-block reads.
+describe('SketchSlice degraded bookkeeping (ADR-047)', () => {
+  let store: ReturnType<typeof createTestStore>;
+  beforeEach(() => {
+    store = createTestStore();
+  });
+
+  const entry = (resource: string, sig = 's1', raw: unknown = { broken: true }) => ({
+    resource: resource as never,
+    path: resource,
+    message: 'hỏng',
+    sig,
+    raw,
+  });
+
+  it('markSketchDegraded appends entries + quarantines raw, deduped by resource+sig', () => {
+    store.getState().markSketchDegraded([entry('base.character_sheet')]);
+    store.getState().markSketchDegraded([entry('base.character_sheet')]); // duplicate → no-op
+    store.getState().markSketchDegraded([entry('characters/hero', 's2', 'raw-blob')]);
+    const s = store.getState();
+    expect(s.sketchDegraded).toHaveLength(2);
+    expect(s.sketchQuarantine['base.character_sheet']).toEqual({ broken: true });
+    expect(s.sketchQuarantine['characters/hero']).toBe('raw-blob');
+    // Degraded entries never carry the raw blob (it lives ONLY in quarantine).
+    expect(s.sketchDegraded[0]).not.toHaveProperty('raw');
+  });
+
+  it('same resource with a NEW sig is a new entry (blob changed → decision must be re-asked)', () => {
+    store.getState().markSketchDegraded([entry('spreads', 'sig-a')]);
+    store.getState().markSketchDegraded([entry('spreads', 'sig-b')]);
+    expect(store.getState().sketchDegraded).toHaveLength(2);
+  });
+
+  it('markSketchDegraded does NOT dirty the snapshot (no accidental autosave trigger)', () => {
+    store.getState().markSketchDegraded([entry('props')]);
+    expect(store.getState().sync.isDirty).toBe(false);
+  });
+
+  it('resolveSketchDegraded removes only the consented resources + their quarantine', () => {
+    store.getState().markSketchDegraded([entry('base.character_sheet'), entry('props', 's3')]);
+    store.getState().resolveSketchDegraded(['base.character_sheet']);
+    const s = store.getState();
+    expect(s.sketchDegraded.map((d: { resource: string }) => d.resource)).toEqual(['props']);
+    expect(s.sketchQuarantine).not.toHaveProperty('base.character_sheet');
+    expect(s.sketchQuarantine).toHaveProperty('props');
+    // D4: consent does NOT write — the reset persists at the next NORMAL save only.
+    expect(s.sync.isDirty).toBe(false);
   });
 });
 
@@ -900,158 +675,6 @@ describe('SketchSlice base (workspace) actions', () => {
     const style = store.getState().sketch.base.character_sheet.styles[0];
     expect(style.image_references).toEqual([{ title: 'ref-a.jpg', media_url: 'https://cdn/a.png' }]);
     expect(store.getState().sync.isDirty).toBe(true);
-  });
-
-  it('normalizeSketch defaults missing base to emptyBase() (2 empty sheets)', () => {
-    const raw = {
-      id: 'sk1',
-      characters: [entity('hero')],
-      props: [],
-      stages: [],
-      spreads: [],
-      // no base field
-    };
-    const result = normalizeSketch(raw);
-    expect(result.base).toEqual({
-      character_sheet: { styles: [] },
-      prop_sheet: { styles: [] },
-    });
-  });
-
-  it('normalizeSketch coerces missing variant text fields to empty string', () => {
-    const raw = {
-      id: 'sk1',
-      base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
-      characters: [
-        {
-          key: 'hero',
-          variants: [
-            {
-              key: 'base',
-              // missing description, visual_design, art_language
-            },
-          ],
-        },
-      ],
-      props: [],
-      stages: [],
-      spreads: [],
-    };
-    const result = normalizeSketch(raw);
-    const heroBase = result.characters[0].variants[0];
-    expect(heroBase.description).toBe('');
-    expect(heroBase.visual_design).toBe('');
-    expect(heroBase.art_language).toBe('');
-  });
-
-  it('normalizeSketch preserves valid base workspace', () => {
-    const base = {
-      character_sheet: {
-        styles: [
-          {
-            style_prompt: 'test style',
-            is_selected: false,
-            image_references: [],
-            illustrations: [],
-            crops: [],
-          },
-        ],
-      },
-      prop_sheet: { styles: [] },
-    };
-    const raw = {
-      id: 'sk1',
-      base,
-      characters: [],
-      props: [],
-      stages: [],
-      spreads: [],
-    };
-    const result = normalizeSketch(raw);
-    expect(result.base).toEqual(base);
-  });
-});
-
-describe('SketchSlice variant crop model (coerce back-compat + positional crops[])', () => {
-  const emptyBase = () => ({ character_sheet: { styles: [] }, prop_sheet: { styles: [] } });
-
-  it('coerces a legacy variant.crop (no raw_sheet) into raw_sheet.crops[0] is_selected=true (lossless)', () => {
-    const raw = {
-      id: 'sk1',
-      base: emptyBase(),
-      characters: [
-        {
-          key: 'hero',
-          variants: [
-            {
-              key: 'hero_v', description: '', visual_design: '', art_language: '',
-              crop: { illustrations: [{ type: 'created', media_url: 'legacy.png', created_time: 't', is_selected: true }] },
-            },
-          ],
-        },
-      ],
-      props: [], stages: [], spreads: [],
-    };
-    const v = normalizeSketch(raw).characters[0].variants[0];
-    expect(v.raw_sheet?.illustrations).toEqual([]);
-    expect(v.raw_sheet?.crops).toHaveLength(1);
-    expect(v.raw_sheet?.crops[0].is_selected).toBe(true);
-    expect(v.raw_sheet?.crops[0].illustrations[0].media_url).toBe('legacy.png');
-  });
-
-  it('coerces a legacy raw_sheet.illustrations + old crop (no crops[]) → crops[0] mapped', () => {
-    const raw = {
-      id: 'sk1',
-      base: emptyBase(),
-      characters: [
-        {
-          key: 'hero',
-          variants: [
-            {
-              key: 'hero_v', description: '', visual_design: '', art_language: '',
-              raw_sheet: { illustrations: [{ type: 'created', media_url: 'sheet.png', created_time: 't', is_selected: true }] },
-              crop: { illustrations: [{ type: 'created', media_url: 'crop.png', created_time: 't', is_selected: true }] },
-            },
-          ],
-        },
-      ],
-      props: [], stages: [], spreads: [],
-    };
-    const v = normalizeSketch(raw).characters[0].variants[0];
-    expect(v.raw_sheet?.illustrations[0].media_url).toBe('sheet.png');
-    expect(v.raw_sheet?.crops).toHaveLength(1);
-    expect(v.raw_sheet?.crops[0].illustrations[0].media_url).toBe('crop.png');
-  });
-
-  it('coerces a new raw_sheet.crops[] positional array (is_selected defaults false when absent)', () => {
-    const raw = {
-      id: 'sk1',
-      base: emptyBase(),
-      characters: [
-        {
-          key: 'hero',
-          variants: [
-            {
-              key: 'hero_v', description: '', visual_design: '', art_language: '',
-              raw_sheet: {
-                illustrations: [],
-                crops: [
-                  { illustrations: [{ type: 'created', media_url: 'c0.png', created_time: 't', is_selected: true }] }, // no is_selected → false
-                  { is_selected: true, illustrations: [] },
-                ],
-              },
-            },
-          ],
-        },
-      ],
-      props: [], stages: [], spreads: [],
-    };
-    const crops = normalizeSketch(raw).characters[0].variants[0].raw_sheet!.crops;
-    expect(crops).toHaveLength(2);
-    expect(crops[0].is_selected).toBe(false);
-    expect(crops[0].illustrations[0].media_url).toBe('c0.png');
-    expect(crops[1].is_selected).toBe(true);
-    expect(crops[1].illustrations).toEqual([]);
   });
 });
 

@@ -21,8 +21,9 @@ export type RetouchSpace = 'object' | 'quiz' | 'remix';
 export type DefaultSpace = 'preview' | 'history' | 'issue' | 'share' | 'collaborator' | 'setting';
 export type CreativeSpaceType = SketchSpace | IllustrationSpace | RetouchSpace | DefaultSpace;
 
-// Save status indicator
-export type SaveStatus = 'dirty' | 'auto-saving' | 'auto-saved' | 'manual-saving' | 'saved';
+// Save status indicator. 'blocked' (ADR-047): a sketch resource is degraded (unreadable raw,
+// consent pending) — replaces 'dirty' so the user learns saving is refused, not merely pending.
+export type SaveStatus = 'dirty' | 'auto-saving' | 'auto-saved' | 'manual-saving' | 'saved' | 'blocked';
 
 // Editor mode (book vs asset)
 export type EditorMode = 'book' | 'asset';

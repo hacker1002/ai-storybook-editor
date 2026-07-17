@@ -57,6 +57,8 @@ import { useCollabPersistSession } from '@/features/editor/hooks/use-collab-pers
 import { useContentSyncSession } from '@/features/editor/hooks/use-content-sync-session';
 import { useHeldResourceSession } from '@/features/editor/hooks/use-held-resource-session';
 import { LockedByOtherOverlay } from '@/features/editor/components/shared-components/sketch-locked-by-other-overlay';
+import { SketchDegradedBanner } from '@/features/editor/components/sketch-degraded-banner';
+import { useSketchSheetDegraded } from '@/stores/snapshot-store';
 import { sheetOf, type BaseKind, type SketchBaseStyle } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
 import { BaseKindSidebar } from './base-kind-sidebar';
@@ -149,6 +151,9 @@ export function SketchBaseSpace() {
 
   const activeKind = effectiveSelected?.kind ?? 'characters';
   const entityKeys = activeKind === 'characters' ? charEntityKeys : propEntityKeys;
+  // ADR-047: the displayed kind's sheet is DEGRADED (unreadable raw quarantined) → banner states
+  // why saving is refused; editing stays possible (D5: block persist, not interaction).
+  const sheetDegraded = useSketchSheetDegraded(activeKind);
   const genStatus = useBaseSheetGenerateStatus(activeKind, effectiveSelected?.index ?? -1);
   const generateOp = useBaseSheetGenerateOp();
   const style = effectiveSelected ? stylesByKind[effectiveSelected.kind][effectiveSelected.index] : null;
@@ -427,7 +432,10 @@ export function SketchBaseSpace() {
         generateOp={generateOp}
       />
 
-      <div className="relative flex flex-1 min-w-[480px] overflow-hidden">
+      <div className="flex flex-1 min-w-[480px] flex-col overflow-hidden">
+        {/* ADR-047 degraded banner — sheet unreadable → read-only notice + re-open consent modal. */}
+        {sheetDegraded && <SketchDegradedBanner />}
+        <div className="relative flex flex-1 overflow-hidden">
         {effectiveSelected && style ? (
           <BaseSheetContentArea
             selectedStyle={effectiveSelected}
@@ -455,6 +463,7 @@ export function SketchBaseSpace() {
         {effectiveSelected && displayedSheetLockedByOther && (
           <LockedByOtherOverlay holderName={displayedSheetHolder} interactive />
         )}
+        </div>
       </div>
 
       {/* Overlays (mount by state). Generate enqueues an async job then closes immediately; edit

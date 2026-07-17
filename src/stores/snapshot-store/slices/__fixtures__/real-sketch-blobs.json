@@ -1,0 +1,2962 @@
+[
+ {
+  "book": "21e89229",
+  "sketch": {
+   "id": "a7d2339a-92cc-44f8-adfa-93820df9fcaf",
+   "base": {
+    "prop_sheet": {
+     "styles": [
+      {
+       "crops": [
+        {
+         "key": "armor",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "sword",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "bow",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "pouch",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "crystal",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "shell",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        }
+       ],
+       "is_selected": true,
+       "style_prompt": "x",
+       "illustrations": [
+        {
+         "type": "created",
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ],
+       "image_references": []
+      }
+     ]
+    },
+    "character_sheet": {
+     "styles": [
+      {
+       "crops": [
+        {
+         "key": "kid",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "daddy",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "mommy",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "demon",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "crane",
+         "illustrations": [
+          {
+           "type": "edited",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x",
+           "original_url": "x"
+          },
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": false,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "bear",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "carp",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        }
+       ],
+       "is_selected": true,
+       "style_prompt": "x",
+       "illustrations": [
+        {
+         "type": "created",
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ],
+       "image_references": []
+      },
+      {
+       "crops": [
+        {
+         "key": "kid",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "daddy",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "mommy",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "demon",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "crane",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "bear",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        },
+        {
+         "key": "carp",
+         "illustrations": [
+          {
+           "type": "created",
+           "media_url": "x",
+           "is_selected": true,
+           "created_time": "x"
+          }
+         ]
+        }
+       ],
+       "is_selected": false,
+       "style_prompt": "x",
+       "illustrations": [
+        {
+         "type": "created",
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ],
+       "image_references": [
+        {
+         "title": "x",
+         "media_url": "x"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "props": [
+    {
+     "key": "armor",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "reinforced",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "sword",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "bow",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "pouch",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "crystal",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "shell",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    }
+   ],
+   "stages": [
+    {
+     "key": "house_night",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "bedroom",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "day",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "field",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "forest",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "star_river",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "castle",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "corridor",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "prison",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "castle_hall",
+     "variants": [
+      {
+       "key": "base",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    }
+   ],
+   "spreads": [
+    {
+     "id": "44aa7f7e-230d-4bfe-ab1f-042697c1966f",
+     "pages": [
+      {
+       "type": "full",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "8108d573-d0d7-4d26-baad-a203c5fe9a11",
+       "type": "full",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "ad625a18-a443-41e7-8bf0-89d5f888fb88",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 40,
+         "x": 4,
+         "y": 76
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 24.142767956956856,
+         "w": 27.35428011032787,
+         "x": 48.543122567442126,
+         "y": 12.970303836333532
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "756e83f2-b23c-4955-a3f2-da69b0ce76aa",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "4f8b0b83-b1f3-4da8-8d51-50993e0937a0",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "485c9800-6f8c-438b-87ae-a604624156d1",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "6ffa3615-b204-4e18-a581-c2541ccb1d5f",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 22.94538588803293,
+         "w": 35.78801280570005,
+         "x": 0.021180602799517168,
+         "y": 1.1535125758889748
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "9c1c33cf-7a3e-4a5f-a8d3-1dc921baffe5",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 22.335362462969577,
+         "w": 34.319371230277,
+         "x": 51.262792714657415,
+         "y": 1.524873756168903
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "493e3475-6c0a-4f9e-9d52-70a906c13562",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "da9a386f-2e68-469c-a011-d034d49e0d74",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "84de3270-6d8b-4c59-af43-7ae3b19b4b29",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "2f578af0-b4f3-4f85-8135-aa560af63be4",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 20.65779804404537,
+         "w": 26.81471512572918,
+         "x": 3.310052606799992,
+         "y": 9.60698154679532
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "03a52794-d04e-41be-80b9-ebe8793941cc",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 37.0247636060563,
+         "x": 58.9752363939437,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "c2914129-6f53-4294-a67f-b65548b99d91",
+     "pages": [
+      {
+       "type": "full",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "f424b7d0-293a-446c-8858-79b3eeb33a33",
+       "type": "full",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "b94b9e77-5f5c-42eb-93bf-0e4065980372",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 40,
+         "x": 56,
+         "y": 76
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 32.688062673750636,
+         "w": 25.43025510614727,
+         "x": 70.50217421888291,
+         "y": 10.779945427429595
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "09f83ce7-af25-4e41-9e0f-718f5af0d812",
+     "pages": [
+      {
+       "type": "full",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "fc890988-76bc-4a0e-bebd-de09454495ed",
+       "type": "full",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "ced0093d-1526-4ed5-9035-ddc8039fae4a",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 40,
+         "x": 4,
+         "y": 76
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 18.616580310880828,
+         "w": 52.075129533678755,
+         "x": 4,
+         "y": 12
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "b4e9c8d4-a5cf-4889-a87d-83f7f16c77c4",
+     "pages": [
+      {
+       "type": "full",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "88d2aadf-4724-4be9-9b6c-760385d4a80d",
+       "type": "full",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "26e84b82-e44b-4f28-9559-3a6292486c99",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 40,
+         "x": 56,
+         "y": 76
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 76,
+         "w": 16,
+         "x": 78,
+         "y": 12
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "3c4ab49a-730a-4174-b9f5-52cdf0ef01c4",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "971e812d-ae9c-44a3-bcb5-76b3108aa476",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "bd3c7739-ea4f-475a-99d4-75955fe785f2",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "7e859a4a-9d15-4746-8ae2-77c48256a6bc",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 70,
+         "x": 4,
+         "y": 4
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 19.19170984455959,
+         "w": 25.71502590673575,
+         "x": 2,
+         "y": 10
+        },
+        "typography": {
+         "size": 19,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "02fe8c82-d6dd-4f6f-97ae-36eb0f3b0f0e",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 16.601036269430054,
+         "w": 25.296257441034115,
+         "x": 74.37622940726588,
+         "y": 78.48360319443647
+        },
+        "typography": {
+         "size": 19,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "6ad9fc9b-82c6-4ff2-896f-1556bada1cc1",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "1de7922c-36e2-4fe7-b1a4-83107a66dbef",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "162727ab-b8ad-46d0-8ac9-a5d0414de830",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "a433265d-60e7-41aa-b312-66fa102eb69e",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 80,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "f2e65547-3784-42c9-8e37-3a187e894975",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 2,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "bb57ecd3-4b08-42d6-a5cd-da25e70922e1",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "28ef820d-d395-45e4-92b9-3b6dd82f6e7d",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "a9416958-90ca-478c-a2df-cd4e27a7a7b2",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "1729dd41-3a30-4393-a1b3-bc1db01b41fe",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 2,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "a5c17522-69a6-48eb-9449-e1bb10c43acb",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 80,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "58681872-9a39-42f0-829c-60afc9808c60",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "68a02e64-d6d3-49f0-9540-ac49927e3b2c",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "80a797b1-7d13-4297-93fc-154fd9537a42",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "a0bdc532-2936-4f00-815a-80d4743b878d",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 80,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "85b09d66-e758-4ad3-893c-a231ba2158a6",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 2,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "ab4564d1-a1b2-4d60-bf3a-457da9c26e76",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "04ff3d54-0ed2-44de-aded-0c925968b143",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "1b20b8ff-32cb-464f-91b0-6871272502bb",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "205c86c5-3831-43e7-bb09-deb80adf2617",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 19.580310880829018,
+         "w": 28.564766839378237,
+         "x": 4.937292574045871,
+         "y": 13.355150074568613
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "feec3aa1-f630-4893-96be-93181ff461bb",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 21.134715025906736,
+         "w": 38.60362694300518,
+         "x": 57.39637305699482,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "d65cf644-29dc-4756-a8ef-cae4a5c79e5c",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "2504b4bc-4d63-42fd-a80e-b0c0232a3eed",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "34e06545-8e12-45fb-8ff6-57f3c7b955d2",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "ab860514-a266-4031-8ed1-0ec3e39d8481",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 80,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "189c7e40-4176-4613-95f4-8432740701cd",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 2,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "127b56e4-dfff-4b32-8e49-97c8c5e639e3",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "abbd979e-e5d4-4a3d-ab32-89a97b4dccc6",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "fcbc5391-54cb-4000-87ec-1ed8c4f07d7e",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "7cbd0bee-e047-42c0-9e6c-2693be69d1a1",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 2,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "c3d55826-13c3-45ed-bc82-a07d0e262c4e",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 70,
+         "x": 6,
+         "y": 4
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 39.73015598183561,
+         "x": 56.26984401816439,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "8d5de6f6-dcd8-4b37-a47b-1cbe133526b4",
+     "pages": [
+      {
+       "type": "full",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "b22aaa24-c3ff-4fe7-83a9-2966c275e8bb",
+       "type": "full",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "c84e01a4-7706-475f-99b5-56e561164e77",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 40,
+         "x": 4,
+         "y": 76
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 76,
+         "w": 16,
+         "x": 4,
+         "y": 12
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "b42be982-4edc-40d1-808f-eb2557648477",
+     "pages": [
+      {
+       "type": "left",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      },
+      {
+       "type": "right",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "80891e6c-2176-4f94-80b1-5c872059ce14",
+       "type": "left",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      },
+      {
+       "id": "edeee406-c88d-4bbb-970c-a1e0a3c22f30",
+       "type": "right",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "5495ed3d-f532-4a41-8171-007e97480918",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 6,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 80,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      },
+      {
+       "id": "522e932f-aa5d-4ad2-a685-44089eba9505",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 22,
+         "w": 70,
+         "x": 4,
+         "y": 74
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 78,
+         "w": 16,
+         "x": 2,
+         "y": 10
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "eb8c08a6-19c9-47ce-8ffc-600439a00afa",
+     "pages": [
+      {
+       "type": "full",
+       "art_direction": {
+        "sound": "x",
+        "stage": "x",
+        "action": "x",
+        "camera": "x",
+        "layers": "x",
+        "setting": "x",
+        "animation": "x",
+        "space_time": "x",
+        "art_concept": "x",
+        "composition": "x",
+        "light_color": "x",
+        "negative_space": "x",
+        "interactive_intent": "x"
+       }
+      }
+     ],
+     "images": [
+      {
+       "id": "5768a318-9e03-4f72-8a6c-a18ea9bed7c7",
+       "type": "full",
+       "illustrations": [
+        {
+         "media_url": "x",
+         "is_selected": true,
+         "created_time": "x"
+        },
+        {
+         "media_url": "x",
+         "is_selected": false,
+         "created_time": "x"
+        }
+       ]
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "d041bf05-c8c3-4e56-958e-23933930ca09",
+       "en_US": {
+        "text": "x",
+        "geometry": {
+         "h": 18,
+         "w": 40,
+         "x": 56,
+         "y": 76
+        },
+        "typography": {
+         "size": 24,
+         "color": "x"
+        }
+       },
+       "vi_VN": {
+        "text": "x",
+        "geometry": {
+         "h": 76,
+         "w": 16,
+         "x": 78,
+         "y": 12
+        },
+        "typography": {
+         "size": 22,
+         "color": "x"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "characters": [
+    {
+     "key": "kid",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "hero",
+       "height": "x",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "daddy",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "fairy",
+       "height": "x",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "mommy",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "fairy",
+       "height": "x",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "demon",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "kid",
+       "height": "x",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "crane",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "animal",
+       "height": "x",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "bear",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "animal",
+       "height": "x",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    },
+    {
+     "key": "carp",
+     "variants": [
+      {
+       "key": "base",
+       "height": "x",
+       "raw_sheet": {
+        "crops": [
+         {
+          "is_selected": true,
+          "illustrations": [
+           {
+            "type": "created",
+            "media_url": "x",
+            "is_selected": true,
+            "created_time": "x"
+           }
+          ]
+         }
+        ],
+        "illustrations": []
+       },
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      },
+      {
+       "key": "animal",
+       "height": "x",
+       "description": "x",
+       "art_language": "x",
+       "visual_design": "x"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "book": "afe355d1",
+  "sketch": {
+   "props": [
+    {
+     "key": "sketch_lantern",
+     "crops": [
+      {
+       "h": 100,
+       "w": 100,
+       "x": 0,
+       "y": 0
+      }
+     ],
+     "variants": [
+      {
+       "key": "base",
+       "visual_description": "x"
+      },
+      {
+       "key": "lit",
+       "visual_description": "x"
+      }
+     ],
+     "media_url": null,
+     "raw_sheet": {
+      "media_url": "x"
+     }
+    }
+   ],
+   "stages": [],
+   "spreads": [
+    {
+     "id": "sp-1",
+     "title": "x",
+     "images": [
+      {
+       "id": "img-1",
+       "illustrations": []
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "tb-1",
+       "en_US": {
+        "text": "x"
+       }
+      }
+     ]
+    },
+    {
+     "id": "sp-2",
+     "title": "x"
+    },
+    {
+     "id": "sp-3",
+     "title": "x"
+    }
+   ],
+   "characters": [
+    {
+     "key": "sketch_hero",
+     "crops": [
+      {
+       "h": 100,
+       "w": 100,
+       "x": 0,
+       "y": 0
+      },
+      {
+       "h": 100,
+       "w": 100,
+       "x": 100,
+       "y": 0
+      }
+     ],
+     "variants": [
+      {
+       "key": "base",
+       "visual_description": "x"
+      },
+      {
+       "key": "winter",
+       "visual_description": "x"
+      }
+     ],
+     "media_url": null,
+     "raw_sheet": {
+      "media_url": "x"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "book": "b5b17d43",
+  "sketch": {
+   "props": [],
+   "stages": [],
+   "spreads": [
+    {
+     "id": "sp-1",
+     "title": "x",
+     "images": [
+      {
+       "id": "img-1",
+       "illustrations": []
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "tb-1",
+       "en_US": {
+        "text": "x"
+       }
+      }
+     ]
+    },
+    {
+     "id": "sp-2",
+     "title": "x"
+    },
+    {
+     "id": "sp-3",
+     "title": "x"
+    }
+   ],
+   "characters": [
+    {
+     "key": "hero",
+     "name": "x"
+    },
+    {
+     "key": "sidekick",
+     "name": "x"
+    }
+   ]
+  }
+ },
+ {
+  "book": "2fb972d9",
+  "sketch": {
+   "props": [],
+   "stages": [],
+   "spreads": [
+    {
+     "id": "sp-1",
+     "title": "x",
+     "images": [
+      {
+       "id": "img-1",
+       "illustrations": []
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "tb-1",
+       "en_US": {
+        "text": "x"
+       }
+      }
+     ]
+    },
+    {
+     "id": "sp-2",
+     "title": "x"
+    },
+    {
+     "id": "sp-3",
+     "title": "x"
+    }
+   ],
+   "characters": [
+    {
+     "key": "hero",
+     "name": "x"
+    },
+    {
+     "key": "sidekick",
+     "name": "x"
+    }
+   ]
+  }
+ },
+ {
+  "book": "e09f628f",
+  "sketch": {
+   "props": [],
+   "stages": [],
+   "spreads": [
+    {
+     "id": "sp-1",
+     "title": "x",
+     "images": [
+      {
+       "id": "img-1",
+       "illustrations": []
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "tb-1",
+       "en_US": {
+        "text": "x"
+       }
+      }
+     ]
+    },
+    {
+     "id": "sp-2",
+     "title": "x"
+    },
+    {
+     "id": "sp-3",
+     "title": "x"
+    }
+   ],
+   "characters": [
+    {
+     "key": "hero",
+     "name": "x"
+    },
+    {
+     "key": "sidekick",
+     "name": "x"
+    }
+   ]
+  }
+ },
+ {
+  "book": "9452d80e",
+  "sketch": {
+   "props": [],
+   "stages": [],
+   "spreads": [
+    {
+     "id": "sp-2",
+     "title": "x"
+    },
+    {
+     "id": "sp-3",
+     "title": "x"
+    },
+    {
+     "id": "sp-1",
+     "title": "x",
+     "images": [
+      {
+       "id": "img-1",
+       "illustrations": []
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "tb-1",
+       "en_US": {
+        "text": "x"
+       }
+      }
+     ]
+    }
+   ],
+   "characters": [
+    {
+     "key": "hero",
+     "name": "x"
+    },
+    {
+     "key": "sidekick",
+     "name": "x"
+    }
+   ]
+  }
+ },
+ {
+  "book": "aa245765",
+  "sketch": {
+   "props": [],
+   "stages": [],
+   "spreads": [
+    {
+     "id": "sp-2",
+     "title": "x"
+    },
+    {
+     "id": "sp-3",
+     "title": "x"
+    },
+    {
+     "id": "sp-1",
+     "title": "x",
+     "images": [
+      {
+       "id": "img-1",
+       "illustrations": []
+      }
+     ],
+     "textboxes": [
+      {
+       "id": "tb-1",
+       "en_US": {
+        "text": "x"
+       }
+      }
+     ]
+    }
+   ],
+   "characters": [
+    {
+     "key": "hero",
+     "name": "x"
+    }
+   ]
+  }
+ },
+ {
+  "book": "fa2b8a0b",
+  "sketch": {
+   "props": [],
+   "stages": [],
+   "spreads": [
+    {
+     "id": "sp-1",
+     "title": "x"
+    },
+    {
+     "id": "sp-2",
+     "title": "x"
+    }
+   ],
+   "characters": [
+    {
+     "key": "hero",
+     "name": "x"
+    }
+   ]
+  }
+ }
+]
