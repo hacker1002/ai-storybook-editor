@@ -16,7 +16,7 @@ import {
 import type { ImageApiFailure } from '@/apis/image-api-client';
 import type { SpreadImage } from '@/types/spread-types';
 import {
-  CROP_DEFAULT_BOX_SIZE_PERCENT,
+  CROP_DEFAULT_BOX_INSET_PERCENT,
   CROP_MIN_BOX_SIZE_PERCENT,
   CROP_BATCH_SIZE,
   type ExtractResult,
@@ -139,11 +139,12 @@ export function useCropsTabState(
     const id = crypto.randomUUID();
     setBoxes((prev) => {
       const n = prev.filter((b) => b.presetId === null).length + 1;
-      const size = CROP_DEFAULT_BOX_SIZE_PERCENT;
+      const inset = CROP_DEFAULT_BOX_INSET_PERCENT;
+      const size = 100 - inset * 2;
       const box: CropBox = {
         id,
-        x: clamp(50 - size / 2, 0, 100 - size),
-        y: clamp(50 - size / 2, 0, 100 - size),
+        x: inset,
+        y: inset,
         w: size,
         h: size,
         title: `Custom ${n}`,

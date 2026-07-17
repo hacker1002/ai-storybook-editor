@@ -185,7 +185,7 @@ export interface CropBox {
 
 /** First dropdown option = free-form (no geometry constraint). */
 export const CUSTOM_PRESET_LABEL = 'Custom';
-export const CROP_DEFAULT_BOX_SIZE_PERCENT = 30; // [+] box edge, % of canvas (mirror Objects)
+export const CROP_DEFAULT_BOX_INSET_PERCENT = 10; // [+] box margin per edge, % of canvas → 80×80
 export const CROP_MIN_BOX_SIZE_PERCENT = 1;      // guard degenerate (anti EMPTY_CROP_RESULT)
 
 // ── Background tab (04-background-tab.md §2 / api/retouch/08-generate-background) ──

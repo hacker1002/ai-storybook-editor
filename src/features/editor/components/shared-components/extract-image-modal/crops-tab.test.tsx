@@ -68,7 +68,7 @@ describe('useCropsTabState — box management', () => {
     const box = result.current.boxes[0];
     expect(box.title).toBe('Custom 1');
     expect(box.presetId).toBeNull();
-    expect(box.w).toBe(30);
+    expect(box).toMatchObject({ x: 10, y: 10, w: 80, h: 80 }); // 10% inset per edge
     expect(result.current.selectedBoxId).toBe(box.id);
     expect(result.current.canRun).toBe(true);
   });
