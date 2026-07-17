@@ -9,7 +9,8 @@
 // viewed kind — an affordance signal only (the [✎] buttons stay acquire-seams; the parent renders
 // the interactive peer-lock veil over this whole pane when another editor holds the sheet).
 
-import { Loader2, Pencil } from 'lucide-react';
+import { Layers, Loader2, Pencil } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ZoomControl } from '@/features/editor/components/shared-components/zoom-control';
@@ -46,6 +47,8 @@ interface BaseSheetContentAreaProps {
   onChangeZoom: (zoom: number) => void;
   onEditRaw: () => void;
   onEditCrop: (entityKey: string) => void;
+  /** Crop card [⧉] — reframe/recompose one entity crop → a new version of it (Extract crop). */
+  onExtractCrop: (entityKey: string) => void;
 }
 
 export function BaseSheetContentArea({
@@ -62,6 +65,7 @@ export function BaseSheetContentArea({
   onChangeZoom,
   onEditRaw,
   onEditCrop,
+  onExtractCrop,
 }: BaseSheetContentAreaProps) {
   const rawUrl = effectiveUrl(style.illustrations);
   // Any op in-flight (either phase) → freeze all [✎] edit seams to avoid racing the single-flight op.
@@ -107,6 +111,7 @@ export function BaseSheetContentArea({
           isCropping={isCropping}
           disableEdit={isBusy}
           onEditCrop={onEditCrop}
+          onExtractCrop={onExtractCrop}
         />
       )}
     </section>
@@ -135,7 +140,8 @@ function RawSheet({
   return (
     <div className="relative flex-1 overflow-hidden">
       {/* Edit-all — kept above the scroll area so it stays anchored to the frame corner. */}
-      <EditIconButton
+      <CardIconButton
+        icon={Pencil}
         label="Edit base sheet"
         disabled={!canEdit}
         onClick={onEditRaw}
@@ -187,6 +193,7 @@ function CropGrid({
   isCropping,
   disableEdit,
   onEditCrop,
+  onExtractCrop,
 }: {
   style: SketchBaseStyle;
   entityKeys: string[];
@@ -195,6 +202,7 @@ function CropGrid({
   isCropping: boolean;
   disableEdit: boolean;
   onEditCrop: (entityKey: string) => void;
+  onExtractCrop: (entityKey: string) => void;
 }) {
   if (entityKeys.length === 0) {
     return (
@@ -222,6 +230,7 @@ function CropGrid({
                 zoom={zoom}
                 disableEdit={disableEdit}
                 onEdit={() => onEditCrop(key)}
+                onExtract={() => onExtractCrop(key)}
               />
             );
           })}
@@ -249,14 +258,18 @@ function CropCard({
   zoom,
   disableEdit,
   onEdit,
+  onExtract,
 }: {
   entityKey: string;
   cropUrl: string | null;
   zoom: number;
   disableEdit: boolean;
   onEdit: () => void;
+  onExtract: () => void;
 }) {
   const name = titleCase(entityKey);
+  // No image / any op in-flight → both seams inert (nothing to edit or reframe).
+  const locked = cropUrl == null || disableEdit;
   return (
     <div className="flex flex-col gap-1.5">
       <div
@@ -267,12 +280,16 @@ function CropCard({
           cropUrl ? 'border-border bg-muted/30' : 'border-2 border-dashed border-muted-foreground/30',
         )}
       >
-        <EditIconButton
-          label={`Edit ${name} crop`}
-          disabled={cropUrl == null || disableEdit}
-          onClick={onEdit}
-          className="absolute right-2 top-2 z-10"
-        />
+        {/* [✎] edit + [⧉] extract cluster, anchored to the frame corner. */}
+        <div className="absolute right-2 top-2 z-10 flex gap-1">
+          <CardIconButton icon={Pencil} label={`Edit ${name} crop`} disabled={locked} onClick={onEdit} />
+          <CardIconButton
+            icon={Layers}
+            label={`Extract from ${name} crop`}
+            disabled={locked}
+            onClick={onExtract}
+          />
+        </div>
         {cropUrl ? (
           <img
             key={cropUrl}
@@ -294,13 +311,16 @@ function CropCard({
   );
 }
 
-/** Small ghost [✎] used by both the raw frame and each crop card. Disabled → aria-disabled. */
-function EditIconButton({
+/** Small ghost icon button used by the raw frame ([✎]) and each crop card ([✎]/[⧉]). Disabled →
+ *  aria-disabled. `icon` decouples it from a single glyph so the crop cluster can reuse it. */
+function CardIconButton({
+  icon: Icon,
   label,
   disabled,
   onClick,
   className,
 }: {
+  icon: LucideIcon;
   label: string;
   disabled: boolean;
   onClick: () => void;
@@ -317,7 +337,7 @@ function EditIconButton({
       title={label}
       onClick={onClick}
     >
-      <Pencil className="h-4 w-4" />
+      <Icon className="h-4 w-4" />
     </Button>
   );
 }

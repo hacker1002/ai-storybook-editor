@@ -62,15 +62,16 @@ export const SPACE_TOOL_MATRIX: Record<ToolSpace, SpaceToolConfig> = {
     extract: ['crop'],           // crop = reframe/recompose page → new version
   },
   'sketch-variant': {
-    // Caller-owns-write: an edit result maps back onto the target's own illustrations (the raw sheet
-    // or crops[cropIndex]), never a spawned layer. Applies to BOTH edit scopes — the raw 21:9 sheet
-    // (Raw tab, 2026-07-16: it IS displayed + editable now; committing an edit auto re-cuts the 4
-    // cells) and a single candidate cell (Crop tab).
+    // Caller-owns-write: an edit/extract result maps back onto the target's own illustrations (the
+    // raw sheet or crops[cropIndex]), never a spawned layer. Applies to BOTH edit scopes — the raw
+    // 21:9 sheet (Raw tab, 2026-07-16: it IS displayed + editable now; committing an edit auto
+    // re-cuts the 4 cells) and a single candidate cell (Crop tab).
     // Generate = dedicated ✨ 2-phase job (variant-kind-sidebar), NOT this image toolbar.
-    // Extract = none: the 4 cells are produced by the auto-cut job, not by a manual crop here.
+    // Extract = crop only: the auto-cut produces the 4 cells; a manual crop REFRAMES one picked cell
+    // → a new version of that cell (per-crop [⧉] on the Crop tab, mirrors the sketch base space).
     generate: [],
     edit: ['inpaint', 'erasor'], // region redraw + erase — on the raw sheet or one crop cell
-    extract: [],
+    extract: ['crop'],           // reframe one candidate cell → new version
   },
 };
 

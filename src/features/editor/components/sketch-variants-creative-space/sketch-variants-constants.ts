@@ -63,6 +63,16 @@ export type EditImageTarget =
   | { kind: BaseKind; entityKey: string; variantKey: string; scope: 'raw' }
   | { kind: BaseKind; entityKey: string; variantKey: string; scope: 'crop'; cropIndex: number };
 
+/** Shared ExtractImageModal binding target — CROP scope only (reframe one candidate cell → a new
+ *  version of it). The raw 21:9 sheet is excluded (its cells come from the auto-cut, not a manual
+ *  crop). Consumed by VariantExtractImageModal (→ crops[cropIndex].illustrations + onCreateImages). */
+export interface ExtractImageTarget {
+  kind: BaseKind;
+  entityKey: string;
+  variantKey: string;
+  cropIndex: number;
+}
+
 /** Structural equality for two variant refs (null-safe). Used by the root (derive selection,
  *  match the running op) and the sidebar (highlight the selected row). */
 export function sameRef(a: VariantRef | null | undefined, b: VariantRef | null | undefined): boolean {

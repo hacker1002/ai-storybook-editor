@@ -56,6 +56,15 @@ export type EditImageTarget =
   | { kind: BaseKind; styleIndex: number; scope: 'raw' }
   | { kind: BaseKind; styleIndex: number; scope: 'crop'; entityKey: string };
 
+/** Shared ExtractImageModal binding target — CROP scope only (reframe one entity crop → a new
+ *  version of it). The raw multi-entity sheet has no single extract target, so it is excluded.
+ *  Consumed by SketchBaseExtractImageModal (scope → the crop's illustrations + onCreateImages). */
+export interface ExtractImageTarget {
+  kind: BaseKind;
+  styleIndex: number;
+  entityKey: string;
+}
+
 /**
  * Auto-select the first available style for the content area. Preference order (design §2.3):
  * is_selected char → char[0] → is_selected prop → prop[0] → null (nothing imported yet).

@@ -46,7 +46,7 @@ import {
   type LockTarget,
   type SavePayload,
 } from '@/stores/resource-lock-store';
-import { useEditSessionStatusStore } from '@/stores/edit-session-status-store';
+import { useEditSessionStatusStore, useRegisterEditCommit } from '@/stores/edit-session-status-store';
 import {
   resolveSketchBaseSheetLockTarget,
   buildSketchBaseSheetPayload,
@@ -64,6 +64,7 @@ import { BaseSheetContentArea } from './base-sheet-content-area';
 import { GenerateStyleModal } from './generate-style-modal';
 import { EditBaseEntityModal } from './edit-base-entity-modal';
 import { SketchBaseEditImageModal } from './sketch-base-edit-image-modal';
+import { SketchBaseExtractImageModal } from './sketch-base-extract-image-modal';
 import { importBaseEntities, type BaseImportParse } from './import/parse-base-entities';
 import {
   KIND_GROUPS,
@@ -71,6 +72,7 @@ import {
   nounForKind,
   pickFirstAvailable,
   type EditImageTarget,
+  type ExtractImageTarget,
   type EditEntityModalState,
   type GenerateModalState,
   type SelectedStyleRef,
@@ -124,6 +126,7 @@ export function SketchBaseSpace() {
   const [generateModal, setGenerateModal] = useState<GenerateModalState | null>(null);
   const [editEntityModal, setEditEntityModal] = useState<EditEntityModalState | null>(null);
   const [editImageTarget, setEditImageTarget] = useState<EditImageTarget | null>(null);
+  const [extractImageTarget, setExtractImageTarget] = useState<ExtractImageTarget | null>(null);
   // Import spinner flag + pending parse awaiting a replace confirm (when entities already exist).
   const [isImporting, setIsImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<BaseImportParse | null>(null);
@@ -201,6 +204,18 @@ export function SketchBaseSpace() {
   const acquireSheet = useCallback((kind: BaseKind) => {
     setLockedSheetKind((prev) => (prev === kind ? prev : kind));
   }, []);
+
+  // Commit-now for the header "Unsaved" button (editor-page handleManualSave → commitFn): null the
+  // held sheet target so `useHeldResourceSession` release-saves the sheet (grain A: crop edits +
+  // is_selected) → header Saving…→Saved. Without this the base space registered NO commit → the
+  // manual-save fell through to the collab-suppressed autoSaveSnapshot() → the button was a no-op.
+  // Mirrors characters/props `setLockedKey(null)` (batch-at-release commit). Display is kept; the
+  // next edit re-acquires via acquireSheet.
+  const commitSheet = useCallback(() => {
+    log.info('commitSheet', 'commit held sheet session (save + unlock)');
+    setLockedSheetKind(null);
+  }, []);
+  useRegisterEditCommit(commitSheet);
 
   // Peer-lock (advisory) for the DISPLAYED kind's sheet — veil the content + suppress acquire-on-interact.
   const displayedSheetTarget = useMemo<LockTarget>(
@@ -368,6 +383,27 @@ export function SketchBaseSpace() {
     [effectiveSelected, acquireSheet],
   );
 
+  // Interact (extract from one crop): acquire the sheet lock + open the extract-image modal (crop
+  // tab). onCreateImages appends a new version of that crop → persists via the sheet session's
+  // release-save on switch/leave (same path as handleEditCrop).
+  const handleExtractCrop = useCallback(
+    (entityKey: string) => {
+      if (!effectiveSelected) return;
+      log.info('handleExtractCrop', 'interact — acquire sheet + open crop extract modal', {
+        kind: effectiveSelected.kind,
+        styleIndex: effectiveSelected.index,
+        entityKey,
+      });
+      acquireSheet(effectiveSelected.kind);
+      setExtractImageTarget({
+        kind: effectiveSelected.kind,
+        styleIndex: effectiveSelected.index,
+        entityKey,
+      });
+    },
+    [effectiveSelected, acquireSheet],
+  );
+
   // NOTE (review #1): NO content-capture acquire. Unlike the variant space (where a content
   // pointerdown IS the select-crop mutation), the base content area has NO non-[✎] mutation — Raw/
   // Crop tabs + zoom + image clicks are pure BROWSE. The two real edit seams (onEditRaw/onEditCrop)
@@ -409,6 +445,7 @@ export function SketchBaseSpace() {
             onChangeZoom={setZoom}
             onEditRaw={handleEditRaw}
             onEditCrop={handleEditCrop}
+            onExtractCrop={handleExtractCrop}
           />
         ) : (
           <EmptyState onAddStyle={() => handleAddStyle('characters')} />
@@ -436,6 +473,12 @@ export function SketchBaseSpace() {
       )}
       {editImageTarget && (
         <SketchBaseEditImageModal target={editImageTarget} onClose={() => setEditImageTarget(null)} />
+      )}
+      {extractImageTarget && (
+        <SketchBaseExtractImageModal
+          target={extractImageTarget}
+          onClose={() => setExtractImageTarget(null)}
+        />
       )}
 
       {/* Replace-confirm before a bulk import overwrites existing char + prop base entities. */}

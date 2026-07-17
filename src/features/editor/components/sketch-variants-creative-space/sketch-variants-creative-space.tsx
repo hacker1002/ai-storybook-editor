@@ -55,12 +55,14 @@ import { VariantKindSidebar } from './variant-kind-sidebar';
 import { VariantSheetContentArea } from './variant-sheet-content-area';
 import { EditVariantModal } from './edit-variant-modal';
 import { VariantEditImageModal } from './variant-edit-image-modal';
+import { VariantExtractImageModal } from './variant-extract-image-modal';
 import {
   KIND_GROUPS,
   ZOOM,
   isBlank,
   sameRef,
   type EditImageTarget,
+  type ExtractImageTarget,
   type VariantGate,
   type VariantGenStatus,
 } from './sketch-variants-constants';
@@ -97,6 +99,7 @@ export function SketchVariantsCreativeSpace() {
   });
   const [editingVariant, setEditingVariant] = useState<VariantRef | null>(null);
   const [editImageTarget, setEditImageTarget] = useState<EditImageTarget | null>(null);
+  const [extractImageTarget, setExtractImageTarget] = useState<ExtractImageTarget | null>(null);
   // Regenerate confirm target (AlertDialog over canvas) — set EVERY time ✨ hits a variant that
   // already has crops (user-locked: confirm every time, guards losing the pick + per-cell edits).
   const [pendingRegenerate, setPendingRegenerate] = useState<VariantRef | null>(null);
@@ -293,6 +296,28 @@ export function SketchVariantsCreativeSpace() {
     [selected, lock],
   );
 
+  // Interact (extract from ONE crop cell): acquire the entity lock + open the extract-image modal on
+  // that cell. onCreateImages appends a new version of the cell → persists via the held session's
+  // release-save (same path as handleEditCrop; the cell's is_selected pick is untouched).
+  const handleExtractCrop = useCallback(
+    (cropIndex: number) => {
+      if (!selected) return;
+      log.info('handleExtractCrop', 'interact — acquire entity lock + open extract modal (crop scope)', {
+        kind: selected.kind,
+        entityKey: selected.entityKey,
+        cropIndex,
+      });
+      lock.adopt(selected);
+      setExtractImageTarget({
+        kind: selected.kind,
+        entityKey: selected.entityKey,
+        variantKey: selected.variantKey,
+        cropIndex,
+      });
+    },
+    [selected, lock],
+  );
+
   // Interact (edit the RAW 21:9 sheet): acquire the entity lock + open the edit-image modal on the
   // sheet. Committing an edit AUTO re-cuts all 4 cells (the modal chains recropVariantSheet) — no
   // confirm, per design §3.5 (mirrors the base space).
@@ -356,6 +381,7 @@ export function SketchVariantsCreativeSpace() {
             onChangeZoom={setZoom}
             onSelectCrop={handleSelectCrop}
             onEditCrop={handleEditCrop}
+            onExtractCrop={handleExtractCrop}
             onEditRaw={handleEditRaw}
           />
         ) : (
@@ -383,6 +409,12 @@ export function SketchVariantsCreativeSpace() {
         <VariantEditImageModal
           target={editImageTarget}
           onClose={() => setEditImageTarget(null)}
+        />
+      )}
+      {extractImageTarget && (
+        <VariantExtractImageModal
+          target={extractImageTarget}
+          onClose={() => setExtractImageTarget(null)}
         />
       )}
 

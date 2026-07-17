@@ -17,7 +17,6 @@ import {
   useImageNaturalSize,
   type Size,
 } from '../edit-image-modal/edit-image-modal-fit';
-import { useCropFitZoom } from './extract-crop-fit';
 
 const log = createLogger('Editor', 'ExtractCanvas');
 
@@ -120,29 +119,35 @@ export function ExtractCanvas({
   // it the wrapper is shrink-to-fit → the inner img's `max-h-full` resolves against an
   // auto-height parent (ignored) → the image fits width only and overflows tall canvases.
   // Keyed by url so a source swap can't apply a stale ratio (no set-state-in-effect — React 19).
-  const [natural, setNatural] = useState<{ url: string; ratio: number } | null>(null);
+  const [natural, setNatural] = useState<{ url: string; w: number; h: number } | null>(null);
   const handleSourceLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
       const im = e.currentTarget;
       if (im.naturalWidth > 0 && im.naturalHeight > 0 && previewUrl) {
-        setNatural({ url: previewUrl, ratio: im.naturalWidth / im.naturalHeight });
+        setNatural({ url: previewUrl, w: im.naturalWidth, h: im.naturalHeight });
       }
       onImageLoad?.(e);
     },
     [onImageLoad, previewUrl],
   );
-  const sourceAspectRatio = natural && natural.url === previewUrl ? natural.ratio : null;
+  const sourceNaturalForUrl = natural && natural.url === previewUrl ? natural : null;
+  const sourceAspectRatio = sourceNaturalForUrl
+    ? sourceNaturalForUrl.w / sourceNaturalForUrl.h
+    : null;
 
-  // Crops tab: on first load (and on a source swap) auto-fit the image so the whole picture is
-  // visible — contain-fit reported up to the modal once per source. Width-% zoom model, so this
-  // replaces the 100% default with the largest zoom that clears both frame edges (design 05 §4.2).
-  useCropFitZoom({
-    enabled: showZoom && isBoxOverlay,
-    frame,
-    imgAspect: sourceAspectRatio,
-    imageKey: previewUrl,
-    onZoomChange,
-  });
+  // Crops tab sizing (design 05 §4.2): fit the source into the MEASURED canvas frame (contain-fit,
+  // longest edge — parity with the Edit modal stage), then scale by zoom% as ACTUAL px width/height
+  // (NOT transform: scale — keeps overflow-auto scroll metrics accurate; editor zoom pattern). So
+  // 100% = fit-to-frame and a tall crop no longer spills below the fold — the previous width-%
+  // model bound only the width, so a portrait source overflowed vertically. The px wrapper still
+  // coincides 1:1 with the rendered image, so the absolute box overlay maps to its rect.
+  const cropFitSize =
+    showZoom && isBoxOverlay && frame && sourceNaturalForUrl
+      ? fitNaturalToFrame(sourceNaturalForUrl.w, sourceNaturalForUrl.h, frame)
+      : null;
+  const cropScaled = cropFitSize
+    ? { w: Math.round((cropFitSize.w * zoom) / 100), h: Math.round((cropFitSize.h * zoom) / 100) }
+    : null;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-[var(--swap-modal-canvas-bg)]">
@@ -239,26 +244,39 @@ export function ExtractCanvas({
             )
           ) : isBoxOverlay ? (
             showZoom ? (
-              // Crops zoom: wrapper width = zoom% of the canvas (CSS width, NOT transform —
-              // keeps overflow-auto scroll metrics accurate, editor zoom pattern/memory). The
-              // block wrapper's height = the img height, so the absolute overlay still maps 1:1.
-              // flex-shrink-0 lets it overflow (scroll) past 100% instead of being squished; the
-              // container's `safe center` keeps the overflowed top/left corner scroll-reachable.
-              <div
-                className="relative leading-[0]"
-                style={{ width: `${zoom}%`, maxWidth: 'none', flexShrink: 0 }}
-              >
+              // Crops zoom: wrapper = the fit-to-frame size × zoom% in ACTUAL px (CSS width/height,
+              // NOT transform — keeps overflow-auto scroll metrics accurate, editor zoom pattern).
+              // 100% = contain-fit so a tall crop fits the pane; flex-shrink-0 lets it overflow
+              // (scroll) past the fit, and the container's `safe center` keeps the overflowed
+              // top/left corner scroll-reachable. The px wrapper coincides 1:1 with the rendered
+              // image so the absolute overlay maps to its box. Falls back to a contain <img> (no
+              // overlay yet) until the frame + natural dims are measured.
+              cropScaled ? (
+                <div
+                  className="relative leading-[0]"
+                  style={{ width: cropScaled.w, height: cropScaled.h, flexShrink: 0 }}
+                >
+                  <img
+                    key={previewUrl}
+                    src={previewUrl}
+                    alt="Source image"
+                    onLoad={handleSourceLoad}
+                    draggable={false}
+                    className="block object-contain"
+                    style={{ width: cropScaled.w, height: cropScaled.h, maxWidth: 'none' }}
+                  />
+                  {overlay}
+                </div>
+              ) : (
                 <img
                   key={previewUrl}
                   src={previewUrl}
                   alt="Source image"
                   onLoad={handleSourceLoad}
                   draggable={false}
-                  className="block w-full object-contain"
-                  style={{ height: 'auto' }}
+                  className="block max-h-full max-w-full object-contain"
                 />
-                {overlay}
-              </div>
+              )
             ) : (
               // Wrapper carries the source aspect-ratio → fits-contain on the longest edge (parity
               // with the result-grid <img>) AND coincides 1:1 with the rendered image so the

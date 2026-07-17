@@ -10,7 +10,8 @@
 // Zoom is applied as CSS width % (NOT transform:scale) so the overflow scroll reaches the zoomed
 // image's corners (memory: zoom-via-css-width / reference generate-canvas.tsx).
 
-import { Check, Loader2, Pencil } from 'lucide-react';
+import { Check, Layers, Loader2, Pencil } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ZoomControl } from '@/features/editor/components/shared-components/zoom-control';
@@ -37,6 +38,7 @@ interface VariantSheetContentAreaProps {
   onChangeZoom: (zoom: number) => void;
   onSelectCrop: (cropIndex: number) => void; // 0..3 → lock crops[i].is_selected
   onEditCrop: (cropIndex: number) => void; // 0..3 → edit that cell
+  onExtractCrop: (cropIndex: number) => void; // 0..3 → reframe that cell → new version
   onEditRaw: () => void; // edit the 21:9 sheet → commit AUTO re-cuts all 4 cells
 }
 
@@ -50,6 +52,7 @@ export function VariantSheetContentArea({
   onChangeZoom,
   onSelectCrop,
   onEditCrop,
+  onExtractCrop,
   onEditRaw,
 }: VariantSheetContentAreaProps) {
   const crops = variant?.raw_sheet?.crops ?? [];
@@ -87,6 +90,7 @@ export function VariantSheetContentArea({
           genStatus={genStatus}
           onSelectCrop={onSelectCrop}
           onEditCrop={onEditCrop}
+          onExtractCrop={onExtractCrop}
         />
       )}
     </section>
@@ -110,7 +114,8 @@ function RawSheetView({
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      <EditIconButton
+      <CardIconButton
+        icon={Pencil}
         label="Edit variant sheet"
         disabled={false}
         onClick={onEditRaw}
@@ -142,6 +147,7 @@ function CropCandidateGrid({
   genStatus,
   onSelectCrop,
   onEditCrop,
+  onExtractCrop,
 }: {
   crops: SketchVariantCrop[];
   selIdx: number;
@@ -149,6 +155,7 @@ function CropCandidateGrid({
   genStatus: VariantGenStatus;
   onSelectCrop: (cropIndex: number) => void;
   onEditCrop: (cropIndex: number) => void;
+  onExtractCrop: (cropIndex: number) => void;
 }) {
   if (genStatus.isBusy) return <SheetSkeleton phase={genStatus.phase} />;
 
@@ -168,6 +175,7 @@ function CropCandidateGrid({
             zoom={zoom}
             onSelect={() => onSelectCrop(i)}
             onEdit={() => onEditCrop(i)}
+            onExtract={() => onExtractCrop(i)}
           />
         ))}
       </div>
@@ -195,6 +203,7 @@ function CropCard({
   zoom,
   onSelect,
   onEdit,
+  onExtract,
 }: {
   index: number;
   cropUrl: string | null;
@@ -202,6 +211,7 @@ function CropCard({
   zoom: number;
   onSelect: () => void;
   onEdit: () => void;
+  onExtract: () => void;
 }) {
   const label = `candidate ${index + 1}`;
   return (
@@ -234,12 +244,22 @@ function CropCard({
         >
           {index + 1}
         </span>
-        {/* Edit must not bubble to the card's select handler. */}
-        <span className="absolute right-2 top-2 z-10" onClick={(e) => e.stopPropagation()}>
-          <EditIconButton
+        {/* [✎] edit + [⧉] extract — must not bubble to the card's select handler. */}
+        <span
+          className="absolute right-2 top-2 z-10 flex gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <CardIconButton
+            icon={Pencil}
             label={`Edit crop ${index + 1}`}
             disabled={cropUrl == null}
             onClick={onEdit}
+          />
+          <CardIconButton
+            icon={Layers}
+            label={`Extract from crop ${index + 1}`}
+            disabled={cropUrl == null}
+            onClick={onExtract}
           />
         </span>
         {/* Picked → check badge (bottom-right). */}
@@ -290,13 +310,16 @@ function EmptyHint({ text }: { text: string }) {
   );
 }
 
-/** Small ghost [✎] used by the raw sheet + each crop card. Disabled → aria-disabled. */
-function EditIconButton({
+/** Small ghost icon button used by the raw sheet ([✎]) + each crop card ([✎]/[⧉]). Disabled →
+ *  aria-disabled. `icon` decouples it from a single glyph so the crop cluster can reuse it. */
+function CardIconButton({
+  icon: Icon,
   label,
   disabled,
   onClick,
   className,
 }: {
+  icon: LucideIcon;
   label: string;
   disabled: boolean;
   onClick: () => void;
@@ -313,7 +336,7 @@ function EditIconButton({
       title={label}
       onClick={onClick}
     >
-      <Pencil className="h-4 w-4" />
+      <Icon className="h-4 w-4" />
     </Button>
   );
 }
