@@ -10,6 +10,7 @@ import type {
   SketchTextboxContent,
   SketchBase,
   SketchBaseSheet,
+  SketchBaseStyle,
 } from '@/types/sketch';
 import type { Illustration } from '@/types/prop-types';
 import { isSketchTextboxContent, sheetOf } from '@/types/sketch';
@@ -37,23 +38,26 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Old-shape markers (pre-3847f27 sketch JSONB). DB rows still hold the legacy shape
- * (no migration run yet) — if any marker is present we treat the blob as stale and
- * reset to DEFAULT_SKETCH (user decision Q4: "data sketch cũ thì replace về rỗng").
+ * Reports an unexpected-shape finding hit while normalizing a raw sketch blob.
+ *
+ * The normalizer stays PURE — it never imports a toast/UI module. It hands every anomaly to the
+ * caller (`snapshot-store/index.ts`), which aggregates them into ONE user-facing toast per load.
  */
-function isLegacySketchShape(raw: Record<string, unknown>): boolean {
-  if ('dummy_id' in raw || 'character_sheets' in raw || 'prop_sheets' in raw) return true;
-  // Legacy spreads carried `images[]` and NO `pages[]`. The current shape ALSO carries
-  // `images[]` (versioned backdrop, this migration) but always has `pages[]` too — so the
-  // discriminator must require `images` WITHOUT `pages`, else every new spread false-positives
-  // as legacy and gets reset to empty (data loss). See phase-01 HAZARD note.
-  const spreads = raw.spreads;
-  if (Array.isArray(spreads) && spreads.length > 0) {
-    const first = spreads[0];
-    if (isPlainObject(first) && 'images' in first && !('pages' in first)) return true;
-  }
-  return false;
-}
+export type SketchAnomalyReporter = (anomaly: string) => void;
+
+const noopAnomalyReporter: SketchAnomalyReporter = () => {};
+
+/**
+ * Stale top-level keys from the pre-3847f27 sketch JSONB.
+ *
+ * They are NOT part of the `Sketch` type, so they are dropped from the in-memory model and will not
+ * survive the next whole-node save — hence they are REPORTED (toast) rather than dropped silently.
+ * They no longer trigger any kind of reset. See the DATA-SAFETY note on `normalizeSketch`.
+ */
+const LEGACY_SKETCH_KEYS = ['dummy_id', 'character_sheets', 'prop_sheets'] as const;
+
+const typeNameOf = (v: unknown): string =>
+  v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v;
 
 const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -153,20 +157,103 @@ export function coerceSketchNode(path: string[], value: unknown): unknown {
   return value;
 }
 
-/** A raw sheet blob → SketchBaseSheet (styles array kept as-is; absent → empty). */
-function normalizeSheet(raw: unknown): SketchBaseSheet {
-  return isPlainObject(raw) && Array.isArray(raw.styles)
-    ? { styles: raw.styles as SketchBaseSheet['styles'] }
-    : { styles: [] };
+/** Coerce one salvaged raw style blob → SketchBaseStyle, defaulting its 3 array fields.
+ *  Mirrors `coerceEntity`'s philosophy: never trust a recovered element's inner shape. Without
+ *  this, a salvaged non-style element reaches `styles[i].crops.find(...)` / `.illustrations
+ *  .forEach(...)` in the base-workspace actions below and throws. Only used on the SALVAGE paths —
+ *  a well-formed `styles` array is passed through untouched. */
+function coerceStyle(raw: unknown): SketchBaseStyle {
+  const r = isPlainObject(raw) ? raw : {};
+  return {
+    style_prompt: asStr(r.style_prompt),
+    is_selected: Boolean(r.is_selected),
+    image_references: Array.isArray(r.image_references)
+      ? (r.image_references as SketchBaseStyle['image_references'])
+      : [],
+    illustrations: Array.isArray(r.illustrations) ? (r.illustrations as Illustration[]) : [],
+    crops: Array.isArray(r.crops) ? (r.crops as SketchBaseStyle['crops']) : [],
+  };
 }
 
-/** Default the base workspace (2 empty sheets) when the blob predates the restructure. */
-function normalizeBase(raw: unknown): SketchBase {
-  if (!isPlainObject(raw)) return emptyBase();
+/**
+ * A raw sheet blob → SketchBaseSheet.
+ *
+ * DATA-SAFETY (2026-07-17): this used to collapse to `{ styles: [] }` for ANY shape it did not
+ * recognise, silently destroying every style the user had created. It now distinguishes:
+ *  - ABSENT (null/undefined) → `{ styles: [] }`. A book with no sheet yet — legitimate, NOT an
+ *    anomaly, so it must NOT toast (crying wolf on every new book trains users to ignore the
+ *    real warning).
+ *  - VALID (`styles` is an array) → passed through untouched.
+ *  - MALFORMED → reported, and anything salvageable is recovered (element-coerced so a recovered
+ *    style can never crash the base workspace).
+ *
+ * NOTE: only the `styles` key is carried — `SketchBaseSheet` has no other field (types/sketch.ts),
+ * so an unknown sibling key IS dropped here (silently: it is unreadable by any current code).
+ */
+function normalizeSheet(raw: unknown, path: string, onAnomaly: SketchAnomalyReporter): SketchBaseSheet {
+  if (raw == null) return { styles: [] }; // legitimately new — no anomaly
+
+  // A bare array parked in the sheet slot is almost certainly the styles[] itself → salvage it
+  // rather than throw the user's styles away.
+  if (Array.isArray(raw)) {
+    onAnomaly(`${path} là array thay vì object (đã giữ nguyên ${raw.length} style)`);
+    return { styles: raw.map(coerceStyle) };
+  }
+
+  if (!isPlainObject(raw)) {
+    onAnomaly(`${path} có kiểu "${typeNameOf(raw)}" thay vì object`);
+    return { styles: [] };
+  }
+
+  const styles = raw.styles;
+  if (Array.isArray(styles)) return { styles: styles as SketchBaseSheet['styles'] }; // keep as-is
+  if (styles == null) return { styles: [] }; // sheet exists but has no style yet — legitimate
+
+  // An object-map of styles (`{"0":{…},"1":{…}}`) is a REAL risk here, not a hypothetical: sketch
+  // subtrees are written positionally through the collab gateway (`resolve_snapshot_path`), and a
+  // positional jsonb_set write onto a missing/'{}' path leaves exactly this shape. Recover it
+  // (ordered by V8's integer-key ascending iteration) instead of blanking the user's styles.
+  if (isPlainObject(styles)) {
+    const values = Object.values(styles);
+    if (values.length > 0 && values.every(isPlainObject)) {
+      onAnomaly(`${path}.styles là object-map thay vì array (đã giữ nguyên ${values.length} style)`);
+      return { styles: values.map(coerceStyle) };
+    }
+  }
+
+  // `styles` holds something that cannot be represented as a style array. There is nothing to
+  // preserve in-type, so report it loudly: the toast is what stops the user from editing on top of
+  // a bad read and persisting the result.
+  onAnomaly(`${path}.styles có kiểu "${typeNameOf(styles)}" thay vì array`);
+  return { styles: [] };
+}
+
+/** The base workspace (2 sheets). Absent → 2 empty sheets (new book); malformed → reported. */
+function normalizeBase(raw: unknown, onAnomaly: SketchAnomalyReporter): SketchBase {
+  if (raw == null) return emptyBase(); // legitimately new — no anomaly
+  if (!isPlainObject(raw)) {
+    onAnomaly(`base có kiểu "${typeNameOf(raw)}" thay vì object`);
+    return emptyBase();
+  }
   return {
-    character_sheet: normalizeSheet(raw.character_sheet),
-    prop_sheet: normalizeSheet(raw.prop_sheet),
+    character_sheet: normalizeSheet(raw.character_sheet, 'base.character_sheet', onAnomaly),
+    prop_sheet: normalizeSheet(raw.prop_sheet, 'base.prop_sheet', onAnomaly),
   };
+}
+
+/** One entity collection (`characters`/`props`/`stages`). Absent → []; malformed → reported. */
+function entityArrayAt(
+  raw: Record<string, unknown>,
+  key: string,
+  onAnomaly: SketchAnomalyReporter,
+): SketchEntity[] {
+  const v = raw[key];
+  if (v == null) return []; // legitimately new — no anomaly
+  if (!Array.isArray(v)) {
+    onAnomaly(`${key} có kiểu "${typeNameOf(v)}" thay vì array`);
+    return [];
+  }
+  return v.map(coerceEntity);
 }
 
 const VALID_PAGE_TYPES: readonly SketchPageType[] = ['left', 'right', 'full'];
@@ -182,10 +269,16 @@ function isValidPageType(v: unknown): v is SketchPageType {
  *    type (keep first). NO length clamp — 'full' → 1, 'left'+'right' → 2.
  *  - legacy scalar `media_url: string` → wrap as ONE image with the first page's type.
  *  - no image at all → `images: []`.
- * `pages` / `textboxes` always default to []. Non-object rows collapse to an empty spread.
+ * `pages` / `textboxes` always default to []. Non-object rows keep their (empty) slot and are
+ * REPORTED — a spreads[] element is never legitimately a non-object, so it must not pass silently.
  */
-export function normalizeSketchSpread(raw: unknown): SketchSpread {
+export function normalizeSketchSpread(
+  raw: unknown,
+  onAnomaly: SketchAnomalyReporter = noopAnomalyReporter,
+): SketchSpread {
   if (!isPlainObject(raw)) {
+    // Nothing salvageable, but keep the slot so the remaining spreads stay positionally correct.
+    onAnomaly(`spreads[] có phần tử kiểu "${typeNameOf(raw)}" thay vì object`);
     return { id: '', images: [], pages: [], textboxes: [] };
   }
   const id = typeof raw.id === 'string' ? raw.id : '';
@@ -235,28 +328,58 @@ export function normalizeSketchSpread(raw: unknown): SketchSpread {
 
 /**
  * Normalize a raw `snapshots.sketch` JSONB blob into the canonical Sketch shape.
- * - non-object / undefined / null → DEFAULT_SKETCH
- * - legacy shape (markers above) → DEFAULT_SKETCH (intentional reset; round-trip will
- *   overwrite the stale DB blob with empty on next save)
- * - new shape → mapped defensively (missing nested arrays default to [])
+ *
+ * DATA-SAFETY CONTRACT (rewritten 2026-07-17 after real production data loss — see below):
+ * **An unexpected shape NEVER silently replaces existing data with empty.** Empty is only ever
+ * returned when the source is genuinely ABSENT (null/undefined = a book with no sketch yet).
+ * Anything else that looks wrong is mapped as defensively as possible and REPORTED via
+ * `onAnomaly`, which the caller surfaces as a toast so a human decides what to do.
+ *
+ * What went wrong: a removed `isLegacySketchShape()` helper judged the WHOLE blob from
+ * `spreads[0]` (`'images' in first && !('pages' in first)`) plus a few stale top-level keys, and
+ * returned DEFAULT_SKETCH on a match — wiping `base.*.styles`, `characters`, `props` and `stages`
+ * in memory. The wipe was invisible (`log.debug`), the user then edited, and the held-session
+ * release-save wrote the emptied node back to the DB. The reset is gone; legacy blobs are mapped.
+ *
+ * @param raw       the raw JSONB value from `snapshots.sketch`
+ * @param onAnomaly called once per unexpected-shape finding. Every anomaly is also `log.warn`n.
  */
-export function normalizeSketch(raw: unknown): Sketch {
-  if (!isPlainObject(raw)) return DEFAULT_SKETCH;
-  if (isLegacySketchShape(raw)) {
-    // debug (not warn): every existing book still holds the legacy shape (no DB
-    // migration run yet), so reset-to-empty is the EXPECTED path, not a fallback.
-    log.debug('normalizeSketch', 'legacy sketch shape → reset to empty', {
-      keys: Object.keys(raw).slice(0, 8),
-    });
+export function normalizeSketch(
+  raw: unknown,
+  onAnomaly: SketchAnomalyReporter = noopAnomalyReporter,
+): Sketch {
+  // Every anomaly gets a warn (never debug — this is how the wipe stayed invisible for so long)
+  // plus whatever the caller wants to do with it.
+  const report: SketchAnomalyReporter = (anomaly) => {
+    log.warn('normalizeSketch', 'unexpected sketch shape — data preserved, NOT reset', { anomaly });
+    onAnomaly(anomaly);
+  };
+
+  if (raw == null) return DEFAULT_SKETCH; // no sketch yet — legitimate, NOT an anomaly
+  if (!isPlainObject(raw)) {
+    report(`sketch có kiểu "${typeNameOf(raw)}" thay vì object`);
     return DEFAULT_SKETCH;
   }
+
+  const legacyKeys = LEGACY_SKETCH_KEYS.filter((k) => k in raw);
+  if (legacyKeys.length > 0) {
+    // No longer a reset — just a heads-up that these stale keys are not carried by the Sketch type
+    // and will not survive the next save.
+    report(`sketch còn key cũ không dùng nữa: ${legacyKeys.join(', ')}`);
+  }
+
+  const spreads = raw.spreads;
+  if (spreads != null && !Array.isArray(spreads)) {
+    report(`spreads có kiểu "${typeNameOf(spreads)}" thay vì array`);
+  }
+
   return {
     id: typeof raw.id === 'string' ? raw.id : null,
-    base: normalizeBase(raw.base),
-    characters: asEntityArray(raw.characters),
-    props: asEntityArray(raw.props),
-    stages: asEntityArray(raw.stages),
-    spreads: Array.isArray(raw.spreads) ? raw.spreads.map(normalizeSketchSpread) : [],
+    base: normalizeBase(raw.base, report),
+    characters: entityArrayAt(raw, 'characters', report),
+    props: entityArrayAt(raw, 'props', report),
+    stages: entityArrayAt(raw, 'stages', report),
+    spreads: Array.isArray(spreads) ? spreads.map((s) => normalizeSketchSpread(s, report)) : [],
   };
 }
 

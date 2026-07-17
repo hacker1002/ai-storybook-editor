@@ -42,15 +42,22 @@ describe('normalizeSketch', () => {
     expect(normalizeSketch([])).toEqual(DEFAULT_SKETCH);
   });
 
-  it('resets legacy shape (top-level markers) to empty', () => {
+  // CONTRACT CHANGE (2026-07-17, data-loss fix): legacy markers used to hard-reset the WHOLE
+  // sketch to DEFAULT_SKETCH. They no longer reset anything — the blob is mapped defensively and
+  // the stale markers are reported as an anomaly instead. See the "data-safety" describe below.
+  it('maps a legacy-marker blob defensively instead of resetting to empty', () => {
     expect(normalizeSketch({ dummy_id: 'd1', spreads: [] })).toEqual(DEFAULT_SKETCH);
-    expect(normalizeSketch({ character_sheets: [{}] })).toEqual(DEFAULT_SKETCH);
-    expect(normalizeSketch({ prop_sheets: [{}] })).toEqual(DEFAULT_SKETCH);
+    // ...but a marker blob that CARRIES data keeps it (that is the whole point):
+    const withData = { character_sheets: [{}], characters: [{ key: 'kid', variants: [] }] };
+    expect(normalizeSketch(withData).characters).toEqual([{ key: 'kid', variants: [] }]);
   });
 
-  it('resets legacy spread shape (spreads[].images[]) to empty', () => {
+  it('maps a legacy spread (images[], no pages[]) instead of resetting to empty', () => {
     const legacy = { id: 'x', spreads: [{ id: 's1', images: [{ id: 'i1' }] }] };
-    expect(normalizeSketch(legacy)).toEqual(DEFAULT_SKETCH);
+    const result = normalizeSketch(legacy);
+    expect(result.id).toBe('x');
+    expect(result.spreads).toHaveLength(1);
+    expect(result.spreads[0].id).toBe('s1');
   });
 
   it('preserves a valid new-shape sketch', () => {
@@ -101,6 +108,168 @@ describe('normalizeSketch', () => {
     const result = normalizeSketch(raw);
     expect(result.spreads).toHaveLength(1);
     expect(result.spreads[0].id).toBe('sp');
+  });
+});
+
+// REGRESSION NET for the 2026-07-17 silent-data-loss incident: `normalizeSketch` judged the whole
+// blob from `spreads[0]` (isLegacySketchShape) and returned DEFAULT_SKETCH on a false positive,
+// wiping base.character_sheet.styles / characters / props IN MEMORY. The user then edited, the
+// held-session release-save wrote the whole node back, and the empty was PERSISTED.
+// Core rule under test: an unexpected shape NEVER blanks populated data — it is reported instead.
+describe('normalizeSketch data-safety (never silently blank populated data)', () => {
+  const style = (prompt: string) => ({
+    style_prompt: prompt,
+    is_selected: true,
+    image_references: [],
+    illustrations: [],
+    crops: [],
+  });
+
+  // A blob that is populated everywhere AND trips the old `spreads[0]` legacy discriminator
+  // (`images` present, `pages` absent).
+  const populatedLegacySpreadBlob = () => ({
+    id: 'sk1',
+    base: {
+      character_sheet: { styles: [style('watercolor')] },
+      prop_sheet: { styles: [style('inked')] },
+    },
+    characters: [{ key: 'kid', variants: [] }],
+    props: [{ key: 'wand', variants: [] }],
+    stages: [{ key: 'forest', variants: [] }],
+    spreads: [{ id: 's1', images: [{ id: 'i1', illustrations: [] }] }],
+  });
+
+  const collect = (raw: unknown) => {
+    const anomalies: string[] = [];
+    const sketch = normalizeSketch(raw, (a) => anomalies.push(a));
+    return { sketch, anomalies };
+  };
+
+  it('does NOT wipe base styles / characters / props when spreads[0] has images and no pages', () => {
+    const result = normalizeSketch(populatedLegacySpreadBlob());
+    expect(result.base.character_sheet.styles).toHaveLength(1);
+    expect(result.base.character_sheet.styles[0].style_prompt).toBe('watercolor');
+    expect(result.base.prop_sheet.styles).toHaveLength(1);
+    expect(result.characters).toEqual([{ key: 'kid', variants: [] }]);
+    expect(result.props).toEqual([{ key: 'wand', variants: [] }]);
+    expect(result.stages).toEqual([{ key: 'forest', variants: [] }]);
+    // The spread itself survives too (pages defaults to [], images kept).
+    expect(result.spreads).toHaveLength(1);
+    expect(result.spreads[0].id).toBe('s1');
+  });
+
+  it.each(['dummy_id', 'character_sheets', 'prop_sheets'])(
+    'does NOT wipe populated base styles when the legacy marker %s is present',
+    (marker) => {
+      const raw = {
+        [marker]: 'legacy-value',
+        base: { character_sheet: { styles: [style('watercolor')] }, prop_sheet: { styles: [] } },
+        characters: [{ key: 'kid', variants: [] }],
+      };
+      const { sketch, anomalies } = collect(raw);
+      expect(sketch.base.character_sheet.styles).toHaveLength(1);
+      expect(sketch.base.character_sheet.styles[0].style_prompt).toBe('watercolor');
+      expect(sketch.characters).toEqual([{ key: 'kid', variants: [] }]);
+      // Stale top-level keys are not part of the Sketch type → dropped on the next whole-node
+      // save, so the user must be told rather than have it happen silently.
+      expect(anomalies.join(' ')).toContain(marker);
+    },
+  );
+
+  it('does NOT blank a populated styles[] when the sheet carries odd sibling keys', () => {
+    const raw = {
+      base: {
+        character_sheet: { styles: [style('watercolor')], legacy_junk: 42 },
+        prop_sheet: { styles: [] },
+      },
+    };
+    const { sketch, anomalies } = collect(raw);
+    expect(sketch.base.character_sheet.styles).toHaveLength(1);
+    expect(anomalies).toEqual([]); // styles is a valid array → nothing to cry wolf about
+  });
+
+  it('salvages a populated styles[] stored directly in the sheet slot (array, not object)', () => {
+    const raw = { base: { character_sheet: [style('watercolor')], prop_sheet: { styles: [] } } };
+    const { sketch, anomalies } = collect(raw);
+    expect(sketch.base.character_sheet.styles).toHaveLength(1);
+    expect(sketch.base.character_sheet.styles[0].style_prompt).toBe('watercolor');
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0]).toContain('base.character_sheet');
+  });
+
+  // A salvaged element must not become a crash: the base-workspace actions dereference
+  // styles[i].crops / .illustrations without full optional chaining, so a recovered element that
+  // isn't shaped like a style would throw on interaction. Salvage must coerce, not just cast.
+  it('element-coerces salvaged styles so a junk element cannot crash the base workspace', () => {
+    const { sketch } = collect({ base: { character_sheet: ['watercolor', { style_prompt: 'ok' }] } });
+    const styles = sketch.base.character_sheet.styles;
+    expect(styles).toHaveLength(2);
+    for (const s of styles) {
+      // The exact shapes the store actions reach into.
+      expect(Array.isArray(s.crops)).toBe(true);
+      expect(Array.isArray(s.illustrations)).toBe(true);
+      expect(Array.isArray(s.image_references)).toBe(true);
+    }
+    expect(styles[1].style_prompt).toBe('ok'); // real style survives salvage intact
+  });
+
+  // Positional jsonb_set writes through the collab gateway can leave an object-map where an array
+  // is expected — the shape most likely to produce the reported `styles: []` symptom.
+  it('salvages an object-map styles ({"0":…,"1":…}) instead of blanking it', () => {
+    const raw = {
+      base: {
+        character_sheet: { styles: { 0: style('watercolor'), 1: style('inked') } },
+        prop_sheet: { styles: [] },
+      },
+    };
+    const { sketch, anomalies } = collect(raw);
+    expect(sketch.base.character_sheet.styles).toHaveLength(2);
+    expect(sketch.base.character_sheet.styles.map((s) => s.style_prompt)).toEqual([
+      'watercolor',
+      'inked',
+    ]);
+    expect(anomalies).toHaveLength(1);
+  });
+
+  it('reports (does not swallow) a malformed sheet and a malformed styles field', () => {
+    expect(collect({ base: { character_sheet: 'nope', prop_sheet: { styles: [] } } }).anomalies)
+      .toHaveLength(1);
+    expect(collect({ base: { character_sheet: { styles: { a: 1 } }, prop_sheet: { styles: [] } } }).anomalies)
+      .toHaveLength(1);
+    expect(collect({ base: 'nope' }).anomalies).toHaveLength(1);
+  });
+
+  it('does NOT blank populated entity collections that are malformed — reports instead', () => {
+    const { sketch, anomalies } = collect({ characters: 'nope', props: [{ key: 'wand', variants: [] }] });
+    expect(sketch.props).toEqual([{ key: 'wand', variants: [] }]); // sibling untouched
+    expect(anomalies.join(' ')).toContain('characters');
+  });
+
+  it('reports a non-object sketch blob but still yields DEFAULT_SKETCH', () => {
+    expect(collect('nope').anomalies).toHaveLength(1);
+    expect(collect(42).anomalies).toHaveLength(1);
+    expect(collect('nope').sketch).toEqual(DEFAULT_SKETCH);
+  });
+
+  // MUST NOT CRY WOLF: a brand-new book genuinely has no sketch — that is not an anomaly, and a
+  // toast there would train users to ignore the real one.
+  it('reports NO anomaly for a genuinely absent sketch (null / undefined = new book)', () => {
+    expect(collect(null)).toEqual({ sketch: DEFAULT_SKETCH, anomalies: [] });
+    expect(collect(undefined)).toEqual({ sketch: DEFAULT_SKETCH, anomalies: [] });
+  });
+
+  it('reports NO anomaly for a well-formed sketch, nor for legitimately absent sub-trees', () => {
+    expect(collect(populatedLegacySpreadBlob()).anomalies).toEqual([]);
+    expect(collect({ id: 'only-id' }).anomalies).toEqual([]); // absent base/characters/spreads
+    expect(collect({ base: {} }).anomalies).toEqual([]); // sheet slots absent → new, not broken
+    expect(collect({ base: { character_sheet: {} } }).anomalies).toEqual([]); // no styles yet
+  });
+
+  it('reports a non-object spreads[] element rather than silently collapsing it', () => {
+    const { sketch, anomalies } = collect({ spreads: [{ id: 'ok', pages: [], textboxes: [] }, null] });
+    expect(sketch.spreads).toHaveLength(2); // slot kept (positional)
+    expect(sketch.spreads[0].id).toBe('ok');
+    expect(anomalies).toHaveLength(1);
   });
 });
 

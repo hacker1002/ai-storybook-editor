@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { toast } from 'sonner';
 import { supabase } from '@/apis/supabase';
 import { createLogger } from '@/utils/logger';
 import { useResourceLockStore } from '@/stores/resource-lock-store';
 import type { SnapshotStore } from './types';
 import type { BaseSpread } from '@/types/spread-types';
+import type { Sketch } from '@/types/sketch';
 
 /** Ensure every spread has required arrays so consumers never hit undefined.
  *  Also strips legacy (name/type/state/variant) fields from 5 layer types and
@@ -64,6 +66,36 @@ import { createSketchBaseGenerateJobSlice } from './slices/sketch-base-generate-
 import { createSketchVariantGenerateJobSlice } from './slices/sketch-variant-generate-job-slice';
 
 const log = createLogger('Store', 'SnapshotStore');
+
+/**
+ * Read a raw `snapshots.sketch` blob, surfacing any unexpected-shape finding to the user.
+ *
+ * DATA-SAFETY: `normalizeSketch` never blanks populated data — it REPORTS instead (see its
+ * contract). This is the caller half: the slice stays pure (no UI imports) and we aggregate every
+ * anomaly of one load into a SINGLE toast. Called OUTSIDE the immer producer on purpose — firing a
+ * toast is a side effect and must not run inside a state updater.
+ */
+function loadSketch(raw: unknown, source: string): Sketch {
+  const anomalies: string[] = [];
+  const sketch = normalizeSketch(raw, (a) => anomalies.push(a));
+  if (anomalies.length > 0) {
+    log.warn(source, 'sketch shape anomalies — no reset performed, read may be partial', {
+      count: anomalies.length,
+      anomalies: anomalies.slice(0, 5),
+    });
+    // Copy is deliberately NOT "đã giữ nguyên dữ liệu": most anomaly classes mean a part of the
+    // blob could not be read into the model, and a subsequent edit+save WOULD overwrite it. The
+    // honest, actionable message is "we didn't wipe anything — but don't save on top of this".
+    // Stable id: dedupes the StrictMode double-invoke of the fetchSnapshot effect in dev.
+    toast.warning('Sketch data có shape lạ — vui lòng báo team trước khi chỉnh sửa tiếp', {
+      id: 'sketch-shape-anomaly',
+      description:
+        'Hệ thống KHÔNG tự động xoá dữ liệu, nhưng có thể chưa đọc được hết. Chỉnh sửa rồi lưu sẽ ghi đè phần chưa đọc được.',
+      duration: 15000,
+    });
+  }
+  return sketch;
+}
 
 export const useSnapshotStore = create<SnapshotStore>()(
   devtools(
@@ -146,6 +178,8 @@ export const useSnapshotStore = create<SnapshotStore>()(
           }
 
           log.info('fetchSnapshot', 'done', { bookId, hasData: !!data, snapshotId: data?.id, saveType: data?.save_type });
+          // Normalize (+ toast on anomaly) BEFORE the producer — side effects must stay out of it.
+          const sketch = data ? loadSketch(data.sketch, 'fetchSnapshot') : DEFAULT_SKETCH;
           set((state) => {
             if (data) {
               state.meta.id = data.id;
@@ -154,7 +188,7 @@ export const useSnapshotStore = create<SnapshotStore>()(
               state.meta.tag = data.tag;
               state.meta.autoSaveId = data.save_type === 2 ? data.id : null;
               state.docs = data.docs?.length ? data.docs : DEFAULT_DOCS;
-              state.sketch = normalizeSketch(data.sketch);
+              state.sketch = sketch;
               state.dummies = data.dummies ?? [];
               const ill = data.illustration;
               state.illustration = {
@@ -430,9 +464,11 @@ export const useSnapshotStore = create<SnapshotStore>()(
         initSnapshot: (data) => {
           const [set] = args;
           log.info('initSnapshot', 'init', { hasData: !!data, hasMeta: !!data.meta });
+          // Normalize (+ toast on anomaly) BEFORE the producer — side effects must stay out of it.
+          const sketch = loadSketch(data.sketch, 'initSnapshot');
           set((state) => {
             state.docs = data.docs ?? DEFAULT_DOCS;
-            state.sketch = normalizeSketch(data.sketch);
+            state.sketch = sketch;
             state.dummies = data.dummies ?? [];
             const ill = data.illustration;
             state.illustration = {
