@@ -64,7 +64,7 @@ describe('normalizeSketch (shape mapping)', () => {
       base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
       characters: [{ key: 'c1', variants: [] }],
       props: [],
-      stages: [{ key: 'st1', variants: [{ key: 'v', description: '', visual_design: 'd', art_language: '' }] }],
+      stages: [{ key: 'st1', base: { styles: [] }, variants: [{ key: 'v', description: '', visual_design: 'd', art_language: '', illustrations: [], crops: [] }] }],
       spreads: [{ id: 'sp1', images: [], pages: [], textboxes: [] }],
     };
     expect(normalizeSketch(valid)).toEqual(valid);
@@ -152,7 +152,7 @@ describe('normalizeSketch data-safety (never silently blank populated data)', ()
     expect(result.base.prop_sheet.styles).toHaveLength(1);
     expect(result.characters).toEqual([{ key: 'kid', variants: [] }]);
     expect(result.props).toEqual([{ key: 'wand', variants: [] }]);
-    expect(result.stages).toEqual([{ key: 'forest', variants: [] }]);
+    expect(result.stages).toEqual([{ key: 'forest', base: { styles: [] }, variants: [] }]);
     // The spread itself survives too (pages defaults to [], images kept).
     expect(result.spreads).toHaveLength(1);
     expect(result.spreads[0].id).toBe('s1');
@@ -284,6 +284,116 @@ describe('normalizeSketch data-safety (never silently blank populated data)', ()
   });
 });
 
+// 2026-07-18 stage rework migration: OLD-shape stage blobs (shared SketchVariant — direct
+// illustrations[], no crops/base) coerce to the new SketchStage shape. Locked decision
+// (plan validation S1): variant IMAGES reset, TEXT kept — a `convert`, NEVER a quarantine
+// (a routine migration must not trip the ADR-047 consent modal or block saves).
+describe('normalizeSketch stage migration (2026-07-18 rework — reset images, keep text)', () => {
+  const oldStage = () => ({
+    key: 'forest',
+    variants: [
+      {
+        key: 'base',
+        description: 'seed',
+        visual_design: 'mossy woods',
+        art_language: 'soft pencil',
+        illustrations: [{ media_url: 'https://x/old.png', created_time: 't', is_selected: true }],
+      },
+      { key: 'storm', description: 'd2', visual_design: 'v2', art_language: 'a2' },
+    ],
+  });
+
+  it('keeps every text field, resets old images, and NEVER quarantines (convert only)', () => {
+    const { sketch, anomalies } = collect({ id: 'sk1', stages: [oldStage()] });
+    const stage = sketch.stages[0];
+    expect(stage.key).toBe('forest');
+    expect(stage.base).toEqual({ styles: [] });
+    expect(stage.variants).toHaveLength(2);
+    expect(stage.variants[0]).toEqual({
+      key: 'base',
+      description: 'seed',
+      visual_design: 'mossy woods',
+      art_language: 'soft pencil',
+      illustrations: [], // old direct-generate image RESET (wrong grid for the 2-cell model)
+      crops: [],
+    });
+    expect(stage.variants[1].visual_design).toBe('v2');
+    // Deliberate migration = convert — never reset/quarantine/save-block.
+    expect(resets(anomalies)).toEqual([]);
+    const converts = anomalies.filter((a) => a.cls === 'convert');
+    expect(converts).toHaveLength(1); // only the variant that actually carried images
+    expect(converts[0].resource).toBe('stages/forest');
+  });
+
+  it('drops a stray legacy height without stamping the new shape', () => {
+    const { sketch, anomalies } = collect({
+      stages: [{ key: 's', variants: [{ key: 'v', height: '110cm' }] }],
+    });
+    expect('height' in sketch.stages[0].variants[0]).toBe(false);
+    expect(resets(anomalies)).toEqual([]);
+  });
+
+  it('round-trips a NEW-shape stage untouched (no anomaly)', () => {
+    const stage = {
+      key: 'house_night',
+      base: {
+        styles: [
+          {
+            style_prompt: 'ink wash',
+            is_selected: true,
+            image_references: [{ title: 'r', media_url: 'https://x/r.png' }],
+            illustrations: [{ media_url: 'https://x/sheet.png', created_time: 't', is_selected: true }],
+            crops: [
+              { is_selected: true, illustrations: [{ media_url: 'https://x/c0.png', created_time: 't', is_selected: true }] },
+              { is_selected: false, illustrations: [] },
+            ],
+          },
+        ],
+      },
+      variants: [
+        {
+          key: 'storm',
+          description: 'd',
+          visual_design: 'v',
+          art_language: 'a',
+          illustrations: [{ media_url: 'https://x/vsheet.png', created_time: 't', is_selected: true }],
+          crops: [
+            { is_selected: false, illustrations: [{ media_url: 'https://x/vc0.png', created_time: 't', is_selected: true }] },
+            { is_selected: false, illustrations: [] },
+          ],
+        },
+      ],
+    };
+    const { sketch, anomalies } = collect({ id: 'sk1', stages: [stage] });
+    expect(sketch.stages[0]).toEqual(stage);
+    expect(anomalies).toEqual([]);
+  });
+
+  it('salvages an object-map base.styles (positional gateway write) as convert', () => {
+    const { sketch, anomalies } = collect({
+      stages: [{ key: 's', base: { styles: { 0: { style_prompt: 'p' } } }, variants: [] }],
+    });
+    expect(sketch.stages[0].base.styles).toHaveLength(1);
+    expect(sketch.stages[0].base.styles[0].style_prompt).toBe('p');
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].cls).toBe('convert');
+  });
+
+  it('classifies unreadable base / base.styles / variants as RESET pinned to the stage node', () => {
+    const badBase = collect({ stages: [{ key: 's1', base: 42, variants: [] }] });
+    expect(resets(badBase.anomalies)).toHaveLength(1);
+    expect(resets(badBase.anomalies)[0].resource).toBe('stages/s1');
+
+    const badStyles = collect({ stages: [{ key: 's2', base: { styles: 'nope' }, variants: [] }] });
+    expect(resets(badStyles.anomalies)).toHaveLength(1);
+    expect(resets(badStyles.anomalies)[0].resource).toBe('stages/s2');
+
+    const badVariants = collect({ stages: [{ key: 's3', variants: 'nope' }] });
+    expect(resets(badVariants.anomalies)).toHaveLength(1);
+    expect(resets(badVariants.anomalies)[0].resource).toBe('stages/s3');
+  });
+});
+
 // T1 — the user acceptance criterion: corrupting ONE resource leaves every other resource
 // DEEP-EQUAL to the healthy run, and the anomaly names exactly the corrupted resource.
 describe('normalizeSketch per-resource isolation (T1 — deep-equal matrix)', () => {
@@ -371,7 +481,7 @@ describe('normalizeSketch fault isolation (T2 — getter throw)', () => {
     const { sketch, anomalies } = collect(blob);
     expect(sketch.characters).toEqual([]); // placeholder
     expect(sketch.props).toEqual([{ key: 'wand', variants: [] }]);
-    expect(sketch.stages).toEqual([{ key: 'forest', variants: [] }]);
+    expect(sketch.stages).toEqual([{ key: 'forest', base: { styles: [] }, variants: [] }]);
     expect(sketch.base.character_sheet.styles).toHaveLength(1);
     const rs = resets(anomalies);
     expect(rs).toHaveLength(1);

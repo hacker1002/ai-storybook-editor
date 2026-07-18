@@ -12,6 +12,9 @@ import type {
   SketchVariant,
   SketchVariantCrop,
   SketchBaseStyle,
+  SketchStage,
+  SketchStageStyle,
+  SketchStageVariant,
 } from '@/types/sketch';
 import type { Illustration } from '@/types/prop-types';
 import { createLogger } from '@/utils/logger';
@@ -34,16 +37,19 @@ export const typeNameOf = (v: unknown): string =>
 
 export const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-/** The three entity collections under `sketch` — the only sub-trees that carry variants. */
-export type SketchEntityCollection = 'characters' | 'props' | 'stages';
+/** The entity collections under `sketch` sharing the char/prop variant shape. `stages` left this
+ *  club with the 2026-07-18 rework — it routes through the dedicated stage coercers below. */
+export type SketchEntityCollection = 'characters' | 'props';
 export const ENTITY_KINDS: readonly string[] = [
   'characters',
   'props',
-  'stages',
 ] satisfies SketchEntityCollection[];
 
 /** Resource key for one entity: node-grain when the key is readable, else the coarse collection. */
-export function entityResourceKey(kind: SketchEntityCollection, key: string): SketchResourceKey {
+export function entityResourceKey(
+  kind: SketchEntityCollection | 'stages',
+  key: string,
+): SketchResourceKey {
   return key ? (`${kind}/${key}` as SketchResourceKey) : kind;
 }
 
@@ -60,8 +66,8 @@ export function coerceVariantCrop(raw: unknown): SketchVariantCrop {
 /** Coerce one raw variant → SketchVariant, filling the 3 required text fields when absent
  *  (backward-compat for blobs written before the 2026-07-13 restructure). raw_sheet parses the
  *  new `{ illustrations[], crops[] }` model; the legacy single `crop` blob (pre-2026-07-14) is
- *  mapped LOSSLESSLY into `crops[0]` (is_selected=true). Stage `illustrations[]` copied through
- *  when present. */
+ *  mapped LOSSLESSLY into `crops[0]` (is_selected=true). char/prop only — stages coerce through
+ *  `coerceStage` (2026-07-18 rework). */
 export function coerceVariant(raw: unknown): SketchVariant {
   const r = isPlainObject(raw) ? raw : {};
   const v: SketchVariant = {
@@ -109,7 +115,6 @@ export function coerceVariant(raw: unknown): SketchVariant {
     // Legacy blob carrying only `crop` (no raw_sheet).
     v.raw_sheet = { illustrations: [], crops: [{ is_selected: true, illustrations: legacyCropIllustrations }] };
   }
-  if (Array.isArray(r.illustrations)) v.illustrations = r.illustrations as Illustration[]; // stage
   return v;
 }
 
@@ -181,6 +186,158 @@ export function asEntityArray(
         });
       }
       return { key: '', variants: [] };
+    }
+  });
+}
+
+// ── Stage coercers (2026-07-18 BREAKING rework — per-stage base.styles[] + 2-cell sheets) ────
+
+/** Coerce one raw stage style attempt → SketchStageStyle (never trust inner shapes). */
+export function coerceStageStyle(raw: unknown): SketchStageStyle {
+  const r = isPlainObject(raw) ? raw : {};
+  return {
+    style_prompt: asStr(r.style_prompt),
+    is_selected: Boolean(r.is_selected),
+    image_references: Array.isArray(r.image_references)
+      ? (r.image_references as SketchStageStyle['image_references'])
+      : [],
+    illustrations: Array.isArray(r.illustrations) ? (r.illustrations as Illustration[]) : [],
+    crops: Array.isArray(r.crops) ? r.crops.map(coerceVariantCrop) : [],
+  };
+}
+
+/**
+ * Coerce one raw stage variant → SketchStageVariant.
+ *
+ * MIGRATE (read-time, 2026-07-18 BREAKING): the OLD stage model (shared SketchVariant — direct
+ * `illustrations[]`, no `crops`) is detected by the ABSENT `crops` field. Per the locked design
+ * decision, old images are RESET (they don't fit the 2-cell sheet grid) while every text field is
+ * KEPT — classified `convert` (deliberate, non-blocking), NEVER `reset`/quarantine (a routine
+ * migration must not trip the ADR-047 consent modal). `height` (old shared shape) is dropped —
+ * stages have none.
+ */
+export function coerceStageVariant(
+  raw: unknown,
+  onAnomaly: SketchAnomalyReporter = noopAnomalyReporter,
+  stageKey?: string,
+): SketchStageVariant {
+  const r = isPlainObject(raw) ? raw : {};
+  const isNewShape = Array.isArray(r.crops);
+  const oldIllustrations = Array.isArray(r.illustrations) ? r.illustrations : [];
+  if (!isNewShape && oldIllustrations.length > 0) {
+    onAnomaly({
+      resource: stageKey ? (`stages/${stageKey}` as SketchResourceKey) : 'stages',
+      cls: 'convert',
+      path: `stages/${stageKey || '?'}.variants`,
+      message: `variant "${asStr(r.key) || '?'}" mang ${oldIllustrations.length} ảnh theo model stage cũ — ảnh reset theo rework 2026-07-18 (text giữ nguyên)`,
+    });
+  }
+  return {
+    key: asStr(r.key),
+    description: asStr(r.description),
+    visual_design: asStr(r.visual_design),
+    art_language: asStr(r.art_language),
+    illustrations: isNewShape ? (oldIllustrations as Illustration[]) : [],
+    crops: isNewShape ? (r.crops as unknown[]).map(coerceVariantCrop) : [],
+  };
+}
+
+/**
+ * Coerce one raw stage → SketchStage. `base` ABSENT (old-shape blob / new book) → `{styles: []}`
+ * with no anomaly; `base.styles` object-map (positional gateway write onto a missing path) →
+ * lossless salvage; wrong-typed `variants` → LOSSY reset of that stage (mirror coerceEntity).
+ */
+export function coerceStage(
+  raw: unknown,
+  onAnomaly: SketchAnomalyReporter = noopAnomalyReporter,
+): SketchStage {
+  if (!isPlainObject(raw)) {
+    onAnomaly({
+      resource: 'stages',
+      cls: 'reset',
+      path: 'stages[]',
+      message: `${describeResource('stages')} có phần tử kiểu "${typeNameOf(raw)}" thay vì object`,
+      raw,
+    });
+    return { key: '', base: { styles: [] }, variants: [] };
+  }
+  const key = asStr(raw.key);
+  let styles: SketchStageStyle[] = [];
+  const rawBase = raw.base;
+  if (isPlainObject(rawBase)) {
+    const rawStyles = rawBase.styles;
+    if (Array.isArray(rawStyles)) {
+      styles = rawStyles.map(coerceStageStyle);
+    } else if (isPlainObject(rawStyles) && Object.values(rawStyles).every(isPlainObject) && Object.values(rawStyles).length > 0) {
+      // Object-map salvage ({"0":{…}}) — same real-world risk as the base workspace sheets.
+      onAnomaly({
+        resource: entityResourceKey('stages', key),
+        cls: 'convert',
+        path: `stages/${key || '?'}.base.styles`,
+        message: `stages/${key || '?'}.base.styles là object-map thay vì array (đã giữ nguyên ${Object.values(rawStyles).length} style)`,
+      });
+      styles = Object.values(rawStyles).map(coerceStageStyle);
+    } else if (rawStyles != null) {
+      onAnomaly({
+        resource: entityResourceKey('stages', key),
+        cls: 'reset',
+        path: `stages/${key || '?'}.base.styles`,
+        message: `stages/${key || '?'}.base.styles có kiểu "${typeNameOf(rawStyles)}" thay vì array`,
+        raw,
+      });
+    }
+  } else if (rawBase != null) {
+    onAnomaly({
+      resource: entityResourceKey('stages', key),
+      cls: 'reset',
+      path: `stages/${key || '?'}.base`,
+      message: `stages/${key || '?'}.base có kiểu "${typeNameOf(rawBase)}" thay vì object`,
+      raw,
+    });
+  }
+  if ('variants' in raw && raw.variants != null && !Array.isArray(raw.variants)) {
+    onAnomaly({
+      resource: entityResourceKey('stages', key),
+      cls: 'reset',
+      path: `stages/${key || '?'}.variants`,
+      message: `variants của ${describeResource(entityResourceKey('stages', key))} có kiểu "${typeNameOf(raw.variants)}" thay vì array`,
+      raw,
+    });
+  }
+  return {
+    key,
+    base: { styles },
+    variants: Array.isArray(raw.variants)
+      ? raw.variants.map((v) => coerceStageVariant(v, onAnomaly, key))
+      : [],
+  };
+}
+
+export function asStageArray(
+  v: unknown,
+  onAnomaly: SketchAnomalyReporter = noopAnomalyReporter,
+): SketchStage[] {
+  if (!Array.isArray(v)) {
+    onAnomaly({
+      resource: 'stages',
+      cls: 'reset',
+      path: 'stages',
+      message: `stages có kiểu "${typeNameOf(v)}" thay vì array`,
+      raw: v,
+    });
+    return [];
+  }
+  return v.map((el) => {
+    try {
+      return coerceStage(el, onAnomaly);
+    } catch (err) {
+      onAnomaly({
+        resource: 'stages',
+        cls: 'reset',
+        path: 'stages[]',
+        message: `${describeResource('stages')} có phần tử gây lỗi khi đọc (${err instanceof Error ? err.message : String(err)})`,
+      });
+      return { key: '', base: { styles: [] }, variants: [] };
     }
   });
 }

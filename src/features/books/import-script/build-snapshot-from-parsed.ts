@@ -11,7 +11,7 @@ import { createLogger } from '@/utils/logger';
 import type { Character } from '@/types/character-types';
 import type { Prop } from '@/types/prop-types';
 import type { Stage } from '@/types/stage-types';
-import type { Sketch, SketchEntity } from '@/types/sketch';
+import type { Sketch, SketchEntity, SketchStage } from '@/types/sketch';
 import type { ParsedEntityRow, ImportModalMeta } from './import-script-types';
 import type { ImportedWorkbook } from './parse-excel-workbook';
 import { buildSketchSpreadsFromWorkbook } from './sketch-spread-excel';
@@ -151,6 +151,26 @@ export function projectSketchEntities(
   }));
 }
 
+/** Stage projection — 2026-07-18 stage model: per-stage style workspace (`base.styles: []`) +
+ *  flat 2-cell variant imagery (empty until first generate). Text mapping mirrors
+ *  projectSketchEntities; stages carry NO height. */
+export function projectSketchStages(
+  entities: { key: string; variants: { key: string; visual_description: string }[] }[],
+): SketchStage[] {
+  return entities.map((e) => ({
+    key: e.key,
+    base: { styles: [] },
+    variants: e.variants.map((v) => ({
+      key: v.key,
+      description: '',
+      visual_design: v.visual_description,
+      art_language: '',
+      illustrations: [],
+      crops: [],
+    })),
+  }));
+}
+
 // ── Assemble ──────────────────────────────────────────────────────────────────
 
 /**
@@ -175,7 +195,7 @@ export function assembleSketchSnapshot(
     base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
     characters: projectSketchEntities(characters),
     props: projectSketchEntities(props),
-    stages: projectSketchEntities(stages),
+    stages: projectSketchStages(stages),
     spreads,
   };
 

@@ -73,10 +73,11 @@ describe('SPACE_TOOL_MATRIX.remix.edit — 3-state (Phase 1 wiring)', () => {
 describe('SPACE_TOOL_MATRIX.sketch-variant — crop-edit-only column', () => {
   const variant = SPACE_TOOL_MATRIX['sketch-variant'];
 
-  it('edit is exactly [inpaint, erasor]; generate + extract empty', () => {
+  it('edit is exactly [inpaint, erasor]; generate empty; extract crop-only', () => {
     expect(variant.edit).toEqual(['inpaint', 'erasor']);
     expect(variant.generate).toEqual([]);
-    expect(variant.extract).toEqual([]);
+    // 2026-07-17 rework: [⧉] reframes one candidate cell → extract = ['crop'] (was []).
+    expect(variant.extract).toEqual(['crop']);
   });
 
   it('inpaint + erasor resolve active (built + available in space)', () => {
@@ -95,6 +96,31 @@ describe('SPACE_TOOL_MATRIX.sketch-variant — crop-edit-only column', () => {
 
   it('lands on inpaint (never an unavailable tool)', () => {
     expect(resolveInitialKey(EDIT_TOOLS, variant.edit, undefined, DEFAULT_EDIT_TOOL)).toBe('inpaint');
+  });
+});
+
+describe('SPACE_TOOL_MATRIX.sketch-stage — identical to sketch-variant', () => {
+  const stage = SPACE_TOOL_MATRIX['sketch-stage'];
+
+  it('edit is exactly [inpaint, erasor]; generate empty; extract crop-only', () => {
+    expect(stage.edit).toEqual(['inpaint', 'erasor']);
+    expect(stage.generate).toEqual([]);
+    expect(stage.extract).toEqual(['crop']);
+  });
+
+  it('inpaint + erasor resolve active; tools outside the column unavailable', () => {
+    for (const key of ['inpaint', 'erasor']) {
+      const enabled = EDIT_TOOLS.find((t) => t.key === key)?.enabled ?? false;
+      expect(resolveToolGate(key, stage.edit, enabled)).toBe('active');
+    }
+    for (const key of ['outpaint', 'upscale', 'remove_object', 'remove_text', 'remove_background']) {
+      const enabled = EDIT_TOOLS.find((t) => t.key === key)?.enabled ?? false;
+      expect(resolveToolGate(key, stage.edit, enabled)).toBe('unavailable');
+    }
+  });
+
+  it('lands on inpaint (never an unavailable tool)', () => {
+    expect(resolveInitialKey(EDIT_TOOLS, stage.edit, undefined, DEFAULT_EDIT_TOOL)).toBe('inpaint');
   });
 });
 

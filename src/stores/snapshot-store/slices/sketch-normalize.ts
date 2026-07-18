@@ -45,7 +45,9 @@ import {
 } from './sketch-resource-registry';
 import {
   asEntityArray,
+  asStageArray,
   coerceEntity,
+  coerceStage,
   coerceStyle,
   isPlainObject,
   typeNameOf,
@@ -224,7 +226,7 @@ function normalizeBase(raw: unknown, onAnomaly: SketchAnomalyReporter): SketchBa
   };
 }
 
-/** One entity collection (`characters`/`props`/`stages`). Absent → []; malformed → reset. */
+/** One entity collection (`characters`/`props`). Absent → []; malformed → reset. */
 function entityArrayAt(
   raw: Record<string, unknown>,
   key: SketchEntityCollection,
@@ -416,7 +418,18 @@ export function normalizeSketch(
     base,
     characters: safeResource('characters', () => entityArrayAt(raw, 'characters', report), [], report),
     props: safeResource('props', () => entityArrayAt(raw, 'props', report), [], report),
-    stages: safeResource('stages', () => entityArrayAt(raw, 'stages', report), [], report),
+    stages: safeResource(
+      'stages',
+      () => {
+        // 2026-07-18 stage rework: dedicated coercers (per-stage base.styles[] + 2-cell sheets);
+        // OLD-shape stage blobs migrate here (text kept, variant images reset — cls 'convert').
+        const v = raw.stages;
+        if (v == null) return []; // legitimately new — no anomaly
+        return asStageArray(v, report);
+      },
+      [],
+      report,
+    ),
     spreads: safeResource(
       'spreads',
       () => {
@@ -446,7 +459,8 @@ export function normalizeSketch(
  * A peer's sync event refetches a SUB-NODE straight from DB jsonb (never through
  * `normalizeSketch`). Every addressable sketch sub-tree is covered (2026-07-17 — previously only
  * the entity kinds; `base`/`spreads` passed through UNVALIDATED and could crash downstream):
- *   ['characters'] / ['characters','2'] → entity array / node (rtype 3/4/5)
+ *   ['characters'] / ['characters','2'] → entity array / node (rtype 3/4)
+ *   ['stages'] / ['stages','1']          → stage array / node (rtype 5 — 2026-07-18 stage shape)
  *   ['base'] / ['base','character_sheet'] → base workspace / one sheet (rtype 11)
  *   ['spreads'] / ['spreads','0']        → spread collection / node (rtype 6)
  * Deeper paths (page image / textbox child writes) pass through — leaf payloads the canvas
@@ -462,6 +476,12 @@ export function coerceSketchNode(
 ): unknown {
   if (value == null) return value; // null → remove; undefined → rpc error (caller skips)
   const head = path[0];
+
+  if (head === 'stages') {
+    if (path.length === 1) return asStageArray(value, onAnomaly);
+    if (path.length === 2) return coerceStage(value, onAnomaly);
+    return value;
+  }
 
   if (ENTITY_KINDS.includes(head)) {
     const kind = head as SketchEntityCollection;

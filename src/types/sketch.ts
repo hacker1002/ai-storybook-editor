@@ -23,27 +23,64 @@ export interface SketchVariantCrop {
 }
 
 // char/prop variant: 4 text field + optional raw_sheet imagery (raw sheet + positional crops[]).
-// stage variant: no height/raw_sheet → `illustrations[]` generated directly.
+// (⚡ 2026-07-18: stages no longer use this shape — see SketchStageVariant below.)
 export interface SketchVariant {
   key: string;                                   // variant key (base, hero); ref = @{entity.key}/{key}
   description: string;                           // ⚡ replaces the legacy visual_description (Excel "description")
-  height?: number | null;                       // ⚡ cm (number, 2026-07-17) — char/prop only (Excel "height" parsed via parseHeightCm); stage has none
+  height?: number | null;                       // ⚡ cm (number, 2026-07-17) — char/prop only (Excel "height" parsed via parseHeightCm)
   visual_design: string;                        // Excel "visual_design"
   art_language: string;                         // Excel "art_language"
-  // char/prop only — ⚡ 2026-07-14: the single `crop` field is GONE; crops[] now live INSIDE raw_sheet.
+  // ⚡ 2026-07-14: the single `crop` field is GONE; crops[] now live INSIDE raw_sheet.
   raw_sheet?: {
     illustrations: Illustration[];               // raw 21:9 sheet versions (CUT SOURCE, not displayed). variant 'base': empty/absent (raw lives only in base workspace)
     crops: SketchVariantCrop[];                  // 4 positional cells cut from the selected sheet. variant 'base': 1 crop cloned from base.{kind}_sheet.styles[selected].crops[key], is_selected=true
   };
-  // stage only:
-  illustrations?: Illustration[];                // direct generate, no crop
 }
 
 // key matches the top-level snapshot entity key. (per-entity media_url REMOVED — imagery lives on base + per-variant)
+// char/prop only — stages carry their own SketchStage shape (2026-07-18 BREAKING rework).
 export interface SketchEntity {
   key: string;
   variants: SketchVariant[];
 }
+
+// ── Stage (per-stage style workspace + 2-cell sheets — DB-CHANGELOG 2026-07-18, BREAKING) ────
+// Each stage owns a PRIVATE style workspace (`base.styles[]` — no shared stage_sheet) plus flat
+// per-variant imagery. Every sheet (base style attempt AND variant) is 21:9 with EXACTLY 2 cells
+// = 2 different takes on the same stage → cut into 2 positional crops → the user locks 1 of 2.
+
+/** One positional cell cut from a 2-cell stage sheet — same shape as the char/prop variant cell
+ *  ({is_selected, illustrations}), just 2 cells per sheet instead of 4. */
+export type SketchStageCrop = SketchVariantCrop;
+
+/** One art-style attempt of a stage (stages[].base.styles[i]). */
+export interface SketchStageStyle {
+  style_prompt: string;
+  is_selected: boolean;                          // locked style — ≤1 true per stage (radio after the first lock)
+  image_references: ImageReference[];            // STYLE refs of this attempt (from the chosen art style)
+  illustrations: Illustration[];                 // 2-cell sheet versions (canonical, edit-able); non-empty → exactly 1 is_selected
+  crops: SketchStageCrop[];                      // 2 positional cells cut from the selected sheet; ≤1 is_selected
+}
+
+export interface SketchStageVariant {
+  key: string;                                   // 'base' | non-base (e.g. 'storm')
+  description: string;                           // Excel seed — NOT editable in the stage space
+  visual_design: string;                         // drives generate (API 11 base / 12 variant)
+  art_language: string;                          // drives generate — ⚡ stage has NO height
+  illustrations: Illustration[];                 // 2-cell sheet versions anchored on the locked base (non-base); base: [] (raw lives only in base.styles)
+  crops: SketchStageCrop[];                      // 2 positional (non-base); base: 1 clone crop is_selected (uniform read-path)
+}
+
+export interface SketchStage {
+  key: string;                                   // sketch.stages[].key (e.g. 'house_night')
+  base: { styles: SketchStageStyle[] };          // per-stage style workspace
+  variants: SketchStageVariant[];
+}
+
+/** Selection target inside the stage space — a base style attempt OR a non-base variant. */
+export type StageSelection =
+  | { stageKey: string; target: 'base'; styleIndex: number }
+  | { stageKey: string; target: 'variant'; variantKey: string }; // variantKey ≠ 'base'
 
 /** Lightweight reference to a non-base variant (variantKey ≠ 'base'). Lets the variant creative
  *  space enumerate variants across a kind without holding whole entity refs (reused by phase-05). */
@@ -212,11 +249,43 @@ export function getSketchSpreadEffectiveUrl(spread: SketchSpread): string | null
   return illustrations.find((i) => i.is_selected)?.media_url ?? illustrations[0]?.media_url ?? null;
 }
 
+// ── Stage effective read-path (pure — single source for slice, job slice, UI gates) ──────────
+
+/** Selected version's url → newest (index 0) → null. The canonical illustrations[] read-path. */
+export function effectiveIllustrationUrl(illustrations: Illustration[]): string | null {
+  return (
+    illustrations.find((i) => i.is_selected)?.media_url ?? illustrations[0]?.media_url ?? null
+  );
+}
+
+/** Locked cell's effective url out of a 2-cell crops[] — null when no cell is locked yet. */
+export function effectiveStageCropUrl(crops: SketchStageCrop[]): string | null {
+  const crop = crops.find((c) => c.is_selected);
+  return crop ? effectiveIllustrationUrl(crop.illustrations) : null;
+}
+
+/**
+ * Effective LOCKED base image of a stage: `styles[].find(is_selected)` → its locked crop → that
+ * crop's effective illustration. ANY broken link → null = base not locked yet (BLOCKS variant
+ * generate — mirror API 12 BASE_NOT_READY).
+ */
+export function effectiveStageBaseUrl(stage: SketchStage): string | null {
+  const style = stage.base.styles.find((s) => s.is_selected);
+  if (!style) return null;
+  return effectiveStageCropUrl(style.crops);
+}
+
+/** Effective official image of a stage variant (base INCLUDED — its single clone crop travels
+ *  the same path). null = no cell locked yet. */
+export function effectiveStageVariantUrl(variant: SketchStageVariant): string | null {
+  return effectiveStageCropUrl(variant.crops);
+}
+
 export interface Sketch {
   id: string | null;
   base: SketchBase;                             // ⚡ NEW — base sheet workspace (char + prop)
   characters: SketchEntity[];
   props: SketchEntity[];
-  stages: SketchEntity[];
+  stages: SketchStage[];                        // ⚡ 2026-07-18 — per-stage style workspace + 2-cell variant sheets
   spreads: SketchSpread[];
 }

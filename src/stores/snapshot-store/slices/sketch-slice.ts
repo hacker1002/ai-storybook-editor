@@ -4,7 +4,7 @@ import type {
   SketchEntity,
   SketchSpread,
   SketchVariant,
-  SketchEntityKind,
+  BaseKind,
   SketchPageType,
   ArtDirection,
   SketchTextboxContent,
@@ -98,16 +98,16 @@ export const createSketchSlice: StateCreator<
       // placeholder reaches the DB on the next NORMAL save. No edit → DB unchanged (fail-safe).
     }),
 
-  // --- Entity-level CRUD (keyed by kind) ---
+  // --- Entity-level CRUD (keyed by kind — char/prop only; stages live on SketchStageSlice) ---
 
-  setSketchEntities: (kind: SketchEntityKind, entities: SketchEntity[]) =>
+  setSketchEntities: (kind: BaseKind, entities: SketchEntity[]) =>
     set((state) => {
       log.debug('setSketchEntities', 'replace all', { kind, count: entities.length });
       state.sketch[kind] = entities;
       state.sync.isDirty = true;
     }),
 
-  upsertSketchEntity: (kind: SketchEntityKind, entity: SketchEntity) =>
+  upsertSketchEntity: (kind: BaseKind, entity: SketchEntity) =>
     set((state) => {
       const list = state.sketch[kind];
       const idx = list.findIndex((e) => e.key === entity.key);
@@ -117,14 +117,14 @@ export const createSketchSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  removeSketchEntity: (kind: SketchEntityKind, key: string) =>
+  removeSketchEntity: (kind: BaseKind, key: string) =>
     set((state) => {
       log.debug('removeSketchEntity', 'remove', { kind, key });
       state.sketch[kind] = state.sketch[kind].filter((e) => e.key !== key);
       state.sync.isDirty = true;
     }),
 
-  upsertSketchVariant: (kind: SketchEntityKind, entityKey: string, variant: SketchVariant) =>
+  upsertSketchVariant: (kind: BaseKind, entityKey: string, variant: SketchVariant) =>
     set((state) => {
       const entity = state.sketch[kind].find((e) => e.key === entityKey);
       if (entity) {
@@ -207,17 +207,6 @@ export const createSketchSlice: StateCreator<
       if (!crop) return;
       log.debug('setSketchVariantCropIllustrations', 'set', { kind, entityKey, variantKey, cropIndex, count: illustrations.length });
       crop.illustrations = illustrations;
-      state.sync.isDirty = true;
-    }),
-
-  setSketchVariantIllustrations: (kind, entityKey, variantKey, illustrations) =>
-    set((state) => {
-      const variant = state.sketch[kind]
-        .find((e) => e.key === entityKey)
-        ?.variants.find((v) => v.key === variantKey);
-      if (!variant) return;
-      log.debug('setSketchVariantIllustrations', 'set', { kind, entityKey, variantKey, count: illustrations.length });
-      variant.illustrations = illustrations;
       state.sync.isDirty = true;
     }),
 

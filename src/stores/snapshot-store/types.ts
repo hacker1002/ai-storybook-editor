@@ -4,11 +4,14 @@ import type {
   SketchEntity,
   SketchVariant,
   SketchVariantCrop,
-  SketchEntityKind,
   BaseKind,
   SketchBaseStyle,
   SketchBaseCrop,
   BaseEntityText,
+  SketchStage,
+  SketchStageStyle,
+  SketchStageVariant,
+  SketchStageCrop,
   SketchSpread,
   SketchPageType,
   ArtDirection,
@@ -47,6 +50,8 @@ import type {
 } from '@/types/spread-types';
 // Base-sheet generate accepts an optional model override; type reused from the api client (DRY).
 import type { SketchModelParams } from '@/apis/sketch-base-api';
+import type { StageModelParams } from '@/apis/sketch-stage-api';
+import type { StageSelection } from '@/types/sketch';
 // ADR-047 degraded-resource bookkeeping (type-only — sketch-normalize is a leaf, no cycle).
 import type { SketchDegradedEntry, SketchDegradedIntake } from './slices/sketch-normalize';
 
@@ -231,23 +236,23 @@ export interface SketchSlice {
   setSketchBaseStyleImageReferences: (kind: BaseKind, styleIndex: number, refs: ImageReference[]) => void;                        // persist uploaded style reference images (title + media_url)
   updateSketchBaseEntityText: (kind: BaseKind, entityKey: string, updates: Pick<Partial<BaseEntityText>, 'description' | 'height' | 'visual_design' | 'art_language'>) => void; // variants[base] text (all 4 fields editable via the merged Edit modal)
 
-  // Entity-level CRUD — `kind` selects the array (sketch.characters | props | stages)
-  setSketchEntities: (kind: SketchEntityKind, entities: SketchEntity[]) => void;
-  upsertSketchEntity: (kind: SketchEntityKind, entity: SketchEntity) => void;
-  removeSketchEntity: (kind: SketchEntityKind, key: string) => void;
-  upsertSketchVariant: (kind: SketchEntityKind, entityKey: string, variant: SketchVariant) => void;
+  // Entity-level CRUD — `kind` selects the array (sketch.characters | props). ⚡ 2026-07-18:
+  // stages left the shared shape — every stage mutation lives on SketchStageSlice below.
+  setSketchEntities: (kind: BaseKind, entities: SketchEntity[]) => void;
+  upsertSketchEntity: (kind: BaseKind, entity: SketchEntity) => void;
+  removeSketchEntity: (kind: BaseKind, key: string) => void;
+  upsertSketchVariant: (kind: BaseKind, entityKey: string, variant: SketchVariant) => void;
   updateSketchVariantText: (
-    kind: SketchEntityKind,
+    kind: BaseKind,
     key: string,
     variantKey: string,
     updates: Partial<Pick<SketchVariant, 'description' | 'height' | 'visual_design' | 'art_language'>>,
   ) => void;
-  // Per-variant imagery (char/prop raw_sheet.illustrations + raw_sheet.crops[]; stage illustrations) — generate append / re-cut / edit-image-modal
+  // Per-variant imagery (char/prop raw_sheet.illustrations + raw_sheet.crops[]) — generate append / re-cut / edit-image-modal
   setSketchVariantRawSheetIllustrations: (kind: BaseKind, entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
   setSketchVariantCrops: (kind: BaseKind, entityKey: string, variantKey: string, crops: SketchVariantCrop[]) => void;                     // ⚡ re-cut: replace raw_sheet.crops[] (base: 1 clone crop)
   selectSketchVariantCrop: (kind: BaseKind, entityKey: string, variantKey: string, cropIndex: number) => void;                            // ⚡ lock: set crops[cropIndex].is_selected true, clear others (≤1)
   setSketchVariantCropIllustrations: (kind: BaseKind, entityKey: string, variantKey: string, cropIndex: number, illustrations: Illustration[]) => void; // one cell whole-set (⚡ + cropIndex)
-  setSketchVariantIllustrations: (kind: 'stages', entityKey: string, variantKey: string, illustrations: Illustration[]) => void;
   // Spread-level CRUD — ships with the sketch-spread creative space.
   // Art-direction is keyed by page `type` (SketchPage has no id); textbox content is per-language.
   setSketchSpreads: (spreads: SketchSpread[]) => void;
@@ -280,6 +285,46 @@ export interface SketchSlice {
     patch: Partial<SketchTextboxContent>,
   ) => void;
   deleteSketchTextbox: (spreadId: string, textboxId: string) => void;
+}
+
+// ── SketchStageSlice — 2026-07-18 stage model (per-stage base.styles[] + 2-cell sheets) ──────
+// Pure write sinks for `sketch.stages[]` (slices/sketch-stage-slice.ts). Invariants (≤1
+// is_selected, radio-after-first style lock, derived variants[base] clone with
+// clear-on-broken-chain) are enforced INSIDE the setters — callers never manage flags manually.
+export interface SketchStageSlice {
+  /** Import replace-all (Excel tab `Stages`). */
+  setSketchStages: (stages: SketchStage[]) => void;
+  /** Append one style attempt (GenerateStageStyleModal mode 'add'). */
+  addSketchStageStyle: (stageKey: string, style: SketchStageStyle) => void;
+  /** Job-slice rollback of a failed 'add' (no raw landed). Delete-style UI is deferred. */
+  removeSketchStageStyle: (stageKey: string, styleIndex: number) => void;
+  /** Regenerate: refresh the attempt's prompt/refs before the job overwrites its sheet. */
+  updateSketchStageStyleConfig: (
+    stageKey: string,
+    styleIndex: number,
+    updates: Partial<Pick<SketchStageStyle, 'style_prompt' | 'image_references'>>,
+  ) => void;
+  /** 🔒 lock style — exclusive is_selected/stage + base-clone refresh. Radio after first lock
+   *  (clicking the locked style = no-op). */
+  setSketchStageStyleSelected: (stageKey: string, styleIndex: number) => void;
+  /** Pick 1/2 base cell of one style attempt (+ clone refresh when that style is locked). */
+  selectSketchStageBaseCrop: (stageKey: string, styleIndex: number, cropIndex: number) => void;
+  /** Pick 1/2 variant cell (non-base). */
+  selectSketchStageVariantCrop: (stageKey: string, variantKey: string, cropIndex: number) => void;
+  /** Whole-set canonical writes — EditImageModal / generate-job bindings. */
+  setSketchStageStyleIllustrations: (stageKey: string, styleIndex: number, illustrations: Illustration[]) => void;
+  setSketchStageStyleCrops: (stageKey: string, styleIndex: number, crops: SketchStageCrop[]) => void;              // ⚡ re-cut: lands 0 picked; locked style → clone re-derives (clears)
+  setSketchStageBaseCropIllustrations: (stageKey: string, styleIndex: number, cropIndex: number, illustrations: Illustration[]) => void;
+  setSketchStageVariantIllustrations: (stageKey: string, variantKey: string, illustrations: Illustration[]) => void;
+  setSketchStageVariantCrops: (stageKey: string, variantKey: string, crops: SketchStageCrop[]) => void;            // ⚡ re-cut: lands 0 picked
+  setSketchStageVariantCropIllustrations: (stageKey: string, variantKey: string, cropIndex: number, illustrations: Illustration[]) => void;
+  /** Partial-merge of the 2 generate-driving fields (visual_design / art_language) — stage has
+   *  NO height; description is import-only. */
+  updateSketchStageVariantText: (
+    stageKey: string,
+    variantKey: string,
+    updates: Partial<Pick<SketchStageVariant, 'visual_design' | 'art_language'>>,
+  ) => void;
 }
 
 export interface DocsSlice {
@@ -723,61 +768,11 @@ export interface ImageTaskSlice {
   clearAllTasks: () => void;
 }
 
-// --- Sketch Generate Job Types (ephemeral, not persisted to DB) ---
-// One job = N entities of a single kind, generated SEQUENTIALLY (1 sheet API call/entity).
-// Distinct from ImageTaskSlice (parallel per-variant illustration tasks): sketch-sheet
-// generation writes entity.media_url + flushes DB per-entity so the UI fills in gradually.
-
-export type SketchTaskStatus = 'pending' | 'running' | 'completed' | 'error';
-
-export interface SketchGenerateTask {
-  entityKey: string;
-  entityName: string;        // titleCase(key) — for toast/aria copy
-  variantCount: number;      // len(variants) captured at enqueue
-  status: SketchTaskStatus;
-  imageUrl?: string;
-  error?: string;            // friendly message or backend code
-  /** true = target was 409-blocked by another editor (collab) and skipped — NOT a
-   *  generation failure. Kept distinct from `status:'error'` so the summary toast /
-   *  per-row UI can separate "being edited" skips from real failures. */
-  skipped?: boolean;
-  startedAt?: string;
-  completedAt?: string;
-}
-
-export interface SketchGenerateJob {
-  id: string;
-  kind: SketchEntityKind;
-  status: 'running' | 'completed' | 'cancelled';
-  tasks: SketchGenerateTask[];
-  currentIndex: number;      // -1 when not started / finished
-  cancelRequested: boolean;
-  /** collab edit-lock: count of targets skipped because another editor holds the lock. */
-  skipped: number;
-  /** display names of the skipped targets (for the summary toast / detail copy). */
-  skippedNames: string[];
-  createdAt: string;
-  completedAt?: string;
-}
-
-export interface StartSketchGenerateJobParams {
-  kind: SketchEntityKind;
-  entityKeys: string[];      // target set (order preserved)
-  artStyleId: string;        // caller resolves book.artstyle_id, must be non-null
-}
-
-export interface SketchGenerateJobSlice {
-  sketchGenerateJob: SketchGenerateJob | null;
-  startSketchGenerateJob: (params: StartSketchGenerateJobParams) => void;
-  cancelSketchGenerateJob: () => void;
-  dismissSketchGenerateJob: () => void;
-}
-
 // --- Sketch Spread Generate Job Types (ephemeral, not persisted to DB) ---
 // One job = N spreads, generated SEQUENTIALLY (1 spread-image API call/spread) in DOC-ORDER.
-// Distinct from SketchGenerateJobSlice (entity sheets): here each spread's result is prepended as
-// a versioned backdrop (addSketchSpreadImageVersion) and the snapshot is AWAIT-flushed to the DB
-// before the next spread runs, so the backend can read prior spreads for consistency.
+// Each spread's result is prepended as a versioned backdrop (addSketchSpreadImageVersion) and the
+// snapshot is AWAIT-flushed to the DB before the next spread runs, so the backend can read prior
+// spreads for consistency.
 
 export type SketchSpreadTaskStatus = 'pending' | 'running' | 'completed' | 'error';
 
@@ -893,7 +888,51 @@ export interface SketchVariantGenerateJobSlice {
   dismissVariantSheetGenerateError: () => void;
 }
 
-export type SnapshotStore = DocsSlice & SketchSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & TypographyApplySlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchGenerateJobSlice & SketchSpreadGenerateJobSlice & SketchBaseGenerateJobSlice & SketchVariantGenerateJobSlice & {
+// --- Sketch Stage Generate Op Types (ephemeral, not persisted to DB) ---
+// One op = ONE stage sheet target — a base style attempt (11, STATELESS → auto-cut 10) OR a
+// non-base variant (12, SNAPSHOT-READING: flush-before → generate → auto-cut 10). SINGLE-FLIGHT
+// (at most one op at a time; cross-job guard useIsAnySketchGenerating gates every sketch
+// Generate button). The op target IS a StageSelection — the same identity the UI selects by,
+// so per-row/per-content status resolves by simple comparison.
+
+export type StageGeneratePhase = 'generate' | 'cut'; // generate = 11|12 (AI); cut = 10 (CV, auto)
+
+export interface StageSheetGenerateOp {
+  target: StageSelection;
+  phase: StageGeneratePhase;
+  startedAt: string;
+  /** classified friendly message; kept on the op until dismiss (content-area shows it inline). */
+  error?: string;
+}
+
+export interface StartStageBaseSheetGenerateParams {
+  stageKey: string;
+  mode: 'add' | 'regenerate';
+  styleIndex?: number; // required for 'regenerate'; ignored for 'add' (job appends a style)
+  stylePrompt: string;
+  referenceImages: ImageReference[]; // hosted art-style refs {title, media_url} — persisted on the style + sent as media_url
+  artStyleId: string; // chosen sketch art-style (defaults to book.sketchstyle_id; caller validates non-null)
+  modelParams?: StageModelParams; // optional override (allowlist group `sketch-base`); omit → DB default
+}
+
+export interface SketchStageGenerateJobSlice {
+  stageSheetGenerateOp: StageSheetGenerateOp | null;
+  /** 2-phase chain for ONE style attempt: 11 (stateless — base text inline from the store, NO
+   *  flush-before) → auto-cut 10 cellCount=2 → crops[] (0 picked). */
+  startStageBaseSheetGenerate: (params: StartStageBaseSheetGenerateParams) => void;
+  /** Cut-only re-run on the style's CURRENT effective raw (call-site: raw edited → crops stale).
+   *  OVERWRITES styles[i].crops[] with 2 fresh unpicked cells (locked style → clone clears). */
+  recropStageBaseSheet: (stageKey: string, styleIndex: number) => void;
+  /** 2-phase chain for ONE non-base variant: flush stage node (12 reads the DB) → 12 → auto-cut
+   *  10 cellCount=2. FE mirrors the 422 gates (BASE_NOT_READY / EMPTY_VARIANT_DESCRIPTION). */
+  startStageVariantSheetGenerate: (stageKey: string, variantKey: string) => void;
+  /** Cut-only re-run on the variant's CURRENT effective raw (raw edited → crops stale). */
+  recropStageVariantSheet: (stageKey: string, variantKey: string) => void;
+  /** Clear an op that settled with an error (so the notifications hook toasts it once). */
+  dismissStageSheetGenerateError: () => void;
+}
+
+export type SnapshotStore = DocsSlice & SketchSlice & SketchStageSlice & MetaSlice & FetchSlice & DummiesSlice & IllustrationSlice & RetouchSlice & TypographyApplySlice & QuizSlice & PropsSlice & CharactersSlice & StagesSlice & ImageTaskSlice & SketchSpreadGenerateJobSlice & SketchBaseGenerateJobSlice & SketchVariantGenerateJobSlice & SketchStageGenerateJobSlice & {
   initSnapshot: (data: { docs?: ManuscriptDoc[]; sketch?: Sketch; dummies?: ManuscriptDummy[]; illustration?: IllustrationData; props?: Prop[]; characters?: Character[]; stages?: Stage[]; meta?: Partial<SnapshotMeta> }) => void;
   resetSnapshot: () => void;
 };

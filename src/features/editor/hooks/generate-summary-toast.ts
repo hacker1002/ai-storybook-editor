@@ -1,11 +1,8 @@
 // generate-summary-toast.ts — shared summary-count helpers for the sketch generate-job
-// notification toasts (entity sheets + spread images). Both jobs end with the same
+// notification toasts (spread images; historically also entity sheets). Jobs end with the same
 // "done/total generated · K skipped · M failed" roll-up shape; this keeps that copy DRY.
 
-import type {
-  SketchGenerateJob,
-  SketchSpreadGenerateJob,
-} from '@/stores/snapshot-store/types';
+import type { SketchSpreadGenerateJob } from '@/stores/snapshot-store/types';
 
 export interface GenerateSummaryCounts {
   /** tasks that produced a result. */
@@ -24,7 +21,7 @@ export interface GenerateSummaryCounts {
  * those skips so the two never double-count.
  */
 export function summarizeGenerateJob(
-  job: SketchGenerateJob | SketchSpreadGenerateJob,
+  job: SketchSpreadGenerateJob,
 ): GenerateSummaryCounts {
   const done = job.tasks.filter((t) => t.status === 'completed').length;
   const skipped = job.skipped ?? 0;

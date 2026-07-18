@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  useSketchEntities,
+  useSketchStages,
   useSketchSpreadById,
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
@@ -100,7 +100,7 @@ interface StageSelectProps {
  *  dropdown portals to body → its z must clear the canvas-lifted dialog (CANVAS_DIALOG_POPOVER_Z),
  *  else it paints behind the modal. */
 function StageSelect({ pageType, value, onChange }: StageSelectProps) {
-  const stages = useSketchEntities('stages');
+  const stages = useSketchStages();
   const label = AD_LABELS.stage;
   const options = useMemo(() => {
     const refs = stages.flatMap((entity) =>

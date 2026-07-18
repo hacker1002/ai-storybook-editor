@@ -22,6 +22,7 @@ import { PropsCreativeSpace } from '../components/props-creative-space';
 import { StagesCreativeSpace } from '../components/stages-creative-space';
 import { CharactersCreativeSpace } from '../components/characters-creative-space';
 import { SketchVariantsCreativeSpace } from '../components/sketch-variants-creative-space';
+import { SketchStagesCreativeSpace } from '../components/sketch-stages-creative-space';
 import { SketchSpreadsCreativeSpace } from '../components/sketch-spreads-creative-space';
 import { SketchBaseSpace } from '../components/sketch-base-creative-space';
 import { SketchLineupSpace } from '../components/sketch-lineup-creative-space';
@@ -42,10 +43,10 @@ import { useCollabUiActive, useCollabHolding, useCollabSavePhase, useEditSession
 import type { CreativeSpaceType, PipelineStep, Language, SaveStatus } from '@/types/editor';
 import { createLogger } from '@/utils/logger';
 import { useImageTaskNotifications } from '../hooks/use-image-task-notifications';
-import { useSketchGenerateNotifications } from '../hooks/use-sketch-generate-notifications';
 import { useSketchSpreadGenerateNotifications } from '../hooks/use-sketch-spread-generate-notifications';
 import { useBaseSheetGenerateNotifications } from '../hooks/use-base-sheet-generate-notifications';
 import { useVariantSheetGenerateNotifications } from '../hooks/use-variant-sheet-generate-notifications';
+import { useStageSheetGenerateNotifications } from '../hooks/use-stage-sheet-generate-notifications';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useFlushOnHidden } from '../hooks/use-flush-on-hidden';
 
@@ -95,8 +96,6 @@ export function EditorPage() {
   // distinct from background_jobs). Remix/export/render/transcode job toasts now
   // live in the app-root useJobNotifications() (ADR-037).
   useImageTaskNotifications();
-  // Summary toast for the sequential sketch-sheet generate job (running → terminal).
-  useSketchGenerateNotifications();
   // Summary toast for the sequential sketch spread-image generate job (running → terminal).
   useSketchSpreadGenerateNotifications();
   // Error toast for the single-flight base-sheet generate op (settled-with-error → toast + dismiss).
@@ -104,6 +103,8 @@ export function EditorPage() {
   // Error toast for the single-flight variant-sheet generate op (settled-with-error → toast + dismiss;
   // the NO_SNAPSHOT precondition is toasted by the slice directly, so the hook only dismisses it).
   useVariantSheetGenerateNotifications();
+  // Error toast for the single-flight STAGE-sheet generate op (same contract as the variant hook).
+  useStageSheetGenerateNotifications();
 
   // Local UI state
   // Placeholder default only — overwritten on mount (loadData) and on step change by
@@ -318,10 +319,10 @@ export function EditorPage() {
       // generate → auto-cut → pick 1/4 → per-crop edit.
       case 'sketch-variant':
         return <SketchVariantsCreativeSpace />;
-      // Stages — component TBD. The old shared 3-kind SketchVariantsSpace(kind) was removed; stage
-      // generates directly (no base sheet / crop) and will be redesigned separately. Coming-soon for now.
+      // Stages — per-stage style workspace (base.styles[]) + 2-cell variant sheets (2026-07-18
+      // rework). 9th collab space (per-stage held lock, rtype 5).
       case 'sketch-stage':
-        return <MockCreativeSpace name={activeCreativeSpace} />;
+        return <SketchStagesCreativeSpace />;
       // sketch-spread (storyboard) — standalone space.
       case 'sketch-spread':
         return <SketchSpreadsCreativeSpace />;

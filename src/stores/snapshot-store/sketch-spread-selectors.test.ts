@@ -29,8 +29,8 @@ describe('sketch spread selectors', () => {
   beforeEach(() => {
     act(() => {
       useSnapshotStore.setState((s) => {
-        s.sketchGenerateJob = null;
         s.sketchSpreadGenerateJob = null;
+        s.baseSheetGenerateOp = null;
       });
     });
   });
@@ -41,12 +41,12 @@ describe('sketch spread selectors', () => {
       expect(result.current).toBe(false);
     });
 
-    it('true when the ENTITY-sheet job is running', () => {
+    it('true when the BASE-sheet op is running', () => {
       const { result } = renderHook(() => useIsAnySketchGenerating());
       act(() => {
         useSnapshotStore.setState((s) => {
-          // Minimal running entity job (only status is read by the selector).
-          s.sketchGenerateJob = { status: 'running' } as never;
+          // Minimal running base op (only null-ness is read by the selector).
+          s.baseSheetGenerateOp = { phase: 'generating' } as never;
         });
       });
       expect(result.current).toBe(true);

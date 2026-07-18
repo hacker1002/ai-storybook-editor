@@ -24,7 +24,7 @@ import type { EditToolKey } from './edit-image-modal/edit-image-modal-constants'
 import type { ExtractTabKey } from './extract-image-modal/extract-image-modal-constants';
 
 /** Creative space whose image toolbar mounts the shared Generate/Edit/Extract modals. */
-export type ToolSpace = 'raw' | 'object' | 'remix' | 'sketch' | 'sketch-variant';
+export type ToolSpace = 'raw' | 'object' | 'remix' | 'sketch' | 'sketch-variant' | 'sketch-stage';
 
 /** Per-space availability lists (gate #1). A key present here is available-in-space; the
  *  modal registry's `enabled` flag still decides active vs coming-soon. */
@@ -72,6 +72,15 @@ export const SPACE_TOOL_MATRIX: Record<ToolSpace, SpaceToolConfig> = {
     generate: [],
     edit: ['inpaint', 'erasor'], // region redraw + erase — on the raw sheet or one crop cell
     extract: ['crop'],           // reframe one candidate cell → new version
+  },
+  'sketch-stage': {
+    // Identical to sketch-variant (design sketch-stages README §4.4): caller-owns-write on the
+    // 2-cell stage sheets — an edit/extract result maps back onto the target's own illustrations
+    // (base style raw/crop or variant raw/crop), never a spawned layer. Generate = the dedicated
+    // ＋/✨ 2-phase jobs (11|12 → auto-cut 10), NOT this image toolbar.
+    generate: [],
+    edit: ['inpaint', 'erasor'],
+    extract: ['crop'],
   },
 };
 

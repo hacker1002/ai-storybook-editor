@@ -48,7 +48,7 @@ const legacyEntity = (key: string, height: unknown) => ({
   variants: [{ key: 'v0', description: '', visual_design: '', art_language: '', height }],
 });
 
-const heightOf = (kind: 'characters' | 'props' | 'stages', idx = 0) =>
+const heightOf = (kind: 'characters' | 'props', idx = 0) =>
   useSnapshotStore.getState().sketch[kind][idx]?.variants[0]?.height;
 
 describe('content-sync merge — legacy sketch `height` string is coerced at the boundary', () => {

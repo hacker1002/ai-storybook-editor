@@ -142,7 +142,7 @@ describe('useCropsTabState — saveBox', () => {
     expect(onUpsert).toHaveBeenCalledTimes(1);
     const arg = onUpsert!.mock.calls[0][0] as CropPreset;
     expect(arg.title).toBe('Custom 1');
-    expect(arg.geometry).toEqual({ x: 35, y: 35, w: 30, h: 30 });
+    expect(arg.geometry).toEqual({ x: 10, y: 10, w: 80, h: 80 });
     expect(result.current.boxes[0].presetId).toBe(arg.id); // box linked
   });
 
@@ -202,7 +202,7 @@ describe('useCropsTabState — renameBox (auto re-saves current version)', () =>
     expect(onUpsert).toHaveBeenCalledTimes(1);
     const arg = onUpsert!.mock.calls[0][0] as CropPreset;
     expect(arg.title).toBe('Hero');
-    expect(arg.geometry).toEqual({ x: 35, y: 35, w: 30, h: 30 });
+    expect(arg.geometry).toEqual({ x: 10, y: 10, w: 80, h: 80 });
     expect(result.current.boxes[0].presetId).toBe(arg.id); // box now linked
   });
 
@@ -296,7 +296,7 @@ describe('useCropsTabState — commitExtract', () => {
     expect(out).toHaveLength(1);
     expect(out[0].sourceTab).toBe('crop');
     expect(out[0].title).toBe('Scene - Custom 1');
-    expect(out[0].meta?.geometry).toEqual({ x: 35, y: 35, w: 30, h: 30 });
+    expect(out[0].meta?.geometry).toEqual({ x: 10, y: 10, w: 80, h: 80 });
     expect(out[0].meta?.ratio).toBe('1:1');
     expect(out[0].meta?.tag).toBeUndefined(); // frame-only — no tag
   });

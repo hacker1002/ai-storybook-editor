@@ -23,7 +23,7 @@ export interface GenerateSpreadImageParams {
   page: SketchGeneratePage;
   /** Optional "W:H" override; omit to let the backend pick its per-page default. */
   targetRatio?: string;
-  // modelParams omitted in v1 (KISS, parity with sketch-sheet-api).
+  // modelParams omitted in v1 (KISS).
 }
 
 export interface GenerateSpreadImageResult {

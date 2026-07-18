@@ -1,6 +1,6 @@
 // sketch-base-api.ts — client for the base-sheet workflow (design store #14, api 05/06). This file
 // owns ONLY the RAW-sheet generate call (05|06 dispatched by kind — all base entities of one kind laid
-// out as cells). Mirrors sketch-sheet-api.ts: flat apis/*.ts + callImageApi<R> (X-API-Key + Bearer
+// out as cells). Convention: flat apis/*.ts + callImageApi<R> (X-API-Key + Bearer
 // built in). Never throws — returns Result | ImageApiFailure, with errorCode preserved so the slice can
 // classify (LLM_ERROR / ART_STYLE_NO_REFERENCES …).
 //

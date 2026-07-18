@@ -1,6 +1,6 @@
 // use-sketch-spread-generate-notifications.ts — watches the sketch SPREAD-image generate job and
 // fires one summary toast when it transitions running → terminal (completed | cancelled), then
-// dismisses the job. Mount once at editor-page level (like use-sketch-generate-notifications) so
+// dismisses the job. Mount once at editor-page level so
 // the toast fires regardless of which creative space is active.
 
 import { useEffect, useRef } from 'react';

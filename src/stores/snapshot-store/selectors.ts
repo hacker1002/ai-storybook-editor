@@ -10,6 +10,9 @@ import type {
   SketchSpread,
   SketchBase,
   SketchBaseStyle,
+  SketchStage,
+  SketchStageStyle,
+  SketchStageVariant,
   BaseKind,
   BaseEntityText,
   VariantRef,
@@ -21,7 +24,8 @@ import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/i
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase, VariantSheetGenerateOp, VariantGeneratePhase } from './types';
+import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase, VariantSheetGenerateOp, VariantGeneratePhase, StageSheetGenerateOp, StageGeneratePhase } from './types';
+import type { StageSelection } from '@/types/sketch';
 import type {
   BaseSpread,
   SpreadImage,
@@ -56,6 +60,8 @@ const EMPTY_PROPS: Prop[] = [];
 const EMPTY_CHARACTERS: Character[] = [];
 const EMPTY_STAGES: Stage[] = [];
 const EMPTY_SKETCH_ENTITIES: SketchEntity[] = [];
+const EMPTY_SKETCH_STAGES: SketchStage[] = [];
+const EMPTY_STAGE_STYLES: SketchStageStyle[] = [];
 const EMPTY_IMAGE_TASKS: ImageTask[] = [];
 const EMPTY_SECTIONS: Section[] = [];
 const EMPTY_BRANCHES: Branch[] = [];
@@ -152,23 +158,52 @@ export const useSketchBaseEntityText = (kind: BaseKind, key: string): BaseEntity
     }),
   );
 
-// Sketch entity selectors — keyed by kind (characters | props | stages).
+// Sketch entity selectors — keyed by kind (characters | props). ⚡ 2026-07-18: stages left the
+// shared entity shape — see the stage selectors below.
 // useSketchEntityKeys mirrors useCharacterKeys: single .map() under useShallow is the
 // proven flat-string[] pattern (NOT the object-of-arrays anti-pattern that loops).
-export const useSketchEntities = (kind: SketchEntityKind): SketchEntity[] =>
+export const useSketchEntities = (kind: BaseKind): SketchEntity[] =>
   useSnapshotStore((s) => s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES);
 export const useSketchEntityByKey = (
-  kind: SketchEntityKind,
+  kind: BaseKind,
   key: string
 ): SketchEntity | undefined =>
   useSnapshotStore((s) => (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES).find((e) => e.key === key));
-export const useSketchEntityKeys = (kind: SketchEntityKind): string[] =>
+export const useSketchEntityKeys = (kind: BaseKind): string[] =>
   useSnapshotStore(useShallow((s) => (s.sketch[kind] ?? EMPTY_SKETCH_ENTITIES).map((e) => e.key)));
+
+// ── Stage selectors (2026-07-18 model — per-stage base.styles[] + 2-cell variant sheets) ──────
+// Ref-stability discipline: whole-object store refs / find() results are Object.is-stable — no
+// useShallow; the keys list is the proven flat-string[] useShallow pattern. NEVER return a fresh
+// object-of-arrays through useShallow (memory: nested-array footgun → render loop).
+export const useSketchStages = (): SketchStage[] =>
+  useSnapshotStore((s) => s.sketch.stages ?? EMPTY_SKETCH_STAGES);
+export const useSketchStageKeys = (): string[] =>
+  useSnapshotStore(useShallow((s) => (s.sketch.stages ?? EMPTY_SKETCH_STAGES).map((st) => st.key)));
+export const useSketchStageByKey = (stageKey: string): SketchStage | undefined =>
+  useSnapshotStore((s) => (s.sketch.stages ?? EMPTY_SKETCH_STAGES).find((st) => st.key === stageKey));
+export const useSketchStageBaseStyles = (stageKey: string): SketchStageStyle[] =>
+  useSnapshotStore(
+    useShallow(
+      (s) =>
+        (s.sketch.stages ?? EMPTY_SKETCH_STAGES).find((st) => st.key === stageKey)?.base.styles ??
+        EMPTY_STAGE_STYLES, // raw ref (no .map) → useShallow is index-stable
+    ),
+  );
+export const useSketchStageVariantByKey = (
+  stageKey: string,
+  variantKey: string,
+): SketchStageVariant | undefined =>
+  useSnapshotStore((s) =>
+    (s.sketch.stages ?? EMPTY_SKETCH_STAGES)
+      .find((st) => st.key === stageKey)
+      ?.variants.find((v) => v.key === variantKey),
+  );
 
 // Targeted variant read (whole-object store ref → Object.is-stable; no useShallow). Used by the
 // variant creative space content area + gate. Returns undefined until the variant exists.
 export const useSketchVariantByKey = (
-  kind: SketchEntityKind,
+  kind: BaseKind,
   entityKey: string,
   variantKey: string,
 ): SketchVariant | undefined =>
@@ -244,39 +279,9 @@ export const useSketchSpreadIds = (): string[] =>
 export const useSketchSpreadById = (spreadId: string): SketchSpread | undefined =>
   useSnapshotStore((s) => s.sketch.spreads.find((sp) => sp.id === spreadId));
 
-// Sketch generate-job selectors (ephemeral, not persisted).
-// Ref-stability matters (memory: useShallow footgun on object-of-fresh-arrays):
-//  - useSketchGenerateJob returns the stable store ref directly (Object.is) — no useShallow.
-//  - useIsSketchGenerating returns a boolean primitive — no useShallow.
-//  - useSketchGenerateProgress / useSketchEntityGenerating build fresh objects of PRIMITIVES
-//    only → useShallow is safe (shallow-eq on strings/bools, never on nested arrays).
-export const useSketchGenerateJob = () => useSnapshotStore((s) => s.sketchGenerateJob);
-
-export const useIsSketchGenerating = (): boolean =>
-  useSnapshotStore((s) => s.sketchGenerateJob?.status === 'running');
-
-export const useSketchGenerateProgress = () =>
-  useSnapshotStore(
-    useShallow((s) => {
-      const job = s.sketchGenerateJob;
-      if (!job) return null;
-      const done = job.tasks.filter((t) => t.status === 'completed' || t.status === 'error').length;
-      return { done, total: job.tasks.length };
-    }),
-  );
-
-export const useSketchEntityGenerating = (kind: SketchEntityKind, entityKey: string) =>
-  useSnapshotStore(
-    useShallow((s) => {
-      const job = s.sketchGenerateJob;
-      const task = job && job.kind === kind ? job.tasks.find((t) => t.entityKey === entityKey) : undefined;
-      const status = task?.status ?? 'idle';
-      return { status, isGenerating: status === 'running', error: task?.error };
-    }),
-  );
-
-// Sketch SPREAD generate-job selectors (ephemeral). Same ref-stability discipline as the entity
-// job above: stable ref / boolean → no useShallow; fresh objects of PRIMITIVES → useShallow safe.
+// Sketch SPREAD generate-job selectors (ephemeral). Ref-stability discipline (memory: useShallow
+// footgun on object-of-fresh-arrays): stable ref / boolean → no useShallow; fresh objects of
+// PRIMITIVES → useShallow safe.
 export const useSketchSpreadGenerateJob = () => useSnapshotStore((s) => s.sketchSpreadGenerateJob);
 
 export const useIsSketchSpreadGenerating = (): boolean =>
@@ -344,15 +349,43 @@ export const useVariantSheetGenerateStatus = (
     }),
   );
 
-// Unified 1-sketch-job guard: true while ANY sketch generation runs — the entity-sheet job OR the
-// spread-image job OR the base-sheet op. Single store read (all 3 Generate buttons + the nav-guard
-// share it → no concurrent burst). Boolean → no useShallow.
+// Sketch STAGE-sheet generate-op selectors (ephemeral, single-flight). Same ref-stability
+// discipline: stable ref → no useShallow; fresh object of PRIMITIVES → useShallow safe.
+export const useStageSheetGenerateOp = (): StageSheetGenerateOp | null =>
+  useSnapshotStore((s) => s.stageSheetGenerateOp);
+
+/** Per-target status keyed by the SAME StageSelection identity the UI selects by. Busy = matching
+ *  op with no error yet — covers BOTH phases (generate + cut). */
+export const useStageGenerateStatus = (
+  target: StageSelection | null,
+): { isBusy: boolean; phase?: StageGeneratePhase; error?: string } =>
+  useSnapshotStore(
+    useShallow((s) => {
+      const op = s.stageSheetGenerateOp;
+      if (!op || !target || !stageTargetsEqual(op.target, target)) return { isBusy: false };
+      return { isBusy: !op.error, phase: op.phase, error: op.error };
+    }),
+  );
+
+/** Pure target identity compare (exported for the space's per-row status resolver). */
+export function stageTargetsEqual(a: StageSelection, b: StageSelection): boolean {
+  if (a.stageKey !== b.stageKey || a.target !== b.target) return false;
+  if (a.target === 'base' && b.target === 'base') return a.styleIndex === b.styleIndex;
+  if (a.target === 'variant' && b.target === 'variant') return a.variantKey === b.variantKey;
+  return false;
+}
+
+// Unified 1-sketch-job guard: true while ANY sketch generation runs — the spread-image job OR the
+// base-sheet op OR the variant-sheet op OR the stage-sheet op. Single store read (all Generate
+// buttons + the nav-guard share it → no concurrent burst). Boolean → no useShallow.
+// NOTE: variantSheetGenerateOp is deliberately NOT in this guard (pre-existing semantics — the
+// variant space self-guards); stage joins the guard per plan Phase 03.
 export const useIsAnySketchGenerating = (): boolean =>
   useSnapshotStore(
     (s) =>
-      s.sketchGenerateJob?.status === 'running' ||
       s.sketchSpreadGenerateJob?.status === 'running' ||
-      s.baseSheetGenerateOp != null,
+      s.baseSheetGenerateOp != null ||
+      s.stageSheetGenerateOp != null,
   );
 
 // Fetch state selectors
@@ -769,16 +802,26 @@ export const useSnapshotActions = () =>
       setSketchBaseStyleCrops: s.setSketchBaseStyleCrops,
       setSketchBaseCropIllustrations: s.setSketchBaseCropIllustrations,
       updateSketchBaseEntityText: s.updateSketchBaseEntityText,
-      // Sketch per-variant imagery (char/prop raw_sheet.illustrations + raw_sheet.crops[]; stage illustrations)
+      // Sketch per-variant imagery (char/prop raw_sheet.illustrations + raw_sheet.crops[])
       setSketchVariantRawSheetIllustrations: s.setSketchVariantRawSheetIllustrations,
       setSketchVariantCrops: s.setSketchVariantCrops,
       selectSketchVariantCrop: s.selectSketchVariantCrop,
       setSketchVariantCropIllustrations: s.setSketchVariantCropIllustrations,
-      setSketchVariantIllustrations: s.setSketchVariantIllustrations,
-      // Sketch generate job (sequential entity-sheet generation)
-      startSketchGenerateJob: s.startSketchGenerateJob,
-      cancelSketchGenerateJob: s.cancelSketchGenerateJob,
-      dismissSketchGenerateJob: s.dismissSketchGenerateJob,
+      // Sketch stage (2026-07-18 model — per-stage style workspace + 2-cell variant sheets)
+      setSketchStages: s.setSketchStages,
+      addSketchStageStyle: s.addSketchStageStyle,
+      removeSketchStageStyle: s.removeSketchStageStyle,
+      updateSketchStageStyleConfig: s.updateSketchStageStyleConfig,
+      setSketchStageStyleSelected: s.setSketchStageStyleSelected,
+      selectSketchStageBaseCrop: s.selectSketchStageBaseCrop,
+      selectSketchStageVariantCrop: s.selectSketchStageVariantCrop,
+      setSketchStageStyleIllustrations: s.setSketchStageStyleIllustrations,
+      setSketchStageStyleCrops: s.setSketchStageStyleCrops,
+      setSketchStageBaseCropIllustrations: s.setSketchStageBaseCropIllustrations,
+      setSketchStageVariantIllustrations: s.setSketchStageVariantIllustrations,
+      setSketchStageVariantCrops: s.setSketchStageVariantCrops,
+      setSketchStageVariantCropIllustrations: s.setSketchStageVariantCropIllustrations,
+      updateSketchStageVariantText: s.updateSketchStageVariantText,
       // Sketch spread generate job (sequential spread-image generation)
       startSketchSpreadGenerateJob: s.startSketchSpreadGenerateJob,
       cancelSketchSpreadGenerateJob: s.cancelSketchSpreadGenerateJob,
@@ -792,6 +835,12 @@ export const useSnapshotActions = () =>
       startVariantSheetGenerate: s.startVariantSheetGenerate,
       recropVariantSheet: s.recropVariantSheet,
       dismissVariantSheetGenerateError: s.dismissVariantSheetGenerateError,
+      // Sketch stage-sheet generate op (single-flight 11|12→auto-cut chain + cut-only re-runs)
+      startStageBaseSheetGenerate: s.startStageBaseSheetGenerate,
+      recropStageBaseSheet: s.recropStageBaseSheet,
+      startStageVariantSheetGenerate: s.startStageVariantSheetGenerate,
+      recropStageVariantSheet: s.recropStageVariantSheet,
+      dismissStageSheetGenerateError: s.dismissStageSheetGenerateError,
       // Sketch (spread-level CRUD — sketch-spread creative space)
       setSketch: s.setSketch,
       setSketchSpreads: s.setSketchSpreads,
