@@ -5,8 +5,9 @@
 // (caller-owns-write). Mounted only while a target is set, so the store hooks run unconditionally.
 //
 // Tool availability REUSES ToolSpace 'sketch' (SPACE_TOOL_MATRIX.sketch.extract = ['crop']) — no new
-// matrix column. Landing tab = crop. Persistence rides the held SHEET session's release-save (the
-// setter only mutates the store, exactly like the crop-edit path — no eager flush here).
+// matrix column. Landing tab = crop. SHEET persistence (grain A) rides the held session's
+// release-save; a write on the LOCKED style additionally flushes the re-cloned entity node
+// (grain B — persistBaseEntityCloneIfLocked), same as the crop-edit path.
 
 import { useCallback, useMemo } from 'react';
 import { ExtractImageModal } from '@/features/editor/components/shared-components/extract-image-modal';
@@ -20,6 +21,7 @@ import type { Illustration } from '@/types/prop-types';
 import type { Geometry, SpreadImage } from '@/types/spread-types';
 import { createLogger } from '@/utils/logger';
 import { type ExtractImageTarget } from './sketch-base-constants';
+import { persistBaseEntityCloneIfLocked } from './persist-base-entity-clone';
 
 const log = createLogger('Editor', 'SketchBaseExtractImageModal');
 
@@ -61,6 +63,9 @@ export function SketchBaseExtractImageModal({ target, onClose }: SketchBaseExtra
       });
       const next = appendMediaVersions(illustrations, results.map((r) => r.media_url));
       setSketchBaseCropIllustrations(target.kind, target.styleIndex, target.entityKey, next);
+      // LOCKED style → the setter re-cloned this crop into the entity's base variant (grain B,
+      // rtype 3/4) — flush that entity now; the sheet release-save only covers grain A.
+      void persistBaseEntityCloneIfLocked(target.kind, target.styleIndex, target.entityKey);
     },
     [illustrations, target, setSketchBaseCropIllustrations],
   );

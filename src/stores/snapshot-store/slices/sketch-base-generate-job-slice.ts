@@ -38,6 +38,9 @@ import type { ImageApiFailure } from '@/apis/image-api-client';
 // gateway held-session instead of the suppressed owner-direct autoSave. Solo → autoSave (below).
 import { useResourceLockStore } from '@/stores/resource-lock-store';
 import { flushSketchBaseSheetUnderLock } from './collab-sketch-base-sheet-save-helper';
+// Grain B (rtype 3/4): a crops replacement on the LOCKED style re-clones every entity's base
+// variant (sketch-slice cloneLockedStyleCropsToBaseVariants) → those entity nodes flush here too.
+import { flushSketchEntityUnderLock } from './collab-sketch-variant-save-helper';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
 
@@ -123,10 +126,20 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
   // call it acquires+releases so no lock lingers). SOLO (incl. the case where the space unmounted →
   // collabPersist flipped false) → the legacy owner-direct autoSaveSnapshot. Reads the FRESH sheet
   // node via getState() at call time (base generate is INLINE — no flush-BEFORE-generate).
-  async function persistBaseSheet(kind: BaseKind): Promise<void> {
+  async function persistBaseSheet(kind: BaseKind, styleIndex: number, cropsLanded: boolean): Promise<void> {
     if (useResourceLockStore.getState().collabPersist) {
       const node = sheetOf(get().sketch.base, kind);
       await flushSketchBaseSheetUnderLock(kind, node, { releaseIfAcquired: true });
+      // New crops landed on the LOCKED style → the store re-cloned every entity's base variant
+      // (grain B, rtype 3/4) — flush those entity nodes too, or the clones silently never save
+      // (the sheet session only covers rtype 11). Peer-held entity → helper skips + toasts.
+      // `cropsLanded` gates the failed/cancelled paths (raw may have landed, crops did not →
+      // clones unchanged → no N-entity writes / peer refetch noise).
+      if (cropsLanded && sheetOf(get().sketch.base, kind).styles[styleIndex]?.is_selected) {
+        for (const e of get().sketch[kind]) {
+          await flushSketchEntityUnderLock(kind, e.key, e, { releaseIfAcquired: true });
+        }
+      }
     } else {
       void get().autoSaveSnapshot();
     }
@@ -206,6 +219,9 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     const entities = baseEntitiesOf(get().sketch[kind]).map(baseVariantText);
     // Closure flag: once the raw sheet is written the style is real (partial success) → never roll back.
     let rawLanded = false;
+    // Crops replacement reached the store → entity base-variant clones may have refreshed (locked
+    // style) → gates the grain-B entity flush in persistBaseSheet.
+    let cropsLanded = false;
 
     try {
       // Refs are the CHOSEN art-style's `image_references` ({title, media_url}) picked in the modal —
@@ -241,6 +257,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
       } else {
         setOpPhase('cropping');
         await runCrop(kind, styleIndex, result.data.imageUrl, cellOrder);
+        cropsLanded = true; // runCrop throws on failure; stale early-return bails before persist
       }
     } catch (err) {
       if (opStale(kind, styleIndex)) return;
@@ -257,7 +274,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
 
     if (opStale(kind, styleIndex)) return; // op reset during the last await → nothing to finalize
     // Persist the result (raw + crops). COLLAB → gateway whole-sheet flush; SOLO → autoSaveSnapshot.
-    await persistBaseSheet(kind);
+    await persistBaseSheet(kind, styleIndex, cropsLanded);
     finalizeOp();
   }
 
@@ -268,8 +285,10 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     rawUrl: string,
     cellOrder: string[],
   ): Promise<void> {
+    let cropsLanded = false;
     try {
       await runCrop(kind, styleIndex, rawUrl, cellOrder);
+      cropsLanded = true;
     } catch (err) {
       if (opStale(kind, styleIndex)) return;
       const msg = err instanceof Error ? err.message : 'Base sheet crop failed';
@@ -279,7 +298,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
 
     if (opStale(kind, styleIndex)) return;
     // Persist the recropped crops. COLLAB → gateway whole-sheet flush; SOLO → autoSaveSnapshot.
-    await persistBaseSheet(kind);
+    await persistBaseSheet(kind, styleIndex, cropsLanded);
     finalizeOp();
   }
 

@@ -36,6 +36,13 @@ vi.mock('./collab-sketch-base-sheet-save-helper', () => ({
   flushSketchBaseSheetUnderLock: mockedSheetFlush,
 }));
 
+// Mock the per-entity gateway flush (grain B, rtype 3/4) — called after a crops replacement on the
+// LOCKED style (the store re-clones entity base variants → those nodes flush too).
+const mockedEntityFlush = vi.hoisted(() => vi.fn(async () => true));
+vi.mock('./collab-sketch-variant-save-helper', () => ({
+  flushSketchEntityUnderLock: mockedEntityFlush,
+}));
+
 // Mock sonner toast
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 
@@ -114,6 +121,7 @@ describe('SketchBaseGenerateJobSlice', () => {
     mockedGenerateCall.mockReset();
     mockedCropCall.mockReset();
     mockedSheetFlush.mockReset().mockResolvedValue(true);
+    mockedEntityFlush.mockReset().mockResolvedValue(true);
     lockState.collabPersist = false; // default: solo (autoSave path)
     vi.mocked(toast.warning).mockReset();
     ({ store, autoSaveSnapshot } = createTestStore());
@@ -200,6 +208,90 @@ describe('SketchBaseGenerateJobSlice', () => {
     // Collab → gateway whole-sheet flush (one-shot releaseIfAcquired), NOT the suppressed autoSave.
     expect(mockedSheetFlush).toHaveBeenCalledWith('characters', expect.any(Object), { releaseIfAcquired: true });
     expect(autoSaveSnapshot).not.toHaveBeenCalled();
+    // Fresh add-style is never locked → no entity clone changed → grain B untouched.
+    expect(mockedEntityFlush).not.toHaveBeenCalled();
+  });
+
+  it('collab persist on the LOCKED style: crops replacement also flushes every entity node (grain B)', async () => {
+    lockState.collabPersist = true;
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [{ key: 'base', description: '', visual_design: 'w', art_language: '' }] },
+      { key: 'villain', variants: [{ key: 'base', description: '', visual_design: 'v', art_language: '' }] },
+    ]);
+    // Existing LOCKED style → regenerate replaces its crops → the store re-clones entity variants.
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's1',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [],
+    });
+    store.getState().setSketchBaseStyleSelected('characters', 0);
+
+    mockedGenerateCall.mockResolvedValueOnce(okGenerate('raw.png', ['hero', 'villain']));
+    mockedCropCall.mockResolvedValueOnce(
+      okCropRow([
+        { cell: 1, imageUrl: 'crop-hero.png' },
+        { cell: 2, imageUrl: 'crop-villain.png' },
+      ]),
+    );
+
+    store.getState().startBaseSheetGenerate({
+      kind: 'characters',
+      mode: 'regenerate',
+      styleIndex: 0,
+      stylePrompt: 's1',
+      referenceImages: [],
+      artStyleId: 'style-1',
+    });
+    await tick();
+    await tick();
+    await tick();
+
+    // Entity base-variant clones live-followed the new crops…
+    const [hero, villain] = store.getState().sketch.characters;
+    expect(hero.variants[0].raw_sheet?.crops[0].illustrations[0].media_url).toBe('crop-hero.png');
+    expect(villain.variants[0].raw_sheet?.crops[0].illustrations[0].media_url).toBe('crop-villain.png');
+
+    // …and BOTH entity nodes flushed through the gateway (grain B) after the sheet flush.
+    expect(mockedSheetFlush).toHaveBeenCalled();
+    expect(mockedEntityFlush).toHaveBeenCalledTimes(2);
+    expect(mockedEntityFlush).toHaveBeenCalledWith('characters', 'hero', expect.any(Object), { releaseIfAcquired: true });
+    expect(mockedEntityFlush).toHaveBeenCalledWith('characters', 'villain', expect.any(Object), { releaseIfAcquired: true });
+    expect(autoSaveSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('collab persist on the LOCKED style: FAILED generate (no crops landed) skips the entity flush', async () => {
+    lockState.collabPersist = true;
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [{ key: 'base', description: '', visual_design: 'w', art_language: '' }] },
+    ]);
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's1',
+      is_selected: false,
+      image_references: [],
+      illustrations: [],
+      crops: [],
+    });
+    store.getState().setSketchBaseStyleSelected('characters', 0);
+
+    mockedGenerateCall.mockResolvedValueOnce({ success: false, error: { code: 'LLM_ERROR', message: 'boom' } } as never);
+
+    store.getState().startBaseSheetGenerate({
+      kind: 'characters',
+      mode: 'regenerate',
+      styleIndex: 0,
+      stylePrompt: 's1',
+      referenceImages: [],
+      artStyleId: 'style-1',
+    });
+    await tick();
+    await tick();
+    await tick();
+
+    // Sheet still persists (raw/error state), but no crops landed → clones unchanged → grain B quiet.
+    expect(mockedSheetFlush).toHaveBeenCalled();
+    expect(mockedEntityFlush).not.toHaveBeenCalled();
   });
 
   it('opStale: reset op mid-await → crops NOT written', async () => {

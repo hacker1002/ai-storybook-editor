@@ -15,6 +15,7 @@ import { titleCase } from '@/features/editor/components/sketch-variants-creative
 import type { Illustration } from '@/types/prop-types';
 import { createLogger } from '@/utils/logger';
 import { nounForKind, type EditImageTarget } from './sketch-base-constants';
+import { persistBaseEntityCloneIfLocked } from './persist-base-entity-clone';
 
 const log = createLogger('Editor', 'SketchBaseEditImageModal');
 
@@ -64,6 +65,9 @@ export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImag
           count: next.length,
         });
         setSketchBaseCropIllustrations(target.kind, target.styleIndex, target.entityKey, next);
+        // LOCKED style → the setter re-cloned this crop into the entity's base variant (grain B,
+        // rtype 3/4) — flush that entity now; the sheet release-save only covers grain A.
+        void persistBaseEntityCloneIfLocked(target.kind, target.styleIndex, target.entityKey);
       }
     },
     [target, setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations, recropBaseSheet],

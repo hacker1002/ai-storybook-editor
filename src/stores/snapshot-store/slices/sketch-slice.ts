@@ -1,6 +1,8 @@
 import type { StateCreator } from 'zustand';
+import type { Draft } from 'immer';
 import type { SnapshotStore, SketchSlice } from '../types';
 import type {
+  SketchBaseStyle,
   SketchEntity,
   SketchSpread,
   SketchVariant,
@@ -31,6 +33,34 @@ export type {
 } from './sketch-normalize';
 
 const log = createLogger('Store', 'SketchSlice');
+
+/**
+ * Clone the LOCKED style's per-entity crops into each entity's variants[base].raw_sheet
+ * (single clone crop, is_selected=true, deep-copied illustrations). The clone LIVE-FOLLOWS the
+ * locked style (mirrors sketch-stage-slice refreshBaseClone): called at lock time AND from every
+ * crop write sink so downstream readers (variant space, Lineup, spreads) never see a stale image.
+ * No-op unless the style is locked. `onlyEntityKey` narrows the write to one entity (single-crop
+ * edit/extract); omitted → all entities (lock / re-crop). Entities without a 'base' variant or a
+ * matching crop are skipped, leaving any prior clone untouched (original lock-time semantics).
+ */
+function cloneLockedStyleCropsToBaseVariants(
+  style: Draft<SketchBaseStyle>,
+  entities: Draft<SketchEntity>[],
+  onlyEntityKey?: string,
+): void {
+  if (!style.is_selected) return;
+  for (const entity of entities) {
+    if (onlyEntityKey !== undefined && entity.key !== onlyEntityKey) continue;
+    const base = entity.variants.find((v) => v.key === 'base');
+    if (!base) continue;
+    const c = style.crops.find((cr) => cr.key === entity.key);
+    if (!c) continue;
+    base.raw_sheet = {
+      illustrations: [],
+      crops: [{ is_selected: true, illustrations: c.illustrations.map((ill) => ({ ...ill })) }],
+    };
+  }
+}
 
 // Slice: state + setSketch/clearSketch + entity-level CRUD (keyed by `kind`) + the DEGRADED
 // bookkeeping (ADR-047): `sketchDegraded` lists resources whose raw blob could not be read
@@ -247,18 +277,7 @@ export const createSketchSlice: StateCreator<
       styles.forEach((s, j) => {
         s.is_selected = j === styleIndex;
       });
-      const crops = styles[styleIndex].crops;
-      for (const entity of state.sketch[kind]) {
-        const base = entity.variants.find((v) => v.key === 'base');
-        if (!base) continue;
-        const c = crops.find((cr) => cr.key === entity.key);
-        if (c) {
-          base.raw_sheet = {
-            illustrations: [],
-            crops: [{ is_selected: true, illustrations: c.illustrations.map((ill) => ({ ...ill })) }],
-          };
-        }
-      }
+      cloneLockedStyleCropsToBaseVariants(styles[styleIndex], state.sketch[kind]);
       state.sync.isDirty = true;
     }),
 
@@ -294,15 +313,22 @@ export const createSketchSlice: StateCreator<
       if (!style) return;
       log.debug('setSketchBaseStyleCrops', 'replace crops', { kind, styleIndex, count: crops.length });
       style.crops = crops;
+      // LOCKED style's crops replaced (raw-edit re-crop / regenerate) → re-clone into every
+      // entity's base variant so the official images live-follow the new cut.
+      cloneLockedStyleCropsToBaseVariants(style, state.sketch[kind]);
       state.sync.isDirty = true;
     }),
 
   setSketchBaseCropIllustrations: (kind, styleIndex, entityKey, illustrations) =>
     set((state) => {
-      const crop = sheetOf(state.sketch.base, kind).styles[styleIndex]?.crops.find((c) => c.key === entityKey);
-      if (!crop) return;
+      const style = sheetOf(state.sketch.base, kind).styles[styleIndex];
+      const crop = style?.crops.find((c) => c.key === entityKey);
+      if (!style || !crop) return;
       log.debug('setSketchBaseCropIllustrations', 'replace crop set', { kind, styleIndex, entityKey, count: illustrations.length });
       crop.illustrations = illustrations;
+      // Crop of the LOCKED style edited/extracted → re-clone THIS entity's base variant so the
+      // entity's official image follows the new crop version (dual-write, live-follow).
+      cloneLockedStyleCropsToBaseVariants(style, state.sketch[kind], entityKey);
       state.sync.isDirty = true;
     }),
 

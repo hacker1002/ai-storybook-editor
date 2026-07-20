@@ -255,7 +255,11 @@ function StageGroup({
                   key={i}
                   className={cn(
                     'flex items-center gap-1 rounded-md pl-3 pr-1',
-                    isSelected ? 'bg-primary/10' : 'hover:bg-muted/50',
+                    isSelected
+                      ? 'bg-primary/10'
+                      : style.is_selected
+                        ? 'bg-primary/5 hover:bg-primary/10'
+                        : 'hover:bg-muted/50',
                   )}
                 >
                   <button
@@ -263,6 +267,9 @@ function StageGroup({
                     className={cn(
                       'min-w-0 flex-1 truncate px-2 py-1.5 text-left text-sm',
                       isSelected && 'font-medium text-foreground',
+                      // Locked = the final style — primary + semibold (twMerge: wins over the
+                      // selected classes above) so it reads at a glance.
+                      style.is_selected && 'font-semibold text-primary',
                     )}
                     aria-current={isSelected ? 'true' : undefined}
                     title={style.style_prompt || `Style ${i + 1}`}
@@ -368,7 +375,8 @@ function StageGroup({
 }
 
 /** Ghost icon button for the row affordances. aria-disabled (NOT the real attr) → greyed but
- *  still hoverable so the why-disabled tooltip surfaces (never-hide-disabled-ui). */
+ *  still hoverable so the why-disabled tooltip surfaces (never-hide-disabled-ui). `pressed`
+ *  (only the 🔒 lock passes it) renders primary-tinted + filled so the locked style pops. */
 function RowIconButton({
   icon: Icon,
   label,
@@ -388,7 +396,11 @@ function RowIconButton({
     <Button
       variant="ghost"
       size="icon"
-      className={cn('h-6 w-6 text-muted-foreground', disabled && 'cursor-not-allowed opacity-40')}
+      className={cn(
+        'h-6 w-6',
+        pressed ? 'text-primary hover:text-primary' : 'text-muted-foreground',
+        disabled && 'cursor-not-allowed opacity-40',
+      )}
       aria-disabled={disabled}
       aria-pressed={pressed}
       aria-label={label}
@@ -398,7 +410,7 @@ function RowIconButton({
         onClick();
       }}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className={cn('h-4 w-4', pressed && 'fill-primary/20')} />
     </Button>
   );
 }

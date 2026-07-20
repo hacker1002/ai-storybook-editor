@@ -613,6 +613,101 @@ describe('SketchSlice base (workspace) actions', () => {
     expect(clonedCropIll?.is_selected).toBe(originalCropIll.is_selected);
   });
 
+  // ── Dual-write (live-follow clone, 2026-07-20): crop writes on the LOCKED style re-clone the
+  //    entity's variants[base].raw_sheet so downstream readers never see a stale official image. ──
+
+  const ill = (url: string, selected = true) => ({
+    type: 'created' as const,
+    media_url: url,
+    created_time: '2026-07-20T00:00:00Z',
+    is_selected: selected,
+  });
+
+  it('setSketchBaseCropIllustrations on the LOCKED style re-clones ONLY that entity\'s base variant', () => {
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [variant('base')] },
+      { key: 'villain', variants: [variant('base')] },
+    ]);
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's1', is_selected: false, image_references: [], illustrations: [],
+      crops: [
+        { key: 'hero', illustrations: [ill('hero-old.png')] },
+        { key: 'villain', illustrations: [ill('villain-old.png')] },
+      ],
+    });
+    store.getState().setSketchBaseStyleSelected('characters', 0); // lock → clones seeded
+
+    store.getState().setSketchBaseCropIllustrations('characters', 0, 'hero', [ill('hero-edited.png')]);
+
+    const [hero, villain] = store.getState().sketch.characters;
+    const heroClone = hero.variants[0].raw_sheet?.crops[0];
+    expect(heroClone?.is_selected).toBe(true);
+    expect(heroClone?.illustrations[0].media_url).toBe('hero-edited.png');
+    // Sibling entity untouched by a single-crop edit.
+    expect(villain.variants[0].raw_sheet?.crops[0].illustrations[0].media_url).toBe('villain-old.png');
+    // Clone is isolated (deep copy, not a shared reference with the sheet crop).
+    const sheetIll = store.getState().sketch.base.character_sheet.styles[0].crops[0].illustrations[0];
+    expect(heroClone?.illustrations[0]).not.toBe(sheetIll);
+  });
+
+  it('setSketchBaseCropIllustrations on an UNLOCKED style leaves entity base variants untouched', () => {
+    store.getState().setSketchEntities('characters', [{ key: 'hero', variants: [variant('base')] }]);
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's1', is_selected: true, image_references: [], illustrations: [],
+      crops: [{ key: 'hero', illustrations: [ill('locked-crop.png')] }],
+    });
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's2', is_selected: false, image_references: [], illustrations: [],
+      crops: [{ key: 'hero', illustrations: [ill('other-crop.png')] }],
+    });
+    store.getState().setSketchBaseStyleSelected('characters', 0); // lock s1
+
+    store.getState().setSketchBaseCropIllustrations('characters', 1, 'hero', [ill('other-edited.png')]);
+
+    // Clone still tracks the LOCKED style (s1), not the edited unlocked one.
+    const clone = store.getState().sketch.characters[0].variants[0].raw_sheet?.crops[0];
+    expect(clone?.illustrations[0].media_url).toBe('locked-crop.png');
+  });
+
+  it('setSketchBaseStyleCrops on the LOCKED style re-clones ALL entity base variants (re-crop live-follow)', () => {
+    store.getState().setSketchEntities('characters', [
+      { key: 'hero', variants: [variant('base')] },
+      { key: 'villain', variants: [variant('base')] },
+    ]);
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's1', is_selected: false, image_references: [], illustrations: [],
+      crops: [
+        { key: 'hero', illustrations: [ill('hero-old.png')] },
+        { key: 'villain', illustrations: [ill('villain-old.png')] },
+      ],
+    });
+    store.getState().setSketchBaseStyleSelected('characters', 0);
+
+    // Raw-edit auto re-crop replaces the whole crops[] → every clone follows.
+    store.getState().setSketchBaseStyleCrops('characters', 0, [
+      { key: 'hero', illustrations: [ill('hero-recut.png')] },
+      { key: 'villain', illustrations: [ill('villain-recut.png')] },
+    ]);
+
+    const [hero, villain] = store.getState().sketch.characters;
+    expect(hero.variants[0].raw_sheet?.crops[0].illustrations[0].media_url).toBe('hero-recut.png');
+    expect(villain.variants[0].raw_sheet?.crops[0].illustrations[0].media_url).toBe('villain-recut.png');
+  });
+
+  it('setSketchBaseStyleCrops on an UNLOCKED style does not touch entity base variants', () => {
+    store.getState().setSketchEntities('characters', [{ key: 'hero', variants: [variant('base')] }]);
+    store.getState().addSketchBaseStyle('characters', {
+      style_prompt: 's1', is_selected: false, image_references: [], illustrations: [],
+      crops: [{ key: 'hero', illustrations: [ill('hero-old.png')] }],
+    });
+
+    store.getState().setSketchBaseStyleCrops('characters', 0, [
+      { key: 'hero', illustrations: [ill('hero-new.png')] },
+    ]);
+
+    expect(store.getState().sketch.characters[0].variants[0].raw_sheet).toBeUndefined();
+  });
+
   it('updateSketchBaseEntityText updates only provided fields, leaves others untouched', () => {
     store.getState().setSketchEntities('characters', [
       { key: 'hero', variants: [{ key: 'base', description: 'old desc', height: 110, visual_design: 'old design', art_language: 'old lang' }] },

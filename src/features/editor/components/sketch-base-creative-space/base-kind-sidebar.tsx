@@ -266,7 +266,7 @@ function StyleRow({
     <div
       className={cn(
         'flex items-center gap-1 rounded-md pr-1',
-        isSelected ? 'bg-primary/10' : 'hover:bg-muted/50',
+        isSelected ? 'bg-primary/10' : isLocked ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-muted/50',
       )}
     >
       {/* Row select = BROWSE (no lock) → always enabled, even when a peer holds the sheet. */}
@@ -275,6 +275,9 @@ function StyleRow({
         className={cn(
           'min-w-0 flex-1 truncate px-2 py-1.5 text-left text-sm',
           isSelected && 'font-medium text-foreground',
+          // Locked = the final style — primary + semibold so it reads at a glance (twMerge:
+          // these win over the selected classes above).
+          isLocked && 'font-semibold text-primary',
         )}
         aria-current={isSelected ? 'true' : undefined}
         onClick={onSelect}
@@ -292,7 +295,12 @@ function StyleRow({
       <Button
         variant="ghost"
         size="icon"
-        className={cn('h-6 w-6 text-muted-foreground', lockedByOther && 'cursor-not-allowed opacity-40')}
+        className={cn(
+          'h-6 w-6',
+          // Locked = primary-tinted, filled padlock — the visual anchor of the locked style.
+          isLocked ? 'text-primary hover:text-primary' : 'text-muted-foreground',
+          lockedByOther && 'cursor-not-allowed opacity-40',
+        )}
         aria-disabled={lockedByOther}
         onClick={() => {
           if (lockedByOther) return;
@@ -302,7 +310,7 @@ function StyleRow({
         aria-label={isLocked ? `Unlock ${label}` : `Lock ${label}`}
         title={lockedByOther ? peerTip : isLocked ? 'Locked style' : 'Lock as final style'}
       >
-        {isLocked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+        {isLocked ? <Lock className="h-4 w-4 fill-primary/20" /> : <LockOpen className="h-4 w-4" />}
       </Button>
     </div>
   );
