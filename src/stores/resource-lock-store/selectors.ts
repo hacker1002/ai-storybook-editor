@@ -83,6 +83,39 @@ export function useIsSpreadLockedByOther(spreadId: string, childImageIds: string
   });
 }
 
+/** Generate-gate for the sketch SPREAD content-area: how many of the target spreads are
+ *  generate-blocked — spread structural lock (type 6, incl. a peer generate job's advisory
+ *  hold) OR any child page-image lock (type 1) held by another editor. Same per-spread rule as
+ *  `useIsSpreadLockedByOther`, counted across the (bulk) target so the button can tell
+ *  ALL-blocked (disable) from partially-blocked (allowed — the job skips those spreads).
+ *  Returns a number → Object.is-stable even though `entries` is rebuilt each render (see file
+ *  header). The job's own pre-generate lock acquire is the authoritative re-check; this gate is
+ *  advisory UX only. */
+export function useLockedByOtherSpreadCount(
+  entries: ReadonlyArray<{ spreadId: string; imageIds: string[] }>,
+): number {
+  return useResourceLockStore((s: ResourceLockState) => {
+    const bookId = s.bookId;
+    if (!bookId || entries.length === 0) return 0;
+    const me = s.myUserId;
+    const now = Date.now();
+    const heldByOther = (key: string): boolean => {
+      const e = s.registry.get(key);
+      return !!e && e.holder_user_id !== me && new Date(e.expires_at).getTime() > now;
+    };
+    let blocked = 0;
+    for (const { spreadId, imageIds } of entries) {
+      if (
+        heldByOther(`${bookId}|1|6|${spreadId}|`) ||
+        imageIds.some((id) => heldByOther(`${bookId}|1|1|${id}|`))
+      ) {
+        blocked += 1;
+      }
+    }
+    return blocked;
+  });
+}
+
 /** Generate-gate for the sketch entity content-area: true when EVERY `resourceId`
  *  of `resourceType` (3 character · 4 prop · 5 stage, locale null) is locked by
  *  another editor — i.e. the whole batch would be skipped by the generate job, so the

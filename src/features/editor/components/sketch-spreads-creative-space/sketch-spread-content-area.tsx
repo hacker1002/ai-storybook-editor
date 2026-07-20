@@ -29,6 +29,7 @@ import {
   useIsAnySketchGenerating,
 } from '@/stores/snapshot-store/selectors';
 import { useCurrentBookId, useSketchStyleId } from '@/stores/book-store';
+import { useLockedByOtherSpreadCount } from '@/stores/resource-lock-store';
 import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
 import { CANVAS_CONFIRM_DIALOG_Z } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
@@ -63,7 +64,20 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
 
   // Generate target: bulk-checked spreads if any, else the focused spread (job slice sorts doc-order).
   const target = checkedSpreadIds.length > 0 ? checkedSpreadIds : [spreadId];
-  const canGenerate = !anyGen && Boolean(sketchStyleId) && target.length > 0;
+  // Peer-lock gate (advisory, same rule as the sidebar rows): a spread is generate-blocked when
+  // its structural lock (type 6 — incl. a peer's running generate job) or any child page-image
+  // lock (type 1) is held by another editor. ALL targets blocked → disable the button; partially
+  // blocked → allowed, the job skips those spreads (toast below). The job's own pre-generate
+  // spread-lock acquire is the authoritative re-check, so a stale gate can't corrupt anything.
+  const allSpreads = useSnapshotStore((s) => s.sketch.spreads);
+  const blockedCount = useLockedByOtherSpreadCount(
+    target.map((id) => {
+      const s = allSpreads.find((x) => x.id === id);
+      return { spreadId: id, imageIds: s?.images.map((im) => im.id) ?? [] };
+    }),
+  );
+  const allBlocked = blockedCount > 0 && blockedCount === target.length;
+  const canGenerate = !anyGen && Boolean(sketchStyleId) && target.length > 0 && !allBlocked;
   // Never hide the disabled Generate button — render it greyed with a hint instead. The hint (and
   // its tooltip) only claims a MISSING style once the book is actually loaded.
   const missingStyle = bookLoaded && !sketchStyleId;
@@ -83,6 +97,13 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
     if (target.length === 0) {
       toast.info('Nothing to generate');
       return;
+    }
+    // Partial peer-block heads-up (all-blocked never reaches here — the button is disabled).
+    // Advisory only: the job re-checks each spread's lock before generating and skips safely.
+    if (blockedCount > 0) {
+      toast.info(
+        `${blockedCount} of ${target.length} spread(s) are being edited by another editor — they will be skipped`,
+      );
     }
     // Resolve "already has an image" at click-time via getState() (NOT a hook — React 19 forbids
     // hooks in callbacks). Any target with a per-page image (images[].illustrations) triggers the
@@ -126,14 +147,24 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
           disabled={!canGenerate}
           aria-busy={isSpreadJob}
           aria-label={label}
-          title={missingStyle ? 'Set a sketch style for this book first (book settings)' : undefined}
+          title={
+            missingStyle
+              ? 'Set a sketch style for this book first (book settings)'
+              : allBlocked
+                ? 'Being edited by another editor'
+                : undefined
+          }
         >
           <Sparkles className="mr-1 h-4 w-4" />
           {label}
         </Button>
-        {/* Disabled-reason hint — the button stays visible & greyed, never hidden. */}
+        {/* Disabled-reason hint — the button stays visible & greyed, never hidden. Missing style
+            wins over the peer-lock hint (one hint at a time; both grey the button anyway). */}
         {missingStyle && !isSpreadJob && (
           <span className="text-xs text-muted-foreground">Set a sketch style for this book first</span>
+        )}
+        {!missingStyle && allBlocked && !isSpreadJob && (
+          <span className="text-xs text-muted-foreground">Being edited by another editor</span>
         )}
         {isSpreadJob && (
           <Button

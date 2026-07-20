@@ -51,6 +51,13 @@ function imageLockTarget(imageId: string): LockTarget {
   return { step: 1, resource_type: 1, resource_id: imageId, locale: null };
 }
 
+/** LockTarget for the WHOLE spread (structural, resource_type 6) — the job's advisory GENERATE
+ *  lock, acquired per spread BEFORE any AI call. Same key the sidebar's edit/delete ops acquire,
+ *  so while a spread generates the peer's sidebar row greys and their structural ops are 409'd. */
+function spreadLockTarget(spreadId: string): LockTarget {
+  return { step: 1, resource_type: 6, resource_id: spreadId, locale: null };
+}
+
 /** 1-based doc-order "spread #N" of a spread (audit `spread_number`), or 0 if not found. */
 function spreadNumber(spreadId: string, spreads: SketchSpread[]): number {
   const idx = spreads.findIndex((s) => s.id === spreadId);
@@ -111,6 +118,22 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
       j.status = j.cancelRequested ? 'cancelled' : 'completed';
       j.currentIndex = -1;
       j.completedAt = new Date().toISOString();
+    });
+  }
+
+  /** Mark task `i` SKIPPED because a peer holds its lock(s): counted in job.skipped + named for
+   *  the summary toast. Shared by the Phase-0 spread-lock skip (blocked BEFORE any AI call) and
+   *  the all-pages-blocked skip (every existing page image 409'd in Phase A). */
+  function markSpreadSkipped(jobId: string, i: number, num: number): void {
+    set((state) => {
+      const j = state.sketchSpreadGenerateJob;
+      if (!j || j.id !== jobId) return;
+      j.skipped += 1;
+      j.skippedNames.push(`spread #${num}`);
+      j.tasks[i].status = 'error';
+      j.tasks[i].skipped = true;
+      j.tasks[i].error = 'Skipped — being edited by another editor';
+      j.tasks[i].completedAt = new Date().toISOString();
     });
   }
 
@@ -211,7 +234,8 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
   }
 
   // ── collab per-spread driver ────────────────────────────────────────────────────────────────
-  // Holds a lock per PER-PAGE image, generates each page, and flushes DATA-ONLY through the gateway
+  // Holds the spread's advisory GENERATE lock (type 6, Phase 0 — blocked ⇒ whole spread skipped
+  // BEFORE any AI call) plus a lock per PER-PAGE image, generates each page, and flushes DATA-ONLY through the gateway
   // save (log:false, create-vs-upload per persistPageImage) under the lock — replacing
   // autoSaveSnapshot/flushSnapshot (a no-op under collabPersist).
   // Returns: 'replaced' → caller returns from runJob (job reset); 'cancelled' →
@@ -247,6 +271,29 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
     let persistFailedMessage = PERSIST_FAILED_MESSAGE; // first failure names it (see below)
 
     try {
+      // Phase 0 — advisory GENERATE lock on the whole spread (type 6), acquired BEFORE any AI
+      // call. Closes the first-generate race: a page with no image yet has no image id to lock,
+      // so without this two editors could both burn an AI call on the same new spread and the
+      // loser would drop its result at the deferred Phase-B acquire. Blocked → skip the whole
+      // spread for free (no generation). Held for the spread's duration (finally releases);
+      // peers see the sidebar row grey and their Generate gate counts the spread as blocked.
+      const spreadTarget = spreadLockTarget(task.spreadId);
+      const spreadAcq = await resourceLock.acquire(spreadTarget);
+      if (get().sketchSpreadGenerateJob?.id !== jobId) {
+        if (spreadAcq.ok) heldTargets.push(spreadTarget); // finally releases
+        return 'replaced';
+      }
+      if (!spreadAcq.ok) {
+        log.info('processSpreadCollab', 'spread locked by another — skip before generate', {
+          jobId,
+          spreadId: task.spreadId,
+          holder: spreadAcq.holder,
+        });
+        markSpreadSkipped(jobId, i, spreadNumber(task.spreadId, get().sketch.spreads));
+        return 'ok';
+      }
+      heldTargets.push(spreadTarget);
+
       // Phase A — acquire locks for pages whose image already EXISTS, so both left+right are held
       // for the spread's duration. A page with no image yet (first generate) has no id to lock →
       // it is acquired right after creation in Phase B.
@@ -407,16 +454,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
         });
       } else if (skippedPages.size > 0 && skippedPages.size === pageTypes.length) {
         // ALL pages blocked by other editors → the whole spread is SKIPPED (not a failure).
-        set((state) => {
-          const j = state.sketchSpreadGenerateJob;
-          if (!j || j.id !== jobId) return;
-          j.skipped += 1;
-          j.skippedNames.push(`spread #${num}`);
-          j.tasks[i].status = 'error';
-          j.tasks[i].skipped = true;
-          j.tasks[i].error = 'Skipped — being edited by another editor';
-          j.tasks[i].completedAt = new Date().toISOString();
-        });
+        markSpreadSkipped(jobId, i, num);
       } else {
         // No url and not all-skipped (e.g. spread has no pages) → defensive error.
         set((state) => {
@@ -441,7 +479,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
       });
       return 'ok'; // NO abort — continue to the next spread
     } finally {
-      for (const t of heldTargets) await resourceLock.release(t); // release BOTH image locks at spread end
+      for (const t of heldTargets) await resourceLock.release(t); // release spread + image locks at spread end
     }
   }
 

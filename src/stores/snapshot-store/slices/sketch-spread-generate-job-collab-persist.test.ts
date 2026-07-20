@@ -225,8 +225,11 @@ describe('SketchSpreadGenerateJobSlice — collab persist grain', () => {
     // holding it means the generated image is store-only and vanishes on reload.
     store.getState().setSketchSpreads([spread('sp-1')]);
     mockedCall.mockResolvedValue(ok('a.png') as never);
-    // Once — beforeEach only mockClear()s `acquire`, so a permanent override would leak.
-    acquire.mockResolvedValueOnce({ ok: false, holder: 'peer-1' });
+    // Target-aware: the Phase-0 SPREAD lock (type 6) succeeds; only the PAGE-image (type 1)
+    // deferred acquire is blocked — the scenario under test. beforeEach resets to always-ok.
+    acquire.mockImplementation(async (t) =>
+      t.resource_type === 1 ? { ok: false, holder: 'peer-1' } : { ok: true },
+    );
 
     start(['sp-1']);
     await tick();
@@ -237,5 +240,63 @@ describe('SketchSpreadGenerateJobSlice — collab persist grain', () => {
     expect(task.status).toBe('error');
     expect(task.error).toMatch(/another editor/i);
     expect(store.getState().sketchSpreadGenerateJob.skipped).toBe(0); // a failure, not a skip
+  });
+
+  it('spread lock (type 6) held by another → spread SKIPPED before any AI call', async () => {
+    store.getState().setSketchSpreads([spread('sp-1')]);
+    mockedCall.mockResolvedValue(ok('a.png') as never);
+    acquire.mockImplementation(async (t) =>
+      t.resource_type === 6 ? { ok: false, holder: 'peer-1' } : { ok: true },
+    );
+
+    start(['sp-1']);
+    await tick();
+    await tick();
+
+    expect(mockedCall).not.toHaveBeenCalled(); // blocked BEFORE generating — no wasted AI call
+    expect(save).not.toHaveBeenCalled();
+    const job = store.getState().sketchSpreadGenerateJob;
+    expect(job.tasks[0].status).toBe('error');
+    expect(job.tasks[0].skipped).toBe(true);
+    expect(job.tasks[0].error).toMatch(/another editor/i);
+    expect(job.skipped).toBe(1);
+    expect(job.skippedNames).toEqual(['spread #1']);
+    expect(job.status).toBe('completed');
+  });
+
+  it('acquires the spread lock (type 6) FIRST and releases it at spread end', async () => {
+    store.getState().setSketchSpreads([spread('sp-1')]);
+    mockedCall.mockResolvedValue(ok('a.png') as never);
+
+    start(['sp-1']);
+    await tick();
+    await tick();
+
+    expect(acquire.mock.calls[0][0]).toMatchObject({ step: 1, resource_type: 6, resource_id: 'sp-1' });
+    expect(release.mock.calls.map((c) => c[0])).toContainEqual(
+      expect.objectContaining({ resource_type: 6, resource_id: 'sp-1' }),
+    );
+    expect(store.getState().sketchSpreadGenerateJob.tasks[0].status).toBe('completed');
+  });
+
+  it('a spread-lock-blocked spread is skipped and the job CONTINUES to the next spread', async () => {
+    store.getState().setSketchSpreads([spread('sp-1'), spread('sp-2')]);
+    mockedCall.mockResolvedValue(ok('b.png') as never);
+    acquire.mockImplementation(async (t) =>
+      t.resource_type === 6 && t.resource_id === 'sp-1' ? { ok: false, holder: 'peer-1' } : { ok: true },
+    );
+
+    start(['sp-1', 'sp-2']);
+    await tick();
+    await tick();
+    await tick();
+
+    expect(mockedCall).toHaveBeenCalledTimes(1); // only sp-2 generated
+    expect(mockedCall.mock.calls[0][0]).toMatchObject({ sketchSpreadId: 'sp-2' });
+    const job = store.getState().sketchSpreadGenerateJob;
+    expect(job.tasks[0].skipped).toBe(true);
+    expect(job.tasks[1].status).toBe('completed');
+    expect(job.skipped).toBe(1);
+    expect(job.status).toBe('completed');
   });
 });

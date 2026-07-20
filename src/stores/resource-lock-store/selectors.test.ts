@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useResourceLockStore } from './index';
-import { useAllResourcesLockedByOther, useSpreadPeerLockName } from './selectors';
+import {
+  useAllResourcesLockedByOther,
+  useLockedByOtherSpreadCount,
+  useSpreadPeerLockName,
+} from './selectors';
 import { FALLBACK_HOLDER_NAME, type LockEntry } from './types';
 
 // Reactive-selector harness: seed bookId / myUserId / registry via setState (no channel),
@@ -80,6 +84,66 @@ describe('useAllResourcesLockedByOther', () => {
     useResourceLockStore.setState({ bookId: null });
     const { result } = renderHook(() => useAllResourcesLockedByOther(3, ['kid_hero']));
     expect(result.current).toBe(false);
+  });
+});
+
+describe('useLockedByOtherSpreadCount', () => {
+  const entriesOf = (...pairs: Array<[string, string[]]>) =>
+    pairs.map(([spreadId, imageIds]) => ({ spreadId, imageIds }));
+
+  it('empty entries → 0 (nothing to gate)', () => {
+    const { result } = renderHook(() => useLockedByOtherSpreadCount([]));
+    expect(result.current).toBe(0);
+  });
+
+  it('free spreads → 0', () => {
+    const { result } = renderHook(() =>
+      useLockedByOtherSpreadCount(entriesOf(['sp1', ['img1']], ['sp2', []])),
+    );
+    expect(result.current).toBe(0);
+  });
+
+  it('spread structural lock (type 6) held by another → counted', () => {
+    seed([[`${BOOK}|1|6|sp1|`, entry(OTHER, future())]]);
+    const { result } = renderHook(() =>
+      useLockedByOtherSpreadCount(entriesOf(['sp1', []], ['sp2', []])),
+    );
+    expect(result.current).toBe(1);
+  });
+
+  it('child page-image lock (type 1) held by another → counted', () => {
+    seed([[`${BOOK}|1|1|img1|`, entry(OTHER, future())]]);
+    const { result } = renderHook(() => useLockedByOtherSpreadCount(entriesOf(['sp1', ['img1']])));
+    expect(result.current).toBe(1);
+  });
+
+  it('lock held by ME → not counted (own generate job never gates my own button)', () => {
+    seed([[`${BOOK}|1|6|sp1|`, entry(ME, future())]]);
+    const { result } = renderHook(() => useLockedByOtherSpreadCount(entriesOf(['sp1', ['img1']])));
+    expect(result.current).toBe(0);
+  });
+
+  it('expired lock → not counted (prune-aware expiry)', () => {
+    seed([[`${BOOK}|1|6|sp1|`, entry(OTHER, past())]]);
+    const { result } = renderHook(() => useLockedByOtherSpreadCount(entriesOf(['sp1', []])));
+    expect(result.current).toBe(0);
+  });
+
+  it('mixed batch counts ONLY the blocked spreads (partial → button stays enabled)', () => {
+    seed([
+      [`${BOOK}|1|6|sp1|`, entry(OTHER, future())],
+      [`${BOOK}|1|1|img2|`, entry(OTHER, future())],
+    ]);
+    const { result } = renderHook(() =>
+      useLockedByOtherSpreadCount(entriesOf(['sp1', []], ['sp2', ['img2']], ['sp3', []])),
+    );
+    expect(result.current).toBe(2);
+  });
+
+  it('no book connected → 0', () => {
+    useResourceLockStore.setState({ bookId: null });
+    const { result } = renderHook(() => useLockedByOtherSpreadCount(entriesOf(['sp1', ['img1']])));
+    expect(result.current).toBe(0);
   });
 });
 
