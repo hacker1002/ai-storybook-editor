@@ -34,7 +34,9 @@ export interface GenerateSpreadImageResult {
     page: SketchGeneratePage;
     targetRatio: string;
     genAspectRatio: string;
-    trimSide: 'right' | 'bottom' | null;
+    /** 'both' = full page (trim chia đôi 2 cạnh, gáy giữ tâm); 'left'/'right' = mép ngoài của trang đơn. */
+    trimSide: 'left' | 'right' | 'bottom' | 'both' | null;
+    /** TỔNG fraction đã cắt (0 nếu khớp enum). */
     trimFraction: number;
   };
   error?: string;
