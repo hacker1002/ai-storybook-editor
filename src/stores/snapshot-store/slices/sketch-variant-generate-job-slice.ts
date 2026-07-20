@@ -1,9 +1,23 @@
 // sketch-variant-generate-job-slice.ts — orchestrates ONE non-base variant sheet: a 2-phase chain
 // generate the RAW 4-cell 21:9 sheet (08|09, AI — 4 independent draws of the SAME variant) → AUTO-CUT
 // the 4 cells out of it (10, CV). The unit is a VARIANT (kind, entityKey, variantKey), not N entities.
-// SINGLE-FLIGHT: at most one op runs at a time. Auto-cut ALWAYS runs after a raw sheet lands (no
-// Re-cut button, no confirm). NO auto-select after cut — the user locks 1/4 later via
-// selectSketchVariantCrop (phase-01).
+// PER-ENTITY PARALLEL: ops live in `variantSheetGenerateOps`, a map keyed by `variantOpKey(ref)` so
+// status/spinners resolve per ROW — but ADMISSION is per ENTITY (`hasOpForEntity`). N different
+// ENTITIES run concurrently; one entity runs one op at a time, whichever variant it is (generate and
+// recrop included).
+//
+// The admission grain must match the PERSIST grain, which is the whole entity node (rtype 3/4):
+// `flushSketchEntityUnderLock` takes ONE lock for the entity and writes the WHOLE node. Two variants
+// of the same entity settling together would be two writers of that node — the second payload was
+// snapshotted before the first landed (whole-node last-writer-wins silently drops a sheet), and the
+// first chain's one-shot `releaseIfAcquired` can release the shared lock while the second chain's
+// save is still in flight (→ `forbidden`, its raw sheet + crops never persist). Different entities
+// hold different locks and write different nodes, so they never contend.
+//
+// The backend bounds the real Gemini concurrency (GEMINI_IMAGE_CONCURRENCY semaphore); the client
+// cap below is UX only.
+// Auto-cut ALWAYS runs after a raw sheet lands (no Re-cut button, no confirm). NO auto-select after
+// cut — the user locks 1/4 later via selectSketchVariantCrop (phase-01).
 //
 // ⚡⚡ SNAPSHOT-READING (the #1 correctness point — differs from base #14): generate 08/09 reads
 // `snapshot.sketch` from the DB by snapshotId, so we MUST land the variant's edited text in the DB
@@ -27,6 +41,9 @@ import type {
   SketchVariantGenerateJobSlice,
   VariantGeneratePhase,
 } from '../types';
+// Key format + entity-level admission test are shared with selectors.ts / the space component —
+// single source, see sketch-op-keys.ts.
+import { variantOpKey, hasOpForEntity, countActiveVariantOps } from '../sketch-op-keys';
 import type { VariantRef, SketchVariant } from '@/types/sketch';
 import type { Illustration } from '@/types/prop-types';
 import {
@@ -48,6 +65,21 @@ const log = createLogger('Store', 'SketchVariantGenerateJobSlice');
 
 /** Variant sheet is a fixed 4-cell / 1-row / 21:9 grid (08/09 §Grid) → cut exactly 4 cells. */
 const VARIANT_CELL_COUNT = 4;
+
+/** Max variant ops the UI starts concurrently. The backend semaphore (GEMINI_IMAGE_CONCURRENCY,
+ *  default 5) is the real bound — this cap is UX only, so the user cannot fan out dozens of sheets
+ *  and then sit behind a server-side queue. 3 variant + 2 base kinds = the backend default. Over
+ *  the cap we toast and DROP (no client-side queue — the user retries). */
+export const VARIANT_GENERATE_CONCURRENCY_CAP = 3;
+
+/** Shown when a 2nd op is requested for a variant that is already generating / re-cutting. */
+export const VARIANT_BUSY_MESSAGE = 'This variant is still generating — please wait.';
+/** Shown when a DIFFERENT variant of the same entity holds the entity's slot (see `hasOpForEntity`). */
+export const VARIANT_ENTITY_BUSY_MESSAGE =
+  'Another variant of this entity is still generating — please wait.';
+/** Shown when the client cap is reached (a slot must free up first). */
+export const VARIANT_CAP_MESSAGE =
+  'Too many sheets generating — wait for one to finish, then try again.';
 
 /** Shown when the book was never saved (no snapshot row yet) — generate would read nothing. Kept on
  *  the op (so it surfaces inline / via the notifications hook) AND toasted immediately. Exported so
@@ -71,6 +103,8 @@ const SKETCH_VARIANT_ERROR_MESSAGES: Record<string, string> = {
   IMAGE_FETCH_ERROR: 'A reference image could not be loaded — please try again.',
   PROMPT_TEMPLATE_NOT_FOUND: 'The image prompt is misconfigured — please contact support.',
   LLM_ERROR: 'The image model failed to generate this sheet — please try again.',
+  // Backend exhausted its own 429 retries → the quota is genuinely saturated. No client auto-retry.
+  GEMINI_RATE_LIMIT: 'The image model is busy right now — wait a moment and try again.',
   NO_IMAGE_IN_RESPONSE: 'The image model returned no image — please try again.',
   STORAGE_UPLOAD_ERROR: 'Could not save the generated image — please try again.',
   // crop (10)
@@ -92,15 +126,10 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
   [],
   SketchVariantGenerateJobSlice
 > = (set, get) => {
-  /** Op no longer owns this ref — reset / new op raced in between an await → bail. */
+  /** This variant's op is gone (dismissed / replaced) — it raced an await → bail without writing.
+   *  Sibling variants have their own keys, so one op settling never stales another. */
   function opStale(ref: VariantRef): boolean {
-    const op = get().variantSheetGenerateOp;
-    return (
-      !op ||
-      op.kind !== ref.kind ||
-      op.entityKey !== ref.entityKey ||
-      op.variantKey !== ref.variantKey
-    );
+    return get().variantSheetGenerateOps[variantOpKey(ref)] == null;
   }
 
   /** Resolve the live variant node (or undefined) for reading its current raw_sheet versions. */
@@ -141,23 +170,28 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
     }
   }
 
-  // ── internal producers (immer) — called at await boundaries ──────────────────────────────────
-  function setOpPhase(phase: VariantGeneratePhase): void {
+  // ── internal producers (immer) — called at await boundaries. All address ONE map entry, so a
+  //    sibling variant's op is never touched. ────────────────────────────────────────────────────
+  function setOpPhase(ref: VariantRef, phase: VariantGeneratePhase): void {
     set((state) => {
-      if (state.variantSheetGenerateOp) state.variantSheetGenerateOp.phase = phase;
+      const op = state.variantSheetGenerateOps[variantOpKey(ref)];
+      if (op) op.phase = phase;
     });
   }
   /** Store the (already classified, friendly) message on the op; the op is KEPT until dismiss. */
-  function markOpError(message: string): void {
+  function markOpError(ref: VariantRef, message: string): void {
     set((state) => {
-      if (state.variantSheetGenerateOp) state.variantSheetGenerateOp.error = message;
+      const op = state.variantSheetGenerateOps[variantOpKey(ref)];
+      if (op) op.error = message;
     });
   }
-  /** Clear the op when it settled without error; on error keep it (content-area shows it inline). */
-  function finalizeOp(): void {
+  /** Drop the op when it settled without error; on error keep it (content-area shows it inline).
+   *  `delete` on the immer draft keeps the map identity stable for untouched keys. */
+  function finalizeOp(ref: VariantRef): void {
     set((state) => {
-      const op = state.variantSheetGenerateOp;
-      if (op && !op.error) state.variantSheetGenerateOp = null;
+      const key = variantOpKey(ref);
+      const op = state.variantSheetGenerateOps[key];
+      if (op && !op.error) delete state.variantSheetGenerateOps[key];
     });
   }
 
@@ -220,7 +254,7 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
             variantKey: ref.variantKey,
           });
           // Do NOT call the AI on a stale / peer-owned node (would burn tokens + write the wrong text).
-          markOpError('Could not save before generating — the entity may be locked by another editor.');
+          markOpError(ref, 'Could not save before generating — the entity may be locked by another editor.');
           return;
         }
       } else {
@@ -231,7 +265,7 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
       const snapshotId = get().meta.id; // ⚡ meta.id (NOT meta.snapshotId); brand-new book: null till first save
       if (!snapshotId) {
         log.warn('runGenerate', 'no snapshot id — cannot generate', { kind: ref.kind, collab });
-        markOpError(NO_SNAPSHOT_MESSAGE); // keep the op (error set) so it surfaces; retryable after dismiss
+        markOpError(ref, NO_SNAPSHOT_MESSAGE); // keep the op (error set) so it surfaces; retryable after dismiss
         toast.error(NO_SNAPSHOT_MESSAGE);
         return; // do NOT call the endpoint (it would fail SNAPSHOT_NOT_FOUND)
       }
@@ -262,7 +296,7 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
       get().setSketchVariantRawSheetIllustrations(ref.kind, ref.entityKey, ref.variantKey, next);
 
       // Phase 2 — AUTO-CUT (ALWAYS runs; no Re-cut button, no confirm).
-      setOpPhase('cut');
+      setOpPhase(ref, 'cut');
       await runCut(ref, gen.data.imageUrl);
     } catch (err) {
       if (opStale(ref)) return;
@@ -273,12 +307,12 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
         variantKey: ref.variantKey,
         error: msg,
       });
-      markOpError(msg); // keep the op so the notifications hook toasts once
+      markOpError(ref, msg); // keep the op so the notifications hook toasts once
     }
 
     if (opStale(ref)) return; // op reset during the last await → nothing to finalize
     persistVariantEntity(ref); // persist-after (raw sheet + crops landed in the store)
-    finalizeOp(); // clear the op if it settled without error
+    finalizeOp(ref); // clear the op if it settled without error
   }
 
   // ── cut-only re-run (call-site #2: the user EDITED the raw sheet in the Raw tab → crops stale). ──
@@ -298,23 +332,42 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
         variantKey: ref.variantKey,
         error: msg,
       });
-      markOpError(msg); // keep the op so the notifications hook toasts once
+      markOpError(ref, msg); // keep the op so the notifications hook toasts once
     }
 
     if (opStale(ref)) return; // op reset during the last await → nothing to finalize
     // Persist even on a cut failure: the RAW edit that triggered this re-cut is already in the store
     // and must land (the crops simply stay as they were).
     persistVariantEntity(ref);
-    finalizeOp();
+    finalizeOp(ref);
   }
 
   return {
-    variantSheetGenerateOp: null,
+    variantSheetGenerateOps: {},
 
     startVariantSheetGenerate: (ref: VariantRef) => {
-      if (get().variantSheetGenerateOp != null) {
-        log.warn('startVariantSheetGenerate', 'blocked — an op is already running', { kind: ref.kind });
-        return; // single-flight
+      const ops = get().variantSheetGenerateOps;
+      const key = variantOpKey(ref);
+      // Defensive net only — the call-site (doGenerate) already guards + toasts BEFORE adopting the
+      // lock, so reaching any branch here means a programmatic caller, not a double click.
+      if (hasOpForEntity(ops, ref)) {
+        log.warn('startVariantSheetGenerate', 'blocked — this entity already has an op', {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+          sameVariant: ops[key] != null,
+        });
+        return; // per-entity single-flight (the persist grain is the whole entity node)
+      }
+      const inFlight = countActiveVariantOps(ops);
+      if (inFlight >= VARIANT_GENERATE_CONCURRENCY_CAP) {
+        log.warn('startVariantSheetGenerate', 'blocked — client concurrency cap reached', {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+          inFlight,
+        });
+        return;
       }
 
       // ⚡ Contract (ADR-047): the art-style gate is GONE — generate no longer requires
@@ -326,7 +379,7 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
         variantKey: ref.variantKey,
       });
       set((state) => {
-        state.variantSheetGenerateOp = {
+        state.variantSheetGenerateOps[key] = {
           kind: ref.kind,
           entityKey: ref.entityKey,
           variantKey: ref.variantKey,
@@ -339,19 +392,23 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
     },
 
     recropVariantSheet: (ref: VariantRef) => {
-      if (get().variantSheetGenerateOp != null) {
+      const key = variantOpKey(ref);
+      // Per-ENTITY, not per-variant: a re-cut ends in the same whole-entity persist as a generate,
+      // so it must not overlap a sibling variant's chain either.
+      if (hasOpForEntity(get().variantSheetGenerateOps, ref)) {
         // Reachable: the edit-image modal stays OPEN after a raw commit, so a 2nd commit can land
         // while the 1st re-cut is still in flight. Dropping it silently would leave crops[] cut from
         // the PREVIOUS raw with no signal and no reason for the user to re-trigger — toast so the
         // mismatch is visible and actionable (mirrors the recrop-failure policy: non-fatal toast,
-        // keep the old crops, user re-triggers).
-        log.warn('recropVariantSheet', 'blocked — an op is already running', {
+        // keep the old crops, user re-triggers). Guard is per-variant: another variant generating
+        // does NOT block this re-cut.
+        log.warn('recropVariantSheet', 'blocked — this variant already has an op', {
           kind: ref.kind,
           entityKey: ref.entityKey,
           variantKey: ref.variantKey,
         });
         toast.warning('Still processing the previous change — the cells were not re-cut. Try again in a moment.');
-        return; // single-flight (shared with generate — one op at a time)
+        return; // per-variant single-flight (shared with generate — one op per variant)
       }
 
       // Reads the effective raw SYNCHRONOUSLY, so a caller that just wrote a new raw version (the
@@ -372,7 +429,7 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
         variantKey: ref.variantKey,
       });
       set((state) => {
-        state.variantSheetGenerateOp = {
+        state.variantSheetGenerateOps[key] = {
           kind: ref.kind,
           entityKey: ref.entityKey,
           variantKey: ref.variantKey,
@@ -384,16 +441,17 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
       void runRecrop({ kind: ref.kind, entityKey: ref.entityKey, variantKey: ref.variantKey }, rawUrl);
     },
 
-    dismissVariantSheetGenerateError: () =>
+    dismissVariantSheetGenerateError: (ref: VariantRef) =>
       set((state) => {
-        const op = state.variantSheetGenerateOp;
+        const key = variantOpKey(ref);
+        const op = state.variantSheetGenerateOps[key];
         if (op && op.error) {
           log.debug('dismissVariantSheetGenerateError', 'clear settled-with-error op', {
             kind: op.kind,
             entityKey: op.entityKey,
             variantKey: op.variantKey,
           });
-          state.variantSheetGenerateOp = null; // op was only kept to surface the error → clear it
+          delete state.variantSheetGenerateOps[key]; // kept only to surface the error → drop it
         }
       }),
   };

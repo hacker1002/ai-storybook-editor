@@ -17,6 +17,7 @@ import type { BaseKind, VariantRef } from '@/types/sketch';
 import { cn } from '@/utils/utils';
 import { useIsLockedByOther, useLockHolderName } from '@/stores/resource-lock-store';
 import { useSketchEntityDegraded } from '@/stores/snapshot-store';
+import { useIsVariantGenerateCapReached } from '@/stores/snapshot-store/selectors';
 import { resolveSketchVariantLockTarget } from '@/stores/snapshot-store/slices/collab-sketch-variant-save-helper';
 import {
   GATE_TOOLTIP,
@@ -187,17 +188,24 @@ function VariantRow({
   const degraded = useSketchEntityDegraded(variantRef.kind, variantRef.entityKey);
   const DEGRADED_TOOLTIP = 'Dữ liệu không đọc được — chỉ xem, không thể lưu. Mở hộp thoại kiểm tra dữ liệu để xử lý.';
 
+  // Client fan-out cap: refuse by GREYING the row's ✨ with a reason, like every other refusal here
+  // — never leave the button live and fail after the click.
+  const capReached = useIsVariantGenerateCapReached();
+  const CAP_TOOLTIP = 'Too many sheets generating — wait for one to finish, then try again.';
+
   // ✏/✨ disabled when a peer holds the entity OR the entity is degraded; ✨ additionally gated on
-  // the generate preconditions.
+  // the generate preconditions and the concurrency cap.
   const editDisabled = lockedByOther || degraded;
-  const generateDisabled = lockedByOther || degraded || !gate.canGenerate;
+  const generateDisabled = lockedByOther || degraded || !gate.canGenerate || capReached;
   const gateTooltip = degraded
     ? DEGRADED_TOOLTIP
     : lockedByOther
       ? `${holderName ?? 'Another editor'} is editing`
       : gate.reason
         ? GATE_TOOLTIP[gate.reason]
-        : undefined;
+        : capReached
+          ? CAP_TOOLTIP
+          : undefined;
 
   return (
     <div

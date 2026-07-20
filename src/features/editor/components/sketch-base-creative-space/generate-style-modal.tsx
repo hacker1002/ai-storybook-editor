@@ -30,7 +30,8 @@ import { Label } from '@/components/ui/label';
 import {
   useSketchBaseStyles,
   useSnapshotActions,
-  useIsAnySketchGenerating,
+  useIsBaseKindGenerating,
+  useIsSpreadOrStageGenerating,
 } from '@/stores/snapshot-store/selectors';
 import { useSketchStyleId } from '@/stores/book-store';
 import { useArtStyles } from '@/stores/art-styles-store';
@@ -68,9 +69,12 @@ export function GenerateStyleModal({ kind, mode, styleIndex, onEnqueued, onClose
   // per-attempt (style experimentation, not persisted to the book).
   const sketchStyleId = useSketchStyleId();
   const { startBaseSheetGenerate } = useSnapshotActions();
-  // Cross-job single-flight guard: the slice bails (warn-only) if any sketch generation is already
-  // running → block Generate here so the modal can't close as if it worked (no silent drop).
-  const isAnyGenerating = useIsAnySketchGenerating();
+  // Gate mirrors the slice's own guards so the modal can never close as if it worked (no silent
+  // drop): per-KIND (this kind already has an op — the OTHER kind generating is fine, that is the
+  // parallelism) + cross-FAMILY (base stays mutually exclusive with the spread and stage spaces).
+  const isThisKindGenerating = useIsBaseKindGenerating(kind);
+  const isSpreadOrStageGenerating = useIsSpreadOrStageGenerating();
+  const isAnyGenerating = isThisKindGenerating || isSpreadOrStageGenerating;
 
   // All art styles are fetched app-wide on auth (App.tsx) → filter the sketch pipeline (type=0). No
   // extra query. Options feed the ArtStyleSelect combobox; the full ArtStyle drives the ref grid.

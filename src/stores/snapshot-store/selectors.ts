@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSnapshotStore } from './index';
+import { variantOpKey, countActiveVariantOps } from './sketch-op-keys';
+import { VARIANT_GENERATE_CONCURRENCY_CAP } from './slices/sketch-variant-generate-job-slice';
 import type { DocType, SaveStatus, SyncState } from '@/types/editor';
 import type {
   Sketch,
@@ -24,7 +26,7 @@ import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/i
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase, VariantSheetGenerateOp, VariantGeneratePhase, StageSheetGenerateOp, StageGeneratePhase } from './types';
+import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase, VariantSheetGenerateOp, VariantOpKey, VariantGeneratePhase, StageSheetGenerateOp, StageGeneratePhase } from './types';
 import type { StageSelection } from '@/types/sketch';
 import type {
   BaseSpread,
@@ -306,20 +308,27 @@ export const useSketchSpreadGenerating = (spreadId: string) =>
     }),
   );
 
-// Sketch BASE-sheet generate-op selectors (ephemeral, single-flight). Same ref-stability discipline:
-// stable ref / boolean → no useShallow; fresh object of PRIMITIVES → useShallow safe.
-export const useBaseSheetGenerateOp = (): BaseSheetGenerateOp | null =>
-  useSnapshotStore((s) => s.baseSheetGenerateOp);
+// Sketch BASE-sheet generate-op selectors (ephemeral, per-KIND map: characters ∥ props). Same
+// ref-stability discipline: stable ref / boolean → no useShallow; fresh object of PRIMITIVES →
+// useShallow safe. The map itself is a stable store ref → no useShallow either.
+export const useBaseSheetGenerateOps = (): Partial<Record<BaseKind, BaseSheetGenerateOp>> =>
+  useSnapshotStore((s) => s.baseSheetGenerateOps);
 
-export const useIsBaseSheetGenerating = (): boolean =>
-  useSnapshotStore((s) => s.baseSheetGenerateOp != null);
+/** Is THIS kind generating? The gate for the per-kind Generate button/modal — a busy `characters`
+ *  must NOT block `props`. */
+export const useIsBaseKindGenerating = (kind: BaseKind): boolean =>
+  useSnapshotStore((s) => s.baseSheetGenerateOps[kind] != null);
+
+/** Is ANY base kind generating? Cross-space guard input (see `useIsAnySketchGenerating`). */
+export const useIsAnyBaseSheetGenerating = (): boolean =>
+  useSnapshotStore((s) => Object.keys(s.baseSheetGenerateOps).length > 0);
 
 // Per-style status — covers BOTH phases (generate + crop): a style is "generating" until crops land.
 export const useBaseSheetGenerateStatus = (kind: BaseKind, styleIndex: number) =>
   useSnapshotStore(
     useShallow((s) => {
-      const op = s.baseSheetGenerateOp;
-      const match = !!op && op.kind === kind && op.styleIndex === styleIndex;
+      const op = s.baseSheetGenerateOps[kind];
+      const match = !!op && op.styleIndex === styleIndex;
       return {
         isGenerating: match,
         phase: (match ? op!.phase : 'idle') as BaseGeneratePhase | 'idle',
@@ -328,10 +337,24 @@ export const useBaseSheetGenerateStatus = (kind: BaseKind, styleIndex: number) =
     }),
   );
 
-// Sketch VARIANT-sheet generate-op selectors (ephemeral, single-flight). Same ref-stability
-// discipline: stable ref → no useShallow; fresh object of PRIMITIVES → useShallow safe.
-export const useVariantSheetGenerateOp = (): VariantSheetGenerateOp | null =>
-  useSnapshotStore((s) => s.variantSheetGenerateOp);
+// Sketch VARIANT-sheet generate-op selectors (ephemeral, per-VARIANT map — N variants run in
+// parallel). Same ref-stability discipline: stable ref → no useShallow; fresh object of PRIMITIVES
+// → useShallow safe.
+export const useVariantSheetGenerateOps = (): Record<VariantOpKey, VariantSheetGenerateOp> =>
+  useSnapshotStore((s) => s.variantSheetGenerateOps);
+
+/** Is ANY variant actually RUNNING? Used by the nav-guard (leaving mid-generate loses the result) —
+ *  NOT by the cross-space mutual-exclusion guard, which deliberately ignores variants.
+ *  Errored-but-undismissed ops are excluded, else one failure would block Home forever. */
+export const useIsAnyVariantSheetGenerating = (): boolean =>
+  useSnapshotStore((s) => countActiveVariantOps(s.variantSheetGenerateOps) > 0);
+
+/** Client fan-out cap reached → the ✨ buttons grey out with a reason instead of failing on click. */
+export const useIsVariantGenerateCapReached = (): boolean =>
+  useSnapshotStore(
+    (s) =>
+      countActiveVariantOps(s.variantSheetGenerateOps) >= VARIANT_GENERATE_CONCURRENCY_CAP,
+  );
 
 // Per-ref status keyed {kind, entityKey, variantKey}. Busy = matching op with no error yet.
 export const useVariantSheetGenerateStatus = (
@@ -341,11 +364,9 @@ export const useVariantSheetGenerateStatus = (
 ): { isBusy: boolean; phase?: VariantGeneratePhase; error?: string } =>
   useSnapshotStore(
     useShallow((s) => {
-      const op = s.variantSheetGenerateOp;
-      const match =
-        !!op && op.kind === kind && op.entityKey === entityKey && op.variantKey === variantKey;
-      if (!match) return { isBusy: false };
-      return { isBusy: !op!.error, phase: op!.phase, error: op!.error };
+      const op = s.variantSheetGenerateOps[variantOpKey({ kind, entityKey, variantKey })];
+      if (!op) return { isBusy: false };
+      return { isBusy: !op.error, phase: op.phase, error: op.error };
     }),
   );
 
@@ -375,17 +396,26 @@ export function stageTargetsEqual(a: StageSelection, b: StageSelection): boolean
   return false;
 }
 
-// Unified 1-sketch-job guard: true while ANY sketch generation runs — the spread-image job OR the
-// base-sheet op OR the variant-sheet op OR the stage-sheet op. Single store read (all Generate
-// buttons + the nav-guard share it → no concurrent burst). Boolean → no useShallow.
-// NOTE: variantSheetGenerateOp is deliberately NOT in this guard (pre-existing semantics — the
-// variant space self-guards); stage joins the guard per plan Phase 03.
+// CROSS-SPACE mutual-exclusion guard: true while a spread / base / stage generation runs. Consumed
+// by the stage modal, the stage import and the spread content-area, so those spaces stay mutually
+// exclusive. Boolean → no useShallow.
+// NOTE: variant ops are deliberately NOT in this guard (pre-existing semantics — the variant space
+// self-guards per variant). The BASE space must not use this one either: it would block `props`
+// while `characters` generates and kill the per-kind parallelism — it uses
+// `useIsBaseKindGenerating` + `useIsSpreadOrStageGenerating` instead.
 export const useIsAnySketchGenerating = (): boolean =>
   useSnapshotStore(
     (s) =>
       s.sketchSpreadGenerateJob?.status === 'running' ||
-      s.baseSheetGenerateOp != null ||
+      Object.keys(s.baseSheetGenerateOps).length > 0 ||
       s.stageSheetGenerateOp != null,
+  );
+
+/** The cross-family half of the base space's gate: base is parallel per kind, but still mutually
+ *  exclusive with the spread and stage spaces. */
+export const useIsSpreadOrStageGenerating = (): boolean =>
+  useSnapshotStore(
+    (s) => s.sketchSpreadGenerateJob?.status === 'running' || s.stageSheetGenerateOp != null,
   );
 
 // Fetch state selectors

@@ -818,7 +818,7 @@ export interface SketchSpreadGenerateJobSlice {
 
 // --- Sketch Base Generate Op Types (ephemeral, not persisted to DB) ---
 // One op = ONE base style attempt (kind, styleIndex): a 2-API chain generate (05|06, AI) → crop
-// (07, CV). SINGLE-FLIGHT (at most one op at a time), per-style 2-phase status. Distinct from the
+// (07, CV). PER-KIND PARALLEL (characters ∥ props, at most one op per kind), per-style 2-phase status. Distinct from the
 // entity (#12) and spread (#13) jobs: the unit is a STYLE (not N entities/spreads), and crop reads
 // NO DB — `imageUrl` is passed straight from the generate result / effective raw, so there is no
 // awaited flush (only a fire-and-forget autoSaveSnapshot at the end).
@@ -848,20 +848,26 @@ export interface StartBaseSheetGenerateParams {
 }
 
 export interface SketchBaseGenerateJobSlice {
-  baseSheetGenerateOp: BaseSheetGenerateOp | null;
+  /** In-flight (or settled-with-error) ops keyed by KIND — `characters` and `props` generate in
+   *  parallel (separate rtype-11 sheet nodes); the same kind stays single-flight because both ops
+   *  would write that one sheet node. Empty object = idle. */
+  baseSheetGenerateOps: Partial<Record<BaseKind, BaseSheetGenerateOp>>;
   startBaseSheetGenerate: (params: StartBaseSheetGenerateParams) => void;
   recropBaseSheet: (kind: BaseKind, styleIndex: number) => void;
-  cancelBaseSheetGenerate: () => void;
-  dismissBaseSheetGenerateError: () => void;
+  cancelBaseSheetGenerate: (kind: BaseKind) => void;
+  dismissBaseSheetGenerateError: (kind: BaseKind) => void;
 }
 
 // --- Sketch Variant Generate Op Types (ephemeral, not persisted to DB) ---
 // One op = ONE non-base variant (kind, entityKey, variantKey): a 2-phase chain generate the RAW
 // 4-cell sheet (08|09, AI, snapshot-reading) → AUTO-CUT the 4 cells (10, CV) — auto-cut ALWAYS runs
-// (no Re-cut button, no confirm). SINGLE-FLIGHT (at most one op at a time), per-ref 2-phase status.
-// Distinct from the base op (#14): the unit is a VARIANT (not a style), generate is snapshot-reading
-// so the job AWAITS flushSnapshot() before reading meta.id (mirror the spread slice, NOT base which
-// ships text in the payload), and the write sinks are the per-variant raw_sheet setters (phase-01).
+// (no Re-cut button, no confirm). PER-VARIANT PARALLEL: ops live in a map keyed by variant, so N
+// different variants generate concurrently; the same variant stays single-flight (generate OR
+// recrop, never both). Safe because the persist/lock grain is already per-entity (rtype 3/4) — two
+// entities flush + lock independently. Distinct from the base op (#14): the unit is a VARIANT (not
+// a style), generate is snapshot-reading so the job AWAITS flushSnapshot() before reading meta.id
+// (mirror the spread slice, NOT base which ships text in the payload), and the write sinks are the
+// per-variant raw_sheet setters (phase-01).
 
 export type VariantGeneratePhase = 'generate' | 'cut'; // generate = 08/09 (AI); cut = 10 (CV, auto)
 
@@ -875,17 +881,23 @@ export interface VariantSheetGenerateOp {
   error?: string;
 }
 
+/** Map key for a variant op: `${kind}|${entityKey}|${variantKey}` — built by `variantOpKey`
+ *  (exported from the slice module, which owns the runtime helpers). */
+export type VariantOpKey = string;
+
 export interface SketchVariantGenerateJobSlice {
-  variantSheetGenerateOp: VariantSheetGenerateOp | null;
-  /** Run the 2-phase generate→auto-cut job for ONE non-base variant. Single-flight; resolves
-   *  artStyleId from book.sketchstyle_id + snapshotId from meta.id (after an awaited flush). */
+  /** In-flight (or settled-with-error) ops keyed by `variantOpKey`. Empty object = idle. */
+  variantSheetGenerateOps: Record<VariantOpKey, VariantSheetGenerateOp>;
+  /** Run the 2-phase generate→auto-cut job for ONE non-base variant. Single-flight PER VARIANT
+   *  (other variants run in parallel); resolves snapshotId from meta.id after an awaited flush. */
   startVariantSheetGenerate: (ref: VariantRef) => void;
   /** Cut-only re-run against the CURRENT effective raw sheet (call-site: the user edited the raw
-   *  sheet in the Raw tab → its crops are stale). Single-flight; OVERWRITES raw_sheet.crops[] with
-   *  4 fresh, unpicked cells. Mirrors recropBaseSheet (#14). No-op when no raw sheet exists. */
+   *  sheet in the Raw tab → its crops are stale). Single-flight per variant; OVERWRITES
+   *  raw_sheet.crops[] with 4 fresh, unpicked cells. No-op when no raw sheet exists. */
   recropVariantSheet: (ref: VariantRef) => void;
-  /** Clear an op that settled with an error (so the notifications hook toasts it once). */
-  dismissVariantSheetGenerateError: () => void;
+  /** Clear the op for THIS variant when it settled with an error (the notifications hook toasts
+   *  it once, then dismisses). */
+  dismissVariantSheetGenerateError: (ref: VariantRef) => void;
 }
 
 // --- Sketch Stage Generate Op Types (ephemeral, not persisted to DB) ---

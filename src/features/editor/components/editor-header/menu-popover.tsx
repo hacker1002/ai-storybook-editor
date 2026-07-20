@@ -2,7 +2,11 @@ import { ArrowLeft, Settings } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { useHasPendingImageTasks, useIsAnySketchGenerating } from '@/stores/snapshot-store/selectors';
+import {
+  useHasPendingImageTasks,
+  useIsAnySketchGenerating,
+  useIsAnyVariantSheetGenerating,
+} from '@/stores/snapshot-store/selectors';
 import { toast } from 'sonner';
 import type { UserPoints, EditorMode } from '@/types/editor';
 
@@ -25,8 +29,12 @@ export function MenuPopover({
 }: MenuPopoverProps) {
   const progressPercent = (userPoints.current / userPoints.total) * 100;
   const hasPendingTasks = useHasPendingImageTasks();
-  // Unified guard — blocks Home while EITHER sketch job (entity-sheet or spread-image) runs.
-  const isSketchGenerating = useIsAnySketchGenerating();
+  // Nav-guard — blocks Home while ANY sketch generation runs. Variant ops are OR-ed in explicitly:
+  // useIsAnySketchGenerating is the cross-space mutual-exclusion guard and deliberately excludes
+  // them, but leaving the editor mid-generate loses the in-flight result either way.
+  const isCrossSpaceGenerating = useIsAnySketchGenerating();
+  const isVariantGenerating = useIsAnyVariantSheetGenerating();
+  const isSketchGenerating = isCrossSpaceGenerating || isVariantGenerating;
 
   const handleHomeClick = () => {
     if (hasPendingTasks) {

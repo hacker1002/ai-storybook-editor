@@ -170,7 +170,7 @@ describe('SketchBaseGenerateJobSlice', () => {
     expect(style.crops[0].illustrations[0].media_url).toBe('crop-hero.png');
 
     // Assert op finalized (null after success)
-    expect(store.getState().baseSheetGenerateOp).toBeNull();
+    expect(store.getState().baseSheetGenerateOps.characters).toBeUndefined();
 
     // Assert autoSave called (solo persist path)
     expect(autoSaveSnapshot).toHaveBeenCalled();
@@ -316,7 +316,7 @@ describe('SketchBaseGenerateJobSlice', () => {
     // Simulate op reset (cancel or removeStyle mid-chain)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     store.setState((s: any) => {
-      s.baseSheetGenerateOp = null;
+      s.baseSheetGenerateOps = {};
     });
 
     // Resolve generate (but op is stale, runCrop guard should bail)
@@ -332,7 +332,7 @@ describe('SketchBaseGenerateJobSlice', () => {
     expect(mockedCropCall).not.toHaveBeenCalled();
   });
 
-  it('single-flight: second start blocked while op != null', async () => {
+  it('per-kind single-flight: a second start on the SAME kind is blocked', async () => {
     const baseEntity: SketchEntity = {
       key: 'hero',
       variants: [{ key: 'base', description: '', visual_design: 'test', art_language: '' }],
@@ -353,7 +353,7 @@ describe('SketchBaseGenerateJobSlice', () => {
     await tick();
     expect(mockedGenerateCall).toHaveBeenCalledTimes(1);
 
-    // Second start while op != null → no-op
+    // Second start on the SAME kind (its sheet node already has a writer) → no-op
     store.getState().startBaseSheetGenerate({
       kind: 'characters',
       mode: 'add',
@@ -365,6 +365,75 @@ describe('SketchBaseGenerateJobSlice', () => {
 
     dGen.resolve(okGenerate('raw.png'));
     await tick();
+  });
+
+  it('per-kind parallel: props starts while characters is still generating', async () => {
+    const baseEntity = (key: string): SketchEntity => ({
+      key,
+      variants: [{ key: 'base', description: '', visual_design: 'test', art_language: '' }],
+    });
+    store.getState().setSketchEntities('characters', [baseEntity('hero')]);
+    store.getState().setSketchEntities('props', [baseEntity('lantern')]);
+
+    const dChar = deferred<ReturnType<typeof okGenerate>>();
+    const dProp = deferred<ReturnType<typeof okGenerate>>();
+    mockedGenerateCall.mockReturnValueOnce(dChar.promise as never);
+    mockedGenerateCall.mockReturnValueOnce(dProp.promise as never);
+
+    store.getState().startBaseSheetGenerate({
+      kind: 'characters',
+      mode: 'add',
+      stylePrompt: 'chars',
+      referenceImages: [],
+      artStyleId: 'style-1',
+    });
+    await tick();
+    store.getState().startBaseSheetGenerate({
+      kind: 'props',
+      mode: 'add',
+      stylePrompt: 'props',
+      referenceImages: [],
+      artStyleId: 'style-1',
+    });
+    await tick();
+
+    expect(mockedGenerateCall).toHaveBeenCalledTimes(2); // both dispatched
+    const ops = store.getState().baseSheetGenerateOps;
+    expect(ops.characters).toBeDefined();
+    expect(ops.props).toBeDefined();
+
+    dChar.resolve(okGenerate('raw.png'));
+    dProp.resolve(okGenerate('raw2.png'));
+    await tick();
+  });
+
+  it('cancel/dismiss address ONE kind — the other kind is untouched', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store.setState((s: any) => {
+      s.baseSheetGenerateOps.characters = {
+        kind: 'characters',
+        styleIndex: 0,
+        phase: 'generating',
+        startedAt: 'now',
+        isRecrop: false,
+      };
+      s.baseSheetGenerateOps.props = {
+        kind: 'props',
+        styleIndex: 0,
+        phase: 'generating',
+        startedAt: 'now',
+        isRecrop: false,
+        error: 'boom',
+      };
+    });
+
+    store.getState().cancelBaseSheetGenerate('characters');
+    expect(store.getState().baseSheetGenerateOps.characters?.cancelRequested).toBe(true);
+    expect(store.getState().baseSheetGenerateOps.props?.cancelRequested).toBeUndefined();
+
+    store.getState().dismissBaseSheetGenerateError('props');
+    expect(store.getState().baseSheetGenerateOps.props).toBeUndefined();
+    expect(store.getState().baseSheetGenerateOps.characters).toBeDefined();
   });
 
   it('recrop: style with raw → crop-only overwrites crops', async () => {
@@ -440,12 +509,12 @@ describe('SketchBaseGenerateJobSlice', () => {
     expect(store.getState().sketch.base.character_sheet.styles).toHaveLength(0);
 
     // Assert op.error set + op kept (not finalized to null)
-    expect(store.getState().baseSheetGenerateOp).not.toBeNull();
-    expect(store.getState().baseSheetGenerateOp?.error).toContain('image model');
+    expect(store.getState().baseSheetGenerateOps.characters).not.toBeUndefined();
+    expect(store.getState().baseSheetGenerateOps.characters?.error).toContain('image model');
 
     // Dismiss
-    store.getState().dismissBaseSheetGenerateError();
-    expect(store.getState().baseSheetGenerateOp).toBeNull();
+    store.getState().dismissBaseSheetGenerateError('characters');
+    expect(store.getState().baseSheetGenerateOps.characters).toBeUndefined();
   });
 
   it('refs: pre-hosted art-style refs → persisted verbatim on the style + sent as media_url to generate', async () => {
@@ -545,8 +614,8 @@ describe('SketchBaseGenerateJobSlice', () => {
     expect(styles[0].illustrations[0].media_url).toBe('raw.png');
 
     // op.error set + kept
-    expect(store.getState().baseSheetGenerateOp).not.toBeNull();
-    expect(store.getState().baseSheetGenerateOp?.error).toContain('crop');
+    expect(store.getState().baseSheetGenerateOps.characters).not.toBeUndefined();
+    expect(store.getState().baseSheetGenerateOps.characters?.error).toContain('crop');
   });
 
   it('positional pairing: crops keyed by 1-based cell (skipped middle cell does NOT shift keys) + warn', async () => {

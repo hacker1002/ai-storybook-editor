@@ -30,13 +30,26 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useSnapshotStore } from '@/stores/snapshot-store';
 import {
   useSketchEntities,
   useSketchVariantByKey,
-  useVariantSheetGenerateOp,
+  useVariantSheetGenerateOps,
   useVariantSheetGenerateStatus,
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
+import {
+  variantOpKey,
+  hasOpForEntity,
+  countActiveVariantOps,
+} from '@/stores/snapshot-store/sketch-op-keys';
+import {
+  VARIANT_GENERATE_CONCURRENCY_CAP,
+  VARIANT_BUSY_MESSAGE,
+  VARIANT_ENTITY_BUSY_MESSAGE,
+  VARIANT_CAP_MESSAGE,
+} from '@/stores/snapshot-store/slices/sketch-variant-generate-job-slice';
+import { toast } from 'sonner';
 import { useCurrentBookId } from '@/stores/book-store';
 import {
   useIsLockedByOther,
@@ -85,8 +98,9 @@ export function SketchVariantsCreativeSpace() {
   // Full entities (both kinds) — the source for BOTH the row refs AND the reactive gate.
   const charEntities = useSketchEntities('characters');
   const propEntities = useSketchEntities('props');
-  // Single-flight op — drives the per-row spinner (across both kinds) + the content-area busy state.
-  const op = useVariantSheetGenerateOp();
+  // In-flight ops keyed by variant — drives the per-row spinners (many rows can be busy at once,
+  // across both kinds) + the content-area busy state.
+  const ops = useVariantSheetGenerateOps();
   const { startVariantSheetGenerate, selectSketchVariantCrop } = useSnapshotActions();
 
   // ── Local UI state (owner = this root; state-location rule) ────────────────────────────────
@@ -137,13 +151,14 @@ export function SketchVariantsCreativeSpace() {
     selected?.variantKey ?? '',
   );
 
-  // Per-row generate status from the single-flight op (fresh on every phase/error transition).
+  // Per-row generate status, looked up by variant key (fresh on every phase/error transition).
   const genStatusByRef = useCallback(
     (ref: VariantRef): VariantGenStatus => {
-      if (op && sameRef(op, ref)) return { isBusy: !op.error, phase: op.phase, error: op.error };
+      const op = ops[variantOpKey(ref)];
+      if (op) return { isBusy: !op.error, phase: op.phase, error: op.error };
       return { isBusy: false };
     },
-    [op],
+    [ops],
   );
 
   // Generate gate — FE fail-fast on the endpoint's hard preconditions. REACTIVE: reads the
@@ -214,12 +229,41 @@ export function SketchVariantsCreativeSpace() {
   );
 
   // ✨ Generate: acquire the entity lock (adopt → held session releases on switch/unmount), then run.
+  // Both guards run BEFORE `lock.adopt` — a dropped click must not leave an adopted lock behind
+  // (the slice's own guards are silent defensive nets, so the toasts live here).
   const doGenerate = useCallback(
     (ref: VariantRef) => {
+      const ops = useSnapshotStore.getState().variantSheetGenerateOps;
+      const key = variantOpKey(ref);
+      // Per-ENTITY admission — the persist grain is the whole entity node, so a sibling variant's
+      // chain blocks this one too (see hasOpForEntity).
+      if (hasOpForEntity(ops, ref)) {
+        const sameVariant = ops[key] != null;
+        log.warn('doGenerate', 'drop — this entity is already generating', {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+          sameVariant,
+        });
+        toast.warning(sameVariant ? VARIANT_BUSY_MESSAGE : VARIANT_ENTITY_BUSY_MESSAGE);
+        return;
+      }
+      const inFlight = countActiveVariantOps(ops);
+      if (inFlight >= VARIANT_GENERATE_CONCURRENCY_CAP) {
+        log.warn('doGenerate', 'drop — client concurrency cap reached', {
+          kind: ref.kind,
+          entityKey: ref.entityKey,
+          variantKey: ref.variantKey,
+          inFlight,
+        });
+        toast.warning(VARIANT_CAP_MESSAGE);
+        return;
+      }
       log.info('doGenerate', 'interact — acquire entity lock + start variant sheet generate', {
         kind: ref.kind,
         entityKey: ref.entityKey,
         variantKey: ref.variantKey,
+        inFlight,
       });
       lock.adopt(ref);
       startVariantSheetGenerate(ref);

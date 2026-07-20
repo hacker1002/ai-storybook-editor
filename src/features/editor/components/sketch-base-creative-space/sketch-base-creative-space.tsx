@@ -34,7 +34,7 @@ import {
   useSketchBaseStyles,
   useSketchBaseEntityKeys,
   useBaseSheetGenerateStatus,
-  useBaseSheetGenerateOp,
+  useBaseSheetGenerateOps,
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
 import { useSnapshotStore } from '@/stores/snapshot-store';
@@ -155,7 +155,7 @@ export function SketchBaseSpace() {
   // why saving is refused; editing stays possible (D5: block persist, not interaction).
   const sheetDegraded = useSketchSheetDegraded(activeKind);
   const genStatus = useBaseSheetGenerateStatus(activeKind, effectiveSelected?.index ?? -1);
-  const generateOp = useBaseSheetGenerateOp();
+  const generateOps = useBaseSheetGenerateOps();
   const style = effectiveSelected ? stylesByKind[effectiveSelected.kind][effectiveSelected.index] : null;
 
   // ── Per-kind held SHEET session (ADR-043, grain A) ───────────────────────────────────────────
@@ -429,7 +429,7 @@ export function SketchBaseSpace() {
         onEditEntity={handleEditEntity}
         onImport={handleImport}
         isImporting={isImporting}
-        generateOp={generateOp}
+        generateOps={generateOps}
       />
 
       <div className="flex flex-1 min-w-[480px] flex-col overflow-hidden">

@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { createSketchSlice } from './sketch-slice';
-import { createSketchVariantGenerateJobSlice } from './sketch-variant-generate-job-slice';
+import {
+  createSketchVariantGenerateJobSlice,
+  VARIANT_GENERATE_CONCURRENCY_CAP,
+} from './sketch-variant-generate-job-slice';
 import type { SketchEntity } from '@/types/sketch';
 import {
   callGenerateVariantSheet,
@@ -74,6 +77,9 @@ function deferred<T>(): Deferred<T> {
 }
 
 const REF = { kind: 'characters', entityKey: 'kid', variantKey: 'hero' } as const;
+const KEY = 'characters|kid|hero';
+const REF2 = { kind: 'props', entityKey: 'sword', variantKey: 'gold' } as const;
+const KEY2 = 'props|sword|gold';
 
 // Entity carrying a base + a non-base 'hero' variant (setters no-op if the variant is absent).
 const entityWithVariant = (): SketchEntity => ({
@@ -185,7 +191,7 @@ describe('SketchVariantGenerateJobSlice', () => {
 
     expect(h.flushEntity).toHaveBeenCalled();
     expect(mockedGen).not.toHaveBeenCalled(); // never burn AI tokens on a stale / peer-owned node
-    expect(store.getState().variantSheetGenerateOp?.error).toContain('Could not save before generating');
+    expect(store.getState().variantSheetGenerateOps[KEY]?.error).toContain('Could not save before generating');
   });
 
   it('(a4) COLLAB: persists the RESULT via the gateway helper (not autoSaveSnapshot)', async () => {
@@ -201,7 +207,7 @@ describe('SketchVariantGenerateJobSlice', () => {
     // flush called twice: flush-before-generate AND persist-after-crops (both whole entity node).
     expect(h.flushEntity.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(autoSaveSnapshot).not.toHaveBeenCalled(); // collab never dual-writes via autosave
-    expect(store.getState().variantSheetGenerateOp).toBeNull();
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
   });
 
   it('(b) meta.id == null → toasts + does NOT call generate + keeps the errored op', async () => {
@@ -218,8 +224,8 @@ describe('SketchVariantGenerateJobSlice', () => {
     expect(mockedGen).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith('Save the book first, then generate.');
     // op kept (error set) so the notifications hook can surface it.
-    expect(store.getState().variantSheetGenerateOp).not.toBeNull();
-    expect(store.getState().variantSheetGenerateOp?.error).toBe('Save the book first, then generate.');
+    expect(store.getState().variantSheetGenerateOps[KEY]).not.toBeUndefined();
+    expect(store.getState().variantSheetGenerateOps[KEY]?.error).toBe('Save the book first, then generate.');
   });
 
   it('(c) advances phase generate → cut', async () => {
@@ -230,16 +236,16 @@ describe('SketchVariantGenerateJobSlice', () => {
 
     store.getState().startVariantSheetGenerate(REF);
     await tick();
-    expect(store.getState().variantSheetGenerateOp?.phase).toBe('generate');
+    expect(store.getState().variantSheetGenerateOps[KEY]?.phase).toBe('generate');
 
     dGen.resolve(okGen('raw.png'));
     await tick();
-    expect(store.getState().variantSheetGenerateOp?.phase).toBe('cut');
+    expect(store.getState().variantSheetGenerateOps[KEY]?.phase).toBe('cut');
 
     dCut.resolve(okCut(['c1.png', 'c2.png', 'c3.png', 'c4.png']));
     await tick();
     // op finalized to null after a clean run.
-    expect(store.getState().variantSheetGenerateOp).toBeNull();
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
   });
 
   it('(d) writes raw (prepend, selected) + crops via the setters with the right pathPrefix', async () => {
@@ -272,7 +278,7 @@ describe('SketchVariantGenerateJobSlice', () => {
     });
     // Durability autosave fired.
     expect(autoSaveSnapshot).toHaveBeenCalled();
-    expect(store.getState().variantSheetGenerateOp).toBeNull();
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
   });
 
   it('(e) crops are NOT auto-locked (cell.is_selected=false, inner illustration selected)', async () => {
@@ -289,7 +295,7 @@ describe('SketchVariantGenerateJobSlice', () => {
     expect(crops.every((c: { illustrations: { is_selected: boolean }[] }) => c.illustrations[0].is_selected === true)).toBe(true);
   });
 
-  it('(f) single-flight: a second start while an op runs is a no-op', async () => {
+  it('(f) per-variant single-flight: a second start for the SAME variant is a no-op', async () => {
     const dGen = deferred<GenerateVariantSheetResult>();
     mockedGen.mockReturnValueOnce(dGen.promise as never);
 
@@ -297,13 +303,139 @@ describe('SketchVariantGenerateJobSlice', () => {
     await tick();
     expect(mockedGen).toHaveBeenCalledTimes(1);
 
-    // Second start (even a different ref) blocked while an op != null.
-    store.getState().startVariantSheetGenerate({ kind: 'props', entityKey: 'sword', variantKey: 'gold' });
+    store.getState().startVariantSheetGenerate(REF);
     expect(mockedGen).toHaveBeenCalledTimes(1); // still 1
-    expect(store.getState().variantSheetGenerateOp?.entityKey).toBe('kid'); // original op unchanged
+    expect(store.getState().variantSheetGenerateOps[KEY]?.entityKey).toBe('kid'); // original op unchanged
 
     dGen.resolve(okGen('raw.png'));
     await tick();
+  });
+
+  it('(f2) parallel: a DIFFERENT variant starts while the first is in flight', async () => {
+    const dGen = deferred<GenerateVariantSheetResult>();
+    mockedGen.mockReturnValueOnce(dGen.promise as never);
+    mockedGen.mockReturnValueOnce(deferred<GenerateVariantSheetResult>().promise as never);
+
+    store.getState().startVariantSheetGenerate(REF);
+    await tick();
+    store.getState().startVariantSheetGenerate(REF2);
+    await tick();
+
+    expect(mockedGen).toHaveBeenCalledTimes(2);
+    const ops = store.getState().variantSheetGenerateOps;
+    expect(Object.keys(ops).sort()).toEqual([KEY, KEY2].sort());
+    expect(ops[KEY].entityKey).toBe('kid');
+    expect(ops[KEY2].entityKey).toBe('sword');
+
+    dGen.resolve(okGen('raw.png'));
+    await tick();
+  });
+
+  it('(f2b) SAME entity, different variant is BLOCKED — the persist grain is the entity node', async () => {
+    // kid has two non-base variants; both would flush the same rtype-3 entity node, so the second
+    // must not be admitted (whole-node last-writer-wins + shared-lock release race).
+    store.getState().setSketchEntities('characters', [
+      {
+        key: 'kid',
+        variants: [
+          { key: 'base', description: '', visual_design: '', art_language: '' },
+          { key: 'hero', description: '', visual_design: 'brave knight', art_language: '' },
+          { key: 'sad', description: '', visual_design: 'downcast knight', art_language: '' },
+        ],
+      },
+    ]);
+    const dGen = deferred<GenerateVariantSheetResult>();
+    mockedGen.mockReturnValueOnce(dGen.promise as never);
+
+    store.getState().startVariantSheetGenerate(REF);
+    await tick();
+    expect(mockedGen).toHaveBeenCalledTimes(1);
+
+    store.getState().startVariantSheetGenerate({
+      kind: 'characters',
+      entityKey: 'kid',
+      variantKey: 'sad',
+    });
+
+    expect(mockedGen).toHaveBeenCalledTimes(1); // sibling variant refused
+    expect(store.getState().variantSheetGenerateOps['characters|kid|sad']).toBeUndefined();
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeDefined();
+
+    dGen.resolve(okGen('raw.png'));
+    await tick();
+  });
+
+  it('(f2c) recrop is refused while a SIBLING variant of the same entity runs', async () => {
+    store.getState().setSketchVariantRawSheetIllustrations('characters', 'kid', 'hero', [
+      {
+        type: 'created' as const,
+        media_url: 'raw.png',
+        created_time: '2026-07-15T00:00:00Z',
+        is_selected: true,
+      },
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store.setState((s: any) => {
+      s.variantSheetGenerateOps['characters|kid|sad'] = {
+        kind: 'characters',
+        entityKey: 'kid',
+        variantKey: 'sad',
+        phase: 'generate',
+        startedAt: 'now',
+      };
+    });
+
+    store.getState().recropVariantSheet(REF);
+
+    expect(mockedCut).not.toHaveBeenCalled();
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
+  });
+
+  it('(f3) client cap: the op past VARIANT_GENERATE_CONCURRENCY_CAP is dropped', async () => {
+    // Cap-many in-flight ops, planted directly (each would otherwise need its own deferred chain).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store.setState((s: any) => {
+      for (let i = 0; i < VARIANT_GENERATE_CONCURRENCY_CAP; i++) {
+        s.variantSheetGenerateOps[`characters|filler${i}|v`] = {
+          kind: 'characters',
+          entityKey: `filler${i}`,
+          variantKey: 'v',
+          phase: 'generate',
+          startedAt: 'now',
+        };
+      }
+    });
+
+    store.getState().startVariantSheetGenerate(REF);
+
+    expect(mockedGen).not.toHaveBeenCalled();
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
+    expect(Object.keys(store.getState().variantSheetGenerateOps)).toHaveLength(
+      VARIANT_GENERATE_CONCURRENCY_CAP,
+    );
+  });
+
+  it('(f4) finalize drops ONLY its own key — a sibling op survives', async () => {
+    mockedGen.mockResolvedValueOnce(okGen('raw.png'));
+    mockedCut.mockResolvedValueOnce(okCut(['c1.png', 'c2.png', 'c3.png', 'c4.png']));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store.setState((s: any) => {
+      s.variantSheetGenerateOps[KEY2] = {
+        kind: 'props',
+        entityKey: 'sword',
+        variantKey: 'gold',
+        phase: 'generate',
+        startedAt: 'now',
+      };
+    });
+
+    store.getState().startVariantSheetGenerate(REF);
+    await tick();
+    await tick();
+    await tick();
+
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined(); // finished → dropped
+    expect(store.getState().variantSheetGenerateOps[KEY2]).toBeDefined(); // sibling untouched
   });
 
   it('(g) error path keeps the op (with friendly message) until dismiss clears it', async () => {
@@ -315,15 +447,15 @@ describe('SketchVariantGenerateJobSlice', () => {
     await tick();
     await tick();
 
-    const op = store.getState().variantSheetGenerateOp;
-    expect(op).not.toBeNull();
+    const op = store.getState().variantSheetGenerateOps[KEY];
+    expect(op).not.toBeUndefined();
     expect(op?.error).toContain('image model'); // LLM_ERROR friendly copy
     // No crops/raw written on a generate failure.
     expect(variantHero(store).raw_sheet).toBeUndefined();
     expect(mockedCut).not.toHaveBeenCalled();
 
-    store.getState().dismissVariantSheetGenerateError();
-    expect(store.getState().variantSheetGenerateOp).toBeNull();
+    store.getState().dismissVariantSheetGenerateError(REF);
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
   });
 
   it('opStale: op reset mid-generate → raw + crops NOT written, cut never called', async () => {
@@ -336,7 +468,7 @@ describe('SketchVariantGenerateJobSlice', () => {
     // Simulate resetSnapshot clearing the op while the generate call is in flight.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     store.setState((s: any) => {
-      s.variantSheetGenerateOp = null;
+      s.variantSheetGenerateOps = {};
     });
     dGen.resolve(okGen('raw.png'));
     await tick();
@@ -360,7 +492,7 @@ describe('SketchVariantGenerateJobSlice', () => {
     const { toast } = await import('sonner');
     expect(toast.warning).toHaveBeenCalledWith('Some cells may be misaligned');
     expect(variantHero(store).raw_sheet.crops).toHaveLength(4); // crops still written
-    expect(store.getState().variantSheetGenerateOp).toBeNull(); // warning is non-fatal → op finalized
+    expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined(); // warning is non-fatal → op finalized
   });
 
   // ── recropVariantSheet: cut-only re-run (Raw-tab edit commit → crops stale) ───────────────────────
@@ -396,7 +528,7 @@ describe('SketchVariantGenerateJobSlice', () => {
       mockedCut.mockResolvedValueOnce(okCut(['n1.png', 'n2.png', 'n3.png', 'n4.png']));
 
       store.getState().recropVariantSheet(REF);
-      expect(store.getState().variantSheetGenerateOp?.phase).toBe('cut'); // skips 'generate'
+      expect(store.getState().variantSheetGenerateOps[KEY]?.phase).toBe('cut'); // skips 'generate'
       await tick();
       await tick();
 
@@ -418,14 +550,14 @@ describe('SketchVariantGenerateJobSlice', () => {
       expect(crops.every((c: { illustrations: { is_selected: boolean }[] }) => c.illustrations[0].is_selected === true)).toBe(true);
       // Raw sheet itself is untouched by a cut-only re-run.
       expect(variantHero(store).raw_sheet.illustrations[0].media_url).toBe('raw.png');
-      expect(store.getState().variantSheetGenerateOp).toBeNull();
+      expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
     });
 
     it('(i) guard: no raw sheet (no effective url) → no api call, no op set', () => {
       // Fresh entityWithVariant fixture: hero variant has no raw_sheet at all.
       store.getState().recropVariantSheet(REF);
       expect(mockedCut).not.toHaveBeenCalled();
-      expect(store.getState().variantSheetGenerateOp).toBeNull();
+      expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
     });
 
     it('(j) single-flight: blocked while an op is already running', () => {
@@ -438,7 +570,7 @@ describe('SketchVariantGenerateJobSlice', () => {
       // Simulate an in-flight op (e.g. a generate op) without resolving it.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       store.setState((s: any) => {
-        s.variantSheetGenerateOp = {
+        s.variantSheetGenerateOps[KEY] = {
           kind: 'characters',
           entityKey: 'kid',
           variantKey: 'hero',
@@ -450,7 +582,7 @@ describe('SketchVariantGenerateJobSlice', () => {
       store.getState().recropVariantSheet(REF);
 
       expect(mockedCut).not.toHaveBeenCalled();
-      expect(store.getState().variantSheetGenerateOp?.phase).toBe('generate'); // unchanged, never set to 'cut'
+      expect(store.getState().variantSheetGenerateOps[KEY]?.phase).toBe('generate'); // unchanged, never set to 'cut'
     });
 
     it('(k) failure: callCropSheetRow fails → op keeps a classified error, PREVIOUS crops[] unchanged', async () => {
@@ -469,8 +601,8 @@ describe('SketchVariantGenerateJobSlice', () => {
       await tick();
       await tick();
 
-      const op = store.getState().variantSheetGenerateOp;
-      expect(op).not.toBeNull();
+      const op = store.getState().variantSheetGenerateOps[KEY];
+      expect(op).not.toBeUndefined();
       expect(op?.error).toContain('Could not cut any cell'); // ALL_CROPS_FAILED friendly copy
       // Previous crops preserved verbatim — runCut only writes crops[] on success.
       const crops = variantHero(store).raw_sheet.crops;
@@ -515,7 +647,7 @@ describe('SketchVariantGenerateJobSlice', () => {
         releaseIfAcquired: true,
       });
       expect(autoSaveSnapshot).not.toHaveBeenCalled();
-      expect(store.getState().variantSheetGenerateOp).toBeNull();
+      expect(store.getState().variantSheetGenerateOps[KEY]).toBeUndefined();
     });
 
     it('(n) effective-url precedence: is_selected version wins over the newest (index 0) entry', async () => {

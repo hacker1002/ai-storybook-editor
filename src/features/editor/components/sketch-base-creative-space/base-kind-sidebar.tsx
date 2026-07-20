@@ -45,7 +45,7 @@ interface BaseKindSidebarProps {
   onImport: (file: File) => void;
   isImporting: boolean;
   /** Single-flight generate op → drives the per-row "generating" spinner (matches kind+styleIndex). */
-  generateOp: BaseSheetGenerateOp | null;
+  generateOps: Partial<Record<BaseKind, BaseSheetGenerateOp>>;
 }
 
 export function BaseKindSidebar({
@@ -60,7 +60,7 @@ export function BaseKindSidebar({
   onEditEntity,
   onImport,
   isImporting,
-  generateOp,
+  generateOps,
 }: BaseKindSidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,7 +113,7 @@ export function BaseKindSidebar({
             styles={stylesByKind[group.kind]}
             expanded={expandedGroups[group.kind]}
             selectedStyle={selectedStyle}
-            generateOp={generateOp}
+            generateOps={generateOps}
             onSelectStyle={onSelectStyle}
             onToggleGroup={onToggleGroup}
             onAddStyle={onAddStyle}
@@ -131,7 +131,7 @@ function KindGroup({
   styles,
   expanded,
   selectedStyle,
-  generateOp,
+  generateOps,
   onSelectStyle,
   onToggleGroup,
   onAddStyle,
@@ -142,7 +142,7 @@ function KindGroup({
   styles: SketchBaseStyle[];
   expanded: boolean;
   selectedStyle: SelectedStyleRef | null;
-  generateOp: BaseSheetGenerateOp | null;
+  generateOps: Partial<Record<BaseKind, BaseSheetGenerateOp>>;
   onSelectStyle: (kind: BaseKind, index: number) => void;
   onToggleGroup: (kind: BaseKind) => void;
   onAddStyle: (kind: BaseKind) => void;
@@ -227,7 +227,7 @@ function KindGroup({
                 index={idx}
                 isLocked={style.is_selected}
                 isSelected={selectedStyle?.kind === kind && selectedStyle.index === idx}
-                isGenerating={generateOp?.kind === kind && generateOp.styleIndex === idx}
+                isGenerating={generateOps[kind]?.styleIndex === idx}
                 lockedByOther={sheetLockedByOther}
                 peerTip={peerTip}
                 onSelect={() => onSelectStyle(kind, idx)}

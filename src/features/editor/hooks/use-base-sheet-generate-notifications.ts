@@ -1,12 +1,13 @@
-// use-base-sheet-generate-notifications.ts — watches the single-flight base-sheet generate op and
-// fires ONE error toast when it settles with an error, then dismisses it. SUCCESS is intentionally
-// silent (per-style inline status is enough — one style generated per run); partial-crop warnings
-// are toasted by the slice itself. Mount once at editor-page level so the toast fires regardless of
-// which creative space is active. Also feeds the nav-guard indirectly via useIsAnySketchGenerating.
+// use-base-sheet-generate-notifications.ts — watches the base-sheet generate ops MAP (characters ∥
+// props) and fires ONE error toast per kind when that op settles with an error, then dismisses it.
+// SUCCESS is intentionally silent (per-style inline status is enough — one style generated per run);
+// partial-crop warnings are toasted by the slice itself. Mount once at editor-page level so the
+// toast fires regardless of which creative space is active. Also feeds the cross-space guard
+// indirectly via useIsAnySketchGenerating.
 
 import { useEffect, useRef } from 'react';
 import { useSnapshotStore } from '@/stores/snapshot-store';
-import type { BaseSheetGenerateOp } from '@/stores/snapshot-store/types';
+import type { BaseKind } from '@/types/sketch';
 import { toast } from 'sonner';
 import { createLogger } from '@/utils/logger';
 
@@ -14,22 +15,27 @@ const log = createLogger('Editor', 'BaseSheetGenerateNotifications');
 
 /**
  * Side-effect-only hook. React 19: prevRef is read/written ONLY inside the effect body (never in the
- * render body). The op carries an already-classified friendly `error`; when it first appears we toast
- * once and dismiss (op → null). On the next render op is null so the guard won't refire (no double
- * toast). Each producer mints a new op ref, so the [op] dep fires on every phase/error transition.
+ * render body). It holds the last seen error PER KIND, so both kinds failing produce two toasts and
+ * neither suppresses the other. Rebuilt from the current map each run → dismissed keys drop out.
  */
 export function useBaseSheetGenerateNotifications(): void {
-  const prevRef = useRef<BaseSheetGenerateOp | null>(null);
-  const op = useSnapshotStore((s) => s.baseSheetGenerateOp);
+  const prevErrorsRef = useRef<Partial<Record<BaseKind, string>>>({});
+  const ops = useSnapshotStore((s) => s.baseSheetGenerateOps);
 
   useEffect(() => {
-    const prev = prevRef.current;
-    // Error just appeared on the current op (settled-with-error) → toast once + dismiss.
-    if (op?.error && prev?.error !== op.error) {
-      log.warn('toast', 'base sheet op error', { kind: op.kind, styleIndex: op.styleIndex });
+    const prev = prevErrorsRef.current;
+    const next: Partial<Record<BaseKind, string>> = {};
+
+    for (const [key, op] of Object.entries(ops)) {
+      if (!op?.error) continue;
+      const kind = key as BaseKind;
+      next[kind] = op.error;
+      if (prev[kind] === op.error) continue; // already toasted this exact failure
+      log.warn('toast', 'base sheet op error', { kind, styleIndex: op.styleIndex });
       toast.error(op.error);
-      useSnapshotStore.getState().dismissBaseSheetGenerateError();
+      useSnapshotStore.getState().dismissBaseSheetGenerateError(kind);
     }
-    prevRef.current = op;
-  }, [op]);
+
+    prevErrorsRef.current = next;
+  }, [ops]);
 }

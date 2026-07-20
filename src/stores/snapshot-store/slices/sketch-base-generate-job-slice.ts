@@ -56,6 +56,8 @@ const SKETCH_BASE_ERROR_MESSAGES: Record<string, string> = {
   ART_STYLE_NO_REFERENCES: 'This art style has no reference images — add some in Style settings.',
   VALIDATION_ERROR: 'Invalid base sheet request — check the entity setup.',
   LLM_ERROR: 'The image model failed to generate this sheet — please try again.',
+  // Backend exhausted its own 429 retries → the quota is genuinely saturated. No client auto-retry.
+  GEMINI_RATE_LIMIT: 'The image model is busy right now — wait a moment and try again.',
   NO_IMAGE_IN_RESPONSE: 'The image model returned no image — please try again.',
   ALL_CROPS_FAILED: 'Could not crop any entity from the sheet — please regenerate.',
   SKIPPED_DELETED: 'Skipped — the style was removed.',
@@ -94,29 +96,34 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
   [],
   SketchBaseGenerateJobSlice
 > = (set, get) => {
-  /** Op no longer owns (kind, i) — reset / removeStyle / new op raced in between an await → bail. */
+  /** This kind's op no longer owns styleIndex — reset / removeStyle / new op raced in between an
+   *  await → bail. The map is keyed by KIND (not by style): only one op per kind can exist, so a
+   *  styleIndex mismatch still means "our op is gone". */
   function opStale(kind: BaseKind, styleIndex: number): boolean {
-    const op = get().baseSheetGenerateOp;
-    return !op || op.kind !== kind || op.styleIndex !== styleIndex;
+    const op = get().baseSheetGenerateOps[kind];
+    return !op || op.styleIndex !== styleIndex;
   }
 
-  // ── internal producers (immer) — called at await boundaries ──────────────────────────────────
-  function setOpPhase(phase: BaseGeneratePhase): void {
+  // ── internal producers (immer) — called at await boundaries. Each addresses ONE kind's entry,
+  //    so the other kind's concurrent op is never touched. ────────────────────────────────────────
+  function setOpPhase(kind: BaseKind, phase: BaseGeneratePhase): void {
     set((state) => {
-      if (state.baseSheetGenerateOp) state.baseSheetGenerateOp.phase = phase;
+      const op = state.baseSheetGenerateOps[kind];
+      if (op) op.phase = phase;
     });
   }
   /** Store the (already classified, friendly) message on the op; the op is KEPT until dismiss. */
-  function markOpError(message: string): void {
+  function markOpError(kind: BaseKind, message: string): void {
     set((state) => {
-      if (state.baseSheetGenerateOp) state.baseSheetGenerateOp.error = message;
+      const op = state.baseSheetGenerateOps[kind];
+      if (op) op.error = message;
     });
   }
-  /** Clear the op when it settled without error; on error keep it (content-area shows it inline). */
-  function finalizeOp(): void {
+  /** Drop the op when it settled without error; on error keep it (content-area shows it inline). */
+  function finalizeOp(kind: BaseKind): void {
     set((state) => {
-      const op = state.baseSheetGenerateOp;
-      if (op && !op.error) state.baseSheetGenerateOp = null;
+      const op = state.baseSheetGenerateOps[kind];
+      if (op && !op.error) delete state.baseSheetGenerateOps[kind];
     });
   }
 
@@ -252,10 +259,10 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
       const cellOrder = result.data.cellOrder;
 
       // Best-effort cancel: stop before the crop phase (raw already saved). Not stale → op is ours.
-      if (get().baseSheetGenerateOp?.cancelRequested) {
+      if (get().baseSheetGenerateOps[kind]?.cancelRequested) {
         log.info('runGenerate', 'cancelled before crop — raw kept, crop skipped', { kind, styleIndex });
       } else {
-        setOpPhase('cropping');
+        setOpPhase(kind, 'cropping');
         await runCrop(kind, styleIndex, result.data.imageUrl, cellOrder);
         cropsLanded = true; // runCrop throws on failure; stale early-return bails before persist
       }
@@ -263,7 +270,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
       if (opStale(kind, styleIndex)) return;
       const msg = err instanceof Error ? err.message : 'Base sheet generation failed';
       log.error('runGenerate', 'failed', { kind, styleIndex, error: msg });
-      markOpError(msg); // keep the op so the notifications hook toasts once
+      markOpError(kind, msg); // keep the op so the notifications hook toasts once
       // Roll back the orphaned empty style: only an 'add' that failed before any raw landed. The op
       // is unchanged (still owns styleIndex) so opStale stays false → finalizeOp still keeps the error.
       if (isAdd && !rawLanded) {
@@ -275,7 +282,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     if (opStale(kind, styleIndex)) return; // op reset during the last await → nothing to finalize
     // Persist the result (raw + crops). COLLAB → gateway whole-sheet flush; SOLO → autoSaveSnapshot.
     await persistBaseSheet(kind, styleIndex, cropsLanded);
-    finalizeOp();
+    finalizeOp(kind);
   }
 
   // ── crop-only re-run (call-site #2, after editing the Raw sheet). ──────────────────────────────
@@ -293,22 +300,25 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
       if (opStale(kind, styleIndex)) return;
       const msg = err instanceof Error ? err.message : 'Base sheet crop failed';
       log.error('runRecrop', 'failed', { kind, styleIndex, error: msg });
-      markOpError(msg);
+      markOpError(kind, msg);
     }
 
     if (opStale(kind, styleIndex)) return;
     // Persist the recropped crops. COLLAB → gateway whole-sheet flush; SOLO → autoSaveSnapshot.
     await persistBaseSheet(kind, styleIndex, cropsLanded);
-    finalizeOp();
+    finalizeOp(kind);
   }
 
   return {
-    baseSheetGenerateOp: null,
+    baseSheetGenerateOps: {},
 
     startBaseSheetGenerate: ({ kind, mode, styleIndex, stylePrompt, referenceImages, artStyleId, modelParams }) => {
-      if (get().baseSheetGenerateOp != null) {
-        log.warn('startBaseSheetGenerate', 'blocked — an op is already running', { kind });
-        return; // single-flight
+      // Per-KIND single-flight: `characters` and `props` run in parallel (separate rtype-11 sheet
+      // nodes → no write contention), but two ops on the SAME kind would both write that one sheet
+      // node last-writer-wins.
+      if (get().baseSheetGenerateOps[kind] != null) {
+        log.warn('startBaseSheetGenerate', 'blocked — this kind already has an op', { kind });
+        return;
       }
 
       const baseEntities = baseEntitiesOf(get().sketch[kind]);
@@ -348,7 +358,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
         entityCount: baseEntities.length,
       });
       set((state) => {
-        state.baseSheetGenerateOp = {
+        state.baseSheetGenerateOps[kind] = {
           kind,
           styleIndex: i,
           phase: 'generating',
@@ -361,9 +371,9 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
     },
 
     recropBaseSheet: (kind, styleIndex) => {
-      if (get().baseSheetGenerateOp != null) {
-        log.warn('recropBaseSheet', 'blocked — an op is already running', { kind });
-        return; // single-flight
+      if (get().baseSheetGenerateOps[kind] != null) {
+        log.warn('recropBaseSheet', 'blocked — this kind already has an op', { kind });
+        return; // per-kind single-flight (shared with generate — one op per kind)
       }
 
       const style = sheetOf(get().sketch.base, kind).styles[styleIndex];
@@ -381,7 +391,7 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
       const cellOrder = baseEntitiesOf(get().sketch[kind]).map((e) => e.key);
       log.info('recropBaseSheet', 'start', { kind, styleIndex, entityCount: cellOrder.length });
       set((state) => {
-        state.baseSheetGenerateOp = {
+        state.baseSheetGenerateOps[kind] = {
           kind,
           styleIndex,
           phase: 'cropping',
@@ -393,27 +403,27 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
       void runRecrop(kind, styleIndex, rawUrl, cellOrder);
     },
 
-    cancelBaseSheetGenerate: () =>
+    cancelBaseSheetGenerate: (kind) =>
       set((state) => {
-        const op = state.baseSheetGenerateOp;
+        const op = state.baseSheetGenerateOps[kind];
         if (op && !op.error) {
           log.info('cancelBaseSheetGenerate', 'cancel requested', {
-            kind: op.kind,
+            kind,
             styleIndex: op.styleIndex,
           });
           op.cancelRequested = true; // best-effort — stops before the crop phase
         }
       }),
 
-    dismissBaseSheetGenerateError: () =>
+    dismissBaseSheetGenerateError: (kind) =>
       set((state) => {
-        const op = state.baseSheetGenerateOp;
+        const op = state.baseSheetGenerateOps[kind];
         if (op && op.error) {
           log.debug('dismissBaseSheetGenerateError', 'clear settled-with-error op', {
-            kind: op.kind,
+            kind,
             styleIndex: op.styleIndex,
           });
-          state.baseSheetGenerateOp = null; // op was only kept to surface the error → clear it
+          delete state.baseSheetGenerateOps[kind]; // kept only to surface the error → drop it
         }
       }),
   };

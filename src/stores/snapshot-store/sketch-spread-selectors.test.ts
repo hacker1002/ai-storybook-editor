@@ -9,7 +9,11 @@ vi.mock('@/apis/supabase', () => ({
 }));
 
 import { useSnapshotStore } from '@/stores/snapshot-store';
-import { useIsAnySketchGenerating, useSketchSpreadGenerating } from '@/stores/snapshot-store/selectors';
+import {
+  useIsAnySketchGenerating,
+  useIsAnyVariantSheetGenerating,
+  useSketchSpreadGenerating,
+} from '@/stores/snapshot-store/selectors';
 import type { SketchSpreadGenerateJob } from '@/stores/snapshot-store/types';
 
 const spreadJob = (
@@ -30,7 +34,8 @@ describe('sketch spread selectors', () => {
     act(() => {
       useSnapshotStore.setState((s) => {
         s.sketchSpreadGenerateJob = null;
-        s.baseSheetGenerateOp = null;
+        s.baseSheetGenerateOps = {};
+        s.variantSheetGenerateOps = {};
       });
     });
   });
@@ -41,12 +46,39 @@ describe('sketch spread selectors', () => {
       expect(result.current).toBe(false);
     });
 
-    it('true when the BASE-sheet op is running', () => {
+    it('true when a BASE-sheet op is running (map non-empty)', () => {
       const { result } = renderHook(() => useIsAnySketchGenerating());
       act(() => {
         useSnapshotStore.setState((s) => {
-          // Minimal running base op (only null-ness is read by the selector).
-          s.baseSheetGenerateOp = { phase: 'generating' } as never;
+          // Minimal running base op (the selector only reads map size).
+          s.baseSheetGenerateOps = { characters: { phase: 'generating' } as never };
+        });
+      });
+      expect(result.current).toBe(true);
+    });
+
+    it('stays false for a VARIANT op — cross-space exclusion deliberately ignores variants', () => {
+      const { result } = renderHook(() => useIsAnySketchGenerating());
+      act(() => {
+        useSnapshotStore.setState((s) => {
+          s.variantSheetGenerateOps = { 'characters|hero|winter': { phase: 'generate' } as never };
+        });
+      });
+      expect(result.current).toBe(false);
+    });
+  });
+
+  describe('useIsAnyVariantSheetGenerating', () => {
+    it('false when the variant map is empty', () => {
+      const { result } = renderHook(() => useIsAnyVariantSheetGenerating());
+      expect(result.current).toBe(false);
+    });
+
+    it('true once any variant op exists (the nav-guard input)', () => {
+      const { result } = renderHook(() => useIsAnyVariantSheetGenerating());
+      act(() => {
+        useSnapshotStore.setState((s) => {
+          s.variantSheetGenerateOps = { 'props|lantern|lit': { phase: 'generate' } as never };
         });
       });
       expect(result.current).toBe(true);
