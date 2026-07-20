@@ -1,7 +1,8 @@
 // sketch-spread-excel.constants.ts — mapping constants for the SHARED new-template
 // sketch-spread parser (design 04-import-sketch-spreads.md §4 + 07-01 §7). New template:
-// Storyboard = 14 labeled rows mapped DIRECTLY 1 label → 1 art_direction field (no
-// `Chỉ đạo hình ảnh` sub-field heuristic); narration moved to per-language tabs.
+// Storyboard = 9 labeled rows (7 mapped DIRECTLY 1 label → 1 art_direction field, plus
+// `Diễn biến` merged into `action` and `Choice` ignored); no `Chỉ đạo hình ảnh` sub-field
+// heuristic; narration moved to per-language tabs.
 
 import type { ArtDirection } from '@/types/sketch';
 import type { Typography } from '@/types/spread-types';
@@ -44,25 +45,36 @@ export const GEO_TOKEN_RE = /(x|y|w|h|font_size)\s*=\s*(\d+(?:\.\d+)?)%?/g;
 
 // Storyboard row label (col A) → ArtDirection field. Map DIRECTLY 1-1 (design 04 §4).
 // `Character` → `action` (merged with the `Diễn biến` row via DIEN_BIEN).
-export const AD_ROW: Record<string, keyof ArtDirection> = {
+// Labels match the REAL workbook template exactly: 7 mapped rows + `Diễn biến` + `Choice`.
+export const AD_ROW = {
   Stage: 'stage',
   Camera: 'camera',
   Composition: 'composition',
   Setting: 'setting',
   Character: 'action',
-  'Space & time': 'space_time',
-  'Light & color': 'light_color',
-  'Art concept': 'art_concept',
-  Animation: 'animation',
-  Sound: 'sound',
-  Layer: 'layers',
-  'Interactive intent': 'interactive_intent',
-  'Negative space': 'negative_space',
-};
+  'Light & tone': 'light_tone',
+  'Art language': 'art_language',
+} as const satisfies Record<string, keyof ArtDirection>;
 
-/** The 13 ArtDirection keys — seed an empty art_direction (all ''). Derived from AD_ROW
- *  (whose 13 values cover every field) so the two lists can never drift. */
+/** The 7 ArtDirection keys — seed an empty art_direction (all ''). Derived from AD_ROW so
+ *  a mapped row can never miss its key; the guard below adds the other direction (every
+ *  ArtDirection field must have a Storyboard row). */
 export const AD_KEYS: (keyof ArtDirection)[] = [...new Set(Object.values(AD_ROW))];
+
+// Compile-time exhaustiveness guard — errors naming the offending key as soon as an
+// ArtDirection field has no AD_ROW entry. Needed because AD_KEYS is only guaranteed
+// ⊆ ArtDirection, and `emptyArtDirection()` casts `{} as ArtDirection`: an unmapped field
+// would yield an object missing that key while typed complete — invisible to validation,
+// the modal (`?? ''`) and Python (`_nonempty_str`), surfacing only as a mysteriously empty
+// prompt section.
+//
+// The `as const` on AD_ROW is what makes this load-bearing: re-adding an explicit
+// `Record<string, keyof ArtDirection>` annotation widens the value type back to the full
+// key union, `Exclude` collapses to `never`, and the guard silently passes for ANY map.
+type AssertNoUnmappedField<T extends never> = T;
+export type AdRowCoversAllFields = AssertNoUnmappedField<
+  Exclude<keyof ArtDirection, (typeof AD_ROW)[keyof typeof AD_ROW]>
+>;
 
 /** Known Storyboard row labels — anything else is warned + ignored (design 04 §6). */
 export const KNOWN_STORYBOARD_LABELS: ReadonlySet<string> = new Set<string>([

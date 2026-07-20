@@ -28,7 +28,7 @@ import {
   useSketchSpreadGenerateProgress,
   useIsAnySketchGenerating,
 } from '@/stores/snapshot-store/selectors';
-import { useCurrentBook } from '@/stores/book-store';
+import { useCurrentBookId, useSketchStyleId } from '@/stores/book-store';
 import { getSketchSpreadEffectiveUrl } from '@/types/sketch';
 import { CANVAS_CONFIRM_DIALOG_Z } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
@@ -44,7 +44,14 @@ export interface SketchSpreadContentAreaProps {
 
 export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSpreadContentAreaProps) {
   const spread = useSketchSpreadById(spreadId);
-  const book = useCurrentBook();
+  // book.sketchstyle_id (art_styles.type=0) — the SKETCH style anchor. NOT book.artstyle_id, which
+  // is the illustration style (type=1); mirrors the base-sheet flow (sketch-base-creative-space).
+  const sketchStyleId = useSketchStyleId();
+  // `currentBook` is null until the editor's book fetch resolves, at which point sketchStyleId is
+  // null too — indistinguishable from "book loaded, no style". Gate the HINT on the book being
+  // loaded so it can't flash on every mount (the button stays greyed either way — a disabled
+  // control is never hidden).
+  const bookLoaded = useCurrentBookId() != null;
   const { startSketchSpreadGenerateJob, cancelSketchSpreadGenerateJob } = useSnapshotActions();
 
   // Generate-job state (1 sketch job global). `anyGen` disables Generate while EITHER sketch job
@@ -56,7 +63,10 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
 
   // Generate target: bulk-checked spreads if any, else the focused spread (job slice sorts doc-order).
   const target = checkedSpreadIds.length > 0 ? checkedSpreadIds : [spreadId];
-  const canGenerate = !anyGen && Boolean(book?.artstyle_id) && target.length > 0;
+  const canGenerate = !anyGen && Boolean(sketchStyleId) && target.length > 0;
+  // Never hide the disabled Generate button — render it greyed with a hint instead. The hint (and
+  // its tooltip) only claims a MISSING style once the book is actually loaded.
+  const missingStyle = bookLoaded && !sketchStyleId;
   const label = isSpreadJob
     ? `Generating… (${progress?.done ?? 0}/${progress?.total ?? 0})`
     : checkedSpreadIds.length > 0
@@ -64,10 +74,10 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
       : 'Generate';
 
   const handleGenerate = () => {
-    log.info('handleGenerate', 'start', { targetCount: target.length });
-    if (!book?.artstyle_id) {
-      log.debug('handleGenerate', 'blocked — no art style');
-      toast.warning('Set an art style for this book first');
+    log.info('handleGenerate', 'start', { targetCount: target.length, hasSketchStyle: !!sketchStyleId });
+    if (!sketchStyleId) {
+      log.warn('handleGenerate', 'blocked — no sketch style on book');
+      toast.warning('Set a sketch style for this book first');
       return;
     }
     if (target.length === 0) {
@@ -85,14 +95,18 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
     if (hadExisting) {
       setPendingTarget(target); // open regenerate confirm
     } else {
-      startSketchSpreadGenerateJob({ spreadIds: target, artStyleId: book.artstyle_id });
+      // Backend param name stays `artStyleId` (art_styles.id lookup) — only the source VALUE is
+      // the sketch style id.
+      startSketchSpreadGenerateJob({ spreadIds: target, artStyleId: sketchStyleId });
     }
   };
 
   const confirmRegenerate = () => {
-    if (pendingTarget && book?.artstyle_id) {
+    if (pendingTarget && sketchStyleId) {
       log.info('confirmRegenerate', 'regenerate confirmed', { count: pendingTarget.length });
-      startSketchSpreadGenerateJob({ spreadIds: pendingTarget, artStyleId: book.artstyle_id });
+      startSketchSpreadGenerateJob({ spreadIds: pendingTarget, artStyleId: sketchStyleId });
+    } else if (pendingTarget) {
+      log.warn('confirmRegenerate', 'blocked — no sketch style on book', { count: pendingTarget.length });
     }
     setPendingTarget(null);
   };
@@ -112,10 +126,15 @@ export function SketchSpreadContentArea({ spreadId, checkedSpreadIds }: SketchSp
           disabled={!canGenerate}
           aria-busy={isSpreadJob}
           aria-label={label}
+          title={missingStyle ? 'Set a sketch style for this book first (book settings)' : undefined}
         >
           <Sparkles className="mr-1 h-4 w-4" />
           {label}
         </Button>
+        {/* Disabled-reason hint — the button stays visible & greyed, never hidden. */}
+        {missingStyle && !isSpreadJob && (
+          <span className="text-xs text-muted-foreground">Set a sketch style for this book first</span>
+        )}
         {isSpreadJob && (
           <Button
             variant="outline"

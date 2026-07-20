@@ -18,6 +18,7 @@ const mockedCall = vi.mocked(callGenerateSketchSpread);
 // (2 image-lock/spread, per-page save) path is covered by its own tests.
 vi.mock('@/stores/resource-lock-store', () => ({
   useResourceLockStore: { getState: () => ({ collabPersist: false, myUserId: null, holderNames: new Map() }) },
+  ACTION_TYPE_CREATE: 2,
 }));
 
 // Isolated harness: sketch slice (state + addSketchSpreadImageVersion) + the spread-job slice, plus

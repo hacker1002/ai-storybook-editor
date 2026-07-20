@@ -189,9 +189,8 @@ describe('SketchSlice spread actions', () => {
   const geo: Geometry = { x: 0, y: 0, w: 100, h: 100 };
   const typo: Typography = { size: 16 };
   const emptyAd = (): ArtDirection => ({
-    stage: '', setting: '', light_color: '', composition: '', action: '', camera: '',
-    art_concept: '', negative_space: '', layers: '', interactive_intent: '', animation: '',
-    sound: '', space_time: '',
+    stage: '', setting: '', composition: '', action: '', camera: '',
+    light_tone: '', art_language: '',
   });
   const spread = (id: string, pageTypes: SketchSpread['pages'][number]['type'][] = ['left', 'right']): SketchSpread => ({
     id,

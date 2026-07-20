@@ -2,7 +2,7 @@
 // (`dummy.xlsx`, design 07-01 §8 / 04). Sheet matrices are plain JS arrays (the shape
 // `sheet_to_json(header:1)` yields) so transforms test without binary/SheetJS.
 //
-// Storyboard: 3 SPREAD blocks × 14 labeled rows — SPREAD 1 (DPS, left only), SPREAD 2
+// Storyboard: 3 SPREAD blocks × 8 mapped rows + the ignored `Choice` row — SPREAD 1 (DPS, left only), SPREAD 2
 // (two-page, clean geo for assertions), SPREAD 3 (two-page WITH branch D/E data that must
 // be dropped). Language tabs vi_VN + en_US carry per-language Lời văn + Textbox geometry.
 // Entities: 7 characters / 6 props / 8 stages (stage keys cover art_direction.stage refs).
@@ -16,9 +16,13 @@ import type { SheetMatrix, SketchImportWorkbook } from '../../sketch-spread-exce
 // 0=label, 1=B(TRÁI/left), 2=C(PHẢI/right), 3=D(nhánh-trái), 4=E(nhánh-phải).
 export const AD_LABELS = [
   'Diễn biến', 'Stage', 'Camera', 'Composition', 'Setting', 'Character',
-  'Space & time', 'Light & color', 'Art concept', 'Animation', 'Sound', 'Layer',
-  'Interactive intent', 'Negative space',
+  'Light & tone', 'Art language',
 ] as const;
+
+/** Branch-nav row — present in the REAL template, mapped to no field. Kept in the fixture
+ *  so the "no warnings" assertion pins it as KNOWN: drop it from KNOWN_STORYBOARD_LABELS
+ *  and every real import gains one `nhãn dòng lạ "Choice"` warning per spread. */
+export const CHOICE_LABEL = 'Choice';
 
 const STAGE_OF: Record<number, string> = { 1: '@house_night/base', 2: '@bedroom/base', 3: '@bedroom/base' };
 
@@ -27,12 +31,13 @@ function fill(label: string, n: number, sideTag: string): string {
   return `${label} ${n} ${sideTag}`;
 }
 
-/** One Storyboard block: `SPREAD N …` header + 14 labeled rows. `sides` = which columns
- *  carry content (1=left, 2=right, 3/4=branch D/E — included only to prove they're dropped). */
+/** One Storyboard block: `SPREAD N …` header + 8 labeled rows + the ignored `Choice` row.
+ *  `sides` = which columns carry content (1=left, 2=right, 3/4=branch D/E — included only
+ *  to prove they're dropped). */
 function sbBlock(n: number, opts: { dps?: boolean; branch?: boolean } = {}): SheetMatrix {
   const header = `SPREAD ${n}${opts.dps ? ' — TRANG ĐÔI' : ''}`;
   const rows: SheetMatrix = [[header, '', '', '', '']];
-  for (const label of AD_LABELS) {
+  for (const label of [...AD_LABELS, CHOICE_LABEL]) {
     const row: (string)[] = [label, '', '', '', ''];
     row[1] = fill(label, n, 'TRÁI');
     if (!opts.dps) row[2] = fill(label, n, 'PHẢI');
@@ -97,18 +102,39 @@ export const EN_US_MATRIX: SheetMatrix = [
   ...langBlock(3, false, 'Lời văn [couplets·anapestic] PA1', 'EN', EN_GEO[3]),
 ];
 
-// ── Entity sheets (id | ref | <entity> key | variant | description) ───────────
+// ── Entity sheets (read BY HEADER NAME — Stages has no `height`, so column indices shift) ──
+// char/prop: id | ref | <entity> | variant | description | height | visual_design | art_language
+// stage:     id | ref | stage    | variant | description |          visual_design | art_language
 
-const entityHeader = (key: string): string[] => ['id', 'ref', key, 'variant', 'description'];
+const entityHeader = (key: string): string[] => [
+  'id',
+  'ref',
+  key,
+  'variant',
+  'description',
+  ...(key === 'stage' ? [] : ['height']),
+  'visual_design',
+  'art_language',
+];
 
-function entityRow(key: string, variant: string, idx: number): string[] {
-  return [`id-${idx}`, `@${key}/${variant}`, key, variant, `Mô tả ${key} ${variant}`];
+function entityRow(key: string, variant: string, idx: number, isStage: boolean): string[] {
+  return [
+    `id-${idx}`,
+    `@${key}/${variant}`,
+    key,
+    variant,
+    `Mô tả ${key} ${variant}`,
+    ...(isStage ? [] : ['110cm']),
+    `Visual ${key} ${variant}`,
+    `Art ${key} ${variant}`,
+  ];
 }
 
 function buildEntitySheet(header: string[], spec: Array<[string, string[]]>): SheetMatrix {
   const rows: SheetMatrix = [header];
+  const isStage = header[2] === 'stage';
   let i = 0;
-  for (const [key, variants] of spec) for (const v of variants) rows.push(entityRow(key, v, i++));
+  for (const [key, variants] of spec) for (const v of variants) rows.push(entityRow(key, v, i++, isStage));
   return rows;
 }
 
@@ -176,9 +202,10 @@ export const FIXTURE_SHEETS: Record<string, SheetMatrix> = {
 export function buildFixtureWorkbook(): ImportedWorkbook {
   return {
     spreadsSource: makeSketchWorkbook(FIXTURE_SHEETS),
-    characters: parseEntitySheet(CHARACTERS_ROWS, 'character'),
-    props: parseEntitySheet(PROPS_ROWS, 'prop'),
-    stages: parseEntitySheet(STAGES_ROWS, 'stage'),
+    characters: parseEntitySheet(CHARACTERS_ROWS, 'character').rows,
+    props: parseEntitySheet(PROPS_ROWS, 'prop').rows,
+    stages: parseEntitySheet(STAGES_ROWS, 'stage').rows,
+    issues: { errors: [], warnings: [] },
   };
 }
 

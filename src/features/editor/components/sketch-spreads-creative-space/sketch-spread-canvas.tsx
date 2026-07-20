@@ -348,8 +348,29 @@ export function SketchSpreadCanvas({ spreadId }: SketchSpreadCanvasProps) {
       const spread_number = idx >= 0 ? idx + 1 : 1; // 1-based doc-order spread position
       if (selectedImageId) {
         // page ∈ left|right|full — taken from the (post-prepend) image node's own type.
-        const page = (node as SketchSpreadImage | null)?.type;
-        return { action_type: 3, patch: node, target_ref: { spread_number, page } };
+        const img = node as SketchSpreadImage | null;
+        return {
+          action_type: 3,
+          patch: node,
+          target_ref: { spread_number, page: img?.type },
+          // The page-image node is minted CLIENT-SIDE by the generate job
+          // (addSketchSpreadImageVersion → crypto.randomUUID), so on a book written before the
+          // create-grain fix it may not exist in the DB yet → this edit would 404 and the Edit /
+          // Extract version would be silently lost. `create_fallback` makes the store retry the
+          // write ONCE as a nested CREATE under the spread's `images[]` (no CREATE-first branch
+          // here: after a generate the node already exists — YAGNI).
+          // TRADE-OFF (accepted, not yet narrowed): the retry fires on ANY 404, and "never
+          // written" is not the only 404 cause — a peer DELETING this page image mid-selection
+          // 404s the same way, so the fallback would re-create it and undo their delete. The
+          // generate job avoids this by gating on `isNew` (session-minted ids); the canvas has no
+          // equivalent signal today. Deemed acceptable because the delete must land inside this
+          // user's held image lock window, but see the follow-up note in the phase report.
+          // GUARDED on a non-null node: getLockNode() returns null when the image was deleted /
+          // the spread went away mid-session, and a null patch must NEVER be appended into
+          // `images[]` as a brand-new node (an unaddressable null element). Without the fallback
+          // such a save just 404s and is dropped — the correct outcome.
+          ...(img ? { create_fallback: { parent_id: spreadId, collection: 'images' } } : {}),
+        };
       }
       return {
         action_type: 3,

@@ -29,6 +29,7 @@ describe('entity mappers', () => {
     expect(kid.variants[0]).toMatchObject({ key: 'base', type: 0, name: 'Base' });
     expect(kid.variants[1]).toMatchObject({ key: 'hero', type: 1, name: 'Hero' });
     expect(kid.variants[0].visual_description).toBe('Mô tả kid base');
+    expect(kid.variants[0].appearance.height).toBe(110); // '110cm' → cm number
   });
 
   it('props: default type narrative, empty category, no sounds', () => {
@@ -50,18 +51,37 @@ describe('entity mappers', () => {
 });
 
 describe('projectSketchEntities', () => {
-  it('projects the full catalog to thin { key, variants[{ key, description, visual_design, art_language }] }', () => {
-    const chars = buildCharacters(buildFixtureWorkbook().characters);
-    const projected = projectSketchEntities(chars);
-    expect(projected).toHaveLength(chars.length);
+  it('maps each Excel column to its OWN variant field (description ≠ visual_design)', () => {
+    const rows = buildFixtureWorkbook().characters;
+    const projected = projectSketchEntities(rows);
+    expect(projected).toHaveLength(7);
     const kid = projected[0];
     expect(kid).toEqual({
       key: 'kid',
       variants: [
-        { key: 'base', description: '', visual_design: 'Mô tả kid base', art_language: '' },
-        { key: 'hero', description: '', visual_design: 'Mô tả kid hero', art_language: '' },
+        {
+          key: 'base',
+          description: 'Mô tả kid base',
+          height: 110,
+          visual_design: 'Visual kid base',
+          art_language: 'Art kid base',
+        },
+        {
+          key: 'hero',
+          description: 'Mô tả kid hero',
+          height: 110,
+          visual_design: 'Visual kid hero',
+          art_language: 'Art kid hero',
+        },
       ],
     });
+  });
+
+  it('an unparseable height only drops the height (variant still imported)', () => {
+    const [row] = buildFixtureWorkbook().characters;
+    const projected = projectSketchEntities([{ ...row, height: 'cao lắm' }]);
+    expect(projected[0].variants[0].height).toBeNull();
+    expect(projected[0].variants[0].visual_design).toBe('Visual kid base');
   });
 });
 
@@ -84,12 +104,23 @@ describe('assembleSketchSnapshot', () => {
   it('sketch entity projection stays in sync with the full catalog (keys + descriptions)', () => {
     expect(snapshot.sketch.characters.map((c) => c.key)).toEqual(snapshot.characters.map((c) => c.key));
     expect(snapshot.sketch.stages).toHaveLength(8);
-    expect(snapshot.sketch.characters[0]).toEqual({
-      key: 'kid',
-      variants: [
-        { key: 'base', description: '', visual_design: 'Mô tả kid base', art_language: '' },
-        { key: 'hero', description: '', visual_design: 'Mô tả kid hero', art_language: '' },
-      ],
+    expect(snapshot.sketch.characters[0].variants[0]).toMatchObject({
+      key: 'base',
+      description: 'Mô tả kid base',
+      height: 110,
+      visual_design: 'Visual kid base',
+      art_language: 'Art kid base',
     });
+  });
+
+  it('stages carry no height (Stages sheet has no such column)', () => {
+    const bedroom = snapshot.sketch.stages[1];
+    expect(bedroom.variants[0]).toMatchObject({
+      key: 'base',
+      description: 'Mô tả bedroom base',
+      visual_design: 'Visual bedroom base',
+      art_language: 'Art bedroom base',
+    });
+    expect('height' in bedroom.variants[0]).toBe(false);
   });
 });

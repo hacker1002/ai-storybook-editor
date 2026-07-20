@@ -140,20 +140,19 @@ export function sheetOf(base: SketchBase, kind: BaseKind): SketchBaseSheet {
   return kind === 'characters' ? base.character_sheet : base.prop_sheet;
 }
 
+/** 7 fields, 1-1 with the real Storyboard template rows (2026-07-20). `action` merges the
+ *  `Diễn biến` + `Character` rows; `light_tone` = `Light & tone`, `art_language` = `Art
+ *  language`. Old keys (light_color/art_concept/space_time/animation/sound/layers/
+ *  interactive_intent/negative_space) are gone — stale values in existing snapshots are
+ *  ignored (no migration, no read-time fallback). */
 export interface ArtDirection {
   stage: string;
   setting: string;
-  light_color: string;
   composition: string;
   action: string;
   camera: string;
-  art_concept: string;
-  negative_space: string;
-  layers: string;
-  interactive_intent: string;
-  animation: string;
-  sound: string;
-  space_time: string;
+  light_tone: string;
+  art_language: string;
 }
 
 export interface SketchPage {

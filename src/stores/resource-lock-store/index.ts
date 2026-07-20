@@ -21,6 +21,7 @@ import {
   renewResourceLock,
   releaseResourceLock,
   saveResource,
+  type SaveResult,
 } from '@/apis/resource-lock-api';
 import {
   openResourceLocksChannel,
@@ -36,6 +37,7 @@ import {
   rowKey,
   rowToEntry,
   FALLBACK_HOLDER_NAME,
+  ACTION_TYPE_CREATE,
   type LockTarget,
   type LockEntry,
   type SavePayload,
@@ -43,6 +45,62 @@ import {
 } from './types';
 
 const log = createLogger('Store', 'ResourceLockStore');
+
+/**
+ * Gateway save + ONE nested-CREATE retry when the node turns out not to exist yet.
+ *
+ * Nodes minted client-side (`crypto.randomUUID()` — e.g. a generated sketch spread page image)
+ * have never been written to the DB, so an EDIT/UPLOAD addressed by their id resolves to no path
+ * and the gateway answers 404. When the caller supplied `create_fallback` we retry ONCE as a
+ * nested CREATE (`action_type` 2 + `parent_id`/`collection`) so the gateway appends the node under
+ * its parent instead. Shared by `save` and `releaseAndSave` (single implementation).
+ *
+ * AUDIT: the gateway writes the activity row straight from `action_type`, and a create can only
+ * be requested as `action_type` 2 (`save_ops.is_create`) — so an unqualified retry would log the
+ * user's Edit/Extract as "created". The repair create is therefore sent with `log: false` (it is
+ * infrastructure recovery, not a user action) and, once the node exists, the ORIGINAL payload is
+ * re-issued: it now resolves, so the audit row (and its server-built `metadata.sync` descriptor
+ * for peers) names the real action. The extra round-trip only ever happens on this rare 404 path;
+ * if the re-log fails the data is already saved, so the create's success is what we report.
+ */
+async function saveWithCreateFallback(
+  bookId: string,
+  t: LockTarget,
+  p: SavePayload,
+): Promise<SaveResult> {
+  const first = await saveResource(bookId, t, p);
+  if (first.ok || !first.notFound || !p.create_fallback || p.action_type === ACTION_TYPE_CREATE) {
+    return first;
+  }
+  log.debug('saveWithCreateFallback', 'node not found — retry as nested create', {
+    resourceType: t.resource_type,
+    resourceId: t.resource_id,
+    collection: p.create_fallback.collection,
+  });
+  const created = await saveResource(bookId, t, {
+    ...p,
+    action_type: ACTION_TYPE_CREATE,
+    parent_id: p.create_fallback.parent_id,
+    collection: p.create_fallback.collection,
+    log: false, // never audit the repair as a "create" — see AUDIT note above
+  });
+  if (!created.ok || p.log === false) {
+    return created; // failed, or the caller wanted no audit anyway (generate job)
+  }
+  log.debug('saveWithCreateFallback', 're-issuing original action for an accurate audit row', {
+    resourceType: t.resource_type,
+    actionType: p.action_type,
+  });
+  const relogged = await saveResource(bookId, t, p);
+  if (!relogged.ok) {
+    log.warn('saveWithCreateFallback', 'audit re-issue failed — data already saved by the create', {
+      resourceType: t.resource_type,
+      resourceId: t.resource_id,
+    });
+    return created;
+  }
+  return relogged;
+}
 
 export interface ResourceLockState {
   // === State (reactive) ===
@@ -68,8 +126,10 @@ export interface ResourceLockState {
   renew: (t: LockTarget) => Promise<boolean>;
   release: (t: LockTarget) => Promise<void>;
   /** `blocked` (ADR-047): the write was refused client-side because the target subtree is
-   *  DEGRADED (consent pending) — distinct from lost/forbidden, nothing reached the gateway. */
-  save: (t: LockTarget, p: SavePayload) => Promise<{ ok: true } | { ok: false; lost: boolean; forbidden: boolean; blocked?: boolean }>;
+   *  DEGRADED (consent pending) — distinct from lost/forbidden, nothing reached the gateway.
+   *  `notFound`: the gateway could not address the node (404 — a subset of `lost`); callers that
+   *  mint nodes client-side retry it as a nested CREATE (see `SavePayload.create_fallback`). */
+  save: (t: LockTarget, p: SavePayload) => Promise<{ ok: true } | { ok: false; lost: boolean; forbidden: boolean; notFound?: boolean; blocked?: boolean }>;
   releaseAndSave: (t: LockTarget, dirty: boolean, payload?: SavePayload, bookIdOverride?: string) => Promise<void>;
 
   // === Phase-03 surface ===
@@ -272,7 +332,7 @@ export const useResourceLockStore = create<ResourceLockState>()(
           return { ok: false, lost: false, forbidden: false, blocked: true };
         }
         log.info('save', 'request', { key, action: p.action_type, log: p.log !== false });
-        const r = await saveResource(bookId, t, p);
+        const r = await saveWithCreateFallback(bookId, t, p);
         if (r.ok) {
           log.info('save', 'saved', { key });
           return { ok: true };
@@ -280,7 +340,7 @@ export const useResourceLockStore = create<ResourceLockState>()(
         if (r.lost) log.warn('save', 'save rejected — lock/node lost', { key });
         else if (r.forbidden) log.warn('save', 'save forbidden — missing resource access', { key });
         else log.error('save', 'save failed', { key });
-        return { ok: false, lost: r.lost, forbidden: r.forbidden };
+        return { ok: false, lost: r.lost, forbidden: r.forbidden, notFound: r.notFound };
       },
 
       releaseAndSave: async (t, dirty, payload, bookIdOverride) => {
@@ -308,8 +368,18 @@ export const useResourceLockStore = create<ResourceLockState>()(
           dirty = false;
         }
         if (dirty && payload) {
-          // save REQUIRES a live lock (precondition) → must run BEFORE unlock.
-          const r = await saveResource(bookId, t, payload);
+          // save REQUIRES a live lock (precondition) → must run BEFORE unlock. A 404 on a
+          // client-minted node retries ONCE as a nested CREATE when the caller passed
+          // `create_fallback` (sketch spread page images) — see saveWithCreateFallback.
+          const r = await saveWithCreateFallback(bookId, t, payload);
+          // EXPECTED outcomes keep their own levels below: `lost` (409/404 — warn) and `forbidden`
+          // (403 access gate — warn, mirroring saveResource/save). Only a genuine/transient failure
+          // escalates to error, which runs in production (logging-convention §Environment).
+          if (!r.ok && !r.lost && !r.forbidden) {
+            log.error('releaseAndSave', 'save failed — local changes kept', { key });
+          } else if (!r.ok && r.forbidden) {
+            log.warn('releaseAndSave', 'save forbidden — missing resource access', { key });
+          }
           if (!r.ok && r.lost) {
             log.warn('releaseAndSave', 'lock lost — keep local changes, skip unlock', { key });
             // Lock already gone/stolen → unlock is a no-op; just drop local bookkeeping.
@@ -468,7 +538,7 @@ export type {
   ResourceType,
   ResourceLockRawRow,
 } from './types';
-export { keyOf, FALLBACK_HOLDER_NAME } from './types';
+export { keyOf, FALLBACK_HOLDER_NAME, ACTION_TYPE_CREATE } from './types';
 export * from './selectors';
 export * from './imperative-guards';
 export { setSketchWriteBlocker, isSketchWriteBlocked } from './write-blocker';

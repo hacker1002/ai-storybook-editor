@@ -8,6 +8,7 @@
 
 import { newUuid } from '@/utils/uuid';
 import { createLogger } from '@/utils/logger';
+import { parseHeightCm } from '@/utils/parse-height-cm';
 import type { Character } from '@/types/character-types';
 import type { Prop } from '@/types/prop-types';
 import type { Stage } from '@/types/stage-types';
@@ -61,6 +62,37 @@ const emptyEmotional = () => ({ mood: '' });
 
 const variantType = (variantKey: string): 0 | 1 => (variantKey === 'base' ? 0 : 1);
 
+/** Excel "height" text → cm NUMBER (shared `parseHeightCm` — same helper the per-space
+ *  re-import uses, so both paths land on the exact same value). A non-empty cell that yields
+ *  nothing measurable only drops the height (the variant is still imported).
+ *
+ *  PURE (no logging): every row passes through here TWICE — once for the catalog
+ *  (`buildCharacters`) and once for the sketch projection (`projectSketchEntities`) — so the
+ *  unparseable-cell report is raised exactly once per row by `collectHeightWarnings` instead. */
+function heightCm(row: ParsedEntityRow): number | null {
+  return parseHeightCm(row.height);
+}
+
+/**
+ * ONE warning per row whose `height` cell has content but nothing measurable — the height is
+ * dropped and the variant still imports. Mirrors the base-space importer's validate pass
+ * (`parse-base-entities.ts::validateBaseImport`) so the user learns the value was lost instead of
+ * only seeing it in the console. Char/prop only (the Stages sheet has no `height`).
+ */
+function collectHeightWarnings(rows: ParsedEntityRow[], issues: ImportIssues): void {
+  for (const row of rows) {
+    if (!row.height || parseHeightCm(row.height) !== null) continue;
+    log.warn('collectHeightWarnings', 'height cell unparseable → dropped', {
+      entityType: row.entity_type,
+      key: row.key,
+      variantKey: row.variant_key,
+    });
+    issues.warnings.push(
+      `Dòng "${row.key}" (${row.entity_type}) variant "${row.variant_key}": height "${row.height}" không parse được → bỏ trống.`,
+    );
+  }
+}
+
 /** Group rows by entity key, preserving first-appearance order. */
 function groupByKey(rows: ParsedEntityRow[]): Map<string, ParsedEntityRow[]> {
   const groups = new Map<string, ParsedEntityRow[]>();
@@ -82,7 +114,14 @@ export function buildCharacters(rows: ParsedEntityRow[]): Character[] {
       name: titlecase(row.variant_key),
       key: row.variant_key,
       type: variantType(row.variant_key),
-      appearance: emptyAppearance(),
+      // Catalog appearance carries the imported height in cm. NOTE the deliberate encoding split
+      // for an unknown/unparseable height: the catalog uses 0 (`Character.appearance.height` is a
+      // non-nullable number — 0 is the schema default the entity spaces already treat as "not
+      // set"), while the sketch projection below uses null (`SketchEntityVariant.height` is
+      // `number | null`, and the sketch ruler distinguishes "no height yet" from a real 0).
+      // Unifying would mean widening the catalog type, which the character-space appearance
+      // form/consumers read as a plain number — out of scope here.
+      appearance: { ...emptyAppearance(), height: heightCm(row) ?? 0 },
       visual_description: row.description,
       illustrations: [],
       image_references: [],
@@ -133,38 +172,36 @@ export function buildStages(rows: ParsedEntityRow[]): Stage[] {
 
 // ── Sketch entity projection ────────────────────────────────────────────────────
 
-/** Full entity catalog → thin sketch projection (design 07-01 §4.3): key + variant text
- *  fields (imagery lives on the base workspace + per-variant). DRY — derived from the same
- *  full entities, never re-parsed. The source `visual_description` maps to the sketch variant
- *  `visual_design`; `description`/`art_language` are populated by the 4-column import (Phase 06). */
-export function projectSketchEntities(
-  entities: { key: string; variants: { key: string; visual_description: string }[] }[],
-): SketchEntity[] {
-  return entities.map((e) => ({
-    key: e.key,
-    variants: e.variants.map((v) => ({
-      key: v.key,
-      description: '',
-      visual_design: v.visual_description,
-      art_language: '',
+/** Entity rows → thin sketch projection (design 07-01 §4.3): key + variant text fields
+ *  (imagery lives on the base workspace + per-variant, empty until first generate).
+ *  ⚡ 2026-07-20: projected straight from the PARSED ROWS, not from the full catalog — each
+ *  Excel column maps to its own variant field (`description` is NOT reused as `visual_design`,
+ *  `art_language` is a real column) and the catalog type has no slot for `art_language`. */
+export function projectSketchEntities(rows: ParsedEntityRow[]): SketchEntity[] {
+  return Array.from(groupByKey(rows).entries()).map(([key, group]) => ({
+    key,
+    variants: group.map((row) => ({
+      key: row.variant_key,
+      description: row.description,
+      height: heightCm(row),
+      visual_design: row.visual_design,
+      art_language: row.art_language,
     })),
   }));
 }
 
 /** Stage projection — 2026-07-18 stage model: per-stage style workspace (`base.styles: []`) +
  *  flat 2-cell variant imagery (empty until first generate). Text mapping mirrors
- *  projectSketchEntities; stages carry NO height. */
-export function projectSketchStages(
-  entities: { key: string; variants: { key: string; visual_description: string }[] }[],
-): SketchStage[] {
-  return entities.map((e) => ({
-    key: e.key,
+ *  projectSketchEntities; stages carry NO height (the Stages sheet has no such column). */
+export function projectSketchStages(rows: ParsedEntityRow[]): SketchStage[] {
+  return Array.from(groupByKey(rows).entries()).map(([key, group]) => ({
+    key,
     base: { styles: [] },
-    variants: e.variants.map((v) => ({
-      key: v.key,
-      description: '',
-      visual_design: v.visual_description,
-      art_language: '',
+    variants: group.map((row) => ({
+      key: row.variant_key,
+      description: row.description,
+      visual_design: row.visual_design,
+      art_language: row.art_language,
       illustrations: [],
       crops: [],
     })),
@@ -186,6 +223,15 @@ export function assembleSketchSnapshot(
   const book: SketchImportBook = { original_language: meta.original_language, typography: null };
   const { spreads, issues } = buildSketchSpreadsFromWorkbook(parsed.spreadsSource, book);
 
+  // Entity-sheet advisories (missing sheet / missing columns) join the SAME issues channel the
+  // spread parser fills → validation → the modal warning block (no second channel).
+  issues.errors.push(...parsed.issues.errors);
+  issues.warnings.push(...parsed.issues.warnings);
+
+  // Height advisories — raised ONCE per row here (the builders below parse the same cell twice).
+  collectHeightWarnings(parsed.characters, issues);
+  collectHeightWarnings(parsed.props, issues);
+
   const characters = buildCharacters(parsed.characters);
   const props = buildProps(parsed.props);
   const stages = buildStages(parsed.stages);
@@ -193,9 +239,9 @@ export function assembleSketchSnapshot(
   const sketch: Sketch = {
     id: newUuid(),
     base: { character_sheet: { styles: [] }, prop_sheet: { styles: [] } },
-    characters: projectSketchEntities(characters),
-    props: projectSketchEntities(props),
-    stages: projectSketchStages(stages),
+    characters: projectSketchEntities(parsed.characters),
+    props: projectSketchEntities(parsed.props),
+    stages: projectSketchStages(parsed.stages),
     spreads,
   };
 

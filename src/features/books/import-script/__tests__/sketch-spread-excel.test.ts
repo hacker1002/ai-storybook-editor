@@ -10,6 +10,7 @@ import {
 import { getSketchTextboxContent } from '@/types/sketch';
 import type { SheetMatrix, SketchImportBook } from '../sketch-spread-excel.types';
 import {
+  CHOICE_LABEL,
   FIXTURE_SHEETS,
   STORYBOARD_MATRIX,
   VI_VN_MATRIX,
@@ -46,6 +47,19 @@ describe('splitSpreadBlocks', () => {
     const s2 = blocks[1];
     expect(s2.cell('Camera', 1)).toBe('Camera 2 TRÁI');
     expect(s2.cell('Camera', 2)).toBe('Camera 2 PHẢI');
+  });
+
+  it('treats the branch-nav `Choice` row as KNOWN — present in the fixture, no warning', () => {
+    const w: string[] = [];
+    splitSpreadBlocks(
+      [
+        ['SPREAD 1', '', ''],
+        ['Camera', 'x', ''],
+        [CHOICE_LABEL, 'go to SPREAD 4', ''],
+      ],
+      w,
+    );
+    expect(w).toEqual([]);
   });
 
   it('warns on an unknown row label (ignored)', () => {
@@ -104,12 +118,13 @@ describe('parseGeo', () => {
 
 describe('buildPage', () => {
   const blocks = splitSpreadBlocks(STORYBOARD_MATRIX, []);
-  it('maps 13 art_direction fields directly; action = Diễn biến + Character', () => {
+  it('maps 7 art_direction fields directly; action = Diễn biến + Character', () => {
     const page = buildPage('left', blocks[1], 1);
     expect(page.type).toBe('left');
     expect(page.art_direction.camera).toBe('Camera 2 TRÁI');
     expect(page.art_direction.stage).toBe('@bedroom/base');
-    expect(page.art_direction.negative_space).toBe('Negative space 2 TRÁI');
+    expect(page.art_direction.light_tone).toBe('Light & tone 2 TRÁI');
+    expect(page.art_direction.art_language).toBe('Art language 2 TRÁI');
     expect(page.art_direction.action).toBe('Diễn biến 2 TRÁI\nCharacter 2 TRÁI');
   });
 
@@ -118,6 +133,52 @@ describe('buildPage', () => {
     const page = buildPage('left', blocks[2], 1);
     expect(page.art_direction.camera).toBe('Camera 3 TRÁI');
     expect(page.art_direction.camera).not.toContain('NHÁNH');
+  });
+});
+
+// Clean break — the 13→7 art_direction reshape (2026-07-20) removed these rows outright.
+// Mirrors the Python `test_description_renamed_keys_have_no_old_alias`: the old labels must
+// stay UNKNOWN. Re-adding e.g. `'Light & color': 'light_tone'` to AD_ROW as a read-time
+// compat alias was explicitly decided against — this test is what blocks it.
+describe('old (pre-reshape) Storyboard labels are gone, not aliased', () => {
+  // Point-in-time snapshot of the labels dropped on 2026-07-20 — NOT a living list; a
+  // future rename must add its own entry here (nothing derives this from AD_ROW).
+  const OLD_LABELS = [
+    'Light & color',
+    'Art concept',
+    'Space & time',
+    'Animation',
+    'Sound',
+    'Layer',
+    'Interactive intent',
+    'Negative space',
+  ];
+
+  const oldMatrix: SheetMatrix = [
+    ['SPREAD 1', '', ''],
+    ...OLD_LABELS.map((label) => [label, `${label} value`, '']),
+  ];
+
+  it('warns on every old label (each is unknown → ignored)', () => {
+    const w: string[] = [];
+    splitSpreadBlocks(oldMatrix, w);
+    for (const label of OLD_LABELS) {
+      expect(w.some((m) => m.includes(`nhãn dòng lạ "${label}"`))).toBe(true);
+    }
+    expect(w).toHaveLength(OLD_LABELS.length);
+  });
+
+  it('contributes nothing to art_direction — all 7 current fields stay empty', () => {
+    const block = splitSpreadBlocks(oldMatrix, [])[0];
+    expect(buildPage('left', block, 1).art_direction).toEqual({
+      stage: '',
+      setting: '',
+      composition: '',
+      action: '',
+      camera: '',
+      light_tone: '',
+      art_language: '',
+    });
   });
 });
 

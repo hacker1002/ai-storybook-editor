@@ -61,10 +61,14 @@ export type RenewResult = { ok: true } | { ok: false; lost: boolean };
  *  i.e. the write could not be applied and local changes must be kept/reverted.
  *  `forbidden` = 403 (actor lacks access to this resource type — e.g. a retouch-only
  *  collaborator saving a step=2 illustration node); an EXPECTED access-gate outcome the
- *  caller surfaces distinctly (toast), not a transient/system failure. */
+ *  caller surfaces distinctly (toast), not a transient/system failure.
+ *  `notFound` = 404 ONLY (a strict SUBSET of `lost`): the node is not addressable in the
+ *  snapshot. Callers that mint a node CLIENT-SIDE (e.g. a generated sketch spread page image)
+ *  use it to retry the write ONCE as a nested CREATE. Optional so existing `{lost,forbidden}`
+ *  consumers/mocks stay valid. */
 export type SaveResult =
   | { ok: true; snapshot_id: string; updated_at: string }
-  | { ok: false; lost: boolean; forbidden: boolean };
+  | { ok: false; lost: boolean; forbidden: boolean; notFound?: boolean };
 
 /** reorder → applied (ok) or failed. `code` surfaces the client-actionable gateway
  *  rejections: `LOCK_REQUIRED` (409 — acquire the type-6 lock first), `SET_MISMATCH`
@@ -162,7 +166,8 @@ export async function saveResource(bookId: string, t: LockTarget, p: SavePayload
     return { ok: true, snapshot_id: res.snapshot_id, updated_at: res.updated_at };
   }
   const fail = res as ImageApiFailure;
-  const lost = fail.httpStatus === 409 || fail.httpStatus === 404;
+  const notFound = fail.httpStatus === 404; // node not addressable → nested-CREATE retry seam
+  const lost = fail.httpStatus === 409 || notFound;
   const forbidden = fail.httpStatus === 403;
   if (lost) {
     log.warn('saveResource', 'save rejected — lock/node lost', {
@@ -182,7 +187,7 @@ export async function saveResource(bookId: string, t: LockTarget, p: SavePayload
       error: fail.error,
     });
   }
-  return { ok: false, lost, forbidden };
+  return { ok: false, lost, forbidden, notFound };
 }
 
 /** POST /api/resource/reorder — permute a snapshot collection server-side (phase 08).

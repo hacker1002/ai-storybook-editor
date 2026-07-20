@@ -29,7 +29,7 @@ import {
   useSnapshotActions,
 } from '@/stores/snapshot-store/selectors';
 import type { ArtDirection, SketchPageType, SketchSpread } from '@/types/sketch';
-import { AD_FIELD_ORDER, AD_KEYS, AD_LABELS, PAGE_LABELS } from './edit-spread-modal.constants';
+import { AD_FIELD_ORDER, AD_LABELS, PAGE_LABELS } from './edit-spread-modal.constants';
 import { CANVAS_CONFIRM_DIALOG_Z, CANVAS_DIALOG_POPOVER_Z } from '@/constants/spread-constants';
 import { createLogger } from '@/utils/logger';
 
@@ -44,10 +44,10 @@ export interface EditSpreadModalProps {
 // which is the page's identity — pages have no id).
 type ArtDirectionDraft = Partial<Record<SketchPageType, ArtDirection>>;
 
-/** Fill all 13 fields, seeding any missing field to '' so every field renders. */
+/** Fill all 7 fields, seeding any missing field to '' so every field renders. */
 function seedArtDirection(source: ArtDirection | undefined): ArtDirection {
   const seeded = {} as ArtDirection;
-  for (const key of AD_KEYS) seeded[key] = source?.[key] ?? '';
+  for (const key of AD_FIELD_ORDER) seeded[key] = source?.[key] ?? '';
   return seeded;
 }
 
@@ -200,7 +200,7 @@ export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
       if (!draftAd) continue;
       // Count changed keys (draft ↔ store) for logging; commit whole draft if any differ.
       let changedKeys = 0;
-      for (const key of AD_KEYS) {
+      for (const key of AD_FIELD_ORDER) {
         if ((draftAd[key] ?? '') !== (page.art_direction[key] ?? '')) changedKeys += 1;
       }
       log.debug('handleSave', 'page diff', { pageType: page.type, changedKeys });

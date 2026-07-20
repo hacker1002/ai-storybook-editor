@@ -29,7 +29,7 @@ function fixtureFile(sheets: Record<string, unknown[][]>): File {
 }
 
 describe('parseSketchSpreadsFromFile — new template end-to-end', () => {
-  it('reads a real workbook → thin sketch spreads (13-field art_direction + multilang textboxes)', async () => {
+  it('reads a real workbook → thin sketch spreads (7-field art_direction + multilang textboxes)', async () => {
     const file = fixtureFile({ Storyboard: STORYBOARD_MATRIX, vi_VN: VI_VN_MATRIX, en_US: EN_US_MATRIX });
     const { spreads, issues } = await parseSketchSpreadsFromFile(file, book);
 
@@ -41,7 +41,7 @@ describe('parseSketchSpreadsFromFile — new template end-to-end', () => {
     expect(spreads[0].pages.map((p) => p.type)).toEqual(['full']);
     expect(spreads[1].pages.map((p) => p.type)).toEqual(['left', 'right']);
 
-    // art_direction: 13 fields, action merges Diễn biến + Character.
+    // art_direction: 7 fields, action merges Diễn biến + Character.
     const s2left = spreads[1].pages[0].art_direction;
     expect(s2left.camera).toBe('Camera 2 TRÁI');
     expect(s2left.action).toBe('Diễn biến 2 TRÁI\nCharacter 2 TRÁI');

@@ -17,7 +17,7 @@ export type SketchGeneratePage = 'left' | 'right' | 'full';
 export interface GenerateSpreadImageParams {
   snapshotId: string;
   sketchSpreadId: string;
-  /** UUID of `art_styles.id` (= `book.artstyle_id`), NOT the description. Backend fetches the row. */
+  /** UUID of `art_styles.id` (= `book.sketchstyle_id`), NOT the description. Backend fetches the row. */
   artStyleId: string;
   /** Which page of the spread to generate — backend generates ONE page per call. */
   page: SketchGeneratePage;

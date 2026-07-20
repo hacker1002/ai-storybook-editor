@@ -1,9 +1,11 @@
 // sketch-spread-generate-job-slice.ts — orchestrates SEQUENTIAL sketch spread-image generation.
 // One job = N spreads, one API call per spread, run one-at-a-time in DOC-ORDER (position in
-// sketch.spreads[]). After each spread resolves: prepend a versioned backdrop
-// (addSketchSpreadImageVersion → sync.isDirty) then AWAIT flushSnapshot() so the write lands in
-// the DB before the next spread — the backend reads prior spreads for a consistent look, and the
-// UI fills in gradually / survives a reload. Partial failures never abort the job.
+// sketch.spreads[]). After each page resolves: prepend a versioned backdrop
+// (addSketchSpreadImageVersion) then AWAIT the write so it lands in the DB before the next
+// page/spread — the backend reads prior spreads for a consistent look, and the UI fills in
+// gradually / survives a reload. Two write paths: under collabPersist the per-page node goes
+// through the resource-lock gateway (create-vs-upload, see persistPageImage); in the legacy solo
+// path it is flushSnapshot(). Partial failures never abort the job.
 //
 // Differs from sketch-generate-job-slice (entity sheets): 1 task = 1 spread (no `kind`), no
 // snapshotId param (resolved from meta.id AFTER an initial flush — a brand-new unsaved book has
@@ -21,12 +23,18 @@ import type {
 } from '../types';
 import { callGenerateSketchSpread } from '@/apis/sketch-spread-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
-import type { SketchSpread, SketchPageType } from '@/types/sketch';
+import type { SketchSpread, SketchPageType, SketchSpreadImage } from '@/types/sketch';
 // resource-lock-store is loaded by snapshot-store/index (line 6) BEFORE the slices, so this static
 // import resolves cleanly in the app. The isolated slice unit tests import this module directly
 // (bypassing index) and therefore mock '@/stores/resource-lock-store' to avoid the module cycle
 // (slice → resource-lock-store → auth-store → snapshot-store/index → slice).
-import { useResourceLockStore, type LockTarget, type ResourceLockState } from '@/stores/resource-lock-store';
+import {
+  useResourceLockStore,
+  ACTION_TYPE_CREATE,
+  type LockTarget,
+  type ResourceLockState,
+  type SavePayload,
+} from '@/stores/resource-lock-store';
 import {
   insertGenerateSummaryLog,
   ACTION_TYPE_UPLOAD,
@@ -71,6 +79,15 @@ const SKETCH_SPREAD_ERROR_MESSAGES: Record<string, string> = {
 };
 
 const SKIPPED_DELETED_MESSAGE = 'Skipped — spread was deleted';
+const PERSIST_FAILED_MESSAGE = 'Image generated but could not be saved — please try again';
+/** A page generated but its lock was held by ANOTHER editor → the gateway save would 409, so the
+ *  image only lives in this session's store. Distinct wording: retrying now would fail the same
+ *  way, the user has to wait for the other editor. */
+const PERSIST_LOCK_BLOCKED_MESSAGE =
+  'Image generated but not saved — another editor is holding this page';
+
+/** Array on a sketch spread node that holds the per-page image nodes (nested-CREATE collection). */
+const SPREAD_IMAGES_COLLECTION = 'images';
 
 /** Maps an ImageApiFailure (or a non-success result) to a friendly message. */
 function classifyError(result: { error?: string }): string {
@@ -97,10 +114,107 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
     });
   }
 
+  // Page-image nodes this session has already ATTEMPTED a gateway write for (the marker is set on
+  // both the CREATE and the UPLOAD branch of persistPageImage; on the UPLOAD branch it is a no-op
+  // because such ids are already pre-existing). A node minted by
+  // addSketchSpreadImageVersion (crypto.randomUUID) has never been written, so its FIRST save must
+  // be a nested CREATE — an UPLOAD would address an id the backend cannot resolve (404) and the
+  // image would be lost on reload.
+  // ATTEMPTED (not "succeeded") on purpose — as an OPTIMIZATION, not a correctness guard. The
+  // gateway is id-aware on create: `resolve_snapshot_path` (image-api services/resource/
+  // addressing.py) dispatches by resource_type FIRST — `_resolve_image` scans `spreads[].images[]`
+  // for the node id — and only falls through to `_resolve_nested_create` when that finds nothing.
+  // So a repeat CREATE carrying the SAME id resolves to the existing index and overwrites it in
+  // place; it does NOT append a duplicate. Marking on attempt therefore costs nothing and saves a
+  // redundant UPLOAD→404→CREATE round-trip on the next save of a node we already created, while
+  // that same fallback still recovers the case where the create never landed. Deliberately NOT
+  // reset on book switch / snapshot reload: keys are UUIDs (no cross-book collision), set is tiny.
+  const attemptedImageIds = new Set<string>();
+
+  /** Nested-CREATE payload: append `img` at `sketch.spreads[i].images[]` under `spreadId`. */
+  function buildCreatePayload(
+    spreadId: string,
+    img: SketchSpreadImage,
+    targetRef: Record<string, unknown>,
+  ): SavePayload {
+    return {
+      action_type: ACTION_TYPE_CREATE,
+      parent_id: spreadId,
+      collection: SPREAD_IMAGES_COLLECTION,
+      patch: img,
+      target_ref: targetRef,
+      log: false,
+    };
+  }
+
+  /**
+   * Persist ONE page-image node through the gateway under the ALREADY-HELD image lock.
+   * - brand-new node (client-minted id, never saved) → nested CREATE under the spread's `images[]`
+   * - already-persisted node (regenerate) → UPLOAD on the node itself (version prepended in patch)
+   * - UPLOAD → 404 (books corrupted by the pre-fix UPLOAD-only path) → retry ONCE as CREATE
+   * Returns true when the write landed.
+   *
+   * The retry is hand-rolled here rather than delegated to the store's `create_fallback` seam
+   * (which the canvas uses) because this path additionally needs the job race-guard between the
+   * two awaits and per-page failure reporting back to the task.
+   */
+  async function persistPageImage(
+    resourceLock: ResourceLockState,
+    target: LockTarget,
+    spreadId: string,
+    pageType: SketchPageType,
+    img: SketchSpreadImage,
+    targetRef: Record<string, unknown>,
+    isNew: boolean,
+    isCurrentJob: () => boolean,
+  ): Promise<boolean> {
+    log.info('persistPageImage', 'persist page image', { spreadId, page: pageType });
+    const createPayload = buildCreatePayload(spreadId, img, targetRef);
+    log.debug('persistPageImage', isNew ? 'branch: create (new node)' : 'branch: update (upload)', {
+      spreadId,
+      page: pageType,
+    });
+    attemptedImageIds.add(img.id); // BEFORE the await — see attemptedImageIds (no server dedupe)
+    let res = await resourceLock.save(
+      target,
+      isNew
+        ? createPayload
+        : { action_type: ACTION_TYPE_UPLOAD, patch: img, target_ref: targetRef, log: false },
+    );
+    if (!res.ok && !isNew && res.notFound) {
+      // Race guard (module async rule): the job may have been replaced/reset during the save —
+      // don't issue a second write for an abandoned job. The caller re-checks and returns
+      // 'replaced' before it reads this result, so `false` here is never mis-reported.
+      if (!isCurrentJob()) {
+        log.debug('persistPageImage', 'job replaced — skip fallback create', { spreadId, page: pageType });
+        return false;
+      }
+      log.debug('persistPageImage', 'branch: fallback create (node absent in DB)', {
+        spreadId,
+        page: pageType,
+      });
+      res = await resourceLock.save(target, createPayload);
+    }
+    if (res.ok) {
+      log.info('persistPageImage', 'persisted', { spreadId, page: pageType });
+      return true;
+    }
+    log.error('persistPageImage', 'page image did not persist', {
+      spreadId,
+      page: pageType,
+      isNew,
+      lost: res.lost,
+      forbidden: res.forbidden,
+      notFound: res.notFound,
+    });
+    return false;
+  }
+
   // ── collab per-spread driver ────────────────────────────────────────────────────────────────
   // Holds a lock per PER-PAGE image, generates each page, and flushes DATA-ONLY through the gateway
-  // save (log:false) under the lock — replacing autoSaveSnapshot/flushSnapshot (a no-op under
-  // collabPersist). Returns: 'replaced' → caller returns from runJob (job reset); 'cancelled' →
+  // save (log:false, create-vs-upload per persistPageImage) under the lock — replacing
+  // autoSaveSnapshot/flushSnapshot (a no-op under collabPersist).
+  // Returns: 'replaced' → caller returns from runJob (job reset); 'cancelled' →
   // caller breaks the loop; 'ok' → continue to the next spread. Releases ALL held image locks at
   // spread end (finally). Skip semantics: a page whose EXISTING image is 409-blocked is skipped;
   // a spread with ALL pages blocked counts as skipped (job.skipped); a partially-blocked spread
@@ -120,8 +234,17 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
     const skippedPages = new Set<SketchPageType>();
     const heldFor = (imageId: string): boolean =>
       heldTargets.some((t) => t.resource_id === imageId);
+    // Image nodes present BEFORE this spread's generate → they came from the loaded snapshot, so
+    // they are addressable in the DB (an UPLOAD resolves). Anything minted during the run below is
+    // brand-new and needs a nested CREATE instead.
+    const preExistingImageIds = new Set(spread.images.map((im) => im.id));
     let lastUrl = '';
     let cancelledMidSpread = false;
+    let persistedAny = false; // ≥1 page write landed → peers must refetch (summary sync)
+    // ≥1 GENERATED page did not land in the DB → the spread task is an error. NOT set for the
+    // Phase-A skip of an existing image (nothing was generated there, nothing is lost).
+    let persistFailed = false;
+    let persistFailedMessage = PERSIST_FAILED_MESSAGE; // first failure names it (see below)
 
     try {
       // Phase A — acquire locks for pages whose image already EXISTS, so both left+right are held
@@ -183,11 +306,14 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           .sketch.spreads.find((s) => s.id === task.spreadId)
           ?.images.find((im) => im.type === pageType);
         if (!img) {
-          log.warn('processSpreadCollab', 'page image missing after version add — skip save', {
+          // Defensive: the version WAS generated but the node cannot be found, so nothing can be
+          // written → the spread must report failed, never a green 'completed' with no DB row.
+          log.error('processSpreadCollab', 'page image missing after version add — cannot save', {
             jobId,
             spreadId: task.spreadId,
             page: pageType,
           });
+          persistFailed = true;
           continue;
         }
         const target = imageLockTarget(img.id);
@@ -200,43 +326,55 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           if (acq.ok) {
             heldTargets.push(target);
           } else {
-            log.warn('processSpreadCollab', 'could not lock new page image — keep local, skip save', {
+            // FIRST generate of this page + the lock is held by someone else → the image exists
+            // ONLY in this store and disappears on reload. That is a FAILURE, not a silent skip:
+            // reporting 'completed' here is exactly the "thumbnail shown, image gone on reload"
+            // bug. (The `skippedPages` skip-semantics above cover pages whose image ALREADY
+            // exists in the DB — nothing is lost there.)
+            log.error('processSpreadCollab', 'could not lock new page image — image not saved', {
               jobId,
               spreadId: task.spreadId,
               page: pageType,
               holder: acq.holder,
             });
+            // FIRST failure names the message: with left+right both failing for DIFFERENT
+            // reasons the generic "could not be saved" is the safer summary for the spread.
+            if (!persistFailed) persistFailedMessage = PERSIST_LOCK_BLOCKED_MESSAGE;
+            persistFailed = true;
             continue; // data is local; without a lock the gateway save would 409
           }
         }
-        const saveRes = await resourceLock.save(target, {
-          action_type: ACTION_TYPE_UPLOAD,
-          patch: img,
-          target_ref: { spread_number: spreadNumber(task.spreadId, get().sketch.spreads), page: pageType },
-          log: false,
-        });
+        // CREATE-first for a node minted in THIS run (it has never existed in the DB), UPLOAD for
+        // one that came from the loaded snapshot / was created earlier in the session.
+        const isNew = !preExistingImageIds.has(img.id) && !attemptedImageIds.has(img.id);
+        const saved = await persistPageImage(
+          resourceLock,
+          target,
+          task.spreadId,
+          pageType,
+          img,
+          { spread_number: spreadNumber(task.spreadId, get().sketch.spreads), page: pageType },
+          isNew,
+          () => get().sketchSpreadGenerateJob?.id === jobId,
+        );
         if (get().sketchSpreadGenerateJob?.id !== jobId) return 'replaced';
-        if (!saveRes.ok) {
-          log.warn('processSpreadCollab', 'page save under lock failed — may not persist', {
-            jobId,
-            spreadId: task.spreadId,
-            page: pageType,
-            lost: saveRes.lost,
-          });
-        }
+        if (saved) persistedAny = true;
+        else persistFailed = true;
       }
 
       const num = spreadNumber(task.spreadId, get().sketch.spreads);
 
       // Cancel arrived mid-spread → mark this task terminal (tasks[] has no 'cancelled' status), then
-      // signal the outer loop to stop. Any page already generated was persisted (per-page save).
+      // signal the outer loop to stop. A page that generated but did NOT persist is an error here
+      // too (same rule as the normal completion branch below) — it would vanish on reload.
       if (cancelledMidSpread) {
-        if (lastUrl) generatedSpreadNumbers.push(num);
+        if (lastUrl && persistedAny) generatedSpreadNumbers.push(num);
         set((state) => {
           const j = state.sketchSpreadGenerateJob;
           if (!j || j.id !== jobId) return;
           if (lastUrl) {
-            j.tasks[i].status = 'completed';
+            j.tasks[i].status = persistFailed ? 'error' : 'completed';
+            if (persistFailed) j.tasks[i].error = persistFailedMessage;
             j.tasks[i].imageUrl = lastUrl;
           } else {
             j.tasks[i].status = 'error';
@@ -249,11 +387,21 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
 
       if (lastUrl) {
         // ≥1 page generated → success (partial if a page was skip-blocked — partial-spread risk).
-        generatedSpreadNumbers.push(num);
+        // A page whose write did NOT land marks the whole spread failed: the image only lives in
+        // the store and would vanish on reload, so the user must see it (never swallowed).
+        if (persistedAny) generatedSpreadNumbers.push(num);
+        if (persistFailed) {
+          log.error('processSpreadCollab', 'spread image not persisted', {
+            jobId,
+            spreadId: task.spreadId,
+            partial: persistedAny,
+          });
+        }
         set((state) => {
           const j = state.sketchSpreadGenerateJob;
           if (!j || j.id !== jobId) return;
-          j.tasks[i].status = 'completed';
+          j.tasks[i].status = persistFailed ? 'error' : 'completed';
+          if (persistFailed) j.tasks[i].error = persistFailedMessage;
           j.tasks[i].imageUrl = lastUrl;
           j.tasks[i].completedAt = new Date().toISOString();
         });

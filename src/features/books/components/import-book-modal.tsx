@@ -33,7 +33,10 @@ const log = createLogger('Books', 'ImportBookModal');
 
 interface ImportBookModalProps {
   source: ImportSource;
-  onClose: () => void;
+  /** `didImport` = the book WAS written (warnings-acknowledged Close path) → the parent must
+   *  refresh the library list, since `createImportedBook` writes straight to the DB and never
+   *  touches the book store. Absent/false = plain Cancel (nothing written, nothing to refresh). */
+  onClose: (didImport?: boolean) => void;
   /** Called with the new book id on successful import → parent navigates to editor. */
   onImported: (bookId: string) => void;
 }
@@ -50,7 +53,7 @@ function ScriptImport({
   onClose,
   onImported,
 }: {
-  onClose: () => void;
+  onClose: (didImport?: boolean) => void;
   onImported: (bookId: string) => void;
 }) {
   const [meta, setMeta] = useState<BookMetaValue>(INITIAL_BOOK_META);
@@ -58,6 +61,10 @@ function ScriptImport({
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  // Imported OK *with* advisories (e.g. an old workbook missing the visual_design /
+  // art_language columns): the book is already written — hold the modal open so the warning
+  // list is actually read, then navigate on "Continue". Non-blocking: nothing was rejected.
+  const [importedBookId, setImportedBookId] = useState<string | null>(null);
 
   const patch = useCallback(
     (p: Partial<BookMetaValue>) => setMeta((m) => ({ ...m, ...p })),
@@ -72,7 +79,21 @@ function ScriptImport({
     setWarnings([]);
   }, []);
 
-  const canSubmit = isBookMetaValid(meta) && !!file && !loading;
+  const canSubmit = isBookMetaValid(meta) && !!file && !loading && !importedBookId;
+  const formDisabled = loading || !!importedBookId;
+
+  const handleContinue = useCallback(() => {
+    if (!importedBookId) return;
+    log.info('handleContinue', 'navigating to editor after warnings', { bookId: importedBookId });
+    onImported(importedBookId);
+  }, [importedBookId, onImported]);
+
+  // Close WITHOUT navigating. When the book was already written (warnings branch) the parent is
+  // told so it can refetch the library — otherwise the new book is invisible until a reload.
+  const handleClose = useCallback(() => {
+    log.debug('handleClose', 'close import modal', { didImport: !!importedBookId });
+    onClose(!!importedBookId);
+  }, [importedBookId, onClose]);
 
   const handleImport = useCallback(async () => {
     if (!file || !isBookMetaValid(meta) || loading) return;
@@ -93,10 +114,17 @@ function ScriptImport({
 
     const res = await importScript(file, modalMeta);
     if (res.ok && res.bookId) {
-      log.info('handleImport', 'ok, navigating to editor', {
-        bookId: res.bookId,
-        warningCount: res.warnings.length,
-      });
+      if (res.warnings.length > 0) {
+        log.warn('handleImport', 'imported with warnings — awaiting acknowledgement', {
+          bookId: res.bookId,
+          warningCount: res.warnings.length,
+        });
+        setWarnings(res.warnings);
+        setImportedBookId(res.bookId);
+        setLoading(false);
+        return;
+      }
+      log.info('handleImport', 'ok, navigating to editor', { bookId: res.bookId });
       onImported(res.bookId); // parent unmounts this modal + navigates — keep loading on
       return;
     }
@@ -110,12 +138,13 @@ function ScriptImport({
     setLoading(false);
   }, [file, meta, loading, onImported]);
 
+  // ESC / outside-click takes the SAME path as the Close button (refresh-if-imported).
   const handleOpenChange = useCallback(
     (open: boolean) => {
       if (loading) return;
-      if (!open) onClose();
+      if (!open) handleClose();
     },
-    [loading, onClose],
+    [loading, handleClose],
   );
 
   return (
@@ -129,10 +158,10 @@ function ScriptImport({
         </DialogHeader>
 
         <div className="max-h-[70vh] space-y-4 overflow-y-auto py-2">
-          <BookMetaFields value={meta} onChange={patch} disabled={loading} idPrefix="import-book" />
+          <BookMetaFields value={meta} onChange={patch} disabled={formDisabled} idPrefix="import-book" />
 
           <Field label="Manuscript file (.xlsx)">
-            <Input type="file" accept=".xlsx" onChange={handleFile} disabled={loading} />
+            <Input type="file" accept=".xlsx" onChange={handleFile} disabled={formDisabled} />
           </Field>
           {file && (
             <p className="truncate text-sm text-muted-foreground">Selected: {file.name}</p>
@@ -157,7 +186,9 @@ function ScriptImport({
           {warnings.length > 0 && (
             <div className="space-y-1 rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 dark:bg-amber-950/20">
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                Cảnh báo ({warnings.length}):
+                {importedBookId
+                  ? `Import thành công, có ${warnings.length} cảnh báo:`
+                  : `Cảnh báo (${warnings.length}):`}
               </p>
               <ul className="list-disc space-y-0.5 pl-5 text-sm text-amber-700 dark:text-amber-400">
                 {warnings.map((msg, i) => (
@@ -169,13 +200,17 @@ function ScriptImport({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancel
+          <Button variant="outline" onClick={handleClose} disabled={loading}>
+            {importedBookId ? 'Close' : 'Cancel'}
           </Button>
-          <Button onClick={handleImport} disabled={!canSubmit}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {loading ? 'Importing...' : 'Import'}
-          </Button>
+          {importedBookId ? (
+            <Button onClick={handleContinue}>Continue to editor</Button>
+          ) : (
+            <Button onClick={handleImport} disabled={!canSubmit}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading ? 'Importing...' : 'Import'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -220,7 +255,7 @@ function ZipComingSoon({ onClose }: { onClose: () => void }) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onClose()}>
             Cancel
           </Button>
           <Button disabled title="Coming soon">

@@ -4,7 +4,7 @@
 // (via the SketchImportWorkbook adapter) so it unit-tests without SheetJS; no store /
 // toast / network side-effects.
 //
-// New template (design 04 §2): Storyboard = 14 labeled rows → 13 art_direction fields
+// New template (design 04 §2): Storyboard = 9 labeled rows → 7 art_direction fields
 // (direct 1-1 map, `action` = Diễn biến + Character); narration lives in per-language
 // tabs (`vi_VN`, `en_US`, …) → multilang `textboxes[].[language_key]` with per-language
 // geometry/typography. Only the main lane (columns B/C) is read; branch D/E is dropped.
@@ -191,7 +191,7 @@ export function parseGeo(cell: string | undefined): ParsedTextboxGeo | null {
 
 // ── Builders ────────────────────────────────────────────────────────────────
 
-/** Build one page's 13-field art_direction (direct 1-1 map + action merge). */
+/** Build one page's 7-field art_direction (direct 1-1 map + action merge). */
 export function buildPage(type: SketchPageType, block: ParsedSpreadBlock, col: number): SketchPage {
   const ad = emptyArtDirection();
   for (const [label, field] of Object.entries(AD_ROW)) {

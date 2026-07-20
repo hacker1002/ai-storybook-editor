@@ -110,6 +110,22 @@ export function BooksPage() {
     [navigate],
   );
 
+  // Import-close WITHOUT navigating (the warnings-acknowledged "Close" path). The import writes
+  // the book directly to the DB (createImportedBook never touches the book store), so the list
+  // must be refetched or the freshly created book stays invisible until a reload. A plain Cancel
+  // (nothing written) skips the fetch.
+  const handleImportClose = useCallback(
+    (didImport?: boolean) => {
+      log.debug('handleImportClose', 'close import modal', { didImport: !!didImport });
+      setImportSource(null);
+      if (didImport) {
+        log.info('handleImportClose', 'imported without navigating — refetch library');
+        void fetchBooks();
+      }
+    },
+    [fetchBooks],
+  );
+
   const handleDelete = useCallback((book: BookListItem) => {
     log.debug('handleDelete', 'open delete dialog (phase 04)', { id: book.id });
     setDeletingBook(book);
@@ -157,7 +173,7 @@ export function BooksPage() {
       {importSource && (
         <ImportBookModal
           source={importSource}
-          onClose={() => setImportSource(null)}
+          onClose={handleImportClose}
           onImported={handleImported}
         />
       )}

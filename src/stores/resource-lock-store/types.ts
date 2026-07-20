@@ -36,6 +36,10 @@ export interface LockEntry {
   expires_at: string; // ISO — pruned once < now()
 }
 
+/** crud audit enum used by every gateway save (verbatim DB enum): 2 create · 3 edit · 4 delete ·
+ *  5 upload/generate. Exported so create-vs-update callers never hardcode `2` inline. */
+export const ACTION_TYPE_CREATE = 2 as const;
+
 /** Save payload — caller maps a snapshot node to this (see gateway save spec §6). */
 export interface SavePayload {
   /** crud audit: 2 create · 3 edit · 4 delete · 5 upload (generate). */
@@ -52,8 +56,15 @@ export interface SavePayload {
    *  which append at the spreads/column root). Serialized into the `/api/resource/save` body. */
   parent_id?: string;
   /** Nested-node CREATE only (pairs with `parent_id`): the target array name on the parent to
-   *  append the new node to — `raw_images` · `raw_textboxes` · `shapes`. OMITTED otherwise. */
+   *  append the new node to — `raw_images` · `raw_textboxes` · `shapes` · `images`. OMITTED
+   *  otherwise. */
   collection?: string;
+  /** CLIENT-ONLY retry hint — NEVER serialized into the `/api/resource/save` body (the api client
+   *  builds the body field-by-field). Set it when the addressed node was minted CLIENT-SIDE and may
+   *  not exist in the DB yet (e.g. a generated sketch spread page image): an EDIT/UPLOAD that comes
+   *  back 404 (`notFound`) is retried ONCE as a nested CREATE using these `parent_id`/`collection`
+   *  values. Handled inside the store (`save` / `releaseAndSave`). */
+  create_fallback?: { parent_id: string; collection: string };
 }
 
 /** Lifecycle status of a single lock session (consumed by phase-03 hook). */

@@ -6,13 +6,19 @@
 // imports into `snapshot.sketch` (no branches), and spread parsing lives in the shared
 // `sketch-spread-excel.ts` module (its own intermediate types).
 
-/** One catalog entity row (1 row = 1 variant). */
+/** One catalog entity row (1 row = 1 variant). Each Excel column maps to its OWN field —
+ *  `description` is NEVER collapsed into `visual_design` (design 05 §4 / snapshot structure). */
 export interface ParsedEntityRow {
   entity_type: 'character' | 'prop' | 'stage';
   key: string;               // 'kid'
   variant_key: string;       // 'base' | 'hero'
   ref: string;               // '@kid/base' (cross-check only)
-  description: string;
+  description: string;       // Excel "description"
+  visual_design: string;     // Excel "visual_design"
+  art_language: string;      // Excel "art_language"
+  /** Raw Excel "height" text ('1.05 m', '110cm'…) — parsed to cm at projection time.
+   *  Always '' for stages (SketchStageVariant has no height). */
+  height: string;
 }
 
 /**
