@@ -23,11 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  useSketchStages,
-  useSketchSpreadById,
-  useSnapshotActions,
-} from '@/stores/snapshot-store/selectors';
+import { useSketchStages, useSketchSpreadById } from '@/stores/snapshot-store/selectors';
 import type { ArtDirection, SketchPageType, SketchSpread } from '@/types/sketch';
 import { AD_FIELD_ORDER, AD_LABELS, PAGE_LABELS } from './edit-spread-modal.constants';
 import { CANVAS_CONFIRM_DIALOG_Z, CANVAS_DIALOG_POPOVER_Z } from '@/constants/spread-constants';
@@ -38,6 +34,13 @@ const log = createLogger('Editor', 'EditSpreadModal');
 export interface EditSpreadModalProps {
   spreadId: string;
   onClose: () => void;
+  /** Persist the changed pages via the collab gateway (owned by the space — mirrors
+   *  onReorder/onDelete). Resolves `true` when the modal should CLOSE (saved, or save-lost
+   *  with the local change kept), `false` to keep it OPEN for retry (peer holds the lock). */
+  onSave: (
+    spreadId: string,
+    changedByPage: Partial<Record<SketchPageType, ArtDirection>>,
+  ) => Promise<boolean>;
 }
 
 // Draft shape: one full ArtDirection per present page type (keyed by SketchPage.type,
@@ -166,13 +169,13 @@ function ArtDirectionFields({ pageType, value, onFieldChange }: ArtDirectionFiel
   );
 }
 
-export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
+export function EditSpreadModal({ spreadId, onClose, onSave }: EditSpreadModalProps) {
   const spread = useSketchSpreadById(spreadId);
-  const { updateSketchPageArtDirection } = useSnapshotActions();
 
   // Seed draft once from the store (lazy init — no effect/setState in render).
   const [draft, setDraft] = useState<ArtDirectionDraft>(() => initDraft(spread));
   const [activeTab, setActiveTab] = useState<SketchPageType>(() => spread?.pages[0]?.type ?? 'left');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Deleted while open → render null (no effect/setState loop). Root gates on editingId.
   if (!spread || spread.pages.length === 0) {
@@ -193,32 +196,42 @@ export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
     }));
   };
 
-  const handleSave = () => {
-    let changedPages = 0;
+  const handleSave = async () => {
+    // Collect the fully-seeded draft for each page that differs from the store; the space
+    // persists them via the gateway (local store write suppressed under collab — the modal
+    // owning the write would silently no-op, which was the "Save does nothing" bug).
+    const changedByPage: Partial<Record<SketchPageType, ArtDirection>> = {};
     for (const page of spread.pages) {
       const draftAd = draft[page.type];
       if (!draftAd) continue;
-      // Count changed keys (draft ↔ store) for logging; commit whole draft if any differ.
       let changedKeys = 0;
       for (const key of AD_FIELD_ORDER) {
         if ((draftAd[key] ?? '') !== (page.art_direction[key] ?? '')) changedKeys += 1;
       }
       log.debug('handleSave', 'page diff', { pageType: page.type, changedKeys });
-      if (changedKeys > 0) {
-        updateSketchPageArtDirection(spreadId, page.type, draftAd);
-        changedPages += 1;
-      }
+      if (changedKeys > 0) changedByPage[page.type] = seedArtDirection(draftAd);
     }
+    const changedPages = Object.keys(changedByPage).length;
     log.info('handleSave', 'commit art direction', {
       spreadId,
       pageCount: spread.pages.length,
       changedPages,
     });
-    onClose();
+    if (changedPages === 0) {
+      onClose();
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const shouldClose = await onSave(spreadId, changedByPage);
+      if (shouldClose) onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
       <DialogContent
         zIndex={CANVAS_CONFIRM_DIALOG_Z}
         className="min-w-[720px] max-w-[60vw] max-h-[85vh] overflow-y-auto"
@@ -267,10 +280,12 @@ export function EditSpreadModal({ spreadId, onClose }: EditSpreadModalProps) {
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Save</Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? 'Saving…' : 'Save'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

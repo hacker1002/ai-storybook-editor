@@ -31,6 +31,8 @@ import {
 import { reorderResource } from '@/apis/resource-lock-api';
 import { runLockedDelete } from '@/features/editor/utils/structural-lock-delete';
 import { runLockedCollectionSave } from '@/features/editor/utils/structural-lock-collection-save';
+import { runLockedResourceSave } from '@/features/editor/utils/structural-lock-resource-save';
+import type { ArtDirection, SketchPageType } from '@/types/sketch';
 import { createLogger } from '@/utils/logger';
 import { SketchSpreadSidebar } from './sketch-spread-sidebar';
 import { SketchSpreadContentArea } from './sketch-spread-content-area';
@@ -53,7 +55,8 @@ export function SketchSpreadsCreativeSpace() {
   const spreadIds = useSketchSpreadIds();
   const book = useCurrentBook();
   const bookId = useCurrentBookId();
-  const { reorderSketchSpreads, deleteSketchSpread, setSketchSpreads } = useSnapshotActions();
+  const { reorderSketchSpreads, deleteSketchSpread, setSketchSpreads, updateSketchPageArtDirection } =
+    useSnapshotActions();
 
   // Collaborator edit-lock: open the realtime lock channel + route flushes through
   // the gateway (suppress owner-direct autoSave) for as long as this space is mounted.
@@ -180,6 +183,66 @@ export function SketchSpreadsCreativeSpace() {
     [spreadIds, deleteSketchSpread],
   );
 
+  // Art-direction edit-modal Save = content EDIT on the spread node (type-6 lock, gateway
+  // save — the ONLY persistence path under collab; a store-only modal Save silently no-ops).
+  // `art_direction` lives on a page (no per-page rtype) so the WHOLE spread node is the
+  // finest addressable grain → step-1 rtype-6 whole-node replace (addressing owned_keys=None).
+  // Because that write carries images/textboxes too, guard a peer's in-flight child edit FIRST
+  // (parity with handleDelete), then acquire → apply local → save whole node → release.
+  const handleSaveArtDirection = useCallback(
+    async (
+      spreadId: string,
+      changedByPage: Partial<Record<SketchPageType, ArtDirection>>,
+    ): Promise<boolean> => {
+      log.info('handleSaveArtDirection', 'save art direction requested', {
+        spreadId,
+        changedPages: Object.keys(changedByPage).length,
+      });
+      const spread = useSnapshotStore.getState().sketch.spreads.find((s) => s.id === spreadId);
+      if (!spread) {
+        log.warn('handleSaveArtDirection', 'spread gone — nothing to save', { spreadId });
+        return true; // deleted out from under the modal → nothing to persist; let it close
+      }
+      const childImageIds = spread.images.map((im) => im.id);
+      const childTextboxIds = spread.textboxes.map((tb) => tb.id);
+      if (isSpreadStructurallyLockedByOther(spreadId, childImageIds, childTextboxIds)) {
+        log.info('handleSaveArtDirection', 'blocked — spread or a child node locked by other', {
+          spreadId,
+        });
+        toast.info('Spread này đang được người khác chỉnh sửa — vui lòng thử lại sau.');
+        return false; // keep the modal open for retry
+      }
+      const idx = spreadIds.indexOf(spreadId);
+      const spread_number = idx >= 0 ? idx + 1 : 1; // 1-based doc-order position (audit)
+      const target: LockTarget = { step: 1, resource_type: 6, resource_id: spreadId, locale: null };
+      // Whole-node patch: replace only the changed pages' art_direction, keep everything else.
+      const nextSpread = {
+        ...spread,
+        pages: spread.pages.map((p) => {
+          const ad = changedByPage[p.type];
+          return ad ? { ...p, art_direction: ad } : p;
+        }),
+      };
+      const outcome = await runLockedResourceSave(
+        target,
+        { action_type: 3, patch: nextSpread, target_ref: { spread_number } },
+        () => {
+          for (const p of spread.pages) {
+            const ad = changedByPage[p.type];
+            if (ad) updateSketchPageArtDirection(spreadId, p.type, ad);
+          }
+        },
+      );
+      if (outcome === 'blocked') return false; // holder toast already shown; keep modal open
+      if (outcome === 'failed') {
+        toast.error('Chưa lưu được art direction — vui lòng thử lại.');
+        return true; // local kept (save-lost); close — a content-sync refetch reconciles
+      }
+      return true;
+    },
+    [spreadIds, updateSketchPageArtDirection],
+  );
+
   const handleCheck = useCallback((id: string, next: boolean) => {
     setCheckedIds((prev) => (next ? [...new Set([...prev, id])] : prev.filter((x) => x !== id)));
   }, []);
@@ -291,7 +354,12 @@ export function SketchSpreadsCreativeSpace() {
 
       {/* key={editingId} forces a remount on A→B switch so the draft never leaks across spreads. */}
       {editingId && (
-        <EditSpreadModal key={editingId} spreadId={editingId} onClose={() => setEditingId(null)} />
+        <EditSpreadModal
+          key={editingId}
+          spreadId={editingId}
+          onClose={() => setEditingId(null)}
+          onSave={handleSaveArtDirection}
+        />
       )}
 
       <AlertDialog open={pendingImport !== null} onOpenChange={(open) => !open && setPendingImport(null)}>
