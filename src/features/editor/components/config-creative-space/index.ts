@@ -8,6 +8,7 @@ export { ConfigBranchSettings } from './config-branch-settings';
 export { ConfigLayoutSettings } from './config-layout-settings';
 export { ConfigEffectSettings } from './config-effect-settings';
 export { ConfigRemixSettings } from './config-remix-settings';
+export { ConfigParametricSlotSettings } from './config-parametric-slot-settings';
 export { ConfigMusicsSoundsSettings } from './musics-sounds/config-musics-sounds-settings';
 export { LayoutThumbnail } from './layout-thumbnail';
 export { LayoutSelectionModal } from './layout-selection-modal';

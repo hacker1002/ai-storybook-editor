@@ -344,6 +344,35 @@ export interface CropPreset {
   geometry: { x: number; y: number; w: number; h: number };
 }
 
+// ── Parametric slot (books.parametric_slot JSONB, DB-CHANGELOG 2026-07-20) ────
+// Book-level config of the param axes a reader/remixer may configure per story:
+// per-character (name/gender/age range) + country + religion. Book defines only
+// availability + default/range; the reader's chosen value lives in the execution
+// layer (see design 12-config-parametric-slot-settings.md).
+export interface ParametricCharacterEntry {
+  key: string; // soft ref → snapshot.characters[].key (unique); entry present = enabled
+  name: string | null; // null = name axis OFF; non-null = default name
+  gender: string | null; // null = gender axis OFF; non-null = default gender
+  age_min: number | null; // paired with age_max (null together)
+  age_max: number | null; // enabled → both non-null, age_min ≤ age_max
+}
+
+export interface ParametricCountryValue {
+  code: string; // ISO 3166-1 alpha-2, uppercase (e.g. 'VN')
+  is_enabled: boolean;
+}
+
+export interface ParametricReligionValue {
+  name: string; // free string (e.g. 'Buddhism')
+  is_enabled: boolean;
+}
+
+export interface BookParametricSlot {
+  characters: ParametricCharacterEntry[];
+  country: { is_enabled: boolean; values: ParametricCountryValue[] };
+  religion: { is_enabled: boolean; values: ParametricReligionValue[] };
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -374,6 +403,7 @@ export interface Book {
   template_layout: BookTemplateLayout | null;
   distribution?: Distribution | null; // export-artifact state (additive, optional)
   crop_presets?: CropPreset[] | null; // Crops-tab reusable frames (additive, optional)
+  parametric_slot?: BookParametricSlot | null; // reader-config param axes (additive, optional; absent = not configured)
   created_at: string;
   updated_at: string;
 }

@@ -11,6 +11,7 @@ import { ConfigBranchSettings } from './config-branch-settings';
 import { ConfigLayoutSettings } from './config-layout-settings';
 import { ConfigEffectSettings } from './config-effect-settings';
 import { ConfigRemixSettings } from './config-remix-settings';
+import { ConfigParametricSlotSettings } from './config-parametric-slot-settings';
 import { ConfigDistributionSettings } from './config-distribution-settings';
 import { ConfigMusicsSoundsSettings } from './musics-sounds/config-musics-sounds-settings';
 import type { ConfigSection } from '@/constants/config-constants';
@@ -18,10 +19,10 @@ import { createLogger } from '@/utils/logger';
 
 const log = createLogger('Editor', 'ConfigCreativeSpace');
 
-function PlaceholderPanel({ section }: { section: string }) {
+function PlaceholderPanel({ label }: { label: string }) {
   return (
     <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-      {section} — coming soon
+      {label} — coming soon
     </div>
   );
 }
@@ -45,8 +46,10 @@ export function ConfigCreativeSpace() {
       case 'layout':  return <ConfigLayoutSettings />;
       case 'effect':  return <ConfigEffectSettings />;
       case 'remix':   return <ConfigRemixSettings />;
+      case 'parametric-slot': return <ConfigParametricSlotSettings />;
+      case 'casting-slot': return <PlaceholderPanel label="Casting Slot" />;
       case 'distribution': return <ConfigDistributionSettings />;
-      default:        return <PlaceholderPanel section={activeSection} />;
+      default:        return <PlaceholderPanel label={activeSection} />;
     }
   };
 

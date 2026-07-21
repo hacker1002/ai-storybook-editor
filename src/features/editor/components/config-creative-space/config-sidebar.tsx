@@ -1,5 +1,5 @@
 // config-sidebar.tsx - Navigation sidebar for ConfigCreativeSpace.
-// Renders 10 section items from CONFIG_SECTIONS; highlights the active section.
+// Renders section items from CONFIG_SECTIONS; highlights the active section.
 
 import * as React from 'react';
 import * as Icons from 'lucide-react';

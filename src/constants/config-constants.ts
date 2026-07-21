@@ -37,6 +37,8 @@ export type ConfigSection =
   | 'layout'
   | 'effect'
   | 'remix'
+  | 'parametric-slot'
+  | 'casting-slot'
   | 'distribution'
   | 'print';
 
@@ -57,6 +59,8 @@ export const CONFIG_SECTIONS: ConfigSectionItem[] = [
   { key: 'layout',         label: 'Layout',           icon: 'LayoutGrid'     },
   { key: 'effect',         label: 'Effect',           icon: 'Sparkles'       },
   { key: 'remix',          label: 'Remix',            icon: 'RefreshCw'      },
+  { key: 'parametric-slot',label: 'Parametric Slot',  icon: 'SlidersHorizontal' },
+  { key: 'casting-slot',   label: 'Casting Slot',     icon: 'Drama'          },
   { key: 'distribution',   label: 'Distribution',     icon: 'Share2'         },
   { key: 'print',          label: 'Print',            icon: 'Printer'        },
 ];
