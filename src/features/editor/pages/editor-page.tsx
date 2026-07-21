@@ -24,6 +24,7 @@ import { CharactersCreativeSpace } from '../components/characters-creative-space
 import { SketchVariantsCreativeSpace } from '../components/sketch-variants-creative-space';
 import { SketchStagesCreativeSpace } from '../components/sketch-stages-creative-space';
 import { SketchSpreadsCreativeSpace } from '../components/sketch-spreads-creative-space';
+import { SketchSpreadErrorDetailModal } from '../components/sketch-spreads-creative-space/sketch-spread-error-detail-modal';
 import { SketchBaseSpace } from '../components/sketch-base-creative-space';
 import { SketchLineupSpace } from '../components/sketch-lineup-creative-space';
 import { SpreadsCreativeSpace } from '../components/spreads-creative-space';
@@ -396,6 +397,12 @@ export function EditorPage() {
             💬
           </button>
         )}
+
+        {/* Sketch-spread generate error detail — mounted at editor ROOT (same level as the
+            summary-toast hook above) so the toast's "Xem chi tiết" action works from ANY
+            creative space, not only while the sketch-spread space is active. Props-less,
+            store-driven (sketchSpreadErrorModalOpen + sketchSpreadLastErrors). */}
+        <SketchSpreadErrorDetailModal />
       </div>
       </InteractionLayerProvider>
     </TooltipProvider>

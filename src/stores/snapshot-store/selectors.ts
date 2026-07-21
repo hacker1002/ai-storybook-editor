@@ -26,7 +26,7 @@ import type { IllustrationData, Section, Branch, BranchSetting } from '@/types/i
 import type { Prop } from '@/types/prop-types';
 import type { Character } from '@/types/character-types';
 import type { Stage } from '@/types/stage-types';
-import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase, VariantSheetGenerateOp, VariantOpKey, VariantGeneratePhase, StageSheetGenerateOp, StageGeneratePhase } from './types';
+import type { ImageTask, QuizValidationIssue, SnapshotStore, BaseSheetGenerateOp, BaseGeneratePhase, VariantSheetGenerateOp, VariantOpKey, VariantGeneratePhase, StageSheetGenerateOp, StageGeneratePhase, SketchSpreadFailedEntry } from './types';
 import type { StageSelection } from '@/types/sketch';
 import type {
   BaseSpread,
@@ -304,9 +304,19 @@ export const useSketchSpreadGenerating = (spreadId: string) =>
     useShallow((s) => {
       const task = s.sketchSpreadGenerateJob?.tasks.find((t) => t.spreadId === spreadId);
       const status = task?.status ?? 'idle';
+      // `error` is a STRUCTURED SketchSpreadTaskError (2026-07-21) — a stable immer
+      // ref per set, so the useShallow compare stays cheap; render `.message`.
       return { status, isGenerating: status === 'running', error: task?.error };
     }),
   );
+
+/** Failed-task snapshot of the LAST finished spread-generate job — survives the job
+ *  dismiss (error-detail modal data source). Stable store array ref → no useShallow. */
+export const useSketchSpreadLastErrors = (): SketchSpreadFailedEntry[] =>
+  useSnapshotStore((s) => s.sketchSpreadLastErrors);
+
+export const useSketchSpreadErrorModalOpen = (): boolean =>
+  useSnapshotStore((s) => s.sketchSpreadErrorModalOpen);
 
 // Sketch BASE-sheet generate-op selectors (ephemeral, per-KIND map: characters ∥ props). Same
 // ref-stability discipline: stable ref / boolean → no useShallow; fresh object of PRIMITIVES →
@@ -856,6 +866,8 @@ export const useSnapshotActions = () =>
       startSketchSpreadGenerateJob: s.startSketchSpreadGenerateJob,
       cancelSketchSpreadGenerateJob: s.cancelSketchSpreadGenerateJob,
       dismissSketchSpreadGenerateJob: s.dismissSketchSpreadGenerateJob,
+      openSketchSpreadErrorModal: s.openSketchSpreadErrorModal,
+      closeSketchSpreadErrorModal: s.closeSketchSpreadErrorModal,
       // Sketch base-sheet generate op (single-flight generate→crop chain + crop-only re-run)
       startBaseSheetGenerate: s.startBaseSheetGenerate,
       recropBaseSheet: s.recropBaseSheet,

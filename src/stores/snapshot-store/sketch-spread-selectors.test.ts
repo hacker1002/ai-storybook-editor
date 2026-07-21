@@ -14,10 +14,14 @@ import {
   useIsAnyVariantSheetGenerating,
   useSketchSpreadGenerating,
 } from '@/stores/snapshot-store/selectors';
-import type { SketchSpreadGenerateJob } from '@/stores/snapshot-store/types';
+import type { SketchSpreadGenerateJob, SketchSpreadTaskError } from '@/stores/snapshot-store/types';
 
 const spreadJob = (
-  tasks: { spreadId: string; status: 'pending' | 'running' | 'completed' | 'error'; error?: string }[],
+  tasks: {
+    spreadId: string;
+    status: 'pending' | 'running' | 'completed' | 'error';
+    error?: SketchSpreadTaskError;
+  }[],
 ): SketchSpreadGenerateJob => ({
   id: 'job-1',
   status: 'running',
@@ -114,14 +118,19 @@ describe('sketch spread selectors', () => {
       expect(result.current).toMatchObject({ status: 'running', isGenerating: true });
     });
 
-    it('surfaces the error message for a failed spread', () => {
+    it('surfaces the structured error for a failed spread', () => {
       const { result } = renderHook(() => useSketchSpreadGenerating('a'));
+      const taskError: SketchSpreadTaskError = {
+        message: 'nope',
+        errorCode: 'REFERENCE_IMAGE_MISSING',
+        failures: [{ code: 'crop_empty', message: "Nhân vật 'Miu': chưa cắt/khóa vùng ảnh tham chiếu" }],
+      };
       act(() => {
         useSnapshotStore.setState((s) => {
-          s.sketchSpreadGenerateJob = spreadJob([{ spreadId: 'a', status: 'error', error: 'nope' }]);
+          s.sketchSpreadGenerateJob = spreadJob([{ spreadId: 'a', status: 'error', error: taskError }]);
         });
       });
-      expect(result.current).toEqual({ status: 'error', isGenerating: false, error: 'nope' });
+      expect(result.current).toEqual({ status: 'error', isGenerating: false, error: taskError });
     });
   });
 });

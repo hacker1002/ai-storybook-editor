@@ -39,8 +39,19 @@ export function useSketchSpreadGenerateNotifications(): void {
         log.info('toast', 'job cancelled', { jobId: job.id, done, skipped, total });
         toast.info(`Cancelled — ${done}/${total} spreads generated${suffix}`);
       } else if (fail > 0 || skipped > 0) {
-        log.warn('toast', 'job completed with skips/failures', { jobId: job.id, done, skipped, fail, total });
-        toast.warning(`${done}/${total} spreads generated${suffix}`);
+        // Error toast does NOT auto-dismiss (chốt validation 2026-07-21): it is the ONLY entry
+        // point into the error-detail modal, so it must survive until the user acts. The modal
+        // data lives in sketchSpreadLastErrors (retained at finalize, BEFORE the dismiss below)
+        // — the action stays valid however late it is clicked.
+        log.warn('toast', 'terminal with errors', { jobId: job.id, done, skipped, fail, total });
+        toast.warning(`${done}/${total} spreads generated${suffix}`, {
+          duration: Infinity,
+          closeButton: true,
+          action: {
+            label: 'Xem chi tiết',
+            onClick: () => useSnapshotStore.getState().openSketchSpreadErrorModal(),
+          },
+        });
       } else {
         log.info('toast', 'job completed', { jobId: job.id, done, total });
         toast.success(`${done}/${total} spreads generated`);

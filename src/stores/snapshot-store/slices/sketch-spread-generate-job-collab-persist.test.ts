@@ -217,7 +217,7 @@ describe('SketchSpreadGenerateJobSlice — collab persist grain', () => {
     expect(save).toHaveBeenCalledTimes(2);
     const task = store.getState().sketchSpreadGenerateJob.tasks[0];
     expect(task.status).toBe('error');
-    expect(task.error).toMatch(/could not be saved/i);
+    expect(task.error?.message).toMatch(/could not be saved/i);
   });
 
   it('FIRST generate whose new page-image lock is 409-blocked → error, never a green skip', async () => {
@@ -238,7 +238,7 @@ describe('SketchSpreadGenerateJobSlice — collab persist grain', () => {
     expect(save).not.toHaveBeenCalled();
     const task = store.getState().sketchSpreadGenerateJob.tasks[0];
     expect(task.status).toBe('error');
-    expect(task.error).toMatch(/another editor/i);
+    expect(task.error?.message).toMatch(/another editor/i);
     expect(store.getState().sketchSpreadGenerateJob.skipped).toBe(0); // a failure, not a skip
   });
 
@@ -258,7 +258,7 @@ describe('SketchSpreadGenerateJobSlice — collab persist grain', () => {
     const job = store.getState().sketchSpreadGenerateJob;
     expect(job.tasks[0].status).toBe('error');
     expect(job.tasks[0].skipped).toBe(true);
-    expect(job.tasks[0].error).toMatch(/another editor/i);
+    expect(job.tasks[0].error?.message).toMatch(/another editor/i);
     expect(job.skipped).toBe(1);
     expect(job.skippedNames).toEqual(['spread #1']);
     expect(job.status).toBe('completed');

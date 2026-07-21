@@ -776,12 +776,45 @@ export interface ImageTaskSlice {
 
 export type SketchSpreadTaskStatus = 'pending' | 'running' | 'completed' | 'error';
 
+/** One per-image finding inside a REFERENCE_IMAGE_MISSING failure (contract from
+ *  api/sketch/04 — one-pass aggregate 2026-07-21). */
+export interface SpreadRefFailure {
+  /** reason enum (variant_missing | crop_empty | fetch_failed) — debug/log only. */
+  code: string;
+  /** Ready-to-display Vietnamese line BUILT BY THE BACKEND (entity name + kind +
+   *  reason) — the FE renders it VERBATIM, never composes per-entity copy. */
+  message: string;
+}
+
+/** Structured error of one spread task — replaces the old flattened string so the
+ *  error-detail modal can show WHY a spread failed (not just that it did). */
+export interface SketchSpreadTaskError {
+  /** Backend-built summary (VI for REFERENCE_IMAGE_MISSING) — fallback to the local
+   *  SKETCH_SPREAD_ERROR_MESSAGES map only when the body carried no message. */
+  message: string;
+  errorCode?: string;     // e.g. REFERENCE_IMAGE_MISSING
+  httpStatus?: number;
+  /** Per-image findings (already-VI messages, aggregated in ONE backend pass). */
+  failures?: SpreadRefFailure[];
+  /** Page the failing API call targeted — display context for the modal. */
+  page?: SketchPageType;
+}
+
+/** Retained snapshot of one failed task for the error-detail modal — survives the
+ *  job dismiss (the notifications hook nulls the job right after the toast). */
+export interface SketchSpreadFailedEntry {
+  spreadId: string;
+  spreadNumber?: number;  // 1-based doc-order — modal header "Spread N"
+  page?: SketchPageType;
+  error: SketchSpreadTaskError;
+}
+
 export interface SketchSpreadGenerateTask {
   spreadId: string;
   ordinal: number;        // 1-based doc-order position at enqueue — aria/toast only
   status: SketchSpreadTaskStatus;
   imageUrl?: string;
-  error?: string;         // friendly message or backend code
+  error?: SketchSpreadTaskError; // structured (2026-07-21) — read `.message` for display
   /** true = ALL of the spread's pages were 409-blocked by another editor (collab) and
    *  the spread was skipped — NOT a generation failure. A partially-blocked spread
    *  (one page done) counts as generated, not skipped. */
@@ -811,9 +844,18 @@ export interface StartSketchSpreadGenerateJobParams {
 
 export interface SketchSpreadGenerateJobSlice {
   sketchSpreadGenerateJob: SketchSpreadGenerateJob | null;
+  /** Failed-task snapshot of the LAST finished job — retained BEFORE dismiss so the
+   *  error-detail modal (opened from the toast action) still has data after the job
+   *  is nulled. Cleared when a new job starts. */
+  sketchSpreadLastErrors: SketchSpreadFailedEntry[];
+  /** Error-detail modal open flag — toast action (editor-root hook) opens it, the
+   *  modal (mounted in the sketch-spread space) reads it; store-bridged, no prop drill. */
+  sketchSpreadErrorModalOpen: boolean;
   startSketchSpreadGenerateJob: (params: StartSketchSpreadGenerateJobParams) => void;
   cancelSketchSpreadGenerateJob: () => void;
   dismissSketchSpreadGenerateJob: () => void;
+  openSketchSpreadErrorModal: () => void;
+  closeSketchSpreadErrorModal: () => void;
 }
 
 // --- Sketch Base Generate Op Types (ephemeral, not persisted to DB) ---

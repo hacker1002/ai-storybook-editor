@@ -37,6 +37,9 @@ export interface ImageApiFailure {
   error: string;
   httpStatus: number;
   errorCode?: string;
+  /** Structured `detail.error.details` from the FastAPI envelope (e.g. sketch-spread
+   *  `{ failures: [{code, message}] }`). Generic — consumers cast to their own shape. */
+  errorDetails?: Record<string, unknown>;
 }
 
 /** Fetch Bearer header from active Supabase session; undefined when unauthenticated
@@ -84,8 +87,8 @@ export async function callImageApi<R extends { success: boolean; error?: string 
     });
 
     if (!response.ok) {
-      const { message, errorCode } = await extractErrorInfo(path, response);
-      return { success: false, error: message, httpStatus: response.status, errorCode };
+      const { message, errorCode, errorDetails } = await extractErrorInfo(path, response);
+      return { success: false, error: message, httpStatus: response.status, errorCode, errorDetails };
     }
 
     const data = await response.json();
@@ -115,8 +118,8 @@ export async function callImageApiGet<R extends { success: boolean; error?: stri
     const response = await fetchWithTimeout(url, { method: 'GET', headers }, DEFAULT_GET_TIMEOUT_MS);
 
     if (!response.ok) {
-      const { message, errorCode } = await extractErrorInfo(path, response);
-      return { success: false, error: message, httpStatus: response.status, errorCode };
+      const { message, errorCode, errorDetails } = await extractErrorInfo(path, response);
+      return { success: false, error: message, httpStatus: response.status, errorCode, errorDetails };
     }
 
     const data = await response.json();
@@ -151,8 +154,8 @@ export async function callImageApiPatch<R extends { success: boolean; error?: st
     });
 
     if (!response.ok) {
-      const { message, errorCode } = await extractErrorInfo(path, response);
-      return { success: false, error: message, httpStatus: response.status, errorCode };
+      const { message, errorCode, errorDetails } = await extractErrorInfo(path, response);
+      return { success: false, error: message, httpStatus: response.status, errorCode, errorDetails };
     }
 
     const data = await response.json();
@@ -182,8 +185,8 @@ export async function callImageApiDelete<R extends { success: boolean; error?: s
     const response = await fetch(url, { method: 'DELETE', headers });
 
     if (!response.ok) {
-      const { message, errorCode } = await extractErrorInfo(path, response);
-      return { success: false, error: message, httpStatus: response.status, errorCode };
+      const { message, errorCode, errorDetails } = await extractErrorInfo(path, response);
+      return { success: false, error: message, httpStatus: response.status, errorCode, errorDetails };
     }
 
     const data = await response.json();
@@ -243,18 +246,28 @@ function classifyFetchError(path: string, err: unknown): ImageApiFailure {
 async function extractErrorInfo(
   path: string,
   response: Response
-): Promise<{ message: string; errorCode?: string }> {
+): Promise<{ message: string; errorCode?: string; errorDetails?: Record<string, unknown> }> {
   try {
     const body = await response.json();
-    // FastAPI HTTPException shape: { detail: { error: { code, message } } }
+    // FastAPI HTTPException shape: { detail: { error: { code, message, details? } } }
     // FastAPI string detail:        { detail: "string" }
-    // Top-level fallbacks:          { error: { code, message } } | { error: string } | { message: string }
+    // Top-level fallbacks:          { error: { code, message, details? } } | { error: string } | { message: string }
     const detail = body?.detail;
     const detailError = typeof detail === 'object' && detail !== null ? detail.error : undefined;
 
     const errorCode: string | undefined =
       (typeof detailError === 'object' && detailError !== null ? detailError.code : undefined) ??
       (typeof body?.error === 'object' && body.error !== null ? body.error.code : undefined);
+
+    // Structured details (precedent: combine-audio-chunks-api). Pass through as-is —
+    // consumers cast to their endpoint's shape (e.g. spread failures[]).
+    const rawDetails =
+      (typeof detailError === 'object' && detailError !== null ? detailError.details : undefined) ??
+      (typeof body?.error === 'object' && body.error !== null ? body.error.details : undefined);
+    const errorDetails: Record<string, unknown> | undefined =
+      typeof rawDetails === 'object' && rawDetails !== null
+        ? (rawDetails as Record<string, unknown>)
+        : undefined;
 
     const message: string =
       (typeof detailError === 'object' && detailError !== null && typeof detailError.message === 'string'
@@ -268,8 +281,10 @@ async function extractErrorInfo(
       body?.message ??
       `HTTP ${response.status}`;
 
-    log.error('extractErrorInfo', 'http error', { path, message, errorCode, status: response.status });
-    return { message: String(message), errorCode };
+    log.error('extractErrorInfo', 'http error', {
+      path, message, errorCode, hasDetails: errorDetails !== undefined, status: response.status,
+    });
+    return { message: String(message), errorCode, errorDetails };
   } catch {
     // Response body not parseable as JSON
   }

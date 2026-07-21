@@ -187,8 +187,18 @@ describe('SketchSpreadGenerateJobSlice', () => {
 
   it('partial failure: spread #1 fails, job continues + completes (mixed statuses)', async () => {
     store.getState().setSketchSpreads([spread('a'), spread('b')]);
+    const failures = [
+      { code: 'crop_empty', message: "Nhân vật 'Miu': chưa cắt/khóa vùng ảnh tham chiếu" },
+      { code: 'fetch_failed', message: "Đạo cụ 'Đèn lồng': không tải được ảnh tham chiếu" },
+    ];
     mockedCall
-      .mockResolvedValueOnce({ success: false, error: 'boom', errorCode: 'LLM_ERROR' } as never)
+      .mockResolvedValueOnce({
+        success: false,
+        error: 'Thiếu ảnh tham chiếu cho 2 đối tượng',
+        errorCode: 'REFERENCE_IMAGE_MISSING',
+        httpStatus: 422,
+        errorDetails: { failures },
+      } as never)
       .mockResolvedValueOnce(ok('b.png') as never);
 
     start(['a', 'b']);
@@ -199,10 +209,42 @@ describe('SketchSpreadGenerateJobSlice', () => {
     const job = store.getState().sketchSpreadGenerateJob;
     expect(job.status).toBe('completed'); // NOT aborted by the failure
     expect(job.tasks[0].status).toBe('error');
-    expect(job.tasks[0].error).toContain('image model'); // LLM_ERROR friendly copy
+    // Structured error: BE-built message wins + failures[] pass through VERBATIM.
+    expect(job.tasks[0].error).toMatchObject({
+      message: 'Thiếu ảnh tham chiếu cho 2 đối tượng',
+      errorCode: 'REFERENCE_IMAGE_MISSING',
+      httpStatus: 422,
+      failures,
+      page: 'full',
+    });
     expect(job.tasks[1].status).toBe('completed');
+    // Retained snapshot for the error-detail modal — survives dismiss.
+    const retained = store.getState().sketchSpreadLastErrors;
+    expect(retained).toHaveLength(1);
+    expect(retained[0]).toMatchObject({ spreadId: 'a', spreadNumber: 1, page: 'full' });
+    expect(retained[0].error.failures).toEqual(failures);
+    store.getState().dismissSketchSpreadGenerateJob();
+    expect(store.getState().sketchSpreadGenerateJob).toBeNull();
+    expect(store.getState().sketchSpreadLastErrors).toHaveLength(1); // survives dismiss
     expect(effectiveUrl(store.getState().sketch.spreads[0])).toBeNull();
     expect(effectiveUrl(store.getState().sketch.spreads[1])).toBe('b.png');
+  });
+
+  it('code-only failure (no body message) falls back to the VI map', async () => {
+    store.getState().setSketchSpreads([spread('a')]);
+    mockedCall.mockResolvedValueOnce({
+      success: false,
+      error: '',
+      errorCode: 'LLM_ERROR',
+    } as never);
+
+    start(['a']);
+    await tick();
+    await tick();
+
+    const job = store.getState().sketchSpreadGenerateJob;
+    expect(job.tasks[0].status).toBe('error');
+    expect(job.tasks[0].error?.message).toContain('Dịch vụ AI'); // SKETCH_SPREAD_ERROR_MESSAGES fallback
   });
 
   it('skips a spread deleted mid-job (SKIPPED_DELETED)', async () => {
@@ -221,7 +263,7 @@ describe('SketchSpreadGenerateJobSlice', () => {
     const job = store.getState().sketchSpreadGenerateJob;
     expect(job.tasks[0].status).toBe('completed');
     expect(job.tasks[1].status).toBe('error');
-    expect(job.tasks[1].error).toMatch(/deleted/i);
+    expect(job.tasks[1].error?.message).toMatch(/deleted/i);
     expect(mockedCall).toHaveBeenCalledTimes(1); // b never dispatched
     expect(job.status).toBe('completed');
   });

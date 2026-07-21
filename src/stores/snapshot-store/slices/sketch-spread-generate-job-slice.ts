@@ -20,6 +20,8 @@ import type {
   SnapshotStore,
   SketchSpreadGenerateJobSlice,
   SketchSpreadGenerateTask,
+  SketchSpreadTaskError,
+  SpreadRefFailure,
 } from '../types';
 import { callGenerateSketchSpread } from '@/apis/sketch-spread-api';
 import type { ImageApiFailure } from '@/apis/image-api-client';
@@ -76,13 +78,24 @@ function orderedPageTypes(spread: SketchSpread): SketchPageType[] {
   return (['left', 'right'] as SketchPageType[]).filter((t) => present.has(t));
 }
 
-// Backend error codes → user-facing English (mirrors SKETCH_ERROR_MESSAGES in the entity job).
+// Backend error codes → Vietnamese FALLBACK copy (2026-07-21 error-detail plan). Used ONLY
+// when the response body carried no message — the backend-built `error.message` wins
+// (BE owns the user-facing copy; for REFERENCE_IMAGE_MISSING it is already VI + N-specific).
 // (ART_STYLE_* entries removed 2026-07-21 — the backend no longer reads art styles.)
 const SKETCH_SPREAD_ERROR_MESSAGES: Record<string, string> = {
-  SPREAD_NO_ART_DIRECTION: 'This spread has no art direction yet — add it before generating.',
-  VALIDATION_ERROR: 'Invalid spread request — check the spread setup.',
-  LLM_ERROR: 'The image model failed to generate this spread — please try again.',
-  NO_IMAGE_IN_RESPONSE: 'The image model returned no image — please try again.',
+  REFERENCE_IMAGE_MISSING: 'Thiếu ảnh tham chiếu cho một số đối tượng',
+  SPREAD_NO_ART_DIRECTION: 'Trang chưa có nội dung art direction',
+  PAGE_NOT_IN_SPREAD: 'Trang không tồn tại trong spread',
+  SNAPSHOT_NOT_FOUND: 'Không tìm thấy dữ liệu sách (snapshot)',
+  SPREAD_NOT_FOUND: 'Không tìm thấy spread',
+  UNSUPPORTED_MODEL: 'Model không được hỗ trợ',
+  VALIDATION_ERROR: 'Dữ liệu gửi lên không hợp lệ',
+  LLM_ERROR: 'Dịch vụ AI gặp sự cố — thử lại sau',
+  NO_IMAGE_IN_RESPONSE: 'AI không trả về ảnh (có thể bị chặn bởi bộ lọc)',
+  PROMPT_TEMPLATE_NOT_FOUND: 'Thiếu cấu hình prompt (liên hệ admin)',
+  STORAGE_UPLOAD_ERROR: 'Lỗi lưu ảnh lên máy chủ',
+  TIMEOUT: 'Máy chủ phản hồi quá lâu — thử lại',
+  CONNECTION_ERROR: 'Mất kết nối máy chủ — thử lại',
 };
 
 const SKIPPED_DELETED_MESSAGE = 'Skipped — spread was deleted';
@@ -96,12 +109,46 @@ const PERSIST_LOCK_BLOCKED_MESSAGE =
 /** Array on a sketch spread node that holds the per-page image nodes (nested-CREATE collection). */
 const SPREAD_IMAGES_COLLECTION = 'images';
 
-/** Maps an ImageApiFailure (or a non-success result) to a friendly message. */
-function classifyError(result: { error?: string }): string {
-  const code = (result as ImageApiFailure).errorCode;
-  return (
-    (code && SKETCH_SPREAD_ERROR_MESSAGES[code]) || result.error || 'Spread image generation failed'
-  );
+/** Generic terminal fallback when neither the body nor the code map gives a message. */
+const GENERIC_SPREAD_ERROR_MESSAGE = 'Tạo ảnh spread thất bại';
+
+/**
+ * Maps an ImageApiFailure (or a non-success result) to a STRUCTURED task error —
+ * replaces the old string-flattening classifyError. `failures[]` (when the backend
+ * sent them — REFERENCE_IMAGE_MISSING) passes through VERBATIM: the messages are
+ * already complete Vietnamese lines built backend-side. Backend `error.message`
+ * wins over the local code map (BE owns the copy); the map is body-less fallback only.
+ */
+function buildTaskError(result: { error?: string }, page?: SketchPageType): SketchSpreadTaskError {
+  const f = result as ImageApiFailure;
+  const rawFailures = f.errorDetails?.failures;
+  const failures = Array.isArray(rawFailures) ? (rawFailures as SpreadRefFailure[]) : undefined;
+  // A body-less response degrades to the client's "HTTP <status> …" placeholder — that is
+  // NOT a backend-built message, so the VI code map outranks it. Any real body message wins.
+  const isBodylessFallback = !f.error || /^HTTP \d/.test(f.error);
+  const message =
+    (!isBodylessFallback ? f.error : undefined) ||
+    (f.errorCode && SKETCH_SPREAD_ERROR_MESSAGES[f.errorCode]) ||
+    f.error ||
+    GENERIC_SPREAD_ERROR_MESSAGE;
+  return { message, errorCode: f.errorCode, httpStatus: f.httpStatus, failures, page };
+}
+
+/** Typed throw carrying the structured task error through the per-spread try/catch —
+ *  keeps the abort-this-spread control flow without flattening back to a string. */
+class SpreadPageGenError extends Error {
+  readonly taskError: SketchSpreadTaskError;
+  constructor(taskError: SketchSpreadTaskError) {
+    super(taskError.message);
+    this.name = 'SpreadPageGenError';
+    this.taskError = taskError;
+  }
+}
+
+/** Catch-site normalizer: unwrap a SpreadPageGenError, wrap anything else as message-only. */
+function toTaskError(err: unknown): SketchSpreadTaskError {
+  if (err instanceof SpreadPageGenError) return err.taskError;
+  return { message: err instanceof Error ? err.message : GENERIC_SPREAD_ERROR_MESSAGE };
 }
 
 export const createSketchSpreadGenerateJobSlice: StateCreator<
@@ -110,7 +157,10 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
   [],
   SketchSpreadGenerateJobSlice
 > = (set, get) => {
-  /** status = cancelled if a cancel was requested, else completed. Only if still the active job. */
+  /** status = cancelled if a cancel was requested, else completed. Only if still the active job.
+   *  Also RETAINS the failed tasks into `sketchSpreadLastErrors` in the SAME producer — the
+   *  notifications hook dismisses (nulls) the job right after the toast, and the error-detail
+   *  modal must still have data to render after that. */
   function finalize(jobId: string): void {
     set((state) => {
       const j = state.sketchSpreadGenerateJob;
@@ -118,6 +168,27 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
       j.status = j.cancelRequested ? 'cancelled' : 'completed';
       j.currentIndex = -1;
       j.completedAt = new Date().toISOString();
+      const spreads = state.sketch.spreads;
+      // `skipped` tasks (all pages 409-blocked by another editor) are excluded: they are
+      // NOT generation failures (their own type contract) and the summary toast already
+      // reports them separately as "K skipped (being edited)".
+      state.sketchSpreadLastErrors = j.tasks
+        .filter((t) => t.status === 'error' && t.error !== undefined && !t.skipped)
+        .map((t) => {
+          const idx = spreads.findIndex((s) => s.id === t.spreadId);
+          return {
+            spreadId: t.spreadId,
+            // Current doc-order number; a spread deleted mid-job falls back to its
+            // enqueue-time ordinal so the modal still names it.
+            spreadNumber: idx >= 0 ? idx + 1 : t.ordinal,
+            page: t.error?.page,
+            error: t.error!,
+          };
+        });
+      log.debug('finalize', 'retained last errors', {
+        jobId,
+        errorCount: state.sketchSpreadLastErrors.length,
+      });
     });
   }
 
@@ -132,7 +203,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
       j.skippedNames.push(`spread #${num}`);
       j.tasks[i].status = 'error';
       j.tasks[i].skipped = true;
-      j.tasks[i].error = 'Skipped — being edited by another editor';
+      j.tasks[i].error = { message: 'Skipped — being edited by another editor' };
       j.tasks[i].completedAt = new Date().toISOString();
     });
   }
@@ -334,7 +405,9 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           page: pageType,
         });
         if (get().sketchSpreadGenerateJob?.id !== jobId) return 'replaced';
-        if (!result.success || !result.data) throw new Error(classifyError(result));
+        if (!result.success || !result.data) {
+          throw new SpreadPageGenError(buildTaskError(result, pageType));
+        }
 
         lastUrl = result.data.imageUrl;
         log.info('processSpreadCollab', 'spread page done', {
@@ -419,11 +492,11 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           if (!j || j.id !== jobId) return;
           if (lastUrl) {
             j.tasks[i].status = persistFailed ? 'error' : 'completed';
-            if (persistFailed) j.tasks[i].error = persistFailedMessage;
+            if (persistFailed) j.tasks[i].error = { message: persistFailedMessage };
             j.tasks[i].imageUrl = lastUrl;
           } else {
             j.tasks[i].status = 'error';
-            j.tasks[i].error = 'Cancelled before this spread finished';
+            j.tasks[i].error = { message: 'Cancelled before this spread finished' };
           }
           j.tasks[i].completedAt = new Date().toISOString();
         });
@@ -446,7 +519,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           const j = state.sketchSpreadGenerateJob;
           if (!j || j.id !== jobId) return;
           j.tasks[i].status = persistFailed ? 'error' : 'completed';
-          if (persistFailed) j.tasks[i].error = persistFailedMessage;
+          if (persistFailed) j.tasks[i].error = { message: persistFailedMessage };
           j.tasks[i].imageUrl = lastUrl;
           j.tasks[i].completedAt = new Date().toISOString();
         });
@@ -459,20 +532,26 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           const j = state.sketchSpreadGenerateJob;
           if (!j || j.id !== jobId) return;
           j.tasks[i].status = 'error';
-          j.tasks[i].error = 'No page generated';
+          j.tasks[i].error = { message: 'No page generated' };
           j.tasks[i].completedAt = new Date().toISOString();
         });
       }
       return 'ok';
     } catch (err) {
       if (get().sketchSpreadGenerateJob?.id !== jobId) return 'replaced';
-      const msg = err instanceof Error ? err.message : 'Spread image generation failed';
-      log.error('processSpreadCollab', 'spread failed', { jobId, spreadId: task.spreadId, error: msg });
+      const taskErr = toTaskError(err);
+      log.error('processSpreadCollab', 'spread failed', {
+        jobId,
+        spreadId: task.spreadId,
+        error: taskErr.message,
+        errorCode: taskErr.errorCode,
+        failuresCount: taskErr.failures?.length ?? 0,
+      });
       set((state) => {
         const j = state.sketchSpreadGenerateJob;
         if (!j || j.id !== jobId) return;
         j.tasks[i].status = 'error';
-        j.tasks[i].error = msg;
+        j.tasks[i].error = taskErr;
         j.tasks[i].completedAt = new Date().toISOString();
       });
       return 'ok'; // NO abort — continue to the next spread
@@ -525,7 +604,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           const j = state.sketchSpreadGenerateJob;
           if (!j || j.id !== jobId) return;
           j.tasks[i].status = 'error';
-          j.tasks[i].error = SKIPPED_DELETED_MESSAGE;
+          j.tasks[i].error = { message: SKIPPED_DELETED_MESSAGE };
           j.tasks[i].completedAt = new Date().toISOString();
         });
         continue;
@@ -577,7 +656,9 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           });
 
           if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: job replaced during await
-          if (!result.success || !result.data) throw new Error(classifyError(result));
+          if (!result.success || !result.data) {
+            throw new SpreadPageGenError(buildTaskError(result, pageType));
+          }
 
           lastUrl = result.data.imageUrl;
           log.info('runJob', 'spread page done', { jobId, spreadId: task.spreadId, page: pageType });
@@ -608,7 +689,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
               j.tasks[i].imageUrl = lastUrl;
             } else {
               j.tasks[i].status = 'error';
-              j.tasks[i].error = 'Cancelled before this spread finished';
+              j.tasks[i].error = { message: 'Cancelled before this spread finished' };
             }
             j.tasks[i].completedAt = new Date().toISOString();
           });
@@ -629,13 +710,19 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
         if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: reset during flush
       } catch (err) {
         if (get().sketchSpreadGenerateJob?.id !== jobId) return;
-        const msg = err instanceof Error ? err.message : 'Spread image generation failed';
-        log.error('runJob', 'spread failed', { jobId, spreadId: task.spreadId, error: msg });
+        const taskErr = toTaskError(err);
+        log.error('runJob', 'spread failed', {
+          jobId,
+          spreadId: task.spreadId,
+          error: taskErr.message,
+          errorCode: taskErr.errorCode,
+          failuresCount: taskErr.failures?.length ?? 0,
+        });
         set((state) => {
           const j = state.sketchSpreadGenerateJob;
           if (!j || j.id !== jobId) return;
           j.tasks[i].status = 'error';
-          j.tasks[i].error = msg;
+          j.tasks[i].error = taskErr;
           j.tasks[i].completedAt = new Date().toISOString();
         });
         // NO break — partial success: continue to the next spread.
@@ -666,6 +753,8 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
 
   return {
     sketchSpreadGenerateJob: null,
+    sketchSpreadLastErrors: [],
+    sketchSpreadErrorModalOpen: false,
 
     startSketchSpreadGenerateJob: ({ spreadIds }) => {
       if (get().sketchSpreadGenerateJob?.status === 'running') {
@@ -705,6 +794,9 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           skippedNames: [],
           createdAt: new Date().toISOString(),
         };
+        // A new run invalidates the previous run's error snapshot + closes the modal.
+        state.sketchSpreadLastErrors = [];
+        state.sketchSpreadErrorModalOpen = false;
       });
 
       void runJob(jobId);
@@ -722,8 +814,23 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
     dismissSketchSpreadGenerateJob: () =>
       set((state) => {
         if (state.sketchSpreadGenerateJob && state.sketchSpreadGenerateJob.status !== 'running') {
+          // sketchSpreadLastErrors deliberately SURVIVES the dismiss — it is the
+          // error-detail modal's data source (cleared on the next job start).
           state.sketchSpreadGenerateJob = null;
         }
+      }),
+
+    openSketchSpreadErrorModal: () =>
+      set((state) => {
+        log.debug('openSketchSpreadErrorModal', 'open', {
+          entries: state.sketchSpreadLastErrors.length,
+        });
+        state.sketchSpreadErrorModalOpen = true;
+      }),
+
+    closeSketchSpreadErrorModal: () =>
+      set((state) => {
+        state.sketchSpreadErrorModalOpen = false;
       }),
   };
 };
