@@ -60,7 +60,7 @@ const ok = (url: string, page: SketchGeneratePage = 'full') => ({
     page,
     targetRatio: page === 'full' ? '2:1' : '1:1',
     genAspectRatio: page === 'full' ? '2:1' : '1:1',
-    trimSide: null as 'right' | 'bottom' | null,
+    trimAxis: null as 'width' | 'height' | null,
     trimFraction: 0,
   },
 });
@@ -99,7 +99,7 @@ describe('SketchSpreadGenerateJobSlice', () => {
   });
 
   const start = (spreadIds: string[]) =>
-    store.getState().startSketchSpreadGenerateJob({ spreadIds, artStyleId: 'style-1' });
+    store.getState().startSketchSpreadGenerateJob({ spreadIds });
 
   it('runs spreads sequentially: call #2 only fires after #1 resolves + version written + flushed', async () => {
     store.getState().setSketchSpreads([spread('a'), spread('b')]);

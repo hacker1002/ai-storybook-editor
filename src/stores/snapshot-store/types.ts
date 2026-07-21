@@ -806,7 +806,7 @@ export interface SketchSpreadGenerateJob {
 
 export interface StartSketchSpreadGenerateJobParams {
   spreadIds: string[];    // target set (checked ?? [focused]); slice sorts to doc-order itself
-  artStyleId: string;     // caller resolves book.artstyle_id, must be non-null
+  // artStyleId GONE (⚡2026-07-21 minimal-prompt rework — pencil style seed-hardcoded backend-side)
 }
 
 export interface SketchSpreadGenerateJobSlice {

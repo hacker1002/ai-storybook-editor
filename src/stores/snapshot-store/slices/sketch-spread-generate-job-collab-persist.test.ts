@@ -72,7 +72,7 @@ const ok = (url: string, p: SketchGeneratePage = 'full') => ({
     page: p,
     targetRatio: '2:1',
     genAspectRatio: '2:1',
-    trimSide: null as 'right' | 'bottom' | null,
+    trimAxis: null as 'width' | 'height' | null,
     trimFraction: 0,
   },
 });
@@ -97,7 +97,7 @@ describe('SketchSpreadGenerateJobSlice — collab persist grain', () => {
   });
 
   const start = (spreadIds: string[]) =>
-    store.getState().startSketchSpreadGenerateJob({ spreadIds, artStyleId: 'style-1' });
+    store.getState().startSketchSpreadGenerateJob({ spreadIds });
 
   it('first generate of a page → nested CREATE (action 2 + parent_id + collection)', async () => {
     store.getState().setSketchSpreads([spread('sp-1')]);

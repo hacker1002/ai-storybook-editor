@@ -2,8 +2,8 @@
 // One job = N spreads, one API call per spread, run one-at-a-time in DOC-ORDER (position in
 // sketch.spreads[]). After each page resolves: prepend a versioned backdrop
 // (addSketchSpreadImageVersion) then AWAIT the write so it lands in the DB before the next
-// page/spread — the backend reads prior spreads for a consistent look, and the UI fills in
-// gradually / survives a reload. Two write paths: under collabPersist the per-page node goes
+// page/spread — per-page durability (the UI fills in gradually / survives a reload; the backend
+// no longer reads prior spreads — 2026-07-21). Two write paths: under collabPersist the per-page node goes
 // through the resource-lock gateway (create-vs-upload, see persistPageImage); in the legacy solo
 // path it is flushSnapshot(). Partial failures never abort the job.
 //
@@ -65,9 +65,10 @@ function spreadNumber(spreadId: string, spreads: SketchSpread[]): number {
 }
 
 /**
- * Pages to generate for a spread, IN ORDER: 'full' alone, else 'left' BEFORE 'right'. Left-before-
- * right is mandatory — the backend only builds CURRENT_SPREAD_LEFT_PAGE (gutter continuity) for
- * 'right' once the left page is drawn + persisted. Sorted explicitly, not from pages[] order.
+ * Pages to generate for a spread, IN ORDER: 'full' alone, else 'left' BEFORE 'right'. The old
+ * reason (backend folded the left page into the right page's consistency refs) died with the
+ * 2026-07-21 minimal-prompt rework — the ordering is kept as a cosmetic/durability convention
+ * (left lands in the DB first), NOT a consistency condition. Sorted explicitly, not pages[] order.
  */
 function orderedPageTypes(spread: SketchSpread): SketchPageType[] {
   const present = new Set(spread.pages.map((p) => p.type));
@@ -76,10 +77,9 @@ function orderedPageTypes(spread: SketchSpread): SketchPageType[] {
 }
 
 // Backend error codes → user-facing English (mirrors SKETCH_ERROR_MESSAGES in the entity job).
+// (ART_STYLE_* entries removed 2026-07-21 — the backend no longer reads art styles.)
 const SKETCH_SPREAD_ERROR_MESSAGES: Record<string, string> = {
   SPREAD_NO_ART_DIRECTION: 'This spread has no art direction yet — add it before generating.',
-  ART_STYLE_NOT_FOUND: 'Selected art style not found — please pick one again in settings.',
-  ART_STYLE_NO_REFERENCES: 'This art style has no reference images — add some in Style settings.',
   VALIDATION_ERROR: 'Invalid spread request — check the spread setup.',
   LLM_ERROR: 'The image model failed to generate this spread — please try again.',
   NO_IMAGE_IN_RESPONSE: 'The image model returned no image — please try again.',
@@ -249,7 +249,6 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
     i: number,
     task: SketchSpreadGenerateTask,
     spread: SketchSpread,
-    artStyleId: string,
     snapshotId: string,
     generatedSpreadNumbers: number[],
   ): Promise<'ok' | 'replaced' | 'cancelled'> {
@@ -332,7 +331,6 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
         const result = await callGenerateSketchSpread({
           snapshotId,
           sketchSpreadId: task.spreadId,
-          artStyleId,
           page: pageType,
         });
         if (get().sketchSpreadGenerateJob?.id !== jobId) return 'replaced';
@@ -484,7 +482,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
   }
 
   // Sequential driver. Fire-and-forget from startSketchSpreadGenerateJob (never awaited).
-  async function runJob(jobId: string, artStyleId: string): Promise<void> {
+  async function runJob(jobId: string): Promise<void> {
     const initial = get().sketchSpreadGenerateJob;
     if (!initial || initial.id !== jobId) return;
 
@@ -548,7 +546,6 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           i,
           task,
           spread,
-          artStyleId,
           snapshotId,
           generatedSpreadNumbers,
         );
@@ -576,7 +573,6 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           const result = await callGenerateSketchSpread({
             snapshotId,
             sketchSpreadId: task.spreadId,
-            artStyleId,
             page: pageType,
           });
 
@@ -589,8 +585,8 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           // Prepend the version (sync.isDirty) into the page's slot.
           get().addSketchSpreadImageVersion(task.spreadId, pageType, lastUrl);
 
-          // Flush AFTER 'left' (before 'right') so the backend's CURRENT_SPREAD_LEFT_PAGE read for
-          // 'right' sees the left page already persisted in the DB (gutter continuity — R1).
+          // Flush AFTER 'left' (before 'right') — per-page durability only (the backend no longer
+          // reads the left page for 'right'; consistency refs died 2026-07-21).
           if (pageType === 'left' && pageTypes.includes('right')) {
             await get().flushSnapshot();
             if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: reset during flush
@@ -627,8 +623,8 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
           j.tasks[i].completedAt = new Date().toISOString();
         });
 
-        // AWAIT the flush after the whole spread so the NEXT spread's PREVIOUS_SPREADS_SHEET read
-        // sees this spread's pages already persisted in the DB.
+        // AWAIT the flush after the whole spread — durability between spreads (the backend no
+        // longer reads previous spreads; PREVIOUS_SPREADS_SHEET died 2026-07-21).
         await get().flushSnapshot();
         if (get().sketchSpreadGenerateJob?.id !== jobId) return; // race: reset during flush
       } catch (err) {
@@ -671,7 +667,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
   return {
     sketchSpreadGenerateJob: null,
 
-    startSketchSpreadGenerateJob: ({ spreadIds, artStyleId }) => {
+    startSketchSpreadGenerateJob: ({ spreadIds }) => {
       if (get().sketchSpreadGenerateJob?.status === 'running') {
         log.warn('startSketchSpreadGenerateJob', 'blocked — a job is already running');
         return;
@@ -711,7 +707,7 @@ export const createSketchSpreadGenerateJobSlice: StateCreator<
         };
       });
 
-      void runJob(jobId, artStyleId);
+      void runJob(jobId);
     },
 
     cancelSketchSpreadGenerateJob: () =>
