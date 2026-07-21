@@ -52,7 +52,7 @@ export interface VariantGate {
 /** Tooltip copy per gate reason (design 01 §2.4). */
 export const GATE_TOOLTIP: Record<VariantGateReason, string> = {
   'base-not-ready': 'Generate the base variant first',
-  'empty-text': 'Add a description before generating',
+  'empty-text': 'Add a visual design description before generating',
 };
 
 /** Shared EditImageModal binding target, discriminated by SCOPE (mirrors the base space's target).

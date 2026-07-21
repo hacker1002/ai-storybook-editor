@@ -174,7 +174,9 @@ export function SketchVariantsCreativeSpace() {
         return { canGenerate: false, reason: 'base-not-ready' };
       }
       const variant = entity?.variants.find((v) => v.key === ref.variantKey);
-      if (isBlank(variant?.visual_design) && isBlank(variant?.art_language)) {
+      // Minimal-prompt rework 2026-07-21: visual_design is the ONLY field the API sends —
+      // art_language alone no longer passes the backend (422 EMPTY_VARIANT_DESCRIPTION).
+      if (isBlank(variant?.visual_design)) {
         return { canGenerate: false, reason: 'empty-text' };
       }
       return { canGenerate: true };
