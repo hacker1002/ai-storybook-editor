@@ -12,7 +12,10 @@
 // Landing = inpaint.
 
 import { useCallback } from 'react';
-import { EditImageModal } from '@/features/editor/components/shared-components/edit-image-modal';
+import {
+  EditImageModal,
+  useSketchPropRefCandidates,
+} from '@/features/editor/components/shared-components/edit-image-modal';
 import { SPACE_TOOL_MATRIX } from '@/features/editor/components/shared-components/image-tools-space-matrix';
 import { useSketchVariantByKey, useSnapshotActions } from '@/stores/snapshot-store/selectors';
 import type { Illustration } from '@/types/prop-types';
@@ -35,6 +38,8 @@ export function VariantEditImageModal({ target, onClose }: VariantEditImageModal
   const variant = useSketchVariantByKey(target.kind, target.entityKey, target.variantKey);
   const { setSketchVariantRawSheetIllustrations, setSketchVariantCropIllustrations, recropVariantSheet } =
     useSnapshotActions();
+  // Inpaint reference candidates (sketch prop crops). Hook runs BEFORE the early return (Rules of Hooks).
+  const referenceImageCandidates = useSketchPropRefCandidates();
 
   const crop = target.scope === 'crop' ? variant?.raw_sheet?.crops[target.cropIndex] : undefined;
   const illustrations: Illustration[] =
@@ -107,6 +112,7 @@ export function VariantEditImageModal({ target, onClose }: VariantEditImageModal
       pathPrefix={pathPrefix}
       enabledTools={SPACE_TOOL_MATRIX['sketch-variant'].edit}
       initialTool="inpaint"
+      referenceImageCandidates={referenceImageCandidates}
     />
   );
 }

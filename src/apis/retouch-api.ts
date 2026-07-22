@@ -30,7 +30,10 @@ export interface EditObjectImageParams {
   /** Set-of-mark region (Inpaint tab): composite source + translucent mark at natural-res,
    *  PNG base64 WITHOUT the `data:` URI prefix. Omit for prompt-only full-image edit. */
   regionAnnotation?: { base64Data: string; mimeType: string };
-  referenceImages?: Array<{ base64Data: string; mimeType: string }>;
+  /** Reference images (identity/material anchors for content named in `prompt`). Max 5,
+   *  base64 WITHOUT the `data:` prefix. Picked prop-variants carry `description` (prop name +
+   *  short @key/variant mention — NOT a visual description); uploaded files omit it. */
+  referenceImages?: Array<{ base64Data: string; mimeType: string; description?: string }>;
   // GIỮ `string` (Validation S1): caller image-task-slice.ts passes StartEditTaskParams.aspectRatio?: string.
   // nearestAspectRatio() returns AspectRatio (assignable to string) → no type-safety loss on the inpaint path.
   aspectRatio?: string;

@@ -8,7 +8,10 @@
 // — no new matrix column (design decision §4.5, KISS). Landing tool = inpaint.
 
 import { useCallback } from 'react';
-import { EditImageModal } from '@/features/editor/components/shared-components/edit-image-modal';
+import {
+  EditImageModal,
+  useSketchPropRefCandidates,
+} from '@/features/editor/components/shared-components/edit-image-modal';
 import { SPACE_TOOL_MATRIX } from '@/features/editor/components/shared-components/image-tools-space-matrix';
 import { useSketchBaseStyles, useSnapshotActions } from '@/stores/snapshot-store/selectors';
 import { titleCase } from '@/features/editor/components/sketch-variants-creative-space/sketch-variants-constants';
@@ -33,6 +36,8 @@ export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImag
   const styles = useSketchBaseStyles(target.kind);
   const { setSketchBaseStyleIllustrations, setSketchBaseCropIllustrations, recropBaseSheet } =
     useSnapshotActions();
+  // Inpaint reference candidates (sketch prop crops). Hook runs BEFORE the early return (Rules of Hooks).
+  const referenceImageCandidates = useSketchPropRefCandidates();
   const style = styles[target.styleIndex];
 
   const illustrations: Illustration[] =
@@ -97,6 +102,7 @@ export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImag
       pathPrefix={pathPrefix}
       enabledTools={SPACE_TOOL_MATRIX.sketch.edit}
       initialTool="inpaint"
+      referenceImageCandidates={referenceImageCandidates}
     />
   );
 }

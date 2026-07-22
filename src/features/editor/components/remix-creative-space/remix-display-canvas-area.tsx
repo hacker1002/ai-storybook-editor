@@ -20,6 +20,7 @@ import {
   EditImageModal,
   SPACE_TOOL_MATRIX,
 } from '@/features/editor/components/shared-components';
+import { useIllustrationPropRefCandidates } from '@/features/editor/components/shared-components/edit-image-modal';
 import { RemixImageToolbar } from './remix-image-toolbar';
 import { useRemixActions } from '@/stores/remix-store/selectors';
 import { useSpaceViewSlot, useEditorSpaceViewStore } from '@/stores/editor-space-view-store';
@@ -70,6 +71,10 @@ export function RemixDisplayCanvasArea({ spreads, remixId, pageNumbering }: Prop
   const state = useSpaceViewSlot(bookId, 'remix');
   const patchSpace = useEditorSpaceViewStore((s) => s.patchSpace);
   const { updateRemixSpreadImage } = useRemixActions();
+
+  // Inpaint reference candidates (book prop variants). Remix reuses the illustration props (user
+  // decision 2026-07-22) — NOT remix.props (crop-sheet clone). Hook runs before any early return.
+  const referenceImageCandidates = useIllustrationPropRefCandidates();
 
   const activeSpreadId = state.activeSpreadId ?? null;
   const viewMode: ViewMode = state.viewMode ?? 'edit';
@@ -268,6 +273,7 @@ export function RemixDisplayCanvasArea({ spreads, remixId, pageNumbering }: Prop
         pathPrefix={`remix/${remixId}/${editImage.id}/edited`}
         enabledTools={SPACE_TOOL_MATRIX.remix.edit}
         initialTool="inpaint"
+        referenceImageCandidates={referenceImageCandidates}
         onUpdateIllustrations={(next) =>
           handleImageUpdate(editModal.spreadId, editModal.imageId, {
             illustrations: next,

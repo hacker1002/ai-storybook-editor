@@ -10,6 +10,7 @@
 'use client';
 
 import { EditImageModal } from '@/features/editor/components/shared-components/edit-image-modal/edit-image-modal';
+import { useSketchPropRefCandidates } from '@/features/editor/components/shared-components/edit-image-modal';
 import { ExtractImageModal } from '@/features/editor/components/shared-components/extract-image-modal/extract-image-modal';
 import { SPACE_TOOL_MATRIX } from '@/features/editor/components/shared-components/image-tools-space-matrix';
 import { SKETCH_PAGE_GEOMETRY } from '@/types/sketch';
@@ -59,6 +60,9 @@ export function SketchImageToolsModals({
   onSelectVersion,
   onClose,
 }: SketchImageToolsModalsProps) {
+  // Inpaint reference candidates (sketch prop crops). Unconditional — before the branch return.
+  const referenceImageCandidates = useSketchPropRefCandidates();
+
   const handleOpenChange = (open: boolean) => {
     if (!open) onClose();
   };
@@ -74,6 +78,7 @@ export function SketchImageToolsModals({
         pathPrefix={`sketch/${spreadId}/${image.type}/edited`}
         enabledTools={SPACE_TOOL_MATRIX.sketch.edit}
         initialTool="inpaint"
+        referenceImageCandidates={referenceImageCandidates}
         onUpdateIllustrations={(next) => {
           // The modal emits this for BOTH a fresh edit (new url → append a version) AND any
           // variant re-selection (existing url → flip is_selected). Route each to its own write;

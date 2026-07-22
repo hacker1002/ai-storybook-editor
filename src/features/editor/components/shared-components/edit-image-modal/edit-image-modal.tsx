@@ -34,7 +34,12 @@ import {
   type EditToolKey,
   type EditCanvasMode,
 } from "./edit-image-modal-constants";
-import { prependVersion, versionFromMediaUrl, mapEditError } from "./edit-image-modal-utils";
+import {
+  prependVersion,
+  versionFromMediaUrl,
+  mapEditError,
+  type ReferenceImageCandidate,
+} from "./edit-image-modal-utils";
 import { resolveInitialKey } from "../image-tools-space-matrix";
 import { useRemoveBgTabState } from "./remove-bg-tab";
 import { useRemoveTextTabState } from "./remove-text-tab";
@@ -85,6 +90,9 @@ export interface EditImageModalProps {
    *  3-state header (never hidden): tools absent from the list render disabled + "Not available
    *  in this space"; present-but-unbuilt tools render disabled + "Coming soon". */
   enabledTools?: EditToolKey[];
+  /** Inpaint reference-image candidates (prop-variants) resolved by the parent per space (design
+   *  §8.4). Threaded to the Inpaint tab's picker grid; undefined → picker offers Upload only. */
+  referenceImageCandidates?: ReferenceImageCandidate[];
   yieldedFrom?: YieldedFromLinkage;
 }
 
@@ -98,6 +106,7 @@ export function EditImageModal({
   pathPrefix,
   initialTool,
   enabledTools,
+  referenceImageCandidates,
   yieldedFrom,
 }: EditImageModalProps) {
   // Landing tool ∈ (available-in-space ∩ built); never lands on a coming-soon slot. Plain const
@@ -138,7 +147,7 @@ export function EditImageModal({
   const upscaleState = useUpscaleTabState({ selectedVersion });
   const outpaintState = useOutpaintTabState({ selectedVersion });
   const erasorState = useEraserTabState({ selectedVersion, pathPrefix, zoom });
-  const inpaintState = useInpaintTabState({ selectedVersion, zoom });
+  const inpaintState = useInpaintTabState({ selectedVersion, zoom, referenceImageCandidates });
 
   // Active "paint" tab — inpaint + erasor share the canvas/commit/undo-redo/confirm path
   // (both expose the same paint surface; resetAll is inpaint-only and used in resetState).

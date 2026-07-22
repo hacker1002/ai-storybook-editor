@@ -2,7 +2,7 @@
 // (prependVersion / mapEditError / versionFromMediaUrl). Canvas + pointer logic is
 // manual-smoke only (jsdom has no real 2d context).
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Illustration } from '@/types/prop-types';
 import {
   EditApiError,
@@ -15,6 +15,9 @@ import {
   DIRECTION_EDGES,
   outpaintFrameInset,
   buildOutpaintPayload,
+  buildPropRefDescription,
+  urlToBase64,
+  MAX_REF_BYTES,
 } from './edit-image-modal-utils';
 import { REGION_MAX_DECODED_BYTES } from './edit-image-modal-constants';
 
@@ -276,5 +279,53 @@ describe('buildOutpaintPayload', () => {
     expect(p.prompt).toBe('extend the sky');
     expect(p.direction).toBe('top');
     expect(p.expandRatio).toBe(30);
+  });
+});
+
+describe('buildPropRefDescription', () => {
+  it('composes name + @key/variant mention only (no visual description)', () => {
+    expect(buildPropRefDescription('Nơ đỏ', 'red_bow', 'base')).toBe('Đạo cụ Nơ đỏ - @red_bow/base');
+  });
+
+  it('handles a plain ASCII name + non-base variant', () => {
+    expect(buildPropRefDescription('Magic Wand', 'wand', 'glowing')).toBe('Đạo cụ Magic Wand - @wand/glowing');
+  });
+
+  it('falls back verbatim when name equals key (parent-side fallback)', () => {
+    expect(buildPropRefDescription('lantern', 'lantern', 'v1')).toBe('Đạo cụ lantern - @lantern/v1');
+  });
+});
+
+describe('urlToBase64', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns prefix-stripped base64 + the source MIME on a valid fetch', async () => {
+    // jsdom provides Blob + FileReader; only fetch needs stubbing.
+    const blob = new Blob(['hello-reference'], { type: 'image/png' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => blob }));
+    const out = await urlToBase64('https://cdn/ref.png');
+    expect(out.mimeType).toBe('image/png');
+    expect(out.base64Data.length).toBeGreaterThan(0);
+    expect(out.base64Data.startsWith('data:')).toBe(false); // prefix stripped
+  });
+
+  it('throws REF_FETCH_FAILED when the response is not ok', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, blob: async () => new Blob([]) }));
+    await expect(urlToBase64('https://cdn/missing.png')).rejects.toThrow('REF_FETCH_FAILED');
+  });
+
+  it('throws REF_UNSUPPORTED_TYPE for a non-whitelisted MIME (before reading)', async () => {
+    // Fake blob (no FileReader read reached) — reject path validates MIME first.
+    const blob = { type: 'image/gif', size: 10 } as unknown as Blob;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => blob }));
+    await expect(urlToBase64('https://cdn/anim.gif')).rejects.toThrow('REF_UNSUPPORTED_TYPE');
+  });
+
+  it('throws REF_TOO_LARGE once the decoded blob exceeds the cap (before reading)', async () => {
+    const blob = { type: 'image/png', size: MAX_REF_BYTES + 1 } as unknown as Blob;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => blob }));
+    await expect(urlToBase64('https://cdn/huge.png')).rejects.toThrow('REF_TOO_LARGE');
   });
 });

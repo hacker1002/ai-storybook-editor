@@ -40,6 +40,7 @@ import {
   INPAINT_MARK_ALPHA,
   INPAINT_IMAGE_SIZE,
   INPAINT_PROMPT_MAX,
+  INPAINT_REF_MAX,
   SWAP_MODAL_OUTLINE_BUTTON_CLASS,
   Z_INDEX,
   type InpaintModel,
@@ -50,7 +51,10 @@ import {
   compositeMark,
   nearestAspectRatio,
   exceedsRegionSizeCap,
+  type ReferenceImageCandidate,
 } from './edit-image-modal-utils';
+import { InpaintReferencePicker } from './inpaint-reference-picker';
+import { useInpaintReferences } from './use-inpaint-references';
 
 const log = createLogger('Editor', 'InpaintTab');
 
@@ -87,10 +91,20 @@ interface UseInpaintTabOptions {
   selectedVersion: Illustration | null;
   /** Shell zoom (50–400) — drives canvas display CSS size + brush-ring cursor scale (⚡H). */
   zoom: number;
+  /** Parent-resolved prop-variant candidates (already filtered to non-null media_url). Undefined
+   *  / empty → the picker only offers Upload. */
+  referenceImageCandidates?: ReferenceImageCandidate[];
 }
 
-export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptions): InpaintTabApi {
+export function useInpaintTabState({
+  selectedVersion,
+  zoom,
+  referenceImageCandidates,
+}: UseInpaintTabOptions): InpaintTabApi {
   const [model, setModel] = useState<InpaintModel>(INPAINT_DEFAULT_MODEL);
+  // Reference-image picker + onPick (upload + picked prop-variant GỘP, cap = INPAINT_REF_MAX). Lives
+  // in a hook so refs persist across version/tab switches; cleared only on modal close (resetAll).
+  const refs = useInpaintReferences();
   const [brushSize, setBrushSize] = useState<number>(INPAINT_BRUSH_DEFAULT);
   const [prompt, setPrompt] = useState('');
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -247,13 +261,14 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
     activeStrokeRef.current = null;
   }, []);
 
-  const afterCommit = resetStrokes; // keep prompt + model; only the mask is cleared
+  const afterCommit = resetStrokes; // keep prompt + model + refs; only the mask is cleared
 
   const resetAll = useCallback(() => {
     resetStrokes();
     setPrompt('');
     setModel(INPAINT_DEFAULT_MODEL);
-  }, [resetStrokes]);
+    refs.clearImages(); // modal close → drop reference images too (design §8.5)
+  }, [resetStrokes, refs]);
 
   // ── Commit: composite mark (if drawn) → Gemini edit (design §3) ────────────────
   const commit = useCallback(
@@ -290,10 +305,21 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
         payload.regionAnnotation = { base64Data: regionB64, mimeType: 'image/png' };
       }
 
+      // Reference images (picked prop-variant + upload GỘP). Only sent when non-empty; picked items
+      // carry `description` (identity mention), uploads omit it.
+      if (refs.images.length > 0) {
+        payload.referenceImages = refs.images.map((i) => ({
+          base64Data: i.base64Data,
+          mimeType: i.mimeType,
+          ...(i.description ? { description: i.description } : {}),
+        }));
+      }
+
       log.info('commit', 'inpaint start', {
         promptLen: payload.prompt.length,
         strokeCount: strokes.length,
         hasRegion: !!payload.regionAnnotation,
+        refCount: refs.images.length,
         model,
         aspectRatio: payload.aspectRatio,
       });
@@ -314,7 +340,7 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
       log.info('commit', 'inpaint success', { processingMs: res.meta?.processingTime });
       return res.data.imageUrl;
     },
-    [prompt, model, strokes],
+    [prompt, model, strokes, refs.images],
   );
 
   // ── ParamsPanel (Model + Brush + Prompt — no History UI) ──────────────────────
@@ -354,6 +380,17 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
           />
         </section>
 
+        <InpaintReferencePicker
+          images={refs.images}
+          candidates={referenceImageCandidates ?? []}
+          max={INPAINT_REF_MAX}
+          fileInputRef={refs.inputRef}
+          onOpenUpload={refs.openPicker}
+          onFilesSelected={refs.handleFilesSelected}
+          onPick={refs.onPick}
+          onRemove={refs.removeImage}
+        />
+
         <section>
           <p className={SECTION_LABEL_CLASS}>Prompt</p>
           <Textarea
@@ -371,7 +408,7 @@ export function useInpaintTabState({ selectedVersion, zoom }: UseInpaintTabOptio
         </section>
       </div>
     ),
-    [model, brushSize, prompt],
+    [model, brushSize, prompt, refs.images, refs.inputRef, refs.openPicker, refs.handleFilesSelected, refs.removeImage, refs.onPick, referenceImageCandidates],
   );
 
   // ── CanvasLayer (rendered in the shell stage when canvasMode='paint') ─────────

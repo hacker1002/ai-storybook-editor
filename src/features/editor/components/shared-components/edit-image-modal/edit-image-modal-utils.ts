@@ -4,8 +4,10 @@
 // NO new data type); these helpers operate on `Illustration[]` directly.
 
 import type { Illustration } from '@/types/prop-types';
+import type { ReferenceImage } from '@/types/remix';
 import type { UpscaleModel, UpscaleImagePayload } from '@/apis/image-api';
 import type { ExpandDirection, OutpaintImageParams } from '@/apis/retouch-api';
+import { createLogger } from '@/utils/logger';
 import {
   ASPECT_RATIOS,
   DEFAULT_ASPECT_RATIO,
@@ -17,6 +19,8 @@ import {
   OUTPAINT_IMAGE_SIZE,
 } from './edit-image-modal-constants';
 import { type Stroke, paintStrokesOnCtx } from './erase-stroke-engine';
+
+const log = createLogger('Editor', 'EditImageModalUtils');
 
 /** Carries the API failure's errorCode/httpStatus through a thrown Error so the shell's
  *  catch can map it via `mapEditError` (single mapping surface). Tabs throw this for API
@@ -287,6 +291,86 @@ export function compositeMark(
   // toDataURL throws on a CORS-tainted canvas — surfaced by mapEditError's CORS branch.
   const dataUrl = base.toDataURL('image/png');
   return dataUrl.split(',')[1] ?? '';
+}
+
+// ── Inpaint reference images (04-inpaint-tab.md §8.1/§8.3/§8.4) ────────────────
+
+/** Accepted MIME whitelist for a reference image (picked prop-variant OR upload) — mirrors the
+ *  picker's upload gate AND the edit-object-image contract. Exported so `urlToBase64` and the
+ *  picker validate against ONE list (DRY). */
+export const ACCEPTED_REF_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+/** Decoded-byte cap for a reference image (mirror the API 10MB cap). */
+export const MAX_REF_BYTES = 10 * 1024 * 1024;
+
+/** Parent-provided pickable reference — one prop variant with a resolvable image. `id` is the
+ *  stable `${propKey}/${variantKey}`; `ref` the short `@key/variant` label; `description` is
+ *  composed by `buildPropRefDescription` (name + mention only). `media_url` is the effective URL
+ *  (the parent has already filtered null entries out — the modal assumes it is non-null). */
+export interface ReferenceImageCandidate {
+  id: string;
+  media_url: string;
+  ref: string;
+  description: string;
+}
+
+/** A picked reference-image item held in the picker state. Widens the canonical `ReferenceImage`
+ *  ({ label, base64Data, mimeType }) with optional picker metadata — every added field is optional,
+ *  so the existing `useReferenceImagePicker` consumers (which read only the 3 base fields) are
+ *  unaffected (widen-safe). */
+export interface PickedReferenceImage extends ReferenceImage {
+  /** 'upload:<uuid>' (upload) | 'prop:<candidate.id>' (picked) — the dedupe key. */
+  id?: string;
+  /** Chip <img> src — upload: data-URI; picked: candidate.media_url (Storage URL). */
+  thumbUrl?: string;
+  /** picked → candidate.description; upload → undefined (uploads carry no identity mention). */
+  description?: string;
+  source?: 'upload' | 'prop';
+}
+
+/** Reference-image description = prop NAME + a short @key/variant mention ONLY (design §8.4 — user
+ *  decision 2026-07-22). Deliberately does NOT append the prop's visual_description/description: the
+ *  reference IMAGE already carries the appearance, and prose about it tends to confuse the model's
+ *  identity read. Pure. */
+export function buildPropRefDescription(propName: string, propKey: string, variantKey: string): string {
+  return `Đạo cụ ${propName} - @${propKey}/${variantKey}`;
+}
+
+/** Fetch a Storage URL → base64 (WITHOUT the `data:` prefix) + its MIME, so a picked prop-variant
+ *  reaches the same `{ base64Data, mimeType }` shape as an uploaded file (single API contract).
+ *  Validates the MIME whitelist + the 10MB size cap BEFORE the (memory-heavy) base64 conversion.
+ *  Throws a plain Error ('REF_FETCH_FAILED' | 'REF_UNSUPPORTED_TYPE' | 'REF_TOO_LARGE' | 'REF_READ_FAILED'); the
+ *  caller (onPick) maps it to a generic toast and never blocks the commit.
+ *
+ *  Uses `fetch().blob()` (design §8.3 — preserves the original MIME, no PNG re-encode). This CORS
+ *  path is already proven on the same Storage bucket by `uploadEphemeralToStorage` (extract modal).
+ *  Contingency if a future bucket blocks fetch-CORS: swap the body for `<img crossOrigin="anonymous">`
+ *  + `canvas.toDataURL('image/png')` (same signature; forces mimeType='image/png'). Manual-smoke
+ *  only (jsdom has no real network). */
+export async function urlToBase64(url: string): Promise<{ base64Data: string; mimeType: string }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('REF_FETCH_FAILED');
+  const blob = await res.blob();
+  if (!(ACCEPTED_REF_TYPES as readonly string[]).includes(blob.type)) {
+    log.warn('urlToBase64', 'unsupported reference mime', { mimeType: blob.type });
+    throw new Error('REF_UNSUPPORTED_TYPE');
+  }
+  if (blob.size > MAX_REF_BYTES) {
+    log.warn('urlToBase64', 'reference exceeds size cap', { size: blob.size });
+    throw new Error('REF_TOO_LARGE');
+  }
+  const dataUrl = await blobToDataUrl(blob);
+  return { base64Data: dataUrl.split(',')[1] ?? '', mimeType: blob.type };
+}
+
+/** Read a Blob → data URL (FileReader). Split out so `urlToBase64` stays flat + so a test can
+ *  reach the reject path without a real network. */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('REF_READ_FAILED'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 // NOTE: the design §2.5 ⚡I editable-focus guard for the `c`/`C` Compare hotkey is NOT

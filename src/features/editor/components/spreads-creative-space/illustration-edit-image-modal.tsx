@@ -6,7 +6,10 @@
 // run unconditionally.
 
 import { useCallback } from "react";
-import { EditImageModal } from "@/features/editor/components/shared-components/edit-image-modal";
+import {
+  EditImageModal,
+  useIllustrationPropRefCandidates,
+} from "@/features/editor/components/shared-components/edit-image-modal";
 import type { EditToolKey } from "@/features/editor/components/shared-components/edit-image-modal";
 import { useRawImageById, useSnapshotActions } from "@/stores/snapshot-store/selectors";
 import type { Illustration } from "@/types/prop-types";
@@ -38,6 +41,8 @@ export function IllustrationEditImageModal({
 }: IllustrationEditImageModalProps) {
   const image = useRawImageById(spreadId, imageId);
   const { updateRawImage } = useSnapshotActions();
+  // Inpaint reference candidates (book prop variants). Hook runs BEFORE the early return (Rules of Hooks).
+  const referenceImageCandidates = useIllustrationPropRefCandidates();
 
   const handleUpdate = useCallback(
     (next: Illustration[]) => {
@@ -76,6 +81,7 @@ export function IllustrationEditImageModal({
       onUpdateIllustrations={handleUpdate}
       pathPrefix={`illustrations/${imageId}/erased`}
       enabledTools={enabledTools}
+      referenceImageCandidates={referenceImageCandidates}
     />
   );
 }
