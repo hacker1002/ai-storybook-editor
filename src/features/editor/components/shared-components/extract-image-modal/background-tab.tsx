@@ -26,6 +26,7 @@ import {
   REMOVE_OBJECTS_MAX,
   BACKGROUND_PROMPT_MAX,
   Z_INDEX,
+  SWAP_MODAL_TOKENS,
   type BackgroundRemoveCandidate,
   type ExtractResult,
 } from './extract-image-modal-constants';
@@ -34,8 +35,11 @@ import { mapExtractError } from './extract-image-modal-utils';
 const log = createLogger('Editor', 'BackgroundTab');
 
 // Radix popper copies the content's computed z onto its portal wrapper — without this the
-// Select/Popover (shadcn default z-50) paints behind the full-screen modal (z-4000). See memory.
-const POPPER_CONTENT_STYLE = { zIndex: Z_INDEX.selectDropdown };
+// Select/Popover (shadcn default z-50) paints behind the full-screen modal (z-4000). Also redeclare
+// SWAP_MODAL_TOKENS: the content portals to <body>, OUTSIDE the DialogContent subtree that defines
+// the `--swap-modal-*` vars, so the object-picker Popover (which styles with those vars) would
+// otherwise render transparent + dark text. Harmless for the Select (uses global bg-popover). See memory.
+const POPPER_CONTENT_STYLE = { ...SWAP_MODAL_TOKENS, zIndex: Z_INDEX.selectDropdown };
 const DARK_TRIGGER_CLASS =
   'w-full bg-[var(--swap-modal-surface-hover)] border-[var(--swap-modal-border-strong)] text-[var(--swap-modal-text-primary)] hover:bg-[var(--swap-modal-surface-hover-strong)] focus-visible:ring-[var(--swap-modal-accent)]';
 const SECTION_LABEL_CLASS =
@@ -258,7 +262,7 @@ export function useBackgroundTabState(
                 <PopoverContent
                   align="start"
                   style={POPPER_CONTENT_STYLE}
-                  className="max-h-64 w-56 overflow-y-auto border-[var(--swap-modal-border-strong)] bg-[var(--swap-modal-surface)] p-1 text-[var(--swap-modal-text-primary)]"
+                  className="max-h-64 w-56 overflow-y-auto border-[var(--swap-modal-border-strong)] bg-[var(--swap-modal-card-bg)] p-1 text-[var(--swap-modal-text-primary)]"
                 >
                   {available.length === 0 ? (
                     <p className="px-2 py-3 text-center text-[11px] text-[var(--swap-modal-text-muted)]">
