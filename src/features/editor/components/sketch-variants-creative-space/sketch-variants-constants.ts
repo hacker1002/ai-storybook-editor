@@ -7,7 +7,7 @@
 //    source — base-sheet-content-area / edit-base-entity-modal / sketch-base-edit-image-modal import
 //    it from here). Do NOT remove or move it.
 
-import type { BaseKind, VariantRef } from '@/types/sketch';
+import type { BaseKind, SketchVariant, VariantRef } from '@/types/sketch';
 
 /** Per-kind config for the two variant groups (Character / Prop). Stage has NO variant sheet. */
 export interface KindGroupConfig {
@@ -84,6 +84,13 @@ export function sameRef(a: VariantRef | null | undefined, b: VariantRef | null |
 /** true when a text field is absent / whitespace-only (drives the `empty-text` gate). */
 export function isBlank(value: string | undefined): boolean {
   return !value || value.trim().length === 0;
+}
+
+/** "Chốt" (finalized) = the variant has a LOCKED official cell (raw_sheet.crops[].is_selected).
+ *  Same predicate the content area uses (`selIdx >= 0`) and the base space's locked-style convention
+ *  — drives the sidebar 🔒/🔓 status glyph (read-only: the pick itself happens in the crop tab). */
+export function isVariantPicked(variant: SketchVariant | undefined): boolean {
+  return !!variant?.raw_sheet?.crops?.some((c) => c.is_selected);
 }
 
 /** Display name derived from a thin entity/variant key (`kid_hero` → `Kid Hero`).

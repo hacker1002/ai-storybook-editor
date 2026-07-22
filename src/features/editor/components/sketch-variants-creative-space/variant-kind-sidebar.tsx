@@ -10,7 +10,7 @@
 // When ANOTHER editor holds the entity, the row shows a 🔒 holder badge and disables ✏ + ✨ (greyed,
 // NOT hidden). Advisory — the acquire 409 is the real authority (browse/select stays enabled).
 
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Lock, Pencil, Sparkles } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Lock, LockOpen, Pencil, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import type { BaseKind, VariantRef } from '@/types/sketch';
@@ -34,6 +34,7 @@ interface VariantKindSidebarProps {
   expandedGroups: Record<BaseKind, boolean>;
   genStatusByRef: (ref: VariantRef) => VariantGenStatus;
   gateByRef: (ref: VariantRef) => VariantGate;
+  pickedByRef: (ref: VariantRef) => boolean;
   onSelect: (ref: VariantRef) => void;
   onToggleGroup: (kind: BaseKind) => void;
   onEditVariant: (ref: VariantRef) => void;
@@ -47,6 +48,7 @@ export function VariantKindSidebar({
   expandedGroups,
   genStatusByRef,
   gateByRef,
+  pickedByRef,
   onSelect,
   onToggleGroup,
   onEditVariant,
@@ -74,6 +76,7 @@ export function VariantKindSidebar({
             selectedVariant={selectedVariant}
             genStatusByRef={genStatusByRef}
             gateByRef={gateByRef}
+            pickedByRef={pickedByRef}
             onSelect={onSelect}
             onToggleGroup={onToggleGroup}
             onEditVariant={onEditVariant}
@@ -92,6 +95,7 @@ function VariantGroup({
   selectedVariant,
   genStatusByRef,
   gateByRef,
+  pickedByRef,
   onSelect,
   onToggleGroup,
   onEditVariant,
@@ -103,6 +107,7 @@ function VariantGroup({
   selectedVariant: VariantRef | null;
   genStatusByRef: (ref: VariantRef) => VariantGenStatus;
   gateByRef: (ref: VariantRef) => VariantGate;
+  pickedByRef: (ref: VariantRef) => boolean;
   onSelect: (ref: VariantRef) => void;
   onToggleGroup: (kind: BaseKind) => void;
   onEditVariant: (ref: VariantRef) => void;
@@ -143,6 +148,7 @@ function VariantGroup({
                 isSelected={sameRef(selectedVariant, ref)}
                 status={genStatusByRef(ref)}
                 gate={gateByRef(ref)}
+                isPicked={pickedByRef(ref)}
                 onSelect={onSelect}
                 onEditVariant={onEditVariant}
                 onGenerate={onGenerate}
@@ -160,6 +166,7 @@ function VariantRow({
   isSelected,
   status,
   gate,
+  isPicked,
   onSelect,
   onEditVariant,
   onGenerate,
@@ -168,6 +175,7 @@ function VariantRow({
   isSelected: boolean;
   status: VariantGenStatus;
   gate: VariantGate;
+  isPicked: boolean;
   onSelect: (ref: VariantRef) => void;
   onEditVariant: (ref: VariantRef) => void;
   onGenerate: (ref: VariantRef) => void;
@@ -216,11 +224,33 @@ function VariantRow({
       )}
       aria-disabled={lockedByOther || degraded}
     >
+      {/* "Chốt" status glyph (read-only) — 🔒 picked / 🔓 not yet. Mirrors the base space's
+          locked-style convention (base-kind-sidebar). The pick itself is made in the crop tab, so
+          this is a status indicator, not a control. */}
+      <span
+        className={cn(
+          'flex shrink-0 items-center pl-1',
+          isPicked ? 'text-primary' : 'text-muted-foreground/50',
+        )}
+        role="img"
+        aria-label={isPicked ? `${mention} đã chốt` : `${mention} chưa chốt`}
+        title={isPicked ? 'Đã chốt' : 'Chưa chốt'}
+      >
+        {isPicked ? (
+          <Lock className="h-3.5 w-3.5 fill-primary/20" aria-hidden="true" />
+        ) : (
+          <LockOpen className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+      </span>
+
       <button
         type="button"
         className={cn(
           'min-w-0 flex-1 truncate px-2 py-1.5 text-left text-sm',
           isSelected && 'font-medium text-foreground',
+          // Chốt = the final cell — primary + semibold so it reads at a glance (twMerge: wins over
+          // the selected classes above). Matches base-kind-sidebar's locked-label treatment.
+          isPicked && 'font-semibold text-primary',
         )}
         aria-current={isSelected ? 'true' : undefined}
         title={mention}

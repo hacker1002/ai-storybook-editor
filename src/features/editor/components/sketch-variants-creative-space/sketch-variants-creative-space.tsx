@@ -73,6 +73,7 @@ import {
   KIND_GROUPS,
   ZOOM,
   isBlank,
+  isVariantPicked,
   sameRef,
   type EditImageTarget,
   type ExtractImageTarget,
@@ -180,6 +181,19 @@ export function SketchVariantsCreativeSpace() {
         return { canGenerate: false, reason: 'empty-text' };
       }
       return { canGenerate: true };
+    },
+    [charEntities, propEntities],
+  );
+
+  // "Chốt" (finalized) status per row — reactive off the subscribed entities, same as gateByRef.
+  // Drives the sidebar 🔒/🔓 glyph; read-only (the pick itself lives in the content-area crop tab).
+  const pickedByRef = useCallback(
+    (ref: VariantRef): boolean => {
+      const entities = ref.kind === 'characters' ? charEntities : propEntities;
+      const variant = entities
+        .find((e) => e.key === ref.entityKey)
+        ?.variants.find((v) => v.key === ref.variantKey);
+      return isVariantPicked(variant);
     },
     [charEntities, propEntities],
   );
@@ -406,6 +420,7 @@ export function SketchVariantsCreativeSpace() {
         expandedGroups={expandedGroups}
         genStatusByRef={genStatusByRef}
         gateByRef={gateByRef}
+        pickedByRef={pickedByRef}
         onSelect={handleSelect}
         onToggleGroup={handleToggleGroup}
         onEditVariant={handleEditVariant}
