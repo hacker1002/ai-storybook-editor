@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { createLogger } from '@/utils/logger';
 import { NARRATOR_KEY } from '@/apis/text-api';
+import { useSnapshotStore } from '@/stores/snapshot-store';
 import {
   DEFAULT_CHUNK_INFERENCE_PARAMS,
   coerceTextboxAudio,
@@ -424,6 +425,8 @@ export function useNarrationModalState(
         chunk: target,
         voicesById,
         signal: controller.signal,
+        // Attribution-only — spread narration is book-scoped (empty/absent → omit).
+        snapshotId: useSnapshotStore.getState().meta.id || undefined,
       });
 
       if (abortRef.current === controller) abortRef.current = null;

@@ -63,6 +63,8 @@ export interface GenerateBaseStageSheetResult {
     storagePath: string;
     stageKey: string; // echo
     grid: StageSheetGrid;
+    /** Soft ref → ai_service_logs.id — raw sheet = direct Gemini output (provenance). */
+    aiRequestId?: string;
   };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number; model?: string; temperature?: number };
@@ -118,6 +120,8 @@ export interface GenerateStageVariantSheetResult {
     variantKey: string; // echo
     grid: StageSheetGrid;
     references?: StageVariantSheetReferences;
+    /** Soft ref → ai_service_logs.id — raw sheet = direct Gemini output (provenance). */
+    aiRequestId?: string;
   };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number; model?: string; temperature?: number };

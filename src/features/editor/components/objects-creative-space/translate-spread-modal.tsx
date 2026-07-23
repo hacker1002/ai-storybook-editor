@@ -54,6 +54,8 @@ export interface TranslateSpreadModalProps {
   originalLang: string;
   editorLang: string;
   context?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
   onApplyTranslations: (payload: ApplyTranslationsPayload) => void;
 }
 
@@ -118,6 +120,7 @@ export function TranslateSpreadModal({
   originalLang,
   editorLang,
   context,
+  snapshotId,
   onApplyTranslations,
 }: TranslateSpreadModalProps) {
   const [rows, setRows] = useState<TranslationRow[]>([]);
@@ -190,6 +193,7 @@ export function TranslateSpreadModal({
           targetLanguage: getLanguageName(editorLang),
           prompt: promptText.trim() || undefined,
           context: context || undefined,
+          snapshotId,
         },
         { signal: ctrl.signal }
       );
@@ -233,6 +237,7 @@ export function TranslateSpreadModal({
     editorLang,
     promptText,
     context,
+    snapshotId,
     spreadId,
     onApplyTranslations,
   ]);

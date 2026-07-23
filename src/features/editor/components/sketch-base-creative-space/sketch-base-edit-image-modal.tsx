@@ -13,7 +13,7 @@ import {
   useSketchPropRefCandidates,
 } from '@/features/editor/components/shared-components/edit-image-modal';
 import { SPACE_TOOL_MATRIX } from '@/features/editor/components/shared-components/image-tools-space-matrix';
-import { useSketchBaseStyles, useSnapshotActions } from '@/stores/snapshot-store/selectors';
+import { useSketchBaseStyles, useSnapshotActions, useSnapshotId } from '@/stores/snapshot-store/selectors';
 import { titleCase } from '@/features/editor/components/sketch-variants-creative-space/sketch-variants-constants';
 import type { Illustration } from '@/types/prop-types';
 import { createLogger } from '@/utils/logger';
@@ -38,6 +38,8 @@ export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImag
     useSnapshotActions();
   // Inpaint reference candidates (sketch prop crops). Hook runs BEFORE the early return (Rules of Hooks).
   const referenceImageCandidates = useSketchPropRefCandidates();
+  // Book-edit context (Sketch space is never remix) → attribute AI edits by snapshotId.
+  const snapshotId = useSnapshotId();
   const style = styles[target.styleIndex];
 
   const illustrations: Illustration[] =
@@ -103,6 +105,7 @@ export function SketchBaseEditImageModal({ target, onClose }: SketchBaseEditImag
       enabledTools={SPACE_TOOL_MATRIX.sketch.edit}
       initialTool="inpaint"
       referenceImageCandidates={referenceImageCandidates}
+      attribution={{ snapshotId: snapshotId ?? undefined }}
     />
   );
 }

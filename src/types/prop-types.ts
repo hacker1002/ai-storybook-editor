@@ -19,6 +19,9 @@ export interface Illustration {
   type?: IllustrationType;
   /** Pre-edit source URL — set ⇔ type='edited'. Provenance-only; never enters the effective-URL resolve chain. */
   original_url?: string;
+  /** Soft ref → ai_service_logs.id (⚡NEW 2026-07-23). Provenance for AI-generated/edited entries
+   *  (created/edited); absent = NULL (uploaded/legacy). Dangling-tolerant (id may precede row insert). */
+  ai_request_id?: string;
 }
 
 /** Coerce-on-read provenance: legacy/absent `type` reads as 'created' (YAGNI — no writer-side validator). */

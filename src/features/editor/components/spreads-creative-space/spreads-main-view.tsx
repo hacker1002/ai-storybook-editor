@@ -26,6 +26,7 @@ import {
 } from '@/features/editor/utils/duplicate-item-helpers';
 import {
   useSnapshotActions,
+  useSnapshotId,
 } from '@/stores/snapshot-store/selectors';
 import { useSnapshotStore } from '@/stores/snapshot-store';
 import { getTextboxContentForLanguage } from '@/features/editor/utils/textbox-helpers';
@@ -139,6 +140,8 @@ export function SpreadsMainView({
     (s) => s.illustration?.spreads ?? EMPTY_SPREADS
   );
   const actions = useSnapshotActions();
+  // Book-edit context (Spreads space is never remix) → attribute AI extract (Texts OCR) by snapshotId.
+  const snapshotId = useSnapshotId();
   const langCode = useLanguageCode();
   const canvasSize = useCanvasSize();
   const book = useCurrentBook();
@@ -756,6 +759,7 @@ export function SpreadsMainView({
           enabledTabs={SPACE_TOOL_MATRIX.raw.extract}
           onCreateImages={handleExtractCreateImages}
           onCreateTexts={handleExtractCreateTexts}
+          snapshotId={snapshotId || undefined}
           cropPresets={book?.crop_presets ?? undefined}
           onUpsertCropPreset={handleUpsertCropPreset}
           onDeleteCropPreset={handleDeleteCropPreset}

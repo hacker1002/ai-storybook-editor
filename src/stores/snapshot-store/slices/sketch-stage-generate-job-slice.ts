@@ -225,10 +225,17 @@ export const createSketchStageGenerateJobSlice: StateCreator<
       log.info('runBaseGenerate', 'raw sheet done', { stageKey, styleIndex });
 
       // Prepend the sheet version (newest selected, prior cleared) — crops preserved until re-cut.
+      // Persist ai_request_id provenance (raw sheet = direct Gemini output).
       const now = new Date().toISOString();
       const prev = stageOf(stageKey)?.base.styles[styleIndex]?.illustrations ?? [];
       const next: Illustration[] = [
-        { type: 'created' as const, media_url: result.data.imageUrl, created_time: now, is_selected: true },
+        {
+          type: 'created' as const,
+          media_url: result.data.imageUrl,
+          created_time: now,
+          is_selected: true,
+          ...(result.data.aiRequestId ? { ai_request_id: result.data.aiRequestId } : {}),
+        },
         ...prev.map((i) => ({ ...i, is_selected: false })),
       ];
       get().setSketchStageStyleIllustrations(stageKey, styleIndex, next);
@@ -299,10 +306,17 @@ export const createSketchStageGenerateJobSlice: StateCreator<
 
       log.info('runVariantGenerate', 'raw sheet done', { stageKey, variantKey });
 
+      // Persist ai_request_id provenance (raw sheet = direct Gemini output).
       const now = new Date().toISOString();
       const prev = variantOf(stageKey, variantKey)?.illustrations ?? [];
       const next: Illustration[] = [
-        { type: 'created' as const, media_url: gen.data.imageUrl, created_time: now, is_selected: true },
+        {
+          type: 'created' as const,
+          media_url: gen.data.imageUrl,
+          created_time: now,
+          is_selected: true,
+          ...(gen.data.aiRequestId ? { ai_request_id: gen.data.aiRequestId } : {}),
+        },
         ...prev.map((i) => ({ ...i, is_selected: false })),
       ];
       get().setSketchStageVariantIllustrations(stageKey, variantKey, next);

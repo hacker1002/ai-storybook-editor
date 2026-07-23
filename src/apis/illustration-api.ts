@@ -39,11 +39,13 @@ export interface GenerateCharacterBaseParams {
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GenerateCharacterBaseResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
@@ -65,11 +67,13 @@ export interface GenerateCharacterVariantParams {
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GenerateCharacterVariantResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
@@ -103,11 +107,13 @@ export interface GeneratePropBaseParams {
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GeneratePropBaseResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
@@ -139,11 +145,13 @@ export interface GeneratePropVariantParams {
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GeneratePropVariantResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
@@ -181,11 +189,13 @@ export interface GenerateStageBaseParams {
   referenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GenerateStageBaseResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
@@ -220,11 +230,13 @@ export interface GenerateStageVariantParams {
   additionalReferenceImages?: Array<{ base64Data: string; mimeType: string }>;
   aspectRatio?: string;
   imageSize?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GenerateStageVariantResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
@@ -265,7 +277,7 @@ export interface GenerateSceneParams {
 
 export interface GenerateSceneResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }

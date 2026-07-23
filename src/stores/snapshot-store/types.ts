@@ -229,7 +229,7 @@ export interface SketchSlice {
   addSketchBaseStyle: (kind: BaseKind, style: SketchBaseStyle) => void;                 // append a style attempt
   removeSketchBaseStyle: (kind: BaseKind, styleIndex: number) => void;                  // drop a style (is_selected clears with it)
   setSketchBaseStyleSelected: (kind: BaseKind, styleIndex: number) => void;             // 🔒 lock: exclusive is_selected + CLONE crops → variants[base].raw_sheet.crops[0]
-  addSketchBaseStyleIllustration: (kind: BaseKind, styleIndex: number, mediaUrl: string) => void;                                 // raw generate result: prepend 'created' + select
+  addSketchBaseStyleIllustration: (kind: BaseKind, styleIndex: number, mediaUrl: string, aiRequestId?: string) => void;           // raw generate result: prepend 'created' + select (+ ai_request_id provenance)
   setSketchBaseStyleIllustrations: (kind: BaseKind, styleIndex: number, illustrations: Illustration[]) => void;                   // raw sheet whole-set (edit-image-modal onUpdate)
   setSketchBaseStyleCrops: (kind: BaseKind, styleIndex: number, crops: SketchBaseCrop[]) => void;                                 // crop result: replace styles[i].crops[]
   setSketchBaseCropIllustrations: (kind: BaseKind, styleIndex: number, entityKey: string, illustrations: Illustration[]) => void; // one crop whole-set (edit-image-modal onUpdate)

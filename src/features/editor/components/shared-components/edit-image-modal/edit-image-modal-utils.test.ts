@@ -59,6 +59,13 @@ describe('prependVersion', () => {
       is_selected: true,
     });
   });
+
+  it('carries ai_request_id when provided; omits it otherwise', () => {
+    const withId = prependVersion(baseVersions, 'https://cdn/new.png', 'https://cdn/a.png', 'req-42');
+    expect(withId[0].ai_request_id).toBe('req-42');
+    const withoutId = prependVersion(baseVersions, 'https://cdn/new.png', 'https://cdn/a.png');
+    expect(withoutId[0].ai_request_id).toBeUndefined();
+  });
 });
 
 describe('versionFromMediaUrl', () => {

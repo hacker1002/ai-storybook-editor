@@ -38,6 +38,10 @@ export interface NarrateScriptRequest {
   modelId: 'eleven_v3';
   settings?: NarrateScriptSettings;
   outputFormat?: NarrateScriptOutputFormat;
+  /** Spread-narration context → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
+  /** Voice-config preview context → ai_service_logs.book_id (book-level, not snapshot-bound). */
+  bookId?: string;
 }
 
 export interface NarrationWordTiming {

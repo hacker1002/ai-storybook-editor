@@ -72,6 +72,8 @@ interface UseBackgroundTabOptions {
   onRequestRun: () => void;
   /** Other spread images (effective URLs, source excluded) offered as remove targets. */
   removeCandidates: BackgroundRemoveCandidate[];
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 function candidateToItem(c: BackgroundRemoveCandidate): BackgroundRemoveItem {
@@ -80,7 +82,7 @@ function candidateToItem(c: BackgroundRemoveCandidate): BackgroundRemoveItem {
 
 export function useBackgroundTabState(
   image: SpreadImage,
-  { isBusy, onRequestRun, removeCandidates }: UseBackgroundTabOptions,
+  { isBusy, onRequestRun, removeCandidates, snapshotId }: UseBackgroundTabOptions,
 ): BackgroundTabHandle {
   const [model, setModel] = useState<string>(DEFAULT_BACKGROUND_MODEL);
   const [prompt, setPrompt] = useState('');
@@ -146,6 +148,7 @@ export function useBackgroundTabState(
         prompt: trimmedPrompt || undefined,
         // Omit modelParams when the default model is selected (server default applies).
         modelParams: model !== DEFAULT_BACKGROUND_MODEL ? { model } : undefined,
+        snapshotId,
       });
 
       if (!res.success) {
@@ -169,6 +172,7 @@ export function useBackgroundTabState(
           media_url: ok.data.imageUrl, // already a permanent Storage URL → commit passthrough
           sourceTab: 'background',
           title: `${image.title ?? 'Image'} - Background ${ordinal}`,
+          aiRequestId: ok.data.aiRequestId, // → illustrations[].ai_request_id (cost attribution)
           meta: {
             prompt: trimmedPrompt || undefined,
             removedCount: ok.meta?.removedCount,
@@ -177,7 +181,7 @@ export function useBackgroundTabState(
         },
       ];
     },
-    [removeItems, prompt, model, image.title],
+    [removeItems, prompt, model, image.title, snapshotId],
   );
 
   const handlePromptKeyDown = useCallback(

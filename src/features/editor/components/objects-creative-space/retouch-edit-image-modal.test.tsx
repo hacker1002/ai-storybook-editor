@@ -25,6 +25,7 @@ const updateRetouchImage = vi.fn();
 vi.mock('@/stores/snapshot-store/selectors', () => ({
   useRetouchImageById: () => FIXTURE_NODE,
   useSnapshotActions: () => ({ updateRetouchImage }),
+  useSnapshotId: () => 'snap-test',
 }));
 
 import { RetouchEditImageModal } from './retouch-edit-image-modal';

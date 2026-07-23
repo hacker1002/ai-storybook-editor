@@ -64,6 +64,8 @@ export interface EnhanceImageAnnotationModalProps {
   images: AnnotationRowInput[];
   language: string; // LOCKED = book.original_language
   artStyle?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
   // `context` dropped 2026-05-28 — see text-api.ts EnhanceImageAnnotationParams.
   onApplyAnnotations: (payload: ApplyAnnotationsPayload) => void;
 }
@@ -125,6 +127,7 @@ export function EnhanceImageAnnotationModal({
   images,
   language,
   artStyle,
+  snapshotId,
   onApplyAnnotations,
 }: EnhanceImageAnnotationModalProps) {
   const [rows, setRows] = useState<AnnotationRow[]>([]);
@@ -263,6 +266,7 @@ export function EnhanceImageAnnotationModal({
           })),
           language,
           art_style: artStyle || undefined,
+          snapshotId,
         },
         { signal: ctrl.signal }
       );
@@ -345,7 +349,7 @@ export function EnhanceImageAnnotationModal({
       if (abortRef.current === ctrl) abortRef.current = null;
       if (!ctrl.signal.aborted) setIsGenerating(false);
     }
-  }, [canGenerate, rows, language, artStyle]);
+  }, [canGenerate, rows, language, artStyle, snapshotId]);
 
   const handleSave = useCallback(() => {
     if (!canSave) return;

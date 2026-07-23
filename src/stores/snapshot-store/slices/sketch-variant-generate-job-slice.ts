@@ -287,10 +287,17 @@ export const createSketchVariantGenerateJobSlice: StateCreator<
       });
 
       // Prepend the raw sheet version (newest selected, clear prior selection) — preserves crops[].
+      // Persist ai_request_id provenance (raw sheet = direct Gemini output).
       const now = new Date().toISOString();
       const prev = variantOf(ref)?.raw_sheet?.illustrations ?? [];
       const next: Illustration[] = [
-        { type: 'created' as const, media_url: gen.data.imageUrl, created_time: now, is_selected: true },
+        {
+          type: 'created' as const,
+          media_url: gen.data.imageUrl,
+          created_time: now,
+          is_selected: true,
+          ...(gen.data.aiRequestId ? { ai_request_id: gen.data.aiRequestId } : {}),
+        },
         ...prev.map((i) => ({ ...i, is_selected: false })),
       ];
       get().setSketchVariantRawSheetIllustrations(ref.kind, ref.entityKey, ref.variantKey, next);

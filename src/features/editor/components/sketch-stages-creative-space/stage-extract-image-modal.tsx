@@ -52,7 +52,8 @@ export function StageExtractImageModal({ target, onClose }: StageExtractImageMod
   const handleCreate = useCallback(
     (results: ExtractResult[]) => {
       if (results.length === 0) return;
-      const next = appendMediaVersions(illustrations, results.map((r) => r.media_url));
+      // Crop tab = CV cut (no AI provider call) → no ai_request_id provenance to carry.
+      const next = appendMediaVersions(illustrations, results.map((r) => ({ media_url: r.media_url })));
       if (target.scope === 'base-crop') {
         log.info('handleCreate', 'append extracted base-crop versions', {
           stageKey: target.stageKey,

@@ -77,6 +77,8 @@ export interface GenerateVariantSheetResult {
     variantKey: string; // echo
     grid: VariantSheetGrid;
     references?: VariantSheetReferences;
+    /** Soft ref → ai_service_logs.id — raw sheet = direct Gemini output (provenance). */
+    aiRequestId?: string;
   };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number; model?: string };

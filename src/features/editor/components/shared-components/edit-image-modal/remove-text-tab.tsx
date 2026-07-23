@@ -24,6 +24,8 @@ import {
   SWAP_MODAL_OUTLINE_BUTTON_CLASS,
   Z_INDEX,
   type RemoveTextModel,
+  type EditImageAttribution,
+  type EditCommitResult,
 } from './edit-image-modal-constants';
 import { EditApiError } from './edit-image-modal-utils';
 
@@ -40,27 +42,29 @@ export interface RemoveTextTabApi {
   ParamsPanel: ReactNode;
   /** Always true when a version is selected (model is always valid — hard-coded allowlist). */
   canCommit: boolean;
-  /** Resolves to the new permanent Storage URL; throws EditApiError on API failure. */
-  commit: (version: Illustration) => Promise<string>;
+  /** Resolves to the new permanent Storage URL + aiRequestId; throws EditApiError on API failure. */
+  commit: (version: Illustration) => Promise<EditCommitResult>;
 }
 
 interface UseRemoveTextTabOptions {
   selectedVersion: Illustration | null;
+  /** AI-usage attribution (book snapshotId / remix remixId) forwarded into the remove-text call. */
+  attribution?: EditImageAttribution;
 }
 
-export function useRemoveTextTabState({ selectedVersion }: UseRemoveTextTabOptions): RemoveTextTabApi {
+export function useRemoveTextTabState({ selectedVersion, attribution }: UseRemoveTextTabOptions): RemoveTextTabApi {
   const [model, setModel] = useState<RemoveTextModel>(DEFAULT_REMOVE_TEXT_MODEL);
 
   const canCommit = !!selectedVersion;
 
   const commit = useCallback(
-    async (version: Illustration): Promise<string> => {
+    async (version: Illustration): Promise<EditCommitResult> => {
       log.info('commit', 'remove text start', {
         imageUrl: version.media_url.slice(0, 60),
         model,
       });
 
-      const res = await callRemoveTextImage({ imageUrl: version.media_url, model });
+      const res = await callRemoveTextImage({ imageUrl: version.media_url, model, ...(attribution ?? {}) });
       if (!res.success || !res.data) {
         const failure = res as ImageApiFailure;
         log.warn('commit', 'remove text failed', {
@@ -75,9 +79,9 @@ export function useRemoveTextTabState({ selectedVersion }: UseRemoveTextTabOptio
 
       const ok = res as RemoveTextImageResult;
       log.info('commit', 'remove text success', { processingMs: ok.meta?.processingTime });
-      return ok.data.imageUrl;
+      return { imageUrl: ok.data.imageUrl, aiRequestId: ok.data.aiRequestId };
     },
-    [model],
+    [model, attribution],
   );
 
   const ParamsPanel = useMemo<ReactNode>(

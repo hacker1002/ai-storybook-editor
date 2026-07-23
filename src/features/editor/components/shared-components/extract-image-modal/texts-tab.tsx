@@ -76,11 +76,13 @@ export interface TextsTabHandle {
 interface UseTextsTabOptions {
   /** processing || committing — disables the params controls. */
   isBusy: boolean;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export function useTextsTabState(
   image: SpreadImage,
-  { isBusy }: UseTextsTabOptions,
+  { isBusy, snapshotId }: UseTextsTabOptions,
 ): TextsTabHandle {
   const [texts, setTexts] = useState<TextBox[]>([]);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -115,6 +117,7 @@ export function useTextsTabState(
         const res = await callDetectTexts({
           imageUrl: sourceUrl,
           modelParams: { model: ocrModel },
+          snapshotId,
         });
         if (!res.success) {
           const failure = res as ImageApiFailure;
@@ -151,7 +154,7 @@ export function useTextsTabState(
         toast.error('Text detection failed. Please try again.');
       }
     },
-    [ocrModel],
+    [ocrModel, snapshotId],
   );
 
   // ── Commit Extract — map boxes → ExtractedTextbox (SYNC, no API/upload) ─────

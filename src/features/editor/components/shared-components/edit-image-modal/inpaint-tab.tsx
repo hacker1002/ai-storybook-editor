@@ -44,6 +44,8 @@ import {
   SWAP_MODAL_OUTLINE_BUTTON_CLASS,
   Z_INDEX,
   type InpaintModel,
+  type EditImageAttribution,
+  type EditCommitResult,
 } from './edit-image-modal-constants';
 import { computeFrameSize, fitNaturalToFrame } from './edit-image-modal-fit';
 import {
@@ -74,9 +76,9 @@ export interface InpaintTabApi {
   canCommit: boolean;
   /** strokes.length > 0 — shell blocking-confirm gate on version/tool change (mirror Erasor). */
   hasUncommitted: boolean;
-  /** Composite mark → callEditObjectImage (Gemini) → new Storage URL. Throws EditApiError on
-   *  API failure or the pre-flight REGION_TOO_LARGE guard; plain Error on canvas CORS taint. */
-  commit: (version: Illustration) => Promise<string>;
+  /** Composite mark → callEditObjectImage (Gemini) → new Storage URL + aiRequestId. Throws
+   *  EditApiError on API failure or the pre-flight REGION_TOO_LARGE guard; plain Error on CORS taint. */
+  commit: (version: Illustration) => Promise<EditCommitResult>;
   /** Clear strokes + redo after a successful commit — KEEPS prompt + model (continue editing). */
   afterCommit: () => void;
   /** Discard strokes when the source image changes (version/tool switch, post-confirm). */
@@ -94,12 +96,15 @@ interface UseInpaintTabOptions {
   /** Parent-resolved prop-variant candidates (already filtered to non-null media_url). Undefined
    *  / empty → the picker only offers Upload. */
   referenceImageCandidates?: ReferenceImageCandidate[];
+  /** AI-usage attribution (book snapshotId / remix remixId) forwarded into the edit call. */
+  attribution?: EditImageAttribution;
 }
 
 export function useInpaintTabState({
   selectedVersion,
   zoom,
   referenceImageCandidates,
+  attribution,
 }: UseInpaintTabOptions): InpaintTabApi {
   const [model, setModel] = useState<InpaintModel>(INPAINT_DEFAULT_MODEL);
   // Reference-image picker + onPick (upload + picked prop-variant GỘP, cap = INPAINT_REF_MAX). Lives
@@ -272,7 +277,7 @@ export function useInpaintTabState({
 
   // ── Commit: composite mark (if drawn) → Gemini edit (design §3) ────────────────
   const commit = useCallback(
-    async (version: Illustration): Promise<string> => {
+    async (version: Illustration): Promise<EditCommitResult> => {
       const img = sourceImgRef.current;
       const canvas = canvasRef.current;
       if (!img || img.naturalWidth === 0) throw new Error('Image not loaded');
@@ -285,6 +290,7 @@ export function useInpaintTabState({
         aspectRatio: nearestAspectRatio(naturalW, naturalH), // always source ratio (aspect-guard)
         imageSize: INPAINT_IMAGE_SIZE,
         modelParams: { model }, // omit params → server temperature default 0.3
+        ...(attribution ?? {}), // book snapshotId / remix remixId (attribution-only)
       };
 
       if (strokes.length > 0 && canvas) {
@@ -338,9 +344,9 @@ export function useInpaintTabState({
       }
 
       log.info('commit', 'inpaint success', { processingMs: res.meta?.processingTime });
-      return res.data.imageUrl;
+      return { imageUrl: res.data.imageUrl, aiRequestId: res.data.aiRequestId };
     },
-    [prompt, model, strokes, refs.images],
+    [prompt, model, strokes, refs.images, attribution],
   );
 
   // ── ParamsPanel (Model + Brush + Prompt — no History UI) ──────────────────────

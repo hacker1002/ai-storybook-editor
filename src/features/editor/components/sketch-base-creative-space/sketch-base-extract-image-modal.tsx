@@ -61,7 +61,8 @@ export function SketchBaseExtractImageModal({ target, onClose }: SketchBaseExtra
         entityKey: target.entityKey,
         count: results.length,
       });
-      const next = appendMediaVersions(illustrations, results.map((r) => r.media_url));
+      // Crop tab = CV cut (no AI provider call) → no ai_request_id provenance to carry.
+      const next = appendMediaVersions(illustrations, results.map((r) => ({ media_url: r.media_url })));
       setSketchBaseCropIllustrations(target.kind, target.styleIndex, target.entityKey, next);
       // LOCKED style → the setter re-cloned this crop into the entity's base variant (grain B,
       // rtype 3/4) — flush that entity now; the sheet release-save only covers grain A.

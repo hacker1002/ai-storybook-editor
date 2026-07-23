@@ -51,11 +51,13 @@ interface UseSegmentTabOptions {
   isBusy: boolean;
   /** Ctrl/Cmd+Enter in the prompt → root.handleRunExtract. */
   onRequestRun: () => void;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export function useSegmentTabState(
   image: SpreadImage,
-  { isBusy, onRequestRun }: UseSegmentTabOptions,
+  { isBusy, onRequestRun, snapshotId }: UseSegmentTabOptions,
 ): SegmentTabHandle {
   const [model, setModel] = useState<string>(DEFAULT_SEGMENT_MODEL);
   const [prompt, setPrompt] = useState('');
@@ -71,7 +73,7 @@ export function useSegmentTabState(
       if (trimmed === '') return [];
       log.info('runExtract', 'segment start', { promptLen: trimmed.length });
 
-      const res = await callSegmentLayer({ imageUrl: sourceUrl, prompt: trimmed });
+      const res = await callSegmentLayer({ imageUrl: sourceUrl, prompt: trimmed, snapshotId });
       if (!res.success) {
         const failure = res as ImageApiFailure;
         log.warn('runExtract', 'segment failed', {
@@ -97,7 +99,7 @@ export function useSegmentTabState(
         },
       ];
     },
-    [prompt, image.title],
+    [prompt, image.title, snapshotId],
   );
 
   const reset = useCallback(() => {

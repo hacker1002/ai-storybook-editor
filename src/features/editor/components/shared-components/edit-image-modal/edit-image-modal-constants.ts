@@ -27,6 +27,23 @@ export {
 
 // ── Shared types (README §2.2) ───────────────────────────────────────────────
 
+/** AI-usage attribution threaded from the mount site → tab commit → callXxx.
+ *  Book-edit context sets `snapshotId`; remix context sets `remixId` (discriminator —
+ *  wins over snapshotId). EditImageModal mounts in BOTH; the mount picks the field. */
+export interface EditImageAttribution {
+  snapshotId?: string;
+  remixId?: string;
+}
+
+/** Result of a tab commit: the new permanent Storage URL + optional AI-usage provenance
+ *  (soft ref → ai_service_logs.id). Set by the AI tabs that surface it (inpaint / outpaint /
+ *  remove-text / upscale / remove-bg); absent for erasor (plain upload). The shell persists
+ *  `aiRequestId` onto the new `edited` Illustration entry (prependVersion). */
+export interface EditCommitResult {
+  imageUrl: string;
+  aiRequestId?: string;
+}
+
 /** Edit-tool discriminator. Scope is driven by the `enabled` flag in EDIT_TOOLS below;
  *  `remove_object` is the only deferred slot (rendered disabled with a "Coming soon"
  *  tooltip). `remove_text` is in scope — see 06-remove-text-tab.md. Key order + labels

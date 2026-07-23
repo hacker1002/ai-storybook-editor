@@ -38,6 +38,8 @@ import {
   Z_INDEX,
   type OutpaintModel,
   type ExpandDirection,
+  type EditImageAttribution,
+  type EditCommitResult,
 } from './edit-image-modal-constants';
 import { EditApiError, buildOutpaintPayload } from './edit-image-modal-utils';
 import { OutpaintFrameOverlay } from './outpaint-overlays';
@@ -61,17 +63,19 @@ export interface OutpaintTabApi {
   ParamsPanel: ReactNode;
   /** ratio>0 && a version is selected (prompt is OPTIONAL). */
   canCommit: boolean;
-  /** Resolves to the new permanent Storage URL; throws EditApiError on API failure. */
-  commit: (version: Illustration) => Promise<string>;
+  /** Resolves to the new permanent Storage URL + aiRequestId; throws EditApiError on API failure. */
+  commit: (version: Illustration) => Promise<EditCommitResult>;
   /** Dashed target-frame overlay for preview mode — canvas passes its measured scaled box. */
   previewOverlay: (box: Box) => ReactNode;
 }
 
 interface UseOutpaintTabOptions {
   selectedVersion: Illustration | null;
+  /** AI-usage attribution (book snapshotId / remix remixId) forwarded into the outpaint call. */
+  attribution?: EditImageAttribution;
 }
 
-export function useOutpaintTabState({ selectedVersion }: UseOutpaintTabOptions): OutpaintTabApi {
+export function useOutpaintTabState({ selectedVersion, attribution }: UseOutpaintTabOptions): OutpaintTabApi {
   const [model, setModel] = useState<OutpaintModel>(OUTPAINT_DEFAULT_MODEL);
   const [direction, setDirection] = useState<ExpandDirection>('all');
   const [ratio, setRatio] = useState<number>(OUTPAINT_RATIO.default);
@@ -80,8 +84,11 @@ export function useOutpaintTabState({ selectedVersion }: UseOutpaintTabOptions):
   const canCommit = ratio > 0 && !!selectedVersion;
 
   const commit = useCallback(
-    async (version: Illustration): Promise<string> => {
-      const payload = buildOutpaintPayload(model, direction, ratio, prompt, version.media_url);
+    async (version: Illustration): Promise<EditCommitResult> => {
+      const payload = {
+        ...buildOutpaintPayload(model, direction, ratio, prompt, version.media_url),
+        ...(attribution ?? {}), // book snapshotId / remix remixId (attribution-only)
+      };
       log.info('commit', 'outpaint start', {
         imageUrl: version.media_url.slice(0, 60),
         direction,
@@ -107,9 +114,9 @@ export function useOutpaintTabState({ selectedVersion }: UseOutpaintTabOptions):
         outputWidth: res.meta?.outputWidth,
         outputHeight: res.meta?.outputHeight,
       });
-      return res.data.imageUrl;
+      return { imageUrl: res.data.imageUrl, aiRequestId: res.data.aiRequestId };
     },
-    [model, direction, ratio, prompt],
+    [model, direction, ratio, prompt, attribution],
   );
 
   const previewOverlay = useCallback(

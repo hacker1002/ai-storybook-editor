@@ -35,6 +35,8 @@ import {
   SWAP_MODAL_OUTLINE_BUTTON_CLASS,
   Z_INDEX,
   type UpscaleModel,
+  type EditImageAttribution,
+  type EditCommitResult,
 } from './edit-image-modal-constants';
 import { EditApiError, buildUpscalePayload } from './edit-image-modal-utils';
 
@@ -54,15 +56,17 @@ export interface UpscaleTabApi {
   ParamsPanel: ReactNode;
   /** Always true when a version is selected (model + scale are always valid — hard allowlist + clamp). */
   canCommit: boolean;
-  /** Resolves to the new permanent Storage URL; throws EditApiError on API failure. */
-  commit: (version: Illustration) => Promise<string>;
+  /** Resolves to the new permanent Storage URL + aiRequestId; throws EditApiError on API failure. */
+  commit: (version: Illustration) => Promise<EditCommitResult>;
 }
 
 interface UseUpscaleTabOptions {
   selectedVersion: Illustration | null;
+  /** AI-usage attribution (book snapshotId / remix remixId) forwarded into the upscale call. */
+  attribution?: EditImageAttribution;
 }
 
-export function useUpscaleTabState({ selectedVersion }: UseUpscaleTabOptions): UpscaleTabApi {
+export function useUpscaleTabState({ selectedVersion, attribution }: UseUpscaleTabOptions): UpscaleTabApi {
   const [model, setModel] = useState<UpscaleModel>(DEFAULT_UPSCALE_MODEL);
   const [scale, setScale] = useState<number>(SCALE.default);
   const [faceEnhance, setFaceEnhance] = useState<boolean>(DEFAULT_FACE_ENHANCE);
@@ -96,11 +100,14 @@ export function useUpscaleTabState({ selectedVersion }: UseUpscaleTabOptions): U
   const canCommit = !!selectedVersion;
 
   const commit = useCallback(
-    async (version: Illustration): Promise<string> => {
+    async (version: Illustration): Promise<EditCommitResult> => {
       // Always build an explicit grain object — model-agnostic, even when toggle OFF
       // (API omit=off, but the FE never omits → send `{enabled:false,...}`).
       const grain = { enabled: grainEnabled, amp: grainAmp, blur: grainBlur };
-      const payload = buildUpscalePayload(model, scale, faceEnhance, version.media_url, grain);
+      const payload = {
+        ...buildUpscalePayload(model, scale, faceEnhance, version.media_url, grain),
+        ...(attribution ?? {}), // book snapshotId / remix remixId (attribution-only)
+      };
       log.info('commit', 'upscale start', {
         imageUrl: version.media_url.slice(0, 60),
         model,
@@ -130,9 +137,9 @@ export function useUpscaleTabState({ selectedVersion }: UseUpscaleTabOptions): U
         height: res.data.height,
         grainApplied: res.meta?.grainApplied,
       });
-      return res.data.imageUrl;
+      return { imageUrl: res.data.imageUrl, aiRequestId: res.data.aiRequestId };
     },
-    [model, scale, faceEnhance, grainEnabled, grainAmp, grainBlur],
+    [model, scale, faceEnhance, grainEnabled, grainAmp, grainBlur, attribution],
   );
 
   const ParamsPanel = useMemo<ReactNode>(

@@ -13,6 +13,7 @@ import { EditImageModal } from '@/features/editor/components/shared-components/e
 import { useSketchPropRefCandidates } from '@/features/editor/components/shared-components/edit-image-modal';
 import { ExtractImageModal } from '@/features/editor/components/shared-components/extract-image-modal/extract-image-modal';
 import { SPACE_TOOL_MATRIX } from '@/features/editor/components/shared-components/image-tools-space-matrix';
+import { useSnapshotId } from '@/stores/snapshot-store/selectors';
 import { SKETCH_PAGE_GEOMETRY } from '@/types/sketch';
 import type { SketchSpreadImage } from '@/types/sketch';
 import type { CropPreset } from '@/types/editor';
@@ -62,6 +63,8 @@ export function SketchImageToolsModals({
 }: SketchImageToolsModalsProps) {
   // Inpaint reference candidates (sketch prop crops). Unconditional — before the branch return.
   const referenceImageCandidates = useSketchPropRefCandidates();
+  // Book-edit context (Sketch space is never remix) → attribute AI edits by snapshotId.
+  const snapshotId = useSnapshotId();
 
   const handleOpenChange = (open: boolean) => {
     if (!open) onClose();
@@ -79,6 +82,7 @@ export function SketchImageToolsModals({
         enabledTools={SPACE_TOOL_MATRIX.sketch.edit}
         initialTool="inpaint"
         referenceImageCandidates={referenceImageCandidates}
+        attribution={{ snapshotId: snapshotId ?? undefined }}
         onUpdateIllustrations={(next) => {
           // The modal emits this for BOTH a fresh edit (new url → append a version) AND any
           // variant re-selection (existing url → flip is_selected). Route each to its own write;

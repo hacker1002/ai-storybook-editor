@@ -58,11 +58,13 @@ export interface GenerateBaseSheetParams {
   referenceImages: BaseReferenceImage[];
   /** Optional model override; omit → backend DB default (kept byte-minimal in the request body). */
   modelParams?: SketchModelParams;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GenerateBaseSheetResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string; cellOrder: string[]; grid: SheetGrid };
+  data?: { imageUrl: string; storagePath: string; cellOrder: string[]; grid: SheetGrid; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 }
@@ -73,7 +75,7 @@ export interface GenerateBaseSheetResult {
  */
 export async function callGenerateBaseSheet(
   kind: BaseKind,
-  { entities, artStyleId, stylePrompt, referenceImages, modelParams }: GenerateBaseSheetParams,
+  { entities, artStyleId, stylePrompt, referenceImages, modelParams, snapshotId }: GenerateBaseSheetParams,
 ): Promise<GenerateBaseSheetResult | ImageApiFailure> {
   const path = BASE_SHEET_ENDPOINT[kind];
   log.info('callGenerateBaseSheet', 'start', {
@@ -89,5 +91,7 @@ export async function callGenerateBaseSheet(
     referenceImages,
     // Only include modelParams when present — keeps the body byte-minimal so the backend uses its DB default.
     ...(modelParams ? { modelParams } : {}),
+    // Attribution-only — forward snapshotId so the AI-usage logger stamps book cost.
+    ...(snapshotId ? { snapshotId } : {}),
   });
 }

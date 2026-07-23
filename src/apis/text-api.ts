@@ -11,6 +11,8 @@ export interface TranslateContentParams {
   targetLanguage: string;
   prompt?: string;
   context?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface TranslateContentMeta {
@@ -208,6 +210,8 @@ export interface EnhanceNarrationParams {
   language: string;
   prompt?: string;
   context?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface EnhanceNarrationMeta {
@@ -474,6 +478,8 @@ export interface EnhanceImageAnnotationParams {
   prompt?: string; // v1 not sent
   // `context` dropped 2026-05-28 — manuscript dump contaminated the
   // describe-what-you-see contract. Server FlexibleModel ignores stray fields.
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface AnnotationItem {

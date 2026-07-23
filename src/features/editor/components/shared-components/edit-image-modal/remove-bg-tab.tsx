@@ -28,6 +28,8 @@ import {
   Z_INDEX,
   type RmbgModel,
   type OutputBgMode,
+  type EditImageAttribution,
+  type EditCommitResult,
 } from './edit-image-modal-constants';
 import { EditApiError } from './edit-image-modal-utils';
 
@@ -44,15 +46,17 @@ export interface RemoveBgTabApi {
   ParamsPanel: ReactNode;
   /** Always true when a version is selected (model is always valid — hard-coded allowlist). */
   canCommit: boolean;
-  /** Resolves to the new permanent Storage URL; throws EditApiError on API failure. */
-  commit: (version: Illustration) => Promise<string>;
+  /** Resolves to the new permanent Storage URL + aiRequestId; throws EditApiError on API failure. */
+  commit: (version: Illustration) => Promise<EditCommitResult>;
 }
 
 interface UseRemoveBgTabOptions {
   selectedVersion: Illustration | null;
+  /** AI-usage attribution (book snapshotId / remix remixId) forwarded into the remove-bg call. */
+  attribution?: EditImageAttribution;
 }
 
-export function useRemoveBgTabState({ selectedVersion }: UseRemoveBgTabOptions): RemoveBgTabApi {
+export function useRemoveBgTabState({ selectedVersion, attribution }: UseRemoveBgTabOptions): RemoveBgTabApi {
   const [model, setModel] = useState<RmbgModel>(DEFAULT_RMBG_MODEL);
   const [outputBg, setOutputBg] = useState<OutputBgMode>(DEFAULT_OUTPUT_BG);
   const [color, setColor] = useState(DEFAULT_OUTPUT_COLOR);
@@ -60,7 +64,7 @@ export function useRemoveBgTabState({ selectedVersion }: UseRemoveBgTabOptions):
   const canCommit = !!selectedVersion;
 
   const commit = useCallback(
-    async (version: Illustration): Promise<string> => {
+    async (version: Illustration): Promise<EditCommitResult> => {
       // backgroundColor: color → flatten onto solid; transparent → null (RGBA). blur/overlay
       // can't reach here (those options are disabled while deferred).
       const backgroundColor = outputBg === 'color' ? color : null;
@@ -70,7 +74,12 @@ export function useRemoveBgTabState({ selectedVersion }: UseRemoveBgTabOptions):
         outputBg,
       });
 
-      const res = await callImageRemoveBg({ imageUrl: version.media_url, model, backgroundColor });
+      const res = await callImageRemoveBg({
+        imageUrl: version.media_url,
+        model,
+        backgroundColor,
+        ...(attribution ?? {}),
+      });
       if (!res.success || !res.data) {
         const failure = res as ImageApiFailure;
         log.warn('commit', 'remove bg failed', {
@@ -85,9 +94,9 @@ export function useRemoveBgTabState({ selectedVersion }: UseRemoveBgTabOptions):
 
       const ok = res as ImageRemoveBgResult;
       log.info('commit', 'remove bg success', { processingMs: ok.meta?.processingTime });
-      return ok.data!.imageUrl;
+      return { imageUrl: ok.data!.imageUrl, aiRequestId: ok.data!.aiRequestId };
     },
-    [model, outputBg, color],
+    [model, outputBg, color, attribution],
   );
 
   const ParamsPanel = useMemo<ReactNode>(

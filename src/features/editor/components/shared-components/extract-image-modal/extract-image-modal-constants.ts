@@ -76,6 +76,11 @@ export interface ExtractResult {
   media_url: string;
   sourceTab: ExtractTabKey;
   title: string;
+  /** ⚡ AI provenance — soft ref → ai_service_logs.id (cost attribution). Set ONLY by the AI
+   *  extract tabs that generate new pixels: Layers (N results share ONE id — 1 call = 1 id) +
+   *  Background. Absent for CV crop results (Objects/Crops) — they carry no AI provenance.
+   *  Threaded into the spawned illustration entry's `ai_request_id` by buildExtractImages. */
+  aiRequestId?: string;
   meta?: {
     prompt?: string;
     coverageRatio?: number;

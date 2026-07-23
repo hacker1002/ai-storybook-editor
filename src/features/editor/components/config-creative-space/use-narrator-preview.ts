@@ -244,6 +244,8 @@ export function useNarratorPreview(): NarratorPreviewApi {
             script,
             modelId: 'eleven_v3',
             settings,
+            // Voice-config preview is book-level (not snapshot-bound) → attribute by bookId.
+            bookId: book.id,
           },
           { signal: controller.signal },
         );

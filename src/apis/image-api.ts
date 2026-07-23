@@ -230,11 +230,15 @@ export interface UpscaleImagePayload {
    *  amp 0..50, blur 0..5. `seed` NOT exposed → API default. API omit=off, but the FE always sends
    *  an explicit object: `enabled:false` turns it off. */
   grain?: { enabled: boolean; amp: number; blur: number; seed?: number };
+  /** Book-edit context → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
+  /** Remix context → ai_service_logs.remix_id (discriminator — wins over snapshotId). */
+  remixId?: string;
 }
 
 export interface UpscaleImageResponse {
   success: true;
-  data: { imageUrl: string; storagePath: string; width: number; height: number };
+  data: { imageUrl: string; storagePath: string; width: number; height: number; aiRequestId?: string };
   meta?: {
     processingTime?: number;
     mimeType?: string;

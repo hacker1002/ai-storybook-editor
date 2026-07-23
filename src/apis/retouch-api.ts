@@ -15,11 +15,13 @@ export interface LayeringImageParams {
   seed?: number | null;
   outputFormat?: 'webp' | 'jpg' | 'png';
   outputQuality?: number;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface LayeringImageResult {
   success: boolean;
-  data?: { urls: string[]; contentType: string };
+  data?: { urls: string[]; contentType: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; numberOfLayers?: number; replicatePredictionId?: string };
 }
@@ -41,11 +43,15 @@ export interface EditObjectImageParams {
   /** Model override — allowlist group `edit-object` (v1 Gemini-only). Omit `params` → server
    *  temperature default 0.3. Out-of-allowlist model → 422 UNSUPPORTED_MODEL. */
   modelParams?: { model: string; params?: { temperature?: number } };
+  /** Book-edit context → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
+  /** Remix context → ai_service_logs.remix_id (discriminator — wins over snapshotId). */
+  remixId?: string;
 }
 
 export interface EditObjectImageResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number; model?: string };
 }
@@ -69,11 +75,15 @@ export interface OutpaintImageParams {
   /** Model override — allowlist group `outpaint` (v1 Gemini-only; out-of-allowlist → 422
    *  UNSUPPORTED_MODEL). Omit `params` → server temperature default 0.4. */
   modelParams?: { model: string; params?: { temperature?: number } };
+  /** Book-edit context → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
+  /** Remix context → ai_service_logs.remix_id (discriminator — wins over snapshotId). */
+  remixId?: string;
 }
 
 export interface OutpaintImageResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: {
     processingTime?: number;
@@ -177,6 +187,8 @@ export interface DetectTextsParams {
   /** OCR model override — allowlist group `detect-texts`. `model` is REQUIRED when `modelParams`
    *  is present (live OpenAPI required:["model"]). Omit `modelParams` → server default. */
   modelParams?: { model: string; params?: Record<string, unknown> };
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface DetectedText {
@@ -212,11 +224,15 @@ export interface ImageRemoveBgParams {
    *  default (server-side). Validated against the allowlist at the endpoint before binding
    *  to the core (never forwarded raw). FE sends explicit value to match the UI default. */
   model?: string;
+  /** Book-edit context → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
+  /** Remix context → ai_service_logs.remix_id (discriminator — wins over snapshotId). */
+  remixId?: string;
 }
 
 export interface ImageRemoveBgResult {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; replicatePredictionId?: string; backgroundColor?: string | null };
 }
@@ -229,11 +245,15 @@ export interface RemoveTextImageParams {
    *  (`flux-kontext-apps/text-removal`). Flat `model` (NOT nested `modelParams`). FE sends
    *  explicit value to match the UI default. */
   model?: string;
+  /** Book-edit context → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
+  /** Remix context → ai_service_logs.remix_id (discriminator — wins over snapshotId). */
+  remixId?: string;
 }
 
 export interface RemoveTextImageResult {
   success: true;
-  data: { imageUrl: string; storagePath: string };
+  data: { imageUrl: string; storagePath: string; aiRequestId?: string };
   meta?: {
     processingTime?: number;
     mimeType?: string;
@@ -471,6 +491,8 @@ export interface SegmentLayerParams {
   imageUrl: string;
   prompt: string;
   threshold?: number;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface SegmentLayerResult {
@@ -478,6 +500,7 @@ export interface SegmentLayerResult {
   data?: {
     imageUrl: string;
     storagePath: string;
+    aiRequestId?: string;
   };
   error?: string;
   meta?: {
@@ -523,11 +546,13 @@ export interface GenerateBackgroundParams {
   imageSize?: string;   // omit → API default "2K"
   /** Model override — allowlist group `generate-background`. Omit → server default. */
   modelParams?: { model: string; params?: { temperature?: number } };
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GenerateBackgroundResult {
   success: true;
-  data: { imageUrl: string; storagePath: string };
+  data: { imageUrl: string; storagePath: string; aiRequestId?: string };
   meta?: {
     processingTime?: number;
     mimeType?: string;

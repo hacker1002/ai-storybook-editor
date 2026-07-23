@@ -9,14 +9,26 @@
 
 import type { Illustration } from '@/types/prop-types';
 
-/** Prepend `urls` as new versions of `existing`; urls[0] = selected head, all others deselected. */
-export function appendMediaVersions(existing: Illustration[], urls: string[]): Illustration[] {
-  if (urls.length === 0) return existing;
+/** One added version: a permanent media URL + optional AI-usage provenance (soft ref →
+ *  ai_service_logs.id). CV-only sources (crop) omit `ai_request_id`; AI sources carry it. */
+export interface AppendMediaVersionEntry {
+  media_url: string;
+  ai_request_id?: string;
+}
+
+/** Prepend `entries` as new versions of `existing`; entries[0] = selected head, all others
+ *  deselected. Each added entry carries its `ai_request_id` (omitted → NULL provenance). */
+export function appendMediaVersions(
+  existing: Illustration[],
+  entries: AppendMediaVersionEntry[],
+): Illustration[] {
+  if (entries.length === 0) return existing;
   const now = new Date().toISOString();
-  const added: Illustration[] = urls.map((media_url, i) => ({
-    media_url,
+  const added: Illustration[] = entries.map((entry, i) => ({
+    media_url: entry.media_url,
     created_time: now,
     is_selected: i === 0,
+    ...(entry.ai_request_id ? { ai_request_id: entry.ai_request_id } : {}),
   }));
   const deselected = existing.map((i) => (i.is_selected ? { ...i, is_selected: false } : i));
   return [...added, ...deselected];

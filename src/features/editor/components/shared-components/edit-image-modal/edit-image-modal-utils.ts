@@ -62,6 +62,7 @@ export function prependVersion(
   versions: Illustration[],
   mediaUrl: string,
   originalUrl: string,
+  aiRequestId?: string,
 ): Illustration[] {
   const newEntry: Illustration = {
     type: 'edited',
@@ -69,6 +70,8 @@ export function prependVersion(
     media_url: mediaUrl,
     created_time: nowISO(),
     is_selected: true,
+    // Provenance soft ref → ai_service_logs.id (absent for erasor upload / remove-bg).
+    ...(aiRequestId ? { ai_request_id: aiRequestId } : {}),
   };
   return [newEntry, ...versions.map((v) => ({ ...v, is_selected: false }))];
 }

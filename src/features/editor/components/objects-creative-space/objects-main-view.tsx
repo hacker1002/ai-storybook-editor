@@ -1138,6 +1138,7 @@ export function ObjectsMainView({
           initialTab={modals.extract.initialTab}
           enabledTabs={SPACE_TOOL_MATRIX.object.extract}
           onCreateImages={handleExtractCreateImages}
+          snapshotId={snapshotId || undefined}
           detectContext={
             modals.extract.image.visual_description?.trim() && snapshotId
               ? {
@@ -1162,6 +1163,7 @@ export function ObjectsMainView({
           originalLang={originalLanguage}
           editorLang={langCode}
           context={bookContext}
+          snapshotId={snapshotId || undefined}
           onApplyTranslations={handleApplyTranslations}
         />
       )}
@@ -1176,6 +1178,7 @@ export function ObjectsMainView({
           readers={enhanceReaders}
           readerToVoice={enhanceReaderToVoice}
           context={bookContext}
+          snapshotId={snapshotId || undefined}
           onApplyEnhancements={handleApplyEnhancements}
         />
       )}
@@ -1188,6 +1191,7 @@ export function ObjectsMainView({
           images={annotationImages}
           language={annotationLanguage}
           artStyle={annotationArtStyle}
+          snapshotId={snapshotId || undefined}
           onApplyAnnotations={handleApplyAnnotations}
         />
       )}

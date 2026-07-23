@@ -17,7 +17,7 @@ import {
   useIllustrationPropRefCandidates,
 } from "@/features/editor/components/shared-components/edit-image-modal";
 import type { EditToolKey } from "@/features/editor/components/shared-components/edit-image-modal";
-import { useRetouchImageById, useSnapshotActions } from "@/stores/snapshot-store/selectors";
+import { useRetouchImageById, useSnapshotActions, useSnapshotId } from "@/stores/snapshot-store/selectors";
 import type { Illustration } from "@/types/prop-types";
 import { createLogger } from "@/utils/logger";
 
@@ -46,6 +46,8 @@ export function RetouchEditImageModal({
 }: RetouchEditImageModalProps) {
   const image = useRetouchImageById(spreadId, imageId);
   const { updateRetouchImage } = useSnapshotActions();
+  // Book-edit context (Objects space is never remix) → attribute AI edits by snapshotId.
+  const snapshotId = useSnapshotId();
   // Inpaint reference candidates (book prop variants). Hook runs BEFORE the early return (Rules of Hooks).
   const referenceImageCandidates = useIllustrationPropRefCandidates();
 
@@ -79,6 +81,7 @@ export function RetouchEditImageModal({
       pathPrefix={`retouch/${imageId}/erased`}
       enabledTools={enabledTools}
       referenceImageCandidates={referenceImageCandidates}
+      attribution={{ snapshotId: snapshotId ?? undefined }}
     />
   );
 }

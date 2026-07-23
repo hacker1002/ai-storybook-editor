@@ -65,6 +65,8 @@ export interface EnhanceSpreadNarrationModalProps {
   readers: Reader[];
   readerToVoice: Record<string, string>;
   context?: string;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
   onApplyEnhancements: (payload: ApplyEnhancementsPayload) => void;
 }
 
@@ -175,6 +177,7 @@ export function EnhanceSpreadNarrationModal({
   readers,
   readerToVoice,
   context,
+  snapshotId,
   onApplyEnhancements,
 }: EnhanceSpreadNarrationModalProps) {
   const [rows, setRows] = useState<EnhanceRow[]>([]);
@@ -313,6 +316,7 @@ export function EnhanceSpreadNarrationModal({
           readers,
           language: editorLang,
           context: context || undefined,
+          snapshotId,
         },
         { signal: ctrl.signal }
       );
@@ -355,7 +359,7 @@ export function EnhanceSpreadNarrationModal({
       if (abortRef.current === ctrl) abortRef.current = null;
       if (!ctrl.signal.aborted) setIsEnhancing(false);
     }
-  }, [canEnhance, rows, editorLang, readers, context]);
+  }, [canEnhance, rows, editorLang, readers, context, snapshotId]);
 
   const handleSaveAll = useCallback(() => {
     if (!canSave) return;

@@ -34,6 +34,8 @@ export interface RunGenerateChunkParams {
   chunk: ChunkDraft;
   voicesById: Map<string, Voice>;
   signal: AbortSignal;
+  /** Attribution-only — spread-narration is book-scoped → ai_service_logs.snapshot_id. */
+  snapshotId?: string;
 }
 
 /**
@@ -44,7 +46,7 @@ export interface RunGenerateChunkParams {
 export async function runGenerateChunk(
   params: RunGenerateChunkParams,
 ): Promise<GenerateChunkOutcome> {
-  const { chunk, voicesById, signal } = params;
+  const { chunk, voicesById, signal, snapshotId } = params;
 
   const validation = validateChunk(chunk, voicesById);
   if (!validation.ok) {
@@ -73,6 +75,7 @@ export async function runGenerateChunk(
           speed: chunk.speed,
         }),
         outputFormat: NARRATION_OUTPUT_FORMAT,
+        snapshotId,
       },
       { signal },
     );

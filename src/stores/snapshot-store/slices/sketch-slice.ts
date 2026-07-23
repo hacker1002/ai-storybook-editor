@@ -281,11 +281,11 @@ export const createSketchSlice: StateCreator<
       state.sync.isDirty = true;
     }),
 
-  addSketchBaseStyleIllustration: (kind, styleIndex, mediaUrl) =>
+  addSketchBaseStyleIllustration: (kind, styleIndex, mediaUrl, aiRequestId) =>
     set((state) => {
       const style = sheetOf(state.sketch.base, kind).styles[styleIndex];
       if (!style) return;
-      log.debug('addSketchBaseStyleIllustration', 'prepend created', { kind, styleIndex });
+      log.debug('addSketchBaseStyleIllustration', 'prepend created', { kind, styleIndex, hasAiRequestId: !!aiRequestId });
       style.illustrations.forEach((x) => {
         x.is_selected = false;
       });
@@ -294,6 +294,8 @@ export const createSketchSlice: StateCreator<
         media_url: mediaUrl,
         created_time: new Date().toISOString(),
         is_selected: true,
+        // Provenance soft ref → ai_service_logs.id (raw sheet = direct Gemini output).
+        ...(aiRequestId ? { ai_request_id: aiRequestId } : {}),
       });
       state.sync.isDirty = true;
     }),

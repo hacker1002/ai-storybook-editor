@@ -105,6 +105,26 @@ describe('useBackgroundTabState — runExtract', () => {
     expect(payload.prompt).toBeUndefined();
   });
 
+  it('carries the API aiRequestId onto the ExtractResult (cost attribution)', async () => {
+    mockCall.mockResolvedValue({
+      success: true as const,
+      data: {
+        imageUrl: 'https://storage/bg-1.png',
+        storagePath: 'extract-results/bg-1.png',
+        aiRequestId: 'ai-bg-123',
+      },
+      meta: { removedCount: 1, model: 'google/nano-banana-pro' },
+    });
+    const { result } = renderTab(makeCandidates(1));
+
+    let out: Awaited<ReturnType<BackgroundTabHandle['runExtract']>> = [];
+    await act(async () => {
+      out = await result.current.runExtract(SOURCE_URL);
+    });
+
+    expect(out[0].aiRequestId).toBe('ai-bg-123');
+  });
+
   it('throws a mapped error on API failure', async () => {
     const failure: ImageApiFailure = {
       success: false,

@@ -7,7 +7,7 @@ import {
 } from '@/apis/narrate-script-api';
 import { PREVIEW_TEXTS } from '@/constants/config-constants';
 import { getNarratorErrorMessage } from '@/features/editor/components/config-creative-space/narrator-error-messages';
-import { useCharacterByKey, useSnapshotActions } from '@/stores/snapshot-store';
+import { useCharacterByKey, useSnapshotActions, useSnapshotStore } from '@/stores/snapshot-store';
 import { useVoicesStore } from '@/stores/voices-store';
 import type { CharacterVoiceSetting } from '@/types/character-types';
 import { createLogger } from '@/utils/logger';
@@ -149,7 +149,13 @@ export function useCharacterVoicePreview(
 
       try {
         const result = await callNarrateScript(
-          { script, modelId: 'eleven_v3', settings },
+          {
+            script,
+            modelId: 'eleven_v3',
+            settings,
+            // Voice-config preview is book-level (not snapshot-bound) → attribute by bookId.
+            bookId: useSnapshotStore.getState().meta.bookId || undefined,
+          },
           { signal: controller.signal },
         );
 

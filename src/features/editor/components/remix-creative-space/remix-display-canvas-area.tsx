@@ -274,6 +274,7 @@ export function RemixDisplayCanvasArea({ spreads, remixId, pageNumbering }: Prop
         enabledTools={SPACE_TOOL_MATRIX.remix.edit}
         initialTool="inpaint"
         referenceImageCandidates={referenceImageCandidates}
+        attribution={{ remixId }}
         onUpdateIllustrations={(next) =>
           handleImageUpdate(editModal.spreadId, editModal.imageId, {
             illustrations: next,

@@ -78,6 +78,9 @@ export function buildExtractImages(
           media_url: result.media_url,
           created_time: new Date().toISOString(),
           is_selected: true,
+          // AI provenance (cost attribution) — present only for AI extract results (Layers /
+          // Background); absent for CV crop results (Objects/Crops carry no aiRequestId).
+          ...(result.aiRequestId ? { ai_request_id: result.aiRequestId } : {}),
         },
       ],
       // Detect tag → subject identity on the spawned layer (DetectTag ⊂ SpreadTag).

@@ -59,7 +59,8 @@ export function VariantExtractImageModal({ target, onClose }: VariantExtractImag
         cropIndex: target.cropIndex,
         count: results.length,
       });
-      const next = appendMediaVersions(illustrations, results.map((r) => r.media_url));
+      // Crop tab = CV cut (no AI provider call) → no ai_request_id provenance to carry.
+      const next = appendMediaVersions(illustrations, results.map((r) => ({ media_url: r.media_url })));
       setSketchVariantCropIllustrations(
         target.kind,
         target.entityKey,

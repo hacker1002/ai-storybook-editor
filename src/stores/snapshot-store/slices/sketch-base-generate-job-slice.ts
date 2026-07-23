@@ -247,12 +247,15 @@ export const createSketchBaseGenerateJobSlice: StateCreator<
         stylePrompt: params.stylePrompt,
         referenceImages: apiRefs,
         modelParams: params.modelParams,
+        // Attribution-only — book snapshot version id (empty/absent → omit). Never remix here.
+        snapshotId: get().meta.id || undefined,
       });
       if (opStale(kind, styleIndex)) return;
       if (!result.success || !result.data) throw new Error(classifyError(result));
 
       log.info('runGenerate', 'raw sheet done', { kind, styleIndex });
-      get().addSketchBaseStyleIllustration(kind, styleIndex, result.data.imageUrl);
+      // Persist ai_request_id provenance from the generate result (raw sheet = direct Gemini output).
+      get().addSketchBaseStyleIllustration(kind, styleIndex, result.data.imageUrl, result.data.aiRequestId);
       rawLanded = true;
 
       // Reading-order entity keys echoed by generate — pair positionally to api-10 crops in runCrop.

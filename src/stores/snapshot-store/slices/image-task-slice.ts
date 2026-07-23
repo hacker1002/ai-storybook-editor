@@ -51,7 +51,7 @@ const MISSING_ART_STYLE_MESSAGE = 'Select an art style first';
 /** Common success shape across all 7 generate-* endpoints (kept in union with ImageApiFailure so errorCode survives). */
 type IllustrationGenerateResult = {
   success: boolean;
-  data?: { imageUrl: string; storagePath: string };
+  data?: { imageUrl: string; storagePath: string; aiRequestId?: string };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number };
 };
@@ -104,6 +104,7 @@ function prependIllustration(
   illustrations: Illustration[],
   imageUrl: string,
   type: IllustrationType = 'created',
+  aiRequestId?: string,
 ): void {
   for (const ill of illustrations) {
     ill.is_selected = false;
@@ -113,6 +114,8 @@ function prependIllustration(
     created_time: new Date().toISOString(),
     is_selected: true,
     type,
+    // Provenance soft ref → ai_service_logs.id (absent for non-AI/uploaded entries).
+    ...(aiRequestId ? { ai_request_id: aiRequestId } : {}),
   });
 }
 
@@ -240,6 +243,7 @@ function routeGenerateCall(
           baseVariant: params.baseVariant,
           artStyleId: params.artStyleId,
           referenceImages: params.referenceImages,
+          snapshotId,
         });
       }
       return callGenerateCharacterVariant({
@@ -250,6 +254,7 @@ function routeGenerateCall(
         baseVariantImageUrl: params.baseVariantImageUrl,
         artStyleId: params.artStyleId,
         additionalReferenceImages: params.additionalReferenceImages,
+        snapshotId,
       });
 
     case 'prop':
@@ -263,6 +268,7 @@ function routeGenerateCall(
           baseStateVisualDescription: params.baseStateVisualDescription,
           artStyleId: params.artStyleId,
           referenceImages: params.referenceImages,
+          snapshotId,
         });
       }
       return callGeneratePropVariant({
@@ -272,6 +278,7 @@ function routeGenerateCall(
         basePropImageUrl: params.basePropImageUrl,
         artStyleId: params.artStyleId,
         additionalReferenceImages: params.additionalReferenceImages,
+        snapshotId,
       });
 
     case 'stage':
@@ -283,6 +290,7 @@ function routeGenerateCall(
           baseSetting: params.baseSetting,
           artStyleId: params.artStyleId,
           referenceImages: params.referenceImages,
+          snapshotId,
         });
       }
       return callGenerateStageVariant({
@@ -295,6 +303,7 @@ function routeGenerateCall(
         baseStageImageUrl: params.baseStageImageUrl,
         artStyleId: params.artStyleId,
         additionalReferenceImages: params.additionalReferenceImages,
+        snapshotId,
       });
 
     case 'illustration_image':
@@ -397,12 +406,13 @@ export const createImageTaskSlice: StateCreator<
         }
 
         const imageUrl = result.data.imageUrl;
+        const aiRequestId = result.data.aiRequestId; // capture pre-closure (narrowing doesn't cross into set())
         log.info('startGenerateTask', 'success', { taskId, imageUrl });
 
         set((state) => {
           const illustrations = findIllustrations(state, entityType, entityKey, childKey);
           if (illustrations) {
-            prependIllustration(illustrations, imageUrl);
+            prependIllustration(illustrations, imageUrl, 'created', aiRequestId);
             state.sync.isDirty = true;
           }
 
@@ -463,7 +473,10 @@ export const createImageTaskSlice: StateCreator<
       });
     });
 
-    callEditObjectImage({ prompt, imageUrl, referenceImages, aspectRatio })
+    // Attribution: this slice edits the book snapshot (never remix) → forward snapshotId only.
+    // Empty/absent id → omit the field (optional attribution).
+    const snapshotId = get().meta.id || undefined;
+    callEditObjectImage({ prompt, imageUrl, referenceImages, aspectRatio, snapshotId })
       .then((result) => {
         const taskStillExists = get().imageTasks.some((t) => t.id === taskId);
         if (!taskStillExists) {
@@ -476,12 +489,13 @@ export const createImageTaskSlice: StateCreator<
         }
 
         const editedImageUrl = result.data.imageUrl;
+        const editedAiRequestId = result.data.aiRequestId; // capture pre-closure (narrowing doesn't cross into set())
         log.info('startEditTask', 'success', { taskId, imageUrl: editedImageUrl });
 
         set((state) => {
           const illustrations = findIllustrations(state, entityType, entityKey, childKey);
           if (illustrations) {
-            prependIllustration(illustrations, editedImageUrl);
+            prependIllustration(illustrations, editedImageUrl, 'created', editedAiRequestId);
             state.sync.isDirty = true;
           }
 

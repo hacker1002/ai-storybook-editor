@@ -54,11 +54,13 @@ export interface LayersTabHandle {
 interface UseLayersTabOptions {
   /** processing || committing — disables the controls. */
   isBusy: boolean;
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export function useLayersTabState(
   image: SpreadImage,
-  { isBusy }: UseLayersTabOptions,
+  { isBusy, snapshotId }: UseLayersTabOptions,
 ): LayersTabHandle {
   const [model, setModel] = useState<string>(DEFAULT_LAYERS_MODEL);
   const [layerCount, setLayerCount] = useState<number>(LAYER_COUNT_DEFAULT);
@@ -67,7 +69,7 @@ export function useLayersTabState(
     async (sourceUrl: string): Promise<ExtractResult[]> => {
       log.info('runExtract', 'layering start', { layerCount });
       // description omitted → API "auto"; seed omitted → API random; goFast/format → API default.
-      const res = await callLayeringImage({ imageUrl: sourceUrl, numberOfLayers: layerCount });
+      const res = await callLayeringImage({ imageUrl: sourceUrl, numberOfLayers: layerCount, snapshotId });
       if (!res.success) {
         const failure = res as ImageApiFailure;
         log.warn('runExtract', 'layering failed', {
@@ -79,16 +81,20 @@ export function useLayersTabState(
 
       const ok = res as LayeringImageResult;
       const urls = ok.data?.urls ?? [];
+      // One layering call = ONE ai_service_logs row → all N layer results share the SAME
+      // aiRequestId (do NOT fabricate per-layer ids). Threaded → illustrations[].ai_request_id.
+      const aiRequestId = ok.data?.aiRequestId;
       log.info('runExtract', 'layering success', { count: urls.length });
       return urls.map((url, i) => ({
         id: crypto.randomUUID(),
         media_url: url,
         sourceTab: 'layering' as const,
         title: `${image.title ?? 'Image'} - Part ${i + 1}`,
+        aiRequestId,
         meta: { layerIndex: i },
       }));
     },
-    [layerCount, image.title],
+    [layerCount, image.title, snapshotId],
   );
 
   const reset = useCallback(() => {

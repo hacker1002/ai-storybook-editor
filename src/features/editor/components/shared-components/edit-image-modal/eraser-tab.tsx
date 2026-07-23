@@ -42,6 +42,7 @@ import {
   RESET_CONFIRM_THRESHOLD,
   SWAP_MODAL_OUTLINE_BUTTON_CLASS,
   Z_INDEX,
+  type EditCommitResult,
 } from './edit-image-modal-constants';
 import { computeFrameSize, fitNaturalToFrame } from './edit-image-modal-fit';
 
@@ -57,8 +58,9 @@ export interface EraserTabApi {
   canCommit: boolean;
   /** strokes.length > 0 — shell blocking-confirm gate on version/tool change (semantic alias). */
   hasUncommitted: boolean;
-  /** Export the workspace at natural resolution + upload → new permanent URL. Throws on CORS taint. */
-  commit: (version: Illustration) => Promise<string>;
+  /** Export the workspace at natural resolution + upload → new permanent URL (no aiRequestId —
+   *  plain upload, not an AI call). Throws on CORS taint. */
+  commit: (version: Illustration) => Promise<EditCommitResult>;
   /** Clear strokes + redo after a successful commit (shell calls). */
   afterCommit: () => void;
   /** Discard strokes when the source image changes (version/tool switch, post-confirm). */
@@ -240,7 +242,7 @@ export function useEraserTabState({ selectedVersion, pathPrefix, zoom }: UseEras
 
   // ── Commit: export natural-res + upload ──────────────────────────────────────
   const commit = useCallback(
-    async (_version: Illustration): Promise<string> => {
+    async (_version: Illustration): Promise<EditCommitResult> => {
       const img = sourceImgRef.current;
       const canvas = canvasRef.current;
       if (!img || !canvas || strokes.length === 0) throw new Error('Nothing to save');
@@ -271,7 +273,7 @@ export function useEraserTabState({ selectedVersion, pathPrefix, zoom }: UseEras
       const file = new File([blob], `erased-${Date.now()}.png`, { type: 'image/png' });
       const result = await uploadImageToStorage(file, pathPrefix);
       log.info('commit', 'upload complete', { publicUrl: result.publicUrl.slice(0, 60) });
-      return result.publicUrl;
+      return { imageUrl: result.publicUrl };
     },
     [strokes, pathPrefix],
   );

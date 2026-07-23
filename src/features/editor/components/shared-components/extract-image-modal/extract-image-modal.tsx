@@ -84,6 +84,9 @@ export interface ExtractImageModalProps {
   yieldedFrom?: { parentId: string; onParentForcePop: () => void };
   /** Objects tab Detect context (visualDescription + snapshotId). Absent → Detect disabled. */
   detectContext?: { visualDescription: string; snapshotId: string };
+  /** Attribution-only snapshot version id (book cost) forwarded into the AI extract tabs
+   *  (segment / layering / background / get_text). Book-context only — never remix. */
+  snapshotId?: string;
   /** Background tab — other spread images (effective URLs, source excluded) offered as
    *  remove targets. Absent/[] → Background grid empty → run disabled. */
   backgroundRemoveCandidates?: BackgroundRemoveCandidate[];
@@ -105,6 +108,7 @@ export function ExtractImageModal({
   enabledTabs,
   yieldedFrom,
   detectContext,
+  snapshotId,
   backgroundRemoveCandidates = [],
   cropPresets,
   onUpsertCropPreset,
@@ -140,10 +144,10 @@ export function ExtractImageModal({
   const onRequestRun = useCallback(() => runExtractRef.current(), []);
 
   // ── Per-tab sub-state (all hooks run unconditionally; root renders the active one) ──
-  const segmentHandle = useSegmentTabState(image, { isBusy, onRequestRun });
-  const layersHandle = useLayersTabState(image, { isBusy });
+  const segmentHandle = useSegmentTabState(image, { isBusy, onRequestRun, snapshotId });
+  const layersHandle = useLayersTabState(image, { isBusy, snapshotId });
   const objectsHandle = useObjectsTabState(image, { isBusy, detectContext });
-  const textsState = useTextsTabState(image, { isBusy });
+  const textsState = useTextsTabState(image, { isBusy, snapshotId });
   const cropsState = useCropsTabState(image, {
     isBusy,
     cropPresets: cropPresets ?? EMPTY_CROP_PRESETS,
@@ -154,6 +158,7 @@ export function ExtractImageModal({
     isBusy,
     onRequestRun,
     removeCandidates: backgroundRemoveCandidates,
+    snapshotId,
   });
 
   // ── Derived (computed in render — no set-state-in-effect, React 19 lint) ─────────

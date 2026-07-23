@@ -33,6 +33,7 @@ import {
   ZOOM,
   type EditToolKey,
   type EditCanvasMode,
+  type EditImageAttribution,
 } from "./edit-image-modal-constants";
 import {
   prependVersion,
@@ -93,6 +94,9 @@ export interface EditImageModalProps {
   /** Inpaint reference-image candidates (prop-variants) resolved by the parent per space (design
    *  §8.4). Threaded to the Inpaint tab's picker grid; undefined → picker offers Upload only. */
   referenceImageCandidates?: ReferenceImageCandidate[];
+  /** AI-usage attribution threaded into every EDIT commit (book snapshotId / remix remixId).
+   *  Dual-context: book mounts pass `{ snapshotId }`, the remix mount passes `{ remixId }`. */
+  attribution?: EditImageAttribution;
   yieldedFrom?: YieldedFromLinkage;
 }
 
@@ -107,6 +111,7 @@ export function EditImageModal({
   initialTool,
   enabledTools,
   referenceImageCandidates,
+  attribution,
   yieldedFrom,
 }: EditImageModalProps) {
   // Landing tool ∈ (available-in-space ∩ built); never lands on a coming-soon slot. Plain const
@@ -142,12 +147,12 @@ export function EditImageModal({
   const canCompare = selectedVersion?.type === "edited" && !!selectedVersion.original_url;
 
   // ── Per-tab sub-state (all hooks run unconditionally; shell renders the active one) ──
-  const removeBgState = useRemoveBgTabState({ selectedVersion });
-  const removeTextState = useRemoveTextTabState({ selectedVersion });
-  const upscaleState = useUpscaleTabState({ selectedVersion });
-  const outpaintState = useOutpaintTabState({ selectedVersion });
+  const removeBgState = useRemoveBgTabState({ selectedVersion, attribution });
+  const removeTextState = useRemoveTextTabState({ selectedVersion, attribution });
+  const upscaleState = useUpscaleTabState({ selectedVersion, attribution });
+  const outpaintState = useOutpaintTabState({ selectedVersion, attribution });
   const erasorState = useEraserTabState({ selectedVersion, pathPrefix, zoom });
-  const inpaintState = useInpaintTabState({ selectedVersion, zoom, referenceImageCandidates });
+  const inpaintState = useInpaintTabState({ selectedVersion, zoom, referenceImageCandidates, attribution });
 
   // Active "paint" tab — inpaint + erasor share the canvas/commit/undo-redo/confirm path
   // (both expose the same paint surface; resetAll is inpaint-only and used in resetState).
@@ -276,14 +281,15 @@ export function EditImageModal({
             : activeTool === "remove_text"
               ? removeTextState.commit
               : removeBgState.commit;
-      const newUrl = await commitFn(committed);
+      const { imageUrl: newUrl, aiRequestId } = await commitFn(committed);
       if (runId !== commitRunIdRef.current) {
         log.debug("handleCommit", "stale — dropped", { runId });
         return;
       }
       // prepend onto the REAL illustrations (not the display fallback); the fallback's url is
-      // preserved as original_url so Compare works after the very first commit.
-      const next = prependVersion(illustrations, newUrl, committed.media_url);
+      // preserved as original_url so Compare works after the very first commit. `aiRequestId`
+      // (present only for AI tabs) is persisted onto the new edited entry for cost provenance.
+      const next = prependVersion(illustrations, newUrl, committed.media_url, aiRequestId);
       onUpdateIllustrations(next);
       if (isPaint) activePaint?.afterCommit(); // clear strokes (inpaint keeps prompt + model)
       log.info("handleCommit", "done", { activeTool });
