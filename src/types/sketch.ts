@@ -199,6 +199,9 @@ export interface SketchSpreadIllustration {
   media_url: string;
   created_time: string; // ISO-8601
   is_selected: boolean;
+  /** Provenance soft ref → ai_service_logs.id (cost attribution). Set for AI-generated pages;
+   *  absent = NULL (legacy/uploaded). Dangling-tolerant (id may precede the log row insert). */
+  ai_request_id?: string;
 }
 
 export interface SketchSpreadImage {

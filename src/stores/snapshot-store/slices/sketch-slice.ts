@@ -399,7 +399,12 @@ export const createSketchSlice: StateCreator<
   // auto-select it, and clear the previous selection. Creates that page's image container on
   // first generate for the page. Marks dirty so the awaited flushSnapshot() in the spread-generate
   // job persists it before the next page/spread reads it back for consistency.
-  addSketchSpreadImageVersion: (spreadId: string, pageType: SketchPageType, mediaUrl: string) =>
+  addSketchSpreadImageVersion: (
+    spreadId: string,
+    pageType: SketchPageType,
+    mediaUrl: string,
+    aiRequestId?: string,
+  ) =>
     set((state) => {
       const spread = state.sketch.spreads.find((s) => s.id === spreadId);
       if (!spread) return;
@@ -416,6 +421,8 @@ export const createSketchSlice: StateCreator<
         media_url: mediaUrl,
         created_time: new Date().toISOString(),
         is_selected: true,
+        // Provenance soft ref → ai_service_logs.id (raw spread page = direct Gemini output).
+        ...(aiRequestId ? { ai_request_id: aiRequestId } : {}),
       });
       log.info('addSketchSpreadImageVersion', 'prepend version', { spreadId, pageType });
       state.sync.isDirty = true;

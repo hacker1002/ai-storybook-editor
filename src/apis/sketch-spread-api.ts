@@ -37,6 +37,9 @@ export interface GenerateSpreadImageResult {
     trimAxis: 'width' | 'height' | null;
     /** TỔNG fraction đã cắt (0 nếu khớp enum). */
     trimFraction: number;
+    /** Soft ref → ai_service_logs.id của call Gemini sinh ảnh này (cost attribution). FE ghi vào
+     *  illustration entry's `ai_request_id`. Additive optional — mirrors sketch base/variant/stage. */
+    aiRequestId?: string;
   };
   error?: string;
   meta?: { processingTime?: number; mimeType?: string; tokenUsage?: number; model?: string };

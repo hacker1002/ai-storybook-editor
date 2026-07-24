@@ -74,6 +74,7 @@ const ok = (url: string, p: SketchGeneratePage = 'full') => ({
     genAspectRatio: '2:1',
     trimAxis: null as 'width' | 'height' | null,
     trimFraction: 0,
+    aiRequestId: `aisl-${url}`,
   },
 });
 
@@ -116,6 +117,23 @@ describe('SketchSpreadGenerateJobSlice — collab persist grain', () => {
     expect(payload.collection).toBe('images');
     expect(payload.log).toBe(false);
     expect(store.getState().sketchSpreadGenerateJob.tasks[0].status).toBe('completed');
+  });
+
+  it('persists ai_request_id provenance into the created illustration entry', async () => {
+    store.getState().setSketchSpreads([spread('sp-1')]);
+    mockedCall.mockResolvedValue(ok('a.png') as never);
+
+    start(['sp-1']);
+    await tick();
+    await tick();
+
+    // Store: the prepended (selected) version carries the soft ref → ai_service_logs.id.
+    const entry = store.getState().sketch.spreads[0].images[0].illustrations[0];
+    expect(entry).toMatchObject({ media_url: 'a.png', ai_request_id: 'aisl-a.png' });
+
+    // Gateway payload (patch = the whole image node) carries it too → survives verbatim jsonb_set.
+    const patch = save.mock.calls[0][1].patch as { illustrations: Array<{ ai_request_id?: string }> };
+    expect(patch.illustrations[0].ai_request_id).toBe('aisl-a.png');
   });
 
   it('regenerate of an already-persisted page → UPLOAD (no parent_id/collection)', async () => {
