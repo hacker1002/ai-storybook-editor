@@ -181,6 +181,7 @@ describe('startStageBaseSheetGenerate (11 — STATELESS)', () => {
       artStyleId: 'style-1',
       stylePrompt: 'ink wash',
       referenceImages: [{ media_url: 'https://x/r.png' }],
+      snapshotId: 'snap-1', // regression lock (G1): book cost attribution must forward meta.id
     });
   });
 

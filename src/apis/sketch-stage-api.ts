@@ -54,6 +54,8 @@ export interface GenerateBaseStageSheetParams {
   stylePrompt?: string; // styles[i].style_prompt
   referenceImages?: StageReferenceImage[]; // ≤3 STYLE refs from styles[i].image_references
   modelParams?: StageModelParams; // allowlist group `sketch-base`
+  /** Attribution-only snapshot version id → ai_service_logs.snapshot_id (book cost). */
+  snapshotId?: string;
 }
 
 export interface GenerateBaseStageSheetResult {
@@ -78,7 +80,7 @@ export interface GenerateBaseStageSheetResult {
 export async function callGenerateBaseStageSheet(
   params: GenerateBaseStageSheetParams,
 ): Promise<GenerateBaseStageSheetResult | ImageApiFailure> {
-  const { modelParams, referenceImages, stylePrompt, ...required } = params;
+  const { modelParams, referenceImages, stylePrompt, snapshotId, ...required } = params;
   log.info('callGenerateBaseStageSheet', 'start', {
     stageKey: params.stageKey,
     refCount: referenceImages?.length ?? 0,
@@ -90,6 +92,8 @@ export async function callGenerateBaseStageSheet(
     ...(stylePrompt ? { stylePrompt } : {}),
     ...(referenceImages && referenceImages.length > 0 ? { referenceImages } : {}),
     ...(modelParams ? { modelParams } : {}),
+    // Attribution-only — forward snapshotId so the AI-usage logger stamps book cost.
+    ...(snapshotId ? { snapshotId } : {}),
   });
 }
 

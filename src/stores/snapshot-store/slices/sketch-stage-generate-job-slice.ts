@@ -218,6 +218,9 @@ export const createSketchStageGenerateJobSlice: StateCreator<
         stylePrompt: params.stylePrompt,
         referenceImages: params.referenceImages.map((r) => ({ media_url: r.media_url })),
         modelParams: params.modelParams,
+        // Attribution-only — book cost stamps on ai_service_logs.snapshot_id (11 is stateless,
+        // so a null id is harmless: request still 200s, just no cost row).
+        snapshotId: get().meta.id || undefined,
       });
       if (opStale(target)) return;
       if (!result.success || !result.data) throw new Error(classifyError(result));
